@@ -17,21 +17,16 @@ effect's target (`state-reserved`), and a stored draft it cannot read may only b
 The rule covers the draft's content, not only its state. Autosave does not rewrite a draft already in a committed
 state or an effect's target: the only write it accepts there is a reset to the initial state that the machine itself
 declares from that state, and a save identical to the stored draft is answered as saved without writing
-(`draft-committed` otherwise). The effect runner records the receipt only on the draft exactly as the effect loaded
-it: it commits against that load's concurrency token, so a draft edited, reset or advanced while the effect ran is a
-conflict rather than a commit, and the claim keeps the receipt for the next send to replay instead of running the
-effect again. That replay is bound to the content too: the claim records a fingerprint of the draft the effect ran on
-(the SHA-256 of its canonical wire), and a send replays the receipt only onto a draft whose content still has that
-fingerprint. A draft that holds other content is refused as `draft-changed`: the receipt is not recorded on it and the
-effect does not run again. A machine built with the fluent builder enters an effect's target only by the effect's own edge:
+(`draft-committed` otherwise). The effect runner records the receipt on the draft exactly as the effect loaded it,
+because nothing else can write the draft while the effect runs: the effect is pending on the draft's row (central
+0048, *Effects and server records*), an edit, a reset or an advance is refused as `effect-in-progress` until it ends,
+and the receipt, the move to the effect's target and the end of the pending mark are one write. A machine built with the fluent builder enters an effect's target only by the effect's own edge:
 `Build()` refuses any other transition into it.
 
-What keeps the claim is part of the same rule. A reset releases a claim only once its outcome is settled on the
-draft being reset: a claim in flight within its lease is kept, and a completed claim is kept unless that draft
-recorded its receipt. The effect is not handed the request's cancellation, and an effect that ends in an
-`OperationCanceledException` leaves its claim in flight until the lease passes, because a cancellation says nothing
-about whether the effect happened. Deleting an expired draft releases its claims first and deletes the row second,
-neither on the request's token.
+The effect is not handed the request's cancellation, and an effect that ends in an `OperationCanceledException`
+leaves its mark until the lease passes, because a cancellation says nothing about whether the effect happened; past
+the lease the effect is run again under its key and its result recorded. A draft with a pending effect is neither
+deleted nor reset.
 
 ## Status
 
@@ -49,9 +44,12 @@ whether the effect produced it, and the machine author would have to write that 
 **Refusing only committed states, not effect targets.** Rejected: a machine need not mark its effect's target
 committed, and the target is what the receipt lives in either way.
 
-**Refusing autosave while the draft's effect is in flight.** Rejected in favour of the token check: it closes the
-same window, but a user could not edit a draft whose send had stalled until the lease passed, and it needs the
-claim ledger read on every save.
+**Refusing autosave while the draft's effect is in flight.** Rejected at first in favour of the token check, then
+adopted (2026-10-13). The token check kept the receipt off a draft written during the effect, but left the effect's
+result in the claim ledger alone, and every other path then had to work out from the ledger whether the result had
+reached the draft. The cost is the one first given: a user cannot edit a draft whose send has stalled, until the
+lease passes and the effect is finished. Reading the ledger on every save is no longer needed, because the mark is on
+the draft's row.
 
 **Committing the content the effect ran on over a later edit.** Not adopted, neither at the first send's commit nor
 at a later replay. It would record exactly what was charged, but it silently discards a write the client was told
@@ -64,7 +62,8 @@ produced for, and nothing tells the client the two differ.
 **Running the effect again for the edited content.** Rejected: the effect is irreversible and has already happened
 once for this draft, which is the one thing the claim exists to prevent.
 
-**Refusing the replay when the content differs (`draft-changed`).** Adopted. It is the fail-closed choice: nothing
+**Refusing the replay when the content differs (`draft-changed`).** Adopted, and retired for machines on
+2026-10-13: with writes refused while the effect is pending, the content cannot differ. It is the fail-closed choice: nothing
 is committed and nothing runs, and the client learns that the draft's action already ran on other content. Restoring
 that content makes the next send replay the receipt. The fingerprint is a column on the claim, not the content
 itself, so the claim stays small and holds nothing the draft does not.
@@ -78,15 +77,11 @@ definition catches up, or reset; autosave does not overwrite it in the meantime.
 
 A client that autosaves the snapshot a send returned gets `Saved` without a write; one that edits a committed draft
 gets `draft-committed`, and a machine with no transition from a committed state or effect target back to its
-initial state has no soft reset out of it. A send whose draft was written while its effect ran reports a conflict.
-Sending again replays the recorded receipt only if the draft's content is again what the effect ran on; otherwise it
-is refused as `draft-changed`, and it stays refused until that content is restored or the draft expires, so a
-client keeps the snapshot it sent until the send settles. A reset does not release such a claim, because the draft
-never recorded its receipt. The fingerprint covers the whole canonical wire, including the definition version, so a
-migration applied between the effect and the replay is also refused rather than guessed at. A claim recorded before
-the fingerprint column existed has none and replays unchecked, as does every claim from a custom `IEffectClaimStore`
-that does not override the fingerprint members. A reset while an effect is in flight, or after a
-receipt that never reached the draft, no longer lets the next send run the effect again. An effect that honours the
+initial state has no soft reset out of it. A write to a draft while its effect is pending is refused as `effect-in-progress`, so a client sends nothing else
+for that draft until the send settles, or until the lease passes and the effect is finished for it. An effect is run
+again under its key when its claimant stops without recording a result, so an effect passes its key to the system it
+calls. A completed claim from the earlier ledger whose draft is still in the effect's state is recorded by the
+draft's next send. An effect that honours the
 request's cancellation after its irreversible step no longer has a token to honour.
 
 ## Exemplars
@@ -95,14 +90,9 @@ request's cancellation after its irreversible step no longer has a token to hono
   it, autosave refuses to create or enter a committed state or an effect's target, refuses to rewrite a draft already
   in one (committed, or an effect's target) or to reset it where the machine declares no reset, accepts a save that
   changes nothing, and refuses to overwrite an unreadable draft except with a reset.
-- `EffectCommitIntegrityTests` pins the runner's half: an edit or a reset during the effect is not committed with
-  its receipt, the next send replays it without running the effect, a cancelled effect keeps its claim, the effect
-  never sees the request's token, and an expired draft leaves no claim behind.
-- `EffectCommitIntegrityTests` also pins the replay's binding to content: a send after an edit during the effect is
-  refused as `draft-changed` without charging again or recording the receipt, a draft restored to what the effect
-  ran on replays it, an unedited draft replays it, and a claim without a fingerprint replays as before.
-  The shipped-migration round trip stores and reads the fingerprint on both Postgres and SQLite, and the claim
-  store's tests check that a reclaimed claim records its new owner's fingerprint.
+- `EffectCommitIntegrityTests` pins the runner's half: an edit or a reset during the effect is refused, the receipt
+  and the move are one write, a cancelled effect keeps its mark until the lease passes, and the effect never sees the
+  request's token. The pending mark's own rules are pinned by `EffectPendingTests`.
 - `MachineBuilderTests.Build_refuses_a_second_edge_into_an_effects_target_state` pins the build-time refusal.
 - [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) is the rule this produces.
 
@@ -113,6 +103,21 @@ builder, is not checked for a second edge into its effect's target.
 
 ## Changelog
 
+- **2026-10-13**: Amended with central 0048. The effect is pending on the draft's row, and every other write to the
+  draft is refused until the receipt and the move are written together; past its lease the effect is run again under
+  its key. The token check, the content fingerprint, `draft-changed` and a reset's release of settled claims are
+  retired for machines, since nothing can write the draft between the effect and its record. Refusing writes while
+  the effect is in flight, rejected on 2026-09-30, is adopted.
+
+- **2026-10-12**: The 2026-10-09 entry states the generic save's refusal as central 0048 does: a gated rule
+  (`Requires` or `RequiresPolicy`) on an event or the start, not only a `Requires` rule.
+- **2026-10-09**: Amended by central ADR 0048 (`Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md`).
+  Autosave is no longer how a client moves a machine. The typed per-machine surface has no save: a draft starts with
+  an explicit `start` and changes only by declared events, and an effect-bound event is an ordinary event whose
+  mutation runs the effect. The generic save survives only behind `ExposeGenericStateMachineMutations()`, and there
+  it serves only machines with no server-side behaviour: a machine with a gated rule (`Requires` or `RequiresPolicy`)
+  on an event or the start, a timer, an invoked train or an effect answers `save-not-allowed`. A timed state is locked: autosave neither leaves nor rewrites it. The rules
+  above still hold for the effect runner and for host code that writes through the store.
 - **2026-09-30**: Amended. The claim records a fingerprint of the content its effect ran on (Postgres migration 053,
   SQLite 018), and a send replays the receipt only onto that content, refusing any other as `draft-changed`. Claims
   without a fingerprint replay as before.

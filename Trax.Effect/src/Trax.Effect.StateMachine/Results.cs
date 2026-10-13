@@ -18,6 +18,31 @@ public static class RejectionReasons
 
     /// <summary>An unexpected error was caught inside the engine. Surfaced as a rejection so the caller never sees an exception.</summary>
     public const string InternalError = "internal-error";
+
+    /// <summary>The trigger input does not match the trigger's declared input schema.</summary>
+    public const string InvalidInput = "invalid-input";
+
+    /// <summary>The trigger is an invoked train's outcome, which only the outcome path applies, never an advance.</summary>
+    public const string OutcomeBound = "outcome-bound";
+
+    /// <summary>The trigger is a state's timer, which only the server fires, never an advance.</summary>
+    public const string TimerBound = "timer-bound";
+
+    /// <summary>The trigger input or the resulting snapshot is past the snapshot size cap.</summary>
+    public const string TooLarge = "too-large";
+
+    /// <summary>
+    /// A refusal of <c>discard</c>, not of an advance: the server put the instance in its state, it is in a state that
+    /// invokes a train, or an effect is pending on it, so its owner may not discard it. Only the draft service answers
+    /// it.
+    /// </summary>
+    public const string DiscardNotAllowed = "discard-not-allowed";
+
+    /// <summary>
+    /// A server refusal: an effect is pending on the instance, so every other write to it waits until the effect is
+    /// recorded or fails. Retry once it has finished. Only the server answers it.
+    /// </summary>
+    public const string EffectInProgress = "effect-in-progress";
 }
 
 /// <summary>

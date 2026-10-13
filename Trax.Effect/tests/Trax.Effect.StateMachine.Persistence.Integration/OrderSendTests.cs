@@ -184,16 +184,16 @@ public class OrderSendTests
     }
 
     [Test]
-    public async Task A_second_order_sent_with_the_same_request_id_after_a_soft_reset_is_placed()
+    public async Task A_send_retried_after_a_soft_reset_replays_and_a_new_id_places_the_next_order()
     {
         var id = Guid.NewGuid();
         await SeedReview("u", id);
         var effect = new CountingEffect();
         await NewRunner(effect).Run("u", id, "send"); // Placed, receipt-1
 
-        // Start over with a soft save (which releases the claim), fill a new order, and send it with the same
-        // key. The recorded request fired from Review, and the draft is back in Review, so its outcome is
-        // gone: the send is a new one and must be placed, not answered with a replay of the Review draft.
+        // Start over with a soft save (which releases the claim) and fill a new order. The recorded send is
+        // answered with its recorded result before the effect is claimed, so the retry charges nothing; the next
+        // order is a new action and takes a new id.
         var ctx = TestDb.NewContext();
         (
             await TestOrder
@@ -204,7 +204,16 @@ public class OrderSendTests
             .BeOfType<AutosaveResult.Saved>();
         await SeedReview("u", id);
 
-        (await NewRunner(effect).Run("u", id, "send"))
+        var retry = (await NewRunner(effect).Run("u", id, "send"))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>()
+            .Subject;
+        retry.Snapshot.State.Should().Be("Placed");
+        retry.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        effect.Calls.Should().Be(1, "a retried send never runs the effect again");
+        (await Load("u", id)).State.Should().Be("Review", "a replay writes nothing");
+
+        (await NewRunner(effect).Run("u", id, "send-2"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
             .Which.Snapshot.State.Should()

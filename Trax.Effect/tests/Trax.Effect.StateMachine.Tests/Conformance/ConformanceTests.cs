@@ -9,7 +9,9 @@ namespace Trax.Effect.StateMachine.Tests.Conformance;
 /// <summary>
 /// Drives the C# turnstile engine over the SAME shared fixtures the TypeScript engine drives. If both
 /// suites stay green over one set of files, the two engines cannot disagree — that is the cross-language
-/// guarantee (PD1), proven by data rather than by generating one engine from the other.
+/// guarantee (PD1), proven by data rather than by generating one engine from the other. The advance fixtures
+/// replay through the declarative turnstile, whose <c>Coin</c> declares its input, as the twin's IR does: the
+/// fixtures with a bad input expect <c>invalid-input</c>, which only a declared input schema can give.
 /// </summary>
 public class ConformanceTests
 {
@@ -55,7 +57,9 @@ public class ConformanceTests
     }
 
     [TestCaseSource(nameof(AdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path)
+    public void Advance_matches_the_shared_fixture(string path) => Replay(path);
+
+    private static void Replay(string path)
     {
         var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
         var given = ToSnapshot((JsonObject)fixture["given"]!);
@@ -64,7 +68,7 @@ public class ConformanceTests
         var input = when["input"]?.DeepClone();
         var expect = (JsonObject)fixture["expect"]!;
 
-        var result = TestTurnstile.Machine.Advance(given, trigger, input);
+        var result = DeclarativeTurnstile.Machine.Advance(given, trigger, input);
 
         if (expect["outcome"]!.GetValue<string>() == "transitioned")
         {

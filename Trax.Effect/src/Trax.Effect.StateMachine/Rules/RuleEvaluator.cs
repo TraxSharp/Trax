@@ -64,17 +64,9 @@ public static class RuleEvaluator
     private static bool IsNullOrMissing(JsonNode? node) =>
         node is null || node.GetValueKind() == JsonValueKind.Null;
 
+    // One notion of "a value of this JSON type" for rules and schemas, in both engines.
     private static bool MatchesType(JsonNode? node, JsonFieldType type) =>
-        node is not null
-        && node.GetValueKind() switch
-        {
-            JsonValueKind.String => type == JsonFieldType.String,
-            JsonValueKind.Number => type == JsonFieldType.Number,
-            JsonValueKind.True or JsonValueKind.False => type == JsonFieldType.Boolean,
-            _ when node is JsonArray => type == JsonFieldType.Array,
-            _ when node is JsonObject => type == JsonFieldType.Object,
-            _ => false,
-        };
+        SchemaValidator.Matches(node, type);
 
     private static bool IsNonEmpty(JsonNode? node) =>
         node switch

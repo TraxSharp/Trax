@@ -48,9 +48,18 @@ public static class FluentCheckout
             ["total"] = 0,
         };
 
+    /// <summary>The same declaration, read through <see cref="Persistence.IMachine"/>.</summary>
+    public static ConfiguredMachine<CheckoutState, CheckoutTrigger> AsMachine() => new(Configure);
+
     private static BuiltMachine<CheckoutState, CheckoutTrigger> Build()
     {
         var b = new MachineBuilder<CheckoutState, CheckoutTrigger>();
+        Configure(b);
+        return b.Build();
+    }
+
+    public static void Configure(IMachineBuilder<CheckoutState, CheckoutTrigger> b)
+    {
         b.Id("checkout").Version(1).StartsAt(CheckoutState.Cart, FreshCart);
 
         b.In(CheckoutState.Cart)
@@ -99,7 +108,5 @@ public static class FluentCheckout
             .On(CheckoutTrigger.Restart)
             .Reduce((_, _) => FreshCart())
             .To(CheckoutState.Cart);
-
-        return b.Build();
     }
 }

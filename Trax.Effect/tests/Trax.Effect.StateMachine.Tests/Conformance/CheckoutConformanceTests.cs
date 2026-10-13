@@ -9,7 +9,8 @@ namespace Trax.Effect.StateMachine.Tests.Conformance;
 /// <summary>
 /// Drives the C# checkout engine over the SAME shared checkout fixtures the TypeScript engine drives.
 /// A 3-state, guard-branched, multi-key-context machine — a stronger cross-language proof than the
-/// turnstile, and the one that exercises multi-key canonicalization on both runtimes.
+/// turnstile, and the one that exercises multi-key canonicalization on both runtimes. The advance fixtures
+/// replay through the declarative checkout, whose <c>Pay</c> declares its input as the twin's IR does.
 /// </summary>
 public class CheckoutConformanceTests
 {
@@ -44,7 +45,9 @@ public class CheckoutConformanceTests
     }
 
     [TestCaseSource(nameof(AdvanceFixtures))]
-    public void Advance_matches_the_shared_fixture(string path)
+    public void Advance_matches_the_shared_fixture(string path) => Replay(path);
+
+    private static void Replay(string path)
     {
         var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;
         var given = ToSnapshot((JsonObject)fixture["given"]!);
@@ -53,7 +56,7 @@ public class CheckoutConformanceTests
         var input = when["input"]?.DeepClone();
         var expect = (JsonObject)fixture["expect"]!;
 
-        var result = TestCheckout.Machine.Advance(given, trigger, input);
+        var result = DeclarativeCheckout.Machine.Advance(given, trigger, input);
 
         if (expect["outcome"]!.GetValue<string>() == "transitioned")
         {

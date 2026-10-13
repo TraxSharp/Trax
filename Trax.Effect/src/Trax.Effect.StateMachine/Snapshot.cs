@@ -33,6 +33,20 @@ public sealed record Snapshot
     /// <summary>The per-state context data. Shape is discriminated by <see cref="State"/>.</summary>
     public required JsonObject Context { get; init; }
 
+    /// <summary>
+    /// What writing this snapshot does to its row's timer: set by the engine on a snapshot a transition produced, and
+    /// by the draft service on one it writes. Null when nothing said, so a store decides from the machine's timers.
+    /// Never part of the wire or of equality.
+    /// </summary>
+    internal SnapshotTimer? Timer { get; init; }
+
+    /// <summary>
+    /// Whether the write of this snapshot is the server's (true) or a client's (false), which the store records on the
+    /// row; null leaves what the row records. Set by the draft service on a snapshot it writes. Never part of the wire
+    /// or of equality.
+    /// </summary>
+    internal bool? ServerRecord { get; init; }
+
     // A JsonObject compares by reference, which would break value equality for a record whose
     // whole point is data equality. Compare context structurally so two snapshots with equal
     // JSON are equal (this is what the conformance and round-trip tests assert on).

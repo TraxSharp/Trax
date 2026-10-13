@@ -7,7 +7,7 @@ using Trax.Effect.StateMachine.Persistence.Mutations;
 namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
-/// The FOUR generic mutations serve every registered machine via the registry (dispatch on the `machine`
+/// The generic save, advance, load and send mutations serve every registered machine via the registry (dispatch on the `machine`
 /// discriminator). Invoked directly the way Trax tests junctions, against real Postgres.
 /// </summary>
 public class RegistryJunctionTests
@@ -73,16 +73,8 @@ public class RegistryJunctionTests
         var id = Guid.NewGuid();
         var effect = new CountingEffect();
 
-        (
-            await new SaveSnapshotJunction(NewRegistry(), User).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = "order",
-                    Id = id,
-                    Snapshot = OrderMachine.ReviewSnapshot(1, 2),
-                }
-            )
-        ).Problem.Should().BeNull();
+        // The generic save does not serve the order, which has an effect, so its draft is written through the store.
+        await TestDb.Seed("u", id, OrderMachine.ReviewSnapshot(1, 2));
 
         var send = await new SendSnapshotJunction(NewRegistry(effect), User).Run(
             new SendSnapshotInput
@@ -425,14 +417,7 @@ public class RegistryJunctionTests
             .Be("not-found");
 
         var draftId = Guid.NewGuid();
-        await new SaveSnapshotJunction(NewRegistry(), User).Run(
-            new SaveSnapshotInput
-            {
-                Machine = "order",
-                Id = draftId,
-                Snapshot = DraftOrder,
-            }
-        );
+        await TestDb.Seed("u", draftId, DraftOrder);
         (
             await new SendSnapshotJunction(NewRegistry(), User).Run(
                 new SendSnapshotInput { Machine = "order", Id = draftId }
@@ -442,14 +427,7 @@ public class RegistryJunctionTests
             .Be("no-transition");
 
         var reviewId = Guid.NewGuid();
-        await new SaveSnapshotJunction(NewRegistry(), User).Run(
-            new SaveSnapshotInput
-            {
-                Machine = "order",
-                Id = reviewId,
-                Snapshot = OrderMachine.ReviewSnapshot(1),
-            }
-        );
+        await TestDb.Seed("u", reviewId, OrderMachine.ReviewSnapshot(1));
         (
             await new SendSnapshotJunction(NewRegistry(new CountingEffect(fail: true)), User).Run(
                 new SendSnapshotInput { Machine = "order", Id = reviewId }

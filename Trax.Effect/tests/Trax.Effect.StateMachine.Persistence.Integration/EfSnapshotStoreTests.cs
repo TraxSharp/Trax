@@ -28,6 +28,22 @@ public class EfSnapshotStoreTests
     }
 
     [Test]
+    public async Task The_database_clock_a_timer_is_armed_by_moves_inside_a_transaction()
+    {
+        // A timer armed late in a long transaction (a batch, or a wait on a lock) is armed from the time it is
+        // written, not from when the transaction began.
+        var context = TestDb.NewContext();
+        var store = TestDb.NewStore(context);
+        using var transaction = await context.BeginTransaction();
+        var first = await store.DatabaseNow(CancellationToken.None);
+        await ((DbContext)context).Database.ExecuteSqlRawAsync("SELECT pg_sleep(0.3)");
+        var second = await store.DatabaseNow(CancellationToken.None);
+        await transaction.Rollback();
+
+        (second - first).Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(250));
+    }
+
+    [Test]
     public async Task Round_trips_through_a_real_jsonb_column_queryable_server_side()
     {
         var id = Guid.NewGuid();

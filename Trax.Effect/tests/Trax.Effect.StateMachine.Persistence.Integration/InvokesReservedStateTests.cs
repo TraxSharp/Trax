@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
@@ -38,14 +39,20 @@ public class InvokesReservedStateTests(StoreProvider provider)
 
     private static JsonObject BuiltContext => new() { ["source"] = "repo", ["artifact"] = "a1" };
 
+    // The generic save does not serve a machine that invokes a train, so its drafts are written through the store.
+    private static ISnapshotStore Store(IServiceScope scope) =>
+        scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+
+    private const string NoSave =
+        "the generic save serves only machines with no server-side behaviour, and an invoked train is one. See "
+        + "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+
     private async Task<Guid> DraftInBuilding()
     {
         var id = Guid.NewGuid();
         using var scope = _host.Scope();
         var service = _host.Service(scope, BuildMachine.Id);
-        (await service.Autosave(User, id, BuildMachine.Json("Draft", Source)))
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
+        await TestDb.Seed(User, id, BuildMachine.Json("Draft", Source), Store(scope));
         (await service.Advance(User, id, "Build"))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()
@@ -69,16 +76,19 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
                 .Be(
-                    "state-reserved",
-                    $"a save never creates a draft in an invoking state. See {Adr}"
+                    DraftRefusalCodes.SaveNotAllowed,
+                    $"a save never creates a draft in an invoking state ({Adr}): {NoSave}"
                 );
 
-            await service.Autosave(User, moved, BuildMachine.Json("Draft", Source));
+            await TestDb.Seed(User, moved, BuildMachine.Json("Draft", Source), Store(scope));
             (await service.Autosave(User, moved, BuildMachine.Json("Building", Source)))
                 .Should()
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
-                .Be("state-reserved", "a save never moves a draft into an invoking state");
+                .Be(
+                    DraftRefusalCodes.SaveNotAllowed,
+                    "a save never moves a draft into an invoking state"
+                );
         }
 
         (await _host.Rows(created)).Should().BeEmpty();
@@ -101,8 +111,8 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
                 .Be(
-                    "draft-invoking",
-                    $"leaving by a save would strand the run; only a declared transition leaves. See {Adr}"
+                    DraftRefusalCodes.SaveNotAllowed,
+                    $"leaving by a save would strand the run; only a declared transition leaves ({Adr}): {NoSave}"
                 );
 
             (await service.Autosave(User, id, BuildMachine.Json("Draft", Source)))
@@ -121,13 +131,11 @@ public class InvokesReservedStateTests(StoreProvider provider)
                     "the context the run was started from cannot be rewritten under it"
                 )
                 .Which.Code.Should()
-                .Be("draft-invoking");
+                .Be(DraftRefusalCodes.SaveNotAllowed);
 
             (await service.Autosave(User, id, BuildMachine.Json("Building", Source)))
                 .Should()
-                .BeOfType<AutosaveResult.Saved>(
-                    "a save identical to the draft is answered as saved"
-                );
+                .BeOfType<AutosaveResult.Rejected>("even a save identical to the draft is refused");
         }
 
         var after = (await _host.Rows(id)).Single();
@@ -144,7 +152,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
         using (var scope = _host.Scope())
         {
             var service = _host.Service(scope, BuildMachine.Id);
-            await service.Autosave(User, id, BuildMachine.Json("Draft", Source));
+            await TestDb.Seed(User, id, BuildMachine.Json("Draft", Source), Store(scope));
 
             foreach (
                 var (state, context) in new[]
@@ -160,8 +168,8 @@ public class InvokesReservedStateTests(StoreProvider provider)
                     .BeOfType<AutosaveResult.Rejected>()
                     .Which.Code.Should()
                     .Be(
-                        "state-reserved",
-                        $"only the run's outcome enters {state}, with what the run produced. See {Adr}"
+                        DraftRefusalCodes.SaveNotAllowed,
+                        $"only the run's outcome enters {state}, with what the run produced ({Adr}): {NoSave}"
                     );
                 (await service.Autosave(User, Guid.NewGuid(), BuildMachine.Json(state, context)))
                     .Should()

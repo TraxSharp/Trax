@@ -292,4 +292,69 @@ public class IrExporterTests
             .Throw<InvalidOperationException>()
             .WithMessage("*state Locked has a delegate validator (Holds)*");
     }
+
+    private const string TimersAdr =
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+
+    [Test]
+    public void Timers_export_as_their_own_trigger_kind()
+    {
+        var reminder = (JsonObject)JsonNode.Parse(IrExporter.Export(ReminderMachine.Built))!;
+        var wait = (JsonObject)JsonNode.Parse(IrExporter.Export(WaitMachine.Built))!;
+
+        // The fixed form, with the union of the rules entering the timed state.
+        var fixedTimer = (JsonObject)
+            reminder["timers"]
+                .Should()
+                .BeOfType<JsonArray>($"a timer is a trigger kind of its own ({TimersAdr})")
+                .Subject.Should()
+                .ContainSingle()
+                .Subject!;
+        fixedTimer["state"]!.GetValue<string>().Should().Be("Review");
+        fixedTimer["trigger"]!.GetValue<string>().Should().Be("Review.after");
+        fixedTimer["target"]!.GetValue<string>().Should().Be("Expired");
+        fixedTimer["after"]!.GetValue<string>().Should().Be("PT10M");
+        fixedTimer.ToJsonString().Should().Contain("Editor");
+
+        // The field form, with its bounds.
+        var fieldTimer = (JsonObject)wait["timers"]!.AsArray().Single()!;
+        fieldTimer["trigger"]!.GetValue<string>().Should().Be("Fetching.after");
+        fieldTimer["target"]!.GetValue<string>().Should().Be("TimedOut");
+        fieldTimer["field"]!["name"]!.GetValue<string>().Should().Be("patience");
+        fieldTimer["field"]!["min"]!.GetValue<string>().Should().Be("PT1M");
+        fieldTimer["field"]!["max"]!.GetValue<string>().Should().Be("PT1H");
+
+        // Canonical: keys sorted, like every other block.
+        foreach (var timer in new[] { fixedTimer, fieldTimer })
+            timer.Select(kv => kv.Key).Should().BeInAscendingOrder(StringComparer.Ordinal);
+    }
+
+    [Test]
+    public void Timers_are_not_in_inputs()
+    {
+        var ir = (JsonObject)JsonNode.Parse(IrExporter.Export(ReminderMachine.Built))!;
+
+        ir["timers"]
+            .Should()
+            .BeOfType<JsonArray>("the timer is exported in a block of its own")
+            .Which.Should()
+            .ContainSingle();
+        ((JsonObject)ir["inputs"]!).ContainsKey("Review.after").Should().BeFalse(TimersAdr);
+        ir["triggers"]!
+            .AsArray()
+            .Select(t => t!.GetValue<string>())
+            .Should()
+            .NotContain("Review.after", "the triggers list names what a client sends");
+    }
+
+    // Green today, and it stays so: adding timers leaves every existing golden byte-identical.
+    [Test]
+    public void A_machine_without_timers_exports_no_timers_block()
+    {
+        Ir().ContainsKey("timers").Should().BeFalse(TimersAdr);
+        ((JsonObject)JsonNode.Parse(IrExporter.Export(IngestMachine.Built))!)
+            .ContainsKey("timers")
+            .Should()
+            .BeFalse();
+    }
 }

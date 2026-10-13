@@ -164,15 +164,11 @@ public class SnapshotMutationDefectTests
     {
         var id = Guid.NewGuid();
         var effect = new CountingEffect();
-        (
-            await Save(
-                "order",
-                id,
-                "{\"machine\":\"order\",\"version\":1,\"state\":\"Draft\",\"context\":{\"items\":[1],\"receipt\":null}}"
-            )
-        )
-            .Problem.Should()
-            .BeNull();
+        await TestDb.Seed(
+            "u",
+            id,
+            "{\"machine\":\"order\",\"version\":1,\"state\":\"Draft\",\"context\":{\"items\":[1],\"receipt\":null}}"
+        );
 
         // The client used the draft id as the idempotency key of an ordinary advance.
         (

@@ -61,15 +61,51 @@ public sealed class MachineDefinition<TState, TTrigger>
     internal IReadOnlyDictionary<TState, InvokeDefinition<TState>> Invokes { get; init; } =
         new Dictionary<TState, InvokeDefinition<TState>>();
 
+    /// <summary>
+    /// The schema each trigger's input is checked against before any guard reads it; a mismatch is
+    /// <c>invalid-input</c>. <see cref="ContextSchema.Empty"/> accepts only no input or <c>{}</c>. A trigger with
+    /// no entry is not checked, which is only the case on a machine whose guards and reducers are raw delegates
+    /// reading the input themselves. Built by <see cref="MachineBuilder{TState,TTrigger}.Build"/>.
+    /// </summary>
+    internal IReadOnlyDictionary<TTrigger, ContextSchema> InputSchemas { get; init; } =
+        new Dictionary<TTrigger, ContextSchema>();
+
+    /// <summary>
+    /// The states with a timer, keyed by state. Empty for a machine with none. Only
+    /// <see cref="SnapshotMachine{TState,TTrigger}.AdvanceTimer"/> fires one; <see cref="SnapshotMachine{TState,TTrigger}.Advance"/>
+    /// refuses a timer trigger as <c>timer-bound</c>.
+    /// </summary>
+    internal IReadOnlyDictionary<TState, TimerDefinition<TState>> Timers { get; init; } =
+        new Dictionary<TState, TimerDefinition<TState>>();
+
     /// <summary>Builds the snapshot a brand-new instance begins with.</summary>
-    public Snapshot CreateInitialSnapshot() =>
-        new()
+    public Snapshot CreateInitialSnapshot()
+    {
+        var context = CreateInitialContext();
+        return new()
         {
             Machine = Id,
             Version = Version,
             State = InitialState.ToString(),
-            Context = CreateInitialContext(),
+            Context = context,
+            Timer = EnteringTimer(InitialState, context).Timer,
         };
+    }
+
+    /// <summary>
+    /// What entering <paramref name="state"/> with <paramref name="context"/> does to the row's timer: arms the state's
+    /// timer from now, or clears it when the state has none. A duration the context cannot give (missing, not an
+    /// ISO-8601 duration, outside its bounds) is the <c>Problem</c>, and the timer is then null.
+    /// </summary>
+    internal (SnapshotTimer? Timer, string? Problem) EnteringTimer(TState state, JsonObject context)
+    {
+        if (!Timers.TryGetValue(state, out var timer))
+            return (SnapshotTimer.None, null);
+        var (duration, problem) = timer.DurationFor(context);
+        return problem is null
+            ? (new SnapshotTimer(duration, Restart: true), null)
+            : (null, problem);
+    }
 
     internal string? ValidateContext(TState state, JsonObject context) =>
         ContextValidators.TryGetValue(state, out var validate) ? validate(context) : null;

@@ -59,6 +59,11 @@ namespace Trax.Effect.Attributes
         public TraxConcurrencyLimitAttribute(int maxConcurrent) { }
         public int MaxConcurrent { get; }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class TraxMachineAttribute : System.Attribute
+    {
+        public TraxMachineAttribute() { }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
     public class TraxMutationAttribute : System.Attribute
     {
@@ -1066,12 +1071,26 @@ namespace Trax.Effect.Models.SnapshotDraft
         public string Context { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
         public System.DateTimeOffset? CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("due_at")]
+        public System.DateTimeOffset? DueAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("effect_key")]
+        public string? EffectKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("effect_lease_until")]
+        public System.DateTimeOffset? EffectLeaseUntil { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("effect_request_id")]
+        public string? EffectRequestId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("effect_token")]
+        public System.Guid? EffectToken { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("effect_trigger")]
+        public string? EffectTrigger { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("id")]
         public System.Guid Id { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoke_stranded_state")]
         public string? InvokeStrandedState { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoke_token")]
         public string? InvokeToken { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("ir_hash")]
+        public string? IrHash { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_request_from_state")]
         public string? LastRequestFromState { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_request_id")]
@@ -1082,8 +1101,18 @@ namespace Trax.Effect.Models.SnapshotDraft
         public string Machine { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("owner_kind")]
         public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("recent_requests", TypeName="jsonb")]
+        public string? RecentRequests { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("revision")]
+        public long Revision { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("row_id")]
         public long RowId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("server_record")]
+        public bool? ServerRecord { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("start_fingerprint")]
+        public string? StartFingerprint { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("start_request_id")]
+        public string? StartRequestId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("state")]
         public string State { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]

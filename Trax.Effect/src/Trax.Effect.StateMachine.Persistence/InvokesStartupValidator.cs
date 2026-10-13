@@ -81,6 +81,27 @@ internal sealed class InvokesStartupValidator(
                         + $"continue or retry edge into {chained.Target}), or declare the machine SystemOwned()."
                 );
 
+        // A timer is the server acting with nobody present, so on a user-owned machine it may not enter an invoking
+        // state: the run would be queued for a user who never asked for it, with no one to authorize it. A timer that
+        // leaves an invoking state goes through the advance's leaving path and is allowed.
+        if (!internals.SystemOwned)
+        {
+            var invoking = declarations.Select(d => d.State).ToHashSet(StringComparer.Ordinal);
+            foreach (
+                var (timed, target) in internals.TimerTargets.OrderBy(
+                    t => t.Key,
+                    StringComparer.Ordinal
+                )
+            )
+                if (invoking.Contains(target))
+                    problems.Add(
+                        $"The machine '{name}' is user-owned, and the timer of {timed} enters {target}, which "
+                            + "invokes a train. Its run would be queued by the server with no user present to "
+                            + "authorize it. Let an event the user sends enter it, or declare the machine "
+                            + "SystemOwned()."
+                    );
+        }
+
         var launcher = services.GetService<IInvokedTrainLauncher>();
         if (launcher is null)
             problems.Add(

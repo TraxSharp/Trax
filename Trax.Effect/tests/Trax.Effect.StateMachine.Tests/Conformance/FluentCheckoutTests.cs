@@ -39,10 +39,19 @@ public class FluentCheckoutTests
             .Be(TestCheckout.Machine.Describe().ToJsonString());
     }
 
-    [TestCaseSource(
-        typeof(CheckoutConformanceTests),
-        nameof(CheckoutConformanceTests.AdvanceFixtures)
-    )]
+    // The shared fixtures but those that send a bad input: this checkout's guards and reducers are delegates, which
+    // read the input themselves, so it declares no input schema and no invalid-input can come from it. The
+    // declarative checkout replays those (CheckoutConformanceTests).
+    public static IEnumerable<TestCaseData> DelegateAdvanceFixtures() =>
+        CheckoutConformanceTests
+            .AdvanceFixtures()
+            .Where(c =>
+                JsonNode.Parse(File.ReadAllText((string)c.Arguments[0]!))!["expect"]!
+                    ["reason"]
+                    ?.GetValue<string>() != RejectionReasons.InvalidInput
+            );
+
+    [TestCaseSource(nameof(DelegateAdvanceFixtures))]
     public void Advance_matches_the_shared_fixture(string path)
     {
         var fixture = (JsonObject)JsonNode.Parse(File.ReadAllText(path))!;

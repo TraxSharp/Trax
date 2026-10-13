@@ -52,11 +52,14 @@ public class EffectCommitIntegrityTests
     private static async Task<Guid> SeedReview(params int[] items)
     {
         var id = Guid.NewGuid();
-        (await Orders().Autosave(User, id, OrderMachine.ReviewSnapshot(items)))
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
+        (await Write(id, OrderMachine.ReviewSnapshot(items))).Should().BeTrue();
         return id;
     }
+
+    // A write to the draft from outside the draft service, as host code makes one: the soft save does not serve a
+    // machine with an effect.
+    private static Task<bool> Write(Guid id, string json) =>
+        TestDb.NewStore().Upsert(User, id, Parse(json));
 
     private static async Task<Snapshot> Stored(Guid id) =>
         (await Orders().Load(User, id)).Should().BeOfType<LoadResult.Loaded>().Which.Snapshot;
@@ -64,71 +67,23 @@ public class EffectCommitIntegrityTests
     private static int ItemCount(Snapshot snapshot) => snapshot.Context["items"]!.AsArray().Count;
 
     [Test]
-    public async Task An_edit_during_the_effect_is_not_committed_with_its_receipt()
+    public async Task An_edit_during_the_effect_is_refused_and_the_receipt_recorded_on_what_it_ran_on()
     {
         var id = await SeedReview(1);
         var charge = new GatedCharge();
 
         var send = Task.Run(() => Runner(charge).Run(User, id, "req-1"));
         await charge.Entered;
-        (await Orders().Autosave(User, id, OrderMachine.ReviewSnapshot(1, 2, 3, 4, 5)))
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
+        var edited = await Write(id, OrderMachine.ReviewSnapshot(1, 2, 3, 4, 5));
         charge.Release();
 
-        (await send).Should().BeOfType<AdvanceOutcome.Conflict>(Adr);
-        var stored = await Stored(id);
-        stored.State.Should().Be("Review");
-        ItemCount(stored).Should().Be(5);
+        edited.Should().BeFalse($"nothing writes a draft its effect is pending on. {Adr}");
+        var placed = (await send).Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot;
+        placed.State.Should().Be("Placed");
+        ItemCount(placed).Should().Be(1, Adr);
+        placed.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
         charge.Calls.Should().Be(1, Adr);
         charge.ChargedItemCounts.Should().Equal([1], Adr);
-    }
-
-    [Test]
-    public async Task A_send_after_an_edit_during_the_effect_neither_charges_again_nor_commits_the_receipt_on_the_edit()
-    {
-        var id = await SeedReview(1);
-        var charge = new GatedCharge();
-
-        var send = Task.Run(() => Runner(charge).Run(User, id, "req-1"));
-        await charge.Entered;
-        await Orders().Autosave(User, id, OrderMachine.ReviewSnapshot(1, 2));
-        charge.Release();
-        await send;
-
-        var retry = await Runner(charge).Run(User, id, "req-2");
-
-        retry
-            .Should()
-            .BeOfType<AdvanceOutcome.Rejected>()
-            .Which.Reason.Should()
-            .Be("draft-changed", Adr);
-        charge.Calls.Should().Be(1, Adr);
-        var stored = await Stored(id);
-        stored.State.Should().Be("Review", Adr);
-        ItemCount(stored).Should().Be(2);
-        stored.Context["receipt"].Should().BeNull(Adr);
-    }
-
-    [Test]
-    public async Task A_send_after_the_draft_is_restored_to_what_the_effect_ran_on_replays_its_receipt()
-    {
-        var id = await SeedReview(1);
-        var charge = new GatedCharge();
-
-        var send = Task.Run(() => Runner(charge).Run(User, id, "req-1"));
-        await charge.Entered;
-        await Orders().Autosave(User, id, OrderMachine.ReviewSnapshot(1, 2));
-        charge.Release();
-        (await send).Should().BeOfType<AdvanceOutcome.Conflict>();
-        await Orders().Autosave(User, id, OrderMachine.ReviewSnapshot(1));
-
-        var retry = await Runner(charge).Run(User, id, "req-2");
-
-        var placed = retry.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot;
-        placed.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
-        ItemCount(placed).Should().Be(1);
-        charge.Calls.Should().Be(1, Adr);
     }
 
     [Test]
@@ -173,43 +128,26 @@ public class EffectCommitIntegrityTests
     }
 
     [Test]
-    public async Task The_claim_records_the_fingerprint_of_the_content_the_effect_ran_on()
-    {
-        var id = await SeedReview(4);
-        var charge = new GatedCharge();
-        charge.Release();
-        var expected = SnapshotFingerprint.Of(Orders().Serialize(await Stored(id)));
-
-        (await Runner(charge).Run(User, id, "req-1")).Should().BeOfType<AdvanceOutcome.Advanced>();
-
-        var completed = await TestDb.NewClaims().GetCompleted(EffectKey(id));
-        completed.Should().NotBeNull();
-        completed!.Receipt.Should().Be("receipt-1");
-        completed.ContentFingerprint.Should().Be(expected, Adr);
-    }
-
-    [Test]
-    public async Task A_reset_while_the_effect_runs_does_not_let_it_run_again()
+    public async Task A_reset_while_the_effect_runs_is_refused_and_the_effect_runs_once()
     {
         var id = await SeedReview(1);
         var charge = new GatedCharge();
 
         var send = Task.Run(() => Runner(charge).Run(User, id, "req-1"));
         await charge.Entered;
-        (await Orders().Autosave(User, id, DraftSnapshot))
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
+        // Back returns the draft to the initial state: the reset a machine with an effect declares.
+        var reset = await Orders().Advance(User, id, "Back");
         charge.Release();
-        (await send).Should().BeOfType<AdvanceOutcome.Conflict>(Adr);
 
-        // A second reset, after the effect finished, still leaves its unrecorded receipt with the claim.
-        (await Orders().Autosave(User, id, DraftSnapshot))
+        reset
             .Should()
-            .BeOfType<AutosaveResult.Saved>();
-        await Orders().Autosave(User, id, OrderMachine.ReviewSnapshot(1));
+            .BeOfType<AdvanceOutcome.Rejected>()
+            .Which.Reason.Should()
+            .Be(DraftRefusalCodes.EffectInProgress, Adr);
+        (await send).Should().BeOfType<AdvanceOutcome.Advanced>();
         var resend = await Runner(charge).Run(User, id, "req-2");
 
-        resend.Should().BeOfType<AdvanceOutcome.Advanced>();
+        resend.Should().BeOfType<AdvanceOutcome.Advanced>("a send of a placed order replays");
         charge.Calls.Should().Be(1, Adr);
         (await Stored(id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
     }
@@ -223,7 +161,7 @@ public class EffectCommitIntegrityTests
         (await Runner(charge).Run(User, id, "req-1")).Should().BeOfType<AdvanceOutcome.Advanced>();
 
         (await Orders().Advance(User, id, "Reset")).Should().BeOfType<AdvanceOutcome.Advanced>();
-        await Orders().Autosave(User, id, OrderMachine.ReviewSnapshot(7));
+        await Write(id, OrderMachine.ReviewSnapshot(7));
         var next = await Runner(charge).Run(User, id, "req-2");
 
         next.Should().BeOfType<AdvanceOutcome.Advanced>().Which.Snapshot.Context["receipt"]!
@@ -271,37 +209,6 @@ public class EffectCommitIntegrityTests
     }
 
     [Test]
-    [LeavesStuckRuns("ends by claiming the key to prove it is free, and keeps that claim")]
-    public async Task Ttl_expiry_cancelled_midway_leaves_no_orphan_claim()
-    {
-        var id = await SeedReview(1);
-        var claims = TestDb.NewClaims();
-        var won = (ClaimResult.Won)await claims.TryClaim(EffectKey(id), TimeSpan.FromMinutes(5));
-        (await claims.Complete(EffectKey(id), won.OwnerToken, "receipt-old")).Should().BeTrue();
-        await TestDb.BackdateDraft(User, id, DateTimeOffset.UtcNow.AddDays(-2));
-
-        using var request = new CancellationTokenSource();
-        var service = new OrderMachine().CreateService(
-            new CancellingStore(TestDb.NewStore(), request),
-            new CancellingClaims(TestDb.NewClaims(), request),
-            draftTtl: TimeSpan.FromHours(1)
-        );
-        try
-        {
-            await service.Load(User, id, request.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            // The request went away midway; what matters is what it left behind.
-        }
-
-        (await Orders().Load(User, id)).Should().BeOfType<LoadResult.NotFound>();
-        (await TestDb.NewClaims().TryClaim(EffectKey(id), TimeSpan.FromMinutes(5)))
-            .Should()
-            .BeOfType<ClaimResult.Won>(Adr);
-    }
-
-    [Test]
     [LeavesStuckRuns(
         "a cancelled effect's outcome is unknown, so its claim stays in flight until the lease passes (IdempotentEffect)"
     )]
@@ -329,18 +236,26 @@ public class EffectCommitIntegrityTests
     public async Task Autosave_of_a_new_draft_does_not_overwrite_one_created_after_its_read()
     {
         var id = Guid.NewGuid();
-        (await TestDb.NewStore().Upsert(User, id, Parse(OrderPlaced("receipt-1", 1))))
+        (await TestDb.NewStore().Upsert(User, id, Parse(LedgerMachine.Json(LedgerState.Closed, 1))))
             .Should()
             .BeTrue();
-        var service = new OrderMachine().CreateService(
+        var service = new LedgerMachine().CreateService(
             new ReadsNothingStore(TestDb.NewStore()),
             TestDb.NewClaims()
         );
 
-        (await service.Autosave(User, id, OrderMachine.ReviewSnapshot(9)))
+        (await service.Autosave(User, id, LedgerMachine.Json(LedgerState.Counting, 9)))
             .Should()
             .BeOfType<AutosaveResult.Conflict>(Adr);
-        (await Stored(id)).State.Should().Be("Placed", Adr);
+        (
+            await new LedgerMachine()
+                .CreateService(TestDb.NewStore(), TestDb.NewClaims())
+                .Load(User, id)
+        )
+            .Should()
+            .BeOfType<LoadResult.Loaded>()
+            .Which.Snapshot.State.Should()
+            .Be(nameof(LedgerState.Closed), Adr);
     }
 
     [Test]

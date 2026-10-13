@@ -122,4 +122,37 @@ public class DifferentialCorpusReplayTests
         var diffs = DifferentialCorpus.Replay(TestTurnstile.Machine, WrongReasonCorpus);
         diffs.Should().ContainSingle().Which.Should().Contain("Push").And.Contain("no-transition");
     }
+
+    // A reminder corpus with a timer case: Review fires its timer into Expired; Idle has no timer.
+    private const string TimerCorpus = """
+        {
+          "machine": "reminder",
+          "version": 1,
+          "cases": [
+            {
+              "given": { "machine": "reminder", "version": 1, "state": "Review", "context": {} },
+              "when": { "trigger": "Review.after" },
+              "expect": { "outcome": "transitioned", "wire": "{\"machine\":\"reminder\",\"version\":1,\"state\":\"Expired\",\"context\":{}}" }
+            },
+            {
+              "given": { "machine": "reminder", "version": 1, "state": "Idle", "context": {} },
+              "when": { "trigger": "Review.after" },
+              "expect": { "outcome": "rejected", "reason": "no-transition" }
+            }
+          ]
+        }
+        """;
+
+    [Test]
+    public void Timer_triggers_replay_through_AdvanceTimer()
+    {
+        var diffs = DifferentialCorpus.Replay(ReminderMachine.Machine, TimerCorpus);
+
+        diffs
+            .Should()
+            .BeEmpty(
+                "a timer case replays through AdvanceTimer, never Advance (Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md): "
+                    + string.Join("\n", diffs)
+            );
+    }
 }

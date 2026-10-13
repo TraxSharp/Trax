@@ -56,16 +56,7 @@ public class MutationErrorMessageTests
     private static async Task<Guid> SeedReview(SnapshotMachineRegistry registry)
     {
         var id = Guid.NewGuid();
-        (
-            await new SaveSnapshotJunction(registry, User).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = "order",
-                    Id = id,
-                    Snapshot = OrderMachine.ReviewSnapshot(1),
-                }
-            )
-        ).Problem.Should().BeNull();
+        await TestDb.Seed(User.CurrentUserKey!, id, OrderMachine.ReviewSnapshot(1));
         return id;
     }
 

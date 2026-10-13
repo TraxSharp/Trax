@@ -19,11 +19,24 @@ public enum GateTrigger
     Go,
 }
 
-/// <summary>A declarative machine whose first <see cref="Configure"/> blocks until released.</summary>
+/// <summary>
+/// A declarative machine whose first <see cref="Configure"/> blocks until released, when made by
+/// <see cref="Blocking"/>. The assembly scan registers it in every host built over this assembly, so the instance the
+/// scan makes is released from the start: every host builds every machine it registers, and a blocked one would hold
+/// each host for the whole wait.
+/// </summary>
 public sealed class SlowToBuildMachine : Machine<GateState, GateTrigger>
 {
-    public readonly ManualResetEventSlim Release = new(false);
+    public readonly ManualResetEventSlim Release = new(true);
     public readonly ManualResetEventSlim Entered = new(false);
+
+    /// <summary>An instance whose first build waits for <see cref="Release"/>.</summary>
+    public static SlowToBuildMachine Blocking()
+    {
+        var machine = new SlowToBuildMachine();
+        machine.Release.Reset();
+        return machine;
+    }
 
     protected override void Configure(IMachineBuilder<GateState, GateTrigger> m)
     {
@@ -86,16 +99,7 @@ public class EffectAndHandshakeDefectTests
                 .BuildServiceProvider()
         );
         var user = new FakePrincipal("u");
-        (
-            await new SaveSnapshotJunction(registry, user).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = "order",
-                    Id = id,
-                    Snapshot = OrderMachine.ReviewSnapshot(1),
-                }
-            )
-        ).Problem.Should().BeNull();
+        await TestDb.Seed("u", id, OrderMachine.ReviewSnapshot(1));
 
         var send = await new SendSnapshotJunction(registry, user).Run(
             new SendSnapshotInput { Machine = "order", Id = id }
@@ -120,7 +124,7 @@ public class EffectAndHandshakeDefectTests
     [Test]
     public void SchemaHash_must_not_read_null_while_another_request_is_computing_it()
     {
-        var machine = new SlowToBuildMachine();
+        var machine = SlowToBuildMachine.Blocking();
 
         var first = Task.Run(() => machine.SchemaHash);
         machine.Entered.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();

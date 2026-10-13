@@ -9,6 +9,40 @@ namespace Trax.Effect.StateMachine.Persistence.Mutations;
 /// <summary>Cross-cutting runtime guards shared by the snapshot mutations.</summary>
 internal static class SnapshotGuards
 {
+    /// <summary>The refusal code of a client prediction that differs from the server's result.</summary>
+    public const string ClientDivergence = "client-divergence";
+
+    /// <summary>The UTF-8 length of <paramref name="value"/>, or 0 for null.</summary>
+    public static int Bytes(string? value) => value is null ? 0 : Encoding.UTF8.GetByteCount(value);
+
+    /// <summary>
+    /// An input as JSON, with the fields of <paramref name="sensitive"/> (a JSON object) added to it. Null when both
+    /// are empty. Throws <see cref="JsonException"/> when either is not valid JSON, when the sensitive part is not an
+    /// object, when the input it joins is not an object, or when one field is in both.
+    /// </summary>
+    public static JsonNode? Merge(string? input, string? sensitive)
+    {
+        var parsed = string.IsNullOrEmpty(input) ? null : JsonNode.Parse(input);
+        if (string.IsNullOrEmpty(sensitive))
+            return parsed;
+        if (JsonNode.Parse(sensitive) is not JsonObject extra)
+            throw new JsonException("The sensitive input is not a JSON object.");
+        var merged = parsed switch
+        {
+            null => new JsonObject(),
+            JsonObject obj => obj,
+            _ => throw new JsonException("The input a sensitive input joins is not a JSON object."),
+        };
+        foreach (var (name, value) in extra.ToList())
+        {
+            if (merged.ContainsKey(name))
+                throw new JsonException($"The input names '{name}' twice.");
+            extra.Remove(name);
+            merged[name] = value;
+        }
+        return merged;
+    }
+
     /// <summary>
     /// The runtime schema-hash handshake. When the client sends its machine hash (<see cref="IMachine.SchemaHash"/>,
     /// embedded in the twin) and it differs from the server's registered machine, the client is running an
@@ -95,6 +129,9 @@ internal class SaveSnapshotJunction(
             AutosaveResult.Saved saved => new SaveSnapshotOutput
             {
                 Snapshot = service.Serialize(saved.Snapshot),
+                Revision = saved.Revision,
+                RowId = saved.RowId,
+                DueAt = saved.DueAt,
             },
             AutosaveResult.Rejected rejected => Failed(
                 SnapshotGuards.Failure(
@@ -128,7 +165,8 @@ internal class SaveSnapshotJunction(
 internal class AdvanceSnapshotJunction(
     ISnapshotMachineRegistry registry,
     ISnapshotPrincipal principal,
-    ILogger<AdvanceSnapshotJunction>? logger = null
+    ILogger<AdvanceSnapshotJunction>? logger = null,
+    IServiceProvider? services = null
 ) : Junction<AdvanceSnapshotInput, AdvanceSnapshotOutput>
 {
     /// <summary>
@@ -155,18 +193,25 @@ internal class AdvanceSnapshotJunction(
         // The same bound autosave applies, checked before parsing: a reducer that copies its input into the
         // context would otherwise store whatever the request body carried.
         if (
-            input.Input is { } raw
-            && Encoding.UTF8.GetByteCount(raw) > SnapshotLimits.MaxSnapshotBytes
+            SnapshotGuards.Bytes(input.Input) + SnapshotGuards.Bytes(input.SensitiveInput)
+            > SnapshotLimits.MaxSnapshotBytes
         )
             return Problem(
-                "too-large",
+                RejectionReasons.TooLarge,
                 $"The trigger input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+
+        // A client's prediction is a snapshot, bounded like one, and refused before it is compared.
+        if (SnapshotGuards.Bytes(input.ClientResult) > SnapshotLimits.MaxSnapshotBytes)
+            return Problem(
+                RejectionReasons.TooLarge,
+                $"The client result exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
         JsonNode? triggerInput;
         try
         {
-            triggerInput = string.IsNullOrEmpty(input.Input) ? null : JsonNode.Parse(input.Input);
+            triggerInput = SnapshotGuards.Merge(input.Input, input.SensitiveInput);
         }
         catch (JsonException)
         {
@@ -175,9 +220,10 @@ internal class AdvanceSnapshotJunction(
 
         // Runtime differential: when the client sent the snapshot its twin computed for this advance, the
         // service compares it with its own result before writing and refuses a divergence (client-divergence)
-        // with nothing persisted, so the client reloads the draft as it was.
+        // with nothing persisted, so the client reloads the draft as it was. The request's user acts as a client,
+        // checked against the event's rule with the roles and policies it holds now.
         var outcome = await service.Advance(
-            userKey,
+            CallerRules.Client(userKey, CallerRules.Caller(services)),
             input.Id,
             input.Trigger,
             triggerInput,
@@ -186,11 +232,33 @@ internal class AdvanceSnapshotJunction(
             CancellationToken
         );
 
+        // Twin drift is worth an operator's attention, but the client's prediction can carry anything the context
+        // holds: only its length and hash are logged.
+        if (
+            outcome is AdvanceOutcome.Rejected { Reason: SnapshotGuards.ClientDivergence }
+            && input.ClientResult is { } predicted
+        )
+            logger?.LogWarning(
+                "The {Machine} draft {DraftId} was refused: the client's result for {Trigger} diverged from the "
+                    + "server's ({Length} characters, SHA-256 {Hash}).",
+                input.Machine,
+                input.Id,
+                input.Trigger,
+                predicted.Length,
+                Convert.ToHexStringLower(
+                    System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(predicted))
+                )
+            );
+
         return outcome switch
         {
             AdvanceOutcome.Advanced advanced => new AdvanceSnapshotOutput
             {
                 Snapshot = service.Serialize(advanced.Snapshot),
+                Revision = advanced.Revision,
+                RowId = advanced.RowId,
+                DueAt = advanced.DueAt,
+                DueAtKnown = advanced.DueAtKnown,
             },
             AdvanceOutcome.Rejected rejected => Failed(
                 SnapshotGuards.Failure(
@@ -235,13 +303,15 @@ internal class AdvanceSnapshotJunction(
 internal class LoadSnapshotJunction(
     ISnapshotMachineRegistry registry,
     ISnapshotPrincipal principal,
-    ILogger<LoadSnapshotJunction>? logger = null
+    ILogger<LoadSnapshotJunction>? logger = null,
+    IServiceProvider? services = null
 ) : Junction<LoadSnapshotInput, LoadSnapshotOutput>
 {
     /// <summary>
-    /// Loads the current user's draft. A missing (or expired) draft comes back as the <c>not-found</c>
-    /// problem, which clients treat as "start fresh"; a stored draft that fails validation comes back with
-    /// its rehydration error code.
+    /// Loads the current user's draft, as a client held to the machine's <c>get</c> rule. A missing (or expired)
+    /// draft, and one the rule does not let the caller read, come back alike as the <c>not-found</c> problem, which
+    /// clients treat as "start fresh"; a stored draft that fails validation comes back with its rehydration error
+    /// code.
     /// </summary>
     public override async Task<LoadSnapshotOutput> Run(LoadSnapshotInput input)
     {
@@ -258,11 +328,18 @@ internal class LoadSnapshotJunction(
         )
             return Problem(mismatch.Code, mismatch.Message);
 
-        return await service.Load(userKey, input.Id, CancellationToken) switch
+        return await service.Load(
+            CallerRules.Client(userKey, CallerRules.Caller(services)),
+            input.Id,
+            CancellationToken
+        ) switch
         {
             LoadResult.Loaded loaded => new LoadSnapshotOutput
             {
                 Snapshot = service.Serialize(loaded.Snapshot),
+                Revision = loaded.Revision,
+                RowId = loaded.RowId,
+                DueAt = loaded.DueAt,
             },
             LoadResult.NotFound => Problem("not-found", "No draft to resume."),
             LoadResult.Invalid invalid => new LoadSnapshotOutput
@@ -287,11 +364,139 @@ internal class LoadSnapshotJunction(
         };
 }
 
+/// <summary>Start a new instance from the machine's declared start, under a server-minted id. Infrastructure chained by <see cref="StartSnapshot"/>; not intended to be called directly.</summary>
+internal class StartSnapshotJunction(
+    ISnapshotMachineRegistry registry,
+    ISnapshotPrincipal principal,
+    IServiceProvider? services = null
+) : Junction<StartSnapshotInput, StartSnapshotOutput>
+{
+    /// <summary>
+    /// Starts an instance for the current user. Refusals are returned as a <see cref="SnapshotProblem"/>:
+    /// <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>, <c>too-large</c> (input over
+    /// <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>malformed</c> (input is not a JSON object), or the code of a
+    /// <see cref="StartOutcome.Rejected"/>.
+    /// </summary>
+    public override async Task<StartSnapshotOutput> Run(StartSnapshotInput input)
+    {
+        if (SnapshotOwner.Key(principal) is not { } userKey)
+            return Problem(
+                DraftRefusalCodes.Unauthenticated,
+                "No authenticated user is associated with this request."
+            );
+        if (registry.Service(input.Machine) is not { } service)
+            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+
+        if (
+            SnapshotGuards.SchemaMismatch(registry, input.Machine, input.SchemaHash) is { } mismatch
+        )
+            return Problem(mismatch.Code, mismatch.Message);
+
+        if (
+            SnapshotGuards.Bytes(input.Input) + SnapshotGuards.Bytes(input.SensitiveInput)
+            > SnapshotLimits.MaxSnapshotBytes
+        )
+            return Problem(
+                RejectionReasons.TooLarge,
+                $"The start input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+
+        JsonObject? startInput;
+        try
+        {
+            startInput = SnapshotGuards.Merge(input.Input, input.SensitiveInput) switch
+            {
+                null => null,
+                JsonObject obj => obj,
+                _ => throw new JsonException("The start input is not a JSON object."),
+            };
+        }
+        catch (JsonException)
+        {
+            return Problem("malformed", "The start input is not a JSON object.");
+        }
+
+        // The request's user acts as a client, checked against the start's rule with the roles and policies it
+        // holds now.
+        var outcome = await service.Start(
+            CallerRules.Client(userKey, CallerRules.Caller(services)),
+            startInput,
+            input.RequestId,
+            CancellationToken
+        );
+
+        return outcome switch
+        {
+            StartOutcome.Started started => new StartSnapshotOutput
+            {
+                Id = started.Id,
+                Created = started.Created,
+                Snapshot = service.Serialize(started.Snapshot),
+                Revision = started.Revision,
+                DueAt = started.DueAt,
+            },
+            StartOutcome.Rejected rejected => Problem(rejected.Code, rejected.Message),
+            _ => Problem("internal-error", "Unknown start outcome."),
+        };
+    }
+
+    private static StartSnapshotOutput Problem(string code, string message) =>
+        new()
+        {
+            Problem = new SnapshotProblem { Code = code, Message = message },
+        };
+}
+
+/// <summary>Delete one of the caller's instances. Infrastructure chained by <see cref="DiscardSnapshot"/>; not intended to be called directly.</summary>
+internal class DiscardSnapshotJunction(
+    ISnapshotMachineRegistry registry,
+    ISnapshotPrincipal principal,
+    IServiceProvider? services = null
+) : Junction<DiscardSnapshotInput, DiscardSnapshotOutput>
+{
+    /// <summary>
+    /// Discards the current user's instance. A missing one, or another user's, is answered as discarded. Refusals
+    /// are returned as a <see cref="SnapshotProblem"/>: <c>unauthenticated</c>, <c>unknown-machine</c>, or the code
+    /// of a <see cref="DiscardOutcome.Rejected"/>.
+    /// </summary>
+    public override async Task<DiscardSnapshotOutput> Run(DiscardSnapshotInput input)
+    {
+        if (SnapshotOwner.Key(principal) is not { } userKey)
+            return Problem(
+                DraftRefusalCodes.Unauthenticated,
+                "No authenticated user is associated with this request."
+            );
+        if (registry.Service(input.Machine) is not { } service)
+            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+
+        var outcome = await service.Discard(
+            CallerRules.Client(userKey, CallerRules.Caller(services)),
+            input.Id,
+            input.RequestId,
+            CancellationToken
+        );
+
+        return outcome switch
+        {
+            DiscardOutcome.Discarded => new DiscardSnapshotOutput { Discarded = true },
+            DiscardOutcome.Rejected rejected => Problem(rejected.Code, rejected.Message),
+            _ => Problem("internal-error", "Unknown discard outcome."),
+        };
+    }
+
+    private static DiscardSnapshotOutput Problem(string code, string message) =>
+        new()
+        {
+            Problem = new SnapshotProblem { Code = code, Message = message },
+        };
+}
+
 /// <summary>Run a machine's one irreversible effect exactly once (state-gated, idempotent). Infrastructure chained by <see cref="SendSnapshot"/>; not intended to be called directly.</summary>
 internal class SendSnapshotJunction(
     ISnapshotMachineRegistry registry,
     ISnapshotPrincipal principal,
-    ILogger<SendSnapshotJunction>? logger = null
+    ILogger<SendSnapshotJunction>? logger = null,
+    IServiceProvider? services = null
 ) : Junction<SendSnapshotInput, SendSnapshotOutput>
 {
     /// <summary>
@@ -325,18 +530,30 @@ internal class SendSnapshotJunction(
         // Absent a client key, one derived from the draft id is the idempotency key, so a bare double-send
         // replays. It is prefixed because advance and send share one request-id namespace: a client that used
         // the bare draft id as an advance's key must not have its Send refused as a reused id.
-        var requestId = string.IsNullOrEmpty(input.RequestId)
-            ? $"send:{input.Id}"
-            : input.RequestId;
+        // A blank one is the client's and names no request: it is refused, as on every other event path.
+        var requestId = input.RequestId ?? $"send:{input.Id}";
 
         var registryService = registry.Service(input.Machine)!;
         try
         {
-            return await runner.Run(userKey, input.Id, requestId, CancellationToken) switch
+            // The effect-bound event's rule is checked against the request's user before the effect is claimed.
+            var sent = runner is IActorEffectRunner actorRunner
+                ? await actorRunner.Run(
+                    CallerRules.Client(userKey, CallerRules.Caller(services)),
+                    input.Id,
+                    requestId,
+                    CancellationToken
+                )
+                : await runner.Run(userKey, input.Id, requestId, CancellationToken);
+            return sent switch
             {
                 AdvanceOutcome.Advanced advanced => new SendSnapshotOutput
                 {
                     Snapshot = registryService.Serialize(advanced.Snapshot),
+                    Revision = advanced.Revision,
+                    RowId = advanced.RowId,
+                    DueAt = advanced.DueAt,
+                    DueAtKnown = advanced.DueAtKnown,
                 },
                 AdvanceOutcome.Rejected rejected => Failed(
                     SnapshotGuards.Failure(

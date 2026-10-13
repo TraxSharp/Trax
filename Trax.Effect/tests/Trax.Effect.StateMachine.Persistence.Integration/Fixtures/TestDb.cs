@@ -37,6 +37,35 @@ public static class TestDb
         new(context ?? NewContext(), Dialect);
 
     /// <summary>
+    /// Writes <paramref name="json"/> as <paramref name="userKey"/>'s draft straight through the store, as host code
+    /// would. The generic save serves only machines with no server-side behaviour, so a draft of a machine with an
+    /// effect, an invoked train or a role-gated event is seeded this way.
+    /// </summary>
+    public static async Task Seed(
+        string userKey,
+        Guid id,
+        string json,
+        ISnapshotStore? store = null
+    )
+    {
+        if (!await (store ?? NewStore()).Upsert(userKey, id, Parse(json)))
+            throw new InvalidOperationException($"Could not seed draft {id} for {userKey}.");
+    }
+
+    /// <summary>A snapshot as a client writes it, parsed.</summary>
+    public static Snapshot Parse(string json)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        return new Snapshot
+        {
+            Machine = node["machine"]!.GetValue<string>(),
+            Version = node["version"]!.GetValue<int>(),
+            State = node["state"]!.GetValue<string>(),
+            Context = node["context"]!.AsObject().DeepClone().AsObject(),
+        };
+    }
+
+    /// <summary>
     /// Force a draft's <c>updated_at</c> to a fixed instant (the store always stamps "now"). This is how the
     /// TTL/expiry tests make a draft look abandoned deterministically, the analogue of the effect-claim
     /// tests' negative lease. Pass an instant comfortably past the TTL under test.

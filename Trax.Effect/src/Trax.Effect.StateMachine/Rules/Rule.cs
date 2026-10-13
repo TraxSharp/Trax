@@ -27,6 +27,9 @@ public enum JsonFieldType
 
     /// <summary>A JSON object.</summary>
     Object,
+
+    /// <summary>A JSON number with no fractional part (<c>2020</c> and <c>2020.0</c> both count).</summary>
+    Integer,
 }
 
 /// <summary>Numeric and count comparison operators.</summary>

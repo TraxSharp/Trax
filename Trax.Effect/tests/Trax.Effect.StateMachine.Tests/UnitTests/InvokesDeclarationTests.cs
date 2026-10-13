@@ -501,7 +501,11 @@ public class InvokesDeclarationTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(
+                RejectionReasons.OutcomeBound,
+                "an outcome is applied only by the outcome path, and Advance names why it refuses one "
+                    + "(Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)"
+            );
         IngestMachine.Machine.CanFire(Fetching(), "Fetching.done").Should().BeFalse();
     }
 
@@ -560,15 +564,17 @@ public class InvokesDeclarationTests
             .Should()
             .Be("Cancelled");
 
-        // The success outcome's input schema is the train's output type; failure and cancel take none.
-        var fields = ir["inputs"]!["Fetching.done"]!["fields"]!
+        // The success outcome's input schema is the train's output type, exported under the outcome rather than
+        // with the inputs a client sends; failure and cancel take none.
+        var fields = done["output"]!["fields"]!
             .AsArray()
             .Select(f =>
                 (Name: f!["name"]!.GetValue<string>(), Type: f["type"]!.GetValue<string>())
             )
             .ToList();
         fields.Should().Equal(("fingerprint", "string"), ("unsure", "boolean"));
-        ((JsonObject)ir["inputs"]!).ContainsKey("Fetching.failed").Should().BeFalse();
+        ((JsonObject)ir["inputs"]!).Should().BeEmpty();
+        outcomes["Fetching.failed"]!.AsObject().ContainsKey("output").Should().BeFalse();
 
         // Outcome edges are not ordinary transitions, and the input mapping is never exported.
         ir["transitions"]!
@@ -576,7 +582,7 @@ public class InvokesDeclarationTests
             .Select(t => t!["trigger"]!.GetValue<string>())
             .Should()
             .NotContain(t => t.Contains('.'));
-        done.Select(kv => kv.Key).Should().BeEquivalentTo("edges", "outcome", "state");
+        done.Select(kv => kv.Key).Should().BeEquivalentTo("edges", "outcome", "output", "state");
     }
 
     [Test]

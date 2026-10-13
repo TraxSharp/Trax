@@ -316,6 +316,16 @@ public sealed class EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = n
             .ExecuteDeleteAsync(cancellationToken);
     }
 
+    /// <summary>Whether the key's claim, completed or not, was taken longer ago than the lease it was taken with.</summary>
+    /// <param name="effectKey">The intent key.</param>
+    internal Task<bool> LeasePassed(string effectKey)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return db
+            .EffectClaims.AsNoTracking()
+            .AnyAsync(x => x.EffectKey == effectKey && x.LeaseExpiresAt < now);
+    }
+
     /// <inheritdoc/>
     public async Task<bool> ReleaseOwned(
         string effectKey,

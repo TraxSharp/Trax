@@ -70,4 +70,19 @@ public class IntrospectionTests
 
         TestTurnstile.Machine.Describe().ToJsonString().Should().Be(expected);
     }
+
+    [Test]
+    public void The_trigger_list_names_the_timer_with_kind_Timer_and_no_input()
+    {
+        Trax.Effect.StateMachine.Persistence.IMachine reminder = ReminderMachine.AsMachine();
+
+        reminder
+            .Triggers.Should()
+            .ContainSingle(t => t.Name == "Review.after")
+            .Which.Should()
+            .Be(
+                new MachineTrigger("Review.after", TriggerKind.Timer, null),
+                "a timer is server-only and takes no input (Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)"
+            );
+    }
 }

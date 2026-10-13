@@ -20,5 +20,9 @@
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
     <!-- Applies an outcome to a machine whose train only the mediator's tests can declare. -->
     <InternalsVisibleTo Include="Trax.Mediator.Tests.StateMachine.Integration" />
+    <!-- Compares the rule of each event entering an invoking state with the train's [TraxAuthorize] at startup. -->
+    <InternalsVisibleTo Include="Trax.Mediator" />
+    <!-- Writes and reads a TimeSpan on the typed machine surface as the ISO-8601 duration a timer reads. -->
+    <InternalsVisibleTo Include="Trax.Api.GraphQL" />
   </ItemGroup>
 </Project>

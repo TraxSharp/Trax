@@ -29,10 +29,14 @@ public class DeclarativeAuthoringDefectTests
 
     public sealed record MapContext(Dictionary<string, int> Counts);
 
+    public sealed record CountInput(int N);
+
+    // The machine's wire: camelCase, enums as names, and a TimeSpan as the ISO-8601 duration a timer reads, which
+    // the schema's duration format describes.
     private static readonly JsonSerializerOptions CamelCase = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new JsonStringEnumConverter(), new IsoDurationJsonConverter() },
     };
 
     private static string? ValidateOwnJson<TContext>(TContext value) =>
@@ -81,7 +85,8 @@ public class DeclarativeAuthoringDefectTests
             null,
             new DateOnly(2026, 9, 28),
             TimeSpan.FromMinutes(5),
-            ulong.MaxValue,
+            // The largest ulong both engines can tell from one past ulong.MaxValue; see below.
+            ulong.MaxValue - 4095,
             -3,
             'x',
             [Guid.NewGuid()],
@@ -91,6 +96,11 @@ public class DeclarativeAuthoringDefectTests
         );
 
         ValidateOwnJson(value).Should().BeNull();
+        // A JSON number reaches both engines as a double, and ulong.MaxValue and ulong.MaxValue + 1 read as the
+        // same one, so the range stops one double short of the end and refuses both.
+        ValidateOwnJson(value with { Big = ulong.MaxValue })
+            .Should()
+            .Be("'big' is out of range.");
 
         var fields = SchemaReflection.For<WideContext>().Fields.ToDictionary(f => f.Name);
         fields["labels"].Type.Should().Be(JsonFieldType.Object);
@@ -195,7 +205,14 @@ public class DeclarativeAuthoringDefectTests
             "fresh",
             (context, input) => new JsonObject { ["n"] = input?["n"]?.DeepClone() }
         );
-        builder.In(S.A).On(T.Go).Reduce(new Reduction.Custom("fresh")).To(S.B);
+        // The reducer reads the input, so the trigger declares it: on a declarative machine a trigger without
+        // WithInput takes no input.
+        builder
+            .In(S.A)
+            .On(T.Go)
+            .WithInput<CountInput>()
+            .Reduce(new Reduction.Custom("fresh"))
+            .To(S.B);
         var engine = builder.Build().Engine;
 
         var result = engine.Advance(

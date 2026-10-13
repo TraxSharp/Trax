@@ -131,6 +131,12 @@ internal sealed record InvokeDefinition<TState>(
     /// <summary>The train's canonical name: its interface's full name.</summary>
     public string TrainName => TrainType.FullName ?? TrainType.Name;
 
+    /// <summary>
+    /// The schema of <see cref="OutputType"/>, which the success outcome's input is checked against before any
+    /// <c>OnDone</c> guard reads it. Reflected when the machine is built.
+    /// </summary>
+    public ContextSchema OutputSchema { get; init; } = ContextSchema.Empty;
+
     /// <summary>The outcome trigger for <paramref name="kind"/>, e.g. <c>Fetching.done</c>.</summary>
     public string TriggerName(InvokeOutcomeKind kind) => OutcomeTriggers.Name(State, kind);
 

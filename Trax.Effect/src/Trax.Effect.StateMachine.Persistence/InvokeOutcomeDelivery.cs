@@ -151,10 +151,9 @@ internal sealed class InvokeOutcomeDelivery(
         TrainState.Cancelled,
     ];
 
-    private readonly Dictionary<string, IMachine> _machines = machines.ToDictionary(
-        m => m.Name,
-        StringComparer.Ordinal
-    );
+    private readonly Dictionary<string, IMachine> _machines = RegisteredMachines
+        .Distinct(machines)
+        .ToDictionary(m => m.Name, StringComparer.Ordinal);
 
     /// <summary>Delivers the outcome of the run whose external id is <paramref name="invokeToken"/>.</summary>
     public async Task<InvokeDelivery> Deliver(

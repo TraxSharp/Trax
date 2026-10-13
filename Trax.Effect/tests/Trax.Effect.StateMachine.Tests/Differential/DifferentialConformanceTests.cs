@@ -16,11 +16,11 @@ public class DifferentialConformanceTests
 {
     [Test]
     public void Turnstile_engine_reproduces_the_shared_differential_corpus() =>
-        AssertReplays("turnstile", TestTurnstile.Machine);
+        AssertReplays("turnstile", DeclarativeTurnstile.Machine);
 
     [Test]
     public void Checkout_engine_reproduces_the_shared_differential_corpus() =>
-        AssertReplays("checkout", TestCheckout.Machine);
+        AssertReplays("checkout", DeclarativeCheckout.Machine);
 
     private static void AssertReplays<TState, TTrigger>(
         string name,

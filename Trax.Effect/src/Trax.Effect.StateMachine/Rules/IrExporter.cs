@@ -40,14 +40,10 @@ public static class IrExporter
         foreach (var (state, schema) in declarative.ContextSchemas)
             context[state.ToString()!] = WriteSchema(schema);
 
+        // Only what a client may send: an invoked train's output is exported under its outcome instead.
         var inputs = new JsonObject();
         foreach (var (trigger, schema) in declarative.TriggerInputs)
             inputs[trigger.ToString()!] = WriteSchema(schema);
-
-        // An invoking state's success outcome takes the train's output as its input, so its schema is the
-        // output type's. Failure and cancel carry no input.
-        foreach (var invoke in def.Invokes.Values)
-            inputs[invoke.TriggerName(InvokeOutcomeKind.Done)] = WriteSchema(OutputSchema(invoke));
 
         var transitions = BuildTransitions(machine, declarative);
 
@@ -85,6 +81,11 @@ public static class IrExporter
         if (def.Invokes.Count > 0)
             ir["outcomes"] = WriteOutcomes(def.Invokes);
 
+        // The timers of timed states, a server-only trigger kind of their own: never in inputs or triggers, which name
+        // what a client sends. Omitted when the machine has none, so its IR is unchanged.
+        if (def.Timers.Count > 0)
+            ir["timers"] = WriteTimers(machine);
+
         // The differential fuzzing inputs (test-only), if authored via .Differential(...). Carries the
         // samples/seeds/contexts the cross-language harness enumerates, so it reads this one IR instead of a
         // hand-written machine.json. Omitted when empty, so a machine without .Differential has identical IR.
@@ -98,6 +99,33 @@ public static class IrExporter
     // as "always taken, keep the context") and its state with no validator, while the server runs the delegate.
     // The twin would accept what the server refuses. Refuse the export instead, naming every offender.
     private static void RefuseDelegates<TState, TTrigger>(
+        BuiltMachine<TState, TTrigger> machine,
+        DeclarativeModel<TState, TTrigger> declarative
+    )
+        where TState : struct, Enum
+        where TTrigger : struct, Enum
+    {
+        var problems = DelegateProblems(machine, declarative);
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                $"IR export refuses the machine '{machine.Definition.Id}': the IR cannot carry a C# delegate, so a "
+                    + "generated twin would accept what the server refuses. "
+                    + string.Join(" ", problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+            );
+    }
+
+    /// <summary>
+    /// Whether <see cref="Export"/> refuses <paramref name="machine"/> by design: it was authored with raw
+    /// delegates (no declarative model), or it mixes the styles and still has a delegate guard, reducer or
+    /// validator. Such a machine has no IR, so it has no IR hash; any other export failure is a defect.
+    /// </summary>
+    internal static bool RefusesByDesign<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
+        where TState : struct, Enum
+        where TTrigger : struct, Enum =>
+        machine.Declarative is not { } declarative
+        || DelegateProblems(machine, declarative).Count > 0;
+
+    private static List<string> DelegateProblems<TState, TTrigger>(
         BuiltMachine<TState, TTrigger> machine,
         DeclarativeModel<TState, TTrigger> declarative
     )
@@ -144,12 +172,57 @@ public static class IrExporter
                     + "`.CustomGuard(\"name\", (context, input) => ...)`."
             );
 
-        if (problems.Count > 0)
-            throw new InvalidOperationException(
-                $"IR export refuses the machine '{def.Id}': the IR cannot carry a C# delegate, so a generated twin "
-                    + "would accept what the server refuses. "
-                    + string.Join(" ", problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+        foreach (
+            var timer in def
+                .Timers.Values.Where(t => t.Fixed is null && t.Field is null)
+                .OrderBy(t => t.State.ToString(), StringComparer.Ordinal)
+        )
+            problems.Add(
+                $"the timer of {timer.State} reads its duration through a selector that is not a single field. Read "
+                    + "it from one field of the state's context: `.After<TContext>(c => c.Field, min, max)`."
             );
+
+        return problems;
+    }
+
+    // One entry per timed state, sorted by state: the state, its trigger, its target, the duration (a fixed `after`, or
+    // the context `field` with its bounds, as ISO-8601 durations), and the rules it acts under, the union of the rules
+    // of everything that enters the state, for the census and the startup comparison.
+    private static JsonArray WriteTimers<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
+        where TState : struct, Enum
+        where TTrigger : struct, Enum
+    {
+        var rules = machine.TimerRules();
+        var timers = new JsonArray();
+        foreach (
+            var timer in machine.Timers.Values.OrderBy(
+                t => t.State.ToString(),
+                StringComparer.Ordinal
+            )
+        )
+        {
+            var acting = new JsonArray();
+            foreach (var rule in rules.GetValueOrDefault(timer.TriggerName) ?? [])
+                acting.Add(rule);
+            var written = new JsonObject
+            {
+                ["state"] = timer.State.ToString(),
+                ["trigger"] = timer.TriggerName,
+                ["target"] = timer.Target.ToString(),
+                ["rules"] = acting,
+            };
+            if (timer.Fixed is { } fixedDuration)
+                written["after"] = IsoDuration.Format(fixedDuration);
+            else
+                written["field"] = new JsonObject
+                {
+                    ["name"] = timer.Field,
+                    ["min"] = IsoDuration.Format(timer.Min),
+                    ["max"] = IsoDuration.Format(timer.Max),
+                };
+            timers.Add(written);
+        }
+        return timers;
     }
 
     private static JsonObject WriteDifferential<TState, TTrigger>(
@@ -197,27 +270,11 @@ public static class IrExporter
         return arr;
     }
 
-    private static ContextSchema OutputSchema<TState>(InvokeDefinition<TState> invoke)
-        where TState : struct, Enum
-    {
-        try
-        {
-            return SchemaReflection.For(invoke.OutputType);
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new InvalidOperationException(
-                $"IR export cannot describe the output of {invoke.TrainType.Name}, invoked in {invoke.State}: "
-                    + ex.Message,
-                ex
-            );
-        }
-    }
-
     // One entry per outcome trigger (Fetching.done, Fetching.failed, Fetching.cancelled): the invoking state, the
     // outcome, the train's canonical name, and the edges in declaration order, which is the order they are tried
-    // in, so a guarded edge before an unguarded fallback stays before it. The input mapping is server-only and
-    // is not exported: the twin never starts a train.
+    // in, so a guarded edge before an unguarded fallback stays before it. The success outcome also carries the
+    // schema of the train's output, which is its input. The input mapping is server-only and is not exported: the
+    // twin never starts a train.
     private static JsonObject WriteOutcomes<TState>(
         IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
     )
@@ -237,12 +294,15 @@ public static class IrExporter
                     e["reduce"] = WriteReduction(edge.Reduce);
                 edges.Add(e);
             }
-            outcomes[invoke.TriggerName(kind)] = new JsonObject
+            var outcome = new JsonObject
             {
                 ["state"] = invoke.State.ToString(),
                 ["outcome"] = OutcomeTriggers.Suffix(kind),
                 ["edges"] = edges,
             };
+            if (kind == InvokeOutcomeKind.Done)
+                outcome["output"] = WriteSchema(invoke.OutputSchema);
+            outcomes[invoke.TriggerName(kind)] = outcome;
         }
         return outcomes;
     }
@@ -302,26 +362,65 @@ public static class IrExporter
         return array;
     }
 
-    private static JsonObject WriteSchema(ContextSchema schema)
+    private static JsonObject WriteSchema(ContextSchema schema) =>
+        new() { ["fields"] = WriteFields(schema.Fields) };
+
+    // A nested record's fields, or a list of records' element fields, are written under the field as "fields".
+    private static JsonArray WriteFields(IReadOnlyList<FieldSchema> schema)
     {
         var fields = new JsonArray();
-        foreach (var field in schema.Fields)
+        foreach (var field in schema)
         {
             var constraints = new JsonArray();
             foreach (var constraint in field.Constraints)
                 constraints.Add(WriteRule(constraint));
 
-            fields.Add(
-                new JsonObject
-                {
-                    ["name"] = field.Name,
-                    ["type"] = TypeName(field.Type),
-                    ["nullable"] = field.Nullable,
-                    ["constraints"] = constraints,
-                }
-            );
+            var written = new JsonObject
+            {
+                ["name"] = field.Name,
+                ["type"] = TypeName(field.Type),
+                ["nullable"] = field.Nullable,
+                ["constraints"] = constraints,
+            };
+            WriteShape(written, field);
+            fields.Add(written);
         }
-        return new JsonObject { ["fields"] = fields };
+        return fields;
+    }
+
+    // What a field and a dictionary value or list element share: a number's range, an enum's names (and which match
+    // only as written), a string's format, a record's fields, and the schema of its own values and keys. Each is
+    // written only when the field has it.
+    private static void WriteShape(JsonObject written, FieldSchema field)
+    {
+        if (field.Minimum is { } minimum)
+            written["minimum"] = minimum;
+        if (field.Maximum is { } maximum)
+            written["maximum"] = maximum;
+        if (field.Enum is { } names)
+            written["enum"] = new JsonArray(names.Select(n => (JsonNode?)n).ToArray());
+        if (field.EnumExact is { } exact)
+            written["enumExact"] = new JsonArray(exact.Select(n => (JsonNode?)n).ToArray());
+        if (field.Format is { } format)
+            written["format"] = format;
+        if (field.Fields is { } nested)
+            written["fields"] = WriteFields(nested);
+        if (field.Values is { } values)
+        {
+            var value = new JsonObject
+            {
+                ["type"] = TypeName(values.Type),
+                ["nullable"] = values.Nullable,
+            };
+            WriteShape(value, values);
+            written["values"] = value;
+        }
+        if (field.Keys is { } keys)
+        {
+            var key = new JsonObject { ["type"] = TypeName(keys.Type), ["nullable"] = false };
+            WriteShape(key, keys);
+            written["keys"] = key;
+        }
     }
 
     private static JsonNode WriteRule(Rule rule)

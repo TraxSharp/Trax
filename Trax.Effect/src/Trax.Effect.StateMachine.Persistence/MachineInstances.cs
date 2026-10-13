@@ -263,6 +263,14 @@ internal interface IMachineInternals
     /// <summary>Whether the machine declares <c>SystemOwned()</c>: only the system holds its instances.</summary>
     bool SystemOwned { get; }
 
+    /// <summary>Who may fire each event, start an instance and read one, as the machine declares it.</summary>
+    MachineRules Rules { get; }
+
+    /// <summary>
+    /// The triggers with an edge whose guard or reducer is a delegate, which the IR and its hash do not describe.
+    /// </summary>
+    IReadOnlyCollection<string> DelegateTriggers { get; }
+
     /// <summary>Every state that invokes a train, as the startup check describes it to the launcher.</summary>
     IReadOnlyList<InvokedTrainDeclaration> InvokedTrains { get; }
 
@@ -277,6 +285,9 @@ internal interface IMachineInternals
 
     /// <summary>Reads stored snapshot JSON, migrating it as a load does. Never throws.</summary>
     RehydrationResult Rehydrate(string json);
+
+    /// <summary>The definition version the machine declares, which a row written by a newer one exceeds.</summary>
+    int Version { get; }
 
     /// <summary>The canonical JSON <paramref name="snapshot"/> is stored and measured as.</summary>
     string Serialize(Snapshot snapshot);
@@ -294,16 +305,83 @@ internal interface IMachineInternals
     bool IsEffectBound(string state, string trigger);
 
     /// <summary>
-    /// <see cref="IMachine.CreateService"/>, with the cancellation a draft deletion calls first, and the runtime a
-    /// machine that invokes trains writes through (null for one that invokes none).
+    /// <see cref="IMachine.CreateService"/>, with the cancellation a draft deletion calls first, the runtime a
+    /// machine that invokes trains writes through (null for one that invokes none), the outbox that creates a user's
+    /// draft under the cap (null for a service that cannot start one), and the cap.
     /// </summary>
     ISnapshotDraftService CreateService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
-        TimeSpan? draftTtl,
         IInvokedRunCancellation? runCancellation,
-        InvokeRuntime? invokes
+        InvokeRuntime? invokes,
+        InvokeOutbox? creates,
+        DraftCap? cap
     );
+
+    /// <summary>
+    /// One sentence per server-written field the machine's declared start reaches; empty when it reaches none. The
+    /// host refuses to start while any is listed.
+    /// </summary>
+    IReadOnlyList<string> StartProblems { get; }
+
+    /// <summary>The effect claim keys of a user's draft, which deleting the draft releases.</summary>
+    IEnumerable<string> EffectKeys(string userKey, Guid id);
+
+    /// <summary>
+    /// <see cref="EffectKeys"/>, each with the state its effect runs from. A machine that does not say names none.
+    /// </summary>
+    IEnumerable<DraftClaimHold.EffectKey> EffectKeysWithStates(string userKey, Guid id) =>
+        EffectKeys(userKey, id).Select(key => new DraftClaimHold.EffectKey(key, null));
+
+    /// <summary>
+    /// The states the draft sweep never deletes a user's instance in, however long it has been idle
+    /// (<see cref="StateMachineOptions.DraftTtl"/>) or has lived (<see cref="StateMachineOptions.MaxDraftLifetime"/>):
+    /// the reserved states (committed, effect targets, outcome targets, gated events' targets), less the states that
+    /// invoke a train. An instance in one is the record of what the server did, and how long it stays is the host's to
+    /// decide. A machine that does not say keeps none.
+    /// </summary>
+    IReadOnlySet<string> KeptFromSweep => new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The effect claim keys of <paramref name="owner"/>'s instance <paramref name="id"/>, of either owner kind.</summary>
+    IEnumerable<string> EffectKeysOf(DraftOwner owner, Guid id);
+
+    /// <summary>
+    /// The effect claim keys of <paramref name="owner"/>'s instance <paramref name="id"/> for the effects that run from
+    /// the state named <paramref name="state"/>: the claims that hold that state's timer. Empty when no effect runs
+    /// from it.
+    /// </summary>
+    IEnumerable<string> EffectKeysFrom(DraftOwner owner, Guid id, string state);
+
+    /// <summary>The states with a timer, by name. Empty for a machine with none.</summary>
+    IReadOnlySet<string> TimedStates { get; }
+
+    /// <summary>Where each timed state's timer goes, by the timed state's name.</summary>
+    IReadOnlyDictionary<string, string> TimerTargets { get; }
+
+    /// <summary>
+    /// The rules each timer acts under, by its trigger (<c>Review.after</c>): the union of the rules of everything that
+    /// enters its state. Empty for a machine with no timer.
+    /// </summary>
+    IReadOnlyDictionary<string, IReadOnlyList<string>> TimerRules { get; }
+
+    /// <summary>
+    /// What a row written in the state named <paramref name="state"/> with <paramref name="context"/> does to its timer
+    /// (see <see cref="SnapshotMachine{TState,TTrigger}.TimerFor"/>). Never throws.
+    /// </summary>
+    (SnapshotTimer? Timer, string? Problem) TimerFor(
+        string state,
+        JsonObject context,
+        bool restart
+    );
+
+    /// <summary>Whether <paramref name="trigger"/> is a state's timer trigger, which only the server fires.</summary>
+    bool IsTimerTrigger(string trigger);
+
+    /// <summary>The timer trigger of the state named <paramref name="state"/>, or null when it has no timer.</summary>
+    string? TimerTriggerOf(string state);
+
+    /// <summary>Fires the timer <paramref name="trigger"/> on <paramref name="snapshot"/>. Never throws.</summary>
+    AdvanceResult AdvanceTimer(Snapshot snapshot, string trigger);
 }
 
 /// <summary>An outcome edge of an invoking state that enters another invoking state.</summary>
@@ -390,6 +468,14 @@ internal sealed class MachineInstances(
         var name = machine.Name;
         var id = MachineInstanceId.For(name, key);
 
+        // Host code is trusted for rules, never for input: an oversized input is refused before anything is read,
+        // and the engine checks the rest against the trigger's declared schema.
+        if (SnapshotLimits.InputTooLarge(input))
+            return new AdvanceOutcome.Rejected(
+                RejectionReasons.TooLarge,
+                $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+
         var stored = await store.Get(DraftOwner.System, name, id, cancellationToken);
         if (stored is null)
             return new AdvanceOutcome.NotFound();
@@ -412,16 +498,16 @@ internal sealed class MachineInstances(
                 );
         }
 
-        // The same reserved triggers a user's advance refuses: the system may move its instance, but it may not
-        // forge what a run or an effect produced.
+        // The same reserved triggers a user's advance refuses: the system may move its instance, but only a run or an
+        // effect records what it produced.
         if (internals.IsEffectBound(current.State, trigger))
             return new AdvanceOutcome.Rejected(
-                "effect-bound",
+                DraftRefusalCodes.EffectBound,
                 "This action runs an irreversible effect, which only its send fires."
             );
         if (internals.IsOutcomeTrigger(trigger))
             return new AdvanceOutcome.Rejected(
-                "outcome-bound",
+                RejectionReasons.OutcomeBound,
                 "This step is completed by the outcome of its work, not by an action."
             );
 
@@ -444,7 +530,7 @@ internal sealed class MachineInstances(
             return new AdvanceOutcome.Rejected(RehydrationErrorCodes.Malformed, unstorable);
         if (Encoding.UTF8.GetByteCount(internals.Serialize(next)) > SnapshotLimits.MaxSnapshotBytes)
             return new AdvanceOutcome.Rejected(
-                "too-large",
+                RejectionReasons.TooLarge,
                 $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -463,7 +549,12 @@ internal sealed class MachineInstances(
         );
         return write switch
         {
-            InvokeWrite.Written => new AdvanceOutcome.Advanced(next),
+            InvokeWrite.Written written => new AdvanceOutcome.Advanced(next)
+            {
+                Revision = stored.Revision + 1,
+                RowId = stored.RowId,
+                DueAt = written.DueAt,
+            },
             InvokeWrite.Refused refused => new AdvanceOutcome.Rejected(
                 refused.Code,
                 refused.Message

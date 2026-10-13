@@ -11,6 +11,26 @@ public static class SnapshotLimits
     public const int MaxSnapshotBytes = 64 * 1024;
 
     /// <summary>
+    /// Whether a trigger's input is past <see cref="MaxSnapshotBytes"/> as JSON, checked on every path that fires
+    /// a trigger before the input is validated or the draft is loaded, so an oversized input is <c>too-large</c>
+    /// and costs no database work. An input that cannot be written as JSON is left to validation, which refuses
+    /// it as <c>invalid-input</c>.
+    /// </summary>
+    internal static bool InputTooLarge(System.Text.Json.Nodes.JsonNode? input)
+    {
+        if (input is null)
+            return false;
+        try
+        {
+            return System.Text.Encoding.UTF8.GetByteCount(input.ToJsonString()) > MaxSnapshotBytes;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// The default lease for an exactly-once effect claim. Long enough that a real effect completes
     /// within it; if a runner dies mid-effect, the next caller reclaims the key after the lease passes.
     /// </summary>

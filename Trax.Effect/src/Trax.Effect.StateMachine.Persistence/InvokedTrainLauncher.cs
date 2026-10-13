@@ -59,7 +59,24 @@ internal sealed record InvokedTrainDeclaration(
     Type InputType,
     Type OutputType,
     bool SystemOwned
-);
+)
+{
+    /// <summary>
+    /// Every way a caller enters the state: each event with an edge into it from another state, and the machine's
+    /// start when the state is the initial one. Entering it runs the train, so a user-owned machine's startup check
+    /// compares each one's rule with the train's <c>[TraxAuthorize]</c>.
+    /// </summary>
+    public IReadOnlyList<EnteringEvent> EnteringEvents { get; init; } = [];
+}
+
+/// <summary>An event that enters an invoking state, or the start into an invoking initial state.</summary>
+/// <param name="Name">The trigger's name, or <see cref="Start"/>.</param>
+/// <param name="Rule">The rule the machine declares for it, or <c>null</c> when it declares none.</param>
+internal sealed record EnteringEvent(string Name, CallerRule? Rule)
+{
+    /// <summary>The name the machine's start enters under.</summary>
+    public const string Start = "Start";
+}
 
 /// <summary>One run an invoking state queues.</summary>
 /// <param name="TrainType">The train's interface, its canonical name.</param>

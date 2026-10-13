@@ -45,6 +45,15 @@ public sealed class SnapshotMachine<TState, TTrigger>
     /// <paramref name="snapshot"/>. Returns the validated successor snapshot on success, or a typed
     /// rejection. Never throws.
     /// </summary>
+    /// <remarks>
+    /// Refusals, first match wins: an unknown state or trigger (<c>no-transition</c>); an invoked train's
+    /// outcome trigger, which only the outcome path applies (<c>outcome-bound</c>); a state's timer trigger, which
+    /// only the server fires through <see cref="AdvanceTimer"/> (<c>timer-bound</c>); no edge from the current
+    /// state (<c>no-transition</c>); an input that does not match the trigger's declared schema
+    /// (<c>invalid-input</c>), checked before any guard reads it; a guard that declines (<c>guard-failed</c>);
+    /// a target state whose timer reads a duration the successor context does not hold within its bounds
+    /// (<c>invalid-input</c>); and a successor context the target state refuses (<c>invalid-context</c>).
+    /// </remarks>
     public AdvanceResult Advance(Snapshot snapshot, string trigger, JsonNode? input = null)
     {
         // Parse the wire tokens into the machine's enum space. Unknown tokens can fire nothing, so
@@ -53,6 +62,19 @@ public sealed class SnapshotMachine<TState, TTrigger>
             return new AdvanceResult.Rejected(
                 RejectionReasons.NoTransition,
                 $"Unknown state '{snapshot.State}'."
+            );
+        // An outcome records what an invoked run produced. Taken from a caller, its input would be whatever the
+        // caller sent and no run would have produced it.
+        if (IsOutcomeTrigger(trigger))
+            return new AdvanceResult.Rejected(
+                RejectionReasons.OutcomeBound,
+                "This step is completed by the outcome of its work, not by an action."
+            );
+        // A timer is the server acting when a state has been held long enough; no caller fires it.
+        if (IsTimerTrigger(trigger))
+            return new AdvanceResult.Rejected(
+                RejectionReasons.TimerBound,
+                "This step moves on by itself when its time is up, not by an action."
             );
         if (!TriggerNames.TryGetValue(trigger, out var triggerValue))
             return new AdvanceResult.Rejected(
@@ -70,6 +92,11 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 RejectionReasons.NoTransition,
                 $"No transition from '{snapshot.State}' on '{trigger}'."
             );
+
+        // The input is checked against the trigger's declared schema before any guard reads it, so a guard and a
+        // reducer only ever see an input of the declared shape.
+        if (InputProblem(triggerValue, input) is { } inputProblem)
+            return new AdvanceResult.Rejected(RejectionReasons.InvalidInput, inputProblem);
 
         try
         {
@@ -90,19 +117,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
 
             var newContext =
                 chosen.Reduce?.Invoke(context, input) ?? (JsonObject)context.DeepClone();
-            var contextError = _def.ValidateContext(toState, newContext);
-            if (contextError is not null)
-                return new AdvanceResult.Rejected(RejectionReasons.InvalidContext, contextError);
-
-            return new AdvanceResult.Transitioned(
-                new Snapshot
-                {
-                    Machine = _def.Id,
-                    Version = _def.Version,
-                    State = toState.ToString(),
-                    Context = newContext,
-                }
-            );
+            return Enter(toState, newContext);
         }
         catch (Exception ex)
         {
@@ -117,6 +132,105 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 Exception = ex,
             };
         }
+    }
+
+    /// <summary>
+    /// Fires the timer <paramref name="trigger"/> (<c>&lt;State&gt;.after</c>) of the state <paramref name="snapshot"/>
+    /// is in, the way the server applies a due timer: the context is carried to the timer's target unchanged. The
+    /// separate entry point for timers; <see cref="Advance"/> refuses them. Never throws.
+    /// </summary>
+    /// <returns>
+    /// The successor, or a rejection: <c>no-transition</c> when <paramref name="trigger"/> is not the timer of the
+    /// state the snapshot is in; <c>invalid-input</c> when the target's own timer reads a duration the context does not
+    /// hold within its bounds; <c>invalid-context</c> when the target refuses the context.
+    /// </returns>
+    internal AdvanceResult AdvanceTimer(Snapshot snapshot, string trigger)
+    {
+        if (!TryParseState(snapshot.State, out var fromState))
+            return new AdvanceResult.Rejected(
+                RejectionReasons.NoTransition,
+                $"Unknown state '{snapshot.State}'."
+            );
+        if (
+            !TimerTriggers.TryParse(trigger, out var timedState)
+            || timedState != snapshot.State
+            || !_def.Timers.TryGetValue(fromState, out var timer)
+        )
+            return new AdvanceResult.Rejected(
+                RejectionReasons.NoTransition,
+                $"No timer fires from '{snapshot.State}' on '{trigger}'."
+            );
+
+        try
+        {
+            return Enter(timer.Target, (JsonObject)snapshot.Context.DeepClone());
+        }
+        catch (Exception ex)
+        {
+            return new AdvanceResult.Rejected(
+                RejectionReasons.InternalError,
+                "The transition failed with an unexpected error."
+            )
+            {
+                Exception = ex,
+            };
+        }
+    }
+
+    /// <summary>Whether <paramref name="trigger"/> names one of this machine's timer triggers (<c>Review.after</c>).</summary>
+    internal bool IsTimerTrigger(string trigger) =>
+        TimerTriggers.TryParse(trigger, out var state)
+        && TryParseState(state, out var parsed)
+        && _def.Timers.ContainsKey(parsed);
+
+    /// <summary>The timer of the state named <paramref name="state"/>, or null when it has none.</summary>
+    internal TimerDefinition<TState>? TimerOf(string state) =>
+        TryParseState(state, out var parsed) && _def.Timers.TryGetValue(parsed, out var timer)
+            ? timer
+            : null;
+
+    /// <summary>
+    /// What a row written in the state named <paramref name="state"/> with <paramref name="context"/> does to its
+    /// timer: a write that enters the state (<paramref name="restart"/>) arms it from now, any other keeps the due
+    /// time the row was given at entry. A duration the context cannot give is the <c>Problem</c>.
+    /// </summary>
+    internal (SnapshotTimer? Timer, string? Problem) TimerFor(
+        string state,
+        JsonObject context,
+        bool restart
+    )
+    {
+        if (!TryParseState(state, out var parsed))
+            return (SnapshotTimer.None, null);
+        var (timer, problem) = _def.EnteringTimer(parsed, context);
+        return timer is { Duration: not null } armed ? (armed with { Restart = restart }, null)
+            : timer is { } none ? (none, null)
+            : (null, problem);
+    }
+
+    // The successor of a transition into toState: the target's timer reads its duration from the context first, so a
+    // duration the context does not hold is refused as input before the context is validated; then the target's
+    // validator. The snapshot carries what its write does to the row's timer.
+    private AdvanceResult Enter(TState toState, JsonObject newContext)
+    {
+        var (timer, timerProblem) = _def.EnteringTimer(toState, newContext);
+        if (timerProblem is not null)
+            return new AdvanceResult.Rejected(RejectionReasons.InvalidInput, timerProblem);
+
+        var contextError = _def.ValidateContext(toState, newContext);
+        if (contextError is not null)
+            return new AdvanceResult.Rejected(RejectionReasons.InvalidContext, contextError);
+
+        return new AdvanceResult.Transitioned(
+            new Snapshot
+            {
+                Machine = _def.Id,
+                Version = _def.Version,
+                State = toState.ToString(),
+                Context = newContext,
+                Timer = timer,
+            }
+        );
     }
 
     /// <summary>
@@ -141,7 +255,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
 
     /// <summary>
     /// Applies an outcome named by its trigger (<c>Fetching.done</c>) with <paramref name="input"/> as its input,
-    /// as the TypeScript twin does on <c>advance</c>. The differential corpus replays outcome cases through this;
+    /// as the TypeScript twin does on <c>applyOutcome</c>. The differential corpus replays outcome cases through this;
     /// <see cref="Advance"/> refuses every outcome trigger. Never throws.
     /// </summary>
     internal AdvanceResult AdvanceOutcome(Snapshot snapshot, string trigger, JsonNode? input) =>
@@ -182,6 +296,13 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 $"No transition from '{snapshot.State}' on '{trigger}': the state invokes no train."
             );
 
+        // A success outcome's input is the train's output, checked against the output type's schema like any
+        // trigger input; a failure or a cancel carries none.
+        var outputSchema =
+            kind == InvokeOutcomeKind.Done ? invoke.OutputSchema : ContextSchema.Empty;
+        if (SchemaValidator.ValidateInput(outputSchema, input) is { } outputProblem)
+            return new AdvanceResult.Rejected(RejectionReasons.InvalidInput, outputProblem);
+
         try
         {
             var context = snapshot.Context;
@@ -198,19 +319,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
 
             var newContext =
                 chosen.CompiledReduce?.Invoke(context, input) ?? (JsonObject)context.DeepClone();
-            var contextError = _def.ValidateContext(chosen.To, newContext);
-            if (contextError is not null)
-                return new AdvanceResult.Rejected(RejectionReasons.InvalidContext, contextError);
-
-            return new AdvanceResult.Transitioned(
-                new Snapshot
-                {
-                    Machine = _def.Id,
-                    Version = _def.Version,
-                    State = chosen.To.ToString(),
-                    Context = newContext,
-                }
-            );
+            return Enter(chosen.To, newContext);
         }
         catch (Exception ex)
         {
@@ -375,12 +484,30 @@ public sealed class SnapshotMachine<TState, TTrigger>
         if (!TriggerNames.TryGetValue(trigger, out var triggerValue))
             return false;
 
-        return _def.Transitions.Any(t =>
-            t.From.Equals(fromState)
-            && t.Trigger.Equals(triggerValue)
-            && GuardPasses(t, snapshot.Context, input)
-        );
+        if (InputProblem(triggerValue, input) is not null)
+            return false;
+
+        try
+        {
+            return _def.Transitions.Any(t =>
+                t.From.Equals(fromState)
+                && t.Trigger.Equals(triggerValue)
+                && GuardPasses(t, snapshot.Context, input)
+            );
+        }
+        catch (Exception)
+        {
+            // A guard is the author's code; one that throws cannot fire, and CanFire never throws.
+            return false;
+        }
     }
+
+    // Why the input does not match the trigger's declared schema, or null when it does or the trigger declares
+    // none to check (a raw-delegate machine, whose guards read the input themselves).
+    private string? InputProblem(TTrigger trigger, JsonNode? input) =>
+        _def.InputSchemas.TryGetValue(trigger, out var schema)
+            ? SchemaValidator.ValidateInput(schema, input)
+            : null;
 
     /// <summary>
     /// The distinct triggers that have any transition out of the snapshot's state — the actions worth

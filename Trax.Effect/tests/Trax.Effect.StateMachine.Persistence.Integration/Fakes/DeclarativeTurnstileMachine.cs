@@ -12,7 +12,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 /// with the test via <see cref="ConfigureTurnstile"/> so the base-class export can be byte-compared against a
 /// direct <c>IrExporter.Export</c> of the identically-configured machine, no golden duplicated.
 /// </summary>
-public sealed class DeclarativeTurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
+public class DeclarativeTurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 {
     public sealed record UnlockedContext
     {

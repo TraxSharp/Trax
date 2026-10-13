@@ -43,12 +43,16 @@ public class TypedSchemaTests
     }
 
     [Test]
-    public void ToJsonName_lowercases_the_first_letter_and_leaves_the_rest()
+    public void ToJsonName_names_a_member_as_the_camelCase_serializer_does()
     {
         MemberPath.ToJsonName("PaidWith").Should().Be("paidWith");
         MemberPath.ToJsonName("X").Should().Be("x");
         MemberPath.ToJsonName("already").Should().Be("already");
         MemberPath.ToJsonName("").Should().Be("");
+        // A leading acronym is lowercased as a whole, as JsonNamingPolicy.CamelCase writes it.
+        MemberPath.ToJsonName("ID").Should().Be("id");
+        MemberPath.ToJsonName("URLValue").Should().Be("urlValue");
+        MemberPath.ToJsonName("IOStream").Should().Be("ioStream");
     }
 
     #endregion
@@ -65,7 +69,10 @@ public class TypedSchemaTests
 
         schema.Fields.Single(f => f.Name == "items").Type.Should().Be(JsonFieldType.Array);
         schema.Fields.Single(f => f.Name == "receipt").Type.Should().Be(JsonFieldType.String);
-        schema.Fields.Single(f => f.Name == "total").Type.Should().Be(JsonFieldType.Number);
+        schema
+            .Fields.Single(f => f.Name == "total")
+            .Type.Should()
+            .Be(JsonFieldType.Integer, "an int is an integer, so a fraction is refused");
         schema.Fields.Single(f => f.Name == "gift").Type.Should().Be(JsonFieldType.Boolean);
 
         // string? is nullable; string[]/int/bool are not.
@@ -103,7 +110,7 @@ public class TypedSchemaTests
         meta.Nullable.Should().BeFalse();
 
         var limit = schema.Fields.Single(f => f.Name == "limit");
-        limit.Type.Should().Be(JsonFieldType.Number);
+        limit.Type.Should().Be(JsonFieldType.Integer);
         limit.Nullable.Should().BeTrue("int? is a nullable value type");
     }
 
@@ -131,7 +138,7 @@ public class TypedSchemaTests
 
         ArrayConstraint("ids")
             .Should()
-            .Be(new Rule.ArrayOf(RuleSource.Context, "ids", JsonFieldType.Number));
+            .Be(new Rule.ArrayOf(RuleSource.Context, "ids", JsonFieldType.Integer));
         ArrayConstraint("tags")
             .Should()
             .Be(new Rule.ArrayOf(RuleSource.Context, "tags", JsonFieldType.String));

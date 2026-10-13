@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -43,15 +44,79 @@ public sealed record BuiltMachine<TState, TTrigger>(
     /// <summary>The states that invoke a train, keyed by state. Empty for a machine that invokes nothing.</summary>
     internal IReadOnlyDictionary<TState, InvokeDefinition<TState>> Invokes => Definition.Invokes;
 
+    /// <summary>The states with a timer, keyed by state. Empty for a machine with none.</summary>
+    internal IReadOnlyDictionary<TState, TimerDefinition<TState>> Timers => Definition.Timers;
+
     /// <summary>
-    /// The states only the server may put a draft in or take it out of, so a soft autosave may not: committed
-    /// states, effect targets, states that invoke a train, and every target an invoked train's outcome reaches.
+    /// The rules a timer acts under, by its trigger: the union of the rules of everything that enters the timed state,
+    /// as each is written for the census (<c>Requires(Editor)</c>), sorted. An event entering it contributes its rule
+    /// (<c>undeclared</c> when it declares none), the start its rule when the state is the initial one, and a timer
+    /// or an invoked train's outcome entering it the rules its own source state was entered under. A timer carries
+    /// the context unchanged, but it acts for whoever could have put the instance in its state.
+    /// </summary>
+    internal IReadOnlyDictionary<string, IReadOnlyList<string>> TimerRules()
+    {
+        var entered = new Dictionary<TState, SortedSet<string>>();
+        SortedSet<string> Of(TState state) =>
+            entered.TryGetValue(state, out var set)
+                ? set
+                : entered[state] = new SortedSet<string>(StringComparer.Ordinal);
+        string Text(CallerRule? rule) => rule?.ToString() ?? "undeclared";
+
+        foreach (var t in Definition.Transitions)
+            Of(t.To).Add(Text(Rules.Events.GetValueOrDefault(t.Trigger.ToString()!)));
+        if (Rules.Start is not null || Start is not null)
+            Of(Definition.InitialState).Add(Text(Rules.Start));
+
+        // What a timer or an outcome carries into its target is whatever its source was entered under, so the sets
+        // are widened until nothing changes; each pass only adds, and the sets are finite.
+        var server = Timers
+            .Values.Select(t => (From: t.State, t.Target))
+            .Concat(
+                Invokes.Values.SelectMany(i => i.Targets.Select(to => (From: i.State, Target: to)))
+            )
+            .ToList();
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var (from, to) in server)
+                if (entered.TryGetValue(from, out var source))
+                    foreach (var rule in source.ToList())
+                        changed |= Of(to).Add(rule);
+        } while (changed);
+
+        return Timers.Values.ToDictionary(
+            t => t.TriggerName,
+            t =>
+                (IReadOnlyList<string>)(
+                    entered.TryGetValue(t.State, out var rules) ? rules.ToList() : []
+                ),
+            StringComparer.Ordinal
+        );
+    }
+
+    /// <summary>
+    /// The states only the server may put a draft in or take it out of, so a soft autosave may not, and its owner may
+    /// not discard an instance in one: committed states, effect targets, states that invoke a train, every target an
+    /// invoked train's outcome reaches, and every target of an event gated by a role or a policy (<c>Requires</c> or
+    /// <c>RequiresPolicy</c>), which records a decision only the server's gate let through. A state any of these
+    /// reaches is reserved even when an ungated event reaches it too. A timer's target is not one: a timer carries
+    /// the context unchanged. The timed state itself is locked instead (see the draft service), so autosave cannot
+    /// leave or rewrite it.
     /// </summary>
     internal IReadOnlySet<TState> ReservedStates =>
         CommittedStates
             .Concat(Effects.Select(e => e.To))
             .Concat(Invokes.Keys)
             .Concat(Invokes.Values.SelectMany(i => i.Targets))
+            .Concat(
+                Definition
+                    .Transitions.Where(t =>
+                        Rules.Events.GetValueOrDefault(t.Trigger.ToString()!) is { Gated: true }
+                    )
+                    .Select(t => t.To)
+            )
             .ToHashSet();
 
     /// <summary>
@@ -69,6 +134,115 @@ public sealed record BuiltMachine<TState, TTrigger>(
 
     /// <summary>The per-user live invoked run limit a machine has when it declares none.</summary>
     internal const int DefaultInvokedRunLimit = 10;
+
+    /// <summary>
+    /// Who may fire each event, start an instance and read one, as the machine declares it. A trigger or read with no
+    /// entry declared no rule.
+    /// </summary>
+    internal MachineRules Rules { get; init; } = MachineRules.None;
+
+    /// <summary>
+    /// The triggers with an edge whose guard or reducer is a delegate rather than a declarative rule or reduction,
+    /// which the IR and its hash do not describe.
+    /// </summary>
+    internal IReadOnlySet<TTrigger> DelegateTriggers { get; init; } = new HashSet<TTrigger>();
+
+    /// <summary>The record each trigger declares with <c>WithInput</c>, by trigger. A trigger with none is absent.</summary>
+    internal IReadOnlyDictionary<TTrigger, Type> TriggerInputTypes { get; init; } =
+        new Dictionary<TTrigger, Type>();
+
+    /// <summary>The machine's declared <c>start</c>, or null when it declares none.</summary>
+    internal StartDeclaration? Start { get; init; }
+
+    /// <summary>
+    /// The record each state declares its context with <c>Context&lt;TContext&gt;()</c>, by state. A state declared
+    /// with <c>Context()</c>, or with no declarative context, is absent.
+    /// </summary>
+    internal IReadOnlyDictionary<TState, Type> ContextTypes { get; init; } =
+        new Dictionary<TState, Type>();
+
+    /// <summary>Every state of <typeparamref name="TState"/>, in declaration order, with its context record.</summary>
+    internal IReadOnlyList<MachineState> States =>
+        Enum.GetValues<TState>()
+            .Select(state => new MachineState(
+                state.ToString(),
+                ContextTypes.GetValueOrDefault(state)
+            ))
+            .ToList();
+
+    /// <summary>
+    /// Every write to the context only the server makes: invoked trains' outcomes, the effect, and events gated by
+    /// <c>Requires</c> or <c>RequiresPolicy</c>.
+    /// </summary>
+    internal IReadOnlyList<ServerWrite> ServerWrites { get; init; } = [];
+
+    /// <summary>
+    /// One sentence per server-written field the declared start reaches; empty when it reaches none, or the machine
+    /// declares no start. A client must not start an instance already holding what only the server writes.
+    /// </summary>
+    internal IReadOnlyList<string> StartProblems()
+    {
+        if (Start is not { } start)
+            return [];
+        var reached = start.InputFields;
+        if (reached is { Count: 0 })
+            return [];
+
+        var problems = new List<string>();
+        foreach (var write in ServerWrites)
+        {
+            if (write.Fields is { Count: 0 })
+                continue;
+            var overlap =
+                reached is null || write.Fields is null
+                    ? (reached ?? write.Fields ?? ["(any field)"]).ToList()
+                    : reached.Intersect(write.Fields, StringComparer.Ordinal).ToList();
+            if (overlap.Count == 0)
+                continue;
+            problems.Add(
+                $"The machine '{Definition.Id}' starts from {start.InputType.Name}, which reaches "
+                    + string.Join(
+                        ", ",
+                        overlap.OrderBy(f => f, StringComparer.Ordinal).Select(f => $"'{f}'")
+                    )
+                    + $", a field {write.Source} writes. A client could start an instance already holding what "
+                    + "only the server writes. Leave the field out of the start's reduction."
+            );
+        }
+        return problems;
+    }
+
+    /// <summary>
+    /// Every trigger the machine declares, with who may fire it and the CLR type of its input: each member of
+    /// <typeparamref name="TTrigger"/> (effect-bound when an edge on it binds the machine's effect, else a client
+    /// trigger), then each invoking state's outcome triggers (the success outcome's input is the train's output), then
+    /// each timed state's timer trigger, which takes no input.
+    /// </summary>
+    internal IReadOnlyList<MachineTrigger> Triggers =>
+        Enum.GetValues<TTrigger>()
+            .Select(trigger => new MachineTrigger(
+                trigger.ToString(),
+                Effects.Any(e => EqualityComparer<TTrigger>.Default.Equals(e.Trigger, trigger))
+                    ? TriggerKind.EffectBound
+                    : TriggerKind.Client,
+                TriggerInputTypes.GetValueOrDefault(trigger)
+            ))
+            .Concat(
+                Invokes.Values.SelectMany(invoke =>
+                    Enum.GetValues<InvokeOutcomeKind>()
+                        .Select(kind => new MachineTrigger(
+                            invoke.TriggerName(kind),
+                            TriggerKind.Outcome,
+                            kind == InvokeOutcomeKind.Done ? invoke.OutputType : null
+                        ))
+                )
+            )
+            .Concat(
+                Timers
+                    .Values.OrderBy(t => t.State)
+                    .Select(t => new MachineTrigger(t.TriggerName, TriggerKind.Timer, null))
+            )
+            .ToList();
 }
 
 /// <summary>The root of the fluent configuration. See <see cref="MachineBuilder{TState,TTrigger}"/>.</summary>
@@ -161,6 +335,107 @@ public interface IMachineBuilder<TState, TTrigger>
         throw new NotSupportedException(
             $"{GetType().Name} does not support custom reducer handlers."
         );
+
+    /// <summary>
+    /// Declare the machine's <c>start</c>: the record a client starts an instance with, how it becomes the
+    /// initial context, and who may start one. A machine a client can reach must declare its start's rule, or the
+    /// host refuses to start; <c>Anonymous()</c> on a user-owned machine is refused the same way.
+    /// <c>ISnapshotDraftService.Start</c> validates the input against the record's schema (never the context type),
+    /// checks the start's rule, applies the reduction to the initial context and mints the instance's id. A host
+    /// refuses to start when the reduction of a machine a client can reach copies the input into a field an invoked
+    /// train's outcome, the effect or an event gated by <c>Requires</c> or <c>RequiresPolicy</c> writes.
+    /// </summary>
+    /// <typeparam name="TStartInput">The record a client starts an instance with; never the context type.</typeparam>
+    /// <param name="configure">Declares the start's reduction and its rule.</param>
+    IMachineBuilder<TState, TTrigger> Start<TStartInput>(
+        Action<IStartBuilder<TStartInput>> configure
+    ) => throw new NotSupportedException($"{GetType().Name} does not support Start.");
+
+    /// <summary>
+    /// Declare who may read an instance through <c>get</c>. A machine a client can reach must declare it, owner-only
+    /// being the floor: <c>AnyAuthenticated()</c> or <c>Anonymous()</c> refuses startup, and <c>Requires</c> or
+    /// <c>RequiresPolicy</c> narrow the owner's read further.
+    /// </summary>
+    /// <param name="rule">Declares the read's rule.</param>
+    IMachineBuilder<TState, TTrigger> Get(Action<IReadRuleBuilder> rule) =>
+        throw new NotSupportedException($"{GetType().Name} does not support Get.");
+
+    /// <summary>
+    /// Declare who may watch an instance through <c>machineChanged</c>, under the same floor as
+    /// <see cref="Get"/>.
+    /// </summary>
+    /// <param name="rule">Declares the subscription's rule.</param>
+    IMachineBuilder<TState, TTrigger> Watch(Action<IReadRuleBuilder> rule) =>
+        throw new NotSupportedException($"{GetType().Name} does not support Watch.");
+
+    /// <summary>
+    /// Declare who may delete an instance through <c>discard</c>, under the same floor as <see cref="Get"/>:
+    /// owner-only, narrowed further by <c>Requires</c> or <c>RequiresPolicy</c>. A machine a client can reach must
+    /// declare it. Whatever the rule, an instance in a committed state, an effect's target, a state that invokes a
+    /// train, a state an invoked train's outcome reaches or the target of an event gated by a role or a policy is not
+    /// discarded, nor is one an effect is running on (<c>discard-not-allowed</c>).
+    /// </summary>
+    /// <param name="rule">Declares the discard's rule.</param>
+    IMachineBuilder<TState, TTrigger> Discard(Action<IReadRuleBuilder> rule) =>
+        throw new NotSupportedException($"{GetType().Name} does not support Discard.");
+}
+
+/// <summary>
+/// Declares a machine's <c>start</c>: how its input record becomes the initial context, and the rule a caller
+/// must meet. See <see cref="IMachineBuilder{TState,TTrigger}.Start{TStartInput}"/>.
+/// </summary>
+/// <typeparam name="TStartInput">The record a client starts an instance with.</typeparam>
+public interface IStartBuilder<TStartInput>
+{
+    /// <summary>Produce the initial context from the start input with a declarative <see cref="Reduction"/>.</summary>
+    IStartBuilder<TStartInput> Reduce(Reduction reduce);
+
+    /// <summary>Only a caller in at least one of <paramref name="roles"/> may start an instance.</summary>
+    IStartBuilder<TStartInput> Requires(params string[] roles);
+
+    /// <summary>Only a caller who satisfies the authorization policy <paramref name="policy"/> may start an instance.</summary>
+    IStartBuilder<TStartInput> RequiresPolicy(string policy);
+
+    /// <summary>Any authenticated caller may start an instance.</summary>
+    IStartBuilder<TStartInput> AnyAuthenticated();
+
+    /// <summary>Any caller may start an instance, authenticated or not.</summary>
+    IStartBuilder<TStartInput> Anonymous();
+}
+
+/// <summary>
+/// Declares who may read an instance, through <c>get</c> or <c>machineChanged</c>, or delete one through
+/// <c>discard</c>. See <see cref="IMachineBuilder{TState,TTrigger}.Get"/>,
+/// <see cref="IMachineBuilder{TState,TTrigger}.Watch"/> and <see cref="IMachineBuilder{TState,TTrigger}.Discard"/>.
+/// </summary>
+public interface IReadRuleBuilder
+{
+    /// <summary>Only the instance's owner may read it.</summary>
+    IReadRuleBuilder OwnerOnly();
+
+    /// <summary>Only a caller in at least one of <paramref name="roles"/> may read it.</summary>
+    IReadRuleBuilder Requires(params string[] roles);
+
+    /// <summary>Only a caller who satisfies the authorization policy <paramref name="policy"/> may read it.</summary>
+    IReadRuleBuilder RequiresPolicy(string policy);
+
+    /// <summary>Any authenticated caller may read it.</summary>
+    IReadRuleBuilder AnyAuthenticated();
+
+    /// <summary>Any caller may read it, authenticated or not.</summary>
+    IReadRuleBuilder Anonymous();
+}
+
+/// <summary>
+/// A state's timer: where the machine goes once the state has been held for the declared duration. See
+/// <see cref="IStateBuilder{TState,TTrigger}.After(TimeSpan)"/>.
+/// </summary>
+public interface ITimerBuilder<TState, TTrigger>
+    where TState : struct, Enum
+    where TTrigger : struct, Enum
+{
+    /// <summary>Finish the timer: land in <paramref name="target"/>. Returns the state builder for more configuration.</summary>
+    IStateBuilder<TState, TTrigger> GoTo(TState target);
 }
 
 /// <summary>
@@ -258,6 +533,40 @@ public interface IStateBuilder<TState, TTrigger>
     )
         where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput> =>
         throw new NotSupportedException($"{GetType().Name} does not support Invokes.");
+
+    /// <summary>
+    /// Leave this state once it has been held for <paramref name="delay"/>: the timer starts on every entry (a
+    /// self-transition included) and is cancelled on leaving. Finish it with
+    /// <see cref="ITimerBuilder{TState,TTrigger}.GoTo"/>. Only the server fires it, when it is due: a client never sends
+    /// the timer trigger (<c>&lt;State&gt;.after</c>), and an advance refuses it as <c>timer-bound</c>. A state has at
+    /// most one timer. <see cref="MachineBuilder{TState,TTrigger}.Build"/> refuses a duration that is not positive or
+    /// is above <see cref="MachineTimers.MaxDuration"/>, a timer back into its own state, timers that form a cycle no
+    /// event breaks, and a timer into an effect's target or an invoked train's outcome target.
+    /// </summary>
+    /// <param name="delay">How long the state is held before the timer fires.</param>
+    ITimerBuilder<TState, TTrigger> After(TimeSpan delay) =>
+        throw new NotSupportedException($"{GetType().Name} does not support After.");
+
+    /// <summary>
+    /// Leave this state once it has been held for the duration a context field holds, bounded by
+    /// <paramref name="min"/> and <paramref name="max"/>. Finish it with
+    /// <see cref="ITimerBuilder{TState,TTrigger}.GoTo"/>. The field holds an ISO-8601 duration (<c>"PT5M"</c>) and is
+    /// read once, when the state is entered: entering with a field that is missing, not such a duration, or outside the
+    /// bounds is refused as <c>invalid-input</c>. Otherwise as <see cref="After(TimeSpan)"/>.
+    /// <see cref="MachineBuilder{TState,TTrigger}.Build"/> refuses bounds that are not positive, a minimum above the
+    /// maximum, a maximum above <see cref="MachineTimers.MaxDuration"/>, a field the state's declared context does not
+    /// have or does not type as a <see cref="TimeSpan"/>, and a field marked <c>[TraxSensitive]</c> (a deadline is
+    /// exported and shown). A selector that is not a single field builds, but the machine cannot be exported to the IR.
+    /// </summary>
+    /// <typeparam name="TContext">The state's context record.</typeparam>
+    /// <param name="duration">The context field holding the duration, e.g. <c>c =&gt; c.Patience</c>.</param>
+    /// <param name="min">The shortest duration the field may hold.</param>
+    /// <param name="max">The longest duration the field may hold.</param>
+    ITimerBuilder<TState, TTrigger> After<TContext>(
+        Expression<Func<TContext, TimeSpan?>> duration,
+        TimeSpan min,
+        TimeSpan max
+    ) => throw new NotSupportedException($"{GetType().Name} does not support After.");
 }
 
 /// <summary>A single transition: its guard, message, reducer, optional exactly-once effect, and destination.</summary>
@@ -271,7 +580,18 @@ public interface ITransitionBuilder<TState, TTrigger>
     /// <summary>Only take this edge when the declarative <see cref="Rule"/> holds (the exportable, string-free guard).</summary>
     ITransitionBuilder<TState, TTrigger> When(Rule guard);
 
-    /// <summary>Declare this trigger's input shape from a record, so the IR carries a typed input schema for it.</summary>
+    /// <summary>
+    /// Declare this trigger's input as the record <typeparamref name="TInput"/>. Both engines check every input
+    /// sent with the trigger against the record's schema before any guard reads it, as strictly as the CLR type:
+    /// a missing or wrongly typed field, a fraction in an integral field, a field the record does not declare, or
+    /// anything other than an object is refused as <c>invalid-input</c>. The record's <c>[JsonPropertyName]</c>
+    /// names are honoured and its <c>[JsonIgnore]</c> members are not part of the input. On a declarative machine
+    /// a trigger without <c>WithInput</c> takes no input: only none or <c>{}</c> is accepted.
+    /// </summary>
+    /// <typeparam name="TInput">The input record. Every edge of one trigger declares the same record, or none does.</typeparam>
+    /// <exception cref="InvalidOperationException">
+    /// <typeparamref name="TInput"/> contains itself, or has a member with no fixed JSON type.
+    /// </exception>
     ITransitionBuilder<TState, TTrigger> WithInput<TInput>();
 
     /// <summary>A human-readable reason surfaced when the guard declines (non-contract detail text).</summary>
@@ -293,6 +613,34 @@ public interface ITransitionBuilder<TState, TTrigger>
 
     /// <summary>Finish the transition: land in <paramref name="target"/>. Returns the state builder for more transitions.</summary>
     IStateBuilder<TState, TTrigger> To(TState target);
+
+    /// <summary>
+    /// Only an authenticated caller in at least one of <paramref name="roles"/> may fire this event, compared
+    /// ordinally. Chained calls each add a set the caller must also meet. The draft service checks it against every
+    /// client actor before the request id, the input or the guard, and refuses one that fails it as
+    /// <c>forbidden</c>. An event has one rule: every edge of it declares the same one, and an event that requires a
+    /// role may not enter the start state.
+    /// </summary>
+    ITransitionBuilder<TState, TTrigger> Requires(params string[] roles) =>
+        throw new NotSupportedException($"{GetType().Name} does not support Requires.");
+
+    /// <summary>
+    /// Only an authenticated caller who satisfies the authorization policy <paramref name="policy"/> may fire this
+    /// event. The host refuses to start when the policy is not registered.
+    /// </summary>
+    ITransitionBuilder<TState, TTrigger> RequiresPolicy(string policy) =>
+        throw new NotSupportedException($"{GetType().Name} does not support RequiresPolicy.");
+
+    /// <summary>Any authenticated caller may fire this event.</summary>
+    ITransitionBuilder<TState, TTrigger> AnyAuthenticated() =>
+        throw new NotSupportedException($"{GetType().Name} does not support AnyAuthenticated.");
+
+    /// <summary>
+    /// Any caller may fire this event, authenticated or not. Refused at startup on a user-owned machine a client
+    /// can reach, whose instances belong to a user.
+    /// </summary>
+    ITransitionBuilder<TState, TTrigger> Anonymous() =>
+        throw new NotSupportedException($"{GetType().Name} does not support Anonymous.");
 }
 
 /// <summary>
@@ -315,7 +663,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     private readonly List<EffectBinding<TState, TTrigger>> _effects = [];
     private readonly Dictionary<int, Func<string, JsonObject, MigrationResult>> _migrations = [];
     private readonly Dictionary<TState, ContextSchema> _contextSchemas = [];
-    private readonly Dictionary<TTrigger, ContextSchema> _triggerInputs = [];
+    private readonly Dictionary<TState, Type> _contextTypes = [];
+    private readonly List<EdgeInput> _edgeInputs = [];
     private readonly Dictionary<TState, List<Rule>> _stateInvariants = [];
     private readonly List<DeclarativeTransition<TState, TTrigger>> _declarativeTransitions = [];
     private readonly Dictionary<TTrigger, List<JsonNode>> _diffSamples = [];
@@ -328,9 +677,18 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         new(StringComparer.Ordinal);
     private bool _usedDeclarative;
     private bool _systemOwned;
+    private StartDeclaration? _start;
+    private readonly List<ServerWrite> _serverWrites = [];
+    private readonly List<EventWrite> _eventWrites = [];
     private int _invokedRunLimit = BuiltMachine<TState, TTrigger>.DefaultInvokedRunLimit;
     private readonly List<InvokeDraft> _invokes = [];
+    private readonly List<TimerDraft> _timers = [];
     private readonly Dictionary<TState, List<JsonNode>> _diffOutcomeSamples = [];
+    private readonly List<EdgeRule> _edgeRules = [];
+    private CallerRuleDraft? _startRule;
+    private CallerRuleDraft? _getRule;
+    private CallerRuleDraft? _watchRule;
+    private CallerRuleDraft? _discardRule;
 
     // States whose validator is a Holds delegate (not rebuilt from Context/Requires since), so the IR exporter
     // can refuse a declarative machine that would export them with no validator.
@@ -426,14 +784,174 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         return this;
     }
 
+    /// <inheritdoc/>
+    public IMachineBuilder<TState, TTrigger> Start<TStartInput>(
+        Action<IStartBuilder<TStartInput>> configure
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        _startRule = new CallerRuleDraft($"The machine '{_id}' start", read: false);
+        var builder = new StartBuilder<TStartInput>(_startRule);
+        configure(builder);
+        var start = builder.Build();
+        // Compiled like a transition's reducer: the custom handlers and the initial context are read when it runs,
+        // so their order in Configure does not matter.
+        _start = start with
+        {
+            Apply = (ctx, input) =>
+                ReductionEvaluator.Apply(
+                    start.Reduction,
+                    ctx,
+                    input,
+                    _initialContext?.Invoke() ?? new JsonObject(),
+                    _customReducers
+                ),
+        };
+        return this;
+    }
+
+    /// <inheritdoc/>
+    public IMachineBuilder<TState, TTrigger> Get(Action<IReadRuleBuilder> rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        _getRule = new CallerRuleDraft($"The machine '{_id}' get", read: true);
+        rule(new ReadRuleBuilder(_getRule));
+        return this;
+    }
+
+    /// <inheritdoc/>
+    public IMachineBuilder<TState, TTrigger> Watch(Action<IReadRuleBuilder> rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        _watchRule = new CallerRuleDraft($"The machine '{_id}' machineChanged", read: true);
+        rule(new ReadRuleBuilder(_watchRule));
+        return this;
+    }
+
+    /// <inheritdoc/>
+    public IMachineBuilder<TState, TTrigger> Discard(Action<IReadRuleBuilder> rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        _discardRule = new CallerRuleDraft($"The machine '{_id}' discard", read: true);
+        rule(new ReadRuleBuilder(_discardRule));
+        return this;
+    }
+
+    // Records the start's input record and its reduction, and its rule in the machine's rules.
+    private sealed class StartBuilder<TStartInput>(CallerRuleDraft rule)
+        : IStartBuilder<TStartInput>
+    {
+        // Reflected at once, so a start record with no finite schema refuses where it is declared.
+        private readonly ContextSchema _schema = SchemaReflection.ForInput(typeof(TStartInput));
+        private Reduction _reduction = new Reduction.Keep();
+
+        public IStartBuilder<TStartInput> Reduce(Reduction reduce)
+        {
+            ArgumentNullException.ThrowIfNull(reduce);
+            _reduction = reduce;
+            return this;
+        }
+
+        public IStartBuilder<TStartInput> Requires(params string[] roles)
+        {
+            rule.Requires(roles);
+            return this;
+        }
+
+        public IStartBuilder<TStartInput> RequiresPolicy(string policy)
+        {
+            rule.RequiresPolicy(policy);
+            return this;
+        }
+
+        public IStartBuilder<TStartInput> AnyAuthenticated()
+        {
+            rule.Kind(CallerRuleKind.AnyAuthenticated);
+            return this;
+        }
+
+        public IStartBuilder<TStartInput> Anonymous()
+        {
+            rule.Kind(CallerRuleKind.Anonymous);
+            return this;
+        }
+
+        public StartDeclaration Build() => new(typeof(TStartInput), _schema, _reduction);
+    }
+
+    // Records a read's rule.
+    private sealed class ReadRuleBuilder(CallerRuleDraft rule) : IReadRuleBuilder
+    {
+        public IReadRuleBuilder OwnerOnly()
+        {
+            rule.Kind(CallerRuleKind.OwnerOnly);
+            return this;
+        }
+
+        public IReadRuleBuilder Requires(params string[] roles)
+        {
+            rule.Requires(roles);
+            return this;
+        }
+
+        public IReadRuleBuilder RequiresPolicy(string policy)
+        {
+            rule.RequiresPolicy(policy);
+            return this;
+        }
+
+        public IReadRuleBuilder AnyAuthenticated()
+        {
+            rule.Kind(CallerRuleKind.AnyAuthenticated);
+            return this;
+        }
+
+        public IReadRuleBuilder Anonymous()
+        {
+            rule.Kind(CallerRuleKind.Anonymous);
+            return this;
+        }
+    }
+
+    // One After as declared, before Build checks it. Its target is set by GoTo.
+    private sealed class TimerDraft(
+        TState state,
+        TimeSpan? fixedDuration,
+        LambdaExpression? duration,
+        TimeSpan min,
+        TimeSpan max
+    )
+    {
+        public TState State { get; } = state;
+        public TimeSpan? Fixed { get; } = fixedDuration;
+        public LambdaExpression? Duration { get; } = duration;
+        public TimeSpan Min { get; } = min;
+        public TimeSpan Max { get; } = max;
+        public TState? Target { get; set; }
+    }
+
+    // Records the timer's target, and the chain continues on the state.
+    private sealed class TimerBuilder(IStateBuilder<TState, TTrigger> state, TimerDraft draft)
+        : ITimerBuilder<TState, TTrigger>
+    {
+        public IStateBuilder<TState, TTrigger> GoTo(TState target)
+        {
+            draft.Target = target;
+            return state;
+        }
+    }
+
     /// <summary>Compile the configuration into an engine-ready definition + host metadata.</summary>
     /// <exception cref="InvalidOperationException">
     /// The machine has no id or no start state, names a custom rule or reduction with no handler bound, binds
-    /// more than one effect with <c>RunsOnce</c>, or enters an effect's target state by any other transition. Or
+    /// more than one effect with <c>RunsOnce</c>, enters an effect's target state by any other transition, or binds an
+    /// effect that runs from or lands in a state that invokes a train. Or
     /// a state invokes more than one train, invokes one by a class rather than its interface, or lacks
     /// <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c> (or declares either of the last two twice); an
     /// outcome goes to an effect's target or to the start state (unless that state invokes a train itself); or an
-    /// ordinary transition enters a state an outcome goes to.
+    /// ordinary transition enters a state an outcome goes to. Or an invoked train's output type has no schema to
+    /// check it against, or one trigger declares different input records (or a record on one edge and none on
+    /// another).
     /// </exception>
     public BuiltMachine<TState, TTrigger> Build()
     {
@@ -456,9 +974,14 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             );
 
         RefuseOtherEdgesIntoEffectTargets();
+        RefuseEffectsOnInvokingStates();
 
         var invokes = BuildInvokes();
         RefuseOtherEdgesIntoOutcomeTargets(invokes);
+        var timers = BuildTimers(invokes);
+
+        var declaredInputs = DeclaredInputs();
+        var rules = BuildRules();
 
         var definition = new MachineDefinition<TState, TTrigger>
         {
@@ -470,6 +993,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             ContextValidators = _validators,
             Migrations = _migrations,
             Invokes = invokes,
+            InputSchemas = InputSchemas(declaredInputs),
+            Timers = timers,
         };
 
         var differential =
@@ -502,7 +1027,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         var declarative = _usedDeclarative
             ? new DeclarativeModel<TState, TTrigger>(
                 _contextSchemas,
-                _triggerInputs,
+                declaredInputs.ToDictionary(kv => kv.Key, kv => kv.Value.Schema),
                 _declarativeTransitions,
                 _stateInvariants.ToDictionary(
                     kv => kv.Key,
@@ -515,12 +1040,255 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             }
             : null;
 
+        var serverWrites = _serverWrites
+            .Concat(
+                invokes.Values.SelectMany(invoke =>
+                    Enum.GetValues<InvokeOutcomeKind>()
+                        .SelectMany(kind =>
+                            invoke
+                                .EdgesFor(kind)
+                                .Select(edge =>
+                                    ServerWrite.Of(
+                                        $"the outcome {invoke.TriggerName(kind)}",
+                                        edge.Reduce,
+                                        opaque: edge.Reduce is null
+                                            && edge.CompiledReduce is not null
+                                    )
+                                )
+                        )
+                )
+            )
+            .ToList();
+        // Only a machine that declares rules is reached event by event, so only there is an open event a caller's.
+        if (
+            rules.Any
+            && OpenWritesToServerFields(serverWrites).ToList() is { Count: > 0 } openWrites
+        )
+            throw new InvalidOperationException(
+                $"The machine '{_id}' cannot be built: "
+                    + string.Join(" ", openWrites.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+            );
+
         return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative)
         {
             SystemOwned = _systemOwned,
             InvokedRunLimit = _invokedRunLimit,
+            TriggerInputTypes = declaredInputs.ToDictionary(kv => kv.Key, kv => kv.Value.Type),
+            ContextTypes = new Dictionary<TState, Type>(_contextTypes),
+            Rules = rules,
+            DelegateTriggers = _edgeInputs
+                .Where(e => e.ReadsInputInCode)
+                .Select(e => e.Trigger)
+                .ToHashSet(),
+            Start = _start,
+            ServerWrites = serverWrites,
         };
     }
+
+    // What one client event's edge writes to the context: every field its reduction writes, and those it copies from
+    // the input. Either is null when the reducer is opaque (a delegate or a custom reducer), which may write any field
+    // from the input.
+    private sealed record EventWrite(
+        TTrigger Trigger,
+        CallerRule? Rule,
+        IReadOnlyCollection<string>? Fields,
+        IReadOnlyCollection<string>? FromInput,
+        TState To
+    );
+
+    // The top-level fields a state's declared invariant requires to be absent: a reduction into that state that writes
+    // one is refused by the invariant, so it cannot set what the server writes there.
+    private HashSet<string> AbsentIn(TState state)
+    {
+        var absent = new HashSet<string>(StringComparer.Ordinal);
+        if (_stateInvariants.TryGetValue(state, out var rules))
+            foreach (var rule in rules)
+                Collect(rule);
+        return absent;
+
+        void Collect(Rule rule)
+        {
+            switch (rule)
+            {
+                case Rule.Absent { Source: RuleSource.Context } field:
+                    absent.Add(StartDeclaration.TopLevel(field.Field));
+                    break;
+                case Rule.All all:
+                    foreach (var inner in all.Rules)
+                        Collect(inner);
+                    break;
+            }
+        }
+    }
+
+    // A field the server writes (what an event gated by a role or a policy writes, an effect's receipt, an invoked
+    // train's outcome) is the server's to decide, as it is for the start: an event anyone may send (AnyAuthenticated,
+    // Anonymous, or no rule) may not copy it from its input. One sentence per pair of an event and a server write.
+    private IEnumerable<string> OpenWritesToServerFields(IReadOnlyList<ServerWrite> serverWrites)
+    {
+        foreach (var open in _eventWrites.Where(w => w.Rule is not { Gated: true }))
+        {
+            if (open.FromInput is { Count: 0 })
+                continue;
+            var absent = AbsentIn(open.To);
+            foreach (
+                var write in serverWrites
+                    .Where(w => w.Fields is not { Count: 0 })
+                    .DistinctBy(w => (w.Source, Fields: string.Join(",", w.Fields ?? [])))
+            )
+            {
+                var overlap = (
+                    open.FromInput is null || write.Fields is null
+                        ? (open.FromInput ?? write.Fields ?? ["(any field)"]).ToList()
+                        : open.FromInput.Intersect(write.Fields, StringComparer.Ordinal).ToList()
+                )
+                    .Where(f => !absent.Contains(f))
+                    .ToList();
+                if (overlap.Count == 0)
+                    continue;
+                var source = write.Source.TrimEnd(',');
+                yield return $"the event {open.Trigger} ({open.Rule?.ToString() ?? "no rule"}) writes "
+                    + string.Join(
+                        ", ",
+                        overlap.OrderBy(f => f, StringComparer.Ordinal).Select(f => $"'{f}'")
+                    )
+                    + $" from its input, a field {source} writes. A caller {open.Trigger} admits would set what "
+                    + $"only the server should. Leave the field out of {open.Trigger}'s reduction, or give "
+                    + $"{open.Trigger} a rule that gates it.";
+            }
+        }
+    }
+
+    // One edge's rule as declared, before Build checks the event's edges agree.
+    private sealed record EdgeRule(TState From, TTrigger Trigger, TState To, CallerRule? Rule);
+
+    // Each event has one rule, whichever state it is sent from, so every edge of it declares the same one (or none
+    // does). A gated event (one naming a role or a policy) may not enter the start state: anyone allowed to start an
+    // instance can put one there, so the rule would gate nothing. A start state that invokes a train is the exception: entering
+    // it runs the train, and the host compares the start's rule and every entering event's with the train's at
+    // startup, which is the gate there.
+    private MachineRules BuildRules()
+    {
+        var problems = new List<string>();
+        var events = new Dictionary<string, CallerRule>(StringComparer.Ordinal);
+        foreach (var group in _edgeRules.GroupBy(e => e.Trigger))
+        {
+            var edges = group.ToList();
+            if (edges.All(e => e.Rule is null))
+                continue;
+            var first = edges.First(e => e.Rule is not null).Rule!;
+            if (edges.Any(e => e.Rule is null || !e.Rule.SameAs(first)))
+            {
+                problems.Add(
+                    $"the event {group.Key} declares different rules on its edges ("
+                        + string.Join(
+                            ", ",
+                            edges.Select(e => $"from {e.From}: {e.Rule?.ToString() ?? "none"}")
+                        )
+                        + "). An event has one rule, whichever state it is sent from; declare the same one on "
+                        + $"every edge of {group.Key}."
+                );
+                continue;
+            }
+            events[group.Key.ToString()] = first;
+        }
+
+        foreach (
+            var edge in _edgeRules.Where(e =>
+                e.Rule is { Gated: true }
+                && EqualityComparer<TState>.Default.Equals(e.To, _initial!.Value)
+                && !EqualityComparer<TState>.Default.Equals(e.From, e.To)
+                && !_invokes.Any(i => EqualityComparer<TState>.Default.Equals(i.State, e.To))
+            )
+        )
+            problems.Add(
+                $"the event {edge.Trigger} ({edge.Rule}) enters the start state {edge.To} from {edge.From}. Anyone "
+                    + $"allowed to start an instance can put one in {edge.To}, so the rule would gate nothing. Send "
+                    + "the event to another state, or drop its Requires and RequiresPolicy."
+            );
+
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                $"The machine '{_id}' cannot be built: "
+                    + string.Join(" ", problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+            );
+
+        return new MachineRules(
+            events,
+            _startRule?.Build(),
+            _getRule?.Build(),
+            _watchRule?.Build(),
+            _discardRule?.Build()
+        );
+    }
+
+    // One trigger's input as an edge declared it with WithInput, or nothing.
+    private sealed record EdgeInput(
+        TTrigger Trigger,
+        TState From,
+        Type? Type,
+        ContextSchema? Schema,
+        bool ReadsInputInCode,
+        bool RunsEffect
+    );
+
+    // The input record each trigger declares. One trigger has one input schema, which both engines validate every
+    // edge's input against, so every edge of a trigger declares the same record, or none does.
+    private Dictionary<TTrigger, (Type Type, ContextSchema Schema)> DeclaredInputs()
+    {
+        var declared = new Dictionary<TTrigger, (Type Type, ContextSchema Schema)>();
+        foreach (var group in _edgeInputs.GroupBy(e => e.Trigger))
+        {
+            var types = group.Select(e => e.Type).Distinct().ToList();
+            if (types.Count > 1)
+                throw new InvalidOperationException(
+                    $"The machine '{_id}' declares the trigger {group.Key} with different inputs on its edges ("
+                        + string.Join(
+                            ", ",
+                            group.Select(e =>
+                                $"from {e.From}: {(e.Type is null ? "no WithInput" : e.Type.Name)}"
+                            )
+                        )
+                        + $"). One trigger has one input schema, which both engines validate its input against. "
+                        + $"Declare the same WithInput<T>() on every edge of {group.Key}, or on none."
+                );
+            if (group.First() is { Type: { } type, Schema: { } schema })
+                declared[group.Key] = (type, schema);
+        }
+        return declared;
+    }
+
+    // What the engine checks each trigger's input against. A declared record is checked as strictly as its CLR
+    // type. On a declarative machine, a trigger that declares none takes no input, except an effect-bound one,
+    // which takes the receipt the effect runner hands it. A trigger whose guard or reducer is a delegate reads
+    // the input in code nothing can describe, so it is left to that code; so is every trigger of a machine built
+    // from delegates alone.
+    private Dictionary<TTrigger, ContextSchema> InputSchemas(
+        IReadOnlyDictionary<TTrigger, (Type Type, ContextSchema Schema)> declared
+    )
+    {
+        var schemas = new Dictionary<TTrigger, ContextSchema>();
+        foreach (var group in _edgeInputs.GroupBy(e => e.Trigger))
+        {
+            if (declared.TryGetValue(group.Key, out var input))
+                schemas[group.Key] = input.Schema;
+            else if (!_usedDeclarative || group.Any(e => e.ReadsInputInCode))
+                continue;
+            else if (group.Any(e => e.RunsEffect))
+                schemas[group.Key] = ReceiptInput;
+            else
+                schemas[group.Key] = ContextSchema.Empty;
+        }
+        return schemas;
+    }
+
+    /// <summary>
+    /// The input an effect-bound trigger that declares no record takes: the receipt the effect runner hands it,
+    /// or nothing. The TypeScript twin derives the same schema from an edge's <c>effect</c> in the IR.
+    /// </summary>
+    internal static readonly ContextSchema ReceiptInput = new([
+        new FieldSchema("receipt", JsonFieldType.String, Nullable: true, []),
+    ]);
 
     // An effect's target state means "the effect ran": the draft reaches it with the receipt the effect produced.
     // A second edge into it would let the plain advance put a draft there with no effect run, so the machine is
@@ -543,6 +1311,27 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 $"The machine '{_id}' enters {effect.To} from {t.From} on {t.Trigger}, but {effect.To} is the target "
                     + $"of the effect bound with RunsOnce on {effect.From} -> {effect.Trigger}. Only the effect's own "
                     + "transition may enter the state that records its receipt; route the other edge to another state."
+            );
+        }
+    }
+
+    // An effect is pending on its instance's row while it runs, and no other write changes the row: an invoked train's
+    // outcome could then not be applied to its invoking state, and the effect's own write would have to queue or cancel
+    // a run. So an effect neither runs from nor lands in a state that invokes a train.
+    private void RefuseEffectsOnInvokingStates()
+    {
+        foreach (var effect in _effects)
+        foreach (var invoke in _invokes)
+        {
+            if (
+                !EqualityComparer<TState>.Default.Equals(invoke.State, effect.From)
+                && !EqualityComparer<TState>.Default.Equals(invoke.State, effect.To)
+            )
+                continue;
+            throw new InvalidOperationException(
+                $"The machine '{_id}' binds an effect with RunsOnce on {effect.From} -> {effect.Trigger} -> "
+                    + $"{effect.To}, and {invoke.State} invokes {invoke.TrainType.Name}. An effect neither runs from "
+                    + "nor lands in a state that invokes a train; put a plain state between them."
             );
         }
     }
@@ -606,6 +1395,24 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             }
         }
 
+        // The success outcome's input is the train's output, validated against its type's schema like a trigger's
+        // input, so the output type needs one.
+        var outputSchemas = new Dictionary<InvokeDraft, ContextSchema>(
+            ReferenceEqualityComparer.Instance
+        );
+        foreach (var draft in _invokes.Where(d => !IsValueTuple(d.OutputType)))
+            try
+            {
+                outputSchemas[draft] = SchemaReflection.ForInput(draft.OutputType);
+            }
+            catch (InvalidOperationException ex)
+            {
+                problems.Add(
+                    $"the state {draft.State} invokes {draft.TrainType.Name}, whose output "
+                        + $"{draft.OutputType.Name} has no schema to check it against: {ex.Message}"
+                );
+            }
+
         foreach (
             var state in _diffOutcomeSamples.Keys.Where(s => _invokes.All(i => !i.State.Equals(s)))
         )
@@ -635,6 +1442,9 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 d.Failed[0],
                 d.Cancelled[0]
             )
+            {
+                OutputSchema = outputSchemas[d],
+            }
         );
     }
 
@@ -664,7 +1474,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     // reduced. An ordinary transition into it would let a client put a draft there with no run, carrying whatever
     // its own input reduced, so the machine is refused, as it is for an effect's target. A self-loop on the
     // target does not enter it and is allowed. So is an edge into a target that itself invokes a train: entering
-    // it only queues a new run and forges no result, and it is how a chained stage is retried.
+    // it only queues a new run and records no result, and it is how a chained stage is retried.
     private void RefuseOtherEdgesIntoOutcomeTargets(
         IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
     )
@@ -700,6 +1510,242 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     + $"outcome of {invoke.TrainType.Name}, invoked in {invoke.State}, goes. Only the outcome may "
                     + "enter it; route the other edge to another state."
             );
+        }
+    }
+
+    private sealed record TimerField(string Name);
+
+    // Every timer names where it goes, waits a positive, bounded time, and reads its duration from a field the state's
+    // context really has, typed as a duration and not sensitive (a deadline is exported and shown). A state has one
+    // timer; a timer back into its own state would fire forever, and so would timers that only lead to each other,
+    // so one event at least must break every loop. A timer into an effect's target or an outcome's target would put
+    // the instance where only the effect or the run may: the same edges are refused for an ordinary transition.
+    private Dictionary<TState, TimerDefinition<TState>> BuildTimers(
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
+    )
+    {
+        var problems = new List<string>();
+        foreach (var group in _timers.GroupBy(t => t.State))
+            if (group.Count() > 1)
+                problems.Add(
+                    $"the state {group.Key} declares {(group.Count() == 2 ? "two" : group.Count().ToString(System.Globalization.CultureInfo.InvariantCulture))} "
+                        + "timers, but a state has at most one. Keep one After(...) on it."
+                );
+
+        var built = new Dictionary<TState, TimerDefinition<TState>>();
+        foreach (var draft in _timers)
+        {
+            var state = draft.State;
+            if (draft.Target is not { } target)
+            {
+                problems.Add(
+                    $"the timer of {state} has no target. Finish After(...) with `.GoTo({typeof(TState).Name}.X)`."
+                );
+                continue;
+            }
+            if (EqualityComparer<TState>.Default.Equals(target, state))
+            {
+                problems.Add(
+                    $"the timer of {state} goes back to {state}, so it would fire again every time it fired. Send it "
+                        + "to another state, or restart the wait with an event that enters the state."
+                );
+                continue;
+            }
+            if (
+                _effects.FirstOrDefault(e =>
+                    EqualityComparer<TState>.Default.Equals(e.To, target)
+                ) is
+                { } effect
+            )
+                problems.Add(
+                    $"the timer of {state} goes to {target}, which is the target of the effect bound with RunsOnce on "
+                        + $"{effect.From} -> {effect.Trigger}. Only the effect may enter the state that records its "
+                        + "receipt; send the timer to another state."
+                );
+            if (
+                !invokes.ContainsKey(target)
+                && invokes.Values.FirstOrDefault(i => i.Targets.Contains(target)) is { } invoke
+            )
+                problems.Add(
+                    $"the timer of {state} goes to {target}, which is where the outcome of {invoke.TrainType.Name}, "
+                        + $"invoked in {invoke.State}, goes. Only the outcome may enter it; send the timer to another "
+                        + "state."
+                );
+
+            TimerField? field = null;
+            Func<JsonObject, TimeSpan?>? computed = null;
+            if (draft.Fixed is { } fixedDuration)
+            {
+                if (fixedDuration <= TimeSpan.Zero)
+                    problems.Add(
+                        $"the timer of {state} waits {fixedDuration}, but a timer waits a positive time."
+                    );
+                else if (fixedDuration > MachineTimers.MaxDuration)
+                    problems.Add(
+                        $"the timer of {state} waits {fixedDuration}, longer than the {MachineTimers.MaxDuration.TotalDays} "
+                            + "days a timer may wait (MachineTimers.MaxDuration)."
+                    );
+            }
+            else
+            {
+                if (draft.Min <= TimeSpan.Zero || draft.Min > draft.Max)
+                    problems.Add(
+                        $"the timer of {state} is bounded by {draft.Min} to {draft.Max}, but its minimum must be "
+                            + "positive and no more than its maximum."
+                    );
+                else if (draft.Max > MachineTimers.MaxDuration)
+                    problems.Add(
+                        $"the timer of {state} may wait up to {draft.Max}, longer than the "
+                            + $"{MachineTimers.MaxDuration.TotalDays} days a timer may wait (MachineTimers.MaxDuration)."
+                    );
+                (field, computed) = TimerDuration(draft, problems);
+            }
+
+            built[state] = new TimerDefinition<TState>(
+                state,
+                target,
+                draft.Fixed,
+                field?.Name,
+                draft.Fixed ?? draft.Min,
+                draft.Fixed ?? draft.Max,
+                computed
+            );
+        }
+
+        problems.AddRange(TimerCycles(built));
+
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                $"The machine '{_id}' cannot be built: "
+                    + string.Join(
+                        " ",
+                        problems.Distinct().Select(p => char.ToUpperInvariant(p[0]) + p[1..])
+                    )
+            );
+        return built;
+    }
+
+    // The field a context duration reads, or the delegate it compiles to when its selector is not a single field. The
+    // field is checked against the state's declared context: it must be one of its fields, typed as a duration, and
+    // not sensitive. A state that declares no context leaves the record the selector names as the only description.
+    private (TimerField? Field, Func<JsonObject, TimeSpan?>? Computed) TimerDuration(
+        TimerDraft draft,
+        List<string> problems
+    )
+    {
+        var state = draft.State;
+        var selector = draft.Duration!;
+        var body = selector.Body is UnaryExpression { NodeType: ExpressionType.Convert } u
+            ? u.Operand
+            : selector.Body;
+        if (
+            body is not MemberExpression { Member: System.Reflection.PropertyInfo property } member
+            || member.Expression is not ParameterExpression
+        )
+            return (null, ComputedDuration(selector));
+
+        var name = MemberPath.JsonNameOf(property);
+        if (Sensitive(property))
+        {
+            problems.Add(
+                $"the timer of {state} reads its duration from '{name}', which is marked [TraxSensitive]. A deadline "
+                    + "is exported and shown to the client, so it cannot come from a sensitive field."
+            );
+            return (null, null);
+        }
+
+        if (_contextSchemas.ContainsKey(state))
+        {
+            var declared = _contextTypes.GetValueOrDefault(state);
+            var field = declared
+                ?.GetProperties(
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance
+                )
+                .FirstOrDefault(p => MemberPath.JsonNameOf(p) == name);
+            if (field is null)
+            {
+                problems.Add(
+                    $"the timer of {state} reads its duration from '{name}', which is not a field of {state}'s "
+                        + $"context ({declared?.Name ?? "an empty context"}). Read a field the state's context declares."
+                );
+                return (null, null);
+            }
+            if (field.PropertyType != typeof(TimeSpan) && field.PropertyType != typeof(TimeSpan?))
+            {
+                problems.Add(
+                    $"the timer of {state} reads its duration from '{name}', which {declared!.Name} declares as a "
+                        + $"{field.PropertyType.Name}. A duration field is a TimeSpan? (an ISO-8601 duration on the wire)."
+                );
+                return (null, null);
+            }
+            if (Sensitive(field))
+            {
+                problems.Add(
+                    $"the timer of {state} reads its duration from '{name}', which is marked [TraxSensitive]. A "
+                        + "deadline is exported and shown to the client, so it cannot come from a sensitive field."
+                );
+                return (null, null);
+            }
+        }
+
+        return (new TimerField(name), null);
+    }
+
+    private static bool Sensitive(System.Reflection.PropertyInfo property) =>
+        property
+            .GetCustomAttributes(typeof(Trax.Effect.Attributes.TraxSensitiveAttribute), true)
+            .Length > 0;
+
+    // A selector that is not a single field runs over the context read as its record. The IR cannot carry it, so the
+    // export refuses the machine; the server still bounds what it returns.
+    private static Func<JsonObject, TimeSpan?> ComputedDuration(LambdaExpression selector)
+    {
+        var compiled = selector.Compile();
+        var record = selector.Parameters[0].Type;
+        return context =>
+            compiled.DynamicInvoke(JsonSerializer.Deserialize(context, record, TimerContextJson))
+            as TimeSpan?;
+    }
+
+    // How a computed duration reads the context: the camelCase names the schema reflects, and a TimeSpan written as an
+    // ISO-8601 duration, as a context carries it.
+    private static readonly JsonSerializerOptions TimerContextJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters =
+        {
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
+            new IsoDurationJsonConverter(),
+        },
+    };
+
+    // Each state has at most one timer, so following timers from any state either ends or comes round to a state it
+    // passed: a cycle no event can break. Each cycle is named once, from its first state in declaration order.
+    private static IEnumerable<string> TimerCycles(
+        IReadOnlyDictionary<TState, TimerDefinition<TState>> timers
+    )
+    {
+        var named = new HashSet<TState>();
+        foreach (var start in Enum.GetValues<TState>())
+        {
+            var path = new List<TState>();
+            var current = start;
+            while (timers.TryGetValue(current, out var timer) && !path.Contains(current))
+            {
+                path.Add(current);
+                current = timer.Target;
+            }
+            if (!path.Contains(current) || named.Contains(current))
+                continue;
+            var cycle = path.SkipWhile(s => !EqualityComparer<TState>.Default.Equals(s, current))
+                .ToList();
+            var first = cycle.MinBy(s => Array.IndexOf(Enum.GetValues<TState>(), s));
+            var at = cycle.IndexOf(first);
+            var ordered = cycle.Skip(at).Concat(cycle.Take(at)).Append(first).ToList();
+            foreach (var s in cycle)
+                named.Add(s);
+            yield return $"the timers of {string.Join(" -> ", ordered)} form a cycle no event breaks, so the "
+                + "instance would go round it forever. Let an event, not a timer, lead out of one of these states.";
         }
     }
 
@@ -757,10 +1803,17 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             return this;
         }
 
-        public IStateBuilder<TState, TTrigger> Context<TContext>() =>
-            SetSchema(SchemaReflection.For<TContext>());
+        public IStateBuilder<TState, TTrigger> Context<TContext>()
+        {
+            owner._contextTypes[state] = typeof(TContext);
+            return SetSchema(SchemaReflection.For<TContext>());
+        }
 
-        public IStateBuilder<TState, TTrigger> Context() => SetSchema(ContextSchema.Empty);
+        public IStateBuilder<TState, TTrigger> Context()
+        {
+            owner._contextTypes.Remove(state);
+            return SetSchema(ContextSchema.Empty);
+        }
 
         private IStateBuilder<TState, TTrigger> SetSchema(ContextSchema schema)
         {
@@ -827,6 +1880,25 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             );
             owner._invokes.Add(draft);
             return new InvokeBuilder(owner, this, draft);
+        }
+
+        public ITimerBuilder<TState, TTrigger> After(TimeSpan delay)
+        {
+            var draft = new TimerDraft(state, delay, null, delay, delay);
+            owner._timers.Add(draft);
+            return new TimerBuilder(this, draft);
+        }
+
+        public ITimerBuilder<TState, TTrigger> After<TContext>(
+            Expression<Func<TContext, TimeSpan?>> duration,
+            TimeSpan min,
+            TimeSpan max
+        )
+        {
+            ArgumentNullException.ThrowIfNull(duration);
+            var draft = new TimerDraft(state, null, duration, min, max);
+            owner._timers.Add(draft);
+            return new TimerBuilder(this, draft);
         }
     }
 
@@ -913,6 +1985,14 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         )
             where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput> =>
             state.Invokes<TTrain, TInput, TOutput>(input);
+
+        public ITimerBuilder<TState, TTrigger> After(TimeSpan delay) => state.After(delay);
+
+        public ITimerBuilder<TState, TTrigger> After<TContext>(
+            Expression<Func<TContext, TimeSpan?>> duration,
+            TimeSpan min,
+            TimeSpan max
+        ) => state.After(duration, min, max);
     }
 
     private sealed class TransitionBuilder(
@@ -929,6 +2009,12 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         private string? _effectKeyPrefix;
         private Rule? _guardRule;
         private Reduction? _reduction;
+        private Type? _inputType;
+        private ContextSchema? _inputSchema;
+        private readonly CallerRuleDraft _rule = new(
+            $"The machine '{owner._id}' event {trigger} from {from}",
+            read: false
+        );
 
         public ITransitionBuilder<TState, TTrigger> When(Func<JsonObject, JsonNode?, bool> guard)
         {
@@ -951,7 +2037,10 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         public ITransitionBuilder<TState, TTrigger> WithInput<TInput>()
         {
             owner._usedDeclarative = true;
-            owner._triggerInputs[trigger] = SchemaReflection.For<TInput>();
+            // Reflected here, so a record with no finite schema (one that contains itself) refuses at once,
+            // naming the record.
+            _inputSchema = SchemaReflection.ForInput(typeof(TInput));
+            _inputType = typeof(TInput);
             return this;
         }
 
@@ -1024,7 +2113,69 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     _reduction
                 )
             );
+            var rule = _rule.Build();
+            owner._edgeRules.Add(new EdgeRule(from, trigger, target, rule));
+            // What only the server writes: the effect's receipt, and what a gated event (a role or a policy) writes.
+            if (_effectType is not null || rule is { Gated: true })
+                owner._serverWrites.Add(
+                    ServerWrite.Of(
+                        _effectType is not null
+                            ? $"the effect-bound event {trigger}"
+                            : $"the event {trigger}, gated by {rule},",
+                        _reduction,
+                        opaque: _reduce is not null && _reduction is null
+                    )
+                );
+            if (_effectType is null)
+                owner._eventWrites.Add(
+                    new EventWrite(
+                        trigger,
+                        rule,
+                        _reduce is not null && _reduction is null
+                            ? null
+                            : ServerWrite.Of(string.Empty, _reduction, opaque: false).Fields,
+                        _reduce is not null && _reduction is null
+                            ? null
+                            : StartDeclaration.FieldsFromInput(_reduction),
+                        target
+                    )
+                );
+            owner._edgeInputs.Add(
+                new EdgeInput(
+                    trigger,
+                    from,
+                    _inputType,
+                    _inputSchema,
+                    ReadsInputInCode: (_guard is not null && _guardRule is null)
+                        || (_reduce is not null && _reduction is null),
+                    RunsEffect: _effectType is not null
+                )
+            );
             return state;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> Requires(params string[] roles)
+        {
+            _rule.Requires(roles);
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> RequiresPolicy(string policy)
+        {
+            _rule.RequiresPolicy(policy);
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> AnyAuthenticated()
+        {
+            _rule.Kind(CallerRuleKind.AnyAuthenticated);
+            return this;
+        }
+
+        public ITransitionBuilder<TState, TTrigger> Anonymous()
+        {
+            _rule.Kind(CallerRuleKind.Anonymous);
+            return this;
         }
     }
 

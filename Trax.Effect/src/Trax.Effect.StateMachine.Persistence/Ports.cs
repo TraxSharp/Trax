@@ -30,6 +30,45 @@ public sealed record StoredSnapshot(
     /// </summary>
     public string? InvokeToken { get; init; }
 
+    /// <summary>
+    /// The instance's revision: 1 when the row was created and one more for every write since, bumped by the
+    /// database. <c>null</c> from a store that does not record one. It travels beside the snapshot, never inside
+    /// <see cref="Json"/>, and orders the writes of one <see cref="RowId"/> only.
+    /// </summary>
+    public long? Revision { get; init; }
+
+    /// <summary>
+    /// The row's surrogate key, which names one incarnation of the instance: a draft deleted and created again under
+    /// the same id has a new one, and its revisions start again at 1. <c>null</c> from a store that does not record
+    /// one.
+    /// </summary>
+    public long? RowId { get; init; }
+
+    /// <summary>
+    /// When the timer of the state the instance is in fires, or <c>null</c> when that state has no timer or it is
+    /// not recorded yet.
+    /// </summary>
+    public DateTimeOffset? DueAt { get; init; }
+
+    /// <summary>
+    /// The client requests the row recorded most recently, oldest first, at most <see cref="RequestIdRing.Capacity"/>,
+    /// each with the result it answered; <c>null</c> where none are recorded yet, or the store does not record them.
+    /// A retry of one of them is answered with its recorded result. Writes the server makes never change it.
+    /// </summary>
+    public IReadOnlyList<RecordedRequest>? RecentRequests { get; init; }
+
+    /// <summary>
+    /// The effect pending on the row, or <c>null</c> when none is, or the store does not record one. While one is
+    /// pending, no other write changes the row.
+    /// </summary>
+    internal PendingEffect? Effect { get; init; }
+
+    /// <summary>
+    /// Whether the server put the row in its state, as the row records it: <c>null</c> on a row written before it was
+    /// recorded, or by host code through the store, or by a store that does not record it.
+    /// </summary>
+    internal bool? ServerRecord { get; init; }
+
     /// <summary>The last applied request as one value, or <c>null</c> when there is no request id.</summary>
     public AppliedRequest? LastRequest =>
         LastRequestId is { } requestId
@@ -38,11 +77,35 @@ public sealed record StoredSnapshot(
 }
 
 /// <summary>
+/// The effect pending on a row: its claimant, the key it runs under, its event, the request that sent it, and when the
+/// lease ends.
+/// </summary>
+/// <param name="Token">The claimant's token, which guards the writes that finish or end the effect.</param>
+/// <param name="Key">The key the effect runs under, the same for every run of it.</param>
+/// <param name="Trigger">The effect-bound event.</param>
+/// <param name="RequestId">The client request that sent it, or null when none was recorded.</param>
+/// <param name="LeaseUntil">When the claimant's lease ends, on the database's clock.</param>
+internal sealed record PendingEffect(
+    Guid Token,
+    string? Key,
+    string? Trigger,
+    string? RequestId,
+    DateTimeOffset? LeaseUntil
+);
+
+/// <summary>
 /// The advance a draft records so a retry can be recognised: the client's idempotency key, the trigger it
 /// fired, and the state it fired from. <see cref="Trigger"/> and <see cref="FromState"/> are <c>null</c>
 /// only on a row written before they were recorded, and such a request is never replayed.
 /// </summary>
-public sealed record AppliedRequest(string RequestId, string? Trigger, string? FromState);
+public sealed record AppliedRequest(string RequestId, string? Trigger, string? FromState)
+{
+    /// <summary>
+    /// The row's ring of recent client requests with this request recorded as the newest, which the store writes
+    /// with it; null leaves the stored ring as it is.
+    /// </summary>
+    internal IReadOnlyList<RecordedRequest>? Ring { get; init; }
+}
 
 /// <summary>
 /// Raw, user-scoped persistence of a snapshot. Engine-agnostic: it moves the four snapshot fields
@@ -198,6 +261,80 @@ public interface ISnapshotStore
     ) => Update(userKey, id, snapshot, expectedToken, request?.RequestId, cancellationToken);
 }
 
+/// <summary>The row a write left, as the writer knows it without reading the row back.</summary>
+/// <param name="RowId">The row's surrogate key, which names the incarnation it wrote.</param>
+/// <param name="Revision">The revision the write gave the row.</param>
+internal readonly record struct WrittenRow(long RowId, long Revision)
+{
+    /// <summary>The due time the write left on the row: when its state's timer fires, or null when it has none.</summary>
+    public DateTimeOffset? DueAt { get; init; }
+}
+
+/// <summary>
+/// An <see cref="ISnapshotStore"/> whose blind writes report the row they left, so the draft service can answer a
+/// save with its revision without a second read, which another write could already have overtaken. Each returns
+/// null where the <see cref="ISnapshotStore"/> member it mirrors returns false.
+/// </summary>
+internal interface IRowReportingSnapshotStore
+{
+    /// <summary><see cref="ISnapshotStore.Upsert"/>, reporting the row it wrote.</summary>
+    Task<WrittenRow?> Upsert(
+        string userKey,
+        Guid id,
+        Snapshot snapshot,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary><see cref="ISnapshotStore.Insert"/>, reporting the row it created.</summary>
+    Task<WrittenRow?> Insert(
+        string userKey,
+        Guid id,
+        Snapshot snapshot,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary>
+    /// <see cref="ISnapshotStore.UpdateWithRequest"/> guarded by the token <paramref name="read"/> was read with,
+    /// reporting the row it left: <paramref name="read"/>'s next revision, and the due time the write gave it.
+    /// </summary>
+    Task<WrittenRow?> UpdateWithRequest(
+        string userKey,
+        Guid id,
+        Snapshot snapshot,
+        StoredSnapshot read,
+        AppliedRequest? request,
+        CancellationToken cancellationToken
+    );
+}
+
+/// <summary>
+/// A store that deletes a user's draft only while it is still the row and revision a caller read, and runs the
+/// caller's follow-up writes in the same transaction. The draft service discards through it, so a draft written
+/// between its check and its delete is kept, and the claims it releases go with the row or not at all.
+/// </summary>
+internal interface IConditionalDraftDelete
+{
+    /// <summary>
+    /// Deletes <paramref name="userKey"/>'s draft of <paramref name="machine"/> under <paramref name="id"/> only while
+    /// it is the row <paramref name="read"/> names (<see cref="StoredSnapshot.RowId"/>), at the revision and invoke
+    /// token it was read with, then runs <paramref name="afterDelete"/> before committing. False, with nothing written
+    /// and <paramref name="afterDelete"/> not run, when the row is gone or has changed since.
+    /// </summary>
+    /// <param name="userKey">The owning user's key.</param>
+    /// <param name="machine">The machine id the draft belongs to.</param>
+    /// <param name="id">The client-minted draft id.</param>
+    /// <param name="read">The row as the caller read it; it must carry its row id and revision.</param>
+    /// <param name="afterDelete">The writes that commit with the delete.</param>
+    /// <remarks>Every write runs on a token nothing cancels: a delete that has started finishes.</remarks>
+    Task<bool> DeleteAsRead(
+        string userKey,
+        string machine,
+        Guid id,
+        StoredSnapshot read,
+        Func<Task> afterDelete
+    );
+}
+
 /// <summary>
 /// The authenticated user behind a request. The draft operations read <see cref="CurrentUserKey"/> to
 /// scope every draft to its owner, so the draft id is NOT a bearer capability. In an HTTP host this is
@@ -223,9 +360,9 @@ public interface ISnapshotEffect
     /// <summary>
     /// Performs the side effect for <paramref name="snapshot"/> (the draft as loaded, in the effect's from-state)
     /// and returns its receipt, which is written into the terminal snapshot's context. Throw if the effect did not
-    /// happen: the claim is released and a retry runs it again. An <see cref="OperationCanceledException"/> (an
-    /// outbound call's timeout included) means the outcome is unknown instead: the claim stays in flight until its
-    /// lease passes, so the effect is not run again before then.
+    /// happen: the draft is left as it was and a retry runs it again. An <see cref="OperationCanceledException"/> (an
+    /// outbound call's timeout included) means the outcome is unknown instead: the effect stays pending on the draft
+    /// until its lease passes, and is then run again under the same key, by the next send or by the reconciler.
     /// </summary>
     /// <param name="snapshot">The draft the effect acts on.</param>
     /// <param name="cancellationToken">
@@ -235,4 +372,18 @@ public interface ISnapshotEffect
     /// </param>
     /// <returns>A non-empty receipt, typically the downstream system's id for what was done.</returns>
     Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Performs the side effect as <see cref="Run(Snapshot, CancellationToken)"/> does, given the effect's key: minted
+    /// when a send marks the draft, and the same for every run of that send, a run again after its claimant stopped
+    /// without recording a result included; the next send of the event, after a reset for instance, has a new one. Pass
+    /// it to the system the effect calls as its idempotency key, so a repeat is recognised there. The default ignores
+    /// the key and calls <see cref="Run(Snapshot, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="snapshot">The draft the effect acts on.</param>
+    /// <param name="effectKey">The effect's key, stable across every run of one intent.</param>
+    /// <param name="cancellationToken">As for <see cref="Run(Snapshot, CancellationToken)"/>.</param>
+    /// <returns>A non-empty receipt, typically the downstream system's id for what was done.</returns>
+    Task<string> Run(Snapshot snapshot, string effectKey, CancellationToken cancellationToken) =>
+        Run(snapshot, cancellationToken);
 }

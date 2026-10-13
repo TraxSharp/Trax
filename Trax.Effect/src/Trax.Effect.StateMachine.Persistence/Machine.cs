@@ -33,6 +33,39 @@ public interface IMachine
     string? SchemaHash { get; }
 
     /// <summary>
+    /// Every trigger the machine declares, with who may fire it (<see cref="TriggerKind"/>) and the record its
+    /// input is declared with (null when it takes none). A typed API is built from this list, so only the client
+    /// triggers become operations. <see cref="Machine{TState,TTrigger}"/> implements it; any other implementation
+    /// that does not throws <see cref="NotSupportedException"/>.
+    /// </summary>
+    IReadOnlyList<MachineTrigger> Triggers =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not list its triggers. Derive the machine from Machine<TState, TTrigger>."
+        );
+
+    /// <summary>
+    /// Every state the machine declares, in the order its state enum declares them, with the record its context is
+    /// declared with (null for an empty context). A typed API types an instance's state and context from this list.
+    /// <see cref="Machine{TState,TTrigger}"/> implements it; any other implementation that does not throws
+    /// <see cref="NotSupportedException"/>.
+    /// </summary>
+    IReadOnlyList<MachineState> States =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not list its states. Derive the machine from Machine<TState, TTrigger>."
+        );
+
+    /// <summary>
+    /// The record a client starts an instance with, as the machine's <c>Start&lt;TStartInput&gt;</c> declares it, or
+    /// <c>null</c> when it declares no start and no client can create one. Never the context type.
+    /// <see cref="Machine{TState,TTrigger}"/> implements it; any other implementation that does not throws
+    /// <see cref="NotSupportedException"/>.
+    /// </summary>
+    Type? StartInputType =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not describe its start. Derive the machine from Machine<TState, TTrigger>."
+        );
+
+    /// <summary>
     /// The machine's committed differential corpus (the TypeScript oracle's golden JSON), or null if it ships
     /// none. A host replays it at startup via <see cref="SelfCheck"/> to prove the running C# engine still
     /// reproduces the frontend twin's behaviour. A machine that carries a corpus loads it (e.g. from an
@@ -47,7 +80,12 @@ public interface IMachine
     /// </summary>
     IReadOnlyList<string> SelfCheck();
 
-    /// <summary>Build the draft service for a request's store (threading committed states, the effect-claim reset, and the optional draft TTL).</summary>
+    /// <summary>
+    /// Build the draft service for a request's store (threading committed states and the effect-claim reset). A
+    /// service built here cannot <c>start</c> an instance and applies no per-user cap; a host gets one that can from
+    /// <see cref="ISnapshotMachineRegistry.Service"/>. <paramref name="draftTtl"/> is not read: the draft sweep
+    /// expires drafts.
+    /// </summary>
     ISnapshotDraftService CreateService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
@@ -118,22 +156,43 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     /// <inheritdoc/>
     public bool HasEffect => Built.Effects.Count > 0;
 
+    /// <summary>
+    /// Every trigger the machine declares: each member of <typeparamref name="TTrigger"/>, as
+    /// <see cref="TriggerKind.EffectBound"/> when an edge on it binds the machine's effect and
+    /// <see cref="TriggerKind.Client"/> otherwise, with the record its <c>WithInput</c> declares; then each
+    /// invoking state's outcome triggers (<c>Building.done</c>, <c>.failed</c>, <c>.cancelled</c>) as
+    /// <see cref="TriggerKind.Outcome"/>, the success outcome's input being the train's output type.
+    /// </summary>
+    public IReadOnlyList<MachineTrigger> Triggers => Built.Triggers;
+
+    /// <summary>
+    /// Every member of <typeparamref name="TState"/>, in declaration order, with the record its
+    /// <c>Context&lt;TContext&gt;()</c> declares, or null for a state declared with <c>Context()</c> or none.
+    /// </summary>
+    public IReadOnlyList<MachineState> States => Built.States;
+
+    /// <summary>The record the machine's <c>Start&lt;TStartInput&gt;</c> declares, or null when it declares no start.</summary>
+    public Type? StartInputType => Built.Start?.InputType;
+
     /// <inheritdoc/>
     public string ExportIr() => IrExporter.Export(Built);
 
     /// <summary>
-    /// The lowercase hex SHA-256 of <see cref="ExportIr"/>, computed once. Null for a raw-delegate machine, which
-    /// has no exportable IR, and null switches the client/server schema-mismatch check off for this machine. Any
-    /// other failure computing it is rethrown to every reader rather than answered with null.
+    /// The lowercase hex SHA-256 of <see cref="ExportIr"/>, computed once. Null for a machine whose IR export is
+    /// refused by design: a raw-delegate machine, or one that declares rules but still has a delegate guard,
+    /// reducer or validator. Null switches the client/server schema-mismatch check off for this machine. Any other
+    /// failure computing it is rethrown to every reader rather than answered with null.
     /// </summary>
     public string? SchemaHash => _schemaHash.Value;
 
-    // A raw-delegate machine has no exportable IR (its guards/reducers are opaque closures), so it has no
-    // frontend twin, no schema hash, and no handshake: null, which the guard treats as "no check". Any other
-    // failure propagates, and the lazy rethrows it to every reader rather than answering null, which would
-    // switch the check off for a machine that should have one.
+    // A machine with a delegate in it (all raw delegates, or rules mixed with a delegate guard, reducer or
+    // validator) has no exportable IR, so it has no frontend twin, no schema hash, and no handshake: null, which
+    // the guard treats as "no check" and a write records as no hash. Serving such a machine through typed
+    // operations is refused separately, where it is exposed. Any other failure propagates, and the lazy rethrows
+    // it to every reader rather than answering null, which would switch the check off for a machine that should
+    // have one.
     private string? ComputeSchemaHash() =>
-        Built.Declarative is null
+        IrExporter.RefusesByDesign(Built)
             ? null
             : Convert.ToHexStringLower(
                 System.Security.Cryptography.SHA256.HashData(
@@ -157,46 +216,70 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     /// </summary>
     /// <param name="store">Where drafts are read and written.</param>
     /// <param name="claims">The effect-claim ledger to clear on reset, or null to leave claims alone.</param>
-    /// <param name="draftTtl">Idle time after which a draft is discarded on load; null never expires one.</param>
+    /// <param name="draftTtl">
+    /// Not read. A read never deletes a draft: expiry belongs to the draft sweep a host's <c>AddStateMachines</c>
+    /// runs, under <see cref="StateMachineOptions.DraftTtl"/>.
+    /// </param>
     public ISnapshotDraftService CreateService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
         TimeSpan? draftTtl = null
-    ) => BuildService(store, claims, draftTtl, runCancellation: null, invokes: null);
+    ) =>
+        BuildService(store, claims, runCancellation: null, invokes: null, creates: null, cap: null);
 
     ISnapshotDraftService IMachineInternals.CreateService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
-        TimeSpan? draftTtl,
         IInvokedRunCancellation? runCancellation,
-        InvokeRuntime? invokes
-    ) => BuildService(store, claims, draftTtl, runCancellation, invokes);
+        InvokeRuntime? invokes,
+        InvokeOutbox? creates,
+        DraftCap? cap
+    ) => BuildService(store, claims, runCancellation, invokes, creates, cap);
 
     private SnapshotDraftService<TState, TTrigger> BuildService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
-        TimeSpan? draftTtl,
         IInvokedRunCancellation? runCancellation,
-        InvokeRuntime? invokes
+        InvokeRuntime? invokes,
+        InvokeOutbox? creates,
+        DraftCap? cap
     ) =>
-        new(
-            Built.Engine,
-            store,
-            Built.CommittedStates,
-            claims,
-            EffectKeysOnReset,
-            draftTtl,
-            Built.Effects
-        )
+        new(Built.Engine, store, Built.CommittedStates, claims, EffectKeysOnReset, Built.Effects)
         {
             RunCancellation = runCancellation,
             ReservedStates = Built.ReservedStates,
             InvokingStates = Built.Invokes.Keys.ToHashSet(),
+            TimedStates = Built.Timers.Keys.ToHashSet(),
             Invokes = invokes,
             InvokedRunLimit = Built.InvokedRunLimit,
+            Rules = Built.Rules,
+            SaveNotAllowed = HasServerBehaviour,
+            StartDeclaration = Built.Start,
+            SystemOwned = Built.SystemOwned,
+            Creates = creates,
+            Cap = cap,
         };
 
+    IReadOnlyList<string> IMachineInternals.StartProblems => Built.StartProblems();
+
+    IEnumerable<string> IMachineInternals.EffectKeys(string userKey, Guid id) =>
+        EffectKeysOnReset(userKey, id);
+
     bool IMachineInternals.SystemOwned => Built.SystemOwned;
+
+    MachineRules IMachineInternals.Rules => Built.Rules;
+
+    IReadOnlyCollection<string> IMachineInternals.DelegateTriggers =>
+        Built.DelegateTriggers.Select(t => t.ToString()).ToList();
+
+    // The generic save serves only machines with no server-side behaviour: an event or a start gated by a role or a
+    // policy, an invoked train, an effect or a timer each move the machine through a declared event, the start's rule
+    // or the server, which the save would step around.
+    private bool HasServerBehaviour =>
+        Built.Rules.AnyGated
+        || Built.Invokes.Count > 0
+        || Built.Effects.Count > 0
+        || Built.Timers.Count > 0;
 
     IReadOnlyList<InvokedTrainDeclaration> IMachineInternals.InvokedTrains =>
         Built
@@ -207,8 +290,32 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
                 i.InputType,
                 i.OutputType,
                 Built.SystemOwned
+            )
+            {
+                EnteringEvents = EnteringEvents(i.State),
+            })
+            .ToList();
+
+    // Every event that enters an invoking state, with its rule, and the start when the machine starts in it: each is
+    // a way a caller makes the state's train run. A self-loop does not enter the state.
+    private IReadOnlyList<EnteringEvent> EnteringEvents(TState state)
+    {
+        var entering = Built
+            .Definition.Transitions.Where(t =>
+                EqualityComparer<TState>.Default.Equals(t.To, state)
+                && !EqualityComparer<TState>.Default.Equals(t.From, state)
+            )
+            .Select(t => t.Trigger.ToString())
+            .Distinct(StringComparer.Ordinal)
+            .Select(trigger => new EnteringEvent(
+                trigger,
+                Built.Rules.Events.GetValueOrDefault(trigger)
             ))
             .ToList();
+        if (EqualityComparer<TState>.Default.Equals(Built.Definition.InitialState, state))
+            entering.Insert(0, new EnteringEvent(EnteringEvent.Start, Built.Rules.Start));
+        return entering;
+    }
 
     IReadOnlyList<ChainedOutcome> IMachineInternals.ChainedOutcomes =>
         Built
@@ -228,6 +335,8 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
             : null;
 
     RehydrationResult IMachineInternals.Rehydrate(string json) => Built.Engine.Rehydrate(json);
+
+    int IMachineInternals.Version => Built.Definition.Version;
 
     string IMachineInternals.Serialize(Snapshot snapshot) => Built.Engine.Serialize(snapshot);
 
@@ -267,6 +376,62 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
         Built.Effects.Select(e => EffectClaimKey.ForUser(e.KeyPrefix, userKey, id));
 
+    IEnumerable<string> IMachineInternals.EffectKeysOf(DraftOwner owner, Guid id) =>
+        owner.UserKey is { } userKey
+            ? EffectKeysOnReset(userKey, id)
+            : Built.Effects.Select(e => EffectClaimKey.ForSystem(e.KeyPrefix, id));
+
+    IEnumerable<string> IMachineInternals.EffectKeysFrom(DraftOwner owner, Guid id, string state) =>
+        Built
+            .Effects.Where(e => e.From.ToString() == state)
+            .Select(e =>
+                owner.UserKey is { } userKey
+                    ? EffectClaimKey.ForUser(e.KeyPrefix, userKey, id)
+                    : EffectClaimKey.ForSystem(e.KeyPrefix, id)
+            );
+
+    IEnumerable<DraftClaimHold.EffectKey> IMachineInternals.EffectKeysWithStates(
+        string userKey,
+        Guid id
+    ) =>
+        Built.Effects.Select(e => new DraftClaimHold.EffectKey(
+            EffectClaimKey.ForUser(e.KeyPrefix, userKey, id),
+            e.From.ToString()
+        ));
+
+    IReadOnlySet<string> IMachineInternals.KeptFromSweep =>
+        Built
+            .ReservedStates.Except(Built.Invokes.Keys)
+            .Select(s => s.ToString())
+            .ToHashSet(StringComparer.Ordinal);
+
+    IReadOnlyDictionary<string, string> IMachineInternals.TimerTargets =>
+        Built.Timers.Values.ToDictionary(
+            t => t.State.ToString(),
+            t => t.Target.ToString(),
+            StringComparer.Ordinal
+        );
+
+    IReadOnlySet<string> IMachineInternals.TimedStates =>
+        Built.Timers.Keys.Select(s => s.ToString()).ToHashSet(StringComparer.Ordinal);
+
+    IReadOnlyDictionary<string, IReadOnlyList<string>> IMachineInternals.TimerRules =>
+        Built.TimerRules();
+
+    (SnapshotTimer? Timer, string? Problem) IMachineInternals.TimerFor(
+        string state,
+        JsonObject context,
+        bool restart
+    ) => Built.Engine.TimerFor(state, context, restart);
+
+    bool IMachineInternals.IsTimerTrigger(string trigger) => Built.Engine.IsTimerTrigger(trigger);
+
+    string? IMachineInternals.TimerTriggerOf(string state) =>
+        Built.Engine.TimerOf(state)?.TriggerName;
+
+    AdvanceResult IMachineInternals.AdvanceTimer(Snapshot snapshot, string trigger) =>
+        Built.Engine.AdvanceTimer(snapshot, trigger);
+
     Snapshot IMachineInternals.InitialSnapshot(JsonObject? context)
     {
         var engine = Built.Engine;
@@ -284,7 +449,25 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
             );
         return engine.Rehydrate(json) switch
         {
-            RehydrationResult.Ok ok => ok.Snapshot,
+            // Created in its initial state, the instance enters it: a timed initial state's timer starts now, and a
+            // duration its context does not hold within bounds refuses the start.
+            RehydrationResult.Ok ok => engine.TimerFor(
+                ok.Snapshot.State,
+                ok.Snapshot.Context,
+                restart: true
+            )
+                is ({ } timer, _)
+                ? ok.Snapshot with
+                {
+                    Timer = timer,
+                }
+                : throw new ArgumentException(
+                    $"The initial snapshot of '{definition.Id}' is not valid ({RejectionReasons.InvalidInput}): "
+                        + engine
+                            .TimerFor(ok.Snapshot.State, ok.Snapshot.Context, restart: true)
+                            .Problem,
+                    nameof(context)
+                ),
             RehydrationResult.Error error => throw new ArgumentException(
                 $"The initial snapshot of '{definition.Id}' is not valid ({error.Code}): {error.Message}",
                 nameof(context),

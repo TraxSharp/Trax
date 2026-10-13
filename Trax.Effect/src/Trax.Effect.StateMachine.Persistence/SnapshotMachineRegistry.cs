@@ -40,21 +40,26 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     private readonly IEffectClaimStore _claims;
     private readonly IdempotentEffect _idempotent;
     private readonly IServiceProvider _services;
-    private readonly TimeSpan? _draftTtl;
+    private readonly DraftCap? _cap;
     private readonly IInvokedRunCancellation? _runCancellation;
     private readonly Dictionary<string, ISnapshotDraftService> _serviceCache = new(
         StringComparer.Ordinal
     );
 
     /// <summary>Creates a registry over the discovered machines and this scope's stores.</summary>
-    /// <param name="machines">Every registered machine. Two machines with the same name throw <see cref="ArgumentException"/>.</param>
+    /// <param name="machines">
+    /// Every registered machine. The same type registered twice is one machine; two types with the same name throw
+    /// <see cref="ArgumentException"/>, which the host's startup check refuses before any request.
+    /// </param>
     /// <param name="store">The draft store the services read and write.</param>
     /// <param name="claims">The effect-claim ledger, cleared on reset and used by the effect runners.</param>
     /// <param name="idempotent">The exactly-once primitive handed to effect runners.</param>
     /// <param name="services">The container effect implementations are resolved from.</param>
-    /// <param name="options">Supplies the draft TTL; null means drafts never expire.</param>
+    /// <param name="options">
+    /// Supplies the per-user draft cap and the TTL it counts with. Null (a registry built by hand) applies no cap.
+    /// </param>
     /// <param name="runCancellation">Cancels a draft's live invoked run before the draft is deleted.</param>
-    /// <exception cref="ArgumentException">Two machines share a name.</exception>
+    /// <exception cref="ArgumentException">Two machine types share a name.</exception>
     public SnapshotMachineRegistry(
         IEnumerable<IMachine> machines,
         ISnapshotStore store,
@@ -66,13 +71,28 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     )
     {
         _runCancellation = runCancellation;
-        _machines = machines.ToDictionary(m => m.Name, StringComparer.Ordinal);
+        _machines = RegisteredMachines
+            .Distinct(machines)
+            .ToDictionary(m => m.Name, StringComparer.Ordinal);
         _store = store;
         _claims = claims;
         _idempotent = idempotent;
         _services = services;
-        _draftTtl = options?.DraftTtl;
+        _cap = options?.EffectiveMaxDraftsPerUser is { } max
+            ? new DraftCap(max, options.DraftTtl, KeptStates(_machines.Values))
+            : null;
     }
+
+    // For a row that does not record whether the server put it in its state, the states the earlier rule kept, as the
+    // draft sweep lists them.
+    private static IReadOnlyCollection<string> KeptStates(IEnumerable<IMachine> machines) =>
+        machines
+            .OfType<IMachineInternals>()
+            .Where(m => !m.SystemOwned)
+            .SelectMany(m =>
+                m.KeptFromSweep.Select(state => DraftExpiry.Key(((IMachine)m).Name, state))
+            )
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public ISnapshotDraftService? Service(string machine)
@@ -101,16 +121,24 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
                         _services.GetRequiredService<InvokeOutbox>()
                     )
                     : null;
+            var store = invokes?.Store as ISnapshotStore ?? _store;
+
+            // Creating a draft under the cap, and starting one, write to the table through the outbox's own
+            // transaction, so they are offered only over the Trax store, never a host's substitute for it.
+            var creates = store is EfSnapshotStore ? _services.GetService<InvokeOutbox>() : null;
             service = internals.CreateService(
-                invokes?.Store as ISnapshotStore ?? _store,
+                store,
                 _claims,
-                _draftTtl,
                 _runCancellation,
-                invokes
+                invokes,
+                creates,
+                creates is null ? null : _cap
             );
         }
         else
-            service = found.CreateService(_store, _claims, _draftTtl);
+            service = found.CreateService(_store, _claims);
+        if (service is IEffectRunnerSlot slot)
+            slot.EffectRunner = () => EffectRunner(machine);
         _serviceCache[machine] = service;
         return service;
     }

@@ -45,10 +45,12 @@ public static class CorpusReplay
             var trigger = when["trigger"]!.GetValue<string>();
             var input = when["input"]?.DeepClone();
 
-            // The twin applies an invoked train's outcome as an ordinary trigger (Fetching.done). The server
-            // never takes one from Advance, so its cases are replayed through the outcome path instead.
-            var result = machine.IsOutcomeTrigger(trigger)
-                ? machine.AdvanceOutcome(snap, trigger, input)
+            // Each trigger kind replays through the entry point that owns it, as the twin enumerates it: an invoked
+            // train's outcome (Fetching.done) through the outcome path, a state's timer (Review.after) through
+            // AdvanceTimer. Advance refuses both.
+            var result =
+                machine.IsOutcomeTrigger(trigger) ? machine.AdvanceOutcome(snap, trigger, input)
+                : machine.IsTimerTrigger(trigger) ? machine.AdvanceTimer(snap, trigger)
                 : machine.Advance(snap, trigger, input);
             var (outcome, wire, reason) = result switch
             {

@@ -76,13 +76,14 @@ public class ServerlessProviderTests
         var sp = scope.ServiceProvider;
 
         var id = Guid.NewGuid();
+        // The generic save does not serve the order, which has an effect, so the store writes it directly.
+        sp.GetRequiredService<ISnapshotMachineRegistry>().Service("order").Should().NotBeNull();
         (
-            await sp.GetRequiredService<ISnapshotMachineRegistry>()
-                .Service("order")!
-                .Autosave("u1", id, OrderMachine.ReviewSnapshot(1))
+            await sp.GetRequiredService<ISnapshotStore>()
+                .Upsert("u1", id, Fixtures.TestDb.Parse(OrderMachine.ReviewSnapshot(1)))
         )
             .Should()
-            .BeOfType<AutosaveResult.Saved>();
+            .BeTrue();
 
         var db = sp.GetRequiredService<IDataContext>();
         ((DbContext)db).Database.ProviderName.Should().Contain(expectedProvider);

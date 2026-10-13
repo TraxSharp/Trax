@@ -117,6 +117,10 @@ public class SnapshotOwnerKeyTests
         var orderAfter = (await Rows(orderId)).Single();
         orderAfter.State.Should().Be("Review");
         orderAfter.UpdatedAt.Should().Be(orderBefore.UpdatedAt);
+
+        // A user's draft under a blank key is itself an inconsistency the teardown reports, so the seeds go.
+        await TestDb.NewStore().Delete(key, turnstileId);
+        await TestDb.NewStore().Delete(key, orderId);
     }
 
     [TestCase(null)]

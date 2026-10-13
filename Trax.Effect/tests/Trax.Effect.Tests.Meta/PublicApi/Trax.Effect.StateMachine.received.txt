@@ -110,9 +110,17 @@ namespace Trax.Effect.StateMachine
     {
         public FieldSchema(string Name, Trax.Effect.StateMachine.JsonFieldType Type, bool Nullable, System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.Rule> Constraints) { }
         public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.Rule> Constraints { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string>? Enum { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string>? EnumExact { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.FieldSchema>? Fields { get; init; }
+        public string? Format { get; init; }
+        public Trax.Effect.StateMachine.FieldSchema? Keys { get; init; }
+        public double? Maximum { get; init; }
+        public double? Minimum { get; init; }
         public string Name { get; init; }
         public bool Nullable { get; init; }
         public Trax.Effect.StateMachine.JsonFieldType Type { get; init; }
+        public Trax.Effect.StateMachine.FieldSchema? Values { get; init; }
     }
     public interface IDifferentialBuilder<TState, TTrigger>
         where TState :  struct, System.Enum
@@ -142,18 +150,40 @@ namespace Trax.Effect.StateMachine
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomGuard(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomReducer(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reducer);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.Effect.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure);
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Discard(System.Action<Trax.Effect.StateMachine.IReadRuleBuilder> rule);
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Get(System.Action<Trax.Effect.StateMachine.IReadRuleBuilder> rule);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id);
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> In(TState state);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> MigrateFrom(int fromVersion, System.Func<string, System.Text.Json.Nodes.JsonObject, Trax.Effect.StateMachine.MigrationResult> migrate);
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Start<TStartInput>(System.Action<Trax.Effect.StateMachine.IStartBuilder<TStartInput>> configure);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> StartsAt(TState state, System.Func<System.Text.Json.Nodes.JsonObject> initialContext);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> SystemOwned();
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Version(int version);
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Watch(System.Action<Trax.Effect.StateMachine.IReadRuleBuilder> rule);
+    }
+    public interface IReadRuleBuilder
+    {
+        Trax.Effect.StateMachine.IReadRuleBuilder Anonymous();
+        Trax.Effect.StateMachine.IReadRuleBuilder AnyAuthenticated();
+        Trax.Effect.StateMachine.IReadRuleBuilder OwnerOnly();
+        Trax.Effect.StateMachine.IReadRuleBuilder Requires(params string[] roles);
+        Trax.Effect.StateMachine.IReadRuleBuilder RequiresPolicy(string policy);
+    }
+    public interface IStartBuilder<TStartInput>
+    {
+        Trax.Effect.StateMachine.IStartBuilder<TStartInput> Anonymous();
+        Trax.Effect.StateMachine.IStartBuilder<TStartInput> AnyAuthenticated();
+        Trax.Effect.StateMachine.IStartBuilder<TStartInput> Reduce(Trax.Effect.StateMachine.Reduction reduce);
+        Trax.Effect.StateMachine.IStartBuilder<TStartInput> Requires(params string[] roles);
+        Trax.Effect.StateMachine.IStartBuilder<TStartInput> RequiresPolicy(string policy);
     }
     public interface IStateBuilder<TState, TTrigger>
         where TState :  struct, System.Enum
         where TTrigger :  struct, System.Enum
     {
+        Trax.Effect.StateMachine.ITimerBuilder<TState, TTrigger> After(System.TimeSpan delay);
+        Trax.Effect.StateMachine.ITimerBuilder<TState, TTrigger> After<TContext>(System.Linq.Expressions.Expression<System.Func<TContext, System.TimeSpan?>> duration, System.TimeSpan min, System.TimeSpan max);
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Committed();
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Context();
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Context<TContext>();
@@ -163,13 +193,23 @@ namespace Trax.Effect.StateMachine
         Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> On(TTrigger trigger);
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Requires(Trax.Effect.StateMachine.Rule constraint);
     }
+    public interface ITimerBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> GoTo(TState target);
+    }
     public interface ITransitionBuilder<TState, TTrigger>
         where TState :  struct, System.Enum
         where TTrigger :  struct, System.Enum
     {
+        Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> Anonymous();
+        Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> AnyAuthenticated();
         Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> Because(string guardMessage);
         Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> Reduce(System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reduce);
         Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> Reduce(Trax.Effect.StateMachine.Reduction reduce);
+        Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> Requires(params string[] roles);
+        Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> RequiresPolicy(string policy);
         Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> RunsOnce<TEffect>(string? keyPrefix = null);
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> To(TState target);
         Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> When(System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard);
@@ -189,6 +229,7 @@ namespace Trax.Effect.StateMachine
         Boolean = 2,
         Array = 3,
         Object = 4,
+        Integer = 5,
     }
     public sealed class MachineBuilder<TState, TTrigger> : Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger>
         where TState :  struct, System.Enum
@@ -199,13 +240,17 @@ namespace Trax.Effect.StateMachine
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomGuard(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomReducer(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reducer) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.Effect.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure) { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Discard(System.Action<Trax.Effect.StateMachine.IReadRuleBuilder> rule) { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Get(System.Action<Trax.Effect.StateMachine.IReadRuleBuilder> rule) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id) { }
         public Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> In(TState state) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> MigrateFrom(int fromVersion, System.Func<string, System.Text.Json.Nodes.JsonObject, Trax.Effect.StateMachine.MigrationResult> migrate) { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Start<TStartInput>(System.Action<Trax.Effect.StateMachine.IStartBuilder<TStartInput>> configure) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> StartsAt(TState state, System.Func<System.Text.Json.Nodes.JsonObject> initialContext) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> SystemOwned() { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Version(int version) { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Watch(System.Action<Trax.Effect.StateMachine.IReadRuleBuilder> rule) { }
     }
     public sealed class MachineDefinition<TState, TTrigger>
         where TState :  struct, System.Enum
@@ -220,6 +265,23 @@ namespace Trax.Effect.StateMachine
         public required System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.TransitionDefinition<TState, TTrigger>> Transitions { get; init; }
         public required int Version { get; init; }
         public Trax.Effect.StateMachine.Snapshot CreateInitialSnapshot() { }
+    }
+    public sealed class MachineState : System.IEquatable<Trax.Effect.StateMachine.MachineState>
+    {
+        public MachineState(string Name, System.Type? ContextType) { }
+        public System.Type? ContextType { get; init; }
+        public string Name { get; init; }
+    }
+    public static class MachineTimers
+    {
+        public static readonly System.TimeSpan MaxDuration;
+    }
+    public sealed class MachineTrigger : System.IEquatable<Trax.Effect.StateMachine.MachineTrigger>
+    {
+        public MachineTrigger(string Name, Trax.Effect.StateMachine.TriggerKind Kind, System.Type? InputType) { }
+        public System.Type? InputType { get; init; }
+        public Trax.Effect.StateMachine.TriggerKind Kind { get; init; }
+        public string Name { get; init; }
     }
     public sealed class MigrationResult : System.IEquatable<Trax.Effect.StateMachine.MigrationResult>
     {
@@ -280,10 +342,16 @@ namespace Trax.Effect.StateMachine
     }
     public static class RejectionReasons
     {
+        public const string DiscardNotAllowed = "discard-not-allowed";
+        public const string EffectInProgress = "effect-in-progress";
         public const string GuardFailed = "guard-failed";
         public const string InternalError = "internal-error";
         public const string InvalidContext = "invalid-context";
+        public const string InvalidInput = "invalid-input";
         public const string NoTransition = "no-transition";
+        public const string OutcomeBound = "outcome-bound";
+        public const string TimerBound = "timer-bound";
+        public const string TooLarge = "too-large";
     }
     public abstract class Rule : System.IEquatable<Trax.Effect.StateMachine.Rule>
     {
@@ -443,6 +511,13 @@ namespace Trax.Effect.StateMachine
         public System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject>? Reduce { get; init; }
         public required TState To { get; init; }
         public required TTrigger Trigger { get; init; }
+    }
+    public enum TriggerKind
+    {
+        Client = 0,
+        EffectBound = 1,
+        Outcome = 2,
+        Timer = 3,
     }
     public abstract class ValueSource : System.IEquatable<Trax.Effect.StateMachine.ValueSource>
     {
