@@ -1,0 +1,6 @@
+{
+  "name": "Review + Pay with a field the input does not declare is refused as invalid input",
+  "given": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } },
+  "when": { "trigger": "Pay", "input": { "receipt": "r-1", "x": 1 } },
+  "expect": { "outcome": "rejected", "reason": "invalid-input" }
+}

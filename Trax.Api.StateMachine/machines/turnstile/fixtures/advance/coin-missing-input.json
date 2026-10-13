@@ -1,0 +1,6 @@
+{
+  "name": "Locked + Coin with the required coin field missing is refused as invalid input",
+  "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+  "when": { "trigger": "Coin", "input": {} },
+  "expect": { "outcome": "rejected", "reason": "invalid-input" }
+}

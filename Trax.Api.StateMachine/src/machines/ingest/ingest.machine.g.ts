@@ -161,24 +161,7 @@ const ir = {
     "source": "s3://bucket/partition-1"
   },
   "initialState": "Idle",
-  "inputs": {
-    "Fetching.done": {
-      "fields": [
-        {
-          "constraints": [],
-          "name": "fingerprint",
-          "nullable": false,
-          "type": "string"
-        },
-        {
-          "constraints": [],
-          "name": "unsure",
-          "nullable": false,
-          "type": "boolean"
-        }
-      ]
-    }
-  },
+  "inputs": {},
   "outcomes": {
     "Fetching.cancelled": {
       "edges": [
@@ -227,6 +210,22 @@ const ir = {
         }
       ],
       "outcome": "done",
+      "output": {
+        "fields": [
+          {
+            "constraints": [],
+            "name": "fingerprint",
+            "nullable": false,
+            "type": "string"
+          },
+          {
+            "constraints": [],
+            "name": "unsure",
+            "nullable": false,
+            "type": "boolean"
+          }
+        ]
+      },
       "state": "Fetching"
     },
     "Fetching.failed": {
@@ -285,7 +284,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "43d06dde52f36f199c32530c8253286dcbdd561854bcc27a354c42e07e78481e";
+export const irHash = "c430afd018cc6b8cbb6e4b9f1866d092258621200b96d81ff3eae83a804d5572";
 
 /** The ingest machine, built from the IR and typed by IngestSpec. No hand-written twin. */
 export const ingest = typedMachineFromIr<IngestSpec>(ir, irHash);

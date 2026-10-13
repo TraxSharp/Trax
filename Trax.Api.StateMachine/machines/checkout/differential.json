@@ -598,7 +598,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "guard-failed"
+        "reason": "invalid-input"
       }
     },
     {
@@ -646,7 +646,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "guard-failed"
+        "reason": "invalid-input"
       }
     },
     {

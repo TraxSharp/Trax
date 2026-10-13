@@ -24,8 +24,8 @@
 // context canonicalized per RFC 8785 so both runtimes serialize byte-identically. The result codes are
 // contract — the C# engine returns the same strings — while `detail` text is free to differ.
 
-export type { Snapshot, MachineDefinition, TransitionDefinition, MigrationResult } from './types';
-export type { Guard, Reduce, ContextValidator } from './types';
+export type { Snapshot, MachineDefinition, TransitionDefinition, MigrationResult, MachineTimer } from './types';
+export type { Guard, Reduce, ContextValidator, InputValidator } from './types';
 export {
   RejectionReasons,
   RehydrationErrorCodes,
@@ -82,8 +82,8 @@ export type { FormView, FormViewOptions, ResumedStep, StepAdvance } from './form
 // the CI drift check call these same two functions, so they cannot disagree.
 
 export { machineFromIr } from './rules/irMachine';
-export type { IrDocument, IrTransition, IrOutcome, IrOutcomeEdge } from './rules/irMachine';
-export { evaluateRule, applyReduction, validateSchema } from './rules/interpreter';
+export type { IrDocument, IrTransition, IrOutcome, IrOutcomeEdge, IrTimer } from './rules/irMachine';
+export { evaluateRule, applyReduction, validateSchema, validateInput } from './rules/interpreter';
 export type {
   Rule,
   Reduction,
@@ -91,6 +91,7 @@ export type {
   SetStep,
   ContextSchema,
   FieldSchema,
+  ValueSchema,
   RuleSource,
   JsonFieldType,
   CompareOp,

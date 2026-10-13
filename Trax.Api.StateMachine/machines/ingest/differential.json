@@ -850,7 +850,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-context"
+        "reason": "invalid-input"
       }
     },
     {

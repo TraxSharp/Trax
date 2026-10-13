@@ -1,3 +1,4 @@
+import { durationTicks } from "./duration";
 import {
   RehydrationErrorCodes,
   RejectionReasons,
@@ -6,6 +7,7 @@ import {
 } from "./results";
 import type {
   MachineDefinition,
+  MachineTimer,
   Snapshot,
   TransitionDefinition,
 } from "./types";
@@ -18,14 +20,27 @@ import type {
  * A plain reducer: `advance` matches the edges out of the snapshot's state, picks the FIRST whose
  * guard passes, and takes that edge's `to` as the destination — so the destination and the reducer
  * come from the SAME chosen edge and cannot disagree. Every public operation is total (never throws).
+ *
+ * One engine contract with the server: `advance` takes only the triggers a caller sends, an invoked train's
+ * outcome goes through `applyOutcome`, and a state's timer through `applyTimer`. Refusals, first match wins: an
+ * unknown state (`no-transition`); an outcome trigger (`outcome-bound`); a timer trigger (`timer-bound`); no edge
+ * from the state (`no-transition`); an input that does not match the trigger's declared schema (`invalid-input`);
+ * a guard that declines (`guard-failed`); a target whose timer reads a duration the successor context does not hold
+ * within bounds (`invalid-input`); a successor context the target refuses (`invalid-context`).
  */
 export class SnapshotMachine<S extends string, T extends string> {
   private readonly stateSet: ReadonlySet<string>;
   private readonly outcomeTriggers: ReadonlySet<string>;
+  private readonly timerTriggers: ReadonlySet<string>;
 
   constructor(private readonly def: MachineDefinition<S, T>) {
     this.stateSet = new Set<string>(def.states);
     this.outcomeTriggers = new Set<string>(def.outcomeTriggers ?? []);
+    this.timerTriggers = new Set<string>(
+      Object.values<MachineTimer | undefined>(def.timers ?? {}).flatMap((t) =>
+        t ? [t.trigger] : [],
+      ),
+    );
   }
 
   get definition(): MachineDefinition<S, T> {
@@ -48,6 +63,18 @@ export class SnapshotMachine<S extends string, T extends string> {
         RejectionReasons.NoTransition,
         `Unknown state '${snapshot.state}'.`,
       );
+    // An outcome records what an invoked run produced; from a caller, its input would be whatever was sent.
+    if (this.outcomeTriggers.has(trigger))
+      return rejected(
+        RejectionReasons.OutcomeBound,
+        "This step is completed by the outcome of its work, not by an action.",
+      );
+    // A timer is the server acting once a state has been held long enough; no caller fires it.
+    if (this.timerTriggers.has(trigger))
+      return rejected(
+        RejectionReasons.TimerBound,
+        "This step moves on by itself when its time is up, not by an action.",
+      );
 
     const matches = this.def.transitions.filter(
       (t) => t.from === snapshot.state && t.trigger === trigger,
@@ -58,6 +85,11 @@ export class SnapshotMachine<S extends string, T extends string> {
         `No transition from '${snapshot.state}' on '${trigger}'.`,
       );
 
+    // The input is checked against the trigger's declared schema before any guard reads it.
+    const inputError = this.inputProblem(trigger, input);
+    if (inputError != null)
+      return rejected(RejectionReasons.InvalidInput, inputError);
+
     try {
       // A guard is hand-written per runtime and may throw on unexpected input, so evaluate it inside the
       // totality backstop: a throwing guard degrades to internal-error rather than escaping advance (PD4).
@@ -65,41 +97,174 @@ export class SnapshotMachine<S extends string, T extends string> {
         guardPasses(t, snapshot.context, input),
       );
       if (!chosen) {
-        // An output no OnDone edge accepts has nowhere to go; it is not a guard a caller could satisfy by
-        // sending something else, so it is a no-transition, as on the server.
-        if (this.outcomeTriggers.has(trigger))
-          return rejected(
-            RejectionReasons.NoTransition,
-            `No OnDone edge from '${snapshot.state}' accepts the train's output.`,
-          );
         const message =
           matches.map((m) => m.guardMessage).find((m) => m != null) ??
           `A transition from '${snapshot.state}' on '${trigger}' exists but its guard rejected the input.`;
         return rejected(RejectionReasons.GuardFailed, message);
       }
 
-      // The chosen edge is the single source of BOTH the destination and the reducer.
-      const toState = chosen.to;
-      const newContext = chosen.reduce
-        ? chosen.reduce(snapshot.context, input)
-        : clone(snapshot.context);
-      const contextError = this.validateContext(toState, newContext);
-      if (contextError != null)
-        return rejected(RejectionReasons.InvalidContext, contextError);
-
-      return {
-        outcome: "transitioned",
-        snapshot: {
-          machine: this.def.id,
-          version: this.def.version,
-          state: toState,
-          context: newContext,
-        },
-      };
+      return this.take(snapshot, chosen, input);
     } catch (e) {
       // Totality backstop: the engine must never surface an exception to a caller.
       return rejected(RejectionReasons.InternalError, errorMessage(e));
     }
+  }
+
+  /**
+   * Applies an invoked train's outcome (`Fetching.done`, `.failed`, `.cancelled`) with the train's output as
+   * its input, the way the server applies a run's outcome. The separate entry point for outcomes: `advance` is
+   * for the triggers a caller sends, and refuses these. A success tries the state's `OnDone` edges in
+   * declaration order and takes the first whose guard accepts the output; an output no edge accepts, and an
+   * outcome of a state the snapshot is not in, are `no-transition`. An output that does not match the train's
+   * output schema is `invalid-input`. Never throws.
+   */
+  applyOutcome(
+    snapshot: Snapshot,
+    trigger: string,
+    output?: unknown,
+  ): AdvanceResult {
+    if (!this.stateSet.has(snapshot.state))
+      return rejected(
+        RejectionReasons.NoTransition,
+        `Unknown state '${snapshot.state}'.`,
+      );
+    if (!this.outcomeTriggers.has(trigger))
+      return rejected(
+        RejectionReasons.NoTransition,
+        `'${trigger}' is not an outcome of this machine.`,
+      );
+
+    const matches = this.def.transitions.filter(
+      (t) => t.from === snapshot.state && t.trigger === trigger,
+    );
+    if (matches.length === 0)
+      return rejected(
+        RejectionReasons.NoTransition,
+        `No transition from '${snapshot.state}' on '${trigger}'.`,
+      );
+
+    const outputError = this.inputProblem(trigger, output);
+    if (outputError != null)
+      return rejected(RejectionReasons.InvalidInput, outputError);
+
+    try {
+      const chosen = matches.find((t) =>
+        guardPasses(t, snapshot.context, output),
+      );
+      // An output no OnDone edge accepts has nowhere to go; it is not a guard a caller could satisfy by sending
+      // something else, so it is a no-transition, as on the server.
+      if (!chosen)
+        return rejected(
+          RejectionReasons.NoTransition,
+          `No OnDone edge from '${snapshot.state}' accepts the train's output.`,
+        );
+      return this.take(snapshot, chosen, output);
+    } catch (e) {
+      return rejected(RejectionReasons.InternalError, errorMessage(e));
+    }
+  }
+
+  // The chosen edge is the single source of BOTH the destination and the reducer.
+  private take(
+    snapshot: Snapshot,
+    chosen: TransitionDefinition<S, T>,
+    input: unknown,
+  ): AdvanceResult {
+    const newContext = chosen.reduce
+      ? chosen.reduce(snapshot.context, input)
+      : clone(snapshot.context);
+    return this.enter(chosen.to, newContext);
+  }
+
+  // The successor of a transition into toState: the target's timer reads its duration from the context first, so a
+  // duration the context does not hold within bounds is refused as input before the context is validated, as on the
+  // server; then the target's validator.
+  private enter(toState: string, newContext: Record<string, unknown>): AdvanceResult {
+    const timerError = this.timerProblem(toState, newContext);
+    if (timerError != null)
+      return rejected(RejectionReasons.InvalidInput, timerError);
+
+    const contextError = this.validateContext(toState, newContext);
+    if (contextError != null)
+      return rejected(RejectionReasons.InvalidContext, contextError);
+
+    return {
+      outcome: "transitioned",
+      snapshot: {
+        machine: this.def.id,
+        version: this.def.version,
+        state: toState,
+        context: newContext,
+      },
+    };
+  }
+
+  // Why entering `state` with `context` cannot arm its timer: the duration field is missing, not an ISO-8601
+  // duration, or outside the declared bounds. Null when the state has no timer, a fixed one, or a duration in bounds.
+  private timerProblem(state: string, context: Record<string, unknown>): string | null {
+    const field = this.def.timers?.[state as S]?.field;
+    if (!field) return null;
+    const ticks = durationTicks(context[field.name]);
+    if (ticks == null)
+      return `The timer of ${state} reads '${field.name}', which must hold an ISO-8601 duration such as "PT5M".`;
+    const min = durationTicks(field.min);
+    const max = durationTicks(field.max);
+    if (min == null || max == null || ticks < min || ticks > max)
+      return `The timer of ${state} waits ${String(context[field.name])}, outside its bounds of ${field.min} to ${field.max}.`;
+    return null;
+  }
+
+  // Why the input does not match the trigger's declared schema, or null. A validator that throws refuses.
+  private inputProblem(trigger: string, input: unknown): string | null {
+    const validate = this.def.inputValidators?.[trigger];
+    if (!validate) return null;
+    try {
+      return validate(input);
+    } catch {
+      return "The input could not be read.";
+    }
+  }
+
+  /**
+   * Fires the timer `trigger` (`<State>.after`) of the state the snapshot is in, the way the server applies a due
+   * timer: the context is carried to the timer's target unchanged. The separate entry point for timers: `advance`
+   * refuses them. A trigger that is not the timer of the snapshot's state is `no-transition`; a target whose own
+   * timer reads a duration the context does not hold within bounds is `invalid-input`; a target that refuses the
+   * context is `invalid-context`. The twin never fires a timer on its own: it holds no entry time. Never throws.
+   */
+  applyTimer(snapshot: Snapshot, trigger: string): AdvanceResult {
+    if (!this.stateSet.has(snapshot.state))
+      return rejected(
+        RejectionReasons.NoTransition,
+        `Unknown state '${snapshot.state}'.`,
+      );
+    const timer = this.def.timers?.[snapshot.state as S];
+    if (!timer || timer.trigger !== trigger)
+      return rejected(
+        RejectionReasons.NoTransition,
+        `No timer fires from '${snapshot.state}' on '${trigger}'.`,
+      );
+    try {
+      return this.enter(timer.target, clone(snapshot.context));
+    } catch (e) {
+      return rejected(RejectionReasons.InternalError, errorMessage(e));
+    }
+  }
+
+  /**
+   * The timer declared on the snapshot's state, or null when the state has none: its trigger, its target and its
+   * declared duration (fixed `after`, or the context `field` with its bounds). Reports no due time: the twin holds
+   * no entry time, so the server sends that beside the snapshot.
+   */
+  timer(snapshot: Snapshot): MachineTimer | null {
+    const timer = this.def.timers?.[snapshot.state as S];
+    if (!timer) return null;
+    return {
+      trigger: timer.trigger,
+      target: timer.target,
+      ...(timer.after !== undefined ? { after: timer.after } : {}),
+      ...(timer.field !== undefined ? { field: { ...timer.field } } : {}),
+    };
   }
 
   rehydrate(json: string): RehydrationResult {
@@ -206,14 +371,20 @@ export class SnapshotMachine<S extends string, T extends string> {
 
   canFire(snapshot: Snapshot, trigger: string, input?: unknown): boolean {
     if (!this.stateSet.has(snapshot.state)) return false;
-    // An outcome is not an action a caller fires, as on the server; `advance` still applies one.
-    if (this.outcomeTriggers.has(trigger)) return false;
-    return this.def.transitions.some(
-      (t) =>
-        t.from === snapshot.state &&
-        t.trigger === trigger &&
-        guardPasses(t, snapshot.context, input),
-    );
+    // An outcome or a timer is not an action a caller fires, as on the server.
+    if (this.outcomeTriggers.has(trigger) || this.timerTriggers.has(trigger))
+      return false;
+    if (this.inputProblem(trigger, input) != null) return false;
+    try {
+      return this.def.transitions.some(
+        (t) =>
+          t.from === snapshot.state &&
+          t.trigger === trigger &&
+          guardPasses(t, snapshot.context, input),
+      );
+    } catch {
+      return false;
+    }
   }
 
   availableTriggers(snapshot: Snapshot): string[] {

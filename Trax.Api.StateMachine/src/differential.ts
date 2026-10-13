@@ -22,6 +22,8 @@ export interface DifferentialSpec {
   triggers: string[];
   /** The IR's outcome triggers (`Fetching.done`), fired like triggers; their samples are train outputs. */
   outcomes?: Record<string, unknown>;
+  /** The IR's timers (`Review.after`), fired through `applyTimer` with no input. */
+  timers?: ReadonlyArray<{ trigger: string }>;
   differential?: {
     samples?: Record<string, unknown[]>;
     seeds?: Record<string, Record<string, unknown>>;
@@ -58,21 +60,32 @@ export function enumerate<S extends string, T extends string>(
   machine: SnapshotMachine<S, T>,
   spec: DifferentialSpec,
 ): DifferentialCorpus {
-  // Outcome triggers are events the twin applies, so they are enumerated after the user's own triggers; the
-  // corpus covers only the pure half (the twin holds no token, so it cannot tell a stale outcome from a live one).
-  const triggers = [
-    ...spec.triggers,
-    ...Object.keys(spec.outcomes ?? {}).sort(),
-  ];
+  // Outcome triggers are enumerated after the user's own triggers, and each is applied through the entry point
+  // that owns it, `applyOutcome`, as the C# replay applies it through its outcome path; `advance` refuses them.
+  // The corpus covers only the pure half (the twin holds no token, so it cannot tell a stale outcome from a live
+  // one).
+  //
+  // Timer triggers come last, each through `applyTimer`, as the C# replay applies them through `AdvanceTimer`. A timer
+  // carries no input, and the corpus records only the declared timer and its transition: never a due time or a
+  // revision, which the server keeps beside the snapshot.
+  const outcomes = Object.keys(spec.outcomes ?? {}).sort();
+  const outcomeSet = new Set(outcomes);
+  const timers = (spec.timers ?? []).map((t) => t.trigger).sort();
+  const timerSet = new Set(timers);
+  const triggers = [...spec.triggers, ...outcomes, ...timers];
+  const fire = (snap: Snapshot, trigger: string, input: unknown) =>
+    outcomeSet.has(trigger)
+      ? machine.applyOutcome(snap, trigger, input)
+      : timerSet.has(trigger)
+        ? machine.applyTimer(snap, trigger)
+        : machine.advance(snap, trigger, input);
   const samples = spec.differential?.samples ?? {};
   const seeds = spec.differential?.seeds ?? {};
   const contexts = spec.differential?.contexts ?? [];
 
   // Every trigger is fired with no payload plus each declared sample input.
-  const inputsFor = (trigger: string): unknown[] => [
-    undefined,
-    ...(samples[trigger] ?? []),
-  ];
+  const inputsFor = (trigger: string): unknown[] =>
+    timerSet.has(trigger) ? [undefined] : [undefined, ...(samples[trigger] ?? [])];
 
   // Phase 1 — discover every reachable snapshot by driving the machine's own transitions from the
   // initial snapshot and each declared seed.
@@ -88,7 +101,7 @@ export function enumerate<S extends string, T extends string>(
     reachable.set(wire, snap);
     for (const trigger of triggers) {
       for (const input of inputsFor(trigger)) {
-        const r = machine.advance(snap, trigger, input);
+        const r = fire(snap, trigger, input);
         if (r.outcome === "transitioned") queue.push(r.snapshot);
       }
     }
@@ -116,7 +129,7 @@ export function enumerate<S extends string, T extends string>(
     const snap = reachable.get(wire) as Snapshot;
     for (const trigger of triggers) {
       for (const input of inputsFor(trigger)) {
-        const r = machine.advance(snap, trigger, input);
+        const r = fire(snap, trigger, input);
         const when = input === undefined ? { trigger } : { trigger, input };
         cases.push(
           r.outcome === "transitioned"

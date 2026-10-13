@@ -1,9 +1,10 @@
 /**
  * The client half of "one set of operations, any machine".
  *
- * `Trax.Effect.StateMachine.Persistence` exposes exactly four mutations — `saveSnapshot`,
- * `advanceSnapshot`, `loadSnapshot`, `sendSnapshot` — under `dispatch { stateMachine { … } }`, and every
- * one carries a `machine` discriminator the server resolves in its registry. There is no per-machine
+ * `Trax.Effect.StateMachine.Persistence` serves six generic mutations, when the host opts in to them —
+ * `startSnapshot`, `saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot`, `discardSnapshot` —
+ * under `dispatch { stateMachine { … } }`, and every one carries a `machine` discriminator the server
+ * resolves in its registry. There is no per-machine
  * mutation fan, so there is no per-machine client either: this module knows nothing about any specific
  * machine. The machine is an argument and the snapshot is opaque canonical JSON on the wire.
  *
@@ -17,20 +18,40 @@ export interface SnapshotProblem {
   message: string;
 }
 
-/** The `output` every one of the four mutations returns: the snapshot as JSON, or a problem. */
+/** The `output` every mutation returns: the snapshot as JSON, or a problem. */
 export interface SnapshotOutput {
   snapshot: string | null;
   problem: SnapshotProblem | null;
+  /** `startSnapshot` only: the id the server minted for the new instance. */
+  id?: string | null;
+  /** `startSnapshot` only: true when this request created the instance, false when it replayed a start. */
+  created?: boolean | null;
+  /** `discardSnapshot` only: true when the instance is gone (already gone, or another user's, included). */
+  discarded?: boolean;
+  /**
+   * The instance's revision after the operation, bumped by every write, when the server reports one (the typed
+   * `machines` root does). It travels beside the snapshot, never in it.
+   */
+  revision?: number | null;
+  /**
+   * When the timer of the state the instance is in fires (ISO-8601), when the server reports it (the typed `machines`
+   * root does, if the document selects it); null when that state has no timer or the server cleared it. Absent when
+   * the answer cannot know it: a replay of a request the instance has moved past since. It travels beside the
+   * snapshot, never in it.
+   */
+  dueAt?: string | null;
 }
 
 export type SnapshotOperation =
+  | 'startSnapshot'
   | 'saveSnapshot'
   | 'advanceSnapshot'
   | 'loadSnapshot'
-  | 'sendSnapshot';
+  | 'sendSnapshot'
+  | 'discardSnapshot';
 
 /**
- * Runs one of the four mutations and returns its `output`. This is the seam between the engine and the
+ * Runs one of the six generic mutations and returns its `output`. This is the seam between the engine and the
  * host's GraphQL stack: an app with generated typed documents (Apollo, urql, …) maps the operation name
  * onto its own document, and an app with none can use {@link createHttpExecutor}.
  *
@@ -42,8 +63,13 @@ export type SnapshotExecutor = (
   input: Record<string, unknown>,
 ) => Promise<SnapshotOutput | null | undefined>;
 
-/** The four operations, machine-agnostic: every method takes the machine and draft id it acts on. */
+/** The operations, machine-agnostic: every method takes the machine (and the draft id) it acts on. */
 export interface SnapshotClient {
+  /**
+   * Create an instance from the machine's declared start. The server mints the id (in the output's `id`);
+   * `requestId` makes a retry return the same instance instead of creating a second one.
+   */
+  start(machine: string, requestId: string, options?: StartOptions): Promise<SnapshotOutput>;
   save(machine: string, id: string, snapshot: string, schemaHash?: string): Promise<SnapshotOutput>;
   advance(
     machine: string,
@@ -53,6 +79,15 @@ export interface SnapshotClient {
   ): Promise<SnapshotOutput>;
   load(machine: string, id: string, schemaHash?: string): Promise<SnapshotOutput>;
   send(machine: string, id: string, requestId?: string, schemaHash?: string): Promise<SnapshotOutput>;
+  /** Delete one of the caller's instances. Idempotent: one already gone answers `discarded: true`. */
+  discard(machine: string, id: string, requestId: string): Promise<SnapshotOutput>;
+}
+
+export interface StartOptions {
+  /** The start input as a JSON object, when the machine's start takes one. */
+  input?: string;
+  /** The machine's schema hash, for the server's version-skew check. */
+  schemaHash?: string;
 }
 
 export interface AdvanceOptions {
@@ -73,7 +108,7 @@ export interface AdvanceOptions {
 const EMPTY: SnapshotOutput = { snapshot: null, problem: null };
 
 /**
- * Bind the four operations to an executor. Nothing here is machine-specific; {@link createDraftSession}
+ * Bind the operations to an executor. Nothing here is machine-specific; {@link createDraftSession}
  * is the layer that pins one (machine, id) pair.
  *
  * `schemaHash` is threaded through every call because the server's version-skew handshake is per-request:
@@ -87,6 +122,14 @@ export function createSnapshotClient(execute: SnapshotExecutor): SnapshotClient 
   ): Promise<SnapshotOutput> => (await execute(operation, input)) ?? EMPTY;
 
   return {
+    start: (machine, requestId, options = {}) =>
+      run('startSnapshot', {
+        machine,
+        requestId,
+        input: options.input,
+        schemaHash: options.schemaHash,
+      }),
+
     save: (machine, id, snapshot, schemaHash) =>
       run('saveSnapshot', { machine, id, snapshot, schemaHash }),
 
@@ -105,6 +148,8 @@ export function createSnapshotClient(execute: SnapshotExecutor): SnapshotClient 
 
     send: (machine, id, requestId, schemaHash) =>
       run('sendSnapshot', { machine, id, requestId, schemaHash }),
+
+    discard: (machine, id, requestId) => run('discardSnapshot', { machine, id, requestId }),
   };
 }
 
@@ -113,10 +158,12 @@ export function createSnapshotClient(execute: SnapshotExecutor): SnapshotClient 
 const OUTPUT = 'output { snapshot problem { code message } }';
 
 const MUTATIONS: Record<SnapshotOperation, string> = {
+  startSnapshot: `mutation($i: StartSnapshotInput!){ dispatch { stateMachine { startSnapshot(input:$i){ output { id created snapshot problem { code message } } } } } }`,
   saveSnapshot: `mutation($i: SaveSnapshotInput!){ dispatch { stateMachine { saveSnapshot(input:$i){ ${OUTPUT} } } } }`,
   advanceSnapshot: `mutation($i: AdvanceSnapshotInput!){ dispatch { stateMachine { advanceSnapshot(input:$i){ ${OUTPUT} } } } }`,
   loadSnapshot: `mutation($i: LoadSnapshotInput!){ dispatch { stateMachine { loadSnapshot(input:$i){ ${OUTPUT} } } } }`,
   sendSnapshot: `mutation($i: SendSnapshotInput!){ dispatch { stateMachine { sendSnapshot(input:$i){ ${OUTPUT} } } } }`,
+  discardSnapshot: `mutation($i: DiscardSnapshotInput!){ dispatch { stateMachine { discardSnapshot(input:$i){ output { discarded problem { code message } } } } } }`,
 };
 
 export interface HttpExecutorOptions {
@@ -127,7 +174,7 @@ export interface HttpExecutorOptions {
 }
 
 /**
- * An executor over plain `fetch` for a host with no GraphQL client. It builds the four documents itself,
+ * An executor over plain `fetch` for a host with no GraphQL client. It builds the six documents itself,
  * so nothing outside this file needs to know their text. A host that already has generated typed
  * documents should write a five-line executor against those instead of using this.
  */
@@ -152,6 +199,8 @@ export function createHttpExecutor(
     // A GraphQL error is transport-level (an auth refusal arrives this way, at HTTP 200) — distinct from
     // a typed problem, which is data. Throwing keeps that distinction: the session maps it to a problem.
     if (body.errors?.length) throw new Error(body.errors[0].message);
-    return body.data?.dispatch?.stateMachine?.[operation]?.output ?? null;
+    const output = body.data?.dispatch?.stateMachine?.[operation]?.output;
+    // A discard's output carries no snapshot; every output has the same fields to its callers.
+    return output ? { ...output, snapshot: output.snapshot ?? null } : null;
   };
 }

@@ -1,0 +1,6 @@
+{
+  "name": "Locked + Coin with a field the input does not declare is refused as invalid input",
+  "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+  "when": { "trigger": "Coin", "input": { "coin": "quarter", "x": 1 } },
+  "expect": { "outcome": "rejected", "reason": "invalid-input" }
+}

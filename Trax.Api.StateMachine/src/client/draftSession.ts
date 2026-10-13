@@ -1,5 +1,5 @@
 /**
- * One user's one draft of one machine, over the four generic operations.
+ * One user's one draft of one machine, over the generic operations, and {@link startDraft}, which creates one.
  *
  * `createSnapshotClient` is machine-agnostic and takes `(machine, id)` on every call; a UI almost always
  * wants the opposite — a handle that has already been told which machine and which draft it is looking
@@ -13,9 +13,13 @@
 import type { MachineSpec, TypedMachine } from '../typed';
 import type { AdvanceOptions, SnapshotClient, SnapshotOutput } from './transport';
 
-/** Total: the stored snapshot (JSON, or null when there is no draft yet), or why not. */
+/**
+ * Total: the stored snapshot (JSON, or null when there is no draft yet), or why not. `revision` is the instance's
+ * revision beside the snapshot when the server reports one (the typed `machines` root does), so a client that also
+ * hears pushes can drop anything at or below the revision it holds.
+ */
 export type DraftResult =
-  | { ok: true; snapshot: string | null }
+  | { ok: true; snapshot: string | null; revision?: number | null }
   | { ok: false; code: string; message: string };
 
 /** The code reported when the request never reached the server (offline, DNS, a 500, an auth error). */
@@ -35,6 +39,10 @@ export interface DraftMessages {
   loadUnavailable: string;
   sendRefused: string;
   sendUnavailable: string;
+  startRefused: string;
+  startUnavailable: string;
+  discardRefused: string;
+  discardUnavailable: string;
 }
 
 const DEFAULT_MESSAGES: DraftMessages = {
@@ -45,6 +53,10 @@ const DEFAULT_MESSAGES: DraftMessages = {
   loadUnavailable: 'Could not load your draft. Check your connection.',
   sendRefused: 'The action could not be completed.',
   sendUnavailable: 'The action could not be completed. Please try again.',
+  startRefused: 'A new draft could not be started.',
+  startUnavailable: 'Could not start a new draft. Check your connection.',
+  discardRefused: 'The draft could not be discarded.',
+  discardUnavailable: 'Could not discard the draft. Check your connection.',
 };
 
 export interface DraftSessionOptions {
@@ -78,36 +90,96 @@ export interface DraftSession {
   load(): Promise<DraftResult>;
   /** Run the bound effect exactly once. A retry with the same `requestId` replays the same receipt. */
   send(requestId?: string): Promise<DraftResult>;
+  /** Delete the draft. Idempotent: a draft already gone is `{ ok: true, snapshot: null }`. */
+  discard(requestId: string): Promise<DraftResult>;
+}
+
+/** Total: the new draft's server-minted id and its first snapshot, or why not. */
+export type StartResult =
+  | { ok: true; id: string; snapshot: string; created: boolean; revision?: number | null }
+  | { ok: false; code: string; message: string };
+
+export interface StartDraftOptions {
+  client: SnapshotClient;
+  /** The machine to start, as in {@link DraftSessionOptions.machine}. */
+  machine: TypedMachine<MachineSpec> | string;
+  /**
+   * The start's idempotency key. Keep it until the start has answered: a retry with the same key returns the
+   * draft the first request created rather than a second one.
+   */
+  requestId: string;
+  /** The start input as JSON, when the machine's start takes one. */
+  input?: string;
+  /** Only when `machine` is a raw name. Omit to opt out of the server's version-skew check. */
+  schemaHash?: string;
+  messages?: Partial<DraftMessages>;
+}
+
+const nameOf = (machine: TypedMachine<MachineSpec> | string) =>
+  typeof machine === 'string' ? machine : machine.id;
+
+const hashOf = (machine: TypedMachine<MachineSpec> | string, schemaHash: string | undefined) =>
+  typeof machine === 'string' ? schemaHash : machine.schemaHash;
+
+// The one place a transport throw or a typed problem becomes a result, so no caller writes a try/catch.
+const settleOutput = async (
+  call: () => Promise<SnapshotOutput>,
+  refused: string,
+  unavailable: string,
+): Promise<{ ok: true; output: SnapshotOutput } | { ok: false; code: string; message: string }> => {
+  let output: SnapshotOutput;
+  try {
+    output = await call();
+  } catch {
+    return { ok: false, code: TRANSPORT_ERROR, message: unavailable };
+  }
+  if (output.problem) {
+    return { ok: false, code: output.problem.code, message: output.problem.message || refused };
+  }
+  return { ok: true, output };
+};
+
+/**
+ * Creates a draft from the machine's declared start: the server mints its id and builds its first snapshot,
+ * so the client never writes one. Total, like every {@link DraftSession} method; bind the returned id with
+ * {@link createDraftSession} to move the draft on.
+ */
+export async function startDraft(options: StartDraftOptions): Promise<StartResult> {
+  const machine = nameOf(options.machine);
+  const schemaHash = hashOf(options.machine, options.schemaHash);
+  const messages: DraftMessages = { ...DEFAULT_MESSAGES, ...options.messages };
+  const settled = await settleOutput(
+    () =>
+      options.client.start(machine, options.requestId, { input: options.input, schemaHash }),
+    messages.startRefused,
+    messages.startUnavailable,
+  );
+  if (!settled.ok) return settled;
+  const { id, snapshot, created, revision } = settled.output;
+  if (!id || !snapshot)
+    return { ok: false, code: TRANSPORT_ERROR, message: messages.startUnavailable };
+  return { ok: true, id, snapshot, created: created ?? true, ...(revision != null ? { revision } : {}) };
 }
 
 export function createDraftSession(options: DraftSessionOptions): DraftSession {
   const { client, id } = options;
-  const machine = typeof options.machine === 'string' ? options.machine : options.machine.id;
-  const schemaHash =
-    typeof options.machine === 'string' ? options.schemaHash : options.machine.schemaHash;
+  const machine = nameOf(options.machine);
+  const schemaHash = hashOf(options.machine, options.schemaHash);
   const messages: DraftMessages = { ...DEFAULT_MESSAGES, ...options.messages };
 
-  // The one place a transport throw or a typed problem becomes a DraftResult, so no method below —
-  // and no caller above — writes a try/catch.
   const settle = async (
     call: () => Promise<SnapshotOutput>,
     refused: string,
     unavailable: string,
   ): Promise<DraftResult> => {
-    let output: SnapshotOutput;
-    try {
-      output = await call();
-    } catch {
-      return { ok: false, code: TRANSPORT_ERROR, message: unavailable };
-    }
-    if (output.problem) {
-      return {
-        ok: false,
-        code: output.problem.code,
-        message: output.problem.message || refused,
-      };
-    }
-    return { ok: true, snapshot: output.snapshot };
+    const settled = await settleOutput(call, refused, unavailable);
+    return settled.ok
+      ? {
+          ok: true,
+          snapshot: settled.output.snapshot,
+          ...(settled.output.revision != null ? { revision: settled.output.revision } : {}),
+        }
+      : settled;
   };
 
   return {
@@ -144,6 +216,13 @@ export function createDraftSession(options: DraftSessionOptions): DraftSession {
         () => client.send(machine, id, requestId, schemaHash),
         messages.sendRefused,
         messages.sendUnavailable,
+      ),
+
+    discard: (requestId) =>
+      settle(
+        () => client.discard(machine, id, requestId),
+        messages.discardRefused,
+        messages.discardUnavailable,
       ),
   };
 }

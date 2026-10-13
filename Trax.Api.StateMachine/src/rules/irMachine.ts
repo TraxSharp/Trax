@@ -4,12 +4,15 @@
 
 import type {
   ContextValidator,
+  InputValidator,
   MachineDefinition,
+  MachineTimer,
   TransitionDefinition,
 } from "../types";
 import {
   applyReduction,
   evaluateRule,
+  validateInput,
   validateSchema,
   type ContextSchema,
   type CustomGuards,
@@ -44,6 +47,27 @@ export interface IrOutcome {
   state: string;
   outcome: "done" | "failed" | "cancelled";
   edges: IrOutcomeEdge[];
+  /** The schema of the train's output, the success outcome's input. Present on the `done` outcome only. */
+  output?: ContextSchema;
+}
+
+/**
+ * A state's timer: from `state`, the trigger `trigger` moves to `target` once the duration has passed. The
+ * duration is fixed (`after`, an ISO-8601 duration) or read from the context field `field.name` at entry,
+ * bounded by `field.min` and `field.max` (ISO-8601 durations). A trigger kind of its own: a client never
+ * sends it, and the server fires it.
+ */
+export interface IrTimer {
+  state: string;
+  trigger: string;
+  target: string;
+  after?: string;
+  field?: { name: string; min: string; max: string };
+  /**
+   * The rules the timer acts under: the union of the rules of everything that enters its state, as the census writes
+   * them (`Requires(Editor)`). For the census and the startup comparison; the twin does not read it.
+   */
+  rules?: string[];
 }
 
 export interface IrDocument {
@@ -59,8 +83,11 @@ export interface IrDocument {
   invariants?: Record<string, Rule>;
   transitions: IrTransition[];
   // The outcome triggers of states that invoke a train, a trigger kind of their own. Absent when the machine
-  // invokes nothing. The success outcome's input schema (the train's output) is under `inputs`.
+  // invokes nothing. The success outcome's input schema (the train's output) is its `output`; `inputs` holds only
+  // what a client may send.
   outcomes?: Record<string, IrOutcome>;
+  // The timers of timed states, a server-only trigger kind of their own. Absent when the machine declares none.
+  timers?: IrTimer[];
   // Differential fuzzing inputs (test-only), authored in C# via .Differential(...) and exported here so the
   // cross-language differential harness enumerates off this IR instead of a hand-written machine.json. Absent
   // on machines with no cross-language differential. Structurally the same block DifferentialSpec carries, so
@@ -126,6 +153,27 @@ export function machineFromIr(
       transitions.push(edge(outcome.state, name, e.to, e.guard, e.reduce));
   }
 
+  // Every trigger's input is checked against one schema before any guard reads it, as on the server: the record
+  // it declares, else nothing (only no input or `{}`), except that an effect-bound trigger takes the receipt the
+  // server's effect runner hands it. A success outcome's input is the train's output; a failure or a cancel
+  // carries none.
+  const inputValidators: Partial<Record<string, InputValidator>> = {};
+  const effectBound = new Set(
+    ir.transitions.filter((t) => t.effect).map((t) => t.trigger),
+  );
+  for (const trigger of ir.triggers) {
+    const schema =
+      ir.inputs[trigger] ??
+      (effectBound.has(trigger) ? receiptInput : emptyInput);
+    inputValidators[trigger] = (input) => validateInput(schema, input);
+  }
+  for (const name of outcomeTriggers) {
+    const outcome = (ir.outcomes as Record<string, IrOutcome>)[name];
+    const schema =
+      outcome.outcome === "done" ? (outcome.output ?? emptyInput) : emptyInput;
+    inputValidators[name] = (input) => validateInput(schema, input);
+  }
+
   const contextValidators: Partial<Record<string, ContextValidator>> = {};
   const validatedStates = new Set([
     ...Object.keys(ir.context),
@@ -147,6 +195,17 @@ export function machineFromIr(
     };
   }
 
+  // A timer is a trigger kind of its own: it is not an edge a caller fires, so it stays out of `transitions`, and
+  // only `applyTimer` takes it. The rules it acts under are the server's concern.
+  const timers: Partial<Record<string, MachineTimer>> = {};
+  for (const t of ir.timers ?? [])
+    timers[t.state] = {
+      trigger: t.trigger,
+      target: t.target,
+      ...(t.after !== undefined ? { after: t.after } : {}),
+      ...(t.field !== undefined ? { field: { ...t.field } } : {}),
+    };
+
   return {
     id: ir.id,
     version: ir.version,
@@ -156,9 +215,21 @@ export function machineFromIr(
     transitions,
     committedStates: ir.committedStates,
     outcomeTriggers,
+    timers,
+    inputValidators,
     contextValidators,
   };
 }
+
+const emptyInput: ContextSchema = { fields: [] };
+
+// What an effect-bound trigger that declares no record takes: the receipt the effect runner hands it, or nothing.
+// The C# builder derives the same schema for the same edge.
+const receiptInput: ContextSchema = {
+  fields: [
+    { name: "receipt", type: "string", nullable: true, constraints: [] },
+  ],
+};
 
 // The initial context derived from the initial state's schema: array -> [], number -> 0, string -> "",
 // boolean -> false, object -> {}, nullable -> null. This is the string-free StartsAt the C# side also derives.
@@ -174,13 +245,14 @@ function defaultsFor(schema: ContextSchema): Record<string, unknown> {
         ctx[field.name] = [];
         break;
       case "number":
+      case "integer":
         ctx[field.name] = 0;
         break;
       case "boolean":
         ctx[field.name] = false;
         break;
       case "string":
-        ctx[field.name] = "";
+        ctx[field.name] = field.enum?.[0] ?? "";
         break;
       case "object":
         ctx[field.name] = {};

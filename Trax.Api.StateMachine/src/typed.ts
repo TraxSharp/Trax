@@ -97,6 +97,18 @@ export class TypedMachine<Spec extends MachineSpec> {
     return this.core.advance(snapshot, trigger, input[0]) as TypedAdvanceResult<Spec>;
   }
 
+  /**
+   * Applies an invoked train's outcome (`Fetching.done`, `.failed`, `.cancelled`), the success outcome's input
+   * being the train's output. `advance` refuses an outcome trigger; this is the entry point that applies one.
+   */
+  applyOutcome<T extends TriggerOf<Spec>>(
+    snapshot: TypedSnapshot<Spec>,
+    trigger: T,
+    ...output: InputArgs<Spec, T>
+  ): TypedAdvanceResult<Spec> {
+    return this.core.applyOutcome(snapshot, trigger, output[0]) as TypedAdvanceResult<Spec>;
+  }
+
   rehydrate(json: string): TypedRehydrationResult<Spec> {
     return this.core.rehydrate(json) as TypedRehydrationResult<Spec>;
   }

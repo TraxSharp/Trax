@@ -2,20 +2,48 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { irFile } from "../../fixtures";
+import { RejectionReasons } from "../../results";
 import { SnapshotMachine } from "../../machine";
 import { generateContextTypes } from "../../rules/generateTypes";
 import { machineFromIr, type IrDocument } from "../../rules/irMachine";
 import { ingest, ingestCore } from "./ingest";
 
 // A state that invokes a train, seen from the twin: its outcomes are events the twin applies through the same
-// declarative guards and reductions as the server. The twin never starts the train.
+// declarative guards and reductions as the server, through `applyOutcome`. The twin never starts the train.
 
 const ir = JSON.parse(fs.readFileSync(irFile("ingest"), "utf8")) as IrDocument;
 const fetching = ingest.snapshotAt("Fetching", { source: "s3://bucket/a" });
 
+// One engine contract: an invoked train's outcome is not a trigger a caller sends, so `advance` refuses it in
+// both engines and `applyOutcome` applies it.
+describe("ingest outcomes: one engine contract", () => {
+  it("Advance_refuses_an_outcome_trigger_in_both_engines", () => {
+    const output = { fingerprint: "sha256:def", unsure: true };
+    expect(ingestCore.advance(fetching, "Fetching.done", output)).toMatchObject({
+      outcome: "rejected",
+      reason: RejectionReasons.OutcomeBound,
+    });
+    expect(ingestCore.applyOutcome(fetching, "Fetching.done", output)).toEqual({
+      outcome: "transitioned",
+      snapshot: {
+        machine: "ingest",
+        version: 1,
+        state: "NeedsReview",
+        context: { fingerprint: "sha256:def", source: "s3://bucket/a" },
+      },
+    });
+  });
+
+  it("refuses an output that does not match the train's output schema, without throwing", () => {
+    expect(
+      ingestCore.applyOutcome(fetching, "Fetching.done", { fingerprint: 5, unsure: "yes" }),
+    ).toMatchObject({ outcome: "rejected", reason: RejectionReasons.InvalidInput });
+  });
+});
+
 describe("ingest outcomes in the twin", () => {
   it("routes an unsure output to its own target through the guarded OnDone", () => {
-    const r = ingest.advance(fetching, "Fetching.done", {
+    const r = ingest.applyOutcome(fetching, "Fetching.done", {
       fingerprint: "sha256:def",
       unsure: true,
     });
@@ -31,7 +59,7 @@ describe("ingest outcomes in the twin", () => {
   });
 
   it("takes the unguarded OnDone after the guarded one for a sure output", () => {
-    const r = ingest.advance(fetching, "Fetching.done", {
+    const r = ingest.applyOutcome(fetching, "Fetching.done", {
       fingerprint: "sha256:abc",
       unsure: false,
     });
@@ -39,15 +67,15 @@ describe("ingest outcomes in the twin", () => {
   });
 
   it("applies failed and cancelled outcomes with no input", () => {
-    const failed = ingest.advance(fetching, "Fetching.failed");
-    const cancelled = ingest.advance(fetching, "Fetching.cancelled");
+    const failed = ingest.applyOutcome(fetching, "Fetching.failed");
+    const cancelled = ingest.applyOutcome(fetching, "Fetching.cancelled");
     expect(failed.outcome === "transitioned" && failed.snapshot.state).toBe("FetchFailed");
     expect(cancelled.outcome === "transitioned" && cancelled.snapshot.state).toBe("Cancelled");
   });
 
   it("is a no-transition when the state was already left", () => {
     const left = ingest.snapshotAt("Idle", { source: "s3://bucket/a" });
-    const r = ingest.advance(left, "Fetching.failed");
+    const r = ingest.applyOutcome(left, "Fetching.failed");
     expect(r).toMatchObject({ outcome: "rejected", reason: "no-transition" });
   });
 
@@ -63,7 +91,7 @@ describe("ingest outcomes in the twin", () => {
       },
     };
     const machine = new SnapshotMachine(machineFromIr(guardedOnly));
-    const r = machine.advance(fetching, "Fetching.done", {
+    const r = machine.applyOutcome(fetching, "Fetching.done", {
       fingerprint: "sha256:abc",
       unsure: false,
     });

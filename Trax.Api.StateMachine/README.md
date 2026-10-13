@@ -10,7 +10,8 @@ This repo owns four things:
 | Piece | Location |
 | --- | --- |
 | The `@trax/state-machine` package (engine, rule interpreter, typed facade, React hook) | [`src/`](src) |
-| The `@trax/state-machine/client` subpath (the four generic snapshot mutations, machine-agnostic) | [`src/client/`](src/client) |
+| The `@trax/state-machine/client` subpath (a host's typed `machines` operations and `machineChanged` stream, and the opt-in generic snapshot mutations) | [`src/client/`](src/client) |
+| The server-authoritative controller and its React hook, `useServerMachine` | [`src/server/`](src/server) |
 | The shared, language-neutral fixtures both engines drive (the cross-language oracle) | [`machines/`](machines) |
 | The IR-driven generators (`generateContextTypes` / `generateMachineFactory`) and the node entrypoints the `trax machine` CLI shells out to | [`src/rules/generateTypes.ts`](src/rules/generateTypes.ts), [`tools/`](tools) |
 
@@ -93,8 +94,12 @@ comes from the machine's IR (`.Committed()` in C#) — never a state name repeat
 The engine above is pure: a reducer and a rule interpreter, no I/O. Persisting a draft is a separate
 subpath, so importing the engine never pulls a transport into a bundle that only wanted the reducer.
 
-`Trax.Effect.StateMachine.Persistence` exposes **one** set of operations for **every** machine —
-`saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot` under `dispatch { stateMachine { … } }`,
+These mutations are served only when the host opts in; upgrading from a version that served them by default is
+covered in [Generic State-Machine Mutations](https://traxsharp.net/docs/migration-guides/generic-state-machine-mutations).
+When the host opts in (`ExposeGenericStateMachineMutations`), `Trax.Effect.StateMachine.Persistence` exposes
+**one** set of operations for **every** machine —
+`startSnapshot`, `saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot` and `discardSnapshot` under
+`dispatch { stateMachine { … } }`,
 each carrying a `machine` discriminator the server resolves in its registry. So there is one client, not
 one per machine:
 
@@ -109,9 +114,9 @@ await session.advance('Next');                     // authoritative transition
 await session.send(requestId);                     // the exactly-once effect
 ```
 
-- **`createSnapshotClient(executor)`** — the four operations, machine-agnostic: `(machine, id)` on every
+- **`createSnapshotClient(executor)`** — the six operations, machine-agnostic: `(machine, id)` on every
   call. The `executor` is the seam to the host's GraphQL stack. An app with generated typed documents
-  writes a small one against those; an app without can use `createHttpExecutor`, which builds the four
+  writes a small one against those; an app without can use `createHttpExecutor`, which builds the six
   documents itself.
 - **`createDraftSession({ client, machine, id })`** — one machine's one draft, with `machine` and
   `schemaHash` read off the `TypedMachine` so they cannot disagree with the machine actually running.
@@ -123,6 +128,34 @@ drifted from the deployed one is refused with `schema-mismatch` and reloads, rat
 outdated contract. `advance` also accepts `clientResult` — the snapshot the local twin computed for that
 same advance — so the server can refuse a `client-divergence` instead of storing a result the two engines
 disagree on.
+
+### A machine the server owns
+
+A host serves each machine marked `[TraxMachine]` as its own typed operations, by persisted id, and pushes every
+write of an instance on `machineChanged`. `createMachineServer` binds those to one machine, from the documents in
+the host's manifest and a graphql-ws socket the page owns;
+`useServerMachine` (at `@trax/state-machine/react`) drives one instance through it:
+
+```ts
+import { createClient } from 'graphql-ws';
+import { createMachineServer, persistedMessageReplacer } from '@trax/state-machine/client';
+import { useServerMachine } from '@trax/state-machine/react';
+import documents from './topic-map.documents.json';
+
+const server = createMachineServer('/trax/graphql', {
+  machine: topicMap,
+  documents,
+  socket: createClient({ url: 'ws://host/trax/graphql', lazy: true, jsonMessageReplacer: persistedMessageReplacer }),
+});
+
+const map = useServerMachine(topicMap, { server, id: storedId });   // without `id`, it starts one
+map.send('ChooseFields', { fields: ['Hydrology'] });
+```
+
+The server applies every transition and returns what it stored. The twin only predicts: the page shows the
+prediction until the answer (or a push) replaces it, and sends it as `clientResult`. Snapshots are ordered by
+revision, events are sent one at a time per instance, each under its own requestId, and `gone` or
+`client-outdated` stop the hook for good. `ServerMachineController` is the same thing without React.
 
 ## Status
 

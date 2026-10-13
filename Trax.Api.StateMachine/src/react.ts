@@ -79,3 +79,9 @@ function composeObservers<Spec extends MachineSpec>(
     },
   };
 }
+
+export {
+  useServerMachine,
+  type UseServerMachineOptions,
+  type UseServerMachineResult,
+} from './server/useServerMachine';

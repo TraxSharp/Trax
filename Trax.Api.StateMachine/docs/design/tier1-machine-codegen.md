@@ -389,7 +389,7 @@ factory, not logic.** Per language:
   currently unexercised, since no machine has one
 - the differential `replay` entry point
 - server target only: the GraphQL mutation fan + DI wiring (subsumed on the C# side, which runs the IR
-  directly; the four generic mutations come from `AddStateMachines`)
+  directly; the generic mutations come from `AddStateMachines`, and are served only on its opt-in)
 
 There is **no per-machine C# artifact to generate.** C# is the source and runs the declarative rules directly
 via `RuleEvaluator`, so the original "C# generator target" is subsumed by interpret-at-runtime. The generator
@@ -571,7 +571,7 @@ phase0-codegen-scope.md §5 (Increment E) is the build plan it was built from, g
 
 ## 10. Persistence and runtime (unchanged)
 
-None of this changes how a machine *runs*. Trax snapshot persistence, the four generic `stateMachine`
+None of this changes how a machine *runs*. Trax snapshot persistence, the generic `stateMachine`
 mutations, draft TTL/expiry, and the exactly-once effect machinery are as-is. The generated types and the
 IR-driven factory plug into the existing engine and persistence. What changed is the *authoring path around*
 the runtime: the machine is authored declaratively in C#, the exporter emits the IR, and the frontend runs

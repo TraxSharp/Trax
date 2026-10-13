@@ -1,0 +1,6 @@
+{
+  "name": "Locked + Coin with a __proto__ key is refused as invalid input, never read through",
+  "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+  "when": { "trigger": "Coin", "input": { "__proto__": { "coin": "quarter" } } },
+  "expect": { "outcome": "rejected", "reason": "invalid-input" }
+}

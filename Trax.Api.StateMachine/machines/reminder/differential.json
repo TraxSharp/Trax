@@ -1,0 +1,247 @@
+{
+  "machine": "reminder",
+  "version": 1,
+  "generated": "GENERATED differential corpus. Do not hand-edit; regenerate with UPDATE_DIFFERENTIAL=1. TypeScript is the oracle; every runtime replays and must reproduce each outcome.",
+  "cases": [
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Done",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Done",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Extend"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Done",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Open"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Done",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Review.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Expired",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Expired",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Extend"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Expired",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Open"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Expired",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Review.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Extend"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Open"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"reminder\",\"version\":1,\"state\":\"Review\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Review.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Review",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"reminder\",\"version\":1,\"state\":\"Done\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Review",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Extend"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"reminder\",\"version\":1,\"state\":\"Review\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Review",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Open"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "reminder",
+        "version": 1,
+        "state": "Review",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Review.after"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"reminder\",\"version\":1,\"state\":\"Expired\",\"context\":{}}"
+      }
+    }
+  ]
+}

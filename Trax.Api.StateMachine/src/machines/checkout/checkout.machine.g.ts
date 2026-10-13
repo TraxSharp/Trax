@@ -28,7 +28,11 @@ const ir = {
           ],
           "name": "items",
           "nullable": false,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
@@ -63,7 +67,11 @@ const ir = {
           ],
           "name": "items",
           "nullable": false,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
@@ -98,7 +106,11 @@ const ir = {
           ],
           "name": "items",
           "nullable": false,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
@@ -261,7 +273,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "7ed747818303694e14df969d1422a25f90e39dff6e9aa20532b84d409066a7c4";
+export const irHash = "87fbe58679e955f82fabb74270e098d512414331452335b307385e8302ca5247";
 
 /** The checkout machine, built from the IR and typed by CheckoutSpec. No hand-written twin. */
 export const checkout = typedMachineFromIr<CheckoutSpec>(ir, irHash);

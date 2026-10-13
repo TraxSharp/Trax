@@ -1,0 +1,6 @@
+{
+  "name": "Review + Pay with the required receipt field missing is refused as invalid input",
+  "given": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } },
+  "when": { "trigger": "Pay", "input": {} },
+  "expect": { "outcome": "rejected", "reason": "invalid-input" }
+}

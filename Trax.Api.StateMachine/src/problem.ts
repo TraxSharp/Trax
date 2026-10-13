@@ -2,7 +2,11 @@ import type { AdvanceResult, RehydrationResult } from './results';
 
 /** One normalized shape for any declined action or failed load — so a UI reasons over one mental model. */
 export interface Problem {
-  kind: 'rejected' | 'load-error';
+  /**
+   * `rejected`: the machine (the twin's or the server's) declined. `load-error`: a stored snapshot could not be read.
+   * `transport`: the server could not be reached, so nothing is known about the outcome.
+   */
+  kind: 'rejected' | 'load-error' | 'transport';
   code: string;
   message: string;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { checkout } from '../machines/checkout/checkout';
-import { createDraftSession, TRANSPORT_ERROR } from './draftSession';
+import { createDraftSession, startDraft, TRANSPORT_ERROR } from './draftSession';
 import {
   createHttpExecutor,
   createSnapshotClient,
@@ -60,6 +60,25 @@ describe('createSnapshotClient', () => {
     });
   });
 
+  it('starts with the machine and request id, and discards by id and request id', async () => {
+    const { calls, execute } = recorder();
+    const client = createSnapshotClient(execute);
+
+    await client.start('checkout', 'start-1', { input: '{"items":[]}', schemaHash: 'hash' });
+    await client.discard('checkout', 'draft-1', 'discard-1');
+
+    expect(calls).toEqual([
+      {
+        operation: 'startSnapshot',
+        input: { machine: 'checkout', requestId: 'start-1', input: '{"items":[]}', schemaHash: 'hash' },
+      },
+      {
+        operation: 'discardSnapshot',
+        input: { machine: 'checkout', id: 'draft-1', requestId: 'discard-1' },
+      },
+    ]);
+  });
+
   it('degrades a null executor result to an empty output rather than throwing', async () => {
     const client = createSnapshotClient(async () => null);
     await expect(client.load('checkout', 'draft-1')).resolves.toEqual({
@@ -87,6 +106,31 @@ describe('createHttpExecutor', () => {
     const [, init] = (fetchMock as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
     expect((init.headers as Record<string, string>)['X-Api-Key']).toBe('k');
     expect(JSON.parse(init.body as string).query).toContain('saveSnapshot(input:$i)');
+  });
+
+  it('reads the minted id of a start and gives a discard\'s output a null snapshot', async () => {
+    const answers: Record<string, unknown> = {
+      startSnapshot: { output: { id: 'minted', created: true, snapshot: '{}', problem: null } },
+      discardSnapshot: { output: { discarded: true, problem: null } },
+    };
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const query = JSON.parse(init.body as string).query as string;
+      const field = query.includes('startSnapshot') ? 'startSnapshot' : 'discardSnapshot';
+      return { json: async () => ({ data: { dispatch: { stateMachine: { [field]: answers[field] } } } }) };
+    }) as unknown as typeof globalThis.fetch;
+    const execute = createHttpExecutor('/graphql', { fetch: fetchMock });
+
+    await expect(execute('startSnapshot', { machine: 'checkout', requestId: 'r' })).resolves.toEqual({
+      id: 'minted',
+      created: true,
+      snapshot: '{}',
+      problem: null,
+    });
+    await expect(execute('discardSnapshot', { machine: 'checkout', id: 'd', requestId: 'r' })).resolves.toEqual({
+      discarded: true,
+      snapshot: null,
+      problem: null,
+    });
   });
 
   it('throws on a GraphQL error, which arrives at HTTP 200 (an auth refusal looks like this)', async () => {
@@ -183,5 +227,41 @@ describe('createDraftSession', () => {
     });
     await s.send('req');
     expect(calls[0].input).toMatchObject({ machine: 'turnstile', schemaHash: 'hash-1' });
+  });
+});
+
+describe('startDraft', () => {
+  it('returns the server-minted id and the first snapshot', async () => {
+    const { calls, execute } = recorder({ id: 'minted', created: true, snapshot: '{"state":"Cart"}', problem: null });
+
+    const started = await startDraft({ client: createSnapshotClient(execute), machine: checkout, requestId: 'r-1' });
+
+    expect(started).toEqual({ ok: true, id: 'minted', snapshot: '{"state":"Cart"}', created: true });
+    expect(calls[0].input).toMatchObject({ machine: checkout.id, requestId: 'r-1', schemaHash: checkout.schemaHash });
+  });
+
+  it('surfaces a refusal as a typed result, and never throws', async () => {
+    const refused = recorder({ snapshot: null, problem: { code: 'too-many-drafts', message: 'Too many.' } });
+    await expect(
+      startDraft({ client: createSnapshotClient(refused.execute), machine: 'checkout', requestId: 'r' }),
+    ).resolves.toEqual({ ok: false, code: 'too-many-drafts', message: 'Too many.' });
+
+    const offline: SnapshotExecutor = async () => {
+      throw new Error('offline');
+    };
+    await expect(
+      startDraft({ client: createSnapshotClient(offline), machine: 'checkout', requestId: 'r' }),
+    ).resolves.toMatchObject({ ok: false, code: TRANSPORT_ERROR });
+  });
+
+  it('discards the bound draft through its session', async () => {
+    const { calls, execute } = recorder({ snapshot: null, problem: null, discarded: true });
+    const s = createDraftSession({ client: createSnapshotClient(execute), machine: checkout, id: 'draft-1' });
+
+    await expect(s.discard('d-1')).resolves.toEqual({ ok: true, snapshot: null });
+    expect(calls[0]).toEqual({
+      operation: 'discardSnapshot',
+      input: { machine: checkout.id, id: 'draft-1', requestId: 'd-1' },
+    });
   });
 });

@@ -6,7 +6,13 @@
 // Object shapes are emitted as `type` aliases, not `interface`, so they carry the implicit index signature
 // that `MachineSpec` (Record<string, ...>) requires.
 
-import type { ContextSchema, FieldSchema, JsonFieldType, RuleSource } from "./interpreter";
+import type {
+  ContextSchema,
+  FieldSchema,
+  JsonFieldType,
+  RuleSource,
+  ValueSchema,
+} from "./interpreter";
 import type { IrDocument } from "./irMachine";
 
 export function generateContextTypes(ir: IrDocument): string {
@@ -30,6 +36,7 @@ export function generateContextTypes(ir: IrDocument): string {
       ...emitType(
         `${machine}${state}Context`,
         ir.context[state] ?? { fields: [] },
+        "context",
       ),
       "",
     );
@@ -42,13 +49,20 @@ export function generateContextTypes(ir: IrDocument): string {
   for (const trigger of ir.triggers) {
     const schema = ir.inputs[trigger];
     if (schema && schema.fields.length > 0)
-      lines.push(...emitType(`${machine}${trigger}Input`, schema), "");
+      lines.push(
+        ...emitType(`${machine}${trigger}Input`, schema, "input"),
+        "",
+      );
   }
-  // A success outcome's input is the invoked train's output.
+  // A success outcome's input is the invoked train's output, exported under the outcome.
+  const outputOf = (outcome: string) => ir.outcomes?.[outcome]?.output;
   for (const outcome of outcomes) {
-    const schema = ir.inputs[outcome];
+    const schema = outputOf(outcome);
     if (schema && schema.fields.length > 0)
-      lines.push(...emitType(outcomeTypeName(machine, outcome), schema), "");
+      lines.push(
+        ...emitType(outcomeTypeName(machine, outcome), schema, "input"),
+        "",
+      );
   }
   lines.push(`export type ${machine}Inputs = {`);
   for (const trigger of ir.triggers) {
@@ -60,7 +74,7 @@ export function generateContextTypes(ir: IrDocument): string {
     lines.push(`  ${trigger}: ${type};`);
   }
   for (const outcome of outcomes) {
-    const schema = ir.inputs[outcome];
+    const schema = outputOf(outcome);
     const type =
       schema && schema.fields.length > 0
         ? outcomeTypeName(machine, outcome)
@@ -143,27 +157,42 @@ export function generateMachineFactory(
   ].join("\n");
 }
 
-function emitType(name: string, schema: ContextSchema): string[] {
+// `source` is where the schema's own constraints say its fields live: a context's read the context, an input's
+// (or a train output's) read the input.
+function emitType(
+  name: string,
+  schema: ContextSchema,
+  source: RuleSource,
+): string[] {
   if (schema.fields.length === 0)
     return [`export type ${name} = Record<string, never>;`];
 
   const lines = [`export type ${name} = {`];
-  for (const field of [...schema.fields].sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-  ))
-    lines.push(`  ${member(field)};`);
+  for (const field of sorted(schema.fields))
+    lines.push(`  ${member(field, source)};`);
   lines.push("};");
   return lines;
 }
 
+const sorted = (fields: readonly FieldSchema[]): FieldSchema[] =>
+  [...fields].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
 // A nullable field is optional and may be null (matches the validator: absent-or-null is allowed).
-function member(field: FieldSchema): string {
+function member(field: FieldSchema, source: RuleSource): string {
   const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(field.name)
     ? field.name
     : JSON.stringify(field.name);
   const optional = field.nullable ? "?" : "";
   const nullable = field.nullable ? " | null" : "";
-  return `${key}${optional}: ${tsType(field)}${nullable}`;
+  return `${key}${optional}: ${tsType(field, source)}${nullable}`;
+}
+
+// A nested record's shape, inline: the fields of an object field, or of each element of an array field.
+function shapeType(fields: readonly FieldSchema[], source: RuleSource): string {
+  if (fields.length === 0) return "Record<string, never>";
+  return `{ ${sorted(fields)
+    .map((f) => `${member(f, source)};`)
+    .join(" ")} }`;
 }
 
 /**
@@ -172,30 +201,56 @@ function member(field: FieldSchema): string {
  * type, `oneOf` gives a string its literal union. Reading them here is what stops a consumer from
  * hand-maintaining a "precise" copy of a context the IR already described exactly.
  *
- * Only a field's own, top-level, context-sourced constraint narrows it. A rule nested inside
+ * Only a field's own, top-level constraint, read from where the schema's record lives, narrows it. A rule nested inside
  * `all`/`any` may be conditional, and one aimed at another field or at trigger input says nothing
  * about this field, so neither is safe to read as a type.
  */
-function tsType(field: FieldSchema): string {
+function tsType(field: FieldSchema, source: RuleSource): string {
+  if (field.fields && field.type === "object") return shapeType(field.fields, source);
+  if (field.fields && field.type === "array")
+    return `${shapeType(field.fields, source)}[]`;
+  if (field.values) return valuesType(field.values, field.type, source);
   for (const rule of field.constraints) {
-    if (rule.rule === "arrayOf" && field.type === "array" && ownContextRule(rule, field))
+    if (rule.rule === "arrayOf" && field.type === "array" && ownRule(rule, field, source))
       return `${baseType(rule.type)}[]`;
-    if (rule.rule === "oneOf" && field.type === "string" && ownContextRule(rule, field))
+    if (rule.rule === "oneOf" && field.type === "string" && ownRule(rule, field, source))
       return union(rule.values);
   }
   return baseType(field.type);
 }
 
-const ownContextRule = (
+// A map's or a list's type from the schema of its values: `Record<string, number>`, `string[]`.
+function valuesType(
+  values: ValueSchema,
+  type: JsonFieldType,
+  source: RuleSource,
+): string {
+  const value = valueType(values, source);
+  if (type !== "array") return `Record<string, ${value}>`;
+  return value.includes(" | ") ? `(${value})[]` : `${value}[]`;
+}
+
+function valueType(schema: ValueSchema, source: RuleSource): string {
+  const base =
+    schema.fields && schema.type === "object" ? shapeType(schema.fields, source)
+    : schema.fields && schema.type === "array" ? `${shapeType(schema.fields, source)}[]`
+    : schema.values ? valuesType(schema.values, schema.type, source)
+    : baseType(schema.type);
+  return schema.nullable ? `${base} | null` : base;
+}
+
+const ownRule = (
   rule: { source: RuleSource; field: string },
   field: FieldSchema,
-): boolean => rule.source === "context" && rule.field === field.name;
+  source: RuleSource,
+): boolean => rule.source === source && rule.field === field.name;
 
 function baseType(type: JsonFieldType): string {
   switch (type) {
     case "string":
       return "string";
     case "number":
+    case "integer":
       return "number";
     case "boolean":
       return "boolean";
