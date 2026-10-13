@@ -4,11 +4,13 @@ description: "The Metadata record every train run produces: its TrainState lifec
 type: reference
 area: effects
 nav_order: 1
+source:
+  - Trax.Effect/src/Trax.Effect/Models/Metadata/Metadata.cs
 ---
 
 # Metadata
 
-Every train execution produces a metadata record. It captures everything about the run: when it started, what junctions it passed through, what it was carrying, and whether it completed or failed.
+Every run of a `ServiceTrain` produces a metadata row (`trax.metadata`): when it started and ended, what it carried, where it ran, and whether it completed, failed or was cancelled.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -65,14 +67,12 @@ The original exception is rethrown to callers with its type, message, and stack 
 
 ## Host Tracking
 
-In distributed environments (Lambda, ECS, multiple servers), every metadata record captures where the train actually executed. Host information is auto-detected at startup and stamped on each execution. See [Host Tracking](/docs/effect/host-tracking) for details on auto-detection, custom labels, and the builder API.
+`HostName`, `HostEnvironment`, `HostInstanceId` and `HostLabels` are detected at startup and stamped on each run. [Host tracking](/docs/effect/host-tracking) covers detection, labels and the builder calls.
 
 ## Nested Trains
 
-A junction can dispatch another train mid-execution by injecting `ITrainBus`. The child gets a metadata record of its own, but it is not linked to the parent's: its `ParentId` is not set, and passing the parent's `Metadata` to `RunAsync` throws rather than linking them. The column, the API's `childCount` and `executionChildren`, and the cleanup that clears a deleted parent's children all exist, but no Trax code path writes a parent link today.
-
-See [Mediator: Nested Trains](/docs/mediator#nested-trains) for how to dispatch a child train.
+A train dispatched from a junction gets a row of its own, not linked to the parent's: `ParentId` is not set. [Nested trains](/docs/mediator#nested-trains) covers dispatching one.
 
 ## Execution Flow
 
-For a diagram of the full ServiceTrain lifecycle, from client request through metadata initialization to SaveChanges, see [Effect Architecture](/docs/effect/architecture#execution-flow).
+[Effect architecture](/docs/effect/architecture#execution-flow) has a diagram of a run, from the request through the row's creation to `SaveChanges`.
