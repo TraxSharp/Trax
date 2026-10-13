@@ -22,6 +22,8 @@ public enum Underwriting
 
 public sealed class LargeModelDecider : IDecider
 {
-    public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken cancellationToken) =>
-        Task.FromResult(new DecisionResult(new Dictionary<string, Answer>()));
+    public Task<DecisionResult> Decide(
+        DecisionRequest request,
+        CancellationToken cancellationToken
+    ) => Task.FromResult(new DecisionResult(new Dictionary<string, Answer>()));
 }
