@@ -9,11 +9,6 @@ api-graphql-client.md
 api-security.md
 api.md
 authorization.md
-core.md
-core/analyzer.md
-core/building-chains.md
-core/ide-extensions.md
-core/memory.md
 core/trains-and-junctions.md
 cross-cutting/cancellation-tokens.md
 cross-cutting/common-patterns.md
