@@ -45,7 +45,8 @@ when the chain reaches it. Throwing is how a junction fails, so a junction reads
 and the train, not the junction, decides what a failure does to the rest of the chain.
 
 A junction also carries the run's `CancellationToken` as a property, set before `Run` is called.
-[How cancellation works](/docs/cross-cutting/cancellation-tokens) covers it.
+[How cancellation works](/docs/cross-cutting/cancellation-tokens) covers it, and
+[Make a junction cancellable](/docs/cross-cutting/make-a-junction-cancellable) shows how to use it.
 
 ## EffectJunction vs Junction
 

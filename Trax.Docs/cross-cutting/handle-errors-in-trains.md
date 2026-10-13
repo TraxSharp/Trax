@@ -149,6 +149,7 @@ public static class Quotes
 To record whether a failure is transient, a conflict or permanent, so the dashboard and your own
 code can act on it without matching exception messages, register an
 [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier).
+[Failure classification](/docs/effect/failure-classification) explains what it is asked and when.
 
 ## SDK Reference
 
