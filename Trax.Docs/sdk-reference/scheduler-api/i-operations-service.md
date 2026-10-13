@@ -102,7 +102,7 @@ saved a `_truncated`, `_unserializable` or `_disposed` placeholder in its place,
 
 The saved input is written with reference metadata (`$id`, `$values`, `$ref`) that the mediator
 does not honour in an input it is handed, so it is first resolved with
-[`TrainInputReader.ResolveSavedInput`](/docs/sdk-reference/mediator-api/train-execution#resolvesavedinput)
+[`TrainInputReader.ResolveSavedInput`](/docs/sdk-reference/mediator-api/train-input-reader#resolvesavedinput)
 into the plain tree the run was given: lists come back as lists, and an object that appeared twice
 comes back in full both times. A saved input whose metadata has no plain form is refused
 (`Execution {id}'s saved input cannot be read back as the input it ran with: ...`), and one whose
