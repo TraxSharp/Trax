@@ -30,53 +30,6 @@ client plays the app and the operator through three stories:
 | An upload that keeps the response shape served on the next call by the same id; one that changes it refused | the Client, `HotFixFlowTests` |
 | The demo key, the dashboard and the page only in Development | `Program.cs`, `ProductionPostureTests` |
 
-## Layout
-
-```
-samples/PersistedOperations/
-├── Trax.Samples.PersistedOperations/          GreetTrain: a name and a style in, a greeting out
-├── Trax.Samples.PersistedOperations.Api/      the host (Program.cs) and the page in wwwroot/
-└── Trax.Samples.PersistedOperations.Client/   console client and manifest.json: the three stories
-```
-
-The train behind every document:
-
-```csharp
-public enum GreetingStyle { Casual, Formal }    // CASUAL, FORMAL in GraphQL
-
-public record GreetInput : IManifestProperties
-{
-    public required string Name { get; init; }
-    public GreetingStyle Style { get; init; }
-}
-
-public record GreetOutput
-{
-    public required string Greeting { get; init; }
-}
-
-// ComposeGreetingJunction
-Greeting = input.Style switch
-{
-    GreetingStyle.Formal => $"Good day, {input.Name}.",
-    _ => $"Hey {input.Name}!",
-};
-```
-
-`Client/manifest.json` ships one operation. The style is fixed in the stored document, not sent by
-the app, so changing it is the operator's job:
-
-```json
-{
-  "operations": [
-    {
-      "id": "greet_v1",
-      "document": "query Greet($name: String!) { discover { greeting { greet(input: { name: $name, style: CASUAL }) { greeting } } } }"
-    }
-  ]
-}
-```
-
 ## Run
 
 From the `Trax.Samples` root:
@@ -151,7 +104,63 @@ The dashboard is at http://localhost:5240/trax, with the stored operations under
 
 ## How it works
 
-```csharp
+### Layout
+
+```
+samples/PersistedOperations/
+├── Trax.Samples.PersistedOperations/          GreetTrain: a name and a style in, a greeting out
+├── Trax.Samples.PersistedOperations.Api/      the host (Program.cs) and the page in wwwroot/
+└── Trax.Samples.PersistedOperations.Client/   console client and manifest.json: the three stories
+```
+
+The train behind every document takes a name and a `GreetingStyle` (`Casual` or `Formal`, `CASUAL` and
+`FORMAL` in GraphQL) and returns a `GreetOutput` with one `Greeting` string:
+
+```csharp from=Trax.Samples/samples/PersistedOperations/Trax.Samples.PersistedOperations/Trains/Greeting/Greet/GreetInput.cs
+public record GreetInput : IManifestProperties
+{
+    public required string Name { get; init; }
+
+    public GreetingStyle Style { get; init; }
+}
+```
+
+```csharp from=Trax.Samples/samples/PersistedOperations/Trax.Samples.PersistedOperations/Trains/Greeting/Greet/Junctions/ComposeGreetingJunction.cs
+public class ComposeGreetingJunction : Junction<GreetInput, GreetOutput>
+{
+    public override Task<GreetOutput> Run(GreetInput input) =>
+        Task.FromResult(
+            new GreetOutput
+            {
+                Greeting = input.Style switch
+                {
+                    GreetingStyle.Formal => $"Good day, {input.Name}.",
+                    _ => $"Hey {input.Name}!",
+                },
+            }
+        );
+}
+```
+
+`Client/manifest.json` ships one operation. The style is fixed in the stored document, not sent by
+the app, so changing it is the operator's job:
+
+```json from=Trax.Samples/samples/PersistedOperations/Trax.Samples.PersistedOperations.Client/manifest.json
+{
+  "operations": [
+    {
+      "id": "greet_v1",
+      "document": "query Greet($name: String!) { discover { greeting { greet(input: { name: $name, style: CASUAL }) { greeting } } } }"
+    }
+  ]
+}
+```
+
+### The host
+
+`Program.cs`, less its banner comment:
+
+```csharp from=Trax.Samples/samples/PersistedOperations/Trax.Samples.PersistedOperations.Api/Program.cs
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
@@ -159,51 +168,90 @@ using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Samples.PersistedOperations;
+using Trax.Samples.PersistedOperations.Api.Auth;
 using Trax.Scheduler.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
-var connectionString = builder.Configuration.GetConnectionString("TraxDatabase")!;
+
+var connectionString =
+    builder.Configuration.GetConnectionString("TraxDatabase")
+    ?? "Host=localhost;Port=5432;Database=trax_persisted_operations;Username=trax;Password=trax123";
+
 var isDevelopment = builder.Environment.IsDevelopment();
 
+// The demo operator key is published in this repository, so it is registered only in
+// Development. Anywhere else no credential exists until you register a real scheme, so every
+// upload is refused.
 if (isDevelopment)
     builder.Services.AddTraxApiKeyAuth(keys =>
-        keys.Add("operator-key-do-not-use-in-production", id: "operator", "Operator"));
+        keys.Add(DemoKeys.OperatorKey, id: "operator", DemoKeys.OperatorRole)
+    );
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
+// The stored documents live in Postgres. The dashboard's pages need the scheduler services even
+// though this sample queues no work.
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString))
-        .AddMediator(typeof(GreetTrain).Assembly)
-        .AddScheduler(scheduler => scheduler));   // the dashboard's pages need the scheduler services
+        .AddMediator(typeof(GraphQLNamespaces).Assembly)
+        .AddScheduler(scheduler => scheduler)
+);
 
-builder.Services.AddTraxGraphQL(graphql => graphql
-    .UsePersistedOperations(opts =>
-        opts.RequirePersisted(true)
-            .LogNonPersistedRequests(true)
-            .SingleNode())
-    .GateOperations(roles: "Operator"));
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql
+        .UsePersistedOperations(opts =>
+            opts.RequirePersisted(true)
+                .LogNonPersistedRequests(true)
+                // One process serves this endpoint and writes the store, so an upload reaches
+                // every cached copy without a broadcast. A second node needs
+                // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
+                .SingleNode()
+        )
+        // The upload mutations live under `operations`. Gate that namespace to the operator;
+        // greet stays reachable to the app.
+        .GateOperations(roles: DemoKeys.OperatorRole)
+);
 
+// The dashboard shows the stored documents under Data > Persisted Operations. It refuses to start
+// without a posture: this sample serves it only in Development, open. Anywhere else, register it
+// with RequirePolicy(...) or RequireRoles(...).
 if (isDevelopment)
     builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
 
 var app = builder.Build();
+
+// The page at / (wwwroot) plays the three stories against this API. Its operator uploads send the
+// demo key, so it is served only in Development, with the key.
 if (isDevelopment)
 {
-    app.UseDefaultFiles();   // the page at / (wwwroot)
+    app.UseDefaultFiles();
     app.UseStaticFiles();
 }
+
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.UseTraxGraphQL();
 if (isDevelopment)
     app.UseTraxDashboard();
+
 app.Run();
+
+/// <summary>
+/// Visible to <c>WebApplicationFactory&lt;Program&gt;</c> for E2E tests.
+/// </summary>
+public partial class Program;
 ```
 
-Packages: `Trax.Api`, `Trax.Api.GraphQL`, `Trax.Api.GraphQL.PersistedOperations`,
-`Trax.Api.Auth.ApiKey`, `Trax.Effect.Data.Postgres`, `Trax.Mediator`, `Trax.Scheduler`,
-`Trax.Dashboard`. A host that calls `UseTraxDashboard()` also sets
+`DemoKeys` (in `Auth/DemoKeys.cs`) holds two constants: `OperatorKey =
+"operator-key-do-not-use-in-production"` and `OperatorRole = "Operator"`.
+
+The host references `Trax.Api`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL`,
+`Trax.Api.GraphQL.PersistedOperations`, `Trax.Dashboard`, `Trax.Scheduler` and
+`Trax.Effect.Provider.Json`; `Trax.Effect.Data.Postgres` and `Trax.Mediator` come in through the
+trains library. A host that calls `UseTraxDashboard()` also sets
 `<RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>` in its csproj.
 
 What each piece is for:
@@ -235,7 +283,7 @@ inline document smuggled into a batch beside a persisted id runs nothing.
 ## Tests
 
 ```bash
-dotnet test tests/Trax.Samples.PersistedOperations.E2E     # 30 tests against Postgres
+dotnet test tests/Trax.Samples.PersistedOperations.E2E     # against Postgres
 ```
 
 The suite runs against the `persisted_operations_e2e_tests` database on port 5432
