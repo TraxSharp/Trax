@@ -3,23 +3,53 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import type { NavItem, NavSection } from "@/lib/nav-tree";
+import {
+  containsSlug,
+  type NavEntry,
+  type NavGroup,
+  type NavItem,
+  type NavSection,
+} from "@/lib/nav-tree";
 
-function NavLink({
-  item,
-  depth = 0,
-}: {
-  item: NavItem;
-  depth?: number;
-}) {
+function slugOf(pathname: string): string {
+  return pathname.replace(/^\/docs\/?/, "").replace(/\/$/, "");
+}
+
+/**
+ * Open state for a collapsible entry: it starts open when it holds the current
+ * page, and opens again when the reader navigates into it.
+ */
+function useOpenFor(entry: NavEntry, pathname: string): [boolean, (open: boolean) => void] {
+  const holdsCurrent = containsSlug(entry, slugOf(pathname));
+  const [isOpen, setIsOpen] = useState(holdsCurrent);
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (seenPath !== pathname) {
+    setSeenPath(pathname);
+    if (holdsCurrent && !isOpen) setIsOpen(true);
+  }
+  return [isOpen, setIsOpen];
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`h-3 w-3 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function NavLink({ item, depth = 0 }: { item: NavItem; depth?: number }) {
   const pathname = usePathname();
   const href = item.slug === "" ? "/docs" : `/docs/${item.slug}`;
   const isActive = pathname === href;
-  const isParentOfActive =
-    item.children.length > 0 &&
-    (pathname.startsWith(href + "/") || isActive);
-  const [isOpen, setIsOpen] = useState(isParentOfActive);
-
+  const [isOpen, setIsOpen] = useOpenFor(item, pathname);
   const hasChildren = item.children.length > 0;
 
   return (
@@ -27,6 +57,7 @@ function NavLink({
       <div className="flex items-center">
         <Link
           href={href}
+          aria-current={isActive ? "page" : undefined}
           className={`flex-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
             isActive
               ? "bg-accent-muted font-medium text-accent"
@@ -40,21 +71,10 @@ function NavLink({
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="mr-1 rounded p-1 text-text-muted hover:text-text-secondary"
-            aria-label={isOpen ? "Collapse" : "Expand"}
+            aria-label={`${isOpen ? "Collapse" : "Expand"} ${item.title}`}
+            aria-expanded={isOpen}
           >
-            <svg
-              className={`h-3 w-3 transition-transform ${isOpen ? "rotate-90" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
+            <Chevron open={isOpen} />
           </button>
         )}
       </div>
@@ -67,6 +87,35 @@ function NavLink({
       )}
     </div>
   );
+}
+
+/** An area inside a section: a button that shows or hides its pages, not a link. */
+function NavGroupBlock({ group }: { group: NavGroup }) {
+  const pathname = usePathname();
+  const [isOpen, setIsOpen] = useOpenFor(group, pathname);
+  return (
+    <div>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-left text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover"
+      >
+        <Chevron open={isOpen} />
+        {group.label}
+      </button>
+      {isOpen && (
+        <div className="mt-0.5 space-y-0.5">
+          {group.items.map((item) => (
+            <NavLink key={item.slug} item={item} depth={1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Entry({ entry }: { entry: NavEntry }) {
+  return entry.kind === "group" ? <NavGroupBlock group={entry} /> : <NavLink item={entry} />;
 }
 
 export default function DocsSidebar({ navTree }: { navTree: NavSection[] }) {
@@ -90,8 +139,11 @@ export default function DocsSidebar({ navTree }: { navTree: NavSection[] }) {
               </p>
             )}
             <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavLink key={item.slug} item={item} />
+              {section.items.map((entry) => (
+                <Entry
+                  key={entry.kind === "group" ? `group-${entry.area}` : entry.slug}
+                  entry={entry}
+                />
               ))}
             </div>
           </div>

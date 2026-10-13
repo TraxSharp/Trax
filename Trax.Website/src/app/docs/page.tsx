@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import { MDXRemote } from "next-mdx-remote/rsc";
 import { getAllDocs, getDocBySlug, markdownPath } from "@/lib/docs";
-import { docsMdxOptions } from "@/lib/mdx-options";
 import { buildNavTree } from "@/lib/nav-tree";
 import DocsLayout from "@/components/docs/DocsLayout";
 import PageLinks from "@/components/docs/PageLinks";
-import { mdxComponents } from "@/components/mdx/MdxComponents";
+import DocArticle from "@/components/docs/DocArticle";
 
 export function generateMetadata(): Metadata {
   const doc = getDocBySlug("");
@@ -29,16 +27,12 @@ export default function DocsHomePage() {
   return (
     <DocsLayout navTree={navTree}>
       {doc ? (
-        <div className="docs-content">
+        <>
           <div className="mb-6 flex justify-end">
             <PageLinks doc={doc} />
           </div>
-          <MDXRemote
-            source={doc.body}
-            components={mdxComponents}
-            options={docsMdxOptions}
-          />
-        </div>
+          <DocArticle doc={doc} docs={allDocs} />
+        </>
       ) : (
         <div>
           <h1 className="text-3xl font-bold text-text-primary">

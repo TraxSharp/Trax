@@ -1,5 +1,9 @@
 import { getAllDocs, markdownUrl, type DocPage } from "./docs";
+import { getDocsSections as navSections, type DocsSection } from "./nav-tree";
+import { TYPE_LABELS } from "./doc-meta";
 import { SITE_DESCRIPTION, SITE_URL } from "./site";
+
+export type { DocsSection };
 
 /**
  * Agent-facing views of the docs: the llms.txt index (https://llmstxt.org) and
@@ -10,78 +14,17 @@ import { SITE_DESCRIPTION, SITE_URL } from "./site";
 /** Keep each bundle under common agent fetch limits (~100 KB). */
 const BUNDLE_MAX_BYTES = 90_000;
 
-const UNGROUPED_SECTION = "Overview";
-
-export interface DocsSection {
-  label: string;
-  /** Pages in reading order: each top-level page followed by its descendants. */
-  pages: { doc: DocPage }[];
-}
-
 export interface Bundle {
-  /** File name under /llms-full/, e.g. "guides.txt". */
+  /** File name under /llms-full/, e.g. "how-to-guides.txt". */
   file: string;
   title: string;
   pages: DocPage[];
   text: string;
 }
 
-function byNavOrder(a: DocPage, b: DocPage): number {
-  return a.navOrder - b.navOrder || a.title.localeCompare(b.title);
-}
-
-/**
- * Resolves each page's parent from its Jekyll front matter. Titles are not
- * unique, so a candidate whose own parent matches the page's grand_parent wins,
- * then a top-level candidate, then any page with that title.
- */
-function resolveParent(doc: DocPage, docs: DocPage[]): DocPage | undefined {
-  if (!doc.parent) return undefined;
-  const candidates = docs.filter((c) => c !== doc && c.title === doc.parent);
-  if (doc.grandParent) {
-    const exact = candidates.find((c) => c.parent === doc.grandParent);
-    if (exact) return exact;
-  }
-  return candidates.find((c) => !c.parent) ?? candidates[0];
-}
-
-/** Every page grouped the way the sidebar groups them, in sidebar order. */
+/** Sidebar order, standalone pages first under "Overview" (nav-tree.ts). */
 export function getDocsSections(docs: DocPage[] = getAllDocs()): DocsSection[] {
-  const children = new Map<DocPage, DocPage[]>();
-  const roots: DocPage[] = [];
-  for (const doc of docs) {
-    const parent = resolveParent(doc, docs);
-    if (parent) {
-      children.set(parent, [...(children.get(parent) ?? []), doc]);
-    } else {
-      roots.push(doc);
-    }
-  }
-
-  const sections: DocsSection[] = [];
-  const byLabel = new Map<string, DocsSection>();
-  const visited = new Set<DocPage>();
-
-  const walk = (doc: DocPage, into: DocsSection) => {
-    if (visited.has(doc)) return;
-    visited.add(doc);
-    into.pages.push({ doc });
-    for (const child of (children.get(doc) ?? []).sort(byNavOrder)) {
-      walk(child, into);
-    }
-  };
-
-  for (const root of roots.sort(byNavOrder)) {
-    const label = root.section ?? UNGROUPED_SECTION;
-    let section = byLabel.get(label);
-    if (!section) {
-      section = { label, pages: [] };
-      byLabel.set(label, section);
-      sections.push(section);
-    }
-    walk(root, section);
-  }
-  return sections;
+  return navSections(docs);
 }
 
 function slugify(text: string): string {
@@ -183,8 +126,9 @@ export function buildLlmsTxt(): string {
   for (const section of getDocsSections()) {
     lines.push(`## ${section.label}`, "");
     for (const { doc } of section.pages) {
+      const type = doc.type ? TYPE_LABELS[doc.type] : undefined;
       lines.push(
-        `- [${pageTitle(doc)}](${markdownUrl(doc.slug)}): ${doc.description}`
+        `- [${pageTitle(doc)}](${markdownUrl(doc.slug)}): ${type ? `(${type}) ` : ""}${doc.description}`
       );
     }
     lines.push("");

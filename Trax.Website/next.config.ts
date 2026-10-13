@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -55,6 +57,26 @@ function securityHeaders(frameSrc = "'self'", frameAncestors = "'none'") {
 // of its files is a route of the app, answered by its index.html.
 const DASHBOARD_DEMO = "/dashboard/demo";
 
+interface PageRedirect {
+  source: string;
+  destination: string;
+  permanent: boolean;
+}
+
+/**
+ * The redirects pages ask for with `redirect_from`, which scripts/sync-docs.sh
+ * collects into .docs-cache/redirects.json before every build. None when the
+ * docs have not been synced.
+ */
+function pageRedirects(): PageRedirect[] {
+  try {
+    const file = path.join(process.cwd(), ".docs-cache", "redirects.json");
+    return JSON.parse(fs.readFileSync(file, "utf-8")) as PageRedirect[];
+  } catch {
+    return [];
+  }
+}
+
 const nextConfig: NextConfig = {
   async headers() {
     // A later entry's header replaces an earlier one's for the paths both match.
@@ -72,6 +94,7 @@ const nextConfig: NextConfig = {
         destination: "/docs/sdk-reference/configuration/add-mediator",
         permanent: true,
       },
+      ...pageRedirects(),
     ];
   },
   async rewrites() {

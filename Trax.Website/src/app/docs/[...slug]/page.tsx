@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { MDXRemote } from "next-mdx-remote/rsc";
 import {
   documentTitle,
   getAllDocs,
@@ -8,12 +7,11 @@ import {
   generateStaticParams as genParams,
   markdownPath,
 } from "@/lib/docs";
-import { docsMdxOptions } from "@/lib/mdx-options";
 import { buildNavTree } from "@/lib/nav-tree";
 import DocsLayout from "@/components/docs/DocsLayout";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
 import PageLinks from "@/components/docs/PageLinks";
-import { mdxComponents } from "@/components/mdx/MdxComponents";
+import DocArticle from "@/components/docs/DocArticle";
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
@@ -62,13 +60,7 @@ export default async function DocPage({ params }: PageProps) {
         />
         <PageLinks doc={doc} />
       </div>
-      <div className="docs-content">
-        <MDXRemote
-          source={doc.body}
-          components={mdxComponents}
-          options={docsMdxOptions}
-        />
-      </div>
+      <DocArticle doc={doc} docs={allDocs} />
     </DocsLayout>
   );
 }

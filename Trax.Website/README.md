@@ -39,6 +39,29 @@ The ADRs are not published, so the sync also writes `.docs-cache/adr-index.json`
 in each code folder. A citation such as `Trax.Mediator/docs/adr/0004` in a page links to that file on GitHub, or to the
 folder's ADR index when the file is not known.
 
+The sync writes three more files there. `site-ref.json` holds the git ref every link to a repository file uses (ADR
+citations, `source:` links, `from=` captions): `v<version>` when it stamped a version, else `main`. The "Edit on GitHub"
+link always points at `main`. `redirects.json` lists a permanent redirect for each `redirect_from` entry in a page's
+front matter, which `next.config.ts` serves; the sync fails when a redirect would hide a live page or two pages claim
+the same old path. `source-kinds.json` says whether each `source:` path is a file or a directory, so its link is a
+GitHub blob or tree URL.
+
+## Page chrome and the sidebar
+
+The docs follow Diátaxis: one type per page. The site reads these front matter fields:
+
+| Field | What the site does with it |
+|---|---|
+| `type` | Badge above the H1 (Tutorial, How-to guide, Explanation, Reference; none for `landing`), linked to `/docs/about-these-docs` when that page exists. Picks the sidebar section when `section` is not set. |
+| `area` | Groups a section's top-level pages under a collapsible area heading when the section spans several areas, and drives "More on <area>" at the foot of the page. `samples` and `contributing` pick their own sections. Without it a page is filed under General. |
+| `source` | Source links under the H1, at the site's ref. |
+| `package`, `namespace`, `surface` | The SDK reference line under the H1: Package (nuget.org link), Namespace or Surface, Source. |
+| `redirect_from` | Old URLs that redirect here. |
+| `section`, `parent`, `grand_parent`, `nav_order` | As before: an explicit section, nesting under the page with that title, order within the group (then title). |
+
+A fence whose info string has `from=<path>[#region]` gets a caption linking the file on GitHub. Other words after the
+language (`compile`, `fragment`) are not rendered.
+
 ## Deploying
 
 traxsharp.net is built by Vercel from the `website` branch, its production branch, with `Trax.Website` as the
@@ -82,13 +105,14 @@ src/
 │   └── layout.tsx, not-found.tsx
 ├── components/
 │   ├── landing/                  # landing page sections; SeeItRunning.tsx tabs the samples, *Replay.tsx play them
-│   ├── docs/                     # docs layout, sidebar, breadcrumb, table of contents
+│   ├── docs/                     # docs layout, sidebar, page chrome (DocArticle), breadcrumb, table of contents
 │   ├── layout/                   # header, footer, mobile nav
 │   └── mdx/                      # element overrides for rendered docs
 ├── data/
 │   └── *-recordings.json         # recorded runs of the samples, which the landing page plays back
 └── lib/
     ├── docs.ts                   # reads .docs-cache, front matter, page summaries
+    ├── doc-meta.ts               # types, areas, sections, and the page chrome's helpers
     ├── nav-tree.ts               # sidebar tree
     ├── llms.ts                   # llms.txt and the full-text bundles
     ├── mdx-options.ts            # docs rendering: CommonMark, raw HTML allow-list, sanitizer, ADR links, highlighting
@@ -96,12 +120,16 @@ src/
     └── site.ts                   # site URL and description
 scripts/
 ├── sync-docs.sh                  # copies Trax.Docs into .docs-cache
+├── docs-index.mjs                # redirects and source kinds from the pages' front matter
 ├── build-dashboard-demo.sh       # builds dashboard/'s demo into public/dashboard/demo
 └── adr-index.mjs                 # lists the ADR files that citations link to
 dashboard/                        # the operations dashboard, its own npm project (see dashboard/README.md)
 tests/
 ├── render.test.ts                # what the docs pipeline lets through to the HTML
 ├── pages.test.ts                 # renders every published page through the pipeline
+├── nav-tree.test.ts              # sidebar sections, area groups, nesting and order (fixtures/docs.ts)
+├── doc-meta.test.ts              # page chrome data: badges, Source links, "More on <area>"
+├── redirects.test.ts             # redirects generated from redirect_from
 └── *-replay.test.ts              # plays every recording through its sample's player
 ```
 

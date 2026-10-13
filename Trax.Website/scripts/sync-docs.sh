@@ -45,6 +45,10 @@ done
 # the version of the latest release into those, so the site always tells a reader to
 # install what exists; the version written in Trax.Docs is only where it was last edited.
 # TRAX_DOCS_VERSION overrides it; outside production nothing is stamped.
+#
+# The same version picks the git ref the site links repository files at (Source links,
+# from= captions, ADR citations): v<version> when stamped, else main.
+site_ref="main"
 if [ -n "${TRAX_DOCS_VERSION:-}" ] || [ "${VERCEL_ENV:-}" = "production" ]; then
   version="${TRAX_DOCS_VERSION:-}"
   if [ -z "$version" ]; then
@@ -61,11 +65,19 @@ if [ -n "${TRAX_DOCS_VERSION:-}" ] || [ "${VERCEL_ENV:-}" = "production" ]; then
   find "$CACHE_DIR" -name "*.md" -print0 | xargs -0 perl -pi -e \
     's/(<PackageReference\s+Include="Trax\.[^"]+"\s+Version=")[^"]+"/${1}'"$version"'"/g'
   echo "Stamped Trax package versions with $version"
+  site_ref="v$version"
 fi
+printf '{"ref": "%s"}\n' "$site_ref" > "$CACHE_DIR/site-ref.json"
+echo "Linking repository files at $site_ref"
 
 # ADR file names, so a citation such as `Trax.Docs/adr/0026` in a page links to the
 # exact file on GitHub. ADRs themselves are not published as pages.
 node "$SCRIPT_DIR/adr-index.mjs" "$REPO_ROOT" > "$CACHE_DIR/adr-index.json"
+
+# Redirects from each page's redirect_from (read by next.config.ts), and whether each
+# source: path is a file or a directory. Fails on a redirect that hides a live page or
+# that two pages claim.
+node "$SCRIPT_DIR/docs-index.mjs" "$CACHE_DIR" "$REPO_ROOT"
 
 count=$(find "$CACHE_DIR" -name "*.md" | wc -l | tr -d ' ')
 if [ "$count" -eq 0 ] || [ ! -f "$CACHE_DIR/index.md" ]; then
