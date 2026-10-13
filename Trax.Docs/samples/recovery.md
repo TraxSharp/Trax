@@ -19,7 +19,8 @@ resumes there and its lane holds only the report step. Progress pills follow the
 the topic map, runs three similarity signals side by side in parallel branches, and each lane draws
 its attempt on the train's declared graph with the branches next to each other. Two state machines
 run trains as well: one system-owned instance per partition of a scholarly index ingests it, and each
-user builds their own topic map through a wizard whose `Building` state runs the map's train.
+user builds their own topic map through a wizard whose `Building` state runs the map's train. A third,
+a food order with no page of its own, is what traxsharp.net plays back.
 
 It proves six features working together, against Postgres, in one process:
 
@@ -679,6 +680,30 @@ reconciler, which every host that registers machines runs, then moves the draft 
 `BuildFailed`. The draft and the seeded data are in Postgres, so both are still there, and `Rebuild` from
 `BuildFailed` queues a new run on the host that is up.
 
+### The food order
+
+`OrderMachine` (`order`) is the smallest of the three, written to be read line by line beside its recording on
+traxsharp.net (`scripts/recordings/order.mjs`). A user fills a cart (`addItem`, priced by the server through a custom
+reduction) and sends `placeOrder`, which enters `Ordered`; `Ordered` invokes `DeliverOrderTrain`, whose outcome ends
+the order in `Delivered` or `Cancelled`. A cart nobody orders is cleared by the server's timer after 30 minutes
+(`Recovery:CartWait` shortens it for the recording). The train's only rule is a signed-in caller (a bare
+`[TraxAuthorize]`), matching `placeOrder`'s `AnyAuthenticated()`.
+
+```
+Cart --PlaceOrder--> Ordered --done-----------------> Delivered
+  │                          --failed or cancelled--> Cancelled
+  └──after 30 minutes──> Cleared
+```
+
+Two things the recording shows are worth knowing. Place order pressed twice under one request id is answered once:
+the second answer replays the first, and a press under a new request id is `no-transition` from `Ordered`, so one
+order makes one run and one charge. And the scheduler never retries a run a machine invoked, so a step that fails
+fails the run, which is the order's `Cancelled`. The restaurant's tablet that does not answer
+(`dispatch { orderTrouble(input: { trouble: TABLET_TIMES_OUT }) }`, armed for the next order) is therefore tried
+again inside `SendToRestaurant`, and the machine sees one run that recovered; `discover { orders { tabletCalls } }`
+lists both attempts. A closed restaurant (`RESTAURANT_CLOSED`) fails the run at `SendToRestaurant`, before
+`ChargeCard`, so the order is `Cancelled` with nothing charged.
+
 ### The page
 
 The page is React 19, Vite, Apollo Client and `graphql-ws`, with subscriptions split onto a
@@ -763,6 +788,8 @@ the other, on the `recovery_restart_e2e_tests` database, so it can kill the firs
 | `AnAutosaveIntoBuilt_IsRefused`, `WhileBuilding_AHandFiredOutcome_AndAnAutosave_AreRefused` | neither a save nor the outcome is served to a client; the real outcome still lands |
 | `CancellingTheBuild_GoesBackToTheRange_AndCancelsItsRun`, `AFailedBuild_IsRebuiltByEnteringBuildingAgain_WithANewRun` | Leaving `Building` cancels its run; a rebuild is a new run |
 | `ARebuiltMap_LeavesTheOldMapToTheSweep_AndKeepsTheOneTheDraftPointsAt`, `TheSweep_NeverDeletesAMapAStoredDraftPointsAt_NorOneItSawOnlyOnce` | After a rebuild, two sweeps delete the replaced map's pairs and keep the new one's; a map is deleted only on the second sweep that finds it unreferenced |
+| `AnOrder_IsDelivered_AndTheServerPricesTheCart`, `PlaceOrderPressedTwice_MakesOneOrderAndOneRun` | The order runs all five steps and reaches `Delivered`; one request sent twice is answered once, a second request is `no-transition`, and the order has one run |
+| `ATabletThatTimesOut_IsTriedAgain_AndTheOrderIsDelivered`, `AClosedRestaurant_CancelsTheOrder_BeforeTheCardIsCharged`, `ACartNobodyOrders_IsClearedByTheServer` | The tablet's second attempt is answered inside the one run; a closed restaurant fails the run before `ChargeCard` and the order is `Cancelled`; the cart's timer moves it to `Cleared` |
 
 | `AHostKilledMidBuild_FailsTheRunOnTheNextStart_AndTheDraftIsRebuiltFromBuildFailed` | A host process killed mid-build leaves the run `InProgress`; the next host fails it on startup, the draft reaches `BuildFailed`, the seeded data is there, and a rebuild reaches `Built` |
 

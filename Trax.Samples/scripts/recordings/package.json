@@ -5,6 +5,7 @@
   "description": "Records the sample runs that traxsharp.net plays back on its landing page.",
   "scripts": {
     "recovery": "node recovery.mjs",
+    "order": "node order.mjs",
     "state-machine": "node state-machine.mjs",
     "chat-service": "node chat-service.mjs",
     "signalr-broadcaster": "node signalr-broadcaster.mjs",

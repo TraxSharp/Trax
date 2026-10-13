@@ -31,4 +31,13 @@ public enum CrashPoint
     /// answered, and the partition is left as it was.
     /// </summary>
     Ingest,
+
+    /// <summary>
+    /// The restaurant's tablet, when an order is sent to it: it does not answer in time, once. The order's
+    /// <c>SendToRestaurant</c> tries it again, and the second attempt is answered.
+    /// </summary>
+    TabletTimesOut,
+
+    /// <summary>The restaurant, when an order is sent to it: it is closed, so the order is refused before any charge.</summary>
+    RestaurantClosed,
 }

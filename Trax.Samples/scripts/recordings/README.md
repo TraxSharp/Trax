@@ -19,6 +19,7 @@ script:
 | Sample | Script | Host it expects | What it records |
 |---|---|---|---|
 | Recovery | `node recovery.mjs` | `RECOVERY_HOST`, default `localhost:5260` | 20 runs: two research topics and three refund orders, clean and crashing, and each fork a crashing run can take, each ending with a requeue |
+| Recovery's food order | `node order.mjs` | `RECOVERY_HOST`, default `localhost:5260`, with `Recovery__RequirePersistedOperations=false` `Recovery__CartWait=00:00:15` and `Recovery__MachineSweepInterval=00:00:01` | four orders, each from a fresh `start` with Place order pressed twice: delivered, the tablet timing out and tried again, the restaurant closed, and a cart the server's timer clears, with both screens' pushes and the invoked run's junction events |
 | StateMachine | `node state-machine.mjs` | `STATE_MACHINE_HOST`, default `localhost:5280` | every button the page offers from every state it can reach, for both machines |
 | ChatService | `node chat-service.mjs` | `CHAT_HOST`, default `localhost:5210` | Alice and Bob in one room, a small tree of lines to pick from, a listener who is refused, and Charlie added at every point of the conversation |
 | SignalRBroadcaster | `node signalr-broadcaster.mjs` | `SIGNALR_HOST`, default `localhost:5270` | the refused connection, sign-in, every kind of ping and the events the hub pushes, sign-out |

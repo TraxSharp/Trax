@@ -43,6 +43,7 @@ using Trax.Samples.Recovery.Faults;
 using Trax.Samples.Recovery.Index;
 using Trax.Samples.Recovery.Machines;
 using Trax.Samples.Recovery.Model;
+using Trax.Samples.Recovery.Orders;
 using Trax.Samples.Recovery.Records;
 using Trax.Scheduler.Extensions;
 
@@ -57,6 +58,12 @@ var pace = builder.Configuration.GetSection(DemoPace.Section).Get<DemoPace>() ??
 builder.Services.AddSingleton(pace);
 builder.Services.AddSingleton<FaultInjector>();
 builder.Services.AddSingleton<CaseFiles>();
+
+// The food order's restaurant, simulated, and how long a cart waits for its order (30 minutes unless
+// Recovery:CartWait shortens it, as the recording does). Set before AddStateMachines builds the machine.
+builder.Services.AddSingleton<Restaurant>();
+if (builder.Configuration.GetValue<TimeSpan?>("Recovery:CartWait") is { } cartWait)
+    OrderMachine.CartWait = cartWait;
 
 // The topic map's papers and the pairs it writes, in the topic_map schema beside Trax's tables.
 builder.Services.AddDomainDataContext<ITopicMapDbContext, TopicMapDbContext>(options =>
@@ -110,12 +117,14 @@ builder.Services.AddTrax(trax =>
                 )
                 : configured;
         })
-        // Two state machines: one system-owned instance per index partition, which ingests it, and
-        // the topic map wizard each user drives, whose Building state builds the map. The topic map is
-        // marked [TraxMachine], so it is served as its own typed operations, machines { topicMap { start
-        // chooseFields back build cancelBuild rebuild edit startOver discard get } }, and the page drives
-        // it through them only: the generic stateMachine mutations are not served. Before AddMediator, which
-        // routes the trains every machine operation runs through.
+        // Three state machines: one system-owned instance per index partition, which ingests it, the
+        // topic map wizard each user drives, whose Building state builds the map, and a user's food
+        // order, whose Ordered state delivers it. The topic map and the order are marked [TraxMachine], so
+        // each is served as its own typed operations, machines { topicMap { start chooseFields back build
+        // cancelBuild rebuild edit startOver discard get } } and machines { order { start addItem
+        // placeOrder discard get } }, and clients drive them through those only: the generic stateMachine
+        // mutations are not served. Before AddMediator, which routes the trains every machine operation
+        // runs through.
         .AddStateMachines(
             o =>
             {

@@ -1,0 +1,62 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.Order.DeliverOrderTrain",
+  "input": "OrderInput",
+  "output": "OrderDelivered",
+  "nodes": [
+    {
+      "id": "SendToRestaurant#0",
+      "kind": "Chain",
+      "junction": "SendToRestaurant",
+      "in": "OrderInput",
+      "out": "SentToRestaurant",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "ChargeCard#0",
+      "kind": "Chain",
+      "junction": "ChargeCard",
+      "in": "OrderInput",
+      "out": "Charged",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Cook#0",
+      "kind": "Chain",
+      "junction": "Cook",
+      "in": "SentToRestaurant",
+      "out": "Cooked",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "PickUp#0",
+      "kind": "Chain",
+      "junction": "PickUp",
+      "in": "Cooked",
+      "out": "PickedUp",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Deliver#0",
+      "kind": "Chain",
+      "junction": "Deliver",
+      "in": "PickedUp",
+      "out": "OrderDelivered",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "OrderDelivered",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -192,7 +192,10 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             .EnumerateArray()
             .Select(f => f.GetProperty("name").GetString())
             .Should()
-            .Equal(["topicMap"], "only the user-owned topic map is exposed");
+            .BeEquivalentTo(
+                ["order", "topicMap"],
+                "only the user-owned machines, the order and the topic map, are exposed"
+            );
         var load = await GraphQL.SendAsync(
             $$"""
             mutation { dispatch { stateMachine { loadSnapshot(input: {

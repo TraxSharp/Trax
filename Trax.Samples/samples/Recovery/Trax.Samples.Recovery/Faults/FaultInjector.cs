@@ -15,6 +15,7 @@ public sealed class FaultInjector
 {
     private readonly ConcurrentDictionary<string, CrashPoint> _armed = new();
     private readonly ConcurrentDictionary<string, CrashPoint> _everyAttempt = new();
+    private int _nextOrder = (int)CrashPoint.None;
 
     /// <summary>Arms <paramref name="point"/> for the run <paramref name="runId"/>.</summary>
     public void Arm(string runId, CrashPoint point)
@@ -58,4 +59,18 @@ public sealed class FaultInjector
     public bool TryFire(string runId, CrashPoint point) =>
         (_everyAttempt.TryGetValue(runId, out var every) && every == point)
         || _armed.TryRemove(new KeyValuePair<string, CrashPoint>(runId, point));
+
+    /// <summary>
+    /// Arms <paramref name="point"/> for the next food order, whose run id nobody knows yet: the
+    /// <c>order</c> machine builds it when the order is placed. <see cref="ClaimNextOrder"/> moves it onto that run.
+    /// </summary>
+    public void ArmNextOrder(CrashPoint point) => Interlocked.Exchange(ref _nextOrder, (int)point);
+
+    /// <summary>Moves whatever <see cref="ArmNextOrder"/> armed onto the order <paramref name="orderId"/>, once.</summary>
+    public void ClaimNextOrder(string orderId)
+    {
+        var point = (CrashPoint)Interlocked.Exchange(ref _nextOrder, (int)CrashPoint.None);
+        if (point != CrashPoint.None)
+            Arm(orderId, point);
+    }
 }

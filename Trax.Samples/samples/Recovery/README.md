@@ -119,8 +119,8 @@ query { operations { runGraph(metadataId: 42) {
 
 ## The state machines
 
-Both live in `Trax.Samples.Recovery/Machines/` and use `Invokes` and `IMachineInstances`. A state that invokes a train queues one run when it is
-entered, and only that entry receives the run's outcome.
+All three live in `Trax.Samples.Recovery/Machines/` and use `Invokes`; the partitions use `IMachineInstances` too. A
+state that invokes a train queues one run when it is entered, and only that entry receives the run's outcome.
 
 **`source-partition`, one instance per index partition, owned by the system.** The host seeds 18 canned
 OpenAlex and Crossref records, six partitions of three. `discoverPartitions` starts one instance per
@@ -224,6 +224,26 @@ timer (`Built.after`) and moves the draft to `Expired`, from which it can be reb
 by push. The timer has no client operation, and an advance that names it is refused (`timer-bound`). The page shows
 the review deadline from the `dueAt` the server pushes beside the Built snapshot; it never fires the timer itself.
 
+**`order`, a food order each user places.** It has no page of its own; traxsharp.net plays a recording of it
+(`scripts/recordings/order.mjs`). `addItem` puts an item from the menu in the cart, priced by the server; `placeOrder`
+enters `Ordered`, which runs `DeliverOrderTrain` (`SendToRestaurant`, `ChargeCard`, `Cook`, `PickUp`, `Deliver`), and
+the run's outcome ends the order. A cart nobody orders is cleared by the server after 30 minutes
+(`OrderMachine.CartWait`; `Recovery:CartWait` shortens it). Pressing **Place order** twice under one request id is
+answered once, and a second request is `no-transition` from `Ordered`: one order, one run, one charge.
+
+```
+Cart --PlaceOrder--> Ordered --done-----------------> Delivered
+  │                          --failed or cancelled--> Cancelled
+  └──after 30 minutes──> Cleared
+```
+
+`dispatch { orderTrouble(input: { trouble: TABLET_TIMES_OUT }) }` arms trouble for the next order placed, as
+**Crash once** does for a run: the restaurant's tablet does not answer once, or (`RESTAURANT_CLOSED`) the restaurant
+is closed. The scheduler never retries a run a machine invoked, and a failed run would be the order's `Cancelled`, so
+the tablet is tried again inside `SendToRestaurant`: the machine sees one run that recovered, and
+`discover { orders { tabletCalls } }` lists both attempts. A closed restaurant fails the run at `SendToRestaurant`,
+before `ChargeCard`, and the order is `Cancelled` with nothing charged.
+
 ## Keys
 
 Two demo keys, registered only in Development (a key carrying `do-not-use-in-production` refuses to
@@ -241,7 +261,7 @@ is visible within seconds, and records two runs of its own each second; `AddMeta
 those after ten minutes and keeps the scenario runs. `appsettings.Development.json` holds a fixed state hash key. Neither
 belongs in production: keep the scheduler defaults, and keep the key with your other secrets.
 
-Case files and armed crashes live in memory; the machines' drafts and instances, and the seeded data, are in
+Case files, armed crashes and the restaurant's tablet calls live in memory; the machines' drafts and instances, and the seeded data, are in
 Postgres. A run started before the host restarts has lost its
 case file, so every retry that reads it again fails and the manifest dead-letters (a research run that
 reached its checkpoint does not read it again). A re-queue would fail the same way,

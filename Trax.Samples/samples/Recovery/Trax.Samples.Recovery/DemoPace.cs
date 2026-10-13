@@ -16,4 +16,7 @@ public sealed class DemoPace
 
     /// <summary>The longest time the demo model takes to answer.</summary>
     public TimeSpan ModelLatencyMax { get; set; } = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>How long the order's <c>SendToRestaurant</c> waits for the restaurant's tablet to answer.</summary>
+    public TimeSpan TabletTimeout { get; set; } = TimeSpan.FromSeconds(2);
 }

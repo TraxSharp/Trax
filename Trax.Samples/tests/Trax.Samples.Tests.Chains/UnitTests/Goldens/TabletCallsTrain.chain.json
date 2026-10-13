@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.OrderDemo.TabletCallsTrain",
+  "input": "TabletCallsInput",
+  "output": "TabletCallsOutput",
+  "nodes": [
+    {
+      "id": "ReadTabletCalls#0",
+      "kind": "Chain",
+      "junction": "ReadTabletCalls",
+      "in": "TabletCallsInput",
+      "out": "TabletCallsOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "TabletCallsOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}
