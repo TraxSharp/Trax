@@ -78,10 +78,6 @@ scheduler/orphan-manifest-cleanup.md
 scheduler/remote-execution.md
 scheduler/scheduling-options.md
 scheduler/setup.md
-sdk-reference/api-audit/add-audit.md
-sdk-reference/api-audit/i-trax-audit-redactor.md
-sdk-reference/api-audit/i-trax-audit-sink.md
-sdk-reference/api-audit/trax-audit-entry.md
 sdk-reference/api-auth/add-trax-api-key-auth.md
 sdk-reference/api-auth/add-trax-jwt-auth.md
 sdk-reference/api-auth/add-trax-jwt-dispatcher.md

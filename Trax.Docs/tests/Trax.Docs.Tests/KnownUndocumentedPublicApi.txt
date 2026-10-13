@@ -95,8 +95,6 @@ Trax.Api.GraphQL T:MetricsQueries
 Trax.Api.GraphQL T:QueryModelRegistration
 Trax.Api.GraphQL T:WorkQueueMutations
 Trax.Api.GraphQL T:WorkQueueQueries
-Trax.Api.GraphQL.Audit M:TraxAuditChannel.DroppedCounterName
-Trax.Api.GraphQL.Audit T:TraxGraphQLBuilderAuditExtensions
 Trax.Api.GraphQL.Client M:IGraphQLClientConfiguration.GraphQLHttpClient
 Trax.Api.GraphQL.Client T:GraphQLClientValidatorExtensions
 Trax.Api.GraphQL.Client.Trax M:OutboundQueryDiscovery.Entry.QueryName
@@ -195,7 +193,6 @@ Trax.Effect M:TraxAuthorizationDeclaration.HasAuthorize
 Trax.Effect M:TraxAuthorizationDeclaration.HasForeign
 Trax.Effect M:TraxBoundedJson.TruncatedPlaceholder
 Trax.Effect M:TraxBuilder.ContributedMediatorAssemblies
-Trax.Effect M:TraxChangeSignal.DroppedCounterName
 Trax.Effect M:TraxEffectBuilder.EffectRegistry
 Trax.Effect M:TraxEffectBuilder.JunctionProgressEnabled
 Trax.Effect M:TraxEffectConfiguration.StaticSystemJsonSerializerOptions

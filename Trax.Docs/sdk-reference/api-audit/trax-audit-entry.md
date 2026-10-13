@@ -6,17 +6,21 @@ area: security
 parent: API Audit
 grand_parent: SDK Reference
 nav_order: 4
+package: Trax.Api.GraphQL.Audit
+namespace: Trax.Api.GraphQL.Audit
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.Audit/TraxAuditEntry.cs
 ---
 
 # TraxAuditEntry
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Immutable record describing one GraphQL request, including one the endpoint policy refused and a subscription refused when it subscribed. Two more kinds of entry describe something other than a whole request: a socket connection refused at `connection_init`, and one failed event of an accepted subscription (see [Entries that are not a whole request](#entries-that-are-not-a-whole-request)). Built by the listener and passed in batches to `ITraxAuditSink.WriteAsync`.
+Immutable record of one audited GraphQL request, including one the endpoint policy refused and a subscription refused when it subscribed. Two more kinds of entry describe something other than a whole request: a socket refused at `connection_init`, and one failed event of an accepted subscription. The listener builds entries and the writer passes them in batches to [ITraxAuditSink.WriteAsync](/docs/sdk-reference/api-audit/i-trax-audit-sink).
 
 ## Signature
 
-```csharp
+```csharp fragment
 public sealed record TraxAuditEntry(
     string PrincipalId,
     string? PrincipalType,
@@ -31,9 +35,9 @@ public sealed record TraxAuditEntry(
 );
 ```
 
-## Fields
+## Properties
 
-| Field | Notes |
+| Property | Value |
 |---|---|
 | `PrincipalId` | From `trax:principal-id` claim (qualified by scheme, `{scheme}:{id}`), or `TraxAuditOptions.DefaultPrincipalId` when absent. |
 | `PrincipalType` | From `trax:principal-type` claim. `apikey`, `jwt`, or similar. `null` for anonymous. |
@@ -43,10 +47,12 @@ public sealed record TraxAuditEntry(
 | `DurationMs` | Elapsed request time in milliseconds. |
 | `Timestamp` | UTC when the request started, NOT when the entry was persisted. |
 | `Success` | False on exception, GraphQL errors in the result, or a refusal by the endpoint policy or a subscription's authorization. |
-| `ErrorText` | By default each error's code and path, `CODE at path`, joined with `; `: `<masked>` for an error with no code, the exception's type name for an exception the pipeline raised, `TRAX_AUTHORIZATION` for a request the endpoint policy refused. With `TraxAuditOptions.RecordErrorMessages` the messages as written instead. Cut at `MaxErrorTextLength`. |
+| `ErrorText` | By default each error's code and path, `CODE at path`, joined with `; `: `<masked>` for an error with no code, the exception's full type name for an exception the pipeline raised (a `GraphQLException` is recorded as the errors it carries), `TRAX_AUTHORIZATION` for a request the endpoint policy refused. With `TraxAuditOptions.RecordErrorMessages` the messages as written instead. Cut at `MaxErrorTextLength`. |
 | `Metadata` | Bag for host-provided extras (request IP, tenant ID, correlation ID). `null` on a request's entry; set on the two entries below, which a sink that stores only the other fields can still tell apart by `ErrorText`. |
 
-## Entries that are not a whole request
+## Behavior
+
+### Entries that are not a whole request
 
 | Entry | `ErrorText` | `Metadata` | Other fields |
 |---|---|---|---|
@@ -54,3 +60,8 @@ public sealed record TraxAuditEntry(
 | An error in an event of an accepted subscription | As for a request: `CODE at path` for each error the event raised, joined with `; `, or the exception's type when the event failed outside a resolver. Cut at `MaxErrorTextLength` | `subscriptionEvent` = `error`, `subscriptionEventErrors` = how many errors the event raised | One entry per failing event, however many of its fields failed, recorded whatever `SkipSubscriptions` says. `Document` and `OperationName` are the subscription's, `PrincipalId` the subscriber's, `DurationMs` 0 and `Timestamp` when the event failed. |
 
 A host that replaces Trax's socket interceptor through `ConfigureSchema` gets no entry for the connections its interceptor refuses.
+
+## See also
+
+- [What an entry records](/docs/api-security#what-an-entry-records)
+- [AddAudit](/docs/sdk-reference/api-audit/add-audit), [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options), [ITraxAuditRedactor](/docs/sdk-reference/api-audit/i-trax-audit-redactor)
