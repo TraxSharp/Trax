@@ -136,7 +136,6 @@ Trax.Core M:TrackRouted.FallbackReason
 Trax.Core M:TrackTaken.FallbackReason
 Trax.Core M:TrackTaken.TookFallback
 Trax.Core T:EitherStatus
-Trax.Core T:FunctionalExtensions
 Trax.Core.Testing M:HygieneGuardFixture.Tests_do_not_use_fixed_delays
 Trax.Core.Testing M:HygieneGuardFixture.Tests_do_not_use_legacy_asserts
 Trax.Core.Testing M:HygieneGuardFixture.Tests_do_not_use_the_Ignore_attribute
