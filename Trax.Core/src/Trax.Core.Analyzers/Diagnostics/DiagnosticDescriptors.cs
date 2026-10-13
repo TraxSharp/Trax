@@ -13,7 +13,8 @@ internal static class DiagnosticDescriptors
         messageFormat: "Junction '{0}' requires input type '{1}' which has not been produced by a previous junction. Available: [{2}].",
         category: "Trax.Core.Train",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true
+        isEnabledByDefault: true,
+        helpLinkUri: "https://traxsharp.net/docs/core/analyzer#chain001"
     );
 
     /// <summary>
@@ -26,6 +27,7 @@ internal static class DiagnosticDescriptors
         messageFormat: "Train return type '{0}' has not been produced by any junction. Available: [{1}].",
         category: "Trax.Core.Train",
         defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true
+        isEnabledByDefault: true,
+        helpLinkUri: "https://traxsharp.net/docs/core/analyzer#chain002"
     );
 }

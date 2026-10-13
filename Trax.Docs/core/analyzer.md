@@ -57,7 +57,9 @@ Activate(input)       -> Memory = { TInput, Unit }
 
 ## Diagnostics
 
-### CHAIN001: Junction input type not available (Error)
+### CHAIN001
+
+Junction input type not available in train memory. Severity: Error.
 
 Fires when a junction needs a type that no previous junction has produced.
 
@@ -78,7 +80,9 @@ error CHAIN001: Junction 'LogGreetingJunction' requires input type 'HelloWorldIn
 which has not been produced by a previous junction. Available: [string, Unit].
 ```
 
-### CHAIN002: Train return type not available (Error)
+### CHAIN002
+
+Train return type not available in memory. Severity: Error.
 
 Fires when `Resolve()` needs a type that hasn't been produced. The analyzer tracks all chain methods including `ShortCircuit`, so a missing return type is always an error.
 
