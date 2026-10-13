@@ -147,7 +147,13 @@ public class ParameterEffect(
             }
         }
 
-        if (configuration.SaveOutputs && configuration.ShouldSaveOutputFor(metadata.Name))
+        // A train that withholds its output (an instance's snapshot, for the state-machine trains) has none stored,
+        // whatever the configuration says: the row is kept for audit without it.
+        if (
+            configuration.SaveOutputs
+            && !metadata.OutputWithheld
+            && configuration.ShouldSaveOutputFor(metadata.Name)
+        )
         {
             var outputObject = (object?)metadata.GetOutputObject();
             if (outputObject is not null && !ReferenceEquals(outputObject, serialized.Output))

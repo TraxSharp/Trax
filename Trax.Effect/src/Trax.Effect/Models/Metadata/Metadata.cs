@@ -400,6 +400,13 @@ public class Metadata : IModel, IDisposable
     internal bool InvokeOutputOversize { get; set; }
 
     /// <summary>
+    /// True when this run's train is marked <c>[OutputWithheldFromLifecycleHooks]</c>: its output is an instance's
+    /// snapshot, so no copy of it is kept on the row (the parameter effect leaves <see cref="Output"/> null) and none
+    /// is handed to the lifecycle hooks. Set by the train before the row's first write. Internal and never stored.
+    /// </summary>
+    internal bool OutputWithheld { get; set; }
+
+    /// <summary>
     /// Records <paramref name="output"/> for the machine that invoked this run, when one did: the copy its
     /// <c>OnDone</c> edges read, or the mark that it was too large. An output that cannot be serialized is left
     /// unrecorded, which the machine treats as a failure, and the exception is returned for the log.

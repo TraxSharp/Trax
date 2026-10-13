@@ -75,11 +75,69 @@ public class LifecycleHookOutputCopyTests
         output.Should().Be("""{"_truncated": true, "_maxBytes": 512}""");
     }
 
-    private static async Task<string?> RunAndCapture(
+    [Test]
+    public async Task A_train_that_withholds_its_output_gives_the_hooks_none_without_SaveTrainParameters()
+    {
+        var output = await RunAndCapture<IWithheldRowsTrain, WithheldRowsTrain>(
+            rows: 3,
+            effects => effects
+        );
+
+        output.Should().BeNull("a train that withholds its output publishes none to any hook");
+    }
+
+    [Test]
+    public async Task A_train_that_withholds_its_output_gives_the_hooks_none_and_its_row_stores_none()
+    {
+        var (output, outputObject, stored) = await RunAndCaptureStored<
+            IWithheldRowsTrain,
+            WithheldRowsTrain
+        >(rows: 3, effects => effects.SaveTrainParameters());
+
+        output.Should().BeNull("the hooks never see the output, stored or not");
+        outputObject.Should().BeNull("nor the object it was serialized from");
+        stored
+            .Should()
+            .BeNull("the parameter effect stores no output for a train that withholds it");
+    }
+
+    [Test]
+    public async Task A_plain_train_still_gives_the_hooks_its_stored_output()
+    {
+        var (output, _, stored) = await RunAndCaptureStored<IRowsTrain, RowsTrain>(
+            rows: 3,
+            effects => effects.SaveTrainParameters()
+        );
+
+        output.Should().NotBeNull().And.Be(stored);
+    }
+
+    private static Task<string?> RunAndCapture(
+        int rows,
+        Func<TraxEffectBuilder, TraxEffectBuilder> configure,
+        Action<IServiceProvider>? arrange = null
+    ) => RunAndCapture<IRowsTrain, RowsTrain>(rows, configure, arrange);
+
+    private static async Task<string?> RunAndCapture<TTrain, TImpl>(
         int rows,
         Func<TraxEffectBuilder, TraxEffectBuilder> configure,
         Action<IServiceProvider>? arrange = null
     )
+        where TTrain : class, IServiceTrain<int, List<string>>
+        where TImpl : class, TTrain =>
+        (await RunAndCaptureStored<TTrain, TImpl>(rows, configure, arrange)).Output;
+
+    private static async Task<(
+        string? Output,
+        object? OutputObject,
+        string? Stored
+    )> RunAndCaptureStored<TTrain, TImpl>(
+        int rows,
+        Func<TraxEffectBuilder, TraxEffectBuilder> configure,
+        Action<IServiceProvider>? arrange = null
+    )
+        where TTrain : class, IServiceTrain<int, List<string>>
+        where TImpl : class, TTrain
     {
         var hook = new OutputRecordingHook();
         var services = new ServiceCollection();
@@ -87,15 +145,16 @@ public class LifecycleHookOutputCopyTests
         services.AddTrax(trax => trax.AddEffects(effects => configure(effects.UseInMemory())));
         services
             .AddSingleton<ITrainLifecycleHookFactory>(new OutputRecordingHookFactory(hook))
-            .AddScopedTraxRoute<IRowsTrain, RowsTrain>();
+            .AddScopedTraxRoute<TTrain, TImpl>();
         await using var provider = services.BuildServiceProvider();
         arrange?.Invoke(provider);
 
         using var scope = provider.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<IRowsTrain>().Run(rows);
+        var train = scope.ServiceProvider.GetRequiredService<TTrain>();
+        await train.Run(rows);
 
         hook.Completed.Should().BeTrue();
-        return hook.Output;
+        return (hook.Output, hook.OutputObject, train.Metadata?.Output);
     }
 
     private sealed class OutputRecordingHook : ITrainLifecycleHook
@@ -103,10 +162,13 @@ public class LifecycleHookOutputCopyTests
         public bool Completed { get; private set; }
         public string? Output { get; private set; }
 
+        public object? OutputObject { get; private set; }
+
         public Task OnCompleted(Metadata metadata, CancellationToken ct)
         {
             Completed = true;
             Output = metadata.Output;
+            OutputObject = metadata.GetOutputObject();
             return Task.CompletedTask;
         }
     }
@@ -126,4 +188,15 @@ public class LifecycleHookOutputCopyTests
     }
 
     public interface IRowsTrain : IServiceTrain<int, List<string>> { }
+
+    [OutputWithheldFromLifecycleHooks]
+    private class WithheldRowsTrain : ServiceTrain<int, List<string>>, IWithheldRowsTrain
+    {
+        protected override Task<Either<Exception, List<string>>> Junctions() =>
+            Task.FromResult<Either<Exception, List<string>>>(
+                Enumerable.Range(0, TrainInput).Select(i => $"row-{i}").ToList()
+            );
+    }
+
+    public interface IWithheldRowsTrain : IServiceTrain<int, List<string>> { }
 }

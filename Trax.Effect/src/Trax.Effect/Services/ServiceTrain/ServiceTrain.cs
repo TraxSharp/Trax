@@ -369,6 +369,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // OnCompleted and OnFailed.
         Metadata.SetInputObject(input);
 
+        // Before the first write, so the parameter effect never stores the output of a train that withholds it.
+        Metadata.OutputWithheld = OutputWithheldFromHooks;
+
         // On the first write too, so a replay of this run can tell that its decisions were
         // recorded even when it dies before it ends. See Trax.Docs/adr/0041.
         Metadata.DecisionsRecorded =
@@ -576,7 +579,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // persisted, through the same decision and ceiling as the stored copy: an output the host
         // excluded is not serialized for the hooks either, and any copy is bounded, because the
         // broadcaster, GraphQL and SignalR hooks publish it to other processes and subscribers.
-        if (Metadata.Output is null)
+        // A train that withholds its output gives the hooks none, serialized or as the object: no
+        // copy is built (the parameter effect stored none either), and a copy any other effect wrote
+        // is set aside while they run and put back after, so the tracked row is unchanged.
+        var withheld = OutputWithheldFromHooks ? Metadata.Output : null;
+        if (OutputWithheldFromHooks)
+        {
+            Metadata.Output = null;
+            Metadata.SetOutputObject(null);
+        }
+        else if (Metadata.Output is null)
         {
             var outputObject = Metadata.GetOutputObject();
             var ceiling = (
@@ -612,22 +624,33 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             }
         }
 
-        // Not the caller's token. A caller that cancelled while the work finished anyway still
-        // gets Completed recorded (effect/0005), so the matching event has to survive too.
-        await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken.None);
-
         try
         {
-            // The train's own override keeps the caller's token; see the OnCancelled branch.
-            await OnCompleted(Metadata, CancellationToken);
+            // Not the caller's token. A caller that cancelled while the work finished anyway still
+            // gets Completed recorded (effect/0005), so the matching event has to survive too.
+            await LifecycleHookRunner.OnCompleted(Metadata, CancellationToken.None);
+
+            try
+            {
+                // The train's own override keeps the caller's token; see the OnCancelled branch.
+                await OnCompleted(Metadata, CancellationToken);
+            }
+            catch (Exception hookEx)
+            {
+                Logger?.LogError(
+                    hookEx,
+                    "Train-level OnCompleted hook threw for train ({TrainName}).",
+                    TrainName
+                );
+            }
         }
-        catch (Exception hookEx)
+        finally
         {
-            Logger?.LogError(
-                hookEx,
-                "Train-level OnCompleted hook threw for train ({TrainName}).",
-                TrainName
-            );
+            if (OutputWithheldFromHooks)
+            {
+                Metadata.Output = withheld;
+                Metadata.SetOutputObject(output);
+            }
         }
 
         // Back to what was stored, so a later save of this tracked row does not send the refused
@@ -636,6 +659,10 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         return output;
     }
+
+    // Whether this train's class withholds its output from the lifecycle hooks.
+    private bool OutputWithheldFromHooks =>
+        GetType().IsDefined(typeof(OutputWithheldFromLifecycleHooksAttribute), inherit: true);
 
     #region Checkpoints
 

@@ -52,6 +52,11 @@
     <InternalsVisibleTo Include="Trax.Effect.StateMachine" />
   </ItemGroup>
 
+  <!-- The parameter effect stores no output for a run whose train withholds it (Metadata.OutputWithheld). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Provider.Parameter" />
+  </ItemGroup>
+
   <!-- Decision recording binds each run's decisions to its row through ServiceTrain.Run. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.Data" />
