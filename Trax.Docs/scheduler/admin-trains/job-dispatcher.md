@@ -1,6 +1,8 @@
 ---
 title: JobDispatcher
 description: The JobDispatcher train that moves queued work queue entries to the job submitter, enforcing global and per-group MaxActiveJobs and handling dispatch failures.
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Trains/JobDispatcher
 type: reference
 area: scheduling
 nav_order: 4
@@ -40,10 +42,13 @@ Manual entries (no manifest) are always included regardless of the per-group lim
 
 Set `MaxQueuedJobsPerCycle` to `null` to disable the limit and load all queued entries without group-fair batching.
 
-```csharp
-.AddScheduler(scheduler => scheduler
-    .MaxQueuedJobsPerCycle(200)  // load up to 200 entries per group per cycle
-)
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        // Up to 200 entries per group per cycle
+        .AddScheduler(scheduler => scheduler.MaxQueuedJobsPerCycle(200))
+);
 ```
 
 #### Ordering
@@ -86,7 +91,7 @@ For each successfully claimed entry, the dispatcher:
 
 JSON that no longer fits its type will not become readable on any later cycle or any other host, so that entry is settled at once rather than retried: in the same transaction the dispatcher records a `Failed` run carrying the reason and marks the entry `Dispatched` to that run. The failure counts toward the manifest's retries and dead letter like any other, and the next entry for the same subject can be dispatched. When the entry is a dead-letter retry, the failed run is linked to the dead letter as its retry run in the same transaction, as a dispatched retry is. Nothing is constructed from an unresolved name. `LocalWorkerService` resolves a background job's input type the same way, and fails a job whose type matches none. The `TrainName` stored in the work queue entry is the canonical interface name (e.g. `MyApp.Trains.IProcessOrderTrain`), set during scheduling or queue submission.
 
-2. **Creates a Metadata record**: a new `Metadata` row with `TrainState = Pending`, linked to the manifest (if present), and carrying the entry's `ReplayDecisionsOf` when it has one. Before copying the link, the dispatcher checks the manifest's `ReplayDecisionsOnRetry` again and drops the link when the manifest no longer replays, so turning replay off reaches a retry that was already queued (see [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)). Saved immediately so it gets a database-generated ID.
+2. **Creates a Metadata record**: a new `Metadata` row with `TrainState = Pending`, linked to the manifest (if present), and carrying the entry's `ReplayDecisionsOf` when it has one. Before copying the link, the dispatcher checks the manifest's `ReplayDecisionsOnRetry` again and drops the link when the manifest no longer replays, so turning replay off reaches a retry that was already queued (see [How retries work](/docs/scheduler/how-retries-work#retries-replay-decisions)). Saved immediately so it gets a database-generated ID.
 
 3. **Updates the work queue entry**: sets `Status = Dispatched`, records the `MetadataId` and `DispatchedAt` timestamp.
 
@@ -100,12 +105,57 @@ Each entry is processed in its own DI scope with a fresh `IDataContext`. If any 
 
 When `EnqueueAsync` throws, the claim is already committed: the run's row is `Pending` and the entry `Dispatched`. The dispatcher then:
 
-1. **Fails the run only if no runner started it.** A single conditional write moves the row to `Failed` only while it is still `Pending`. If it has left `Pending`, a runner has the job (a remote runner that ran it and answered with an error, or that is still running it when the HTTP timeout expires, or an in-memory submitter that ran it inline): the entry stays `Dispatched`, no dispatch attempt is counted, and the train is not run again. See [Delivery and execution](/docs/scheduler/remote-execution#delivery-and-execution).
+1. **Fails the run only if no runner started it.** A single conditional write moves the row to `Failed` only while it is still `Pending`. If it has left `Pending`, a runner has the job (a remote runner that ran it and answered with an error, or that is still running it when the HTTP timeout expires, or an in-memory submitter that ran it inline): the entry stays `Dispatched`, no dispatch attempt is counted, and the train is not run again. [Choosing where trains run](/docs/scheduler/remote-execution#delivery-and-execution) explains why.
 2. **Requeues the entry if attempts remain.** It increments `DispatchAttempts`; below [`MaxDispatchAttempts`](/docs/sdk-reference/scheduler-api/add-scheduler) (default 5) it resets the entry to `Queued` and sets `ScheduledAt` to hold it back: 5 seconds after the first failure, doubling per attempt, up to 5 minutes, counted from the database's clock, the one `LoadQueuedJobsJunction` compares it with. The run of a requeued attempt records `FailureException = "DispatchRequeued"`, with the submitter's exception in `FailureReason`, and is **not** counted in the manifest's failed runs, so a short outage of a remote worker does not dead-letter the manifest.
 3. **Leaves an exhausted entry `Dispatched`.** The attempt that reaches `MaxDispatchAttempts` records the submitter's exception as the run's failure, which counts once toward the manifest's retries.
 4. **Publishes a terminal failure.** Once the `Failed` row is committed, a run failed for good (attempts exhausted, or `MaxDispatchAttempts` is 0) goes through the lifecycle hooks a train's own failure goes through: `OnFailed`, then `OnStateChanged`. The broadcaster and the GraphQL subscriptions (`onTrainFailed`, `onTrainStateChanged`) see it, so a client following the queued run by its `externalId` gets its outcome. A requeued attempt publishes nothing, because its entry runs again under the same `externalId`, and neither does a row a runner has already started, which the runner reports. An entry whose input cannot be read is settled the same way and publishes its failed run too. The event carries `failureException` `DispatchFailed` and a fixed `failureReason` ("The run could not be dispatched, so it never started. See the run's record for the cause."), not what the row records: the cause is the dispatcher's and the runner's (a remote worker's response body, a Lambda error, an input type's assembly-qualified name), and a lifecycle event reaches subscribers outside the operations view. The row keeps the full cause for `operations.executions`. The dispatcher waits for the hooks at most 30 seconds, whether or not a hook honours its token, so a hook that hangs does not hold up the entries behind it.
 
 This handling runs on its own token, bounded at 30 seconds, not on the dispatcher's. A host that stops while a job is being submitted cancels the dispatcher's token, and the failed submit must still be recorded; otherwise the run would stay `Pending` and hold its subject until the stale-pending reaper found it.
+
+#### Before the dispatcher sees a failure
+
+The HTTP and Lambda transports retry transient failures inside `EnqueueAsync`, with exponential
+backoff and jitter, so only a failure that outlasts those retries reaches the steps above. The HTTP
+submitter and run executor retry HTTP 429, 502 and 503, and wait as long as a `Retry-After` header
+asks when the server sends one. The Lambda submitter and run executor retry status 429, 502, 503 and
+504 and network-level `HttpRequestException`s. Each transport's `Retry` options (`HttpRetryOptions`:
+`MaxRetries` 5, `BaseDelay` 1 second doubling, `MaxDelay` 30 seconds, `MaxRetries = 0` to turn them
+off) are on [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) and
+[UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers).
+
+#### Setting the attempts
+
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler => scheduler.MaxDispatchAttempts(10)) // default 5
+);
+```
+
+`MaxDispatchAttempts(0)` turns requeuing off: the first failed submit fails the run and counts.
+
+#### What catches the rest
+
+A run that was delivered but never finished is not the dispatcher's to see. The ManifestManager's
+[stale pending reaper](/docs/scheduler/admin-trains/manifest-manager#reapstalependingmetadatajunction)
+fails a run still `Pending` after `StalePendingTimeout` (a runner that received the job and died
+before starting it), and its
+[stale in-progress reaper](/docs/scheduler/admin-trains/manifest-manager#reapstaleinprogressmetadatajunction)
+fails one still `InProgress` long past its timeout (a Lambda hard kill, an out-of-memory crash).
+Both record ordinary failed runs, which count toward the manifest's retries and dead letter.
+
+#### Throttled backends
+
+On a backend with a concurrency limit, such as a Lambda function with reserved concurrency, these
+settings work together:
+
+| Setting | Set it to |
+|---------|-----------|
+| `MaxConcurrentDispatch` | At or below the backend's concurrency limit |
+| `MaxActiveJobs` | The backend's concurrency limit, so dispatch does not outrun it |
+| `Retry.MaxRetries` on the transport | 5 to 10 where throttling is frequent |
+| `MaxDispatchAttempts` | 5 to 10, to ride out longer outages |
 
 ## Parallel Dispatch
 
@@ -113,26 +163,32 @@ By default, `DispatchJobsJunction` processes entries sequentially, one `TryClaim
 
 `MaxConcurrentDispatch` controls how many entries are dispatched in parallel within a single polling cycle:
 
-```csharp
-.AddScheduler(scheduler => scheduler
-    .MaxConcurrentDispatch(10)
-    .UseRemoteWorkers(
-        remote => remote.BaseUrl = "https://my-workers.example.com/trax/execute",
-        routing => routing.ForTrain<IHeavyComputeTrain>())
-)
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler
+                .MaxConcurrentDispatch(10)
+                .UseRemoteWorkers(
+                    remote => remote.BaseUrl = "https://my-workers.example.com/trax/execute",
+                    routing => routing.ForTrain<IReportTrain>()
+                )
+        )
+);
 ```
 
 When `MaxConcurrentDispatch > 1`, the junction uses a `SemaphoreSlim` to bound concurrency and `Task.WhenAll` to dispatch entries in parallel. Each entry still gets its own DI scope and database transaction, the `FOR UPDATE SKIP LOCKED` pattern prevents two concurrent dispatches from claiming the same entry, even within the same cycle.
 
 | `MaxConcurrentDispatch` | Behavior |
 |-------------------------|----------|
-| `1` (default) | Sequential `foreach` loop. Zero overhead, exact backward compatibility |
+| `1` (default) | Sequential `foreach` loop |
 | `> 1` | Parallel dispatch bounded by `SemaphoreSlim`. entries are started in priority order but may complete in any order |
 
 **Considerations:**
 - Each concurrent dispatch opens its own database connection. Keep the value well below your connection pool size (default Npgsql pool: 100).
 - Priority ordering within a cycle is best-effort when dispatching in parallel, entries are *started* in priority order, but complete in arbitrary order. This matches the existing behavior in multi-server deployments.
-- Error handling is per-entry: if one dispatch fails (HTTP timeout, network error), the others continue. A failed dispatch is handled as in [Dispatch failures](#dispatch-failures), same as the sequential path.
+- Error handling is per-entry: if one dispatch fails (HTTP timeout, network error), the others continue. A failed dispatch is handled as in [Dispatch failures](#dispatch-failures), as on the sequential path.
 
 ## MaxActiveJobs Enforcement
 
@@ -140,17 +196,22 @@ Capacity is enforced at two independent levels: global and per-group.
 
 ### Global MaxActiveJobs
 
-The global limit works the same as before. The count is based on `Metadata` rows in `Pending` or `InProgress` state, excluding administrative trains (and any types registered via `ExcludeFromMaxActiveJobs<T>()`). The capacity count query uses a `HashSet<string>` for excluded train names, which Npgsql translates to a single parameterized `<> ALL(@excluded)` array comparison instead of N separate `NOT LIKE` clauses. This allows PostgreSQL to use the covering partial index on active metadata efficiently.
+The count is based on `Metadata` rows in `Pending` or `InProgress` state, excluding administrative trains (and any types registered via `ExcludeFromMaxActiveJobs<T>()`). The capacity count query uses a `HashSet<string>` for excluded train names, which Npgsql translates to a single parameterized `<> ALL(@excluded)` array comparison instead of N separate `NOT LIKE` clauses. This allows PostgreSQL to use the covering partial index on active metadata efficiently.
 
 The count happens once at the start of each dispatch cycle, not per-entry. If you have `MaxActiveJobs = 100` and 95 are active, the dispatcher will take up to 5 entries from the queue. The remaining entries stay `Queued` and get picked up on the next polling cycle.
 
 Setting `MaxActiveJobs` to `null` disables the global check entirely, all queued entries are dispatched (subject to per-group limits).
 
-```csharp
-.AddScheduler(scheduler => scheduler
-    .MaxActiveJobs(100)                              // limit to 100 concurrent jobs
-    .ExcludeFromMaxActiveJobs<IMyInternalTrain>() // don't count these
-)
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler
+                .MaxActiveJobs(100) // at most 100 active jobs
+                .ExcludeFromMaxActiveJobs<ISyncTrain>() // not counted
+        )
+);
 ```
 
 ### Per-Group MaxActiveJobs
@@ -196,11 +257,10 @@ Because Group A has higher priority, its entries appear first in the sorted queu
 
 ## Why a Separate Train
 
-Before the JobDispatcher existed, the ManifestManager handled dispatch directly. `MaxActiveJobs` was checked in its `EnqueueJobsJunction`. That worked fine when the ManifestManager was the only source of job execution.
-
-But other sources exist: `TriggerAsync` for manual triggers, the dashboard for re-runs. Each of those had to independently create Metadata and enqueue to Hangfire, bypassing the ManifestManager's capacity check entirely.
-
-The work queue + JobDispatcher pattern fixes this. All sources write to the same queue. The JobDispatcher is the only thing that reads from it. Capacity enforcement happens exactly once, in one place.
+Every source of a run (a schedule, `TriggerAsync`, a dead-letter requeue, a dashboard re-run, a
+queued mutation) writes the work queue, and the JobDispatcher is the only thing that reads it.
+Capacity, priority and subject serialization are therefore enforced once, in one place, whatever
+started the run. See [Administrative Trains: The work queue](/docs/scheduler/admin-trains#the-work-queue).
 
 ## SDK Reference
 

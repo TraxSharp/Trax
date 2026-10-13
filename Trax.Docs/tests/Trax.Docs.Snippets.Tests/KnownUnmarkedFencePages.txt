@@ -62,7 +62,6 @@ samples/recovery.md
 samples/scheduling.md
 samples/signalr-broadcaster.md
 samples/state-machine.md
-scheduler/admin-trains/job-dispatcher.md
 scheduler/admin-trains/job-runner.md
 scheduler/admin-trains/metadata-cleanup.md
 scheduler/concurrency.md
@@ -72,7 +71,6 @@ scheduler/dependent-trains.md
 scheduler/exclusions.md
 scheduler/health-and-liveness.md
 scheduler/orphan-manifest-cleanup.md
-scheduler/remote-execution.md
 scheduler/scheduling-options.md
 sdk-reference/api-audit/add-audit.md
 sdk-reference/api-audit/i-trax-audit-redactor.md
