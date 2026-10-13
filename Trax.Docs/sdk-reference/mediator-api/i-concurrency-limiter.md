@@ -5,16 +5,24 @@ type: reference
 area: mediator
 parent: Mediator API
 grand_parent: SDK Reference
-nav_order: 9
+nav_order: 7
+package: Trax.Mediator
+namespace: Trax.Mediator.Services.ConcurrencyLimiter
+source:
+  - Trax.Mediator/src/Trax.Mediator/Services/ConcurrencyLimiter/IConcurrencyLimiter.cs
+  - Trax.Mediator/src/Trax.Mediator/Services/ConcurrencyLimiter/ConcurrencyLimiter.cs
 ---
 
 # IConcurrencyLimiter
 
-Gates direct runs per train, per principal and globally. `ITrainExecutionService.RunAsync` acquires a permit after authorizing the caller and reading the input, and releases it when the run ends. Queued work does not pass through it. You configure it through the mediator builder rather than calling it; see [Concurrency Limiting](/docs/sdk-reference/mediator-api/concurrency-limiting).
+The gate behind the [concurrency limits](/docs/sdk-reference/mediator-api/concurrency-limiting).
+`ITrainExecutionService.RunAsync` acquires a permit after authorizing the caller and reading the
+input, and releases it when the run ends. Queued work does not pass through it. The limits are
+configured on the mediator builder, not through this interface.
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Mediator.Services.ConcurrencyLimiter;
 
 public interface IConcurrencyLimiter
@@ -23,24 +31,36 @@ public interface IConcurrencyLimiter
 }
 ```
 
+## Parameters
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `trainFullName` | `string` | The train interface's `FullName`, the canonical train name |
 | `ct` | `CancellationToken` | Cancels the wait; throws `OperationCanceledException` without taking a slot |
 
-**Returns**: a permit. Disposing it releases every slot it holds; disposing it twice is safe.
+## Returns
+
+A permit. Disposing it releases every slot it holds; disposing it twice is safe.
 
 ## Behavior
 
 - Waits asynchronously while a limit is reached. It never rejects.
-- Takes the per-train, per-principal and global limits in that order, so two runs cannot deadlock on each other's slots.
-- The principal is whatever [ICurrentPrincipalProvider](/docs/sdk-reference/mediator-api/i-current-principal-provider) returns at the time of the call.
+- Takes the per-train, per-principal and global limits in that order, so two runs cannot deadlock
+  on each other's slots.
+- The principal is whatever
+  [ICurrentPrincipalProvider](/docs/sdk-reference/mediator-api/i-current-principal-provider)
+  returns at the time of the call.
 - A limit that is not configured is skipped.
 
-`AddMediator` registers the default `ConcurrencyLimiter` as a singleton, built from [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration) and the `[TraxConcurrencyLimit]` attributes discovery found. Replace it only to change how limits are enforced, for example to share them across processes; register yours after `AddMediator`.
+### Registered services
 
-## Package
+`AddMediator` registers the default `ConcurrencyLimiter` as a singleton, built from
+[MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration), the
+`[TraxConcurrencyLimit]` attributes discovery found and the registered `ICurrentPrincipalProvider`.
+A replacement registered after `AddMediator` takes its place.
 
-```
-dotnet add package Trax.Mediator
-```
+## See also
+
+- [Concurrency limits](/docs/sdk-reference/mediator-api/concurrency-limiting)
+- [Limit concurrent train runs](/docs/mediator/limit-concurrent-train-runs)
+- [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service)
