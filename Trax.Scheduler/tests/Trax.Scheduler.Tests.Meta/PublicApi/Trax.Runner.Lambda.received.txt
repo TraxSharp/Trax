@@ -1,0 +1,15 @@
+namespace Trax.Runner.Lambda
+{
+    public abstract class TraxLambdaFunction
+    {
+        protected TraxLambdaFunction() { }
+        protected virtual System.TimeSpan TerminalWriteMargin { get; }
+        protected virtual System.IServiceProvider BuildServiceProvider() { }
+        protected virtual void ConfigureLogging(Microsoft.Extensions.Logging.ILoggingBuilder logging) { }
+        protected virtual void ConfigureRunner(Trax.Scheduler.Configuration.TraxJobRunnerOptions runner, Microsoft.Extensions.Configuration.IConfiguration configuration) { }
+        protected abstract void ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration configuration);
+        public System.Threading.Tasks.Task<object?> FunctionHandler(Trax.Scheduler.Services.Lambda.LambdaEnvelope envelope, Amazon.Lambda.Core.ILambdaContext context) { }
+        public System.Threading.Tasks.Task RunLocalAsync(string[] args) { }
+        public System.Threading.Tasks.Task RunLocalAsync(string[] args, System.Threading.CancellationToken cancellationToken) { }
+    }
+}

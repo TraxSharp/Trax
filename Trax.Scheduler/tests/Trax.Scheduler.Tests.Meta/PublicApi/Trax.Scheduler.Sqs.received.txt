@@ -1,0 +1,27 @@
+namespace Trax.Scheduler.Sqs.Configuration
+{
+    public class SqsWorkerOptions
+    {
+        public SqsWorkerOptions() { }
+        public System.Action<Amazon.SQS.AmazonSQSConfig>? ConfigureSqsClient { get; set; }
+        public string? MessageGroupId { get; set; }
+        public string QueueUrl { get; set; }
+        public byte[]? SigningKey { get; set; }
+    }
+}
+namespace Trax.Scheduler.Sqs.Extensions
+{
+    public static class SqsSchedulerExtensions
+    {
+        public static Trax.Scheduler.Configuration.SchedulerConfigurationBuilder UseSqsWorkers(this Trax.Scheduler.Configuration.SchedulerConfigurationBuilder builder, System.Action<Trax.Scheduler.Sqs.Configuration.SqsWorkerOptions> configure, System.Action<Trax.Scheduler.Configuration.SubmitterRouting>? routing = null) { }
+    }
+}
+namespace Trax.Scheduler.Sqs.Lambda
+{
+    public class SqsJobRunnerHandler
+    {
+        public SqsJobRunnerHandler(System.IServiceProvider serviceProvider) { }
+        public System.Threading.Tasks.Task HandleAsync(Amazon.Lambda.SQSEvents.SQSEvent sqsEvent, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Amazon.Lambda.SQSEvents.SQSBatchResponse> HandleBatchAsync(Amazon.Lambda.SQSEvents.SQSEvent sqsEvent, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+}

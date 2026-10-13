@@ -94,6 +94,11 @@
           "System.CodeDom": "6.0.0"
         }
       },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.102.8",
+        "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
+      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -287,6 +292,14 @@
           "Trax.Effect.StateMachine.Persistence": "[1.99.99, )"
         }
       },
+      "trax.runner.lambda": {
+        "type": "Project",
+        "dependencies": {
+          "Amazon.Lambda.Core": "[3.3.0, )",
+          "Amazon.Lambda.Serialization.SystemTextJson": "[3.0.1, )",
+          "Trax.Scheduler": "[1.99.99, )"
+        }
+      },
       "trax.scheduler": {
         "type": "Project",
         "dependencies": {
@@ -294,6 +307,60 @@
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
           "Trax.Mediator": "[1.99.99, )"
+        }
+      },
+      "trax.scheduler.lambda": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.Lambda": "[4.0.108.2, )",
+          "Trax.Scheduler": "[1.99.99, )"
+        }
+      },
+      "trax.scheduler.sqs": {
+        "type": "Project",
+        "dependencies": {
+          "AWSSDK.SQS": "[4.0.100.15, )",
+          "Amazon.Lambda.SQSEvents": "[3.0.1, )",
+          "Trax.Scheduler": "[1.99.99, )"
+        }
+      },
+      "Amazon.Lambda.Core": {
+        "type": "CentralTransitive",
+        "requested": "[3.3.0, )",
+        "resolved": "3.3.0",
+        "contentHash": "CZKlX8ZDMi6aKPo5lPAjmsJFDXNJHX00aiiYeRQOEszP8cjx6qklBvTPj4qpr4dlp3YYQjmB87CqAiWV7vk2fA=="
+      },
+      "Amazon.Lambda.Serialization.SystemTextJson": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.1, )",
+        "resolved": "3.0.1",
+        "contentHash": "QsHygaMyxQdgh5NPs5GGyBjK6mqQr5nv8rpqlrWC5+e1k7sVx+2xwDHv493S5IMw461S/PyHfjkUDjIQU5ArSA==",
+        "dependencies": {
+          "Amazon.Lambda.Core": "3.3.0"
+        }
+      },
+      "Amazon.Lambda.SQSEvents": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.1, )",
+        "resolved": "3.0.1",
+        "contentHash": "57cPCJQIDLYzKHXsK6hXZUFH+Ra6JpNXXlyjP/O/hvjBmhRud7EPt4IBgowW8P6s1wqoS+9txmi+iuLwhZ7I4A=="
+      },
+      "AWSSDK.Lambda": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.108.2, )",
+        "resolved": "4.0.108.2",
+        "contentHash": "b/l4MmOI145W1AiJR97//516EzsZkBGP3uAWH3Hml6UNQn5k5R1C9Mt/wY1j/VjefONWiCOzl+Bgfk1ECJfQcQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
+      "AWSSDK.SQS": {
+        "type": "CentralTransitive",
+        "requested": "[4.0.100.15, )",
+        "resolved": "4.0.100.15",
+        "contentHash": "A2vyeQSZgH682aI2+1oLQKAp03pPBl2FgLHCm33MBEV/3N5tiy0nwMhJxG+Sb1gRiciO9M9QBu2UidcsuO7PkQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
         }
       },
       "Cronos": {

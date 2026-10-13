@@ -1,0 +1,34 @@
+namespace Trax.Scheduler.Lambda.Configuration
+{
+    public class LambdaRetryOptions
+    {
+        public LambdaRetryOptions() { }
+        public System.TimeSpan BaseDelay { get; set; }
+        public System.TimeSpan MaxDelay { get; set; }
+        public int MaxRetries { get; set; }
+    }
+    public class LambdaRunOptions
+    {
+        public LambdaRunOptions() { }
+        public System.Action<Amazon.Lambda.AmazonLambdaConfig>? ConfigureLambdaClient { get; set; }
+        public string FunctionName { get; set; }
+        public Trax.Scheduler.Lambda.Configuration.LambdaRetryOptions Retry { get; set; }
+        public byte[]? SigningKey { get; set; }
+    }
+    public class LambdaWorkerOptions
+    {
+        public LambdaWorkerOptions() { }
+        public System.Action<Amazon.Lambda.AmazonLambdaConfig>? ConfigureLambdaClient { get; set; }
+        public string FunctionName { get; set; }
+        public Trax.Scheduler.Lambda.Configuration.LambdaRetryOptions Retry { get; set; }
+        public byte[]? SigningKey { get; set; }
+    }
+}
+namespace Trax.Scheduler.Lambda.Extensions
+{
+    public static class LambdaSchedulerExtensions
+    {
+        public static Trax.Scheduler.Configuration.SchedulerConfigurationBuilder UseLambdaRun(this Trax.Scheduler.Configuration.SchedulerConfigurationBuilder builder, System.Action<Trax.Scheduler.Lambda.Configuration.LambdaRunOptions> configure) { }
+        public static Trax.Scheduler.Configuration.SchedulerConfigurationBuilder UseLambdaWorkers(this Trax.Scheduler.Configuration.SchedulerConfigurationBuilder builder, System.Action<Trax.Scheduler.Lambda.Configuration.LambdaWorkerOptions> configure, System.Action<Trax.Scheduler.Configuration.SubmitterRouting>? routing = null) { }
+    }
+}
