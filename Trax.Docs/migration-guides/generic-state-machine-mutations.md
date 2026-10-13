@@ -1,12 +1,15 @@
 ---
-title: Generic State-Machine Mutations
-description: The generic stateMachine mutations are now opt-in. What stops working on upgrade, how to move to each machine's typed API, and what opting back in requires.
+title: Move off the generic state-machine mutations
+description: "The generic stateMachine mutations are now opt-in: what stops working on upgrade, how to move to each machine's typed API, and what opting back in requires."
 type: how-to
 area: upgrading
+parent: Upgrading
 nav_order: 1
 ---
 
-# Generic State-Machine Mutations
+# Move off the generic state-machine mutations
+
+Applies from: the first release after Trax 1.62.0 (not yet released on 2026-10-13).
 
 The generic `stateMachine` mutations are no longer served by default. Each machine a host names is served as its own
 typed API instead, under the [machines root](/docs/sdk-reference/graphql-api/machines). The decision is
@@ -38,7 +41,7 @@ machine the host registers, whether `AddStateMachines` found it in a scanned ass
 subclass. A subclass has its base's id, so a host that also registers the base (by scanning the library's assembly,
 or through a registration of the library's) refuses to start, naming both. A sealed machine cannot be served this way.
 
-```csharp
+```csharp fragment
 [TraxMachine]
 public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger> { ... }
 
@@ -56,7 +59,7 @@ built from delegates, or one that declares `SystemOwned()`, refuses startup when
 Exposing a machine requires [persisted operations](/docs/sdk-reference/persisted-operations/use-persisted-operations).
 The host generates and registers each exposed machine's documents itself, so there is nothing to upload:
 
-```csharp
+```csharp fragment
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted => persisted.SingleNode()));
 ```
@@ -81,7 +84,7 @@ exception, until it does:
 register. There is no machine-level default: an event added later without a rule stops the host from starting rather
 than inheriting one.
 
-```csharp
+```csharp fragment
 m.Id("topic-map")
     .Version(1)
     .StartsAt(TopicMapState.ChoosingFields, () => new JsonObject())
@@ -136,7 +139,7 @@ and [Driving an instance from React](/docs/sdk-reference/graphql-api/machines#dr
 A host that cannot move yet serves the generic mutations again with `ExposeGenericStateMachineMutations`, which takes
 the name of an authorization policy every caller of the six mutations must satisfy:
 
-```csharp
+```csharp fragment
 builder.Services.AddAuthorization(o =>
     o.AddPolicy("StateMachineClients", p => p.RequireAuthenticatedUser()));
 
@@ -176,7 +179,7 @@ These apply to every host that calls `AddStateMachines`, whichever surface serve
 
 The upgrade also applies migrations `076` to `080` (SQLite `038` to `040`), which add the revision, the start
 request id and request ring, the change notices, the timers' due time and the switch that turns the notices off.
-Each is described, with what a rolling deploy sees, in [Database migrations](/docs/migration-guides/database-migrations#state-machine-revision-076-sqlite-038).
+Each is described, with what a rolling deploy sees, in [Schema migrations](/docs/reference/schema-migrations#state-machine-revision-076-sqlite-038).
 
 ## Related
 
