@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useFitCode } from "./useFitCode";
+import { alignChains, codeLineLayout, useFitCode } from "./useFitCode";
 import { replayNow } from "@/lib/replay-pace";
 import data from "@/data/order-recordings.json";
 import { ORDER, STAGES, durationOf, trackAt, viewAt, type OrderRecordings, type Scenario, type Slot, type Stage, type Tone, type Track } from "@/lib/order-replay";
@@ -37,7 +36,10 @@ export default function OrderReplay() {
     return () => clearInterval(timer);
   }, [active, duration]);
 
+  // Counts runs, so the code panel starts each one following it again.
+  const [runs, setRuns] = useState(0);
   const run = useCallback((k: string) => {
+    setRuns((n) => n + 1);
     base.current = replayNow();
     setElapsed(0);
     setPlaying(k);
@@ -68,7 +70,6 @@ export default function OrderReplay() {
     return () => observer.disconnect();
   }, [run]);
 
-  const chosen = scenarios.find((s) => s.key === key);
   const leaves = key === "left-in-cart";
 
   return (
@@ -91,7 +92,6 @@ export default function OrderReplay() {
               </option>
             ))}
           </select>
-          <p className="text-xs leading-relaxed text-text-muted">{chosen?.caption}</p>
         </Group>
 
         <Group label="Laptop">
@@ -106,7 +106,7 @@ export default function OrderReplay() {
           >
             {leaves ? "Leave it in the cart" : "Place order"}
           </button>
-          <ActionButton onClick={reset} disabled={!playing || active}>
+          <ActionButton onClick={reset} disabled={!playing}>
             Reset
           </ActionButton>
           <p className="min-h-[3.5em] text-xs leading-relaxed text-signal">{view?.note}</p>
@@ -135,18 +135,17 @@ export default function OrderReplay() {
         </Group>
       </div>
 
-      <CodePanel source={recordings.source} lit={view?.lit ?? null} revision={view?.revision ?? null} />
+      <CodePanel
+        key={runs}
+        machine={recordings.source}
+        train={recordings.train?.source}
+        lit={view?.lit ?? null}
+        trainLit={view?.trainLit ?? null}
+        revision={view?.revision ?? null}
+      />
       <PhonePanel view={view} />
       <TimelinePanel track={track} train={recordings.train?.name ?? "DeliverOrderTrain"} />
 
-      <p className="text-xs leading-relaxed text-text-muted lg:col-span-3">
-        Recorded from the{" "}
-        <Link href="/docs/samples/recovery" className="text-accent hover:text-accent-hover">
-          Recovery sample
-        </Link>{" "}
-        running against Postgres, and played back in your browser: every change reached the laptop and the phone as a
-        push from the server, and neither asked for it.
-      </p>
     </div>
   );
 }
@@ -179,9 +178,9 @@ function PanelTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-// The words that declare a state, its events, its timer and the train it runs, picked out in the code.
+// The words that declare a state, its events, its timer and the train it runs, and the train's steps, picked out.
 const TOKEN =
-  /(\.(?:In|On|Invokes|After|GoTo|To|OnDone|OnFailed|OnCancelled)\b)|(\[Trax[A-Za-z]*)|("[^"]*")|(\/\/.*$)|(\b(?:public|class|protected|override)\b)/g;
+  /(\.(?:In|On|Invokes|After|GoTo|To|OnDone|OnFailed|OnCancelled|Chain|Resolve)\b|\bChain(?=<))|(\[Trax[A-Za-z]*)|("[^"]*")|(\/\/.*$)|(\b(?:public|class|protected|override)\b)/g;
 
 function highlight(line: string) {
   const parts: React.ReactNode[] = [];
@@ -200,55 +199,98 @@ function highlight(line: string) {
   return parts;
 }
 
+type Shown = "machine" | "train";
+
+/**
+ * The machine's code, or the train's while the order's run is on its junctions: the panel follows the run, and a
+ * file tab picked by hand holds until the next run.
+ */
 function CodePanel({
-  source,
+  machine,
+  train,
   lit,
+  trainLit,
   revision,
 }: {
-  source: { file: string; code: string } | undefined;
+  machine: { file: string; code: string } | undefined;
+  train: { file: string; code: string } | undefined;
   lit: { line: number; tone: Tone; stage: Stage } | null;
+  trainLit: { step: string; tone: Tone; stage: Stage } | null;
   revision: number | null;
 }) {
+  const [picked, setPicked] = useState<Shown | null>(null);
+  const shown: Shown = picked ?? (trainLit && train ? "train" : "machine");
+  const source = shown === "train" ? train : machine;
   const code = source?.code ?? "";
   const file = source?.file ?? "OrderMachine.cs";
-  const lines = useMemo(() => code.split("\n"), [code]);
-  // Only the states, from the first m.In(...) to the end of Configure, so they stay on screen while the light moves.
-  // The line numbers stay the file's.
+  const lines = useMemo(() => alignChains(code.split("\n")), [code]);
+  // Only the part that acts, so it stays on screen while the light moves: the machine's states, from the first
+  // m.In(...) to the end of Configure, or the train's chain, from Junctions() to Resolve(). The line numbers stay
+  // the file's.
   const [first, last, indent] = useMemo(() => {
-    const at = lines.findIndex((l) => l.trim().startsWith("m.In("));
+    let at: number;
     let end = -1;
-    lines.forEach((l, i) => {
-      if (i > at && /^\s*\.\w+\(.*\);\s*$/.test(l)) end = i;
-    });
-    const shown = at < 0 || end < 0 ? [0, lines.length] : [at, end + 1];
-    const indent = Math.min(...lines.slice(shown[0], shown[1]).filter((l) => l.trim()).map((l) => l.search(/\S/)));
-    return [shown[0], shown[1], Number.isFinite(indent) ? indent : 0];
-  }, [lines]);
+    if (shown === "train") {
+      at = lines.findIndex((l) => l.includes("Junctions()"));
+      end = lines.findIndex((l, i) => i > at && l.includes(".Resolve()"));
+    } else {
+      at = lines.findIndex((l) => l.trim().startsWith("m.In("));
+      lines.forEach((l, i) => {
+        if (i > at && /^\s*\.\w+\(.*\);\s*$/.test(l)) end = i;
+      });
+    }
+    const range = at < 0 || end < 0 ? [0, lines.length] : [at, end + 1];
+    const indent = Math.min(...lines.slice(range[0], range[1]).filter((l) => l.trim()).map((l) => l.search(/\S/)));
+    return [range[0], range[1], Number.isFinite(indent) ? indent : 0];
+  }, [lines, shown]);
+  const litLine =
+    shown === "train"
+      ? trainLit
+        ? { line: lines.findIndex((l) => l.includes(`Chain<${trainLit.step}>`)) + 1, stage: trainLit.stage }
+        : null
+      : lit;
   const pane = useRef<HTMLPreElement>(null);
-  useFitCode(pane, file);
+  useFitCode(pane, file, 12, 11);
+
+  const tab = (which: Shown, name: string | undefined) =>
+    name && (
+      <button
+        onClick={() => setPicked(which)}
+        className={`-mb-[9px] border-b-2 pb-2 font-mono normal-case tracking-normal transition-colors ${
+          shown === which ? "border-accent text-text-primary" : "border-transparent text-text-muted hover:text-text-secondary"
+        }`}
+      >
+        {name.split("/").pop()}
+      </button>
+    );
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary lg:h-[600px]">
       <PanelTitle>
-        Code <span className="font-mono normal-case tracking-normal text-text-secondary">{file}</span>
+        Code
+        {tab("machine", machine?.file)}
+        {tab("train", train?.file)}
         {revision != null && (
           <span className="ml-auto font-mono font-normal normal-case tracking-normal text-text-muted/70" title="The order's revision on the server">
             update {revision}
           </span>
         )}
       </PanelTitle>
-      <pre ref={pane} className="flex-1 overflow-x-auto py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
+      <pre ref={pane} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
         {lines.slice(first, last).map((line, offset) => {
           const i = first + offset;
-          const on = lit != null && i + 1 === lit.line;
+          const on = litLine != null && i + 1 === litLine.line;
+          const layout = codeLineLayout(line.slice(indent));
           return (
             <div
               key={i}
-              className="flex w-max min-w-full border-l-2 border-transparent pr-4 transition-colors duration-200"
-              style={on ? { borderLeftColor: STAGES[lit.stage].color, background: tint(lit.stage, 0.16) } : undefined}
+              className={`flex ${layout.row} border-l-2 border-transparent pr-4 transition-colors duration-200`}
+              style={on ? { borderLeftColor: STAGES[litLine.stage].color, background: tint(litLine.stage, 0.16) } : undefined}
             >
               <span className="mr-4 w-8 shrink-0 select-none text-right text-text-muted/60">{i + 1}</span>
-              <span className="whitespace-pre">{highlight(line.slice(indent))}</span>
+              <span className={layout.text} style={layout.style}>
+                {highlight(layout.body)}
+              </span>
             </div>
           );
         })}
@@ -284,7 +326,7 @@ function PhonePanel({ view }: { view: ReturnType<typeof viewAt> | null }) {
               {view?.phone.status ?? "Nothing yet"}
             </p>
             <p className="mt-0.5 min-h-[1.5em] text-xs leading-relaxed text-text-muted">
-              {view ? view.phone.detail : "Place the order and follow it here."}
+              {view?.phone.detail}
             </p>
             <ol className="mt-3 flex items-center gap-1.5 text-[10px] text-text-muted" aria-label="The order's states">
               {machine.map((m, i) => (
@@ -325,7 +367,7 @@ function TimelinePanel({ track, train }: { track: Track; train: string }) {
     <div className="min-w-0 rounded-lg border border-border bg-bg-secondary pb-3 lg:col-span-3">
       <PanelTitle>Timeline</PanelTitle>
       <StackedTimeline track={track} train={train} />
-      <div className="mx-3 mt-3 hidden overflow-x-auto rounded-md border border-border bg-bg-primary/60 p-3 md:block">
+      <div className="mx-3 mt-3 hidden min-h-[114px] overflow-x-auto rounded-md border border-border bg-bg-primary/60 p-3 md:block">
         <div className="min-w-[720px] text-[11px]">
           <div className={GRID}>
             <RowName>OrderMachine</RowName>

@@ -42,12 +42,12 @@ test("every line the page can light is a line of OrderMachine.cs that says what 
   }
 });
 
-test("a double click on Place order makes one order, and the page says so", () => {
+test("a double click on Place order makes one order, without a word on the page", () => {
   const s = scenario("order");
   const places = eventsOf(s).filter((e) => e.kind === "request" && e.operation === "placeOrder");
   assert.equal(places.length, 2);
   const view = end("order");
-  assert.match(view.note ?? "", /one order/);
+  assert.equal(view.note, null);
   assert.equal(view.states.filter((x) => x.label === "Ordered").length, 1);
   assert.equal(view.junctions.filter((j) => j.label === "ChargeCard").length, 1);
 });
@@ -203,4 +203,18 @@ test("the phone speaks plainly: no revisions or internals on its face, one colou
   assert.deepEqual(view.phone.machine.map((m) => [m.label, m.at]), [["Cart", "done"], ["Ordered", "done"], ["Delivered", "current"]]);
   assert.deepEqual(end("restaurant-closed").phone.machine.map((m) => m.label), ["Cart", "Ordered", "Cancelled"]);
   assert.equal(end("restaurant-closed").lit?.stage, "cancelled");
+});
+
+test("while the train runs, the junction acting is lit in the train's own code, one Chain line per step", () => {
+  const code = recordings.train.source?.code ?? "";
+  for (const step of recordings.train.steps) assert.ok(code.includes(`Chain<${step}>`), `no Chain<${step}> in the train`);
+
+  const s = scenario("order");
+  const lit = new Set<string>();
+  for (const e of eventsOf(s)) {
+    const view = viewAt(recordings, s, e.t);
+    if (view.trainLit) lit.add(view.trainLit.step);
+  }
+  assert.deepEqual([...lit], recordings.train.steps);
+  assert.equal(end("order").trainLit, null, "the run is over, so the machine's code shows again");
 });

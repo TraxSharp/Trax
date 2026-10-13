@@ -36,7 +36,7 @@ export interface OrderRecordings {
   recordedAt: string;
   source: { file: string; code: string };
   lines: Record<string, number>;
-  train: { name: string; steps: string[] };
+  train: { name: string; steps: string[]; source?: { file: string; code: string } };
   scenarios: Scenario[];
 }
 
@@ -129,6 +129,8 @@ export interface View {
   };
   /** The code line to light (1-based, the file's numbering), how, and the stage acting. */
   lit: { line: number; tone: Tone; stage: Stage } | null;
+  /** While the order's run is on its junctions: the junction acting, and how, for the train's own code. */
+  trainLit: { step: string; tone: Tone; stage: Stage } | null;
   /** What the laptop says about the last thing it sent, such as the double click. */
   note: string | null;
   progress: { label: string; tone: Tone; stage: Stage }[];
@@ -225,12 +227,8 @@ export function viewAt(recordings: OrderRecordings, scenario: Scenario | undefin
         break;
       }
       case "answer": {
-        if (e.replayed || (e.problem && e.operation === "placeOrder" && state === "Ordered")) {
-          note = e.replayed
-            ? "Place order sent twice: one order, one charge (the second was a replay)."
-            : `Place order sent twice: one order, one charge (the second was refused: ${e.problem?.message ?? "already ordered"}).`;
-          break;
-        }
+        // A second Place order is answered as a replay, or refused once the order is placed: nothing to say.
+        if (e.replayed || (e.problem && e.operation === "placeOrder" && state === "Ordered")) break;
         if (e.problem) {
           note = e.problem.message;
           break;
@@ -404,6 +402,14 @@ export function viewAt(recordings: OrderRecordings, scenario: Scenario | undefin
     revision,
     phone: { status, detail, stage, lines: phoneLines, machine },
     lit: typeof line === "number" ? { line, tone: litTone, stage: litStage } : null,
+    trainLit:
+      litKey === "invoke" && j
+        ? {
+            step: j.step,
+            tone: j.status === "failed" ? "failed" : j.status === "completed" ? "done" : "running",
+            stage: j.status === "failed" ? "cancelled" : stageOfJunction(j.step),
+          }
+        : null,
     note,
     progress,
     states,

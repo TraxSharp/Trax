@@ -1,3 +1,4 @@
+import Link from "next/link";
 interface Pkg {
   name: string;
   desc: string;
@@ -190,6 +191,9 @@ export default function PackageList() {
           all on NuGet and all MIT licensed. There is no commercial edition, and
           there will not be one.
         </p>
+        <Link href="/docs/getting-started" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
+          Install it and write your first train &rarr;
+        </Link>
 
         <div className="mt-8 divide-y divide-border/50 border-y border-border/50">
           {folders.map((f) => (

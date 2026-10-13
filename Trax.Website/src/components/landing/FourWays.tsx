@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { codeToHtml } from "shiki";
 import CodeTabs, { type CodeTab } from "./CodeTabs";
 
@@ -6,9 +7,9 @@ const trainCode = `public class RecalculateLeaderboardTrain
         IRecalculateLeaderboardTrain
 {
     protected override Task<Either<Exception, RecalculateLeaderboardOutput>> Junctions() =>
-        Chain<AggregateScoresJunction>()
-            .Chain<RankPlayersJunction>()
-            .Resolve();
+         Chain<AggregateScoresJunction>()
+        .Chain<RankPlayersJunction>()
+        .Resolve();
 }`;
 
 interface RawTab {
@@ -20,8 +21,7 @@ interface RawTab {
 const rawTabs: RawTab[] = [
   {
     label: "Call it",
-    caption:
-      "Hand the input to the train bus and await the output. The bus finds the train by its input type, runs it in the current request, and records the run.",
+    caption: "",
     blocks: [
       {
         file: "LeaderboardController.cs",
@@ -38,8 +38,7 @@ const rawTabs: RawTab[] = [
   },
   {
     label: "Schedule it",
-    caption:
-      "Give it an id, an input and a schedule. Failed runs are retried with backoff, and a run that keeps failing lands in the dead-letter queue for someone to look at.",
+    caption: "",
     blocks: [
       {
         file: "Program.cs",
@@ -55,8 +54,7 @@ const rawTabs: RawTab[] = [
   },
   {
     label: "Serve it",
-    caption:
-      "Two attributes turn the train into a typed GraphQL mutation. A train exposed this way has to say who may call it, or the host refuses to start.",
+    caption: "",
     blocks: [
       {
         file: "RecalculateLeaderboardTrain.cs",
@@ -82,8 +80,7 @@ public class RecalculateLeaderboardTrain
   },
   {
     label: "Move it",
-    caption:
-      "Start worker processes on other machines against the same database. Each one polls Postgres and claims jobs with FOR UPDATE SKIP LOCKED, so each job is claimed by one worker at a time. Nothing calls the workers over HTTP, and the train class does not change.",
+    caption: "",
     blocks: [
       {
         file: "Worker / Program.cs",
@@ -127,10 +124,11 @@ export default async function FourWays() {
           One train, four ways to run it
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          This train recalculates a game&apos;s leaderboard. It is adapted
-          from the game server sample, and nothing in it knows how it will be
-          run.
+          The same logic often has to run from a request, on a schedule and on other machines. Write it once.
         </p>
+        <Link href="/docs/core/trains-and-junctions" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
+          How a train is built &rarr;
+        </Link>
 
         <div
           className="mt-8 overflow-hidden rounded border border-accent/30 [&_pre]:overflow-x-auto [&_pre]:bg-bg-secondary [&_pre]:p-5 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed"

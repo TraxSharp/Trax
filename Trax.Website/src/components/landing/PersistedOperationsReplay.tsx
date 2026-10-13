@@ -1,103 +1,121 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useFitCode } from "./useFitCode";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import data from "@/data/persisted-operations-recordings.json";
-import {
-  ACTIONS,
-  act,
-  highlightFor,
-  offered,
-  outcomeOf,
-  rangeOf,
-  start,
-  type Caller,
-  type Entry,
-  type Exchange,
-  type Recording,
-  type Session,
-  type StoreState,
-} from "@/lib/persisted-operations-replay";
+import { durationOf, viewAt, type Actor, type Card, type Outcome, type Recording } from "@/lib/persisted-operations-replay";
 
 // Recorded from the PersistedOperations sample's API by Trax.Samples' scripts/recordings/persisted-operations.mjs,
-// which writes this file with its --copy-to option. Re-record when the sample's host, trains or manifest change.
+// which writes this file with its --copy-to option. Re-record when the sample's host, train or manifest change.
 const recording = data as unknown as Recording;
+const stories = Array.isArray(recording.stories) ? recording.stories : [];
 
-const GROUPS: { as: Caller; label: string; note: string }[] = [
-  { as: "client", label: "As a client", note: "No key" },
-  { as: "operator", label: "As the operator", note: "X-Api-Key: operator key" },
-  { as: "anonymous", label: "Managing without a key", note: "No key" },
-];
+const ACTOR: Record<Actor, string> = { app: "The app", stranger: "Someone else", operator: "The operator" };
 
-const STATE_LABEL: Record<StoreState, string> = {
-  empty: "Nothing uploaded",
-  uploaded: "Manifest uploaded",
-  hotfixed: "greet_v1 hot-fixed",
+const OUTCOME: Record<Outcome, { label: string; tone: string }> = {
+  waiting: { label: "sent", tone: "border-info/40 text-info" },
+  answered: { label: "answered", tone: "border-accent/40 text-accent-bright" },
+  accepted: { label: "accepted", tone: "border-accent/40 text-accent-bright" },
+  refused: { label: "refused", tone: "border-derail/40 text-derail" },
 };
 
-const labelOf = (key: string) => ACTIONS.find((a) => a.key === key)?.label ?? key;
-
 export default function PersistedOperationsReplay() {
-  const [session, setSession] = useState<Session>(() => start(recording));
-  const latest = session.log[session.log.length - 1] ?? null;
+  const [key, setKey] = useState(stories[0]?.key ?? "calls");
+  const [playing, setPlaying] = useState(false);
+  const [elapsed, setElapsed] = useState(-1);
+  const base = useRef(0);
+
+  const story = stories.find((s) => s.key === key);
+  const duration = durationOf(story);
+  const active = playing && elapsed < duration;
+  const view = useMemo(() => viewAt(story, elapsed), [story, elapsed]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setElapsed(Math.min(performance.now() - base.current, duration)), 50);
+    return () => clearInterval(timer);
+  }, [active, duration]);
+
+  const play = useCallback(() => {
+    base.current = performance.now();
+    setElapsed(0);
+    setPlaying(true);
+  }, []);
+
+  const reset = () => {
+    setPlaying(false);
+    setElapsed(-1);
+  };
+
+  // Play the first story once, the first time the demo is on screen, unless the reader prefers less motion.
+  const root = useRef<HTMLDivElement>(null);
+  const autoplayed = useRef(false);
+  useEffect(() => {
+    const node = root.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || autoplayed.current) return;
+        autoplayed.current = true;
+        observer.disconnect();
+        play();
+      },
+      { threshold: 0.2 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [play]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[250px_minmax(0,1fr)_minmax(0,1fr)]">
-      {/* Actions */}
+    <div ref={root} className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_minmax(0,300px)]">
       <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Store</span>
-          <span
-            className={`self-start rounded-full border px-2.5 py-0.5 text-xs ${
-              session.state === "empty"
-                ? "border-border text-text-muted"
-                : session.state === "hotfixed"
-                  ? "border-signal/50 text-signal"
-                  : "border-accent/50 text-accent-bright"
-            }`}
+        <Group label="Scenario">
+          <select
+            value={key}
+            disabled={active}
+            onChange={(e) => {
+              setKey(e.target.value);
+              reset();
+            }}
+            className="rounded-md border border-border bg-bg-primary px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
           >
-            {STATE_LABEL[session.state]}
-          </span>
-        </div>
-        {GROUPS.map((group) => (
-          <div key={group.as} className="flex flex-col gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-              {group.label} <span className="font-normal normal-case tracking-normal">({group.note})</span>
-            </span>
-            {ACTIONS.filter((a) => a.as === group.as).map((a) => (
-              <button
-                key={a.key}
-                disabled={!offered(recording, session, a.key)}
-                onClick={() => setSession((s) => act(recording, s, a.key))}
-                title={offered(recording, session, a.key) ? undefined : "Upload the manifest first"}
-                className="rounded-md border border-border bg-bg-tertiary px-3 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35 disabled:hover:border-border"
-              >
-                {a.label}
-              </button>
+            {stories.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.title}
+              </option>
             ))}
-          </div>
-        ))}
-        <button
-          onClick={() => setSession(start(recording))}
-          disabled={session.log.length === 0}
-          className="rounded-md border border-border px-3 py-1.5 text-left text-[13px] text-text-secondary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35"
-        >
-          Reset to an empty store
-        </button>
+          </select>
+        </Group>
+        <Group label="Actions">
+          <button
+            onClick={play}
+            disabled={active}
+            className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-40"
+          >
+            Play
+          </button>
+          <button
+            onClick={reset}
+            disabled={elapsed < 0}
+            className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35 disabled:hover:border-border"
+          >
+            Reset
+          </button>
+        </Group>
       </div>
 
-      <TrafficPanel log={session.log} />
+      <RequestsPanel cards={view.cards} />
+      <PhonePanel greeting={view.phone.greeting} calling={view.phone.calling} />
+      <StoredPanel stored={view.stored} proposed={view.proposed} />
+    </div>
+  );
+}
 
-      <StorePanel session={session} />
-
-      <div className="min-w-0 lg:col-span-3">
-        <CodePanel entry={latest} />
-      </div>
-
-      <p className="text-xs leading-relaxed text-text-muted lg:col-span-3">
-        Recorded from the PersistedOperations sample&apos;s API: every request above is the one the page sends, and every
-        response, refusal and stored document is the one the real server gave back.
-      </p>
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">{label}</span>
+      {children}
     </div>
   );
 }
@@ -110,28 +128,39 @@ function PanelTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TrafficPanel({ log }: { log: Entry[] }) {
+// One card per request: who sent it, what they sent, and what came back.
+function RequestsPanel({ cards }: { cards: Card[] }) {
   const box = useRef<HTMLDivElement>(null);
   // Scroll the panel itself, never the page.
   useLayoutEffect(() => {
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
-  }, [log.length]);
+  }, [cards.length]);
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
-      <PanelTitle>HTTP</PanelTitle>
-      <div ref={box} className="h-[520px] overflow-y-auto px-4 py-3 lg:h-[640px]">
-        {log.length === 0 && (
-          <p className="text-sm text-text-muted">
-            Pick an action. The store starts empty, so a call by id fails until the manifest is uploaded.
-          </p>
-        )}
-        {log.map((entry, i) => (
-          <div key={i} className={`border-border ${i > 0 ? "mt-4 border-t pt-4" : ""}`}>
-            <p className="mb-2 text-xs font-medium text-text-primary">{labelOf(entry.key)}</p>
-            {entry.exchanges.map((exchange, j) => (
-              <ExchangeView key={j} exchange={exchange} latest={i === log.length - 1} />
-            ))}
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary lg:h-[600px]">
+      <PanelTitle>Requests</PanelTitle>
+      <div ref={box} className="flex h-[340px] flex-col gap-2.5 overflow-y-auto p-3 lg:h-auto lg:min-h-0 lg:flex-1">
+        {cards.map((card) => (
+          <div key={card.key} className="rounded-md border border-border bg-bg-primary/60 p-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-text-secondary">{ACTOR[card.actor]}</span>
+              <span className={`ml-auto rounded-full border px-1.5 py-px text-[10px] ${OUTCOME[card.outcome].tone}`}>
+                {OUTCOME[card.outcome].label}
+              </span>
+            </div>
+            <p className="mt-1.5 font-mono text-[11px] leading-relaxed text-text-muted [overflow-wrap:anywhere]">{card.sent}</p>
+            <div className="mt-2 flex items-baseline gap-2 border-t border-border pt-1.5">
+              {card.outcome === "waiting" ? (
+                <span className="animate-pulse text-info">Waiting for the server…</span>
+              ) : (
+                <>
+                  <span className={card.outcome === "refused" ? "text-derail" : "font-medium text-accent-bright"}>
+                    &larr; {card.answer}
+                  </span>
+                  {card.ms != null && <span className="ml-auto shrink-0 text-[10px] text-text-muted">{card.ms} ms</span>}
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -139,160 +168,85 @@ function TrafficPanel({ log }: { log: Entry[] }) {
   );
 }
 
-function ExchangeView({ exchange, latest }: { exchange: Exchange; latest: boolean }) {
-  const { request } = exchange;
-  const outcome = outcomeOf(exchange);
-  const { query, ...rest } = request.body as { query?: string } & Record<string, unknown>;
+// The shipped app: it only ever sends greet_v1 and a name.
+function PhonePanel({ greeting, calling }: { greeting: string | null; calling: boolean }) {
   return (
-    <div className={`mb-3 font-mono text-[11.5px] leading-relaxed ${latest ? "" : "opacity-60"}`}>
-      <div className="text-text-secondary">
-        <span className="text-info">{request.method}</span> {request.path}
-      </div>
-      {Object.entries(request.headers).map(([name, value]) => (
-        <div key={name} className="text-text-muted">
-          {name}: <span className={name === "X-Api-Key" ? "text-signal" : ""}>{value}</span>
-        </div>
-      ))}
-      <pre className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-primary p-2 text-text-secondary [overflow-wrap:anywhere]">
-        {query != null ? `${query.trim()}\n\n` : ""}
-        {JSON.stringify(rest, null, 2)}
-      </pre>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-full border px-2 py-0.5 font-sans text-[11px] ${
-            outcome.ok ? "border-accent/40 text-accent-bright" : "border-derail/40 text-derail"
-          }`}
-        >
-          {exchange.status} {outcome.ok ? "ok" : (outcome.code ?? "refused")}
-        </span>
-        <span className="font-sans text-[11px] text-text-muted">{exchange.durationMs} ms</span>
-      </div>
-      <pre
-        className={`mt-1 whitespace-pre-wrap rounded border p-2 [overflow-wrap:anywhere] ${
-          outcome.ok ? "border-border bg-bg-primary text-text-primary" : "border-derail/30 bg-derail-muted/40 text-derail"
-        }`}
-      >
-        {JSON.stringify(exchange.response, null, 2)}
-      </pre>
-    </div>
-  );
-}
-
-function StorePanel({ session }: { session: Session }) {
-  const ids = recording.manifest.map((m) => m.id);
-  return (
-    <div className="min-w-0 self-start overflow-hidden rounded-lg border border-border bg-bg-secondary">
-      <PanelTitle>What the store holds</PanelTitle>
-      <div className="space-y-3 px-4 py-3 text-xs">
-        {ids.map((id) => {
-          const stored = session.store[id];
-          const manifest = recording.manifest.find((m) => m.id === id)?.document;
-          const fixed = stored != null && stored.document !== manifest;
-          return (
-            <div key={id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-text-primary">{id}</span>
-                {stored == null ? (
-                  <span className="text-text-muted">not stored</span>
-                ) : (
-                  <>
-                    {fixed && (
-                      <span className="rounded-full border border-signal/40 px-2 py-px text-[11px] text-signal">hot-fixed</span>
-                    )}
-                    <span className="font-mono text-[11px] text-text-muted" title={stored.shapeFingerprint}>
-                      shape {stored.shapeFingerprint.slice(0, 8)}
-                    </span>
-                  </>
-                )}
-              </div>
-              {stored != null && (
-                <pre className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-primary p-2 font-mono text-[11px] leading-relaxed text-text-secondary [overflow-wrap:anywhere]">
-                  {stored.document}
-                </pre>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// The words that switch persisted operations on and gate them, picked out in the code.
-const TOKEN =
-  /(\.(?:UsePersistedOperations|RequirePersisted|AllowOperationsMatching|GateOperations|UseDatabase|SingleNode)\b)|(\[Trax[A-Za-z]*)|("[^"]*")|(\/\/.*$)|(\b(?:public|class|protected|override|if)\b)/g;
-
-function highlight(line: string) {
-  const parts: React.ReactNode[] = [];
-  let last = 0;
-  for (const m of line.matchAll(TOKEN)) {
-    if (m.index > last) parts.push(line.slice(last, m.index));
-    const tone = m[1]
-      ? "text-signal"
-      : m[2]
-        ? "text-info"
-        : m[3]
-          ? "text-accent-bright"
-          : m[4]
-            ? "text-text-muted/70 italic"
-            : "text-text-muted";
-    parts.push(
-      <span key={m.index} className={tone}>
-        {m[0]}
-      </span>,
-    );
-    last = m.index + m[0].length;
-  }
-  parts.push(line.slice(last));
-  return parts;
-}
-
-function CodePanel({ entry }: { entry: Entry | null }) {
-  const { file, needle } = entry ? highlightFor(entry) : { file: recording.sources[0].path, needle: "" };
-  const source = recording.sources.find((s) => s.path === file) ?? recording.sources[0];
-  const lines = useMemo(() => source.code.split("\n"), [source.code]);
-  const [first, end] = useMemo(() => rangeOf(source.path, source.code), [source]);
-  const indent = useMemo(
-    () => Math.min(...lines.slice(first, end).filter((l) => l.trim()).map((l) => l.search(/\S/))),
-    [lines, first, end],
-  );
-  const at = needle ? lines.findIndex((l) => l.includes(needle)) : -1;
-  const ok = entry ? entry.exchanges.every((e) => outcomeOf(e).ok) : true;
-  const tone = ok ? "border-accent-bright bg-accent/15" : "border-derail bg-derail/15";
-
-  // Bring the highlighted line into view by scrolling the panel, never the page.
-  const pane = useRef<HTMLPreElement>(null);
-  useFitCode(pane, source.path, 11.5);
-  const marked = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const p = pane.current;
-    const m = marked.current;
-    if (!p) return;
-    p.scrollTop = m ? Math.max(0, m.offsetTop - p.clientHeight / 2 + m.clientHeight / 2) : 0;
-  }, [file, at, entry]);
-
-  return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
-      <PanelTitle>
-        Code <span className="font-mono normal-case tracking-normal text-text-secondary">{source.path.split("/").pop()}</span>
-      </PanelTitle>
-      <pre ref={pane} className="relative max-h-[360px] overflow-auto py-3 font-mono text-[11.5px] leading-[1.7] text-text-secondary">
-        {lines.slice(first, end).map((line, offset) => {
-          const i = first + offset;
-          return (
-            <div
-              key={i}
-              ref={i === at ? marked : undefined}
-              className={`flex w-max min-w-full border-l-2 pr-4 transition-colors duration-200 ${i === at ? tone : "border-transparent"}`}
+    <div className="flex min-w-0 justify-center">
+      <div className="flex h-[360px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] lg:h-[600px] border border-border bg-bg-secondary px-3 pb-3 pt-2.5">
+        <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-border" />
+        <div className="flex flex-1 flex-col rounded-[1.4rem] border border-border bg-bg-primary px-4 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Your app</p>
+          <p className="text-xs text-text-secondary">Version 1.0, already in the store</p>
+          <div className="flex flex-1 items-center justify-center">
+            <p
+              className={`text-center text-2xl font-semibold transition-colors ${greeting ? "text-text-primary" : "text-text-muted"} ${calling ? "animate-pulse" : ""}`}
             >
-              <span className="mr-4 w-8 shrink-0 select-none text-right text-text-muted/60">{i + 1}</span>
-              <span className="whitespace-pre">
-                {highlight(line.slice(indent))}
-              </span>
-            </div>
-          );
-        })}
-      </pre>
+              {greeting ?? "…"}
+            </p>
+          </div>
+          <p className="rounded-md border border-border px-2 py-1.5 font-mono text-[10.5px] text-text-muted">
+            sends greet_v1 {"{"} name: &quot;Alice&quot; {"}"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// What the server runs when the app sends greet_v1, and the edit the operator sent.
+function StoredPanel({
+  stored,
+  proposed,
+}: {
+  stored: string | null;
+  proposed: { document: string; outcome: Outcome; against: string | null } | null;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border bg-bg-secondary pb-3 lg:col-span-3">
+      <PanelTitle>Stored query: greet_v1</PanelTitle>
+      {/* Room for both documents, so the operator's edit does not push the page down. */}
+      <div className="mx-3 mt-3 flex min-h-[190px] flex-col gap-2">
+        <Document label="On the server" text={stored} />
+        {proposed && <Document label="Sent by the operator" text={proposed.document} outcome={proposed.outcome} against={proposed.against} />}
+      </div>
+    </div>
+  );
+}
+
+function Document({
+  label,
+  text,
+  outcome,
+  against,
+}: {
+  label: string;
+  text: string | null;
+  outcome?: Outcome;
+  against?: string | null;
+}) {
+  // Words that differ from the stored document are lit, so the change reads at a glance.
+  const was = new Set((against ?? "").split(/(\s+)/));
+  const words = (text ?? "nothing stored").split(/(\s+)/);
+  const tone = outcome === "refused" ? "text-derail" : outcome === "accepted" ? "text-accent-bright" : "text-signal";
+  return (
+    <div className="rounded-md border border-border bg-bg-primary/60 p-3">
+      <div className="mb-1.5 flex items-center gap-2 text-[11px] text-text-muted">
+        {label}
+        {outcome && (
+          <span className={`ml-auto rounded-full border px-1.5 py-px text-[10px] ${OUTCOME[outcome].tone}`}>{OUTCOME[outcome].label}</span>
+        )}
+      </div>
+      <p className="font-mono text-[12px] leading-relaxed text-text-secondary [overflow-wrap:anywhere]">
+        {words.map((w, i) =>
+          against !== undefined && w.trim() && !was.has(w) ? (
+            <span key={i} className={`font-semibold ${tone}`}>
+              {w}
+            </span>
+          ) : (
+            <span key={i}>{w}</span>
+          ),
+        )}
+      </p>
     </div>
   );
 }

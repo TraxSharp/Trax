@@ -26,16 +26,9 @@ export default function RunRecord() {
             Every run leaves a record
           </h2>
           <p className="mt-3 text-text-secondary">
-            API calls, background jobs and cron schedules all go through the
-            same pipeline, and each run gets a row in Postgres: when it
-            started, how it ended, which junction failed and the exception it
-            threw. Turn on parameter saving and the input and output are stored
-            with it.
-          </p>
-          <p className="mt-4 text-text-secondary">
-            When a job fails overnight, you open the run and read what
-            happened. The dashboard shows the same rows, and so does a SQL
-            query.
+            Every run is saved to Postgres: when it started, how it ended, and
+            the step that failed with its error. You can read it in the
+            dashboard or with SQL.
           </p>
           <Link
             href="/docs/effect/metadata"

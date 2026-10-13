@@ -8,8 +8,7 @@ export default function QuickStart() {
           Import an existing API
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          OpenAPI or GraphQL. The CLI reads the schema, generates typed trains
-          and junctions, wires up the hub. You fill in the business logic.
+          Start from the OpenAPI or GraphQL spec you already have instead of a blank project.
         </p>
 
         <div className="mt-8 max-w-2xl">

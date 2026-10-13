@@ -38,6 +38,13 @@ export default function MobileNav({ links, pathname, onClose }: MobileNavProps) 
         >
           GitHub
         </a>
+        <a
+          href="/llms.txt"
+          className="rounded-lg px-3 py-2 text-sm text-text-muted transition-colors hover:text-text-primary"
+        >
+          <span className="font-mono">llms.txt</span>
+          <span className="ml-2 text-xs">the docs for AI assistants</span>
+        </a>
       </div>
     </nav>
   );

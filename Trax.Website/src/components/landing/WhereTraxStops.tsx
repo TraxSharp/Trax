@@ -7,9 +7,8 @@ const limits: {
   roadmap?: { key: string; label: string };
 }[] = [
   {
-    title: "A crash restarts the train",
-    body: "If a process dies halfway through a run, the run is marked failed and a scheduled train is retried from its first junction. A decider's recorded answers are replayed rather than asked again, unless the state they were about has changed, but every junction runs again, so junctions that call other systems should be safe to repeat.",
-    roadmap: { key: "composition", label: "Resuming from a checkpoint is being built" },
+    title: "A crash reruns from the last checkpoint",
+    body: "If a process dies halfway through a run, the run is marked failed and retried from its last checkpoint, or from its first junction if it declares none. Junctions after that point run again, so ones that call other systems should be safe to repeat.",
   },
   {
     title: "Postgres in production",
@@ -39,6 +38,9 @@ export default function WhereTraxStops() {
         <p className="mt-3 max-w-2xl text-text-secondary">
           What it does not do today, so you can decide before you install it.
         </p>
+        <Link href="/docs/reference/comparison" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
+          How Trax compares with Quartz.NET and Hangfire &rarr;
+        </Link>
 
         <div className="mt-10 grid gap-x-16 gap-y-8 sm:grid-cols-2">
           {limits.map((limit) => (

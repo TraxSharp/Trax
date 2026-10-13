@@ -93,3 +93,8 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-hover);
 }
+
+/* useFitCode measures a code panel with every line unwrapped. */
+pre[data-fit="measure"] * {
+  white-space: pre !important;
+}

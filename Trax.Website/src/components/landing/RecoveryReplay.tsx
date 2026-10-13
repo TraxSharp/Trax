@@ -1,43 +1,47 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useFitCode } from "./useFitCode";
+import { alignChains, codeLineLayout, useFitCode } from "./useFitCode";
 import data from "@/data/recovery-recordings.json";
 import {
   advance,
-  badgeOf,
   begin,
   currentStep,
   keyOf,
-  labelOf,
   lineOf,
   phaseOf,
   requeue,
   takeFork,
-  type Attempt,
-  type Line,
   type Phase,
   type Playback,
   type Recording,
   type Scenario,
+  type CrashAt,
+  pastCheckpoint,
+  withCheckpointPauses,
   type Step,
+  trackOf,
+  modelCallsOf,
+  type ModelCall,
+  type LaneSlot,
+  type TrackLane,
 } from "@/lib/recovery-replay";
-import { replayNow } from "@/lib/replay-pace";
+import { REPLAY_PACE } from "@/lib/replay-pace";
 
 // Recorded from the Recovery sample by Trax.Samples' scripts/recordings, which writes this file with its
 // --copy-to option. Re-record when the sample's trains or its page change.
-const recordings = data.recordings as Recording[];
+const recordings = (data.recordings as Recording[]).map(withCheckpointPauses);
 const sources = data.sources as Record<Scenario, { file: string; code: string }>;
 
-const TOPICS = [
-  { key: "papers", label: "What the papers say about cold-weather battery wear" },
-  { key: "wiki", label: "History of the telegraph" },
-];
 const ORDERS = [
   { key: "A-1001", label: "A-1001: $89, arrived broken" },
   { key: "A-1002", label: "A-1002: $420, never arrived" },
   { key: "A-1003", label: "A-1003: $35.50, changed my mind, 2 earlier refunds" },
+];
+const CRASHES: { key: CrashAt; label: string }[] = [
+  { key: "emailing", label: "Crash once while emailing" },
+  { key: "paying", label: "Crash once while paying" },
+  { key: "none", label: "Don't crash" },
 ];
 const PHASES: { phases: Phase[]; label: string }[] = [
   { phases: ["starting", "runs"], label: "Runs" },
@@ -46,23 +50,35 @@ const PHASES: { phases: Phase[]; label: string }[] = [
 ];
 
 export default function RecoveryReplay() {
-  const [scenario, setScenario] = useState<Scenario>("RESEARCH");
-  const [topic, setTopic] = useState(TOPICS[0].key);
   const [order, setOrder] = useState(ORDERS[0].key);
-  const [crash, setCrash] = useState(true);
+  const [crash, setCrash] = useState<CrashAt>(CRASHES[0].key);
   const [playback, setPlayback] = useState<Playback | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  // Playback time is replayNow() minus this.
-  const base = useRef(0);
+  // The playback clock, in recording time, and the real time it was last moved at. It runs at the replays' slower
+  // pace, except through a backoff, which waits in real time so its countdown reads true seconds.
+  const clock = useRef(0);
+  const lastTick = useRef(0);
+  const restart = (at: number) => {
+    clock.current = at;
+    lastTick.current = performance.now();
+  };
 
   const phase = phaseOf(playback);
+  const phaseNow = useRef(phase);
+  useEffect(() => {
+    phaseNow.current = phase;
+  }, [phase]);
   const active = playback != null && !playback.waiting && !playback.finished;
   const locked = active && phase !== "done";
 
   useEffect(() => {
     if (!active) return;
+    lastTick.current = performance.now();
     const timer = setInterval(() => {
-      const now = replayNow() - base.current;
+      const real = performance.now();
+      clock.current += (real - lastTick.current) / (phaseNow.current === "breaks" ? 1 : REPLAY_PACE);
+      lastTick.current = real;
+      const now = clock.current;
       setElapsed(now);
       setPlayback((p) => (p ? advance(p, now) : p));
     }, 50);
@@ -70,21 +86,21 @@ export default function RecoveryReplay() {
   }, [active]);
 
   const run = useCallback(
-    (s: Scenario = scenario, subject: string = s === "RESEARCH" ? topic : order, withCrash: boolean = crash) => {
-      const recording = recordings.find((r) => r.key === keyOf(s, subject, withCrash));
+    (orderId: string = order, crashAt: CrashAt = crash) => {
+      const recording = recordings.find((r) => r.key === keyOf(orderId, crashAt));
       if (!recording) return;
-      base.current = replayNow();
+      restart(0);
       setElapsed(0);
       setPlayback(begin(recording));
     },
-    [scenario, topic, order, crash],
+    [order, crash],
   );
 
   const changeData = () => {
     if (!playback) return;
     const taken = takeFork(playback, recordings, "changeData");
     if (!taken) return;
-    base.current -= taken.shift;
+    clock.current += taken.shift;
     setPlayback(taken.playback);
   };
 
@@ -93,13 +109,13 @@ export default function RecoveryReplay() {
     if (phase === "breaks") {
       const taken = takeFork(playback, recordings, "askAfresh");
       if (!taken) return;
-      base.current -= taken.shift;
+      clock.current += taken.shift;
       setPlayback(taken.playback);
       return;
     }
     const asked = requeue(playback);
     if (!asked) return;
-    base.current = replayNow() - asked.at;
+    restart(asked.at);
     setElapsed(asked.at);
     setPlayback(asked.playback);
   };
@@ -122,7 +138,7 @@ export default function RecoveryReplay() {
         if (!entry.isIntersecting || autoplayed.current) return;
         autoplayed.current = true;
         observer.disconnect();
-        run("RESEARCH", TOPICS[0].key, true);
+        run(ORDERS[0].key, CRASHES[0].key);
       },
       { threshold: 0.2 },
     );
@@ -136,56 +152,27 @@ export default function RecoveryReplay() {
     return next ? Math.max(0, (next.t - elapsed) / 1000) : null;
   }, [playback, phase, elapsed]);
 
-  const shown = playback?.recording.scenario ?? scenario;
   const step = playback ? currentStep(playback) : null;
   const reached = PHASES.findIndex((p) => p.phases.includes(phase));
+  // The timeline is drawn in full before anything plays, for the run chosen.
+  const chosen = recordings.find((r) => r.key === keyOf(order, crash));
+  // A crash after the checkpoint retries from it, with no question left to ask afresh or data to change.
+  const forkable = phase === "breaks" && playback?.forkTaken === "none" && !pastCheckpoint(playback?.recording);
+  const lanes = trackOf(playback?.recording ?? chosen, playback, elapsed);
 
   return (
     <div ref={root} className="grid gap-4 lg:grid-cols-[230px_minmax(0,1fr)_minmax(0,300px)]">
       {/* Controls */}
       <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm">
-        <Group label="Scenario">
-          <div role="tablist" className="grid grid-cols-2 gap-0.5 rounded-md border border-border bg-bg-primary p-0.5">
-            {(["RESEARCH", "REFUND"] as const).map((s) => (
-              <button
-                key={s}
-                role="tab"
-                aria-selected={scenario === s}
-                disabled={locked}
-                onClick={() => choose(() => setScenario(s))}
-                className={`rounded px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-default ${
-                  scenario === s ? "bg-bg-tertiary text-text-primary" : "text-text-muted hover:text-text-secondary"
-                }`}
-              >
-                {s === "RESEARCH" ? "Research" : "Refund"}
-              </button>
-            ))}
-          </div>
-          <label className="flex flex-col gap-1.5 text-xs text-text-muted">
-            {scenario === "RESEARCH" ? "Topic" : "Order"}
-            <select
-              value={scenario === "RESEARCH" ? topic : order}
-              disabled={locked}
-              onChange={(e) => choose(() => (scenario === "RESEARCH" ? setTopic : setOrder)(e.target.value))}
-              className="rounded-md border border-border bg-bg-primary px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
-            >
-              {(scenario === "RESEARCH" ? TOPICS : ORDERS).map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2.5 text-xs text-text-secondary">
-            <input
-              type="checkbox"
-              checked={crash}
-              disabled={locked}
-              onChange={(e) => choose(() => setCrash(e.target.checked))}
-              className="h-4 w-4 accent-derail"
-            />
-            Crash once ({scenario === "RESEARCH" ? "while it writes the report" : "in the step after the approval"})
-          </label>
+        <Group label="Refund">
+          <Picker label="Order" value={order} options={ORDERS} disabled={locked} onChange={(v) => choose(() => setOrder(v))} />
+          <Picker
+            label="Crash"
+            value={crash}
+            options={CRASHES}
+            disabled={locked}
+            onChange={(v) => choose(() => setCrash(v as CrashAt))}
+          />
         </Group>
 
         <Group label="Actions">
@@ -196,29 +183,25 @@ export default function RecoveryReplay() {
           >
             Run
           </button>
-          <ActionButton onClick={changeData} disabled={phase !== "breaks" || playback?.forkTaken !== "none"}>
+          <ActionButton onClick={changeData} disabled={!forkable}>
             Change the data during the backoff
           </ActionButton>
           <div className="grid grid-cols-2 gap-2">
             <ActionButton
               onClick={askAfresh}
-              disabled={
-                !(phase === "breaks" && playback?.forkTaken === "none") && !(playback?.waiting && !playback.requeued)
-              }
+              disabled={!forkable && !(playback?.waiting && !playback.requeued)}
             >
               Ask afresh
             </ActionButton>
-            <ActionButton onClick={() => setPlayback(null)} disabled={!playback || locked}>
+            <ActionButton onClick={() => setPlayback(null)} disabled={!playback}>
               Reset
             </ActionButton>
           </div>
           <p className="min-h-[3.5em] text-xs leading-relaxed text-text-muted">
             {retryIn != null && playback?.forkTaken === "none" ? (
               <span className="text-signal">
-                In the backoff: the retry starts in {retryIn.toFixed(1)} s. Change the data or ask afresh before it does.
+                Retrying in {retryIn.toFixed(1)} s
               </span>
-            ) : playback?.waiting && !playback.requeued ? (
-              "The run is over. Ask afresh to run it again with every question put to the model."
             ) : null}
           </p>
         </Group>
@@ -246,26 +229,43 @@ export default function RecoveryReplay() {
         </Group>
       </div>
 
-      <CodePanel source={sources[shown]} step={playback?.recording.scenario === shown ? step : null} />
-      <ConsolePanel lines={playback?.lines ?? []} />
-      <TimelinePanel playback={playback} elapsed={elapsed} />
+      <CodePanel source={sources.REFUND} step={step} />
+      <ModelPanel calls={modelCallsOf(playback)} />
+      <TimelinePanel lanes={lanes} />
 
-      <p className="text-xs leading-relaxed text-text-muted lg:col-span-3">
-        Recorded from the{" "}
-        <Link href="/docs/samples/recovery" className="text-accent hover:text-accent-hover">
-          Recovery sample
-        </Link>{" "}
-        running against Postgres, and played back in your browser: every junction, answer and track arrived as a{" "}
-        <Link href="/docs/effect/junction-events" className="text-accent hover:text-accent-hover">
-          junction event
-        </Link>
-        . The model is the sample&apos;s stand-in, which answers like a typed decision model; one setting points it at{" "}
-        <Link href="/docs/sdk-reference/configuration/add-nimble-decider" className="text-accent hover:text-accent-hover">
-          Nimble
-        </Link>{" "}
-        instead.
-      </p>
     </div>
+  );
+}
+
+function Picker({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { key: string; label: string }[];
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 text-xs text-text-muted">
+      {label}
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-border bg-bg-primary px-2 py-2 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50"
+      >
+        {options.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -319,7 +319,7 @@ function highlight(line: string) {
 }
 
 function CodePanel({ source, step }: { source: { file: string; code: string }; step: Step | null }) {
-  const lines = useMemo(() => source.code.split("\n"), [source.code]);
+  const lines = useMemo(() => alignChains(source.code.split("\n")), [source.code]);
   // Only the chain, from Junctions() to Resolve(), so it stays on screen while the highlight moves. The line
   // numbers stay the file's.
   const [first, last, indent] = useMemo(() => {
@@ -330,7 +330,7 @@ function CodePanel({ source, step }: { source: { file: string; code: string }; s
     return [shown[0], shown[1], indent];
   }, [lines]);
   const pane = useRef<HTMLPreElement>(null);
-  useFitCode(pane, source.file);
+  useFitCode(pane, source.file, 12, 11);
   const highlighted = step ? lineOf(source.code, step) : -1;
   const tone =
     step?.state === "FAILED"
@@ -340,20 +340,23 @@ function CodePanel({ source, step }: { source: { file: string; code: string }; s
         : "border-accent-bright bg-accent/15";
 
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary lg:h-[600px]">
       <PanelTitle>
         Code <span className="font-mono normal-case tracking-normal text-text-secondary">{source.file}</span>
       </PanelTitle>
-      <pre ref={pane} className="flex-1 overflow-x-auto py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
+      <pre ref={pane} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-3 font-mono text-[12px] leading-[1.7] text-text-secondary">
         {lines.slice(first, last).map((line, offset) => {
           const i = first + offset;
+          const layout = codeLineLayout(line.slice(indent));
           return (
             <div
               key={i}
-              className={`flex w-max min-w-full border-l-2 pr-4 transition-colors duration-200 ${i === highlighted ? tone : "border-transparent"}`}
+              className={`flex ${layout.row} border-l-2 pr-4 transition-colors duration-200 ${i === highlighted ? tone : "border-transparent"}`}
             >
               <span className="mr-4 w-8 shrink-0 select-none text-right text-text-muted/60">{i + 1}</span>
-              <span className="whitespace-pre">{highlight(line.slice(indent))}</span>
+              <span className={layout.text} style={layout.style}>
+                {highlight(layout.body)}
+              </span>
             </div>
           );
         })}
@@ -362,31 +365,65 @@ function CodePanel({ source, step }: { source: { file: string; code: string }; s
   );
 }
 
-const LINE_TONES: Record<Line["tone"], string> = {
-  info: "text-text-secondary",
-  model: "text-info",
-  replay: "font-semibold text-signal",
-  error: "font-semibold text-derail",
-  success: "font-semibold text-accent-bright",
-  system: "text-text-muted",
+const BADGE_TONES: Record<string, string> = {
+  replay: "border-signal/40 text-signal",
+  afresh: "border-afresh/40 text-afresh",
+  model: "border-accent/40 text-accent-bright",
 };
 
-function ConsolePanel({ lines }: { lines: Line[] }) {
+// What the model was asked and what it answered, one card per question, newest at the bottom.
+function ModelPanel({ calls }: { calls: ModelCall[] }) {
   const box = useRef<HTMLDivElement>(null);
-  // Scroll the console itself, never the page.
+  // Scroll the panel itself, never the page.
   useLayoutEffect(() => {
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
-  }, [lines.length]);
+  }, [calls.length]);
+  const model = calls.find((c) => c.model)?.model;
 
   return (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
-      <PanelTitle>Console</PanelTitle>
-      <div ref={box} className="h-[340px] overflow-y-auto px-4 py-3 font-mono text-[11.5px] leading-relaxed lg:h-auto lg:flex-1 lg:basis-0">
-        {lines.length === 0 && <p className="font-sans text-sm text-text-muted">Pick a scenario and press Run.</p>}
-        {lines.map((l) => (
-          <div key={l.key} className={`whitespace-pre-wrap py-px ${LINE_TONES[l.tone]}`}>
-            <span className="mr-2 text-text-muted/70">{(l.t / 1000).toFixed(1).padStart(4, " ")}s</span>
-            {l.text}
+      <PanelTitle>
+        Model
+        {model && <span className="ml-auto font-mono font-normal normal-case tracking-normal text-text-muted/80">{model}</span>}
+      </PanelTitle>
+      <div ref={box} className="flex h-[340px] flex-col gap-2.5 overflow-y-auto p-3 lg:h-auto lg:flex-1 lg:basis-0">
+        {calls.map((call) => (
+          <div key={call.key} className="rounded-md border border-border bg-bg-primary/60 p-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-text-secondary">{call.questionKey}?</span>
+              <span className="text-[10px] text-text-muted">{call.attempt}</span>
+              {call.badge ? (
+                <span className={`ml-auto rounded-full border px-1.5 py-px text-[10px] ${BADGE_TONES[call.badge.tone] ?? "border-border text-text-muted"}`}>
+                  {call.badge.text.replace(": model not asked", "")}
+                </span>
+              ) : null}
+            </div>
+            {call.question && (
+              <div className="mt-1.5 text-text-secondary">
+                <p className="text-text-primary">{call.question.instructions}</p>
+                <ul className="mt-1 space-y-0.5 text-[11px] text-text-muted">
+                  {(call.question.options ?? [
+                    { name: "Yes", description: call.question.yes },
+                    { name: "No", description: call.question.no },
+                  ]).map((o) => (
+                    <li key={o.name}>
+                      <span className="font-mono text-text-secondary">{o.name}</span>
+                      {o.description ? `: ${o.description}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="mt-2 flex items-baseline gap-2 border-t border-border pt-1.5">
+              {call.state === "waiting" ? (
+                <span className="animate-pulse text-info">Waiting for the model…</span>
+              ) : (
+                <>
+                  <span className="font-medium text-accent-bright">&rarr; {call.answer}</span>
+                  {call.ms != null && <span className="ml-auto text-[10px] text-text-muted">{(call.ms / 1000).toFixed(1)} s</span>}
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -394,141 +431,80 @@ function ConsolePanel({ lines }: { lines: Line[] }) {
   );
 }
 
-const BADGE_TONES: Record<string, string> = {
-  replay: "text-signal border-signal/40 bg-signal/10",
-  afresh: "text-afresh border-afresh/40 bg-afresh/10",
-  model: "text-accent-bright border-accent/40 bg-accent/10",
-  failed: "text-derail border-derail/40 bg-derail/10",
+// The timeline is a fixed grid, as in the food order demo: one lane per attempt, one box per junction or question,
+// each filling as the run reaches it.
+const SLOT_TONES: Record<LaneSlot["tone"], { box: string; fill: string; text: string }> = {
+  idle: { box: "border-border", fill: "", text: "text-text-muted" },
+  saved: { box: "border-info/60", fill: "bg-info/20", text: "text-info" },
+  restored: { box: "border-border-hover border-dashed", fill: "bg-text-muted/10", text: "text-text-secondary" },
+  running: { box: "border-info/60 bg-info/5", fill: "bg-info/25", text: "text-info" },
+  done: { box: "border-accent/55", fill: "bg-accent/25", text: "text-accent-bright" },
+  failed: { box: "border-derail/60", fill: "bg-derail/25", text: "text-derail" },
+  replayed: { box: "border-signal/60", fill: "bg-signal/20", text: "text-signal" },
+  asked: { box: "border-afresh/60", fill: "bg-afresh/20", text: "text-afresh" },
 };
 
-function barTone(step: Step): string {
-  if (step.kind !== "JUNCTION") return step.replayed ? "bg-signal text-bg-primary" : "bg-accent-muted text-accent-bright ring-1 ring-accent/60";
-  if (step.state === "FAILED") return "bg-derail text-white";
-  if (step.state === "IN_PROGRESS") return "bg-info text-bg-primary animate-pulse";
-  return "bg-accent text-white";
-}
+const STATUS_TONES: Record<NonNullable<TrackLane["status"]>["tone"], string> = {
+  idle: "border-border text-text-muted",
+  running: "border-info/40 text-info",
+  done: "border-accent/40 text-accent-bright",
+  failed: "border-derail/40 text-derail",
+};
 
-function TimelinePanel({ playback, elapsed }: { playback: Playback | null; elapsed: number }) {
-  const attempts = playback?.attempts ?? [];
-  if (!playback || attempts.length === 0)
-    return (
-      <div className="rounded-lg border border-border bg-bg-secondary lg:col-span-3">
-        <PanelTitle>Timeline</PanelTitle>
-        <p className="px-4 py-4 text-sm text-text-muted">
-          Each attempt&apos;s junctions, questions and tracks appear here as they happen.
-        </p>
-      </div>
-    );
-
-  const running = attempts.some((a) => a.trainState === "IN_PROGRESS" || a.trainState === "PENDING");
-  const t0 = Math.min(...attempts.map((a) => a.start ?? 0));
-  const ends = attempts.flatMap((a) => [a.end ?? 0, ...Object.values(a.steps).map((s) => s.end ?? s.start ?? 0)]);
-  const t1 = Math.max(running ? elapsed : 0, ...ends, t0 + 1000);
-
+function TimelinePanel({ lanes }: { lanes: TrackLane[] }) {
+  const columns = lanes[0]?.slots.length ?? 0;
+  const grid = { gridTemplateColumns: `96px repeat(${columns}, minmax(0, 1fr)) 84px` };
   return (
-    <div className="rounded-lg border border-border bg-bg-secondary pb-3 lg:col-span-3">
+    <div className="min-w-0 rounded-lg border border-border bg-bg-secondary pb-3 lg:col-span-3">
       <PanelTitle>Timeline</PanelTitle>
-      {attempts.map((attempt) => (
-        <Lane key={attempt.id} playback={playback} attempt={attempt} elapsed={elapsed} t0={t0} t1={t1} />
-      ))}
+      {/* Narrow screens: each attempt top to bottom. */}
+      <div className="mx-3 mt-3 flex flex-col gap-3 md:hidden">
+        {lanes.map((lane) => (
+          <div key={lane.id} className="flex flex-col gap-1.5 rounded-md border border-border bg-bg-primary/60 p-3 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-text-secondary">{lane.label}</span>
+              {lane.status && <StatusPill status={lane.status} />}
+            </div>
+            {lane.slots.map((slot) => (
+              <SlotBox key={slot.key} slot={slot} />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="mx-3 mt-3 hidden overflow-x-auto rounded-md border border-border bg-bg-primary/60 p-3 md:block">
+        {/* Room for three attempts, the most a run shows, so a requeue does not push the page down. */}
+        <div className="flex min-h-[84px] flex-col gap-1.5 text-[11px]" style={{ minWidth: 96 + 84 + columns * 110 }}>
+          {lanes.map((lane) => (
+            <div key={lane.id} className="grid items-center gap-x-1" style={grid}>
+              <span className="truncate font-medium text-text-secondary">{lane.label}</span>
+              {lane.slots.map((slot) => (
+                <SlotBox key={slot.key} slot={slot} />
+              ))}
+              <span className="flex justify-end">{lane.status && <StatusPill status={lane.status} />}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-function Lane({
-  playback,
-  attempt,
-  elapsed,
-  t0,
-  t1,
-}: {
-  playback: Playback;
-  attempt: Attempt;
-  elapsed: number;
-  t0: number;
-  t1: number;
-}) {
-  const steps = Object.values(attempt.steps).sort((a, b) => a.position - b.position);
-  const manifestIndex = playback.attempts.filter((a) => a.origin === "manifest").findIndex((a) => a.id === attempt.id);
-  const maxRetries = playback.run?.maxRetries ?? 2;
-  const [status, statusTone] =
-    attempt.trainState === "COMPLETED"
-      ? [manifestIndex > 0 ? "Recovered" : "Completed", "text-accent-bright border-accent/40"]
-      : attempt.trainState === "FAILED"
-        ? [
-            attempt.origin === "manifest" && manifestIndex < maxRetries ? `Failed, retrying ${manifestIndex + 1}/${maxRetries}` : "Failed",
-            "text-derail border-derail/40",
-          ]
-        : ["Running", "text-info border-info/40"];
-  // A question's bar runs from the previous step's end to its answer: the time the model took.
-  const bars: { step: Step; from: number; to: number }[] = [];
-  let previousEnd = attempt.start ?? 0;
-  for (const step of steps) {
-    const started = step.start ?? previousEnd;
-    const ended = step.end ?? (step.state === "IN_PROGRESS" ? elapsed : started);
-    const from = step.kind === "JUNCTION" ? started : Math.min(previousEnd, started);
-    const to = step.kind === "JUNCTION" ? ended : started;
-    previousEnd = Math.max(previousEnd, to);
-    bars.push({ step, from, to });
-  }
+function StatusPill({ status }: { status: NonNullable<TrackLane["status"]> }) {
+  return <span className={`rounded-full border px-2 py-0.5 text-[10px] ${STATUS_TONES[status.tone]}`}>{status.text}</span>;
+}
 
-  // The lane is a row: each bar and each gap between bars grows with the time it covers, so the lanes
-  // keep one time axis, but a bar never shrinks below its name. A lane too long for the panel scrolls.
-  const segments: ({ kind: "gap"; ms: number } | { kind: "bar"; ms: number; step: Step })[] = [];
-  let cursor = t0;
-  for (const { step, from, to } of bars) {
-    if (from > cursor) segments.push({ kind: "gap", ms: from - cursor });
-    segments.push({ kind: "bar", ms: Math.max(to - from, 0), step });
-    cursor = Math.max(cursor, to);
-  }
-  if (t1 > cursor) segments.push({ kind: "gap", ms: t1 - cursor });
-
+function SlotBox({ slot }: { slot: LaneSlot }) {
+  const tone = SLOT_TONES[slot.tone];
   return (
-    <div className="mx-3 mt-3 rounded-md border border-border bg-bg-primary/60 p-3">
-      <div className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-text-muted">
-        <span>
-          <strong className="font-semibold text-text-primary">{labelOf(playback, attempt)}</strong> execution {attempt.id}
-        </span>
-        {steps.map((step) => {
-          const badge = badgeOf(playback, attempt, step);
-          return badge ? (
-            <span key={step.position} className={`rounded-full border px-2 py-0.5 ${BADGE_TONES[badge.tone]}`}>
-              {step.questionKey} = {step.answer}: {badge.text}
-            </span>
-          ) : null;
-        })}
-        {attempt.failureJunction && (
-          <span className={`rounded-full border px-2 py-0.5 ${BADGE_TONES.failed}`}>crashed in {attempt.failureJunction}</span>
-        )}
-        <span className={`ml-auto rounded-full border px-2 py-0.5 ${statusTone}`}>{status}</span>
-      </div>
-      <div className="flex h-[34px] items-center overflow-x-auto rounded border border-border bg-bg-secondary px-px">
-        {segments.map((segment, i) => {
-          if (segment.kind === "gap") return <div key={`gap-${i}`} className="min-w-0" style={{ flex: `${segment.ms} 1 0px` }} />;
-          const step = segment.step;
-          const title = [
-            step.kind === "ROUTE" ? `→ ${step.answer}` : step.kind === "JUNCTION" ? step.name : `${step.questionKey}?`,
-            step.answer != null ? `answer ${step.answer}` : "",
-            badgeOf(playback, attempt, step)?.text ?? "",
-          ]
-            .filter(Boolean)
-            .join("\n");
-          // A route is a marker between two steps and takes no width of its own.
-          if (step.kind === "ROUTE")
-            return <div key={step.position} title={title} className="z-10 -mx-[3px] h-3 w-[6px] shrink-0 rounded-full bg-border-hover" />;
-          const label = step.kind === "JUNCTION" ? step.name : `${step.questionKey}?`;
-          return (
-            <div
-              key={step.position}
-              title={title}
-              className={`flex h-6 min-w-max items-center whitespace-nowrap rounded px-1.5 text-[10.5px] font-medium ${barTone(step)}`}
-              style={{ flex: `${Math.max(segment.ms, 1)} 1 0px` }}
-            >
-              {label}
-            </div>
-          );
-        })}
-      </div>
+    <div
+      title={slot.title ?? slot.label}
+      className={`relative h-6 overflow-hidden rounded border bg-bg-secondary transition-opacity ${tone.box} ${slot.dimmed ? "opacity-40" : ""}`}
+    >
+      <div className={`absolute inset-y-0 left-0 transition-[width] duration-100 ${tone.fill}`} style={{ width: `${slot.fill * 100}%` }} />
+      <span className={`relative flex h-full items-center gap-1.5 truncate px-1.5 text-[10.5px] font-medium ${tone.text}`}>
+        <span className="truncate">{slot.label}</span>
+        {slot.note && <span className="ml-auto shrink-0 text-[9.5px] font-normal opacity-80">{slot.note}</span>}
+      </span>
     </div>
   );
 }

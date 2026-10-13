@@ -59,10 +59,11 @@ export default function LayerDiagram() {
           Take the layers you need
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          Each package adds one thing on top of the one before it. Stop at
-          whatever layer solves your problem, and add the next one when you
-          need it. The trains you already wrote do not change.
+          Each package adds one thing on top of the one before it.
         </p>
+        <Link href="/docs/reference/packages" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
+          Every package and what it adds &rarr;
+        </Link>
 
         {/* Vertical track with stops */}
         <div className="mt-12 space-y-0">

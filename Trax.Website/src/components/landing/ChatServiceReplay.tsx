@@ -70,7 +70,7 @@ export default function ChatServiceReplay() {
   return (
     <div ref={root} className="grid gap-4 lg:grid-cols-[230px_repeat(3,minmax(0,1fr))]">
       {/* Controls */}
-      <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm">
+      <div className="flex flex-col gap-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm lg:h-[480px] lg:overflow-y-auto">
         <Group label="Next line">
           {!playback ? (
             <button
@@ -94,7 +94,7 @@ export default function ChatServiceReplay() {
                 ? "Alice is creating the room and adding Bob..."
                 : playing
                   ? "Sending..."
-                  : "That is the whole conversation. Reset to take another path."}
+                  : null}
             </p>
           )}
         </Group>
@@ -103,18 +103,12 @@ export default function ChatServiceReplay() {
           <ActionButton onClick={letCharlieTry} disabled={!prologueDone || playing || playback?.refused || charlieIn}>
             Charlie tries to listen in
           </ActionButton>
-          <p className="text-xs leading-relaxed text-text-muted">
-            He has a key but is not in the room. Then a socket with no key at all tries.
-          </p>
           <ActionButton onClick={letCharlieIn} disabled={!prologueDone || playing || charlieIn}>
             Alice adds Charlie
           </ActionButton>
-          <p className="text-xs leading-relaxed text-text-muted">
-            His client loads the history so far and subscribes, and hears every line after it.
-          </p>
         </Group>
 
-        <ActionButton onClick={() => setPlayback(null)} disabled={!playback || playing}>
+        <ActionButton onClick={() => setPlayback(null)} disabled={!playback}>
           Reset
         </ActionButton>
       </div>
@@ -128,13 +122,6 @@ export default function ChatServiceReplay() {
         <CodePanel played={playback?.played ?? []} />
       </div>
 
-      <p className="text-xs leading-relaxed text-text-muted lg:col-span-4">
-        Recorded from the ChatService sample signed in as Alice, Bob and Charlie with its demo keys, and played back in
-        your browser. Every request, response and WebSocket frame above is one the host sent or received; the keys are
-        masked, as the sample&apos;s own panel masks them. The lines on offer were each sent to the room once, and
-        the conversation is the path you pick through them. Charlie&apos;s join was recorded at every point of the
-        conversation, so the history he loads is the one you picked.
-      </p>
     </div>
   );
 }
@@ -180,43 +167,51 @@ function ChatView({ user, playback }: { user: string; playback: ChatPlayback | n
   const view = playback ? viewOf(playback, user) : { room: false, subscribed: false, lines: [] as ViewLine[] };
   const box = useStickToEnd(view.lines.length);
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
-      <PanelTitle>
-        <span className="normal-case tracking-normal text-text-primary">{user}</span>
-        {view.room && <span className="font-mono normal-case tracking-normal">#{recording.roomName}</span>}
-        {view.subscribed && (
-          <span className="ml-auto rounded-full border border-accent/40 px-2 py-0.5 normal-case tracking-normal text-accent-bright">
-            subscribed
-          </span>
-        )}
-      </PanelTitle>
-      <div ref={box} className="flex h-[280px] flex-col gap-2 overflow-y-auto px-4 py-3">
-        {view.lines.length === 0 && (
-          <p className="text-sm text-text-muted">
-            {view.subscribed ? "Listening on onChatEvent." : view.room ? "Room created." : "Not in the room."}
-          </p>
-        )}
-        {view.lines.map((line) =>
-          line.kind === "system" ? (
-            <p key={line.key} className="text-center text-xs text-text-muted">
-              {line.content}
-            </p>
-          ) : (
-            <div key={line.key} className={`flex flex-col ${line.mine ? "items-end" : "items-start"}`}>
-              <span className="mb-0.5 text-[11px] text-text-muted">
-                {line.sender}
-                {line.sentAt ? ` · ${line.sentAt.slice(11, 19)} UTC` : ""}
-              </span>
-              <span
-                className={`max-w-[85%] rounded-lg px-3 py-1.5 text-sm ${
-                  line.mine ? "bg-accent text-white" : "bg-bg-tertiary text-text-primary"
-                }`}
-              >
-                {line.content}
-              </span>
+    // Each person's phone: a rounded frame with a thin bar for the notch, showing the chat app's screen.
+    <div className="flex min-w-0 justify-center">
+      <div className="flex h-[400px] w-full max-w-[300px] flex-col overflow-hidden rounded-[2rem] border border-border bg-bg-secondary px-3 pb-3 pt-2.5 lg:h-[480px]">
+        <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-border" />
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-border bg-bg-primary">
+          <div className="border-b border-border px-4 pb-2.5 pt-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-text-primary">{user}</span>
+              {view.subscribed && (
+                <span className="ml-auto rounded-full border border-accent/40 px-2 py-px text-[10px] text-accent-bright">
+                  live
+                </span>
+              )}
             </div>
-          ),
-        )}
+            <p className="mt-0.5 font-mono text-[11px] text-text-muted">{view.room ? `#${recording.roomName}` : "No room"}</p>
+          </div>
+          <div ref={box} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
+            {view.lines.length === 0 && (
+              <p className="text-sm text-text-muted">
+                {view.subscribed ? "Listening on onChatEvent." : view.room ? "Room created." : "Not in the room."}
+              </p>
+            )}
+            {view.lines.map((line) =>
+              line.kind === "system" ? (
+                <p key={line.key} className="text-center text-xs text-text-muted">
+                  {line.content}
+                </p>
+              ) : (
+                <div key={line.key} className={`flex flex-col ${line.mine ? "items-end" : "items-start"}`}>
+                  <span className="mb-0.5 text-[11px] text-text-muted">
+                    {line.sender}
+                    {line.sentAt ? ` · ${line.sentAt.slice(11, 19)} UTC` : ""}
+                  </span>
+                  <span
+                    className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
+                      line.mine ? "bg-accent text-white" : "bg-bg-tertiary text-text-primary"
+                    }`}
+                  >
+                    {line.content}
+                  </span>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

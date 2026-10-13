@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { codeToHtml } from "shiki";
 
 interface CodeBlock {
@@ -15,7 +16,7 @@ const architectures: Architecture[] = [
   {
     name: "All-in-one",
     description:
-      "API, scheduler, and job execution in a single process. The simplest setup, and a good fit for small services, internal tools, or getting started.",
+      "API, scheduler, and job execution in a single process.",
     blocks: [
       {
         label: "Program.cs",
@@ -35,7 +36,7 @@ builder.Services.AddTraxGraphQL();`,
   {
     name: "API + Scheduler",
     description:
-      "The API handles requests and queues work. A separate scheduler process picks up jobs and runs them locally. Good when you want to isolate heavy processing from your request path.",
+      "The API handles requests and queues work. A separate scheduler process picks up jobs and runs them locally.",
     blocks: [
       {
         label: "Api / Program.cs",
@@ -61,7 +62,7 @@ builder.AddTraxDashboard();`,
   {
     name: "Hub + Workers",
     description:
-      "A hub manages scheduling and the API. Stateless worker nodes poll the database for jobs and execute them independently. Add workers to take more load. Workers coordinate through PostgreSQL row locking, no message broker required.",
+      "A hub manages scheduling and the API. Stateless worker nodes poll the database for jobs and execute them independently.",
     blocks: [
       {
         label: "Hub / Program.cs",
@@ -90,7 +91,7 @@ builder.Services.AddTraxWorker(opts => {
   {
     name: "Ephemeral dispatch",
     description:
-      "The API hands work to an AWS Lambda function through the AWS SDK. There is no public endpoint to secure: IAM decides who may invoke the function. No persistent worker process, no polling. The function boots, runs one train, and exits. Good for bursty workloads where you don't want idle compute.",
+      "The API hands work to an AWS Lambda function through the AWS SDK.",
     blocks: [
       {
         label: "Api / Program.cs",
@@ -130,7 +131,7 @@ builder.Services.AddTraxWorker(opts => {
   {
     name: "Just the scheduler",
     description:
-      "No API at all. A standalone process that runs trains on a schedule: data processing, ETL, report generation, background maintenance. If you don't need an external trigger, you don't need an API.",
+      "No API at all. A standalone process that runs trains on a schedule.",
     blocks: [
       {
         label: "Program.cs",
@@ -179,10 +180,11 @@ export default async function DeploymentArchitectures() {
           Deploy it however you want
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          Same trains, different topologies. Move from a single process to
-          distributed workers to serverless dispatch by changing a few lines of
-          configuration. The train code stays the same.
+          Start in one process and split it out as load grows, without rewriting your trains.
         </p>
+        <Link href="/docs/scheduler/remote-execution" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
+          Running work on other machines &rarr;
+        </Link>
 
         <div className="mt-12 space-y-16">
           {architectures.map((arch, i) => (

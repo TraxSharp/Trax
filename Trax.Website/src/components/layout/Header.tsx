@@ -53,6 +53,13 @@ export default function Header() {
           >
             GitHub
           </a>
+          <a
+            href="/llms.txt"
+            title="The docs as plain text, indexed for AI assistants and coding agents"
+            className="ml-2 rounded-md border border-border px-2 py-1 font-mono text-xs text-text-muted transition-colors hover:border-accent/50 hover:text-accent"
+          >
+            llms.txt
+          </a>
         </nav>
 
         <button

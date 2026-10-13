@@ -1,160 +1,129 @@
-// Plays back the PersistedOperations sample's recorded requests (src/data/persisted-operations-recordings.json,
-// written by Trax.Samples' scripts/recordings/persisted-operations.mjs). The recording holds, for each state the
-// store can be in, the exact request each action sends to the sample's API, the status and response it got, and,
-// after an upload, what the store held. Taking an action replays its recorded exchange and moves the store the way
-// the real one moved, so the actions can be taken in any order the page allows.
+// Plays back the PersistedOperations sample's recorded stories (src/data/persisted-operations-recordings.json,
+// written by Trax.Samples' scripts/recordings/persisted-operations.mjs). Each story is the requests the sample's
+// client sent its API, in order, with the status, the response and the time each took, and after an upload what
+// the store held for greet_v1. Everything the page shows at a moment is worked out from the steps that had been
+// sent or answered by then.
 
-export type StoreState = "empty" | "uploaded" | "hotfixed";
+export type Actor = "app" | "stranger" | "operator";
 
-export interface Exchange {
-  request: { method: string; path: string; headers: Record<string, string>; body: Record<string, unknown> };
+export interface Step {
+  actor: Actor;
+  kind: "call" | "inline" | "upload";
+  /** The document an upload sent. */
+  document?: string;
+  request: { headers: Record<string, string>; body: Record<string, unknown> };
   status: number;
-  response: Record<string, unknown>;
-  durationMs: number;
+  response: { data?: Record<string, unknown> | null; errors?: { message: string; extensions?: Record<string, unknown> }[] };
+  ms: number;
+  /** What the store held for greet_v1 after an upload. */
+  storedAfter?: string | null;
 }
 
-export interface StoredOperation {
-  id: string;
-  operationName: string;
-  document: string;
-  shapeFingerprint: string;
-  isActive: boolean;
-  description: string | null;
-}
-
-export type Store = Record<string, StoredOperation | null>;
-
-export interface RecordedAction {
-  exchanges: Exchange[];
-  /** What the store held after an upload that went through. */
-  storeAfter?: Store;
+export interface Story {
+  key: string;
+  title: string;
+  storedBefore: string | null;
+  steps: Step[];
 }
 
 export interface Recording {
   sources: { path: string; code: string }[];
   manifest: { id: string; document: string }[];
-  states: Record<StoreState, { store: Store; actions: Record<string, RecordedAction> }>;
-  /** The state an upload leaves the store in when it goes through. */
-  leadsTo: Record<string, StoreState>;
+  stories: Story[];
 }
 
-export type Caller = "client" | "operator" | "anonymous";
+/** When the first request goes out, the time between one answer and the next request, and the least a request shows as in flight. */
+export const PACE = { first: 400, between: 1400, minInFlight: 450 };
 
-export interface ActionInfo {
+export type Outcome = "waiting" | "answered" | "refused" | "accepted";
+
+/** One request as the page shows it: who sent what, and what came back. */
+export interface Card {
   key: string;
-  label: string;
-  /** Who sends it: a client with no key, the operator key, or someone with no key trying to manage. */
-  as: Caller;
+  actor: Actor;
+  /** What was sent, in a line. */
+  sent: string;
+  outcome: Outcome;
+  /** The answer in a line: the greeting, the refusal or "Accepted". */
+  answer?: string;
+  ms?: number;
 }
 
-/** The actions the page offers, in the order it lists them. */
-export const ACTIONS: ActionInfo[] = [
-  { key: "callGreet:Alice", label: "Call greet_v1 by id (Alice)", as: "client" },
-  { key: "callGreet:Eve", label: "Call greet_v1 by id (Eve)", as: "client" },
-  { key: "callLookup:user-42", label: "Call lookupUser_v1 by id (user-42)", as: "client" },
-  { key: "callLookup:user-7", label: "Call lookupUser_v1 by id (user-7)", as: "client" },
-  { key: "inline", label: "Send an inline document", as: "client" },
-  { key: "devInline", label: "Send an inline document named dev_greet", as: "client" },
-  { key: "upload", label: "Upload the manifest", as: "operator" },
-  { key: "hotfix", label: "Hot-fix greet_v1 (fields reordered)", as: "operator" },
-  { key: "shapeEdit", label: "Edit greet_v1 so its shape changes", as: "operator" },
-  { key: "uploadAnonymous", label: "Upload greet_v1 without a key", as: "anonymous" },
-];
-
-export interface Entry {
-  key: string;
-  /** The state the store was in when the action was taken. */
-  from: StoreState;
-  exchanges: Exchange[];
+export interface View {
+  cards: Card[];
+  /** The greeting the app shows, from its latest answered call, and whether a call is in flight. */
+  phone: { greeting: string | null; calling: boolean };
+  /** What the store holds for greet_v1 now, and the edit the operator has sent but not had answered, or last sent. */
+  stored: string | null;
+  /** `against` is what the store held when the edit was sent, so the change stays lit after it is taken. */
+  proposed: { document: string; outcome: Outcome; against: string | null } | null;
+  finished: boolean;
 }
 
-export interface Session {
-  state: StoreState;
-  store: Store;
-  log: Entry[];
-}
-
-export function start(recording: Recording): Session {
-  return { state: "empty", store: recording.states.empty.store, log: [] };
-}
-
-/** Whether the action was recorded in the session's state; the page offers only those. */
-export function offered(recording: Recording, session: Session, key: string): boolean {
-  return key in recording.states[session.state].actions;
-}
-
-/** Replays one action: logs its recorded exchanges and moves the store as the real one moved. */
-export function act(recording: Recording, session: Session, key: string): Session {
-  const recorded = recording.states[session.state].actions[key];
-  if (!recorded) throw new Error(`No recording of ${key} in state ${session.state}`);
-  const moved = recorded.storeAfter != null && recording.leadsTo[key] != null;
-  return {
-    state: moved ? recording.leadsTo[key] : session.state,
-    store: recorded.storeAfter ?? session.store,
-    log: [...session.log, { key, from: session.state, exchanges: recorded.exchanges }],
-  };
-}
-
-export interface Outcome {
-  ok: boolean;
-  /** The error code the server answered with, if it refused. */
-  code?: string;
-  message?: string;
-}
-
-/** Whether the server did what was asked, and if not, the code and message it refused with. */
-export function outcomeOf(exchange: Exchange): Outcome {
-  const errors = exchange.response.errors as { message?: string; extensions?: { code?: string } }[] | undefined;
-  if (errors?.length) return { ok: false, code: errors[0].extensions?.code, message: errors[0].message };
-  const upload = (exchange.response.data as { operations?: { persistedOperations?: { uploadPersistedOperation?: { success: boolean; errors: { code: string; message: string }[] } } } } | undefined)
-    ?.operations?.persistedOperations?.uploadPersistedOperation;
-  if (upload && !upload.success) return { ok: false, code: upload.errors[0]?.code, message: upload.errors[0]?.message };
-  return { ok: exchange.status < 400 };
-}
-
-export const FILES = {
-  program: "Trax.Samples.PersistedOperations.Api/Program.cs",
-  greet: "Trax.Samples.PersistedOperations/Trains/Greeting/Greet/GreetTrain.cs",
-  lookup: "Trax.Samples.PersistedOperations/Trains/Users/LookupUser/LookupUserTrain.cs",
-} as const;
-
-/** The file and the line (by its text) the code panel shows for an action and how it went. */
-export function highlightFor(entry: Entry): { file: string; needle: string } {
-  const ok = entry.exchanges.every((e) => outcomeOf(e).ok);
-  const key = entry.key;
-  if (key.startsWith("callGreet") || key.startsWith("callLookup")) {
-    if (!ok) return { file: FILES.program, needle: "opts.UseDatabase(connectionString)" };
-    return key.startsWith("callGreet")
-      ? { file: FILES.greet, needle: "Chain<ComposeGreetingJunction>()" }
-      : { file: FILES.lookup, needle: "Chain<FetchUserJunction>()" };
+/** When each step is sent and answered, in milliseconds from the start of the story. */
+export function scheduleOf(story: Story): { sendAt: number; answerAt: number }[] {
+  const out: { sendAt: number; answerAt: number }[] = [];
+  let at = PACE.first;
+  for (const step of story.steps) {
+    const answerAt = at + Math.max(step.ms, PACE.minInFlight);
+    out.push({ sendAt: at, answerAt });
+    at = answerAt + PACE.between;
   }
-  switch (key) {
-    case "inline":
-      return { file: FILES.program, needle: ".RequirePersisted(true)" };
-    case "devInline":
-      return { file: FILES.program, needle: "opts.AllowOperationsMatching" };
-    case "uploadAnonymous":
-      return { file: FILES.program, needle: ".GateOperations(roles: DemoKeys.OperatorRole)" };
-    case "shapeEdit":
-      return { file: FILES.program, needle: ".UsePersistedOperations(opts =>" };
-    default:
-      return { file: FILES.program, needle: "opts.UseDatabase(connectionString)" };
-  }
+  return out;
 }
 
-/**
- * The lines of a file the code panel shows, 0-based and end exclusive: Program.cs's GraphQL setup, or a train
- * from its attributes down.
- */
-export function rangeOf(path: string, code: string): [number, number] {
-  const lines = code.split("\n");
-  if (path === FILES.program) {
-    const first = lines.findIndex((l) => l.startsWith("builder.Services.AddTraxGraphQL("));
-    const last = lines.findIndex((l, i) => i > first && l.trim() === ");");
-    if (first >= 0 && last > first) return [first, last + 1];
-  }
-  const first = lines.findIndex((l) => /^\s*(\[Trax|public class)/.test(l));
-  let end = lines.length;
-  while (end > 0 && lines[end - 1].trim() === "") end--;
-  return [Math.max(first, 0), end];
+export const durationOf = (story: Story | undefined) => (story ? (scheduleOf(story).at(-1)?.answerAt ?? 0) + 200 : 0);
+
+export function viewAt(story: Story | undefined, now: number): View {
+  const empty: View = { cards: [], phone: { greeting: null, calling: false }, stored: story?.storedBefore ?? null, proposed: null, finished: false };
+  if (!story) return empty;
+  const schedule = scheduleOf(story);
+  const view = empty;
+  story.steps.forEach((step, i) => {
+    const { sendAt, answerAt } = schedule[i];
+    if (now < sendAt) return;
+    const answered = now >= answerAt;
+    const result = answered ? outcomeOf(step) : null;
+    view.cards.push({
+      key: `${story.key}:${i}`,
+      actor: step.actor,
+      sent: sentText(step),
+      outcome: result?.outcome ?? "waiting",
+      answer: result?.text,
+      ms: answered ? step.ms : undefined,
+    });
+    if (step.actor === "app") {
+      view.phone.calling = !answered;
+      if (result?.outcome === "answered") view.phone.greeting = result.text;
+    }
+    if (step.kind === "upload" && step.document) {
+      view.proposed = { document: step.document, outcome: result?.outcome ?? "waiting", against: view.stored };
+      if (answered && step.storedAfter !== undefined) view.stored = step.storedAfter;
+    }
+  });
+  view.finished = now >= durationOf(story);
+  return view;
 }
+
+/** What came back for a step, in a line. */
+export function outcomeOf(step: Step): { outcome: Outcome; text: string } {
+  const error = step.response.errors?.[0]?.message;
+  if (step.kind === "upload") {
+    const result = (step.response.data as UploadData | undefined)?.operations?.persistedOperations?.uploadPersistedOperation;
+    if (result?.success) return { outcome: "accepted", text: "Accepted" };
+    return { outcome: "refused", text: result?.errors?.[0]?.message ?? error ?? `HTTP ${step.status}` };
+  }
+  if (error) return { outcome: "refused", text: error };
+  const greeting = (step.response.data as GreetData | undefined)?.discover?.greeting?.greet?.greeting;
+  return greeting != null ? { outcome: "answered", text: greeting } : { outcome: "refused", text: `HTTP ${step.status}` };
+}
+
+function sentText(step: Step): string {
+  const body = step.request.body as { id?: string; variables?: unknown; query?: string };
+  if (step.kind === "call") return `${body.id} ${JSON.stringify(body.variables)}`;
+  if (step.kind === "inline") return body.query ?? "";
+  return `greet_v1 = ${step.document ?? ""}`;
+}
+
+type UploadData = { operations?: { persistedOperations?: { uploadPersistedOperation?: { success: boolean; errors?: { message: string }[] } } } };
+type GreetData = { discover?: { greeting?: { greet?: { greeting?: string } } } };

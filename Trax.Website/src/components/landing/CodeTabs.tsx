@@ -33,10 +33,12 @@ export default function CodeTabs({ tabs }: { tabs: CodeTab[] }) {
       </div>
 
       <div role="tabpanel" className="pt-6">
-        <p className="max-w-2xl text-sm leading-relaxed text-text-secondary">
-          {tab.caption}
-        </p>
-        <div className="mt-4 space-y-3">
+        {tab.caption && (
+          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-text-secondary">
+            {tab.caption}
+          </p>
+        )}
+        <div className="space-y-3">
           {tab.blocks.map((block) => (
             <div
               key={block.file}

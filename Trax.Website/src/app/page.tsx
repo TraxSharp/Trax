@@ -1,5 +1,4 @@
 import Hero from "@/components/landing/Hero";
-import StepShape from "@/components/landing/StepShape";
 import FourWays from "@/components/landing/FourWays";
 import RunRecord from "@/components/landing/RunRecord";
 import Decisions from "@/components/landing/Decisions";
@@ -14,7 +13,6 @@ export default function Home() {
   return (
     <main>
       <Hero />
-      <StepShape />
       <SeeItRunning />
       <FourWays />
       <RunRecord />

@@ -6,16 +6,16 @@ import CodeTabs, { type CodeTab } from "./CodeTabs";
 // (core/decisions.md, effect/decisions.md), so it matches what the docs show.
 
 const switchCode = `protected override Task<Either<Exception, Resolution>> Junctions() =>
-    Chain<ParseTicket>()
-        .Switch<Ticket, TicketTrack>(tracks => tracks
-            .When(TicketTrack.Refund, t => t.Chain<IssueRefund>().Chain<NotifyCustomer>(),
-                  requireConfidence: 0.7)
-            .When(TicketTrack.Escalate, t => t.Chain<OpenIncident>())
-            .When(TicketTrack.SelfServe, t => t.Chain<SendHelpArticle>())
-            .RequireConfidence(0.5)
-            .Otherwise(t => t.Chain<QueueForHuman>()))
-        .Chain<CloseTicket>()
-        .Resolve();`;
+     Chain<ParseTicket>()
+    .Switch<Ticket, TicketTrack>(tracks => tracks
+        .When(TicketTrack.Refund, t => t.Chain<IssueRefund>().Chain<NotifyCustomer>(),
+              requireConfidence: 0.7)
+        .When(TicketTrack.Escalate, t => t.Chain<OpenIncident>())
+        .When(TicketTrack.SelfServe, t => t.Chain<SendHelpArticle>())
+        .RequireConfidence(0.5)
+        .Otherwise(t => t.Chain<QueueForHuman>()))
+    .Chain<CloseTicket>()
+    .Resolve();`;
 
 interface RawTab {
   label: string;
@@ -27,31 +27,31 @@ const rawTabs: RawTab[] = [
   {
     label: "Ask once, route twice",
     caption:
-      "Decide asks several questions about one state in a single call, and later steps route on the answers without asking again. Gate routes on a yes or no probability, Switch on a choice and Scale on a level. A track is a chain like any other, so it can ask and route again.",
+      "Decide asks several questions about one state in a single call, and later steps route on the answers without asking again. Gate routes on a yes or no probability, Switch on a choice and Scale on a level.",
     blocks: [
       {
         file: "ModeratePostTrain.cs",
         lang: "csharp",
-        code: `AddServices(decider)
-    .Decide<Post>(q => q.YesNo<ContainsThreat>().Choice<Verdict>().Score<Severity>())
-    .Gate<ContainsThreat>(gate => gate
-        .Yes(t => t.Chain<TakeDownPost>(), atLeast: 0.7)
-        .No(t => t.Switch<Verdict>(verdict => verdict
-            .When(Verdict.Allow, a => a.Chain<PublishPost>())
-            .When(Verdict.Remove, r => r.Chain<TakeDownPost>())
-            .When(Verdict.Review, r => r.Scale<Severity>(scale => scale
-                .AtLeast(Severity.Low, s => s.Chain<QueueForModerator>())
-                .AtLeast(Severity.High, s => s.Chain<PageTrustAndSafety>())))),
-            below: 0.3)
-        .Unsure(t => t.Chain<PageTrustAndSafety>()))
-    .Resolve();`,
+        code: ` AddServices(decider)
+.Decide<Post>(q => q.YesNo<ContainsThreat>().Choice<Verdict>().Score<Severity>())
+.Gate<ContainsThreat>(gate => gate
+    .Yes(t => t.Chain<TakeDownPost>(), atLeast: 0.7)
+    .No(t => t.Switch<Verdict>(verdict => verdict
+        .When(Verdict.Allow, a => a.Chain<PublishPost>())
+        .When(Verdict.Remove, r => r.Chain<TakeDownPost>())
+        .When(Verdict.Review, r => r.Scale<Severity>(scale => scale
+            .AtLeast(Severity.Low, s => s.Chain<QueueForModerator>())
+            .AtLeast(Severity.High, s => s.Chain<PageTrustAndSafety>())))),
+        below: 0.3)
+    .Unsure(t => t.Chain<PageTrustAndSafety>()))
+.Resolve();`,
       },
     ],
   },
   {
     label: "The question",
     caption:
-      "A model judges by the question's words and each option's description, not the type's name. The words go on the type, once. A decision with no question at all is refused when the chain is read.",
+      "A model judges by the question's words and each option's description.",
     blocks: [
       {
         file: "TicketTrack.cs",
@@ -74,7 +74,7 @@ public enum TicketTrack
   {
     label: "Deciders",
     caption:
-      "IDecider answers the questions; the train does not know what is behind it. AddNimbleDecider points at a Nimble server you run (Nimble is Bespoke Labs' open-weights decision model), and AddSystemOneDecider at another server that accepts the same request format, such as Jev. RuleDecider is policy written as code, and CascadingDecider asks a fast decider first and a slower one only about what the first was unsure of.",
+      "A decider answers the questions. Use a model server such as Nimble, rules written in code, or a fast decider that hands what it is unsure of to a slower one.",
     blocks: [
       {
         file: "Program.cs",
@@ -108,7 +108,7 @@ public enum TicketTrack
   {
     label: "Shadows",
     caption:
-      "A shadow is asked every question the live decider is asked, alongside it. Its answers are recorded with whether each agreed, and never acted on: a shadow that fails, disagrees or is slow changes nothing. Each shadow gets its own copy of the state and its own DI scope. Use one to move from a rule table to a model, or from one model version to the next, on real traffic.",
+      "A shadow is asked every question the live decider is asked, alongside it. Its answers are recorded with whether each agreed,.",
     blocks: [
       {
         file: "ModeratePostTrain.cs",
@@ -166,16 +166,7 @@ export default async function Decisions() {
           <code className="font-mono text-[0.95em]">Scale</code> names every
           track the train can take. At run time a decider answers a typed
           question about a value in Memory, and the train takes the matching
-          track. Every track is part of the declaration, so the host checks all
-          of them at startup, before the first run.
-        </p>
-        <p className="mt-3 max-w-2xl text-text-secondary">
-          An answer below its track&apos;s confidence bar takes the{" "}
-          <code className="font-mono text-[0.95em]">Otherwise</code> track,
-          and a switch with no{" "}
-          <code className="font-mono text-[0.95em]">Otherwise</code> fails the
-          run instead of guessing. An answer that does not fit the question is
-          never acted on.
+          track.
         </p>
 
         <div
@@ -193,21 +184,10 @@ export default async function Decisions() {
               Every decision is recorded, and a requeue replays it
             </h3>
             <p>
-              With <code className="font-mono text-[0.95em]">AddDecisionRecording</code>,
-              each question a run asks is written to{" "}
-              <code className="font-mono text-[0.95em]">trax.decision</code>{" "}
-              before the train acts on it: the question, the answer, the model
-              and decider that gave it, each shadow&apos;s answer, every track
-              taken, and why an answer was refused. A run that crashes after
-              deciding still shows what it decided.
-            </p>
-            <p>
-              Re-queueing a run from the dashboard or with the{" "}
-              <code className="font-mono text-[0.95em]">requeueExecution</code>{" "}
-              mutation takes the same tracks as the original, from the recorded
-              answers, instead of asking the model again. An answer is replayed
-              only into a state that hashes the same as the one it was given
-              about; otherwise the decider is asked afresh, and the row says why.
+              Each answer is saved before the train acts on it. Run it again
+              and it takes the same tracks from the saved answers, without
+              asking the model. If the data changed since, the model is asked
+              again.
             </p>
             <div className="flex flex-col gap-2 pt-2 text-sm font-medium">
               <Link
