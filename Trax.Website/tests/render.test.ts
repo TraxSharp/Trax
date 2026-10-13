@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compileMDX } from "next-mdx-remote/rsc";
 import { renderToStaticMarkup } from "react-dom/server";
-import { docsMdxOptions } from "../src/lib/mdx-options.ts";
+import { docsMdxOptions, loadSiteRef } from "../src/lib/mdx-options.ts";
 
 async function render(markdown: string): Promise<string> {
   const { content } = await compileMDX({ source: markdown, options: docsMdxOptions });
@@ -85,4 +85,46 @@ test("no live script, frame, meta, handler or javascript: URL survives", async (
   assert.match(html, /<code>x<\/code> text/);
   // An allowed tag keeps its id and loses everything else.
   assert.match(html, /<a id="ok">anchor<\/a>/);
+});
+
+test("a from= fence gets a caption linking its source on GitHub, and still renders its code", async () => {
+  const html = await render(
+    "```csharp from=Trax.Samples/samples/X/Program.cs#docs-host\nvar x = new List<int>();\n```\n"
+  );
+  const ref = loadSiteRef();
+  const caption = html.match(/<p class="code-source[^"]*">.*?<\/p>/)?.[0] ?? "";
+  assert.ok(caption.includes(
+    `<a href="https://github.com/TraxSharp/Trax/blob/${ref}/Trax.Samples/samples/X/Program.cs">Trax.Samples/samples/X/Program.cs</a>`
+  ), html);
+  assert.ok(caption.includes("(region docs-host)"), caption);
+  // The caption comes right before the highlighted block.
+  assert.match(html, /<\/p><figure data-rehype-pretty-code-figure="">/);
+  assert.match(html, /data-language="csharp"/);
+  assert.match(html, /List<\/span><span[^>]*>&lt;/);
+  assert.doesNotMatch(html, /data-from/);
+});
+
+test("a from= fence without a region and in another language gets a caption too", async () => {
+  const html = await render("```json from=Trax.Samples/samples/X/appsettings.json\n{ \"a\": 1 }\n```\n");
+  assert.match(html, /<p class="code-source[^"]*">From <a href="[^"]+\/Trax.Samples\/samples\/X\/appsettings.json">/);
+  assert.doesNotMatch(html, /region/);
+  assert.match(html, /data-language="json"/);
+});
+
+test("compile, compile=app and fragment are ignored", async () => {
+  for (const meta of ["compile", "compile=app,host", "fragment"]) {
+    const html = await render(`\`\`\`csharp ${meta}\nvar y = 2;\n\`\`\`\n`);
+    assert.doesNotMatch(html, /code-source/, meta);
+    assert.ok(!html.includes(meta.split("=")[0] + "="), html);
+    assert.match(html, /data-language="csharp"/, meta);
+    assert.match(html, /<span style="[^"]+">var<\/span>/, meta);
+  }
+});
+
+test("raw HTML cannot forge a from= caption", async () => {
+  const html = await render('<code data-from="https://evil.example/x">x</code>\n\n<pre><code data-from="/x">y</code></pre>\n');
+  // The tags are not on the allow-list, so they render as the text written.
+  assert.doesNotMatch(html, /code-source/);
+  assert.doesNotMatch(html, /href="https:\/\/evil/);
+  assert.ok(html.includes("&lt;code data-from="), html);
 });

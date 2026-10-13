@@ -45,6 +45,10 @@ done
 # the version of the latest release into those, so the site always tells a reader to
 # install what exists; the version written in Trax.Docs is only where it was last edited.
 # TRAX_DOCS_VERSION overrides it; outside production nothing is stamped.
+#
+# The same version picks the git ref the site links repository files at (Source links,
+# from= captions, ADR citations): v<version> when stamped, else main.
+site_ref="main"
 if [ -n "${TRAX_DOCS_VERSION:-}" ] || [ "${VERCEL_ENV:-}" = "production" ]; then
   version="${TRAX_DOCS_VERSION:-}"
   if [ -z "$version" ]; then
@@ -61,7 +65,10 @@ if [ -n "${TRAX_DOCS_VERSION:-}" ] || [ "${VERCEL_ENV:-}" = "production" ]; then
   find "$CACHE_DIR" -name "*.md" -print0 | xargs -0 perl -pi -e \
     's/(<PackageReference\s+Include="Trax\.[^"]+"\s+Version=")[^"]+"/${1}'"$version"'"/g'
   echo "Stamped Trax package versions with $version"
+  site_ref="v$version"
 fi
+printf '{"ref": "%s"}\n' "$site_ref" > "$CACHE_DIR/site-ref.json"
+echo "Linking repository files at $site_ref"
 
 # ADR file names, so a citation such as `Trax.Docs/adr/0026` in a page links to the
 # exact file on GitHub. ADRs themselves are not published as pages.

@@ -7,7 +7,8 @@ import type { Options as Schema } from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import rehypePrettyCode from "rehype-pretty-code";
 import type { MDXRemoteProps } from "next-mdx-remote/rsc";
-import type { Html, Paragraph, Parent, Root, Text } from "mdast";
+import type { Code, Html, Paragraph, Parent, Root, Text } from "mdast";
+import type { Element, ElementContent, Root as HastRoot } from "hast";
 import { visit, SKIP } from "unist-util-visit";
 
 // This module is imported by the render tests under plain Node, so it imports
@@ -17,6 +18,21 @@ const GITHUB_REPO = "https://github.com/TraxSharp/Trax";
 
 /** Folder name to the ADR file paths in it, written by scripts/adr-index.mjs. */
 export type AdrIndex = Record<string, string[]>;
+
+/**
+ * The git ref the site links repository files at: `v<version>` when the sync
+ * stamped a release, else `main`. Written by scripts/sync-docs.sh.
+ */
+export function loadSiteRef(): string {
+  try {
+    const { ref } = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), ".docs-cache", "site-ref.json"), "utf-8")
+    );
+    return typeof ref === "string" && ref ? ref : "main";
+  } catch {
+    return "main";
+  }
+}
 
 function loadAdrIndex(): AdrIndex {
   try {
@@ -44,10 +60,11 @@ export function adrUrl(
   repo: string,
   dir: string,
   number: string,
-  index: AdrIndex
+  index: AdrIndex,
+  ref = "main"
 ): string {
   const file = index[repo]?.find((p) => p.startsWith(`${dir}/${number}-`));
-  return `${GITHUB_REPO}/blob/main/${repo}/${file ?? `${dir}/README.md`}`;
+  return `${GITHUB_REPO}/blob/${ref}/${repo}/${file ?? `${dir}/README.md`}`;
 }
 
 interface MdNode {
@@ -57,20 +74,21 @@ interface MdNode {
   children?: MdNode[];
 }
 
-function citationLink(
-  match: RegExpExecArray,
-  child: MdNode,
-  index: AdrIndex
-): MdNode {
+interface LinkContext {
+  index: AdrIndex;
+  ref: string;
+}
+
+function citationLink(match: RegExpExecArray, child: MdNode, ctx: LinkContext): MdNode {
   return {
     type: "link",
-    url: adrUrl(match[1], match[2], match[3], index),
+    url: adrUrl(match[1], match[2], match[3], ctx.index, ctx.ref),
     children: [child],
   };
 }
 
 /** Splits a text node around its ADR citations, linking each one. */
-function linkText(node: MdNode, index: AdrIndex): MdNode[] {
+function linkText(node: MdNode, index: LinkContext): MdNode[] {
   const value = node.value ?? "";
   const out: MdNode[] = [];
   let last = 0;
@@ -89,7 +107,7 @@ function linkText(node: MdNode, index: AdrIndex): MdNode[] {
 
 const NO_LINKS_INSIDE = new Set(["link", "linkReference", "definition", "code"]);
 
-function linkCitations(node: MdNode, index: AdrIndex): void {
+function linkCitations(node: MdNode, index: LinkContext): void {
   if (!node.children || NO_LINKS_INSIDE.has(node.type)) return;
   node.children = node.children.flatMap((child) => {
     if (child.type === "text") return linkText(child, index);
@@ -103,13 +121,83 @@ function linkCitations(node: MdNode, index: AdrIndex): void {
 }
 
 /**
- * Turns ADR citations in prose (`Trax.Docs/adr/0026`) into GitHub links. The
- * ADRs are not published on the site, so the citation would otherwise lead
- * nowhere.
+ * Turns ADR citations in prose (`Trax.Docs/adr/0026`) into GitHub links at the
+ * site's ref. The ADRs are not published on the site, so the citation would
+ * otherwise lead nowhere.
  */
-export function remarkAdrLinks(options: { index?: AdrIndex } = {}) {
-  const index = options.index ?? loadAdrIndex();
-  return (tree: MdNode) => linkCitations(tree, index);
+export function remarkAdrLinks(options: { index?: AdrIndex; ref?: string } = {}) {
+  const ctx = { index: options.index ?? loadAdrIndex(), ref: options.ref ?? loadSiteRef() };
+  return (tree: MdNode) => linkCitations(tree, ctx);
+}
+
+/** The `from=` word of a fence's info string: `csharp from=Trax.Samples/x/Program.cs#docs-host`. */
+const FROM_WORD = /(?:^|\s)from=(\S+)/;
+
+/** Property carrying a fence's `from=` target from the markdown tree to rehypeCodeSource. */
+const FROM_PROPERTY = "dataFrom";
+
+/**
+ * Reads `from=<path>[#region]` from a fence's meta and keeps it on the code
+ * element, where rehypeCodeSource turns it into a caption. Every other meta
+ * word (compile, compile=app, fragment) is left alone and never rendered.
+ */
+export function remarkCodeSource() {
+  return (tree: Root) => {
+    visit(tree, "code", (node: Code) => {
+      const match = FROM_WORD.exec(node.meta ?? "");
+      if (!match) return;
+      const data = (node.data ??= {});
+      data.hProperties = { ...data.hProperties, [FROM_PROPERTY]: match[1] };
+    });
+  };
+}
+
+/**
+ * Puts a caption above each `from=` fence: the source path, linked to the
+ * file on GitHub at the site's ref. It runs after rehype-sanitize, so the
+ * caption's classes are kept, and before highlighting, which wraps the
+ * `pre` in a figure of its own.
+ */
+export function rehypeCodeSource(options: { ref?: string } = {}) {
+  const ref = options.ref ?? loadSiteRef();
+  return (tree: HastRoot) => {
+    visit(tree, "element", (node: Element, index, parent) => {
+      if (node.tagName !== "pre" || !parent || index === undefined) return;
+      const code = node.children.find(
+        (c): c is Element => c.type === "element" && c.tagName === "code"
+      );
+      const from = code?.properties?.[FROM_PROPERTY];
+      if (!code || typeof from !== "string") return;
+      delete code.properties[FROM_PROPERTY];
+      const [file, region] = from.split("#", 2);
+      const children: ElementContent[] = [
+        {
+          type: "element",
+          tagName: "a",
+          properties: { href: `${GITHUB_REPO}/blob/${ref}/${file.replace(/^\/+/, "")}` },
+          children: [{ type: "text", value: file }],
+        },
+      ];
+      if (region) {
+        children.push({
+          type: "element",
+          tagName: "span",
+          properties: { className: ["text-text-muted"] },
+          children: [{ type: "text", value: ` (region ${region})` }],
+        });
+      }
+      const caption: Element = {
+        type: "element",
+        tagName: "p",
+        properties: {
+          className: ["code-source", "mb-1", "font-mono", "text-xs", "text-text-muted"],
+        },
+        children: [{ type: "text", value: "From " }, ...children],
+      };
+      parent.children.splice(index, 0, caption);
+      return index + 2;
+    });
+  };
 }
 
 /**
@@ -206,6 +294,12 @@ export const docsSanitizeSchema: Schema = {
     "td",
     "section",
   ],
+  // remarkCodeSource's `from=` target. Raw HTML cannot reach a `code` element
+  // (it is not in RAW_HTML_TAGS), so only a fence's info string sets it.
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...(defaultSchema.attributes?.code ?? []), FROM_PROPERTY],
+  },
   clobber: [],
   clobberPrefix: "",
   strip: ["script", "style"],
@@ -219,15 +313,17 @@ export const docsSanitizeSchema: Schema = {
  * inline styles and ids are kept. A fence with no language is highlighted as
  * `text`, so every block carries a `data-language` and the `code` component
  * can tell it apart from inline code. ADR citations in prose become links to
- * the cited file on GitHub (remarkAdrLinks).
+ * the cited file on GitHub (remarkAdrLinks), and a fence with `from=<path>`
+ * gets a caption linking its source file (remarkCodeSource, rehypeCodeSource).
  */
 export const docsMdxOptions: MDXRemoteProps["options"] = {
   mdxOptions: {
     format: "md",
-    remarkPlugins: [remarkGfm, remarkLiteralHtml, remarkAdrLinks],
+    remarkPlugins: [remarkGfm, remarkLiteralHtml, remarkAdrLinks, remarkCodeSource],
     rehypePlugins: [
       rehypeRaw,
       [rehypeSanitize, docsSanitizeSchema],
+      rehypeCodeSource,
       rehypeSlug,
       [
         rehypePrettyCode,

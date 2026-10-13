@@ -60,7 +60,7 @@ test("ADR citations link to the file on GitHub, or to the repo's ADR index", asy
     {
       ...runtime,
       format: "md",
-      remarkPlugins: [[remarkAdrLinks, { index }]],
+      remarkPlugins: [[remarkAdrLinks, { index, ref: "main" }]],
     } as Parameters<typeof evaluate>[1]
   );
   const html = renderToStaticMarkup(createElement(Content));
