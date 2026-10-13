@@ -15,7 +15,6 @@ core/building-chains.md
 core/decisions.md
 core/ide-extensions.md
 core/memory.md
-core/trains-and-junctions.md
 cross-cutting/cancellation-tokens.md
 cross-cutting/common-patterns.md
 cross-cutting/di-registration.md
