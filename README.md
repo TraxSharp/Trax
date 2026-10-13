@@ -5,7 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
-Business logic you can call, schedule, or serve as an API, with every run recorded in your Postgres.
+A headless web framework for .NET. Build a more robust frontend: whatever goes wrong, the backend gets it right, and
+every run is recorded in your Postgres.
 [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) ·
 [Samples](Trax.Samples) · [NuGet](https://www.nuget.org/profiles/Theauxm)
 
@@ -21,7 +22,8 @@ Every Trax package releases at one version, so install the same version of each 
 ## Example
 
 A train is a chain of junctions. Run it directly, queue it, schedule it, or let Trax.Api serve it as GraphQL; each
-run writes a row to `trax.metadata`.
+run writes a row to `trax.metadata`. A state machine marked `[TraxMachine]` is served as its own typed API, applied on
+the server, and a machine state can run a train.
 
 ```csharp
 public class RecalculateLeaderboardTrain
@@ -46,7 +48,7 @@ folder depends only on folders above it in this table; take the layers you need,
 | [Trax.Effect](Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine |
 | [Trax.Mediator](Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
 | [Trax.Scheduler](Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
-| [Trax.Api](Trax.Api) | GraphQL generated from your trains, with authentication, audit and typed clients |
+| [Trax.Api](Trax.Api) | GraphQL generated from your trains and machines: a mutation per machine event, authorization checked on the server, persisted operations, audit and live subscriptions |
 | [Trax.Dashboard](Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
 | [Trax.Cli](Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
 | [Trax.Samples](Trax.Samples) | **Start here.** Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
