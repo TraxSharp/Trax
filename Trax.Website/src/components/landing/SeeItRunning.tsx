@@ -46,7 +46,7 @@ const samples: Sample[] = [
   {
     tab: "State machine",
     title: "A side effect that runs exactly once",
-    body: "Two state machines served over four generic GraphQL mutations. The server holds the state and runs the charge bound to the Pay edge itself, so pressing Pay twice leaves one charge with the payment provider.",
+    body: "Two state machines, each served as its own typed GraphQL operations. The server holds the state and runs the charge bound to the Pay edge itself, so pressing Pay twice leaves one charge with the payment provider.",
     shows: ["Machines authored with the fluent API", "The server decides what a valid draft is", "An effect bound to an edge, run exactly once"],
     href: "/docs/samples/state-machine",
     source: {
@@ -56,7 +56,7 @@ const samples: Sample[] = [
         { path: "Trax.Samples.StateMachine.Api/Program.cs", label: "the host: AddStateMachines in one line" },
         { path: "Trax.Samples.StateMachine/Payments.cs", label: "the simulated payment provider" },
         { path: "Trax.Samples.StateMachine/SnapshotPrincipal.cs", label: "maps the caller to the draft's user key" },
-        { path: "web/src/traxTransport.ts", label: "the page's client for the four mutations" },
+        { path: "web/src/traxTransport.ts", label: "the page's client for the machines' operations" },
       ],
       docs: "/docs/samples/state-machine",
       run: [

@@ -1,13 +1,15 @@
 // Plays back the StateMachine sample's recordings (src/data/state-machine-recordings.json, written by Trax.Samples'
 // scripts/recordings/state-machine.mjs). Each machine was recorded as a graph: a node is a draft's state and
 // context, an edge is one of the page's buttons pressed there, with the request the page sent and the server's
-// whole response. Pressing a button follows its edge, so every answer shown is one the server gave at that point.
+// whole response. The page drives each machine through its own operations under the GraphQL `machines` root:
+// `start` opens a draft (the server mints its id), and each event is a mutation of its own. Pressing a button
+// follows its edge, so every answer shown is one the server gave at that point.
 
 export type MachineName = "turnstile" | "checkout";
 
+/** A draft as the page shows it: the context without the fields its state does not hold. */
 export interface Snapshot {
   machine: string;
-  version: number;
   state: string;
   context: Record<string, unknown>;
 }
@@ -24,11 +26,21 @@ export interface Charge {
   chargedAt: string;
 }
 
+/** One request: the machine operation's name, the GraphQL document the page sent, and the server's answer. */
 export interface Exchange {
-  op: "saveSnapshot" | "advanceSnapshot" | "loadSnapshot" | "sendSnapshot";
-  variables: { i: Record<string, unknown> };
+  operation: string;
+  query: string;
   response: unknown;
   ms: number;
+}
+
+/** What a machine operation answers. */
+export interface Answer {
+  id: string | null;
+  revision: number | null;
+  state: string | null;
+  context: Record<string, unknown> | null;
+  problem: Problem | null;
 }
 
 export interface Edge {
@@ -39,10 +51,10 @@ export interface Edge {
 
 export interface Action {
   id: string;
-  kind: "advance" | "send" | "save";
-  trigger?: string;
+  kind: "event";
+  trigger: string;
   input?: Record<string, unknown>;
-  preset?: "add-item" | "penny-total";
+  preset?: "add-item";
 }
 
 export interface MachineRecording {
@@ -63,6 +75,12 @@ export interface Recordings {
   machines: Record<MachineName, MachineRecording>;
 }
 
+/**
+ * What an exchange was: the draft starting, an event that moved it (or left it where it was), an event that ran
+ * the charge, a second Pay that returned the first one's receipt, or a refusal.
+ */
+export type Kind = "start" | "move" | "charge" | "replay" | "refused";
+
 /** One request the page sent and what came back, as the traffic panel lists it. */
 export interface LogEntry {
   key: number;
@@ -74,8 +92,9 @@ export interface LogEntry {
   from: string | null;
   /** Charges the payment provider took because of this request. */
   charges: Charge[];
-  /** A send that returned the receipt the draft already had: the charge did not run again. */
+  /** An event that returned the receipt the draft already had: the charge did not run again. */
   replayed: boolean;
+  kind: Kind;
 }
 
 export interface Session {
@@ -85,25 +104,36 @@ export interface Session {
   charges: Charge[];
 }
 
-/** What the server's answer to an exchange says. */
-export function outcome(exchange: Exchange): { snapshot: Snapshot | null; problem: Problem | null } {
-  const data = (exchange.response as { data: { dispatch: { stateMachine: Record<string, { output: { snapshot: string | null; problem: Problem | null } }> } } })
-    .data.dispatch.stateMachine[exchange.op];
-  return { snapshot: data.output.snapshot ? (JSON.parse(data.output.snapshot) as Snapshot) : null, problem: data.output.problem };
+/** The machine an exchange went to and the operation's answer, read from the server's response. */
+export function answerOf(exchange: Exchange): { machine: string; answer: Answer } {
+  const machines = (exchange.response as { data: { machines: Record<string, Record<string, Answer>> } }).data.machines;
+  const [machine, operations] = Object.entries(machines)[0];
+  return { machine, answer: operations[exchange.operation] };
 }
 
-/** The page opening a machine: it loads the stored draft, finds none, and saves a first one. */
+/** What the server's answer to an exchange says, with the context as the page shows it. */
+export function outcome(exchange: Exchange): { snapshot: Snapshot | null; problem: Problem | null } {
+  const { machine, answer } = answerOf(exchange);
+  if (answer.problem || !answer.state) return { snapshot: null, problem: answer.problem };
+  const context = Object.fromEntries(Object.entries(answer.context ?? {}).filter(([, v]) => v !== null && v !== undefined));
+  return { snapshot: { machine, state: answer.state, context }, problem: null };
+}
+
+/** The page opening a machine: it starts a draft, whose id the server mints. */
 export function open(recordings: Recordings, machine: MachineName): Session {
   const m = recordings.machines[machine];
-  const log = m.opening.map((exchange, i) => ({
-    key: i,
-    action: null,
-    exchange,
-    ...outcome(exchange),
-    from: null,
-    charges: [],
-    replayed: false,
-  }));
+  const log = m.opening.map(
+    (exchange, i): LogEntry => ({
+      key: i,
+      action: null,
+      exchange,
+      ...outcome(exchange),
+      from: null,
+      charges: [],
+      replayed: false,
+      kind: "start",
+    }),
+  );
   return { machine, node: m.start, log, charges: [] };
 }
 
@@ -112,7 +142,7 @@ export function snapshotOf(recordings: Recordings, session: Session): Snapshot {
 }
 
 /**
- * Whether a button can be pressed here, and if not, why. The page offers every trigger from every state; the
+ * Whether a button can be pressed here, and if not, why. The page offers every event from every state; the
  * recording covers all of them, except an item past the second and a payment past the second, which it stops at.
  */
 export function availability(recordings: Recordings, session: Session, actionId: string): { ok: boolean; reason?: string } {
@@ -120,7 +150,6 @@ export function availability(recordings: Recordings, session: Session, actionId:
   const snapshot = snapshotOf(recordings, session);
   const items = (snapshot.context.items as unknown[] | undefined) ?? [];
   if (actionId === "add-item" && items.length >= recordings.maxItems) return { ok: false, reason: `The recording stops at ${recordings.maxItems} items.` };
-  if (actionId === "save-penny-total" && items.length === 0) return { ok: false, reason: "Add an item first." };
   if (actionId === "pay") return { ok: false, reason: `The recording stops at ${recordings.maxPaid} payments. Start over to pay again.` };
   return { ok: false, reason: "Not recorded." };
 }
@@ -132,6 +161,8 @@ export function press(recordings: Recordings, session: Session, actionId: string
   const before = snapshotOf(recordings, session);
   const result = outcome(edge.exchange);
   const receipt = (s: Snapshot | null) => (s?.context.receipt as string | null | undefined) ?? null;
+  const replayed = !result.problem && edge.charges.length === 0 && !!receipt(before) && receipt(before) === receipt(result.snapshot);
+  const kind: Kind = result.problem ? "refused" : edge.charges.length > 0 ? "charge" : replayed ? "replay" : "move";
   const entry: LogEntry = {
     key: session.log.length,
     action: actionId,
@@ -139,14 +170,15 @@ export function press(recordings: Recordings, session: Session, actionId: string
     ...result,
     from: before.state,
     charges: edge.charges,
-    replayed: edge.exchange.op === "sendSnapshot" && !!receipt(before) && receipt(before) === receipt(result.snapshot),
+    replayed,
+    kind,
   };
   return { ...session, node: edge.to, log: [...session.log, entry], charges: [...edge.charges, ...session.charges] };
 }
 
-/** The GraphQL document an exchange sent, from the page's own transport. */
-export function queryOf(recordings: Recordings, exchange: Exchange): string {
-  return recordings.queries[exchange.op];
+/** An operation's event, as Machines.cs names it: `addItem` is `AddItem`. */
+export function triggerOf(operation: string): string {
+  return operation[0].toUpperCase() + operation.slice(1);
 }
 
 /** The lines (0-based, end exclusive) of a machine's Configure method in Machines.cs. */
@@ -159,9 +191,10 @@ export function configureRange(code: string, machine: MachineName): [number, num
 }
 
 /**
- * The line of Machines.cs that decided the last request, so the code panel can point at it: the move's `.On(...)`
- * when it moved, its `.When(...)` when the guard refused it, the target state's `.Holds(...)` when a rule refused
- * it, `.RunsOnce<ICharge>` for the charge, and the state's `m.In(...)` when there is no such move. -1 when none.
+ * The line of Machines.cs that decided the last request, so the code panel can point at it: `.StartsAt(...)` for
+ * the start, the move's `.On(...)` when it moved, its `.When(...)` when the guard refused it, the target state's
+ * `.Requires(...)` when a rule refused it, `.RunsOnce<ICharge>` for the charge, and the state's `m.In(...)` when
+ * there is no such move. -1 when none.
  */
 export function lineOf(code: string, machine: MachineName, entry: LogEntry | undefined): number {
   if (!entry) return -1;
@@ -175,26 +208,21 @@ export function lineOf(code: string, machine: MachineName, entry: LogEntry | und
     return [at, next < 0 ? end : next];
   };
   const find = (needle: string, [from, to]: [number, number]) => lines.findIndex((l, i) => i >= from && i < to && l.includes(needle));
-  const i = entry.exchange.variables.i;
   const refusal = entry.problem?.code;
 
-  if (entry.exchange.op === "loadSnapshot") return -1;
-  if (entry.exchange.op === "saveSnapshot") {
-    const state = entry.snapshot?.state ?? (JSON.parse(String(i.snapshot)) as Snapshot).state;
-    return find(".Holds(", block(state));
-  }
+  if (entry.kind === "start") return find(".StartsAt(", [start, end]);
+  if (entry.kind === "charge" || entry.kind === "replay") return find(".RunsOnce<", [start, end]);
   const from = block(entry.from);
-  if (entry.exchange.op === "sendSnapshot") {
-    if (refusal === "no-transition") return find(`m.In(${enumName}State.${entry.from})`, from);
-    return find(".RunsOnce<", [start, end]);
-  }
-  const trigger = String(i.trigger);
-  const on = find(`.On(${enumName}Trigger.${trigger})`, from);
+  const on = find(`.On(${enumName}Trigger.${triggerOf(entry.exchange.operation)})`, from);
   if (refusal === "no-transition" || on < 0) return find(`m.In(${enumName}State.${entry.from})`, from);
-  if (refusal === "guard-failed") return find(".When(", [on, from[1]]);
+  const nextOn = find(".On(", [on + 1, from[1]]);
+  const move: [number, number] = [on, nextOn < 0 ? from[1] : nextOn];
+  if (refusal === "guard-failed") return find(".When(", move);
   if (refusal === "invalid-context") {
     const to = /^(\w+):/.exec(entry.problem?.message ?? "")?.[1];
-    return find(".Holds(", block(to ?? null));
+    const rule = find(".Requires(", block(to ?? entry.from));
+    return rule >= 0 ? rule : find(`m.In(${enumName}State.${entry.from})`, from);
   }
+  if (refusal) return find(`m.In(${enumName}State.${entry.from})`, from);
   return on;
 }

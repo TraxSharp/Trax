@@ -4,13 +4,14 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFitCode } from "./useFitCode";
 import data from "@/data/state-machine-recordings.json";
 import {
+  answerOf,
   availability,
   configureRange,
   lineOf,
   open,
   press,
-  queryOf,
   snapshotOf,
+  type Action,
   type LogEntry,
   type MachineName,
   type Recordings,
@@ -52,18 +53,32 @@ const MACHINES: Record<MachineName, { label: string; example: string; states: st
   },
 };
 
-const BUTTONS: Record<string, { label: string; caption: string; trigger?: string; probe?: boolean }> = {
-  "coin-quarter": { label: "Coin { coin: quarter }", caption: "insert a quarter", trigger: "Coin" },
-  "coin-dollar": { label: "Coin { coin: dollar }", caption: "insert a dollar", trigger: "Coin" },
-  "coin-penny": { label: "Coin { coin: penny }", caption: "insert a penny", trigger: "Coin", probe: true },
-  push: { label: "Push", caption: "walk through", trigger: "Push" },
-  next: { label: "Next", caption: "go to review", trigger: "Next" },
-  back: { label: "Back", caption: "back to the cart", trigger: "Back" },
-  pay: { label: "Pay", caption: "sendSnapshot: runs the charge", trigger: "Pay" },
-  reset: { label: "Reset", caption: "start over", trigger: "Reset" },
-  "add-item": { label: "Add an item", caption: "saveSnapshot at $9.99 each" },
-  "save-penny-total": { label: "Save with a $0.01 total", caption: "saveSnapshot, wrong total", probe: true },
+// What each recorded button means in the example. The buttons themselves, and what they send, come from the recording.
+const CAPTIONS: Record<string, { caption: string; probe?: boolean }> = {
+  "coin-quarter": { caption: "insert a quarter" },
+  "coin-dollar": { caption: "insert a dollar" },
+  "coin-penny": { caption: "insert a penny", probe: true },
+  push: { caption: "walk through" },
+  "add-item": { caption: "add to the cart, priced by the server" },
+  next: { caption: "go to review" },
+  back: { caption: "back to the cart" },
+  pay: { caption: "runs the charge" },
+  reset: { caption: "start over" },
 };
+
+const literal = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
+
+/** A button's label: the event's own mutation, with the input it sends from where the draft is now. */
+function labelOf(action: Action, session: Session): string {
+  const operation = action.trigger[0].toLowerCase() + action.trigger.slice(1);
+  if (action.preset === "add-item") {
+    const query = recordings.machines[session.machine].edges[session.node]?.[action.id]?.exchange.query ?? "";
+    const item = /item: "([^"]*)"/.exec(query)?.[1];
+    return item ? `${operation} { item: ${item} }` : operation;
+  }
+  const input = Object.entries(action.input ?? {});
+  return input.length ? `${operation} { ${input.map(([k, v]) => `${k}: ${literal(v)}`).join(", ")} }` : operation;
+}
 
 export default function StateMachineReplay() {
   const [sessions, setSessions] = useState<Record<MachineName, Session>>(() => ({
@@ -103,12 +118,12 @@ export default function StateMachineReplay() {
           <p className="text-xs leading-relaxed text-text-muted">{view.example}</p>
         </Group>
 
-        <Group label="Fire a trigger">
+        <Group label="Send an event">
           <div className="flex flex-col gap-1.5">
             {recordings.actions[machine].map((action) => {
-              const button = BUTTONS[action.id];
+              const button = CAPTIONS[action.id] ?? { caption: action.trigger };
               const can = availability(recordings, session, action.id);
-              const arrow = view.moves.some((m) => m.trigger === button.trigger && m.from === snapshot.state);
+              const arrow = view.moves.some((m) => m.trigger === action.trigger && m.from === snapshot.state);
               return (
                 <button
                   key={action.id}
@@ -122,7 +137,7 @@ export default function StateMachineReplay() {
                   }`}
                 >
                   <span className={`block font-mono text-xs ${button.probe ? "text-derail" : "text-text-primary"}`}>
-                    {button.label}
+                    {labelOf(action, session)}
                   </span>
                   <span className="block text-[11px] text-text-muted">{button.caption}</span>
                 </button>
@@ -130,12 +145,12 @@ export default function StateMachineReplay() {
             })}
           </div>
           <p className="text-xs leading-relaxed text-text-muted">
-            Every trigger can be sent from any state. The green ones have an arrow out of {snapshot.state}; the
-            others show what the server says when there isn&apos;t one.
+            Each event is its own mutation, and every one can be sent from any state. The green ones have an
+            arrow out of {snapshot.state}; the others show what the server says when there isn&apos;t one.
           </p>
           <button
             onClick={startOver}
-            disabled={session.log.length <= 2}
+            disabled={!session.log.some((entry) => entry.action)}
             className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-accent/60 disabled:cursor-default disabled:opacity-35"
           >
             Start over
@@ -224,7 +239,12 @@ function CodePanel({ machine, entry }: { machine: MachineName; entry?: LogEntry 
   const pane = useRef<HTMLPreElement>(null);
   useFitCode(pane, machine);
   const highlighted = lineOf(code, machine, entry);
-  const tone = entry?.problem ? "border-derail bg-derail/15" : entry?.exchange.op === "sendSnapshot" ? "border-signal bg-signal/15" : "border-accent-bright bg-accent/15";
+  const tone =
+    entry?.kind === "refused"
+      ? "border-derail bg-derail/15"
+      : entry?.kind === "charge" || entry?.kind === "replay"
+        ? "border-signal bg-signal/15"
+        : "border-accent-bright bg-accent/15";
 
   return (
     <Panel title="Code" extra={<span className="font-mono normal-case tracking-normal text-text-secondary">{file}</span>} className="flex-1">
@@ -243,7 +263,7 @@ function CodePanel({ machine, entry }: { machine: MachineName; entry?: LogEntry 
   );
 }
 
-const TOKEN = /(\.(?:On|When|Because|Holds|RunsOnce|Reduce|To|Committed|MigrateFrom|StartsAt)\b)|(m\.In)|("[^"]*")/g;
+const TOKEN = /(\.(?:On|When|Because|Requires|RunsOnce|Reduce|To|Committed|MigrateFrom|StartsAt)\b)|(m\.In)|("[^"]*")/g;
 
 function highlight(line: string) {
   const parts: React.ReactNode[] = [];
@@ -286,11 +306,11 @@ function Verdict({ entry, state, context }: { entry?: LogEntry; state: string; c
               {entry.from !== state ? `Moved ${entry.from} to ${state}` : `Stored in ${state}`}
             </p>
             <p className="mt-1 text-text-secondary">
-              {entry.exchange.op === "sendSnapshot"
+              {entry.kind === "charge"
                 ? "The page sent only the draft's id. The server ran the charge itself, exactly once."
-                : entry.exchange.op === "saveSnapshot"
-                  ? "The server checked the page's draft against the state's rule before keeping it."
-                  : "The server ran the move on its own stored copy of the draft."}
+                : entry.action === "add-item"
+                  ? "The page sent only the item. The server added it and priced the cart itself."
+                  : "The page sent only the event and the draft's id. The server ran the move on its own stored copy."}
             </p>
           </div>
         )}
@@ -355,8 +375,7 @@ function Traffic({ log }: { log: LogEntry[] }) {
           <details key={entry.key} open={entry.key === log.length - 1} className="rounded border border-border bg-bg-primary/60">
             <summary className="flex cursor-pointer flex-wrap items-baseline gap-x-3 px-3 py-1.5 font-mono text-xs">
               <span className="text-text-primary">
-                POST {entry.exchange.op} · {String(entry.exchange.variables.i.machine)}
-                {entry.exchange.variables.i.trigger ? ` · ${String(entry.exchange.variables.i.trigger)}` : ""}
+                POST {machineOf(entry)}.{entry.exchange.operation}
               </span>
               <span className={entry.problem ? "text-derail" : "text-accent-bright"}>
                 {entry.problem ? `Refused · ${entry.problem.code}` : `200 OK · ${entry.snapshot?.state ?? ""}`}
@@ -364,7 +383,7 @@ function Traffic({ log }: { log: LogEntry[] }) {
               <span className="text-text-muted">{entry.exchange.ms} ms</span>
             </summary>
             <div className="grid gap-2 border-t border-border p-3 lg:grid-cols-2">
-              <Json title="Request" value={{ query: queryOfEntry(entry), variables: entry.exchange.variables }} />
+              <Json title="Request" value={{ query: entry.exchange.query }} />
               <Json title="Response" value={entry.exchange.response} />
             </div>
           </details>
@@ -374,7 +393,7 @@ function Traffic({ log }: { log: LogEntry[] }) {
   );
 }
 
-const queryOfEntry = (entry: LogEntry) => queryOf(recordings, entry.exchange);
+const machineOf = (entry: LogEntry) => answerOf(entry.exchange).machine;
 
 function Json({ title, value }: { title: string; value: unknown }) {
   return (
