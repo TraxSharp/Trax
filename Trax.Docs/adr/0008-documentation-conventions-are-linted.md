@@ -60,10 +60,10 @@ these lints the moment they touch a page.
   the exempt-folder list.
 - `NoEmDashesTests` and `NoJekyllSyntaxTests` pin the house style and the migration away
   from Jekyll link syntax.
-- `CompiledSnippetsTests` compiles every fence marked `csharp compile` against the published
-  Trax packages pinned in `tests/Trax.Docs.Snippets.Tests`, warnings included, and names the
-  page and line of each diagnostic. `DocsPackageVersionsTests` holds a Trax version written on a
-  page to the pin the snippets compiled against, and refuses a floating `1.*`.
+- `CompiledSnippetsTests` compiles every fence marked `csharp compile` against the Trax projects
+  of the same checkout, which `tests/Trax.Docs.Snippets.Tests` references, warnings included, and
+  names the page and line of each diagnostic. `DocsPackageVersionsTests` holds every Trax version
+  written on a page to one exact version, and refuses a floating `1.*`.
 - `PackagesPageTests` holds `reference/packages.md` to the list of published packages the test
   owns, in both directions.
 - `PageDescriptionTests` requires a one-sentence `description` in every published page's front
@@ -77,15 +77,18 @@ these lints the moment they touch a page.
   database migrations guide, or recorded in its `NotInTheGuide` set with the reason it changes
   nothing an upgrader sees.
 
-Not covered: compiling is opt in, and most fences are not marked. The public API guard checks
+Not covered: most fences are marked `fragment` or not yet marked, and neither compiles; which
+marker a fence must carry is [0050](./0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md). The public API guard checks
 that a name appears on some published page, not that it appears on the right one, nor that what the
-page says about it is true; a member whose name is a common word (`Id`, `Name`) always passes. An unmarked example that no
+page says about it is true; a member whose name is a common word (`Id`, `Name`) always passes. A `fragment` or unmarked example that no
 longer compiles, a described parameter that was renamed, or a compiled example whose prose says
 something the code does not do, passes every one of these. A compiled snippet proves the API
-exists in the pinned release, not that the example behaves as the page says.
+exists in the checkout, not that the example behaves as the page says.
 
 ## Changelog
 
+- **2026-10-13**: Snippets compile against the projects of the same checkout, not pinned packages,
+  and every C# fence now carries a marker, recorded in 0050.
 - **2026-10-09**: Added the public API and migration guards. A milestone shipped a testing type
   whose documented checks were three of eight, five migrations missing from the upgrade guide, and
   public properties no page named, and no test noticed.
