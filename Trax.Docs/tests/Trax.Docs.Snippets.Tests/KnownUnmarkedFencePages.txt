@@ -15,9 +15,6 @@ core/building-chains.md
 core/decisions.md
 core/ide-extensions.md
 core/memory.md
-cross-cutting/cancellation-tokens.md
-cross-cutting/common-patterns.md
-cross-cutting/functional-programming.md
 dashboard.md
 effect.md
 effect/architecture.md

@@ -119,7 +119,7 @@ is asserting the failure the train reports.
 
 A junction reads its token from its `CancellationToken` property, which the train sets before
 `Run`. To test that a junction stops when it is cancelled, see
-[Make a junction cancellable](/docs/cross-cutting/cancellation-tokens).
+[Make a junction cancellable](/docs/cross-cutting/make-a-junction-cancellable#5-test-it).
 
 ## SDK Reference
 

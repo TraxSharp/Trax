@@ -256,7 +256,7 @@ back with; `JsonSerializer`'s defaults write PascalCase, which the dispatcher do
 It stamps `ConfirmedAt` unless the entry is deferred. An entry with a null `ConfirmedAt` is staged:
 the dispatcher never claims it, and once it is older than `StaleStagedEntryTimeout` the
 ManifestManager's sweep cancels it. An entry built this way skips everything
-`ITrainExecutionService.QueueAsync` does: authorization, the `OnQueue` hook and `QueueSubjectKey`.
+`ITrainExecutionService.QueueAsync` does: authorization, the `OnQueue` hook and `QueueSubjectKey` (see [Enqueue hooks](/docs/mediator/enqueue-hooks)).
 `CreateWorkQueue` has three more fields for tests that need them:
 
 | Field | Default | Effect |
