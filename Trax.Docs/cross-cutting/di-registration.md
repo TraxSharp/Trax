@@ -68,9 +68,6 @@ services.AddTransientTraxRoute<ICreateOrderTrain, CreateOrderTrain>();
 services.AddScopedTraxJunction<IValidateOrderJunction, ValidateOrderJunction>();
 ```
 
-## See also
+## SDK Reference
 
-- [Route and Junction Registration](/docs/sdk-reference/trains-and-junctions/route-registration): the signatures
-- [Chain](/docs/sdk-reference/train-methods/chain): `Chain` and `IChain`
-- [Inject](/docs/sdk-reference/attributes/inject)
-- [AddMediator](/docs/sdk-reference/configuration/add-mediator)
+> [Route and Junction Registration](/docs/sdk-reference/trains-and-junctions/route-registration) | [Chain / IChain](/docs/sdk-reference/train-methods/chain) | [Inject](/docs/sdk-reference/attributes/inject) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)
