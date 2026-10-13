@@ -1,12 +1,17 @@
 ---
-title: HotChocolate 16 Migration
-description: "What a host must change when Trax.Api.GraphQL moves to HotChocolate 16: package versions, renamed types, schema services, scalar renames and projection."
+title: Upgrade to HotChocolate 16
+description: "What a host changes when Trax.Api.GraphQL moves to HotChocolate 16: packages, renamed types, schema services, scalars, projection and auth attributes."
 type: how-to
 area: upgrading
-nav_order: 3
+parent: Upgrading
+nav_order: 6
 ---
 
-# HotChocolate 16 Migration
+# Upgrade to HotChocolate 16
+
+Applies from: Trax.Api 1.41.0, which moved from HotChocolate 15.1 to 16.6. The refusal of
+HotChocolate's own authorization attributes, [below](#replace-hotchocolates-authorize-and-allowanonymous),
+applies from Trax.Api 1.43.0.
 
 `Trax.Api.GraphQL` and its companion packages now build against HotChocolate 16. Most of the
 surface is unchanged, but HotChocolate 16 renamed several types, split its service containers,
@@ -45,7 +50,7 @@ registration now fails to activate with `Unable to resolve service for type ...`
 
 Bridge each dependency across:
 
-```csharp
+```csharp fragment
 builder.AddApplicationService<IAuthenticationSchemeProvider>();
 builder.AddHttpRequestInterceptor<MyInterceptor>();
 ```
@@ -58,7 +63,7 @@ the component itself is wired conditionally.
 its own and those win. A component that resolves services dynamically takes
 `TraxApplicationServices` instead, which Trax registers and bridges for you.
 
-```csharp
+```csharp fragment
 public sealed class MySocketInterceptor(TraxApplicationServices applicationServices)
     : DefaultSocketSessionInterceptor
 {
@@ -73,7 +78,7 @@ yourself.
 
 `IOperationMessagePayload.As<T>()` is gone. Read the raw JSON instead:
 
-```csharp
+```csharp fragment
 var payload = init.Payload?.Deserialize<MyPayload>(
     new JsonSerializerOptions(JsonSerializerDefaults.Web)
 );
@@ -123,6 +128,26 @@ If you previously worked around that with `[IsProjected(true)]` on an entity pro
 it. The key of a query model is now added automatically, and anything else is declared on the
 resolver with `[Parent(requires: ...)]`, which is enforced by the
 [architecture guards](/docs/reference/architecture-guards).
+
+## Replace HotChocolate's [Authorize] and [AllowAnonymous]
+
+A surface that declares its posture with `HotChocolate.Authorization.Authorize` or
+`HotChocolate.Authorization.AllowAnonymous` refuses host startup, with a message naming the Trax
+attribute to use instead. Trax reads only its own attributes; why is in
+[Authorization](/docs/authorization).
+
+| Replace | With |
+|---|---|
+| `[Authorize]` | `[TraxAuthorize]` |
+| `[Authorize(Policy = "P")]` | `[TraxAuthorize(Policy = "P")]` |
+| `[Authorize(Roles = ["a", "b"])]` | `[TraxAuthorize(Roles = "a,b")]` |
+| `[AllowAnonymous]` | `[TraxAllowAnonymous]` |
+
+On an `[ExtendObjectType]` class the two do not mean the same thing. HotChocolate applies a
+class-level attribute to the type being extended; `[TraxAuthorize]` applies to the fields the
+extension contributes. Check each class-level replacement against what it should gate.
+
+ASP.NET Core's `[Authorize]` on endpoints and MVC actions is not affected.
 
 ## SDK Reference
 
