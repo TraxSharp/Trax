@@ -159,7 +159,7 @@ the time set at entry. The EF store does this on every path, `Upsert` and `Inser
 
 The EF store also keeps, beside the snapshot and never inside it, the effect pending on the row
 (`SnapshotDraft.EffectToken`, `EffectKey`, `EffectTrigger`, `EffectRequestId` and `EffectLeaseUntil`; see
-[Effects](/docs/sdk-reference/statemachine-api/effects)) and whether the server put the row in its state
+[ISnapshotEffect](/docs/sdk-reference/statemachine-api/i-snapshot-effect)) and whether the server put the row in its state
 (`SnapshotDraft.ServerRecord`). Every write the EF store makes matches only a row with no pending effect, apart from
 the writes of that effect itself, so nothing moves or changes a row while its effect runs.
 
