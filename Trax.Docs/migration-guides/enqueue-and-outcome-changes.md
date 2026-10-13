@@ -1,20 +1,24 @@
 ---
-title: Enqueue and Outcome Changes
-description: "Upgrade notes for the release that changed enqueueing and outcome recording: QueueAsync, mediator-routed enqueues, WorkQueue.Create and rolling deploys."
+title: Adapt to the enqueue and outcome changes
+description: "Upgrade steps for the release that changed enqueueing and outcome recording: QueueAsync, mediator-routed enqueues, WorkQueue.Create and rolling deploys."
 type: how-to
 area: upgrading
+parent: Upgrading
 nav_order: 4
 ---
 
-# Enqueue and Outcome Changes
+# Adapt to the enqueue and outcome changes
+
+Applies from: Trax.Core 1.7.2, Trax.Effect 1.54.2, Trax.Mediator 1.22.1, Trax.Scheduler 1.32.2 and
+Trax.Api 1.43.2, released together. The read-only `WorkQueue.SubjectKey` arrived later, in
+Trax.Effect 1.57.3, which needs Trax.Mediator 1.23.0 or later.
 
 The release that made `Junctions()` the only way to declare a chain also changed how work is
-enqueued and how a run's outcome is recorded. None of it needs a version bump beyond the usual
-`1.x` update, and most of it compiles unchanged, which is why it is listed here: several changes
+enqueued and how a run's outcome is recorded. Most of it compiles unchanged, and several changes
 only show up at runtime.
 
 The chain declaration change has its own guide,
-[Removal of RunInternal and Activate](/docs/migration-guides/runinternal-and-activate). Read it
+[Move trains off RunInternal and Activate](/docs/migration-guides/runinternal-and-activate). Read it
 first if any train overrides `RunInternal` or calls `Activate`.
 
 ## Projects scaffolded by an older Trax.Cli
@@ -34,7 +38,7 @@ scaffold `Junctions()`.
 
 **A new parameter before `ct`.** The signature is now:
 
-```csharp
+```csharp fragment
 Task<QueueTrainResult> QueueAsync(
     string trainName,
     string? inputJson,
@@ -96,7 +100,7 @@ What to check:
 - **`requeueExecution` refuses a run with no saved input**, or one whose input was stored as the
   truncation placeholder, rather than re-running it with an empty input.
 
-`Trax.Docs/adr/0017` records why, and
+[ADR 0017](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0017-a-callers-enqueue-goes-through-the-mediator.md) records why, and
 [mutations](/docs/sdk-reference/graphql-api/mutations#queuetrain) lists the failure messages.
 
 ## A cancelled caller can get a completed run
@@ -107,7 +111,7 @@ returned as `Completed`, where the caller used to get `OperationCanceledExceptio
 stayed `InProgress`. Code that treated a cancelled request as proof the work did not happen should
 check the result instead. See
 [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#servicetrain-token-propagation);
-`effect/0005` in Trax.Effect records the decision.
+[Trax.Effect ADR 0005](https://github.com/TraxSharp/Trax/blob/main/Trax.Effect/docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md) records the decision.
 
 ## Work queue entries are built only by `WorkQueue.Create`
 
@@ -122,7 +126,7 @@ the mediator does. An empty key, or one longer than `WorkQueue.MaxSubjectKeyLeng
 characters), throws `ArgumentException`. Leave the key null when the entry should not be
 serialized.
 
-A later Trax.Effect makes `WorkQueue.SubjectKey` read-only, so `Create` is the only place a key is
+Trax.Effect 1.57.3 makes `WorkQueue.SubjectKey` read-only, so `Create` is the only place a key is
 set and every key passes its checks. Assigning `entry.SubjectKey = ...` no longer compiles; pass
 the key in `CreateWorkQueue.SubjectKey` instead. That Trax.Effect needs Trax.Mediator 1.23.0 or
 later: Trax.Mediator 1.22.x sets the key after `Create`, so it fails every enqueue with
