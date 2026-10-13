@@ -225,13 +225,11 @@ sdk-reference/train-methods/short-circuit.md
 sdk-reference/train-methods/switch.md
 sdk-reference/trains-and-junctions.md
 sdk-reference/trains-and-junctions/effect-junction.md
-sdk-reference/trains-and-junctions/i-route.md
 sdk-reference/trains-and-junctions/junction.md
 sdk-reference/trains-and-junctions/monad-task.md
 sdk-reference/trains-and-junctions/route-registration.md
 sdk-reference/trains-and-junctions/service-train.md
 sdk-reference/trains-and-junctions/train-exception.md
-sdk-reference/trains-and-junctions/train.md
 statemachine/authoring.md
 statemachine/declarative-authoring.md
 statemachine/invoking-trains.md
