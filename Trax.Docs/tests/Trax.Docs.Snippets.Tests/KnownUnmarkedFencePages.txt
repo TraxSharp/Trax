@@ -16,7 +16,6 @@ core/decisions.md
 core/ide-extensions.md
 core/memory.md
 core/trains-and-junctions.md
-cross-cutting/cancellation-tokens.md
 cross-cutting/di-registration.md
 cross-cutting/di-registration/junction-registration.md
 cross-cutting/di-registration/train-registration.md
