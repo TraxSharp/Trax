@@ -96,7 +96,7 @@ Leave the key off and every `operations` field answers
 
 ## How it works
 
-Two projects, following the [trains library pattern](/docs/reference/project-layout#structuring-your-application):
+Two projects, following the [trains library pattern](/docs/reference/project-layout#trains-in-a-class-library):
 
 ```
 samples/Scheduling/

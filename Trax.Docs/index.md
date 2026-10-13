@@ -49,6 +49,9 @@ it ended, and which junction failed with what. Trax is MIT licensed and targets 
 - [State Machines](/docs/statemachine): snapshots and definitions, the guarantees, and the matching
   C# and TypeScript runtimes.
 - [Authorization](/docs/authorization): where Trax checks who may run what.
+- [Deployment topologies](/docs/reference/deployment-topologies): the ways to split an application
+  across processes, and the sample that runs each.
+- [Trax compared with Quartz.NET and Hangfire](/docs/reference/comparison): what each is for.
 
 ### Look up
 
@@ -59,3 +62,9 @@ it ended, and which junction failed with what. Trax is MIT licensed and targets 
   OpenAPI spec.
 - [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim, with
   the fix.
+- [Schema migrations](/docs/reference/schema-migrations): what each release changes in the database.
+
+### Upgrade and explore
+
+- [Upgrading](/docs/migration-guides): the migration guides, newest first.
+- [Samples](/docs/samples): complete applications, each proving one feature end to end.

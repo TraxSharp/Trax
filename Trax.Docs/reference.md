@@ -18,7 +18,7 @@ Pages to look things up in. Per-type and per-method pages are in the
 - [Glossary](/docs/reference/glossary): the names Trax uses, with the namespace each lives in.
 - [Registration Order](/docs/reference/registration-order): which registration calls must come first, and the error each wrong order raises.
 - [Troubleshooting](/docs/cross-cutting/troubleshooting): the error messages Trax raises, verbatim, with causes and fixes.
-- [Benchmarks](/docs/reference/benchmarks): train overhead against plain code.
+- [Benchmarks](/docs/reference/benchmarks): train overhead against plain code, measured.
 - [Acknowledgments](/docs/reference/acknowledgments): the third-party packages Trax depends on.
 
 ## Trains
@@ -44,7 +44,7 @@ Pages to look things up in. Per-type and per-method pages are in the
 ## Data
 
 - [Data Persistence](/docs/effect/effect-providers/data-persistence): the Postgres, SQLite and InMemory data providers.
-- [Database Migrations](/docs/migration-guides/database-migrations): every schema migration that changes something visible.
+- [Schema migrations](/docs/reference/schema-migrations): every schema migration that changes something visible, Postgres and SQLite paired.
 
 ## Mediator
 
@@ -68,8 +68,8 @@ Pages to look things up in. Per-type and per-method pages are in the
 
 ## Tooling
 
-- [CLI](/docs/reference/cli): the `trax` command.
+- [CLI](/docs/reference/cli): the `trax` command, `generate` and `machine`.
 - [Project Templates](/docs/reference/templates): the `dotnet new` templates.
-- [Architecture Guards](/docs/reference/architecture-guards): the guard packages and what they check.
+- [Architecture Guards](/docs/reference/architecture-guards): the guard packages, their fixtures and what they check.
 - [Analyzer](/docs/core/analyzer): the deprecated chain analyzer.
 - [IDE Extensions](/docs/core/ide-extensions): inlay hints for VS Code and Rider.
