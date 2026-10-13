@@ -28,7 +28,6 @@ cross-cutting/troubleshooting.md
 dashboard.md
 effect/architecture.md
 effect/broadcaster-sinks.md
-effect/decisions.md
 effect/effect-providers.md
 effect/effect-providers/data-persistence.md
 effect/effect-providers/domain-data-contexts.md
