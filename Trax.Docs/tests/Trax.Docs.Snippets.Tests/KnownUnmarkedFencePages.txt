@@ -28,14 +28,12 @@ cross-cutting/troubleshooting.md
 dashboard.md
 effect/architecture.md
 effect/broadcaster-sinks.md
-effect/effect-providers.md
 effect/effect-providers/data-persistence.md
 effect/effect-providers/domain-data-contexts.md
 effect/effect-providers/json-effect.md
 effect/effect-providers/junction-logger.md
 effect/effect-providers/junction-progress.md
 effect/effect-providers/parameter-effect.md
-effect/host-tracking.md
 effect/junction-events.md
 mediator.md
 migration-guides/async-chain.md
