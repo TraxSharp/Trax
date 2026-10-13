@@ -97,6 +97,28 @@ public class MachineGeneratorNodeTests
     public void Generate_reproduces_the_committed_ingest_artifacts_with_outcome_triggers_byte_for_byte() =>
         AssertByteParityWithCommitted(new DeclarativeIngestMachine(), "ingest");
 
+    // A timed state exports its timer as a trigger of its own kind, which the twin shows and never fires and the
+    // corpus replays through AdvanceTimer. The committed reminder artifacts are written by the generation this
+    // test waits for, so it first proves the generated IR carries the timer.
+    [Test]
+    [Property(
+        "adr",
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
+    )]
+    public void Generate_reproduces_the_committed_reminder_artifacts_with_timers_byte_for_byte()
+    {
+        var reminder = new DeclarativeReminderMachine();
+
+        reminder
+            .ExportIr()
+            .Should()
+            .Contain("\"timers\"", "a timed state exports its timer (Trax.Docs/adr/0048)")
+            .And.Contain("Review.after")
+            .And.Contain("PT10M");
+
+        AssertByteParityWithCommitted(reminder, "reminder");
+    }
+
     // The end goal: the CLI's IR/twin/corpus for a machine are byte-identical to what the engine repo commits,
     // so `trax machine generate` (and `check`) is a faithful stand-in for the retired regenerate-via-tests path.
     private void AssertByteParityWithCommitted(IMachine machine, string id)

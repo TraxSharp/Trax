@@ -15,7 +15,9 @@ internal enum MachineFormat
 /// Renders a machine's IR (<c>Machine.ExportIr()</c>) for <c>trax machine show</c>: a plain-text block per state
 /// for a terminal, or a Mermaid <c>stateDiagram-v2</c> or Graphviz source for docs and PRs. Pure, so it is tested
 /// from IR text without an assembly. The text form lists each state's outgoing edges rather than laying out a
-/// 2-D graph, which stays readable and diffs cleanly however many states there are.
+/// 2-D graph, which stays readable and diffs cleanly however many states there are. A state's timer is drawn as an
+/// edge of its own, under its trigger (<c>Review.after</c>) and marked with how long the state is held, since only
+/// the server fires it.
 /// </summary>
 internal static class MachineRenderer
 {
@@ -98,6 +100,8 @@ internal static class MachineRenderer
                     notes.Add($"reduce: {Safe(edge.Reduce)}");
                 if (edge.Effect is not null)
                     notes.Add(Paint($"{g.Effect} effect {Safe(edge.Effect)} (send only)", "33"));
+                if (edge.Timer is not null)
+                    notes.Add(Paint($"{g.Timer} after {Safe(edge.Timer)} (server only)", "36"));
                 if (notes.Count > 0)
                     line.Append("   ").Append(string.Join("   ", notes));
                 sb.Append(line.ToString().TrimEnd()).Append('\n');
@@ -168,6 +172,8 @@ internal static class MachineRenderer
             parts.Add($"reduce: {edge.Reduce}");
         if (edge.Effect is not null)
             parts.Add($"effect {edge.Effect} (send only)");
+        if (edge.Timer is not null)
+            parts.Add($"after {edge.Timer} (server only)");
         return string.Join(separator, parts);
     }
 
@@ -188,11 +194,12 @@ internal static class MachineRenderer
         string Dash,
         char DashChar,
         string Arrow,
-        string Effect
+        string Effect,
+        string Timer
     )
     {
-        public static readonly Glyphs Unicode = new("◀", "■", "──", '─', "▶", "⚡");
-        public static readonly Glyphs Ascii = new("<-", "[x]", "--", '-', ">", "!");
+        public static readonly Glyphs Unicode = new("◀", "■", "──", '─', "▶", "⚡", "⏱");
+        public static readonly Glyphs Ascii = new("<-", "[x]", "--", '-', ">", "!", "@");
     }
 
     private sealed record Transition(
@@ -202,7 +209,11 @@ internal static class MachineRenderer
         string? Guard,
         string? Reduce,
         string? Effect
-    );
+    )
+    {
+        /// <summary>How long a timer edge's state is held (<c>PT10M</c>, or a context field with its bounds); null for an event.</summary>
+        public string? Timer { get; init; }
+    }
 
     private sealed record Ir(
         string Id,
@@ -235,6 +246,30 @@ internal static class MachineRenderer
                     ShortName((t["effect"] as JsonObject)?["type"]?.ToString())
                 ))
                 .ToList();
+
+            // A timer is an edge the server takes once its state has been held long enough: fixed (`after`), or for
+            // the duration a context field holds within its bounds.
+            transitions.AddRange(
+                (root["timers"] as JsonArray ?? [])
+                    .OfType<JsonObject>()
+                    .Select(t => new Transition(
+                        Required(t, "state"),
+                        Required(t, "trigger"),
+                        Required(t, "target"),
+                        null,
+                        null,
+                        null
+                    )
+                    {
+                        Timer =
+                            t["after"]?.ToString()
+                            ?? (
+                                t["field"] is JsonObject field
+                                    ? $"{field["name"]} ({field["min"]} to {field["max"]})"
+                                    : "?"
+                            ),
+                    })
+            );
 
             return new Ir(
                 Required(root, "id"),

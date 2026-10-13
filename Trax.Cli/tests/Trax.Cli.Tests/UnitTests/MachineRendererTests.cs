@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Machines;
@@ -142,6 +143,72 @@ public class MachineRendererTests
                 }
 
                 """.ReplaceLineEndings("\n")
+            );
+    }
+
+    // Review is held for ten minutes, then the server moves it to Expired. A drawing that left the timer out
+    // would show Review as a state only a user's event leaves.
+    private static readonly string Reminder = new DeclarativeReminderMachine().ExportIr();
+
+    // The timer edge Review → Expired, labelled with its duration as the IR spells it or as a reader would.
+    private static readonly Regex TimerDuration = new(
+        @"\b(PT10M|10m|10 min)",
+        RegexOptions.Compiled
+    );
+
+    [Test]
+    [Property(
+        "adr",
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
+    )]
+    public void Text_marks_a_timer_edge_with_its_duration()
+    {
+        var lines = MachineRenderer.Render(Reminder, MachineFormat.Text).Split('\n');
+
+        lines
+            .Should()
+            .Contain(
+                l => l.Contains("▶ Expired", StringComparison.Ordinal) && TimerDuration.IsMatch(l),
+                "Review's timer is an edge to Expired, marked with how long Review is held "
+                    + "(Trax.Docs/adr/0048)"
+            );
+    }
+
+    [Test]
+    [Property(
+        "adr",
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
+    )]
+    public void Mermaid_marks_a_timer_edge_with_its_duration()
+    {
+        var lines = MachineRenderer.Render(Reminder, MachineFormat.Mermaid).Split('\n');
+
+        lines
+            .Should()
+            .Contain(
+                l =>
+                    l.Contains("Review --> Expired", StringComparison.Ordinal)
+                    && TimerDuration.IsMatch(l),
+                "Review's timer is an edge to Expired, labelled with its duration (Trax.Docs/adr/0048)"
+            );
+    }
+
+    [Test]
+    [Property(
+        "adr",
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
+    )]
+    public void Dot_marks_a_timer_edge_with_its_duration()
+    {
+        var lines = MachineRenderer.Render(Reminder, MachineFormat.Dot).Split('\n');
+
+        lines
+            .Should()
+            .Contain(
+                l =>
+                    l.Contains("\"Review\" -> \"Expired\"", StringComparison.Ordinal)
+                    && TimerDuration.IsMatch(l),
+                "Review's timer is an edge to Expired, labelled with its duration (Trax.Docs/adr/0048)"
             );
     }
 
