@@ -78,6 +78,7 @@ public sealed record FieldSchema(
 /// sorted by key (ordinal) to match the canonical wire. Reflected from the author's record
 /// (<see cref="SchemaReflection"/>), carried in the IR, and turned into a shape validator by each engine.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/declarative-data-model#context-schema">SDK reference</seealso>
 public sealed record ContextSchema(IReadOnlyList<FieldSchema> Fields)
 {
     /// <summary>A state with no context, or a trigger that takes no input.</summary>

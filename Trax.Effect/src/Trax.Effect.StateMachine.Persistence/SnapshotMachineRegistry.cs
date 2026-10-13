@@ -7,6 +7,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// discovered <see cref="IMachine"/>s; built per request over the scoped store/claims. This is what lets a
 /// single generic mutation serve every registered machine via a <c>machine</c> discriminator.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#isnapshotmachineregistry">SDK reference</seealso>
 public interface ISnapshotMachineRegistry
 {
     /// <summary>

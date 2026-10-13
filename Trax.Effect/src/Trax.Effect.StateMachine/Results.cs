@@ -5,6 +5,7 @@ namespace Trax.Effect.StateMachine;
 /// These strings are part of the cross-language contract: the shared conformance fixtures assert
 /// on them, so the TypeScript reducer must use the identical values.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/result-codes">SDK reference</seealso>
 public static class RejectionReasons
 {
     /// <summary>No transition is wired from the current state on the given trigger (or the state/trigger token is unknown).</summary>

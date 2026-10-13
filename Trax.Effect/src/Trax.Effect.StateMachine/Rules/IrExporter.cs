@@ -9,6 +9,7 @@ namespace Trax.Effect.StateMachine;
 /// emit a per-language runtime lives here, exported from the one C# source. Output is canonical JSON so it is
 /// a stable golden.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/ir-format">SDK reference</seealso>
 public static class IrExporter
 {
     /// <summary>

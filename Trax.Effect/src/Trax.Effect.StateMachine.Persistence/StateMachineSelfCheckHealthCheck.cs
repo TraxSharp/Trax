@@ -50,6 +50,7 @@ internal sealed class StateMachineSelfCheckHealthCheck(IEnumerable<IMachine> mac
 /// builder.Services.AddHealthChecks().AddTraxStateMachineSelfCheck();
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/add-trax-state-machine-self-check">SDK reference</seealso>
 public static class StateMachineHealthCheckExtensions
 {
     /// <summary>

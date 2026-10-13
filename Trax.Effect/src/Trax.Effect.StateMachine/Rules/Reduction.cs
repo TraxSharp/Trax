@@ -23,6 +23,7 @@ public sealed record SetStep(string Field, ValueSource Source);
 /// pure functions of (context, input); anything nondeterministic (a receipt, a timestamp) arrives as input.
 /// The genuinely-custom case is a <see cref="Custom"/> handler referenced by name.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/declarative-data-model#reduction">SDK reference</seealso>
 public abstract record Reduction
 {
     /// <summary>Carry the current context forward unchanged (the default when no reducer is declared).</summary>
