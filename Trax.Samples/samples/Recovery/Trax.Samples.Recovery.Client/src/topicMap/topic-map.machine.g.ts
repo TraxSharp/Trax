@@ -25,13 +25,19 @@ const ir = {
           ],
           "name": "fields",
           "nullable": true,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "fromYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
@@ -41,21 +47,27 @@ const ir = {
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "papers",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "toYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "topicPairs",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         }
       ]
     },
@@ -78,13 +90,19 @@ const ir = {
           ],
           "name": "fields",
           "nullable": true,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "fromYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
@@ -94,21 +112,27 @@ const ir = {
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "papers",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "toYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "topicPairs",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         }
       ]
     },
@@ -131,13 +155,19 @@ const ir = {
           ],
           "name": "fields",
           "nullable": true,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "fromYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
@@ -147,21 +177,27 @@ const ir = {
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "papers",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "toYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "topicPairs",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         }
       ]
     },
@@ -184,13 +220,19 @@ const ir = {
           ],
           "name": "fields",
           "nullable": true,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "fromYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
@@ -200,21 +242,27 @@ const ir = {
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "papers",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "toYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "topicPairs",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         }
       ]
     },
@@ -237,13 +285,19 @@ const ir = {
           ],
           "name": "fields",
           "nullable": true,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "fromYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
@@ -253,21 +307,27 @@ const ir = {
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "papers",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "toYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "topicPairs",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         }
       ]
     },
@@ -290,13 +350,19 @@ const ir = {
           ],
           "name": "fields",
           "nullable": true,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "fromYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
@@ -306,21 +372,92 @@ const ir = {
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "papers",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "toYear",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "topicPairs",
           "nullable": true,
-          "type": "number"
+          "type": "integer"
+        }
+      ]
+    },
+    "Expired": {
+      "fields": [
+        {
+          "constraints": [],
+          "name": "coCitationTrack",
+          "nullable": true,
+          "type": "string"
+        },
+        {
+          "constraints": [
+            {
+              "field": "fields",
+              "rule": "arrayOf",
+              "source": "context",
+              "type": "string"
+            }
+          ],
+          "name": "fields",
+          "nullable": true,
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
+        },
+        {
+          "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "name": "fromYear",
+          "nullable": true,
+          "type": "integer"
+        },
+        {
+          "constraints": [],
+          "name": "mapId",
+          "nullable": true,
+          "type": "string"
+        },
+        {
+          "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "name": "papers",
+          "nullable": true,
+          "type": "integer"
+        },
+        {
+          "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "name": "toYear",
+          "nullable": true,
+          "type": "integer"
+        },
+        {
+          "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "name": "topicPairs",
+          "nullable": true,
+          "type": "integer"
         }
       ]
     }
@@ -333,55 +470,19 @@ const ir = {
       "fields": [
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "fromYear",
           "nullable": false,
-          "type": "number"
+          "type": "integer"
         },
         {
           "constraints": [],
+          "maximum": 2147483647,
+          "minimum": -2147483648,
           "name": "toYear",
           "nullable": false,
-          "type": "number"
-        }
-      ]
-    },
-    "Building.done": {
-      "fields": [
-        {
-          "constraints": [],
-          "name": "coCitationTrack",
-          "nullable": false,
-          "type": "string"
-        },
-        {
-          "constraints": [],
-          "name": "hiddenTwins",
-          "nullable": false,
-          "type": "array"
-        },
-        {
-          "constraints": [],
-          "name": "papers",
-          "nullable": false,
-          "type": "number"
-        },
-        {
-          "constraints": [],
-          "name": "runId",
-          "nullable": false,
-          "type": "string"
-        },
-        {
-          "constraints": [],
-          "name": "strongest",
-          "nullable": false,
-          "type": "array"
-        },
-        {
-          "constraints": [],
-          "name": "topicPairs",
-          "nullable": false,
-          "type": "number"
+          "type": "integer"
         }
       ]
     },
@@ -392,18 +493,22 @@ const ir = {
             {
               "field": "fields",
               "rule": "nonEmpty",
-              "source": "context"
+              "source": "input"
             },
             {
               "field": "fields",
               "rule": "arrayOf",
-              "source": "context",
+              "source": "input",
               "type": "string"
             }
           ],
           "name": "fields",
           "nullable": false,
-          "type": "array"
+          "type": "array",
+          "values": {
+            "nullable": false,
+            "type": "string"
+          }
         }
       ]
     }
@@ -513,6 +618,28 @@ const ir = {
       "rule": "count",
       "source": "context",
       "value": 1
+    },
+    "Expired": {
+      "rule": "all",
+      "rules": [
+        {
+          "field": "fields",
+          "op": "gte",
+          "rule": "count",
+          "source": "context",
+          "value": 1
+        },
+        {
+          "field": "fromYear",
+          "rule": "present",
+          "source": "context"
+        },
+        {
+          "field": "toYear",
+          "rule": "present",
+          "source": "context"
+        }
+      ]
     }
   },
   "outcomes": {
@@ -561,6 +688,158 @@ const ir = {
         }
       ],
       "outcome": "done",
+      "output": {
+        "fields": [
+          {
+            "constraints": [],
+            "name": "coCitationTrack",
+            "nullable": false,
+            "type": "string"
+          },
+          {
+            "constraints": [],
+            "fields": [
+              {
+                "constraints": [],
+                "name": "embedding",
+                "nullable": false,
+                "type": "number"
+              },
+              {
+                "constraints": [],
+                "name": "score",
+                "nullable": false,
+                "type": "number"
+              },
+              {
+                "constraints": [],
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "name": "sharedAuthors",
+                "nullable": false,
+                "type": "integer"
+              },
+              {
+                "constraints": [],
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "name": "sharedReferences",
+                "nullable": false,
+                "type": "integer"
+              },
+              {
+                "constraints": [],
+                "name": "titleA",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "titleB",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "workA",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "workB",
+                "nullable": false,
+                "type": "string"
+              }
+            ],
+            "name": "hiddenTwins",
+            "nullable": false,
+            "type": "array"
+          },
+          {
+            "constraints": [],
+            "maximum": 2147483647,
+            "minimum": -2147483648,
+            "name": "papers",
+            "nullable": false,
+            "type": "integer"
+          },
+          {
+            "constraints": [],
+            "name": "runId",
+            "nullable": false,
+            "type": "string"
+          },
+          {
+            "constraints": [],
+            "fields": [
+              {
+                "constraints": [],
+                "name": "embedding",
+                "nullable": false,
+                "type": "number"
+              },
+              {
+                "constraints": [],
+                "name": "score",
+                "nullable": false,
+                "type": "number"
+              },
+              {
+                "constraints": [],
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "name": "sharedAuthors",
+                "nullable": false,
+                "type": "integer"
+              },
+              {
+                "constraints": [],
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "name": "sharedReferences",
+                "nullable": false,
+                "type": "integer"
+              },
+              {
+                "constraints": [],
+                "name": "titleA",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "titleB",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "workA",
+                "nullable": false,
+                "type": "string"
+              },
+              {
+                "constraints": [],
+                "name": "workB",
+                "nullable": false,
+                "type": "string"
+              }
+            ],
+            "name": "strongest",
+            "nullable": false,
+            "type": "array"
+          },
+          {
+            "constraints": [],
+            "maximum": 2147483647,
+            "minimum": -2147483648,
+            "name": "topicPairs",
+            "nullable": false,
+            "type": "integer"
+          }
+        ]
+      },
       "state": "Building"
     },
     "Building.failed": {
@@ -579,7 +858,19 @@ const ir = {
     "Building",
     "Built",
     "ChoosingFields",
-    "ChoosingRange"
+    "ChoosingRange",
+    "Expired"
+  ],
+  "timers": [
+    {
+      "after": "P7D",
+      "rules": [
+        "Requires(Operator)"
+      ],
+      "state": "Built",
+      "target": "Expired",
+      "trigger": "Built.after"
+    }
   ],
   "transitions": [
     {
@@ -593,6 +884,14 @@ const ir = {
       "trigger": "Rebuild"
     },
     {
+      "from": "BuildCancelled",
+      "reduce": {
+        "reduce": "reset"
+      },
+      "to": "ChoosingFields",
+      "trigger": "StartOver"
+    },
+    {
       "from": "BuildFailed",
       "to": "ChoosingRange",
       "trigger": "Edit"
@@ -601,6 +900,14 @@ const ir = {
       "from": "BuildFailed",
       "to": "Building",
       "trigger": "Rebuild"
+    },
+    {
+      "from": "BuildFailed",
+      "reduce": {
+        "reduce": "reset"
+      },
+      "to": "ChoosingFields",
+      "trigger": "StartOver"
     },
     {
       "from": "Building",
@@ -608,6 +915,14 @@ const ir = {
       "trigger": "CancelBuild"
     },
     {
+      "from": "Building",
+      "reduce": {
+        "reduce": "reset"
+      },
+      "to": "ChoosingFields",
+      "trigger": "StartOver"
+    },
+    {
       "from": "Built",
       "to": "ChoosingRange",
       "trigger": "Edit"
@@ -616,6 +931,14 @@ const ir = {
       "from": "Built",
       "to": "Building",
       "trigger": "Rebuild"
+    },
+    {
+      "from": "Built",
+      "reduce": {
+        "reduce": "reset"
+      },
+      "to": "ChoosingFields",
+      "trigger": "StartOver"
     },
     {
       "from": "ChoosingFields",
@@ -685,6 +1008,24 @@ const ir = {
       },
       "to": "Building",
       "trigger": "Build"
+    },
+    {
+      "from": "Expired",
+      "to": "ChoosingRange",
+      "trigger": "Edit"
+    },
+    {
+      "from": "Expired",
+      "to": "Building",
+      "trigger": "Rebuild"
+    },
+    {
+      "from": "Expired",
+      "reduce": {
+        "reduce": "reset"
+      },
+      "to": "ChoosingFields",
+      "trigger": "StartOver"
     }
   ],
   "triggers": [
@@ -693,13 +1034,14 @@ const ir = {
     "CancelBuild",
     "ChooseFields",
     "Edit",
-    "Rebuild"
+    "Rebuild",
+    "StartOver"
   ],
   "version": 1
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "4a617ad1b59be7b12e8a294ebdc810e39253030007abb856652cce26eb746f0d";
+export const irHash = "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893";
 
 /** The topic-map machine, built from the IR and typed by TopicMapSpec. No hand-written twin. */
 export const topicMap = typedMachineFromIr<TopicMapSpec>(ir, irHash);

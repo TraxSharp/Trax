@@ -10,7 +10,7 @@ using Trax.Samples.StateMachine.E2E.Utilities;
 namespace Trax.Samples.StateMachine.E2E.Tests;
 
 /// <summary>
-/// The four mutations carry <c>[TraxAuthorize]</c>, so an anonymous caller is refused with Trax's
+/// Every typed machine operation requires an authenticated caller, so an anonymous one is refused with Trax's
 /// opaque authorization error before any draft is read or written; <c>listMachines</c> is anonymous.
 /// The demo keys are published in this repository, so they exist only in Development: started in
 /// Production, the host registers no key and refuses them like any other anonymous caller.
@@ -25,55 +25,43 @@ public class AuthenticationTests : StateMachineTestFixture
     private const string Adr =
         "see Trax.Docs/adr/0035-demo-credentials-exist-only-in-development.md";
 
-    private static IEnumerable<TestCaseData> EveryMutation()
+    private static IEnumerable<TestCaseData> EveryOperation()
     {
         var id = Guid.NewGuid();
         yield return new TestCaseData(
-            "saveSnapshot",
-            "SaveSnapshotInput",
-            new
-            {
-                machine = "turnstile",
-                id,
-                snapshot = """{"machine":"turnstile","version":1,"state":"Locked","context":{}}""",
-            }
-        ).SetArgDisplayNames("saveSnapshot");
+            $$"""mutation { machines { turnstile { start(requestId: "start-anonymous") { id } } } }"""
+        ).SetArgDisplayNames("turnstile.start");
         yield return new TestCaseData(
-            "advanceSnapshot",
-            "AdvanceSnapshotInput",
-            new
-            {
-                machine = "turnstile",
-                id,
-                trigger = "Coin",
-            }
-        ).SetArgDisplayNames("advanceSnapshot");
+            $$"""mutation { machines { turnstile { coin(id: "{{id}}", input: { coin: "quarter" }, requestId: "coin-anonymous") { id } } } }"""
+        ).SetArgDisplayNames("turnstile.coin");
         yield return new TestCaseData(
-            "loadSnapshot",
-            "LoadSnapshotInput",
-            new { machine = "turnstile", id }
-        ).SetArgDisplayNames("loadSnapshot");
+            $$"""mutation { machines { turnstile { push(id: "{{id}}", requestId: "push-anonymous") { id } } } }"""
+        ).SetArgDisplayNames("turnstile.push");
         yield return new TestCaseData(
-            "sendSnapshot",
-            "SendSnapshotInput",
-            new { machine = "checkout", id }
-        ).SetArgDisplayNames("sendSnapshot");
+            $$"""{ machines { turnstile { get(id: "{{id}}") { id } } } }"""
+        ).SetArgDisplayNames("turnstile.get");
+        yield return new TestCaseData(
+            $$"""mutation { machines { checkout { pay(id: "{{id}}", requestId: "pay-anonymous") { id } } } }"""
+        ).SetArgDisplayNames("checkout.pay");
+        yield return new TestCaseData(
+            $$"""mutation { machines { checkout { discard(id: "{{id}}", requestId: "discard-anonymous") { id } } } }"""
+        ).SetArgDisplayNames("checkout.discard");
     }
 
-    [TestCaseSource(nameof(EveryMutation))]
-    public async Task Anonymous_IsRefused(string field, string inputType, object input)
+    [TestCaseSource(nameof(EveryOperation))]
+    public async Task Anonymous_IsRefused(string document)
     {
-        var response = await Machines.RawAsync(Anonymous, field, inputType, input);
+        var response = await Machines.RawAsync(Anonymous, document);
 
         response.IsRefused.Should().BeTrue(response.Raw);
     }
 
-    [TestCaseSource(nameof(EveryMutation))]
-    public async Task AWrongKey_IsRefused(string field, string inputType, object input)
+    [TestCaseSource(nameof(EveryOperation))]
+    public async Task AWrongKey_IsRefused(string document)
     {
         var stranger = new Caller("stranger", "not-a-key-this-host-knows");
 
-        var response = await Machines.RawAsync(stranger, field, inputType, input);
+        var response = await Machines.RawAsync(stranger, document);
 
         response.IsRefused.Should().BeTrue(response.Raw);
     }
@@ -81,17 +69,10 @@ public class AuthenticationTests : StateMachineTestFixture
     [Test]
     public async Task Anonymous_WritesNothing()
     {
-        var id = Guid.NewGuid();
+        var requestId = $"start-{Guid.NewGuid():N}";
         var response = await Machines.RawAsync(
             Anonymous,
-            "saveSnapshot",
-            "SaveSnapshotInput",
-            new
-            {
-                machine = Turnstile,
-                id,
-                snapshot = TurnstileWire("Locked"),
-            }
+            $$"""mutation { machines { turnstile { start(requestId: "{{requestId}}") { id } } } }"""
         );
         response.IsRefused.Should().BeTrue(response.Raw);
 
@@ -102,24 +83,22 @@ public class AuthenticationTests : StateMachineTestFixture
         );
         await connection.OpenAsync();
         await using var count = new NpgsqlCommand(
-            "select count(*) from trax.snapshot_draft where id = @id",
+            "select count(*) from trax.snapshot_draft where start_request_id = @requestId",
             connection
         );
-        count.Parameters.AddWithValue("id", id);
+        count.Parameters.AddWithValue("requestId", requestId);
 
         ((long)(await count.ExecuteScalarAsync())!)
             .Should()
-            .Be(0, "a refused save stores no draft under any caller");
+            .Be(0, "a refused start stores no draft under any caller");
     }
 
     [Test]
     public async Task Development_TheDemoKeyWorks()
     {
-        var id = Guid.NewGuid();
+        var (_, started) = await Machines.StartAsync(Alice, Turnstile);
 
-        (await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Locked")))
-            .State.Should()
-            .Be("Locked");
+        started.State.Should().Be("Locked");
     }
 
     [Test]
@@ -135,14 +114,7 @@ public class AuthenticationTests : StateMachineTestFixture
 
         var response = await machines.RawAsync(
             Alice,
-            "saveSnapshot",
-            "SaveSnapshotInput",
-            new
-            {
-                machine = Turnstile,
-                id = Guid.NewGuid(),
-                snapshot = TurnstileWire("Locked"),
-            }
+            """mutation { machines { turnstile { start(requestId: "start-production") { id } } } }"""
         );
         response.IsRefused.Should().BeTrue($"{Adr}: {response.Raw}");
 

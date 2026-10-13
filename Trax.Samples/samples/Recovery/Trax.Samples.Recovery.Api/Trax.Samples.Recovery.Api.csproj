@@ -13,9 +13,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The page's own persisted documents, which the host registers when it starts. One file, read by both. -->
+    <EmbeddedResource
+      Include="../Trax.Samples.Recovery.Client/src/persisted-operations.json"
+      LogicalName="Trax.Samples.Recovery.Api.persisted-operations.json"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
     <ProjectReference Include="../../../../Trax.Dashboard/src/Trax.Dashboard/Trax.Dashboard.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />

@@ -1,8 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Trax State Machine sample: a GraphQL host over two fluent machines.
 //
-// Two machines, authored fluently in Trax.Samples.StateMachine, are discovered with one line
-// (AddStateMachines) and driven through the four generic `stateMachine` mutations:
+// Two machines, authored declaratively in Trax.Samples.StateMachine, are discovered with one line
+// (AddStateMachines) and exposed, so each is served as its own typed operations under the `machines` root. A
+// client starts an instance with `start`, which mints its id from the machine's declared start, and moves it with
+// one mutation per event; the effect's event runs the charge on the server:
 //   turnstile  Locked ⇄ Unlocked                (no effect)
 //   checkout   Cart → Review → Paid             (Paid committed, one exactly-once charge on Pay)
 //
@@ -19,17 +21,18 @@
 //   # What machines are available?
 //   { discover { stateMachine { listMachines { machines { name hasEffect } } } } }
 //
-//   # Save a checkout draft at Review. Use one id (a UUID) throughout. The total must be 999 cents
-//   # per item: the server owns the price, so a draft with any other total is refused.
-//   mutation { dispatch { stateMachine { saveSnapshot(input: {
-//     machine: "checkout", id: "11111111-1111-1111-1111-111111111111",
-//     snapshot: "{\"machine\":\"checkout\",\"version\":2,\"state\":\"Review\",\"context\":{\"items\":[\"book\"],\"receipt\":null,\"total\":999}}"
-//   }) { output { snapshot problem { code } } } } } }
+//   # Start a checkout: the answer carries the id the server minted. Use it as ID below.
+//   mutation { machines { checkout { start(requestId: "start-1") {
+//     id revision state context { items total } problem { code } } } } }
 //
-//   # Charge exactly once (state-gated + idempotent). A second send does not re-charge.
-//   mutation { dispatch { stateMachine { sendSnapshot(input: {
-//     machine: "checkout", id: "11111111-1111-1111-1111-111111111111", requestId: "pay-1"
-//   }) { output { snapshot problem { code } } } } } }
+//   # Add an item, then review. The server prices the cart: 999 cents per item.
+//   mutation { machines { checkout { addItem(id: "ID", input: { item: "book" }, requestId: "add-1") {
+//     revision state context { items total } problem { code } } } } }
+//   mutation { machines { checkout { next(id: "ID", requestId: "next-1") { state problem { code } } } } }
+//
+//   # Charge exactly once (state-gated + idempotent). A retry with the same requestId does not re-charge.
+//   mutation { machines { checkout { pay(id: "ID", requestId: "pay-1") {
+//     state context { receipt total } problem { code } } } } }
 //
 // Docs: https://traxsharp.net/docs/samples/state-machine
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +40,7 @@
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -66,13 +70,24 @@ builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 // Trax + the state machine, in one builder chain. AddStateMachines discovers the machines in the sample
-// library, wires the store / effect-claim ledger / exactly-once runner / registry, AUTO-registers the
-// SnapshotDbContext against the Postgres provider above, and contributes the four generic `stateMachine`
-// mutations to the mediator scan. The host names neither SnapshotDbContext nor the mutations' assembly.
+// library, wires the store / effect-claim ledger / exactly-once runner / registry against the Postgres
+// provider above, and contributes the trains every machine operation runs through to the mediator scan. Both
+// machines are marked [TraxMachine], so clients reach each through its own typed operations; a machine not marked
+// is not served to a client.
 // (Call AddStateMachines before AddMediator: the mediator builds its route registry when it runs.)
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
-        .AddStateMachines(typeof(TurnstileMachine).Assembly)
+        .AddStateMachines(
+            o =>
+            {
+                // Alice and Bob are two users every visitor of the demo shares, and the server caps the drafts
+                // one user may hold (50 by default). A draft a walkthrough or a closed browser leaves behind
+                // expires after a day of no activity rather than the default 30, so a demo database that lives
+                // for weeks does not fill the cap. The cap itself stays on.
+                o.DraftTtl = TimeSpan.FromDays(1);
+            },
+            typeof(TurnstileMachine).Assembly
+        )
         .AddMediator(typeof(TurnstileMachine).Assembly)
 );
 
@@ -81,7 +96,19 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddSingleton<SimulatedPaymentProvider>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
 
-builder.Services.AddTraxGraphQL(graphql => graphql);
+// Exposed machines are served as persisted documents, one per operation, whose ids carry the machine's version; the
+// node orders a machine's versions across a deploy through them, so exposing a machine requires them. This demo keeps
+// the ad-hoc queries above working (logged, not refused) and serves no document-management operations; a production
+// host refuses ad-hoc documents with RequirePersisted(true).
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql.UsePersistedOperations(persisted =>
+        persisted
+            .SingleNode()
+            .RequirePersisted(false)
+            .LogNonPersistedRequests(true)
+            .ExposeOperationsNamespace(false)
+    )
+);
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 // Allow the Vite dev server (the web/ frontend) to call the API. The frontend authenticates with the

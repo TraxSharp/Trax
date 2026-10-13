@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
@@ -11,8 +12,8 @@ using Trax.Samples.Recovery.Machines;
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 
 /// <summary>
-/// The <c>topic-map</c> wizard, a user's own machine, driven over GraphQL as the page drives it: choose
-/// the fields, choose the years, build. <c>Building</c> runs the topic map train, and only that run's
+/// The <c>topic-map</c> wizard, a user's own machine, driven over GraphQL as the page drives it: start it,
+/// choose the fields, choose the years, build. <c>Building</c> runs the topic map train, and only that run's
 /// outcome moves the draft on; a client cannot put the draft in <c>Built</c> itself or fire the
 /// outcome by hand.
 /// </summary>
@@ -53,6 +54,122 @@ public class TopicMapMachineTests : RecoveryTestFixture
     }
 
     [Test]
+    public async Task TheServerMintsTheDraftId_AndADiscardedDraftIsGone()
+    {
+        var mine = Guid.NewGuid();
+        var draft = new TopicMapDraft(GraphQL, OperatorKey, mine);
+
+        (await draft.CreateAsync()).State.Should().Be(nameof(TopicMapState.ChoosingFields));
+        draft
+            .Id.Should()
+            .NotBe(mine, "the start mints the id on the server; the client names none");
+
+        // Start a new map: the page discards the draft it leaves.
+        (await draft.DiscardAsync())
+            .Should()
+            .BeTrue();
+        (await draft.LoadAsync()).Problem.Should().Be("not-found");
+    }
+
+    [Test]
+    public async Task StartingANewMapFromBuilt_ResetsTheDraft_AndLeavesNothingThatCountsTowardTheCap()
+    {
+        await _draft.CreateAsync();
+        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
+        (await Row()).DueAt.Should().NotBeNull("Built holds the map for review under a timer");
+        (await _draft.DiscardAsync())
+            .Should()
+            .BeFalse("a draft a build's outcome put in Built is the record of that build");
+
+        // Start a new map, as the page does once a build began: the same draft, back at the first step.
+        var reset = await _draft.AdvanceAsync(nameof(TopicMapTrigger.StartOver));
+
+        reset.Problem.Should().BeNull();
+        reset.State.Should().Be(nameof(TopicMapState.ChoosingFields));
+        reset
+            .Context.Select(kv => kv.Value)
+            .Should()
+            .AllSatisfy(v => v.Should().BeNull(), "nothing is chosen on the new map");
+        var row = await Row();
+        row.DueAt.Should()
+            .BeNull("leaving Built cancels its review timer, so nothing keeps the draft alive");
+        row.InvokeToken.Should().BeNull();
+
+        // Nothing is left that the user cannot throw away: a fresh draft is discarded like any other.
+        (await _draft.DiscardAsync())
+            .Should()
+            .BeTrue();
+        (await _draft.LoadAsync()).Problem.Should().Be("not-found");
+    }
+
+    [TestCase(TopicMapState.Building)]
+    [TestCase(TopicMapState.Built)]
+    [TestCase(TopicMapState.BuildFailed)]
+    [TestCase(TopicMapState.BuildCancelled)]
+    [TestCase(TopicMapState.Expired)]
+    public async Task StartingANewMap_ResetsTheDraft_FromEveryStateThatOffersIt(TopicMapState from)
+    {
+        await _draft.CreateAsync();
+        switch (from)
+        {
+            case TopicMapState.Building:
+                // Started at once, before the run ends: the draft is in Building, or Built if the run won.
+                (await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025))
+                    .State.Should()
+                    .Be(nameof(TopicMapState.Building));
+                break;
+            case TopicMapState.BuildFailed:
+                // One field over two years holds fewer than two papers, so the build fails.
+                await _draft.BuildAsync([CorpusFixture.Hydrology], 1990, 1991);
+                await _draft.WaitForStateAsync(nameof(TopicMapState.BuildFailed));
+                break;
+            default:
+                await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+                await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
+                break;
+        }
+        await using (var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
+            var row = db.SnapshotDrafts.Where(d =>
+                d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId
+            );
+            if (from == TopicMapState.BuildCancelled)
+                // An operator's cancel of the run is what puts a build here; the page cannot, so the row is moved
+                // as the run's outcome would move it.
+                await row.ExecuteUpdateAsync(x =>
+                    x.SetProperty(d => d.State, nameof(TopicMapState.BuildCancelled))
+                        .SetProperty(d => d.DueAt, (DateTimeOffset?)null)
+                        .SetProperty(d => d.ServerRecord, true)
+                );
+            if (from == TopicMapState.Expired)
+            {
+                await row.ExecuteUpdateAsync(x =>
+                    x.SetProperty(d => d.DueAt, DateTimeOffset.UtcNow.AddMinutes(-1))
+                );
+                await SharedRecoverySetup
+                    .Factory.Services.GetRequiredService<InvokeOutcomeReconciler>()
+                    .FireDueTimersOnce(CancellationToken.None);
+                (await _draft.LoadAsync()).State.Should().Be(nameof(TopicMapState.Expired));
+            }
+        }
+
+        var reset = await _draft.AdvanceAsync(nameof(TopicMapTrigger.StartOver));
+
+        reset.Problem.Should().BeNull($"StartOver is offered from {from}");
+        reset.State.Should().Be(nameof(TopicMapState.ChoosingFields));
+        reset
+            .Context.Select(kv => kv.Value)
+            .Should()
+            .AllSatisfy(v => v.Should().BeNull(), "nothing is chosen on the new map");
+        var after = await Row();
+        after.DueAt.Should().BeNull();
+        after.InvokeToken.Should().BeNull("a run the draft was waiting on is cancelled with it");
+        (await _draft.DiscardAsync()).Should().BeTrue("the new map is the owner's own draft");
+    }
+
+    [Test]
     public async Task AnAutosaveIntoBuilt_IsRefused()
     {
         var forged = new JsonObject
@@ -70,7 +187,13 @@ public class TopicMapMachineTests : RecoveryTestFixture
             TopicMapDraft.Snapshot(nameof(TopicMapState.Built), forged)
         );
 
-        saved.Problem.Should().Be("state-reserved", "only the build's outcome puts a draft there");
+        saved
+            .Problem.Should()
+            .Be(
+                TopicMapDraft.NotServed,
+                "the host serves the topic map only through its typed operations, which have no save, and only "
+                    + "the build's outcome puts a draft in Built"
+            );
         (await _draft.LoadAsync()).Snapshot.Should().BeNull("nothing was written");
     }
 
@@ -92,18 +215,84 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 hiddenTwins = Array.Empty<object>(),
             }
         );
-        forged.Problem.Should().Be("outcome-bound", "only the run's outcome applies it");
+        forged
+            .Problem.Should()
+            .Be(
+                TopicMapDraft.NotServed,
+                "an outcome has no client field: only the run's outcome applies it"
+            );
 
         var current = await _draft.LoadAsync();
         current.State.Should().Be(nameof(TopicMapState.Building));
         var moved = await _draft.SaveAsync(
             TopicMapDraft.Snapshot(nameof(TopicMapState.ChoosingRange), current.Context)
         );
-        moved.Problem.Should().Be("draft-invoking", "an autosave cannot leave a state with a run");
+        moved
+            .Problem.Should()
+            .Be(
+                TopicMapDraft.NotServed,
+                "the host serves no save, so a client cannot leave a state with a run but through its events"
+            );
 
         // The real outcome still lands.
         var built = await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
         built.Context["topicPairs"]!.GetValue<int>().Should().Be(32);
+    }
+
+    // The built map's review timer: Built is held for a review window, then the server moves it on. A timer
+    // trigger is named after the state it leaves.
+    private const string ReviewTimer = "Built.after";
+
+    [Test]
+    [Property(
+        "adr",
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
+    )]
+    public async Task AHandFiredTimer_IsRefused()
+    {
+        await _draft.CreateAsync();
+        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var built = await _draft.WaitForStateAsync(nameof(TopicMapState.Built));
+
+        // A timer trigger is not an event: the typed surface has no field for it, so a client cannot even name it.
+        (await _draft.AdvanceAsync(ReviewTimer))
+            .Problem.Should()
+            .Be(TopicMapDraft.NotServed, "a timer has no client field (Trax.Docs/adr/0048)");
+
+        // Nor can host code acting for the draft's owner fire it, whatever role it holds.
+        string owner;
+        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+            owner = (
+                await scope
+                    .ServiceProvider.GetRequiredService<IDataContext>()
+                    .SnapshotDrafts.AsNoTracking()
+                    .SingleAsync(d => d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId)
+            ).UserKey!;
+        using (var scope = SharedRecoverySetup.Factory.Services.CreateScope())
+            (
+                await scope
+                    .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+                    .Service(TopicMapMachine.MachineId)!
+                    .Advance(
+                        new Actor.Client(owner, Trax.Samples.Recovery.Auth.RecoveryRoles.Operator),
+                        _draft.Id,
+                        ReviewTimer
+                    )
+            )
+                .Should()
+                .BeOfType<AdvanceOutcome.Rejected>()
+                .Which.Reason.Should()
+                .Be(
+                    Trax.Effect.StateMachine.RejectionReasons.TimerBound,
+                    "only the server fires a timer, when it is due (Trax.Docs/adr/0048)"
+                );
+
+        var after = await _draft.LoadAsync();
+        after.State.Should().Be(nameof(TopicMapState.Built));
+        after
+            .Snapshot!.ToJsonString()
+            .Should()
+            .Be(built.Snapshot!.ToJsonString(), "a refused timer writes nothing");
     }
 
     [Test]
@@ -331,18 +520,27 @@ public class TopicMapMachineTests : RecoveryTestFixture
         var viewer = new GraphQLClient(Http);
 
         var response = await viewer.SendAsync(
-            $$"""
-            mutation { dispatch { stateMachine { loadSnapshot(input: {
-              machine: "topic-map", id: "{{_draft.Id}}" }) { output { snapshot problem { code } } } } } }
-            """,
+            $$"""{ machines { topicMap { get(id: "{{_draft.Id}}") { id state } } } }""",
             Auth.DemoKeys.Viewer
         );
 
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         response
-            .GetData("dispatch", "stateMachine", "loadSnapshot", "output", "snapshot")
+            .GetData("machines", "topicMap", "get")
             .ValueKind.Should()
-            .Be(System.Text.Json.JsonValueKind.Null, "a draft belongs to the caller who saved it");
+            .Be(
+                System.Text.Json.JsonValueKind.Null,
+                "a draft belongs to the caller who started it; another user's id reads as an unknown one"
+            );
+    }
+
+    private async Task<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> Row()
+    {
+        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .SnapshotDrafts.AsNoTracking()
+            .SingleAsync(d => d.Id == _draft.Id && d.Machine == TopicMapMachine.MachineId);
     }
 
     private async Task<List<Trax.Effect.Models.WorkQueue.WorkQueue>> Runs()

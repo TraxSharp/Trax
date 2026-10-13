@@ -4,11 +4,13 @@
 //   node state-machine.mjs [--copy-to <dir>]
 //
 // The script presses every button the sample's page offers, from every state the page can reach, over the same
-// GraphQL operations the page sends, and writes down each request and the server's whole response. It walks each
-// machine as a graph: a node is a draft's state and context, an edge is one button pressed there. Each edge is
-// recorded on a fresh draft brought to its node by replaying the path that first reached it, so every response
-// is the one the server gives at that point. The page's free-form draft editor becomes two presets: add the next
-// item of a fixed list (at most two), and save with a $0.01 total.
+// GraphQL operations the page sends (web/src/traxTransport.ts): each machine's own typed operations under the
+// `machines` root, `start`, one mutation per event and `get`, and writes down each request and the server's whole
+// response. The page never writes a snapshot: a draft starts with `start`, which mints its id on the server, and
+// moves only with the machine's declared events. It walks each machine as a graph: a node is a draft's state and
+// context, an edge is one button pressed there. Each edge is recorded on a fresh draft brought to its node by
+// replaying the path that first reached it, so every response is the one the server gives at that point. The
+// page's free-form AddItem becomes one preset: add the next item of a fixed list (at most two).
 //
 // The checkout's charge is the one thing a replay repeats: getting a draft back to Paid means paying again. So a
 // Paid draft's buttons are all pressed on the one draft that was paid on the way there (the refusals and a second
@@ -32,59 +34,72 @@ const OUT = join(here, "out", "state-machine");
 const MAX_ITEMS = 2;
 const MAX_PAID = 2;
 const ITEMS = ["book", "pen"];
-const UNIT_PRICE_CENTS = 999;
 
-const OUTPUT = "externalId output { snapshot problem { code message } }";
-const INPUT_TYPES = {
-  saveSnapshot: "SaveSnapshotInput",
-  advanceSnapshot: "AdvanceSnapshotInput",
-  loadSnapshot: "LoadSnapshotInput",
-  sendSnapshot: "SendSnapshotInput",
-};
-// The page's own documents (web/src/traxTransport.ts).
-const QUERIES = Object.fromEntries(
-  Object.entries(INPUT_TYPES).map(([op, type]) => [
-    op,
-    `mutation($i: ${type}!){ dispatch { stateMachine { ${op}(input:$i){ ${OUTPUT} } } } }`,
-  ]),
-);
 const LIST_CHARGES = "{ discover { payments { listCharges { charges { receipt amountCents items chargedAt } } } } }";
 
-// The page's two machines, their ids, first drafts and buttons (web/src/machines.ts and App.tsx).
+// The page's two machines: their fields under `machines`, the context each answer selects, the ids the website
+// shows, and their buttons (web/src/traxTransport.ts, machines.ts and App.tsx).
 const MACHINES = {
   turnstile: {
     id: "a0000000-0000-0000-0000-000000000001",
-    initial: { machine: "turnstile", version: 1, state: "Locked", context: {} },
+    field: "turnstile",
+    context: "paidWith",
     actions: [
-      { id: "coin-penny", kind: "advance", trigger: "Coin", input: { coin: "penny" } },
-      { id: "coin-quarter", kind: "advance", trigger: "Coin", input: { coin: "quarter" } },
-      { id: "coin-dollar", kind: "advance", trigger: "Coin", input: { coin: "dollar" } },
-      { id: "push", kind: "advance", trigger: "Push" },
+      { id: "coin-penny", kind: "event", trigger: "Coin", input: { coin: "penny" } },
+      { id: "coin-quarter", kind: "event", trigger: "Coin", input: { coin: "quarter" } },
+      { id: "coin-dollar", kind: "event", trigger: "Coin", input: { coin: "dollar" } },
+      { id: "push", kind: "event", trigger: "Push" },
     ],
   },
   checkout: {
     id: "b0000000-0000-0000-0000-000000000002",
-    initial: { machine: "checkout", version: 2, state: "Cart", context: { items: [], receipt: null, total: 0 } },
+    field: "checkout",
+    context: "items receipt total",
     // Ordered so that on a Paid draft every button that leaves it unchanged comes before Reset.
     actions: [
-      { id: "save-penny-total", kind: "save", preset: "penny-total" },
-      { id: "add-item", kind: "save", preset: "add-item" },
-      { id: "back", kind: "advance", trigger: "Back" },
-      { id: "next", kind: "advance", trigger: "Next" },
-      { id: "pay", kind: "send" },
-      { id: "reset", kind: "advance", trigger: "Reset" },
+      { id: "add-item", kind: "event", trigger: "AddItem", preset: "add-item" },
+      { id: "back", kind: "event", trigger: "Back" },
+      { id: "next", kind: "event", trigger: "Next" },
+      { id: "pay", kind: "event", trigger: "Pay" },
+      { id: "reset", kind: "event", trigger: "Reset" },
     ],
   },
 };
 
 let requestCounter = 0;
 
-async function post(query, variables) {
+// A trigger's field: the trigger in camelCase, as the server names it (AddItem is addItem).
+const fieldOf = (trigger) => trigger[0].toLowerCase() + trigger.slice(1);
+
+// A value as a GraphQL literal: objects with bare keys, everything else as JSON writes it.
+const literal = (value) => {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(literal).join(", ")}]`;
+  if (typeof value === "object")
+    return `{ ${Object.entries(value)
+      .map(([k, v]) => `${k}: ${literal(v)}`)
+      .join(", ")} }`;
+  return JSON.stringify(value);
+};
+
+/** The document the page sends for one operation of a machine, with its arguments written in. */
+function documentOf(machine, operation, args) {
+  const m = MACHINES[machine];
+  const selection = `id revision state context { ${m.context} } problem { code message }`;
+  const argList = Object.entries(args)
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => `${k}: ${literal(v)}`)
+    .join(", ");
+  const root = operation === "get" ? "" : "mutation ";
+  return `${root}{ machines { ${m.field} { ${operation}(${argList}) { ${selection} } } } }`;
+}
+
+async function post(query) {
   const started = performance.now();
   const response = await fetch(`http://${HOST}/trax/graphql`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Api-Key": API_KEY },
-    body: JSON.stringify({ query, variables }),
+    body: JSON.stringify({ query }),
   });
   const body = await response.json();
   if (body.errors?.length) throw new Error(`${body.errors[0].message} (${query.slice(0, 60)}...)`);
@@ -96,48 +111,37 @@ async function charges() {
   return body.data.discover.payments.listCharges.charges;
 }
 
-/** One of the four mutations, as the page sends it, with the server's whole answer. */
-async function mutate(op, input) {
-  const { body, ms } = await post(QUERIES[op], { i: input });
-  const raw = body.data.dispatch.stateMachine[op];
+/** The answer as the page shows it: the context's null fields are the ones the state does not hold. */
+function snapshotOf(machine, answer) {
+  if (!answer || answer.problem || !answer.state) return null;
+  const context = Object.fromEntries(
+    Object.entries(answer.context ?? {}).filter(([, v]) => v !== null && v !== undefined),
+  );
+  return { machine, state: answer.state, context };
+}
+
+/** One typed operation, as the page sends it, with the server's whole answer. */
+async function operate(machine, operation, args) {
+  const query = documentOf(machine, operation, args);
+  const { body, ms } = await post(query);
+  const answer = body.data.machines[MACHINES[machine].field][operation];
   return {
-    exchange: { op, variables: { i: input }, response: body, ms },
-    snapshot: raw.output.snapshot ? JSON.parse(raw.output.snapshot) : null,
-    problem: raw.output.problem,
+    exchange: { operation, query, response: body, ms },
+    id: answer?.id ?? null,
+    snapshot: snapshotOf(machine, answer),
+    problem: answer?.problem ?? null,
   };
 }
 
 /** What a button sends, given the draft as the page last saw it. Null when the page would not offer it. */
 function request(machine, action, draftId, current) {
-  const name = current.machine;
-  switch (action.kind) {
-    case "advance":
-      return [
-        "advanceSnapshot",
-        { machine: name, id: draftId, trigger: action.trigger, input: action.input ? JSON.stringify(action.input) : null, requestId: null },
-      ];
-    case "send":
-      return ["sendSnapshot", { machine: name, id: draftId, requestId: `pay-${++requestCounter}` }];
-    case "save": {
-      const items = current.context.items ?? [];
-      // The page saves with the state it shows and no receipt (web/src/App.tsx, DraftEditor).
-      if (action.preset === "add-item") {
-        if (items.length >= MAX_ITEMS) return null;
-        const next = [...items, ITEMS[items.length]];
-        return ["saveSnapshot", save(name, draftId, current.state, next, next.length * UNIT_PRICE_CENTS)];
-      }
-      if (items.length === 0) return null; // the page disables "Save with a $0.01 total" on an empty cart
-      return ["saveSnapshot", save(name, draftId, current.state, items, 1)];
-    }
+  const requestId = `${action.id}-${++requestCounter}`;
+  if (action.preset === "add-item") {
+    const items = current.context.items ?? [];
+    if (items.length >= MAX_ITEMS) return null;
+    return [fieldOf(action.trigger), { id: draftId, input: { item: ITEMS[items.length] }, requestId }];
   }
-}
-
-function save(machine, id, state, items, total) {
-  return {
-    machine,
-    id,
-    snapshot: JSON.stringify({ machine, version: 2, state, context: { items, receipt: null, total } }),
-  };
+  return [fieldOf(action.trigger), { id: draftId, input: action.input, requestId }];
 }
 
 /**
@@ -154,23 +158,20 @@ function keyOf(snapshot, paid) {
 async function press(machine, action, draft) {
   const req = request(machine, action, draft.id, draft.snapshot);
   if (!req) return null;
-  const before = action.kind === "send" ? await charges() : null;
-  const result = await mutate(...req);
-  const added = before
-    ? (await charges()).filter((c) => !before.some((b) => b.receipt === c.receipt))
-    : [];
+  const paying = action.trigger === "Pay";
+  const before = paying ? await charges() : null;
+  const result = await operate(machine, ...req);
+  const added = before ? (await charges()).filter((c) => !before.some((b) => b.receipt === c.receipt)) : [];
   const snapshot = result.snapshot ?? draft.snapshot;
   const paid = draft.paid + added.length;
   return { exchange: result.exchange, problem: result.problem, snapshot, paid, charges: added };
 }
 
-/** A fresh draft opened the way the page opens one (load, then save the first draft), brought along a path. */
+/** A fresh draft opened the way the page opens one: start, which mints its id on the server. */
 async function open(machine) {
-  const m = MACHINES[machine];
-  const id = randomUUID();
-  const load = await mutate("loadSnapshot", { machine, id });
-  const first = await mutate("saveSnapshot", { machine, id, snapshot: JSON.stringify(m.initial) });
-  return { draft: { id, snapshot: first.snapshot, paid: 0 }, opening: [load.exchange, first.exchange] };
+  const started = await operate(machine, "start", { requestId: `start-${randomUUID()}` });
+  if (!started.snapshot) throw new Error(`${machine}: start was refused: ${JSON.stringify(started.problem)}`);
+  return { draft: { id: started.id, snapshot: started.snapshot, paid: 0 }, opening: [started.exchange] };
 }
 
 async function walk(draft, machine, path) {
@@ -248,7 +249,8 @@ function writeWebsiteCopy(dir) {
   const project = resolve(here, "../../samples/StateMachine/Trax.Samples.StateMachine");
   const file = "Trax.Samples.StateMachine/Machines.cs";
   const data = {
-    queries: { ...QUERIES, listCharges: LIST_CHARGES },
+    // Each exchange carries the document the page sent; these are the reads around a payment.
+    queries: { listCharges: LIST_CHARGES },
     actions: Object.fromEntries(Object.entries(MACHINES).map(([name, m]) => [name, m.actions])),
     maxItems: MAX_ITEMS,
     maxPaid: MAX_PAID,

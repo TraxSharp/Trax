@@ -1,6 +1,7 @@
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Trains.Topics.Junctions;
 
 namespace Trax.Samples.Recovery.Trains.Topics;
@@ -23,13 +24,13 @@ namespace Trax.Samples.Recovery.Trains.Topics;
 /// cancelled from another host, and its output holds no sensitive member.
 /// </para>
 /// <para>
-/// The <c>topic-map</c> machine's <c>Building</c> state invokes it, and a user-owned machine may not
-/// invoke a train stricter than its own mutations, which need an authenticated caller and no role. So
-/// it asks for exactly that. Every caller this host authenticates holds <c>Operator</c> or
-/// <c>Viewer</c>, so the set of callers who may run it is the same as before.
+/// The <c>topic-map</c> machine's <c>Building</c> state invokes it. Both events that enter <c>Building</c>,
+/// <c>Build</c> and <c>Rebuild</c>, require <see cref="RecoveryRoles.Operator"/>, and the host compares each
+/// of them with this train's requirement at startup, so the train asks for the same role and a viewer can
+/// neither run it directly nor reach it through the machine.
 /// </para>
 /// </remarks>
-[TraxAuthorize]
+[TraxAuthorize(Roles = RecoveryRoles.Operator)]
 public class BuildTopicMapTrain : ServiceTrain<TopicMapInput, TopicMap>, IBuildTopicMapTrain
 {
     protected override Task<Either<Exception, TopicMap>> Junctions() =>

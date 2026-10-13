@@ -1,7 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using Trax.Effect.Attributes;
 using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
+using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Trains.Topics;
 using static Trax.Effect.StateMachine.Rules;
 
@@ -29,6 +31,12 @@ public enum TopicMapState
     /// cancel it, because a user's draft is read-only to operators.
     /// </summary>
     BuildCancelled,
+
+    /// <summary>
+    /// The built map was not reviewed within <see cref="TopicMapMachine.ReviewWindow"/>: the server moved it here by
+    /// the review timer. It can be rebuilt, or its range edited.
+    /// </summary>
+    Expired,
 }
 
 public enum TopicMapTrigger
@@ -50,6 +58,12 @@ public enum TopicMapTrigger
 
     /// <summary>Change the choices after a build.</summary>
     Edit,
+
+    /// <summary>
+    /// Start a new map on this draft: back to the first step with nothing chosen. From Building it cancels the run,
+    /// and from a finished build it leaves the build's state, so its review timer is cancelled.
+    /// </summary>
+    StartOver,
 }
 
 /// <summary>
@@ -82,6 +96,9 @@ public sealed record FieldsChoice
     public List<string> Fields { get; init; } = [];
 }
 
+/// <summary>What a user starts a topic map with: nothing, the wizard starts empty.</summary>
+public sealed record TopicMapStart;
+
 /// <summary>The input of <see cref="TopicMapTrigger.Build"/>.</summary>
 public sealed record RangeChoice
 {
@@ -100,24 +117,41 @@ public sealed record RangeChoice
 ///       │                               └──────Edit─────────┼─┼─────────────────  Built, BuildFailed,
 ///       │                                                   │ └────cancelled----> BuildCancelled
 ///                                       Building ◀──Rebuild── Built, BuildFailed, BuildCancelled
+///   ChoosingFields ◀──StartOver── Building, Built, BuildFailed, BuildCancelled, Expired (nothing chosen)
 /// </code>
 /// </summary>
 /// <remarks>
 /// <para>
 /// User-owned, so the client's twin drives it and the draft is the user's own: close the tab and
-/// <c>loadSnapshot</c> returns the same place. Because a client would like to skip the work, every
-/// state an outcome reaches is reserved: an autosave cannot put a draft in <c>Building</c>,
-/// <c>Built</c>, <c>BuildFailed</c> or <c>BuildCancelled</c>, and <c>advanceSnapshot</c> refuses
-/// <c>Building.done</c>.
+/// <c>machines { topicMap { get } }</c> returns the same place. The host exposes it, so a client creates a
+/// draft with its typed <c>start</c>, which mints its id on the server, and moves it only with the machine's
+/// events, each its own mutation. Because a client would like to skip the work, no client writes a snapshot
+/// of it, and no client field fires <c>Building.done</c>: only the run's outcome does.
 /// </para>
 /// <para>
 /// No outcome target invokes a train, so every move out of a finished build is a user's event:
 /// <c>Rebuild</c> enters <c>Building</c> again, which queues a new run.
 /// </para>
+/// <para>
+/// <c>StartOver</c> is how the page starts a new map once a build began. The server refuses to discard a draft in
+/// <c>Building</c> or in a state a build's outcome reached, since it is the record of that build, so the page resets
+/// the draft it holds instead of leaving it behind: an abandoned draft would count against the user's draft cap until
+/// it expired, and a Built one's review timer would keep it alive past that.
+/// </para>
+/// <para>
+/// Every event declares who may send it. <c>Build</c> and <c>Rebuild</c> enter <c>Building</c>, which runs
+/// <see cref="IBuildTopicMapTrain"/>, so both require <see cref="RecoveryRoles.Operator"/>, the role the train
+/// asks for: the host compares each event entering the state with the train at startup. Any authenticated user
+/// may move through the rest of the wizard, and only a draft's owner reads it.
+/// </para>
 /// </remarks>
+[TraxMachine]
 public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
 {
     public const string MachineId = "topic-map";
+
+    /// <summary>How long a built map is held for review before the server moves it to <c>Expired</c>.</summary>
+    public static readonly TimeSpan ReviewWindow = TimeSpan.FromDays(7);
 
     // Declared before anything reads it: static fields initialize in order.
     private static readonly Reduction KeepTheMap = SetAll(
@@ -137,11 +171,18 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
 
     protected override void Configure(IMachineBuilder<TopicMapState, TopicMapTrigger> m)
     {
-        m.Id(MachineId).Version(1).StartsAt(TopicMapState.ChoosingFields, () => new JsonObject());
+        m.Id(MachineId)
+            .Version(1)
+            .StartsAt(TopicMapState.ChoosingFields, () => new JsonObject())
+            .Start<TopicMapStart>(s => s.Reduce(Keep()).AnyAuthenticated())
+            .Get(r => r.OwnerOnly())
+            .Watch(r => r.OwnerOnly())
+            .Discard(r => r.OwnerOnly());
 
         m.In(TopicMapState.ChoosingFields)
             .Context<TopicMapContext>()
             .On(TopicMapTrigger.ChooseFields)
+            .AnyAuthenticated()
             .WithInput<FieldsChoice>()
             .When(Input((FieldsChoice i) => i.Fields).CountAtLeast(1))
             .Because("Choose at least one field.")
@@ -152,8 +193,10 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
             .Context<TopicMapContext>()
             .Requires(HasFields)
             .On(TopicMapTrigger.Back)
+            .AnyAuthenticated()
             .To(TopicMapState.ChoosingFields)
             .On(TopicMapTrigger.Build)
+            .Requires(RecoveryRoles.Operator)
             .WithInput<RangeChoice>()
             .When(
                 All(
@@ -179,28 +222,61 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
             .OnCancelled(TopicMapState.BuildCancelled)
             // Leaving Building cancels its run.
             .On(TopicMapTrigger.CancelBuild)
-            .To(TopicMapState.ChoosingRange);
+            .AnyAuthenticated()
+            .To(TopicMapState.ChoosingRange)
+            .On(TopicMapTrigger.StartOver)
+            .AnyAuthenticated()
+            .Reduce(Reset())
+            .To(TopicMapState.ChoosingFields);
 
         m.In(TopicMapState.Built)
             .Context<TopicMapContext>()
             .Requires(All(HasRange, Field((TopicMapContext c) => c.MapId).NonEmpty()))
+            // A built map is reviewed within a window; once it passes, the server moves the map on by itself, and the
+            // page hears it by push.
+            .After(ReviewWindow)
+            .GoTo(TopicMapState.Expired)
             .On(TopicMapTrigger.Rebuild)
+            .Requires(RecoveryRoles.Operator)
             .To(TopicMapState.Building)
             .On(TopicMapTrigger.Edit)
-            .To(TopicMapState.ChoosingRange);
+            .AnyAuthenticated()
+            .To(TopicMapState.ChoosingRange)
+            .On(TopicMapTrigger.StartOver)
+            .AnyAuthenticated()
+            .Reduce(Reset())
+            .To(TopicMapState.ChoosingFields);
 
-        foreach (var ended in new[] { TopicMapState.BuildFailed, TopicMapState.BuildCancelled })
+        foreach (
+            var ended in new[]
+            {
+                TopicMapState.BuildFailed,
+                TopicMapState.BuildCancelled,
+                TopicMapState.Expired,
+            }
+        )
             m.In(ended)
                 .Context<TopicMapContext>()
                 .Requires(HasRange)
                 .On(TopicMapTrigger.Rebuild)
+                .Requires(RecoveryRoles.Operator)
                 .To(TopicMapState.Building)
                 .On(TopicMapTrigger.Edit)
-                .To(TopicMapState.ChoosingRange);
+                .AnyAuthenticated()
+                .To(TopicMapState.ChoosingRange)
+                .On(TopicMapTrigger.StartOver)
+                .AnyAuthenticated()
+                .Reduce(Reset())
+                .To(TopicMapState.ChoosingFields);
 
         m.Differential(d =>
             d.Sample(TopicMapTrigger.ChooseFields, new FieldsChoice { Fields = ["Hydrology"] })
                 .Sample(TopicMapTrigger.Build, new RangeChoice { FromYear = 2016, ToYear = 2025 })
+                // A whole number no int holds: both engines refuse it as invalid-input.
+                .Sample(
+                    TopicMapTrigger.Build,
+                    new JsonObject { ["fromYear"] = 1e10, ["toYear"] = 2025 }
+                )
                 .EmptySample(TopicMapTrigger.ChooseFields)
                 .OutcomeSample(
                     TopicMapState.Building,

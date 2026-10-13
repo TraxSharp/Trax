@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Samples.StateMachine.E2E.Factories;
 
 // In the assembly root namespace so this [SetUpFixture] covers every test namespace.
@@ -13,11 +16,18 @@ public class SharedStateMachineSetup
     public static StateMachineApiFactory Factory { get; private set; } = null!;
 
     [OneTimeSetUp]
-    public void OneTimeSetUp()
+    public async Task OneTimeSetUp()
     {
         Factory = new StateMachineApiFactory();
         // Builds and starts the host: the Trax migrations, snapshot_draft and effect_claim included, run here.
         _ = Factory.Services;
+
+        // The database outlives a run, and the demo callers hold at most the host's per-user draft count, so each run
+        // starts from no drafts and no claims rather than inheriting every earlier run's.
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
+        await db.SnapshotDrafts.ExecuteDeleteAsync();
+        await db.EffectClaims.ExecuteDeleteAsync();
     }
 
     [OneTimeTearDown]

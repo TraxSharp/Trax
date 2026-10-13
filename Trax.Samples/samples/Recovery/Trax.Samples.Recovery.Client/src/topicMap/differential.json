@@ -1,0 +1,5665 @@
+{
+  "machine": "topic-map",
+  "version": 1,
+  "generated": "GENERATED differential corpus. Do not hand-edit; regenerate with UPDATE_DIFFERENTIAL=1. TypeScript is the oracle; every runtime replays and must reproduce each outcome.",
+  "cases": [
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildCancelled",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "BuildFailed",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"BuildCancelled\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Built\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"BuildFailed\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"BuildCancelled\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Built\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"BuildFailed\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Building",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Built",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Expired\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"fields\":[\"Hydrology\"]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"fields\":[\"Hydrology\"]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingFields",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{\"fields\":[\"Hydrology\"]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"toYear\":2025}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "ChoosingRange",
+        "context": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 2016,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Build",
+        "input": {
+          "fromYear": 10000000000,
+          "toYear": 2025
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "CancelBuild"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {
+          "fields": [
+            "Hydrology"
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "ChooseFields",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Edit"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingRange\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Rebuild"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"Building\",\"context\":{\"coCitationTrack\":\"Trusted\",\"fields\":[\"Hydrology\"],\"fromYear\":2016,\"mapId\":\"map-sample\",\"papers\":28,\"toYear\":2025,\"topicPairs\":32}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"topic-map\",\"version\":1,\"state\":\"ChoosingFields\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.done",
+        "input": {
+          "coCitationTrack": "Trusted",
+          "hiddenTwins": [],
+          "papers": 28,
+          "runId": "map-sample",
+          "strongest": [],
+          "topicPairs": 32
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Building.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "topic-map",
+        "version": 1,
+        "state": "Expired",
+        "context": {
+          "coCitationTrack": "Trusted",
+          "fields": [
+            "Hydrology"
+          ],
+          "fromYear": 2016,
+          "mapId": "map-sample",
+          "papers": 28,
+          "toYear": 2025,
+          "topicPairs": 32
+        }
+      },
+      "when": {
+        "trigger": "Built.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    }
+  ]
+}

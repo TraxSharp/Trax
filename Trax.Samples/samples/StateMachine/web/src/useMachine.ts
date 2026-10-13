@@ -3,10 +3,10 @@ import type { Problem, Result, Snapshot, TraxTransport } from "./traxTransport";
 
 /** What the page last asked the server to do, and what came back: the walkthrough explains it. */
 export interface LastAction {
-  kind: "advance" | "save" | "send";
+  kind: "start" | "advance" | "send";
   /** The trigger an advance fired. */
   trigger?: string;
-  /** The trigger input, or for a save the context it wrote. */
+  /** The trigger input. */
   input?: Record<string, unknown>;
   /** The state the stored draft was in before the request. */
   from: string | null;
@@ -16,15 +16,32 @@ export interface LastAction {
   at: number;
 }
 
-// Owns one machine instance's snapshot. On mount it resumes the caller's stored draft (or seeds a fresh one
-// if there is none), and every action re-renders, including a rejection, so a declined action is never
-// silently swallowed. The whole hook is machine-agnostic; the caller supplies the initial snapshot factory.
-export function useMachine(
-  transport: TraxTransport,
-  machine: string,
-  id: string,
-  initial: () => Snapshot,
-) {
+function read(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function write(key: string, value: string | null) {
+  try {
+    if (value == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // A private window keeps nothing between visits; this one still works.
+  }
+}
+
+// Owns one machine instance's snapshot. On mount it resumes the caller's stored instance, or starts one: the server
+// mints the id from the machine's declared start, and this browser keeps it per user and machine. Every action
+// re-renders, including a rejection, so a declined action is never silently swallowed. The whole hook is
+// machine-agnostic.
+export function useMachine(transport: TraxTransport, machine: string, user: string) {
+  const idKey = `trax-statemachine.${user}.${machine}`;
+  // The request id of a start that has not answered: a reload retries it and gets the same instance back.
+  const startKey = `${idKey}.start`;
+  const [id, setId] = useState<string | null>(() => read(idKey));
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,8 +69,10 @@ export function useMachine(
           replayed: action.kind === "send" && !!receipt(before) && receipt(before) === receipt(result.snapshot),
           at: Date.now(),
         });
+        return result;
       } catch (e) {
         setProblem({ code: "transport", message: e instanceof Error ? e.message : String(e) });
+        return null;
       } finally {
         setBusy(false);
       }
@@ -61,39 +80,56 @@ export function useMachine(
     [apply],
   );
 
+  const start = useCallback(async () => {
+    let requestId = read(startKey);
+    if (!requestId) {
+      requestId = crypto.randomUUID();
+      write(startKey, requestId);
+    }
+    const started = await run(() => transport.start(machine, requestId), { kind: "start" });
+    if (started?.id) {
+      write(startKey, null);
+      write(idKey, started.id);
+      setId(started.id);
+    }
+  }, [transport, machine, idKey, startKey, run]);
+
   const reload = useCallback(async () => {
+    if (!id) return start();
     setBusy(true);
     try {
       const loaded = await transport.load(machine, id);
       if (loaded.snapshot) {
         setSnapshot(loaded.snapshot);
         setProblem(null);
-      } else {
-        // No draft yet (a fresh start): seed one via the soft save path.
-        apply(await transport.save(machine, id, initial()));
+        return;
       }
+      if (loaded.problem?.code !== "not-found") return setProblem(loaded.problem);
     } catch (e) {
-      setProblem({ code: "transport", message: e instanceof Error ? e.message : String(e) });
+      return setProblem({ code: "transport", message: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
     }
-  }, [transport, machine, id, initial, apply]);
+    // The server no longer holds this instance (it expired, or was discarded): start a new one.
+    write(idKey, null);
+    setId(null);
+  }, [transport, machine, id, idKey, start]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
   return {
+    id,
     snapshot,
     problem,
     busy,
     last,
     state: snapshot?.state ?? null,
     context: snapshot?.context ?? {},
-    save: (s: Snapshot) => run(() => transport.save(machine, id, s), { kind: "save", input: s.context }),
-    advance: (trigger: string, input?: Record<string, unknown>, requestId?: string) =>
-      run(() => transport.advance(machine, id, trigger, input, requestId), { kind: "advance", trigger, input }),
-    send: (requestId?: string) => run(() => transport.send(machine, id, requestId), { kind: "send" }),
+    advance: (trigger: string, input?: Record<string, unknown>) =>
+      id ? run(() => transport.advance(machine, id, trigger, input, crypto.randomUUID()), { kind: "advance", trigger, input }) : undefined,
+    send: (requestId?: string) => (id ? run(() => transport.send(machine, id, requestId), { kind: "send" }) : undefined),
     reload,
   };
 }

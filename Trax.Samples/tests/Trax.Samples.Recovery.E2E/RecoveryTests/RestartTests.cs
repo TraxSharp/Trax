@@ -26,11 +26,17 @@ public class RestartTests
     public async Task AHostKilledMidBuild_FailsTheRunOnTheNextStart_AndTheDraftIsRebuiltFromBuildFailed()
     {
         Guid draftId;
-        await using (var first = await RecoveryHostProcess.StartAsync(TimeSpan.FromSeconds(2)))
+        await using (
+            var first = await RecoveryHostProcess.StartAsync(
+                TimeSpan.FromSeconds(2),
+                requirePersistedOperations: false
+            )
+        )
         {
+            await TopicMapDrafts.ClearAsync(RecoveryHostProcess.ConnectionString);
             var draft = new TopicMapDraft(new GraphQLClient(first.Http), DemoKeys.Operator);
-            draftId = draft.Id;
             await draft.CreateAsync();
+            draftId = draft.Id;
             (await draft.BuildAsync(CorpusFixture.Fields, 2016, 2025))
                 .State.Should()
                 .Be(nameof(TopicMapState.Building));
@@ -56,7 +62,8 @@ public class RestartTests
         (await DraftStateAsync(draftId)).Should().Be(nameof(TopicMapState.Building));
 
         await using var second = await RecoveryHostProcess.StartAsync(
-            TimeSpan.FromMilliseconds(200)
+            TimeSpan.FromMilliseconds(200),
+            requirePersistedOperations: false
         );
         var resumed = new TopicMapDraft(new GraphQLClient(second.Http), DemoKeys.Operator, draftId);
 

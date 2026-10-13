@@ -6,7 +6,7 @@ type Filter = "all" | "refused";
 const ARROWS = { out: "↑", in: "↓", info: "•" };
 
 /**
- * "Under the hood": every stateMachine mutation this tab sends and what the server answered, as they
+ * "Under the hood": every machine operation this tab sends and what the server answered, as they
  * happen, each with what Trax did. A request and its response share the Trax run's external id, and
  * hovering one lights up the other.
  */

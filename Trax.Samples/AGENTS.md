@@ -53,8 +53,8 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Samples.Tests.Meta/` holds twenty-one convention guards. Eleven are shared with other
-folders, and ten are this folder's own. `E2EDatabaseProvisioningTests` reads the root CI workflow
+`tests/Trax.Samples.Tests.Meta/` holds twenty-two convention guards. Eleven are shared with other
+folders, and eleven are this folder's own. `E2EDatabaseProvisioningTests` reads the root CI workflow
 and `.github/ci/packages.json`, checking every sample factory's *default* connection string
 against the ports and databases CI actually creates; a factory that declares none, because its sample runs on SQLite or the
 in-memory provider or reads the connection from configuration, gives it nothing to check.
@@ -71,6 +71,12 @@ is named by a row. Rows naming another folder's class are checked for shape only
 `RabbitMqExchangePerSampleTests` requires every RabbitMQ sample to name an exchange no other sample
 uses. `SamplePortsTests` keeps every sample port in 5200-5299 or 5310-5319 and owned by one sample.
 `AsyncAssertionsAreAwaitedTests` refuses an async assertion whose Task is dropped unawaited.
+`PlaywrightVersionTests` keeps the `Microsoft.Playwright` pin equal to the screenshot script's
+Playwright, so the browser tests and the script download one browser build (central ADR `0049`).
+
+`tests/Trax.Samples.Recovery.Browser/` drives the Recovery page in chromium with Playwright for .NET.
+It builds the page with vite, so it needs `npm ci` in the page's folder and in
+`Trax.Api.StateMachine`, and chromium installed with the `playwright.ps1` beside its build output.
 
 This folder has no `PublicApiSurfaceTests`, which is right: the samples are applications, and
 the one package it does ship, `Trax.Samples.Templates`, is template content with no API

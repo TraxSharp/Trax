@@ -1,13 +1,11 @@
 // How the page describes the two machines: their states, the rule each state's context must satisfy, and the
 // moves between them. It mirrors Machines.cs for display only; the server decides everything.
 
-import type { Snapshot } from "./traxTransport";
-
 export interface StateView {
   name: string;
   /** What every draft in this state must satisfy, in words. */
   rule: string;
-  /** Committed: only the machine's effect can put a draft here, and a save cannot move it out. */
+  /** Committed: only the machine's effect can put a draft here, and only its declared events move it out. */
   committed?: boolean;
 }
 
@@ -26,7 +24,7 @@ export interface TriggerButton {
   input?: Record<string, unknown>;
   /** What the trigger means in the example, as a caption. */
   caption: string;
-  /** Fired with sendSnapshot rather than advanceSnapshot. */
+  /** The event bound to the effect: the server runs the effect when it is sent. */
   send?: boolean;
   /** A trigger the machine is expected to refuse, shown as a probe. */
   probe?: boolean;
@@ -34,7 +32,6 @@ export interface TriggerButton {
 
 export interface MachineView {
   name: "turnstile" | "checkout";
-  id: string;
   title: string;
   tagline: string;
   /** The example, in one line: the machine is the point, this is only the costume. */
@@ -42,15 +39,10 @@ export interface MachineView {
   states: StateView[];
   moves: MoveView[];
   triggers: TriggerButton[];
-  initial: () => Snapshot;
 }
-
-// Demo unit price in cents, matched to the server's CheckoutMachine.
-export const UNIT_PRICE_CENTS = 999;
 
 export const TURNSTILE: MachineView = {
   name: "turnstile",
-  id: "a0000000-0000-0000-0000-000000000001",
   title: "A simple machine",
   tagline: "Two states, two triggers, one guard.",
   example: "Picture a turnstile: a coin unlocks it, and walking through locks it again.",
@@ -68,12 +60,10 @@ export const TURNSTILE: MachineView = {
     { trigger: "Coin", input: { coin: "penny" }, caption: "insert a penny", probe: true },
     { trigger: "Push", caption: "walk through" },
   ],
-  initial: () => ({ machine: "turnstile", version: 1, state: "Locked", context: {} }),
 };
 
 export const CHECKOUT: MachineView = {
   name: "checkout",
-  id: "b0000000-0000-0000-0000-000000000002",
   title: "A machine with an effect",
   tagline: "Three states, and one move that does something irreversible, exactly once.",
   example: "Picture a checkout: fill a cart, review it, pay. Paying charges a card, which must never happen twice.",
@@ -83,7 +73,8 @@ export const CHECKOUT: MachineView = {
     { name: "Paid", rule: "a receipt, and the total is $9.99 per item", committed: true },
   ],
   moves: [
-    { trigger: "Next", from: "Cart", to: "Review" },
+    { trigger: "AddItem", from: "Cart", to: "Cart", guard: "names an item; the server prices the cart" },
+    { trigger: "Next", from: "Cart", to: "Review", guard: "at least one item" },
     { trigger: "Back", from: "Review", to: "Cart" },
     { trigger: "Pay", from: "Review", to: "Paid", effect: "charge", guard: "needs items and a receipt" },
     { trigger: "Reset", from: "Paid", to: "Cart" },
@@ -94,5 +85,4 @@ export const CHECKOUT: MachineView = {
     { trigger: "Pay", caption: "pay: runs the charge", send: true },
     { trigger: "Reset", caption: "start over" },
   ],
-  initial: () => ({ machine: "checkout", version: 2, state: "Cart", context: { items: [], receipt: null, total: 0 } }),
 };

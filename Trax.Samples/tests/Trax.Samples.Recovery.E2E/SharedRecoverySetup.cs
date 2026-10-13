@@ -1,4 +1,6 @@
 using Trax.Samples.Recovery.E2E.Factories;
+using Trax.Samples.Recovery.E2E.Fixtures;
+using Trax.Samples.Recovery.E2E.Utilities;
 
 // In the assembly root namespace so this [SetUpFixture] covers every test namespace.
 namespace Trax.Samples.Recovery.E2E;
@@ -13,11 +15,14 @@ public class SharedRecoverySetup
     public static RecoveryApiFactory Factory { get; private set; } = null!;
 
     [OneTimeSetUp]
-    public void OneTimeSetUp()
+    public async Task OneTimeSetUp()
     {
         Factory = new RecoveryApiFactory();
         // Building the host runs the Trax migrations and starts the scheduler and its workers.
         _ = Factory.Services;
+        await TopicMapDrafts.ClearAsync(
+            TestPostgres.WithPort(RecoveryApiFactory.DefaultConnectionString)
+        );
     }
 
     [OneTimeTearDown]

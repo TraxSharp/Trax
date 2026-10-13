@@ -1,9 +1,10 @@
 using Trax.Samples.StateMachine.E2E.Fixtures;
+using Trax.Samples.StateMachine.E2E.Utilities;
 
 namespace Trax.Samples.StateMachine.E2E.Tests;
 
 /// <summary>
-/// The turnstile, the machine with no effect, driven over GraphQL: a draft is saved, triggers advance
+/// The turnstile, the machine with no effect, driven over its typed operations: a draft is started or seeded, events advance
 /// it on the server, and a trigger the machine does not allow is refused as data, leaving the stored
 /// draft where it was.
 /// </summary>
@@ -30,9 +31,8 @@ public class TurnstileTests : StateMachineTestFixture
     public async Task ACoin_Unlocks_AndAPush_LocksAgain()
     {
         var id = Guid.NewGuid();
-        (await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Locked")))
-            .State.Should()
-            .Be("Locked");
+        await SeedAsync(Alice, id, TurnstileWire("Locked"));
+        (await Machines.LoadAsync(Alice, Turnstile, id)).State.Should().Be("Locked");
 
         var unlocked = await Machines.AdvanceAsync(
             Alice,
@@ -52,10 +52,26 @@ public class TurnstileTests : StateMachineTestFixture
     }
 
     [Test]
+    public async Task AStartedTurnstile_IsLocked_AndARetriedStartReturnsTheSameOne()
+    {
+        // The page starts its turnstile rather than saving one: the server mints the id.
+        var requestId = $"start-{Guid.NewGuid():N}";
+
+        var (id, started) = await Machines.StartAsync(Alice, Turnstile, requestId);
+        var (retried, _) = await Machines.StartAsync(Alice, Turnstile, requestId);
+
+        started.State.Should().Be("Locked");
+        retried.Should().Be(id!.Value, "a retried start answers with the instance it created");
+        (await Machines.AdvanceAsync(Alice, Turnstile, id.Value, "Coin", """{"coin":"dollar"}"""))
+            .State.Should()
+            .Be("Unlocked");
+    }
+
+    [Test]
     public async Task ACoinTheGuardRefuses_IsGuardFailed_AndTheDraftStaysLocked()
     {
         var id = Guid.NewGuid();
-        await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Locked"));
+        await SeedAsync(Alice, id, TurnstileWire("Locked"));
 
         var penny = await Machines.AdvanceAsync(
             Alice,
@@ -74,7 +90,7 @@ public class TurnstileTests : StateMachineTestFixture
     public async Task APushWhileLocked_IsNoTransition()
     {
         var id = Guid.NewGuid();
-        await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Locked"));
+        await SeedAsync(Alice, id, TurnstileWire("Locked"));
 
         (await Machines.AdvanceAsync(Alice, Turnstile, id, "Push"))
             .ProblemCode.Should()
@@ -83,45 +99,55 @@ public class TurnstileTests : StateMachineTestFixture
     }
 
     [Test]
-    public async Task ASnapshotWhoseContextBreaksItsState_IsRefused_AndNothingIsStored()
+    public async Task ASnapshotAClientWrites_IsNotServed_AndNothingIsStored()
     {
-        // Unlocked requires a non-empty paidWith; a client cannot save its way past the coin.
+        // Unlocked requires a non-empty paidWith, and a client cannot save its way past the coin: the host serves
+        // the turnstile only through its events, with no save at all.
         var id = Guid.NewGuid();
 
         (await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Unlocked")))
             .ProblemCode.Should()
-            .Be("invalid-context");
+            .Be(StateMachineClient.NotServed);
         (await Machines.LoadAsync(Alice, Turnstile, id)).ProblemCode.Should().Be("not-found");
     }
 
     [Test]
-    public async Task SendingATurnstile_IsNoEffect()
+    public async Task ATurnstile_HasNoEffectToSend()
     {
-        var id = Guid.NewGuid();
-        await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Locked"));
+        // The turnstile binds no effect, so its typed operations are its start, its discard and its two events.
+        var response = await Machines.RawAsync(
+            Alice,
+            """{ __type(name: "TurnstileMachineMutations") { fields { name } } }"""
+        );
 
-        (await Machines.SendAsync(Alice, Turnstile, id)).ProblemCode.Should().Be("no-effect");
+        response.HasErrors.Should().BeFalse(response.Raw);
+        response
+            .GetData("__type", "fields")
+            .EnumerateArray()
+            .Select(f => f.GetProperty("name").GetString())
+            .Should()
+            .BeEquivalentTo(["start", "discard", "coin", "push"]);
     }
 
     [Test]
-    public async Task AnUnknownMachine_IsRefused()
+    public async Task AnUnknownMachine_IsNotServed()
     {
         (await Machines.LoadAsync(Alice, "vending", Guid.NewGuid()))
             .ProblemCode.Should()
-            .Be("unknown-machine");
+            .Be(StateMachineClient.NotServed, "a machine the host does not expose has no field");
     }
 
     [Test]
     public async Task EachUserSeesOnlyTheirOwnDraft()
     {
         var id = Guid.NewGuid();
-        await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Locked"));
+        await SeedAsync(Alice, id, TurnstileWire("Locked"));
         await Machines.AdvanceAsync(Alice, Turnstile, id, "Coin", input: """{"coin":"dollar"}""");
 
         (await Machines.LoadAsync(Bob, Turnstile, id)).ProblemCode.Should().Be("not-found");
 
         // Bob's draft under the same id is his own, and leaves Alice's alone.
-        await Machines.SaveAsync(Bob, Turnstile, id, TurnstileWire("Locked"));
+        await SeedAsync(Bob, id, TurnstileWire("Locked"));
         (await Machines.LoadAsync(Bob, Turnstile, id)).State.Should().Be("Locked");
         (await Machines.LoadAsync(Alice, Turnstile, id)).Context["paidWith"]!
             .GetValue<string>()

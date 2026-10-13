@@ -1,4 +1,7 @@
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.StateMachine;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.StateMachine.E2E.Utilities;
 
 namespace Trax.Samples.StateMachine.E2E.Fixtures;
@@ -78,12 +81,41 @@ public abstract class StateMachineTestFixture
             ["context"] = context,
         }.ToJsonString();
 
-    /// <summary>A checkout draft at Review with <paramref name="items"/>, saved as Alice.</summary>
+    /// <summary>A checkout draft at Review with <paramref name="items"/>, Alice's.</summary>
     protected async Task<Guid> CheckoutAtReview(params string[] items)
     {
         var id = Guid.NewGuid();
-        var saved = await Machines.SaveAsync(Alice, Checkout, id, CheckoutWire("Review", items));
-        saved.State.Should().Be("Review");
+        await SeedAsync(Alice, id, CheckoutWire("Review", items));
+        (await Machines.LoadAsync(Alice, Checkout, id)).State.Should().Be("Review");
         return id;
     }
+
+    /// <summary>
+    /// Writes <paramref name="wire"/> as <paramref name="caller"/>'s draft straight through the host's store, as
+    /// host code would. The generic save serves only machines with no server-side behaviour, and the checkout has
+    /// an effect, so a client cannot save one.
+    /// </summary>
+    protected static async Task SeedAsync(Caller caller, Guid id, string wire)
+    {
+        var node = JsonNode.Parse(wire)!.AsObject();
+        using var scope = SharedStateMachineSetup.Factory.Services.CreateScope();
+        var written = await scope
+            .ServiceProvider.GetRequiredService<ISnapshotStore>()
+            .Upsert(
+                UserKey(caller),
+                id,
+                new Snapshot
+                {
+                    Machine = node["machine"]!.GetValue<string>(),
+                    Version = node["version"]!.GetValue<int>(),
+                    State = node["state"]!.GetValue<string>(),
+                    Context = node["context"]!.AsObject().DeepClone().AsObject(),
+                }
+            );
+        written.Should().BeTrue();
+    }
+
+    // TraxCallerSnapshotPrincipal keys a draft by the caller's principal id, which the API key scheme qualifies
+    // with its name.
+    protected static string UserKey(Caller caller) => $"TraxApiKey:{caller.Name}";
 }

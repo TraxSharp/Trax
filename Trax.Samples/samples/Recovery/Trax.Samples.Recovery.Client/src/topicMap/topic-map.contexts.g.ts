@@ -1,7 +1,7 @@
 // AUTO-GENERATED from topic-map.ir.json by generateContextTypes. Do not edit by hand.
 
-export type TopicMapState = "BuildCancelled" | "BuildFailed" | "Building" | "Built" | "ChoosingFields" | "ChoosingRange";
-export type TopicMapTrigger = "Back" | "Build" | "CancelBuild" | "ChooseFields" | "Edit" | "Rebuild";
+export type TopicMapState = "BuildCancelled" | "BuildFailed" | "Building" | "Built" | "ChoosingFields" | "ChoosingRange" | "Expired";
+export type TopicMapTrigger = "Back" | "Build" | "CancelBuild" | "ChooseFields" | "Edit" | "Rebuild" | "StartOver";
 export type TopicMapOutcome = "Building.cancelled" | "Building.done" | "Building.failed";
 
 export type TopicMapBuildCancelledContext = {
@@ -64,6 +64,16 @@ export type TopicMapChoosingRangeContext = {
   topicPairs?: number | null;
 };
 
+export type TopicMapExpiredContext = {
+  coCitationTrack?: string | null;
+  fields?: string[] | null;
+  fromYear?: number | null;
+  mapId?: string | null;
+  papers?: number | null;
+  toYear?: number | null;
+  topicPairs?: number | null;
+};
+
 export type TopicMapContexts = {
   BuildCancelled: TopicMapBuildCancelledContext;
   BuildFailed: TopicMapBuildFailedContext;
@@ -71,6 +81,7 @@ export type TopicMapContexts = {
   Built: TopicMapBuiltContext;
   ChoosingFields: TopicMapChoosingFieldsContext;
   ChoosingRange: TopicMapChoosingRangeContext;
+  Expired: TopicMapExpiredContext;
 };
 
 export type TopicMapBuildInput = {
@@ -84,10 +95,10 @@ export type TopicMapChooseFieldsInput = {
 
 export type TopicMapBuildingDoneOutput = {
   coCitationTrack: string;
-  hiddenTwins: unknown[];
+  hiddenTwins: { embedding: number; score: number; sharedAuthors: number; sharedReferences: number; titleA: string; titleB: string; workA: string; workB: string; }[];
   papers: number;
   runId: string;
-  strongest: unknown[];
+  strongest: { embedding: number; score: number; sharedAuthors: number; sharedReferences: number; titleA: string; titleB: string; workA: string; workB: string; }[];
   topicPairs: number;
 };
 
@@ -98,6 +109,7 @@ export type TopicMapInputs = {
   ChooseFields: TopicMapChooseFieldsInput;
   Edit: undefined;
   Rebuild: undefined;
+  StartOver: undefined;
   "Building.cancelled": undefined;
   "Building.done": TopicMapBuildingDoneOutput;
   "Building.failed": undefined;

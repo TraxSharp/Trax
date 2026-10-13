@@ -12,12 +12,14 @@ const STEP_LABEL: Record<string, string> = {
   Built: "Built",
   BuildFailed: "Build failed",
   BuildCancelled: "Build cancelled",
+  Expired: "Expired",
 };
 
 /**
  * "Build my topic map": the topic-map state machine's wizard. Each step is a trigger the generated
  * twin checks and the server applies; Building runs the topic map train on the server, and only its
- * outcome moves the draft on. The draft is stored per demo key, so a reload comes back to the same step.
+ * outcome moves the draft on. The server starts the draft and mints its id, which this browser keeps, so a
+ * reload comes back to the same step.
  */
 export function TopicMapWizard() {
   const draft = useTopicMapDraft();
@@ -49,7 +51,7 @@ export function TopicMapWizard() {
     <>
       <p className="wizard-step">
         <span className={`wizard-state ${state}`}>{STEP_LABEL[state] ?? state}</span>
-        <code>draft {draft.id.slice(0, 8)}</code>
+        <code>draft {draft.id?.slice(0, 8)}</code>
       </p>
 
       {state === "ChoosingFields" && (
@@ -90,12 +92,21 @@ export function TopicMapWizard() {
           stored under <code>{context.mapId}</code>; the draft keeps only that pointer.
         </p>
       )}
+      {state === "Built" && draft.dueAt && (
+        <p className="hint review-deadline" data-due-at={draft.dueAt}>
+          Review it by <time dateTime={draft.dueAt}>{new Date(draft.dueAt).toLocaleString()}</time>, or the server
+          moves it to Expired.
+        </p>
+      )}
       {state === "BuildFailed" && (
         <p className="hint">The build failed: a slice needs at least two papers, or the run's host went away.</p>
       )}
       {state === "BuildCancelled" && <p className="hint">The build's run was cancelled.</p>}
+      {state === "Expired" && (
+        <p className="hint">The map was not reviewed in time, so the server moved it on. Rebuild it, or edit its years.</p>
+      )}
 
-      {(state === "Built" || state === "BuildFailed" || state === "BuildCancelled") && (
+      {(state === "Built" || state === "BuildFailed" || state === "BuildCancelled" || state === "Expired") && (
         <div className="action-pair">
           {button("Rebuild", () => void draft.advance("Rebuild"), draft.can("Rebuild"))}
           {button("Edit", () => void draft.advance("Edit"), draft.can("Edit"))}

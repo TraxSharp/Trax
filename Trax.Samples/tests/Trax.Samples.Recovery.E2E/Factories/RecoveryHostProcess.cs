@@ -56,7 +56,24 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     /// the host binding it, in which another process on the machine can take it.
     /// </remarks>
     /// <param name="stepDelay">How long each junction takes, so a test can catch a run in the middle.</param>
-    public static async Task<RecoveryHostProcess> StartAsync(TimeSpan stepDelay)
+    /// <param name="connectionString">
+    /// The database the host runs on; <see cref="ConnectionString"/> when null. A suite of its own passes its own,
+    /// so two suites never share the scheduler's tables.
+    /// </param>
+    /// <param name="requirePersistedOperations">
+    /// Whether the host refuses ad-hoc documents, as it does by default. A suite that drives the API with
+    /// hand-written documents turns it off.
+    /// </param>
+    /// <param name="machineSweepInterval">
+    /// How often the host's machine reconciler sweeps, or null for the sample's default. A suite that moves a due
+    /// time into the past behind the reconciler's back sets it short.
+    /// </param>
+    public static async Task<RecoveryHostProcess> StartAsync(
+        TimeSpan stepDelay,
+        string? connectionString = null,
+        bool requirePersistedOperations = true,
+        TimeSpan? machineSweepInterval = null
+    )
     {
         var assembly = HostAssembly();
 
@@ -69,12 +86,17 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         };
         start.ArgumentList.Add(assembly);
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
-        start.Environment["ConnectionStrings__TraxDatabase"] = ConnectionString;
+        start.Environment["ConnectionStrings__TraxDatabase"] = connectionString ?? ConnectionString;
         start.Environment["Kestrel__Endpoints__Http__Url"] = "http://127.0.0.1:0";
         start.Environment["Logging__LogLevel__Microsoft.Hosting.Lifetime"] = "Information";
         start.Environment["Recovery__StepDelay"] = stepDelay.ToString("c");
         start.Environment["Recovery__ModelLatencyMin"] = "00:00:00";
         start.Environment["Recovery__ModelLatencyMax"] = "00:00:00";
+        start.Environment["Recovery__RequirePersistedOperations"] = requirePersistedOperations
+            ? "true"
+            : "false";
+        if (machineSweepInterval is { } sweep)
+            start.Environment["Recovery__MachineSweepInterval"] = sweep.ToString("c");
 
         var output = new StringBuilder();
         var listening = new TaskCompletionSource<Uri>(

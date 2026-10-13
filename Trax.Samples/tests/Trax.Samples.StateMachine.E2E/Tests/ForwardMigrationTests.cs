@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.StateMachine.E2E.Fixtures;
+using Trax.Samples.StateMachine.E2E.Utilities;
 
 namespace Trax.Samples.StateMachine.E2E.Tests;
 
@@ -48,8 +49,10 @@ public class ForwardMigrationTests : StateMachineTestFixture
     }
 
     [Test]
-    public async Task AVersion1SnapshotAnOlderClientSaves_IsStoredAsVersion2()
+    public async Task AVersion1SnapshotAnOlderClientSaves_IsRefused()
     {
+        // The host serves the checkout only through its events, with no save: an older client's save is refused
+        // whatever its version, and nothing is stored.
         var book = UniqueItem("book");
         var id = Guid.NewGuid();
         var v1 = Wire(
@@ -59,11 +62,10 @@ public class ForwardMigrationTests : StateMachineTestFixture
             new JsonObject { ["items"] = new JsonArray(book), ["receipt"] = null }
         );
 
-        var saved = await Machines.SaveAsync(Alice, Checkout, id, v1);
-
-        saved.Snapshot["version"]!.GetValue<int>().Should().Be(2);
-        saved.Context["total"]!.GetValue<long>().Should().Be(999);
-        (await Machines.LoadAsync(Alice, Checkout, id)).Wire.Should().Be(saved.Wire);
+        (await Machines.SaveAsync(Alice, Checkout, id, v1))
+            .ProblemCode.Should()
+            .Be(StateMachineClient.NotServed);
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("not-found");
     }
 
     [Test]
@@ -78,9 +80,9 @@ public class ForwardMigrationTests : StateMachineTestFixture
             new JsonObject { ["items"] = new JsonArray(), ["receipt"] = null }
         );
 
-        (await Machines.SaveAsync(Alice, Checkout, id, noTotal))
-            .ProblemCode.Should()
-            .Be("invalid-context");
+        await SeedAsync(Alice, id, noTotal);
+
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("invalid-context");
     }
 
     [Test]
@@ -99,9 +101,9 @@ public class ForwardMigrationTests : StateMachineTestFixture
             }
         );
 
-        (await Machines.SaveAsync(Alice, Checkout, id, v3))
-            .ProblemCode.Should()
-            .Be("version-mismatch");
+        await SeedAsync(Alice, id, v3);
+
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("version-mismatch");
     }
 
     /// <summary>

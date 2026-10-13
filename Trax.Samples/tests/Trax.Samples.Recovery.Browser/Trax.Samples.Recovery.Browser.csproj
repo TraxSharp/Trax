@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Microsoft.Playwright is referenced from test projects only (Trax.Docs/adr/0049). -->
+    <IsTestProject>true</IsTestProject>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The host runs as a process of its own, started from its build output, so the reference only
+         makes sure it is built in the same configuration. -->
+    <ProjectReference Include="..\..\samples\Recovery\Trax.Samples.Recovery.Api\Trax.Samples.Recovery.Api.csproj" />
+    <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
+    <ProjectReference Include="..\..\..\Trax.Effect\src\Trax.Effect.Data.Testing\Trax.Effect.Data.Testing.csproj" />
+  </ItemGroup>
+
+  <!-- The Recovery suite's host process, its Postgres port, its GraphQL client and its draft clean-up, compiled
+       here rather than referenced: a test project is not a library, and these four files are all the browser tests
+       share. -->
+  <ItemGroup>
+    <Compile
+      Include="..\Trax.Samples.Recovery.E2E\Factories\RecoveryHostProcess.cs"
+      Link="Shared\RecoveryHostProcess.cs"
+    />
+    <Compile
+      Include="..\Trax.Samples.Recovery.E2E\Fixtures\TestPostgres.cs"
+      Link="Shared\TestPostgres.cs"
+    />
+    <Compile
+      Include="..\Trax.Samples.Recovery.E2E\Utilities\GraphQLClient.cs"
+      Link="Shared\GraphQLClient.cs"
+    />
+    <Compile
+      Include="..\Trax.Samples.Recovery.E2E\Utilities\TopicMapDrafts.cs"
+      Link="Shared\TopicMapDrafts.cs"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Playwright" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Microsoft.Testing.Extensions.VSTestBridge" />
+    <PackageReference Include="Microsoft.Testing.Platform.MSBuild" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>

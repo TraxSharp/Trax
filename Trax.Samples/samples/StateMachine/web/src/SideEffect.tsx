@@ -64,7 +64,7 @@ export function SideEffect({ transport, last, draftId }: { transport: TraxTransp
       <div className="sent">
         <span className="group-label">All the page sends to pay</span>
         <code className="sent-body">
-          sendSnapshot {"{"} machine: "checkout", id: "{draftId.slice(0, 8)}…", requestId {"}"}
+          machines {"{"} checkout {"{"} pay(id: "{draftId.slice(0, 8)}…", requestId) {"}"} {"}"}
         </code>
         <span className="sent-note">No amount, no card, no charge call: the server takes the total from its own copy.</span>
       </div>

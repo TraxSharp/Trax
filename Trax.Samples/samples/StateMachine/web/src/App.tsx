@@ -3,7 +3,7 @@ import { Avatar } from "./Avatar";
 import { Diagram } from "./Diagram";
 import { Inspector } from "./Inspector";
 import { SideEffect } from "./SideEffect";
-import { CHECKOUT, TURNSTILE, UNIT_PRICE_CENTS, type MachineView } from "./machines";
+import { CHECKOUT, TURNSTILE, type MachineView } from "./machines";
 import { createTransport, type TraxTransport } from "./traxTransport";
 import { useMachine, type MachineHandle } from "./useMachine";
 import { Walkthrough } from "./Walkthrough";
@@ -110,7 +110,7 @@ export function App() {
 }
 
 function MachineStage({ machine, transport, user }: { machine: MachineView; transport: TraxTransport; user: string }) {
-  const m = useMachine(transport, machine.name, machine.id, machine.initial);
+  const m = useMachine(transport, machine.name, user);
 
   return (
     <div className="stage-body">
@@ -137,7 +137,7 @@ function MachineStage({ machine, transport, user }: { machine: MachineView; tran
                   key={`${t.trigger}-${t.caption}`}
                   className={`trigger ${available ? "avail" : ""} ${t.probe ? "probe" : ""}`}
                   disabled={m.busy}
-                  onClick={() => (t.send ? m.send(`pay-${Date.now()}`) : m.advance(t.trigger, t.input))}
+                  onClick={() => void (t.send ? m.send(`pay-${Date.now()}`) : m.advance(t.trigger, t.input))}
                 >
                   <span className="trigger-name">
                     {t.trigger}
@@ -154,7 +154,7 @@ function MachineStage({ machine, transport, user }: { machine: MachineView; tran
           </p>
         </div>
 
-        {machine.name === "checkout" && <DraftEditor m={m} />}
+        {machine.name === "checkout" && <AddItem m={m} />}
 
         <Context m={m} />
       </section>
@@ -168,29 +168,25 @@ function MachineStage({ machine, transport, user }: { machine: MachineView; tran
             <pre>{m.snapshot ? JSON.stringify(m.snapshot, null, 2) : "loading…"}</pre>
           </details>
         </section>
-        {machine.moves.some((mv) => mv.effect) && <SideEffect transport={transport} last={m.last} draftId={machine.id} />}
+        {machine.moves.some((mv) => mv.effect) && <SideEffect transport={transport} last={m.last} draftId={m.id ?? ""} />}
       </div>
     </div>
   );
 }
 
-/** The checkout's context is the page's to edit: a save writes the whole draft, and the server checks it. */
-function DraftEditor({ m }: { m: MachineHandle }) {
+/** The cart is filled with the AddItem event: the page names the item, and the server prices the cart. */
+function AddItem({ m }: { m: MachineHandle }) {
   const [item, setItem] = useState("");
-  const items = (m.context.items as string[] | undefined) ?? [];
-  const save = (nextItems: string[], total: number) =>
-    m.save({ machine: "checkout", version: 2, state: m.state ?? "Cart", context: { items: nextItems, receipt: null, total } });
 
   const add = () => {
     if (!item.trim()) return;
-    const next = [...items, item.trim()];
-    void save(next, next.length * UNIT_PRICE_CENTS);
+    void m.advance("AddItem", { item: item.trim() });
     setItem("");
   };
 
   return (
     <div className="group">
-      <span className="group-label">Or edit the draft and save it</span>
+      <span className="group-label">Fill the cart</span>
       <div className="editor">
         <input
           value={item}
@@ -199,12 +195,13 @@ function DraftEditor({ m }: { m: MachineHandle }) {
           onKeyDown={(e) => e.key === "Enter" && add()}
         />
         <button disabled={m.busy || !item.trim()} onClick={add}>
-          Save with it
-        </button>
-        <button className="probe" disabled={m.busy || items.length === 0} onClick={() => save(items, 1)}>
-          Save with a $0.01 total
+          AddItem
         </button>
       </div>
+      <p className="aside-note">
+        The page sends only the item&apos;s name. The server appends it and computes the total, so no request can set
+        a price.
+      </p>
     </div>
   );
 }

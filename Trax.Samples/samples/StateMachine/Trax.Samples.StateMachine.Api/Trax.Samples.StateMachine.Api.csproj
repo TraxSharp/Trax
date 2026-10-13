@@ -20,5 +20,6 @@
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
   </ItemGroup>
 </Project>

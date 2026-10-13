@@ -1,0 +1,79 @@
+[
+  {
+    "id": "trax_machine_topic-map_start_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd78933f4415318ed361e6",
+    "machine": "topic-map",
+    "operation": "start",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapStart($requestId: String!) { machines { topicMap { start(requestId: $requestId) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_discard_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd78934a848c25f7fbd292",
+    "machine": "topic-map",
+    "operation": "discard",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapDiscard($id: UUID!, $requestId: String!) { machines { topicMap { discard(id: $id, requestId: $requestId) { id discarded problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_chooseFields_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd78933cd4363e97ebfaf7",
+    "machine": "topic-map",
+    "operation": "chooseFields",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapChooseFields($id: UUID!, $input: FieldsChoiceInput!, $requestId: String!, $clientResult: String) { machines { topicMap { chooseFields(id: $id, input: $input, requestId: $requestId, clientResult: $clientResult) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_back_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893cff3fd0cac246995",
+    "machine": "topic-map",
+    "operation": "back",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapBack($id: UUID!, $requestId: String!, $clientResult: String) { machines { topicMap { back(id: $id, requestId: $requestId, clientResult: $clientResult) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_build_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893d4fa8dab95afb498",
+    "machine": "topic-map",
+    "operation": "build",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapBuild($id: UUID!, $input: RangeChoiceInput!, $requestId: String!, $clientResult: String) { machines { topicMap { build(id: $id, input: $input, requestId: $requestId, clientResult: $clientResult) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_cancelBuild_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893e10488a221cd95dc",
+    "machine": "topic-map",
+    "operation": "cancelBuild",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapCancelBuild($id: UUID!, $requestId: String!, $clientResult: String) { machines { topicMap { cancelBuild(id: $id, requestId: $requestId, clientResult: $clientResult) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_rebuild_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893cd18ab49c72ebefc",
+    "machine": "topic-map",
+    "operation": "rebuild",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapRebuild($id: UUID!, $requestId: String!, $clientResult: String) { machines { topicMap { rebuild(id: $id, requestId: $requestId, clientResult: $clientResult) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_edit_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd78934ba4db0c93d96f93",
+    "machine": "topic-map",
+    "operation": "edit",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapEdit($id: UUID!, $requestId: String!, $clientResult: String) { machines { topicMap { edit(id: $id, requestId: $requestId, clientResult: $clientResult) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_startOver_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd78938263a668392bf626",
+    "machine": "topic-map",
+    "operation": "startOver",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "mutation TopicMapStartOver($id: UUID!, $requestId: String!, $clientResult: String) { machines { topicMap { startOver(id: $id, requestId: $requestId, clientResult: $clientResult) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_get_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd789322ac23d2d659e29b",
+    "machine": "topic-map",
+    "operation": "get",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "query TopicMapGet($id: UUID!) { machines { topicMap { get(id: $id) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
+  },
+  {
+    "id": "trax_machine_topic-map_machineChanged_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893588547ffc2ca1116",
+    "machine": "topic-map",
+    "operation": "machineChanged",
+    "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
+    "document": "subscription TopicMapMachineChanged($id: UUID!) { machineChanged(machine: \"topic-map\", id: $id) { rowId revision state context dueAt gone reload problem { code message } } }"
+  }
+]

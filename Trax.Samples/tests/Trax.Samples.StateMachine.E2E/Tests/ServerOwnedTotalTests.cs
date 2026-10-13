@@ -1,18 +1,19 @@
 using Trax.Samples.StateMachine.E2E.Fixtures;
+using Trax.Samples.StateMachine.E2E.Utilities;
 
 namespace Trax.Samples.StateMachine.E2E.Tests;
 
 /// <summary>
-/// The client writes the whole checkout snapshot, total included, and the total is what the charge
-/// takes. So the server owns it: a draft whose total is not 999 cents per item is refused, and the
-/// charge reads the amount from the server's stored, already-checked copy of the draft, never from
-/// anything the send request carries.
+/// The total is what the charge takes, so the server owns it: a client cannot save a checkout at all (the
+/// host serves it only through its events), a stored draft whose total is not 999
+/// cents per item cannot be read, and the charge reads the amount from the server's stored, already-checked
+/// copy of the draft, never from anything the send request carries.
 /// </summary>
 [TestFixture]
 public class ServerOwnedTotalTests : StateMachineTestFixture
 {
     [Test]
-    public async Task ADraftWhoseTotalDisagreesWithItsItems_IsInvalidContext_AndNothingIsStored()
+    public async Task ADraftWhoseTotalDisagreesWithItsItems_IsRefused_AndNothingIsStored()
     {
         var book = UniqueItem("book");
         var id = Guid.NewGuid();
@@ -25,7 +26,7 @@ public class ServerOwnedTotalTests : StateMachineTestFixture
             CheckoutWire("Review", [book, "pen"], total: 1)
         );
 
-        saved.ProblemCode.Should().Be("invalid-context");
+        saved.ProblemCode.Should().Be(StateMachineClient.NotServed);
         (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("not-found");
         (await Machines.SendAsync(Alice, Checkout, id)).ProblemCode.Should().Be("not-found");
         Charges.For(book).Should().BeEmpty();
@@ -46,7 +47,7 @@ public class ServerOwnedTotalTests : StateMachineTestFixture
             )
         )
             .ProblemCode.Should()
-            .Be("invalid-context");
+            .Be(StateMachineClient.NotServed);
 
         (await Machines.LoadAsync(Alice, Checkout, id)).Context["total"]!
             .GetValue<long>()

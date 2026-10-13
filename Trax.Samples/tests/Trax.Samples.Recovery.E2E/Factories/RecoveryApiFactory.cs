@@ -23,6 +23,9 @@ public sealed class RecoveryApiFactory : SampleApiFactory<Api.Program>
 
     public CountingDecider Decider { get; } = new();
 
+    /// <summary>Whether the host refuses ad-hoc documents. Off unless a test sets it before the host starts.</summary>
+    public bool RequirePersistedOperations { get; init; }
+
     protected override string ConnectionString => TestPostgres.WithPort(DefaultConnectionString);
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -38,6 +41,14 @@ public sealed class RecoveryApiFactory : SampleApiFactory<Api.Program>
         // Sweep the scheduler's own runs within seconds, so a test can watch it happen.
         builder.UseSetting("Recovery:SchedulerRunRetention", "00:00:03");
         builder.UseSetting("Recovery:CleanupInterval", "00:00:01");
+
+        // This suite drives the API with hand-written documents, which the host refuses as shipped. The browser
+        // suite runs the host as shipped, persisted documents only, and TopicMapDocumentsTests holds the
+        // topic map's to the ones the page is built with.
+        builder.UseSetting(
+            "Recovery:RequirePersistedOperations",
+            RequirePersistedOperations ? "true" : "false"
+        );
 
         builder.ConfigureTestServices(services =>
         {

@@ -19,19 +19,30 @@ namespace Trax.Samples.Tests.Meta.Tests;
 /// <c>IsTestProject</c> may reference it, wherever in the folder it lives.
 /// </para>
 ///
-/// <para>Enforces <c>Trax.Docs/adr/0011-test-frameworks-stay-out-of-shipped-libraries.md</c>, and
-/// <c>Trax.Docs/adr/0044-property-tests-use-cscheck-in-test-projects-only.md</c> for CsCheck.</para>
+/// <para>
+/// Playwright for .NET, which drives a browser, is held to the same rule: only a test project may
+/// reference it, so nothing packed carries it.
+/// </para>
+///
+/// <para>Enforces <c>Trax.Docs/adr/0011-test-frameworks-stay-out-of-shipped-libraries.md</c>,
+/// <c>Trax.Docs/adr/0044-property-tests-use-cscheck-in-test-projects-only.md</c> for CsCheck, and
+/// <c>Trax.Docs/adr/0049-browser-tests-use-playwright-for-dotnet-in-test-projects-only.md</c> for
+/// Playwright.</para>
 /// </summary>
 [Property("adr", "Trax.Docs/adr/0011-test-frameworks-stay-out-of-shipped-libraries.md")]
 [Property("adr", "Trax.Docs/adr/0044-property-tests-use-cscheck-in-test-projects-only.md")]
+[Property(
+    "adr",
+    "Trax.Docs/adr/0049-browser-tests-use-playwright-for-dotnet-in-test-projects-only.md"
+)]
 [TestFixture]
 public class NoTestFrameworkInSrcTests
 {
     private const string PropertyTestsAdr =
         "Trax.Docs/adr/0044-property-tests-use-cscheck-in-test-projects-only.md";
 
-    /// <summary>Test-only packages no project may reference unless it is a test project.</summary>
-    private static readonly string[] TestProjectOnlyPackages = ["CsCheck"];
+    private const string BrowserTestsAdr =
+        "Trax.Docs/adr/0049-browser-tests-use-playwright-for-dotnet-in-test-projects-only.md";
 
     /// <summary>
     /// Projects allowed to reference a test framework because shipping fixtures is their
@@ -140,7 +151,7 @@ public class NoTestFrameworkInSrcTests
             .EnumerateFiles(RepoRoot.Path, "*.csproj", SearchOption.AllDirectories)
             .Where(p => !IsBuildOutput(p));
 
-        var offenders = TestOnlyReferencesOutsideTestProjects(projects);
+        var offenders = TestOnlyReferencesOutsideTestProjects(projects, "CsCheck");
 
         offenders
             .Should()
@@ -179,7 +190,7 @@ public class NoTestFrameworkInSrcTests
                 """
             );
 
-            TestOnlyReferencesOutsideTestProjects([library, tests])
+            TestOnlyReferencesOutsideTestProjects([library, tests], "CsCheck")
                 .Should()
                 .ContainSingle(
                     $"a library referencing CsCheck is the violation {PropertyTestsAdr} names, "
@@ -194,7 +205,30 @@ public class NoTestFrameworkInSrcTests
         }
     }
 
-    private static List<string> TestOnlyReferencesOutsideTestProjects(IEnumerable<string> projects)
+    [Test]
+    public void OnlyTestProjects_ReferencePlaywright()
+    {
+        var projects = Directory
+            .EnumerateFiles(RepoRoot.Path, "*.csproj", SearchOption.AllDirectories)
+            .Where(p => !IsBuildOutput(p));
+
+        var offenders = TestOnlyReferencesOutsideTestProjects(projects, "Microsoft.Playwright");
+
+        offenders
+            .Should()
+            .BeEmpty(
+                "Microsoft.Playwright is a test-only dependency: only a project with "
+                    + "<IsTestProject>true</IsTestProject> may reference it, and never a shipped "
+                    + "package, a sample or a Trax.*.Testing package. Move the browser tests to a test "
+                    + $"project. Enforces {BrowserTestsAdr}. Offenders:\n  "
+                    + string.Join("\n  ", offenders)
+            );
+    }
+
+    private static List<string> TestOnlyReferencesOutsideTestProjects(
+        IEnumerable<string> projects,
+        string package
+    )
     {
         var offenders = new List<string>();
 
@@ -213,7 +247,7 @@ public class NoTestFrameworkInSrcTests
                 .Descendants("PackageReference")
                 .Select(e => e.Attribute("Include")?.Value)
                 .Where(v => v is not null)
-                .Where(v => TestProjectOnlyPackages.Contains(v, StringComparer.OrdinalIgnoreCase))
+                .Where(v => string.Equals(v, package, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             if (referenced.Count > 0)

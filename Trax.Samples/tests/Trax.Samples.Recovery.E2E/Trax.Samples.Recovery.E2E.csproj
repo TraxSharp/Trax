@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\samples\Recovery\Trax.Samples.Recovery.Api\Trax.Samples.Recovery.Api.csproj" />
     <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
     <ProjectReference Include="..\..\..\Trax.Effect\src\Trax.Effect.Data.Testing\Trax.Effect.Data.Testing.csproj" />
+    <ProjectReference Include="..\..\..\Trax.Effect\src\Trax.Effect.StateMachine.Testing\Trax.Effect.StateMachine.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -180,6 +180,19 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
 
         // A user's draft operations never reach a system instance, even by its id.
         var id = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-01"))!.Id;
+        // A system-owned machine cannot be exposed, so it has no field under machines, and the host serves no
+        // generic read either.
+        var machines = await GraphQL.SendAsync(
+            """{ __type(name: "MachinesQueries") { fields { name } } }""",
+            OperatorKey
+        );
+        machines.HasErrors.Should().BeFalse(machines.FirstErrorMessage);
+        machines
+            .GetData("__type", "fields")
+            .EnumerateArray()
+            .Select(f => f.GetProperty("name").GetString())
+            .Should()
+            .Equal(["topicMap"], "only the user-owned topic map is exposed");
         var load = await GraphQL.SendAsync(
             $$"""
             mutation { dispatch { stateMachine { loadSnapshot(input: {
@@ -187,15 +200,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             """,
             OperatorKey
         );
-        load.HasErrors.Should().BeFalse(load.FirstErrorMessage);
-        var output = load.GetData("dispatch", "stateMachine", "loadSnapshot", "output");
-        output.GetProperty("snapshot").ValueKind.Should().Be(JsonValueKind.Null);
-        output
-            .GetProperty("problem")
-            .GetProperty("code")
-            .GetString()
-            .Should()
-            .Be("unknown-machine");
+        load.HasErrors.Should().BeTrue("the generic mutations are not served");
     }
 
     [Test]

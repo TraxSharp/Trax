@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ORDERS, SLICES, TOPICS } from "../cases";
 import { SOURCES } from "../sources";
 import type { Phase, Scenario, Step } from "../types";
@@ -6,7 +6,9 @@ import { useRecoveryRun } from "../useRecoveryRun";
 import { CodePanel } from "./CodePanel";
 import { ConsolePanel } from "./ConsolePanel";
 import { TimelinePanel } from "./TimelinePanel";
-import { TopicMapWizard } from "./TopicMapWizard";
+
+// The wizard, its machine and the socket it follows its draft over load when the topic map is first chosen.
+const TopicMapWizard = lazy(() => import("./TopicMapWizard").then((m) => ({ default: m.TopicMapWizard })));
 
 // The host retries a failed run after four seconds and polls every second (see the README's demo-only
 // settings), so the retry starts four to five seconds after the failure.
@@ -134,7 +136,9 @@ export function App() {
 
         {scenario === "TOPIC_MAP" && (
           <Group label="Build my map: a state machine">
-            <TopicMapWizard />
+            <Suspense fallback={<p className="hint">Loading your draft…</p>}>
+              <TopicMapWizard />
+            </Suspense>
           </Group>
         )}
 

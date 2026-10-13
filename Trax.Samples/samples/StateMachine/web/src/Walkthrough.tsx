@@ -58,16 +58,19 @@ export function Walkthrough({ machine, last, user }: { machine: MachineView; las
 
 function headline(last: LastAction): string {
   if (last.kind === "advance") {
-    const coin = last.input?.coin;
-    return `advanceSnapshot · ${last.trigger}${coin ? ` { coin: "${coin}" }` : ""}`;
+    const shown = last.input?.coin ?? last.input?.item;
+    const key = last.input?.coin ? "coin" : "item";
+    const trigger = last.trigger ?? "";
+    return `machines · ${trigger.slice(0, 1).toLowerCase()}${trigger.slice(1)}${shown ? ` { ${key}: "${shown}" }` : ""}`;
   }
-  if (last.kind === "send") return "sendSnapshot · the effect's move";
-  return "saveSnapshot · a draft the page wrote";
+  if (last.kind === "send") return "machines · pay, the effect's move";
+  return "machines · start, a new instance";
 }
 
 function verdict(last: LastAction): string {
   const to = last.result.snapshot?.state;
   if (last.kind === "send" && last.replayed) return "The effect had already run: its receipt came back, and nothing was charged.";
+  if (last.kind === "start") return `A new instance, in ${to}.`;
   if (last.from && to && last.from !== to) return `The draft moved from ${last.from} to ${to}.`;
   return `The draft is in ${to ?? last.from}.`;
 }
@@ -99,25 +102,24 @@ function explain(machine: MachineView, last: LastAction, user: string): Step[] {
       ["no-transition", "effect-bound"],
       move ? `Yes: ${move.from} → ${move.to}.` : undefined,
       code === "effect-bound"
-        ? `Yes, but it runs the ${move?.effect} effect, so only sendSnapshot may fire it.`
+        ? `Yes, but it runs the ${move?.effect} effect, so it is its own field, pay, which runs the effect on the server.`
         : `No. There is no ${last.trigger} arrow leaving ${from}, so the trigger means nothing here.`,
     );
     if (move?.guard) check(`Guard: ${move.guard}.`, ["guard-failed"], "Passed.");
     else steps.push({ status: stopped ? "skip" : "ok", text: "This move has no guard." });
     if (move) check(`${move.to} rule: ${stateRule(move.to)}.`, ["invalid-context"], "Holds.");
     store(`Stored the draft in ${move?.to ?? "its new state"}, for ${user} only.`);
-  } else if (last.kind === "save") {
-    const state = last.result.snapshot?.state ?? last.from ?? undefined;
-    const total = typeof last.input?.total === "number" ? `$${((last.input.total as number) / 100).toFixed(2)}` : "?";
-    const items = Array.isArray(last.input?.items) ? (last.input!.items as unknown[]).length : 0;
+  } else if (last.kind === "start") {
+    const state = last.result.snapshot?.state;
     steps.push({
       status: "ok",
-      text: `Received a whole draft the page wrote: ${state}, ${items} item${items === 1 ? "" : "s"}, total ${total}.`,
-      detail: "A save is the page's own copy, so the server checks it before keeping it.",
+      text: "The page sent only the machine's name and a request id.",
+      detail: "No snapshot and no id: the server builds the first snapshot from the machine's declared start.",
     });
-    check(`Can a save put a draft in ${state}?`, ["state-reserved", "draft-committed", "draft-unreadable"], "Yes.");
-    check(`${state} rule: ${stateRule(state)}.`, ["invalid-context", "malformed", "unknown-state"], "Holds.");
-    store(`Stored it, for ${user} only.`);
+    check(`May ${user} start a ${machine.name}?`, ["forbidden", "unauthenticated", "no-start"], "Yes: any signed-in user may.");
+    check("Is this a new request?", ["request-id-reused", "invalid-request-id"], "A retry would return the instance it created.");
+    check(`Does ${user} hold fewer drafts than the server allows?`, ["too-many-drafts"], "Yes.");
+    store(`Minted an id and stored the instance in ${state ?? "its first state"}, for ${user} only.`);
   } else {
     const effectMove = machine.moves.find((m) => m.effect);
     steps.push({

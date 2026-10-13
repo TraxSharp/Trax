@@ -3,9 +3,9 @@ using Trax.Samples.StateMachine.Tests.Fakes;
 namespace Trax.Samples.StateMachine.Tests.UnitTests;
 
 /// <summary>
-/// The checkout's <c>total</c> is the amount a real <c>ICharge</c> would take. The server owns it:
-/// a client-written draft whose total disagrees with its items (999 cents each) is refused, the
-/// same way a draft with no total is.
+/// The checkout's <c>total</c> is the amount a real <c>ICharge</c> would take. The server owns it: a
+/// client cannot save a checkout at all, and a stored draft whose total disagrees with its items (999
+/// cents each) cannot be read, the same way a draft with no total cannot.
 /// </summary>
 public class CheckoutTotalAuthorityTests
 {
@@ -14,36 +14,32 @@ public class CheckoutTotalAuthorityTests
     [Test]
     public async Task A_draft_whose_total_disagrees_with_its_items_is_refused()
     {
-        var service = new CheckoutMachine().CreateService(
-            new InMemorySnapshotStore(),
-            claims: null
-        );
+        var store = new InMemorySnapshotStore();
+        var service = new CheckoutMachine().CreateService(store, claims: null);
 
-        // Two items are 1998 cents; the client says 1.
-        var result = await service.Autosave(
+        // Two items are 1998 cents; the draft says 1.
+        store.Seed(
             "alice",
             Id,
             "{\"machine\":\"checkout\",\"version\":2,\"state\":\"Review\",\"context\":{\"items\":[\"book\",\"pen\"],\"receipt\":null,\"total\":1}}"
         );
 
-        result.Should().BeOfType<AutosaveResult.Rejected>();
+        (await service.Load("alice", Id)).Should().BeOfType<LoadResult.Invalid>();
     }
 
     [Test]
-    public async Task A_draft_whose_total_matches_its_items_is_saved()
+    public async Task A_draft_whose_total_matches_its_items_is_read()
     {
-        var service = new CheckoutMachine().CreateService(
-            new InMemorySnapshotStore(),
-            claims: null
-        );
+        var store = new InMemorySnapshotStore();
+        var service = new CheckoutMachine().CreateService(store, claims: null);
 
-        var result = await service.Autosave(
+        store.Seed(
             "alice",
             Id,
             "{\"machine\":\"checkout\",\"version\":2,\"state\":\"Review\",\"context\":{\"items\":[\"book\",\"pen\"],\"receipt\":null,\"total\":1998}}"
         );
 
-        result.Should().BeOfType<AutosaveResult.Saved>();
+        (await service.Load("alice", Id)).Should().BeOfType<LoadResult.Loaded>();
     }
 
     [Test]
