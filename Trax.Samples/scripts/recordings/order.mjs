@@ -25,11 +25,13 @@
 // `gap`, the milliseconds removed.
 //
 // out/order/<key>.json holds each scenario as recorded, and out/order-recordings.json the website's copy, the shape
-// Trax.Website reads (src/data/order-recordings.json): OrderMachine.cs verbatim, the lines to light, the train's steps
-// and the four scenarios. --copy-to <dir> also writes it there; --copy-only rewrites it from out/ without recording.
+// Trax.Website reads (src/data/order-recordings.json): OrderMachine.cs verbatim, the lines to light, the train's steps,
+// the cart as the server priced it, the cart timer's duration from the machine's real IR as shipped (exported with the
+// trax CLI into out/order/order.ir.json), and the four scenarios. --copy-to <dir> also writes it there; --copy-only rewrites it from out/ without recording.
 
 import { createClient } from "graphql-ws";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,6 +41,8 @@ const KEY = "recovery-operator-key-do-not-use-in-production";
 const OUT = join(here, "out", "order");
 const MACHINE_FILE = "Trax.Samples.Recovery/Machines/OrderMachine.cs";
 const MACHINE_SOURCE = resolve(here, "../../samples/Recovery", MACHINE_FILE);
+const REPO = resolve(here, "../../..");
+const PROJECT = resolve(here, "../../samples/Recovery/Trax.Samples.Recovery");
 const STEPS = ["SendToRestaurant", "ChargeCard", "Cook", "PickUp", "Deliver"];
 const POLL_MS = 100;
 // A stretch with nothing happening longer than this is compressed to COMPRESSED_GAP in `t`.
@@ -271,7 +275,8 @@ function junctionEvents(at, steps, calls, run) {
     for (const call of attempts.filter((c) => c.problem && c.attempt < Math.max(...attempts.map((a) => a.attempt)))) {
       const next = attempts.find((c) => c.attempt === call.attempt + 1);
       events.push({ t: at(call.endedAt), kind: "junction", attempt: call.attempt, step: s.name, status: "failed", message: call.problem });
-      events.push({ t: at(call.endedAt), kind: "retry", attempt: next.attempt, message: `Trying the tablet again (attempt ${next.attempt}).` });
+      const backoff = Math.round((Date.parse(next.startedAt) - Date.parse(call.endedAt)) / 100) / 10;
+      events.push({ t: at(call.endedAt), kind: "retry", attempt: next.attempt, message: `Trying the tablet again in ${backoff} s (attempt ${next.attempt}).` });
       events.push({ t: at(next.startedAt), kind: "junction", attempt: next.attempt, step: s.name, status: "running" });
     }
     if (status === "running") continue;
@@ -305,6 +310,24 @@ async function waitFor(condition, timeoutMs, what) {
     await sleep(POLL_MS);
   }
   throw new Error(`timed out waiting for ${what}`);
+}
+
+/** Exports the machine's IR with the trax CLI from the Recovery assembly, as shipped (no host setting applies). */
+function exportIr() {
+  const assembly = join(PROJECT, "bin", "Debug", "net10.0", "Trax.Samples.Recovery.dll");
+  if (!existsSync(assembly)) throw new Error(`build the Recovery sample first: ${assembly} is missing`);
+  mkdirSync(OUT, { recursive: true });
+  execFileSync(
+    "dotnet",
+    [
+      "run", "--project", join(REPO, "Trax.Cli", "src", "Trax.Cli"), "--",
+      "machine", "generate",
+      "--assembly", assembly,
+      "--machine", "Trax.Samples.Recovery.Machines.OrderMachine",
+      "--ir-out", OUT,
+    ],
+    { stdio: ["ignore", "ignore", "inherit"] },
+  );
 }
 
 /** Shortens every idle stretch past IDLE_MS to COMPRESSED_GAP, marking the event after it with the real gap. */
@@ -366,6 +389,8 @@ function websiteCopy() {
   return {
     recordedAt: scenarios.map((s) => s.recordedAt).sort()[0],
     order: JSON.parse(readFileSync(join(OUT, `${SCENARIOS[0].key}.json`), "utf8")).order,
+    // The cart's timer as the machine ships it, from its real IR; the recording's host shortened it.
+    timerAfter: JSON.parse(readFileSync(join(OUT, "order.ir.json"), "utf8")).timers[0].after,
     source: { file: MACHINE_FILE, code },
     lines: linesOf(code),
     train: { name: "DeliverOrderTrain", steps: STEPS },
@@ -392,7 +417,7 @@ async function main() {
   const copyTo = copyAt >= 0 ? resolve(process.cwd(), args[copyAt + 1]) : null;
   if (args.includes("--copy-only")) return writeCopies(copyTo);
 
-  mkdirSync(OUT, { recursive: true });
+  exportIr();
   const sockets = { laptop: socket(), phone: socket(), junctions: socket() };
   try {
     for (const scenario of SCENARIOS) {

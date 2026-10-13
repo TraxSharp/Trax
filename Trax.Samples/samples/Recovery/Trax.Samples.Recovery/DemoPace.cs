@@ -19,4 +19,7 @@ public sealed class DemoPace
 
     /// <summary>How long the order's <c>SendToRestaurant</c> waits for the restaurant's tablet to answer.</summary>
     public TimeSpan TabletTimeout { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>How long the order's <c>SendToRestaurant</c> waits before trying the tablet again.</summary>
+    public TimeSpan TabletRetryBackoff { get; set; } = TimeSpan.FromSeconds(1);
 }
