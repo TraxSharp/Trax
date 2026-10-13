@@ -1,34 +1,40 @@
 ---
-title: Removal of RunInternal and Activate
-description: Migrating trains that overrode RunInternal or called Activate to a Junctions() declaration, including the Memory rules the startup check enforces.
+title: Move trains off RunInternal and Activate
+description: "Moving trains that overrode RunInternal or called Activate to a Junctions() declaration, the Memory rules the startup check enforces, and the async chain."
 type: how-to
 area: upgrading
+parent: Upgrading
 nav_order: 5
+redirect_from:
+  - /docs/migration-guides/async-chain
 ---
 
-# Removal of RunInternal and Activate
+# Move trains off RunInternal and Activate
+
+Applies from: Trax.Core 1.7.2 and Trax.Effect 1.54.2. The async chain this builds on arrived in
+Trax.Core 1.5.0; a train older than that also needs [the async chain edits](#before-traxcore-150-the-async-chain).
 
 `Junctions()` is now the only way to declare a train's chain. `Train.RunInternal` is private,
 `Train.Activate` is internal, and `ServiceTrain.Activate` is gone. A train that overrode
 `RunInternal` or called `Activate` no longer compiles. The reason is in
-`Trax.Docs/adr/0016`: a chain built
-imperatively has no single shape, so the host could not read it at startup.
+[ADR 0016](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0016-a-junction-chain-is-a-declaration-not-a-step-of-the-work.md):
+a chain built imperatively has no single shape, so the host could not read it at startup.
 
 The same release changed how work is enqueued and how a run's outcome is recorded; see
-[Enqueue and Outcome Changes](/docs/migration-guides/enqueue-and-outcome-changes).
+[Adapt to the enqueue and outcome changes](/docs/migration-guides/enqueue-and-outcome-changes).
 
 ## Overriding RunInternal
 
 Before:
 
-```csharp
+```csharp fragment
 protected override Task<Either<Exception, TOut>> RunInternal(TIn input) =>
     Activate(input).Chain<A>().Resolve();
 ```
 
 After:
 
-```csharp
+```csharp fragment
 protected override Task<Either<Exception, TOut>> Junctions() =>
     Chain<A>().Resolve();
 ```
@@ -82,11 +88,63 @@ the producer's output as that interface, or ask for the concrete type.
 The input-reading fault compiles cleanly and only surfaces at startup. While chains are being
 moved over, the check can be turned off:
 
-```csharp
+```csharp fragment
 .AddMediator(mediator => mediator.SkipChainVerification())
 ```
 
 It silences every other chain fault too, so it is a stopgap to remove once the trains are moved,
 not a setting to leave on. See
-[Trains & Junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic)
+[Trains and junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic)
 for the full list of what the check refuses.
+
+## Before Trax.Core 1.5.0: the async chain
+
+Trax.Core 1.5.0 made `Junctions()`, `Chain`, `Resolve`, `Extract`, `ShortCircuit` and
+`AddServices` async. The names and the fluent shape stayed; the return types moved into `Task`, so
+the chain no longer blocks on async work. The old chain blocked synchronously on each junction's
+`Task`, which deadlocked under Blazor Server, WPF and any other single-threaded
+`SynchronizationContext`.
+
+| Member | Before | After |
+|---|---|---|
+| `Train.Junctions()` | returns `TReturn` | returns `Task<Either<Exception, TReturn>>` |
+| `Monad.Chain<T>()` | returns `Monad<,>` | returns `MonadTask<,>`, an awaitable wrapper |
+| `Monad.ShortCircuit<T>()` | returns `Monad<,>` | returns `MonadTask<,>` |
+| `Monad.Extract<TIn, TOut>()` | returns `Monad<,>` | unchanged on `Monad<,>`, also on `MonadTask<,>` |
+| `Monad.AddServices<...>(...)` | returns `Monad<,>` | unchanged on `Monad<,>`, also on `MonadTask<,>` |
+| `Monad.Resolve()` | returns `Either<Exception, TReturn>` | unchanged on `Monad<,>`; returns `Task<Either<Exception, TReturn>>` on `MonadTask<,>` |
+| `implicit operator TReturn(Monad<,>)` | existed | deleted |
+
+`MonadTask<,>` exposes the same `Chain`, `ShortCircuit`, `Extract`, `AddServices` and `Resolve`, so
+`.Chain<A>().Chain<B>().Resolve()` keeps composing across the async boundary.
+
+A train that overrode `Junctions()` makes three edits: wrap the return type in
+`Task<Either<Exception, ...>>`, end the chain in `.Resolve()`, and add `using Trax.Core.Functional;`.
+
+Before:
+
+```csharp fragment
+protected override LookupOutput Junctions() =>
+    Chain<LoadInputJunction>().Chain<DispatchJunction>();
+```
+
+After:
+
+```csharp fragment
+protected override Task<Either<Exception, LookupOutput>> Junctions() =>
+    Chain<LoadInputJunction>().Chain<DispatchJunction>().Resolve();
+```
+
+A train that overrode `RunInternal` at the time moves straight to `Junctions()` as
+[Overriding RunInternal](#overriding-runinternal) shows. Code that used the implicit conversion,
+`T result = monad;`, awaits `monad.Chain<X>().Resolve()` and reads the `Either` instead. Junction
+code is unchanged: `Junction<TIn, TOut>.Run` already returned `Task<TOut>`.
+
+Workarounds added only to avoid the deadlock, such as a sync-context suppression around a chain,
+can be deleted.
+
+## Related
+
+- [Trains and junctions](/docs/core/trains-and-junctions): how a chain is declared now.
+- [Junctions](/docs/sdk-reference/train-methods/junctions): the `Junctions()` reference.
+- [Adapt to the enqueue and outcome changes](/docs/migration-guides/enqueue-and-outcome-changes): the rest of the same release.
