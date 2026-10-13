@@ -1,238 +1,266 @@
 ---
-title: Authoring a machine
-description: How to author a state machine as a Machine subclass, wire it into a host, drive it over GraphQL, and keep the C# and TypeScript runtimes in parity.
+title: Author and serve a machine
+description: "Author a declarative state machine with caller rules and an exactly-once effect, wire it into a host, and serve it to clients as its own typed GraphQL API."
 type: how-to
 area: machines
 nav_order: 1
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
 ---
 
-# Authoring a machine
+# Author and serve a machine
 
-A machine is a class. You subclass `Machine<TState, TTrigger>`, declare its states, transitions, guards,
-reducers, committed states, and its one irreversible effect inline, and a host discovers it with one line.
-There is no per-machine registration and no effect wiring in the composition root.
+This builds a checkout machine (`Cart`, `Review`, `Paid`) whose `Pay` event charges a card exactly once, registers
+it in a host, and serves it to clients under the `machines` GraphQL root. What a machine is, and why the snapshot is
+shaped the way it is, is in [State machines](/docs/statemachine).
 
-## Declare the machine
+## 1. Declare the machine
 
-`TState` and `TTrigger` are your own enums. Everything about a transition lives on the transition it belongs
-to: the guard that admits it, the reducer that computes the next context, and the effect it fires.
+Subclass `Machine<TState, TTrigger>` over your own state and trigger enums, and declare everything in `Configure`:
+each state's context record, each event's guard, reducer and caller rule, the committed state, and the one
+irreversible effect. Mark the class `[TraxMachine]` to serve it to clients; an unmarked machine is reachable only from
+host code.
 
-```csharp
-using Trax.Effect.StateMachine.Persistence;
+A served machine has to be declarative (guards and reducers written as data, so it has an
+[IR](/docs/sdk-reference/statemachine-api/ir-format)) and user-owned, and it must declare who may do everything a
+client can do: a rule on every event and on its `Start`, and an owner-only or stricter rule on `Get`, `Watch` and
+`Discard`. The host refuses to start, listing every gap in one exception, until it does.
+
+```csharp compile=checkout
+using System.Text.Json.Nodes;
+using Trax.Effect.Attributes;
 using Trax.Effect.StateMachine;
+using Trax.Effect.StateMachine.Persistence;
+using static Trax.Effect.StateMachine.Rules;
 
+public enum CheckoutState
+{
+    Cart,
+    Review,
+    Paid,
+}
+
+public enum CheckoutTrigger
+{
+    ChooseItems,
+    Next,
+    Back,
+    Pay,
+}
+
+public sealed record EmptyStart;
+
+public sealed record CartContext
+{
+    public List<string> Items { get; init; } = [];
+}
+
+public sealed record PaidContext
+{
+    public List<string> Items { get; init; } = [];
+
+    public string Receipt { get; init; } = "";
+}
+
+public sealed record ItemsInput
+{
+    public List<string> Items { get; init; } = [];
+}
+
+public sealed record PayInput
+{
+    public string Receipt { get; init; } = "";
+}
+
+[TraxMachine]
 public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 {
+    private static readonly Rule HasItems = Field((CartContext c) => c.Items).CountGreaterThan(0);
+
     protected override void Configure(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
     {
-        m.Id("checkout").Version(1).StartsAt(CheckoutState.Cart, Fresh);
+        m.Id("checkout")
+            .Version(1)
+            .StartsAt(CheckoutState.Cart, () => new JsonObject { ["items"] = new JsonArray() })
+            .Start<EmptyStart>(s => s.Reduce(Keep()).AnyAuthenticated())
+            .Get(r => r.OwnerOnly())
+            .Watch(r => r.OwnerOnly())
+            .Discard(r => r.OwnerOnly());
 
         m.In(CheckoutState.Cart)
-            .Holds(ctx => ItemsIsArray(ctx) && ReceiptEmpty(ctx) ? null : "Cart: items[] and no receipt.")
+            .Context<CartContext>()
+            .On(CheckoutTrigger.ChooseItems)
+            .AnyAuthenticated()
+            .WithInput<ItemsInput>()
+            .Reduce(Set((CartContext c) => c.Items).FromInput((ItemsInput i) => i.Items))
+            .To(CheckoutState.Cart)
             .On(CheckoutTrigger.Next)
+            .AnyAuthenticated()
+            .When(HasItems)
+            .Because("Choose an item before reviewing.")
             .To(CheckoutState.Review);
 
         m.In(CheckoutState.Review)
+            .Context<CartContext>()
+            .On(CheckoutTrigger.Back)
+            .AnyAuthenticated()
+            .To(CheckoutState.Cart)
             .On(CheckoutTrigger.Pay)
-            .When((ctx, input) => ItemsCount(ctx) > 0 && Receipt(input) is not null)
+            .AnyAuthenticated()
+            .WithInput<PayInput>()
+            .When(All(HasItems, Input((PayInput i) => i.Receipt).NonEmpty()))
             .Because("Checkout needs items and a receipt to be paid.")
             .RunsOnce<ICharge>("checkout:charge")
-            .Reduce((ctx, input) => WithReceipt(ctx, Receipt(input)))
+            .Reduce(Set((PaidContext c) => c.Receipt).FromInput((PayInput i) => i.Receipt))
             .To(CheckoutState.Paid);
 
-        m.In(CheckoutState.Paid).Committed();
+        m.In(CheckoutState.Paid).Context<PaidContext>().Committed();
     }
 }
 ```
 
-| Builder call | What it declares |
-| --- | --- |
-| `Id` / `Version` / `StartsAt` | the machine's stable name, its definition version, and the initial state plus a factory for its context |
-| `In(state)` | opens a state to add its context rule and its outgoing transitions |
-| `Holds(validator)` | the state's context rule: return `null` when valid, or a reason string. Enforced on the way in (rehydrate) and out (advance) |
-| `On(trigger)` | starts a transition out of the current state |
-| `When(guard)` / `Because(message)` | admits the transition only when the guard passes; the message is surfaced on a rejection |
-| `Reduce(reducer)` | computes the next context. Return a fresh JSON object; never mutate the input |
-| `RunsOnce<TEffect>(keyPrefix)` | binds an irreversible effect that fires exactly once when this transition is sent |
-| `To(state)` | the destination |
-| `Committed()` | marks a state a soft autosave must not overwrite (a completed order) |
+`Pay` is bound to the effect, so no client fires it with a receipt: the server runs the charge and fires `Pay` with
+the receipt the charge returned, as `input["receipt"]`. `Paid` is committed, so no save can put a draft there or take
+one out. Every builder call is listed in [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring),
+the guard and reduction forms in the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and the
+records' mapping to JSON in [Context and input schemas](/docs/statemachine/context-schemas).
 
-Guards and reducers are named code, never serialized. The snapshot carries structure and data, never logic.
+## 2. Implement the effect
 
-## Wire it into a host
+The effect is an interface over `ISnapshotEffect`, implemented in the host. The runner calls the overload that takes
+the effect's key, which is the same for every run of one send; pass it to the system you call as its idempotency
+key. The effect gets the server's stored snapshot, never the client's, so price from what the server holds.
 
-One builder step. `AddStateMachines` discovers every machine and wires the store, the effect-claim ledger,
-the exactly-once runner, and the registry, over the data context of the provider you configured in
-`AddEffects`, and contributes the six generic mutation trains to the mediator scan (they
-ship in the persistence package, not your assembly, so Trax can route them by input type). Call it before
-`AddMediator`. The host binds only the two things a machine can't know: how to map its auth to a user key, and
-each effect implementation.
+```csharp compile=checkout
+using Trax.Effect.StateMachine;
+using Trax.Effect.StateMachine.Persistence;
 
-```csharp
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
-        .AddStateMachines(typeof(CheckoutMachine).Assembly)
-        .AddMediator(typeof(CheckoutMachine).Assembly));
+public interface ICharge : ISnapshotEffect;
 
-builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
-builder.Services.AddScoped<ICharge, StripeCharge>();
+public sealed class GatewayCharge(IPaymentGateway gateway) : ICharge
+{
+    public Task<string> Run(Snapshot snapshot, string effectKey, CancellationToken cancellationToken)
+    {
+        var items = snapshot.Context["items"]!.AsArray().Select(i => i!.GetValue<string>()).ToList();
+        return gateway.Charge(items, idempotencyKey: effectKey, cancellationToken);
+    }
+
+    public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Trax runs a machine's effect with its key.");
+}
 ```
 
-Abandoned drafts expire: a background sweep deletes a user's draft idle past `DraftTtl` (30 days unless the
-`configure` overload sets another), so a forgotten form never lingers. A load never deletes.
+Return a non-empty receipt. Throwing means the charge did not happen and a retry runs it again; an
+`OperationCanceledException` means the outcome is unknown, and the effect is taken over under the same key once its
+lease passes. The details are in [Effects](/docs/sdk-reference/statemachine-api/effects).
 
-```csharp
-trax.AddStateMachines(
-    o => o.DraftTtl = TimeSpan.FromDays(30),
-    typeof(CheckoutMachine).Assembly);
-```
+## 3. Map the caller to a user key
 
-`ISnapshotPrincipal` maps the current caller to the user key that scopes drafts. Binding it over Trax's own
-`TraxCaller` is a one-liner:
+Drafts are scoped by a user key, which the host supplies through `ISnapshotPrincipal`. Over Trax's `TraxCaller`:
 
-```csharp
+```csharp compile=checkout
+using Trax.Api.Auth;
+using Trax.Effect.StateMachine.Persistence;
+
 public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPrincipal
 {
     public string? CurrentUserKey => caller.IsAuthenticated ? caller.Principal!.Id : null;
 }
 ```
 
-## Drive it over GraphQL
+A request with no user key is refused as `unauthenticated`. Authentication itself is the host's: see
+[Secure a GraphQL host](/docs/api-security).
 
-A machine is served to clients when its class is marked `[TraxMachine]` (from `Trax.Effect.Attributes`), as a train
-is with `[TraxMutation]`; a machine without it is not served, and there is no host-side switch that serves it. The
-attribute is read from every machine the host registers, by the `AddStateMachines` scan or as `IMachine` by hand.
-To serve a machine you do not own, derive a class from it, mark that, and register only the subclass: a subclass has
-its base's id, and a host that registers two machine types under one id refuses to start, naming both. So the base
-must not be registered (do not scan its assembly, and do not call a registration of the library's that adds it), and
-a sealed machine cannot be served this way. The same type registered twice is one machine. The attribute is not
-inherited: a subclass of a marked machine is served only if it is marked itself, and a host registering an unmarked
-one refuses to start. On anything else a scanned assembly holds that the scan cannot register (an abstract or open
-generic class, or a class that is no machine) it refuses startup too; a closed generic machine the host registers
-by its closed type, from an assembly it does not scan, is served. Each served machine is its own typed API under the [machines root](/docs/sdk-reference/graphql-api/machines): `start`,
-one mutation per event taking the event's own input type, `discard` and `get`, each answering with the stored state,
-its typed context and its revision, or a problem. The host must also call `UsePersistedOperations` in
-`AddTraxGraphQL`: each operation is served as a persisted document that carries the machine's version, and a host
-that serves a machine without them refuses to start.
+## 4. Register the machine in the host
 
-```graphql
-mutation { machines { checkout { addItem(id: "...", input: { item: "book" }, requestId: "r-1") {
-  revision state context { items total } problem { code message } } } } }
+`AddStateMachines` discovers every machine in the assemblies it is given and wires the snapshot store, the
+effect-claim ledger, the exactly-once runner and the registry over the data provider configured in `AddEffects`.
+Call it after `AddEffects` and before `AddMediator`. A served machine's operations are persisted documents that
+carry the machine's version, so the GraphQL host must call `UsePersistedOperations`; a host that serves a machine
+without it refuses to start.
+
+```csharp compile=checkout
+using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.StateMachine.Persistence;
+using Trax.Mediator.Extensions;
+
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddStateMachines(typeof(CheckoutMachine).Assembly)
+        .AddMediator(typeof(CheckoutMachine).Assembly));
+
+builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
+builder.Services.AddScoped<ICharge, GatewayCharge>();
+
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql.UsePersistedOperations(persisted => persisted.SingleNode()));
 ```
 
-### The generic mutations
+`SingleNode()` suits one process; more than one node uses `UseRabbitMqInvalidation(connectionString)`, as
+[Turn on persisted operations](/docs/persisted-operations) describes. Host options (draft expiry, the per-user draft
+cap, the change feed) are under [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options).
+The rules for which registered machines are served, and the refusals for a marked subclass or a duplicate id, are
+under [Serving a machine](/docs/sdk-reference/statemachine-api/add-trax-state-machines#serving-a-machine).
 
-A host that opts in with `ExposeGenericStateMachineMutations(o => o.Policy = "...")` also serves six generic mutations
-for every registered machine under the `stateMachine` namespace, each behind the policy it names. The machine is a
-runtime argument (the `machine` field), so there is no per-machine mutation to write. They were served by default
-before; upgrading a host that used them is covered in [Generic State-Machine Mutations](/docs/migration-guides/generic-state-machine-mutations).
+## 5. Call it from a client
 
-| Mutation | Trust level |
-| --- | --- |
-| `startSnapshot` | create: the server mints the id and builds the first snapshot from the machine's declared `start` |
-| `saveSnapshot` | soft path: the client sends a whole snapshot, the server validates and stores it |
-| `advanceSnapshot` | authoritative: the client sends a trigger, the server re-drives the stored draft |
-| `loadSnapshot` | resume: read the caller's stored draft, held to the machine's `get` rule (a missing draft is normal, not an error, and a draft the rule does not let the caller read answers the same) |
-| `sendSnapshot` | run the machine's one irreversible effect, exactly once and state-gated |
-| `discardSnapshot` | delete one of the caller's own instances, cancelling a run its state invoked first |
+The machine is now `machines { checkout { ... } }`: `start`, one mutation per client event (`chooseItems`, `next`,
+`back`), the effect event `pay`, `discard`, and the `get` query, each answering with the state, its typed context and
+the revision, or a `problem`. With persisted operations required (the default), a client sends each operation by
+its persisted id, which it reads from `operations { machineDocuments { ... } }` at build time; the
+[TypeScript client](/docs/sdk-reference/graphql-api/machines#the-typescript-client) does that from the machine's
+documents. The `chooseItems` operation, written out as a document (the generated one selects every field of the
+answer):
 
 ```graphql
-mutation {
-  dispatch { stateMachine { sendSnapshot(input: {
-    machine: "checkout", id: "…", requestId: "pay-1"
-  }) { output { snapshot problem { code } } } } }
+mutation ($id: UUID!, $input: ItemsInput!, $requestId: String!) {
+  machines { checkout { chooseItems(id: $id, input: $input, requestId: $requestId) {
+    id revision state context { items receipt } problem { code message } } } }
 }
 ```
 
-All six live under `dispatch { stateMachine { ... } }`, `loadSnapshot` included: it is a mutation, not a
-query. Each takes one `input` argument and returns `output { snapshot problem { code message } }`, where exactly one
-of `snapshot` and `problem` is set; `startSnapshot` adds the minted `id`, `created` and `revision`, and
-`discardSnapshot` returns `output { discarded problem { code message } }`. The snapshot crosses the wire as a
-**string** of canonical JSON in both directions, so a client `JSON.stringify`s the snapshot it saves and parses the one it gets back.
+Every refusal is a typed `problem` in the data, never a thrown error: `guard-failed` carries the `Because` text,
+`forbidden` a caller the event's rule refuses, `request-id-reused` a retry that changed its request. Fields, answers
+and limits are in the [machines root](/docs/sdk-reference/graphql-api/machines), and every code in
+[Result codes](/docs/sdk-reference/statemachine-api/result-codes).
 
-| Mutation | Input type | Fields (`!` is required) |
-| --- | --- | --- |
-| `startSnapshot` | `StartSnapshotInput` | `machine: String!`, `requestId: String!`, `input: String` (the start input as a JSON object), `schemaHash: String` |
-| `saveSnapshot` | `SaveSnapshotInput` | `machine: String!`, `id: UUID!`, `snapshot: String!` (the whole snapshot as JSON), `schemaHash: String` |
-| `advanceSnapshot` | `AdvanceSnapshotInput` | `machine: String!`, `id: UUID!`, `trigger: String!` (a trigger name, `"Coin"`), `input: String` (the trigger input as JSON, `"{\"coin\":\"quarter\"}"`), `requestId: String`, `schemaHash: String`, `clientResult: String` |
-| `loadSnapshot` | `LoadSnapshotInput` | `machine: String!`, `id: UUID!`, `schemaHash: String` |
-| `sendSnapshot` | `SendSnapshotInput` | `machine: String!`, `id: UUID!`, `requestId: String`, `schemaHash: String` |
-| `discardSnapshot` | `DiscardSnapshotInput` | `machine: String!`, `id: UUID!`, `requestId: String!` |
+The [State Machine sample](/docs/samples/state-machine) is a complete, runnable version: two machines, a GraphQL
+host, exactly-once over the wire, a forward migration and a server-checked total.
 
-`sendSnapshot` takes no trigger: it fires the one transition the machine binds its effect to, and only from that
-transition's source state (from any other state it is `no-transition`). The receipt the effect returns reaches the
-transition's reducer as `input["receipt"]`. `schemaHash` and `clientResult` are the
-[runtime-integrity](/docs/sdk-reference/statemachine-api/runtime-integrity) checks; leave them out and nothing is
-checked.
+## Serve the generic mutations instead
 
-With variables, the way a browser client sends it:
+A host can also serve six generic `stateMachine` mutations that take the machine as an argument. They are off by
+default, and the opt-in requires an authorization policy:
 
-```graphql
-mutation Advance($i: AdvanceSnapshotInput!) {
-  dispatch { stateMachine { advanceSnapshot(input: $i) {
-    output { snapshot problem { code message } }
-  } } }
-}
+```csharp compile
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.StateMachine.Persistence;
+using Trax.Mediator.Extensions;
+
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddStateMachines(
+            o => o.ExposeGenericStateMachineMutations(g => g.Policy = "machine-clients"),
+            assembly)
+        .AddMediator(assembly));
 ```
 
-```json
-{ "i": { "machine": "turnstile", "id": "33333333-3333-3333-3333-333333333333",
-         "trigger": "Coin", "input": "{\"coin\":\"quarter\"}" } }
-```
-
-```json
-{ "data": { "dispatch": { "stateMachine": { "advanceSnapshot": { "output": {
-  "snapshot": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}",
-  "problem": null } } } } } }
-```
-
-Every rejection comes back as a typed `problem` in the data, never a thrown error across the boundary: an
-unknown machine is `unknown-machine`, an invalid snapshot is `invalid-context`, a stale write is `conflict`.
-A snapshot, a trigger input, or an advanced snapshot larger than 64 KiB is `too-large`, and nothing is written.
-
-A `requestId` makes a retry safe: the same id with the same trigger returns the current snapshot instead of
-firing again, and the same id with a different trigger is refused as `request-id-reused`. Advance and send
-share one id space; a send with no `requestId` uses `send:{id}`. The full rule is under
-[persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched).
-The six snapshot mutations carry `[TraxAuthorize]`, so an unauthenticated caller is refused before the mutation
-runs, with the `TRAX_AUTHORIZATION` GraphQL error ("Not authorized.") rather than a `problem`. A request that
-reaches a mutation with no user key (`ISnapshotPrincipal.CurrentUserKey` is null) is refused as
-`unauthenticated`.
-
-A complete, runnable version of this (two machines, a GraphQL host, exactly-once over the wire, a forward
-migration and a server-checked total) is the [State Machine sample](/docs/samples/state-machine).
+The host registers the policy with ASP.NET Core authorization, as for a train's `[TraxAuthorize(Policy = ...)]`.
+While the opt-in is on, every user-owned machine is reachable through the generic mutations, so each must declare the
+same rules a marked machine does. The mutations are listed in
+[Generic state-machine mutations](/docs/statemachine/generic-mutations).
 
 ## Keep the two runtimes in parity
 
-A TypeScript twin is generated from the machine's [IR](/docs/sdk-reference/statemachine-api/ir-format), so it
-needs a [declaratively authored](/docs/statemachine/declarative-authoring) machine; the delegate machine above
-cannot be exported. The exhaustive [differential corpus](/docs/statemachine#two-runtimes-one-behavior) is
-generated from the same IR. Its inputs are authored in C#, in `Configure`, with `.Differential(...)`:
-
-- **Samples**: a few representative inputs per trigger (a no-input case is always added). A guard that accepts
-  `quarter`/`dollar` wants one input that passes, one that fails, and an empty one.
-- **Seeds**: a representative valid context for any state a trigger cannot reach (context that arrives via
-  autosave rather than a transition). The initial state and everything reachable from it need no seed.
-
-```csharp
-m.Differential(d => d
-    .Sample(CheckoutTrigger.Pay, new JsonObject { ["receipt"] = "rcpt_1" })
-    .EmptySample(CheckoutTrigger.Pay)
-    .Seed(CheckoutState.Review, new JsonObject
-    {
-        ["items"] = new JsonArray("book"),
-        ["total"] = 5,
-        ["receipt"] = null,
-    }));
-```
-
-They are exported into the IR's `differential` block, and
-[`trax machine generate --corpus-out`](/docs/reference/cli#trax-machine-generate) regenerates
-`differential.json` from it; commit the result. There is no `machine.json` to edit: the CLI reads only the IR
-it exports from your compiled machine. Both engines then replay the corpus and fail loudly if their guards or
-reducers ever drift apart. The [IDifferentialBuilder](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder)
-reference lists the typed overloads and probe contexts.
+A TypeScript twin and the differential corpus that proves it matches the server are generated from the machine's IR
+by `trax machine generate`; [The codegen pipeline](/docs/statemachine/codegen-pipeline) explains both and how to
+author the corpus's inputs with `.Differential(...)`.
 
 ## SDK Reference
 
-> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)
+> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [Effects](/docs/sdk-reference/statemachine-api/effects) | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | [Machines root](/docs/sdk-reference/graphql-api/machines) | [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
