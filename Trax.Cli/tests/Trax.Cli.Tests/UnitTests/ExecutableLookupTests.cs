@@ -7,7 +7,10 @@ namespace Trax.Cli.Tests.UnitTests;
 /// <c>trax machine generate</c> runs from inside a checkout it does not trust, so the <c>node</c> it starts is
 /// found on <c>PATH</c> only: a <c>node</c> file planted at the checkout's root must never run, which a bare
 /// name handed to <see cref="System.Diagnostics.Process"/> would allow on Unix.
+///
+/// <para>Enforces <c>docs/adr/0001-the-machine-toolchain-is-half-in-process.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0001-the-machine-toolchain-is-half-in-process.md")]
 public class ExecutableLookupTests
 {
     private string _root = null!;
@@ -45,7 +48,12 @@ public class ExecutableLookupTests
         );
 
         runner.IsAvailable().Should().BeFalse("no absolute PATH entry holds a node");
-        File.Exists(marker).Should().BeFalse("the node in the current directory must not be run");
+        File.Exists(marker)
+            .Should()
+            .BeFalse(
+                "the node in the current directory must not be run. See "
+                    + "docs/adr/0001-the-machine-toolchain-is-half-in-process.md."
+            );
     }
 
     [Test]
