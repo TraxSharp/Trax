@@ -82,7 +82,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 
 | Method | Description |
 |--------|-------------|
-| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default with Postgres) |
+| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default with Postgres) |
 | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Routes specific trains to a remote HTTP endpoint for execution |
 | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | Routes specific trains to an Amazon SQS queue for execution (`Trax.Scheduler.Sqs`) |
 | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | Offloads synchronous `run` execution to a remote endpoint (blocks until complete) |

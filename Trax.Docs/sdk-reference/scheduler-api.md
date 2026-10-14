@@ -24,7 +24,7 @@ Both share the same concepts: external IDs for upsert semantics, `Schedule` obje
 | Method | Description |
 |--------|-------------|
 | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | Adds the scheduler subsystem and configures global options (polling, retries, timeouts) |
-| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default) |
+| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default) |
 | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Routes specific trains to a remote HTTP endpoint |
 | [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | AWS Lambda base class for remote runners (`Trax.Runner.Lambda` package) |
 ### Scheduling Methods

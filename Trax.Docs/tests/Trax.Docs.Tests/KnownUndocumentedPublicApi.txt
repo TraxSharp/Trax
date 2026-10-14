@@ -307,14 +307,10 @@ Trax.Scheduler M:SchedulerConfigurationBuilder.AddRoutedSubmitter
 Trax.Scheduler M:SchedulerConfigurationBuilder.SetRemoteRunRegistration
 Trax.Scheduler M:TopologicalSortResult.CycleMembers
 Trax.Scheduler M:TopologicalSortResult.IsAcyclic
-Trax.Scheduler M:TraxJobRunnerOptions.InMemoryNonceStore
-Trax.Scheduler M:TraxJobRunnerOptions.UnsignedRequestsAllowed
 Trax.Scheduler T:DagValidator
-Trax.Scheduler T:EffectSettingsService
 Trax.Scheduler T:ExecuteJobResult
 Trax.Scheduler T:IJobDispatcherTrain
 Trax.Scheduler T:IManifestManagerTrain
-Trax.Scheduler T:JobRunnerExtensions
 Trax.Scheduler T:LogRecord
 Trax.Scheduler T:RemoteRunJson
 Trax.Scheduler T:RemoteRunOutput
@@ -324,6 +320,4 @@ Trax.Scheduler T:RunnerRequestSignature
 Trax.Scheduler T:RunnerRequestVerdict
 Trax.Scheduler T:SchedulerBuilderOrderExtensions
 Trax.Scheduler T:SchedulerExtensions
-Trax.Scheduler T:SchedulerLivenessHealthCheckExtensions
 Trax.Scheduler T:TopologicalSortResult
-Trax.Scheduler T:WorkerExtensions
