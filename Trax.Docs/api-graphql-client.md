@@ -152,7 +152,7 @@ public sealed class PlayerLookup(IGraphQLClientExecutor graphql)
 
 A query the schema rejects throws `GraphQLValidationException` before any HTTP call. The other
 exceptions `Run` throws are listed on
-[IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request#igraphqlclientexecutor).
+[IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-executor).
 
 ## 7. Call several servers
 
