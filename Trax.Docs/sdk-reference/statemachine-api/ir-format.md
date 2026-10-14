@@ -19,7 +19,7 @@ source:
 `IrExporter.Export(builtMachine)` serializes a declaratively authored machine to its IR: one canonical JSON document
 (`<machine>.ir.json`) that carries identity, structure, per-state context schema, per-trigger input schema, and every
 transition's guard and reducer as data. The per-language generators read it. The output is
-[canonical JSON](/docs/statemachine#two-runtimes-one-behavior), so the same machine always exports the same bytes.
+[canonical JSON](/docs/statemachine/canonical-wire), so the same machine always exports the same bytes.
 `IMachine.ExportIr()` calls it.
 
 ## Signature
