@@ -59,6 +59,12 @@ write the same request:
 - Derive from `TypedRequest<TResponse>` (in `.Typed`) and let the query be generated from the
   response type's properties. See [Typed requests](/docs/api/typed-requests).
 
+### Nested envelopes (Path)
+
+A Trax server puts a namespaced train's field under `discover { <namespace> { ... } }`. A typed
+request reaches it with `Path = "discover.<namespace>"` on `[GraphQLOperation]`; see
+[GraphQLOperation properties](/docs/api/typed-requests#graphqloperation-properties).
+
 ## 3. Register the client and pick a schema source
 
 ```csharp compile=client
@@ -68,6 +74,8 @@ builder
     .Services.AddTraxGraphQLClient(new Uri("https://players.example.com/graphql"))
     .UseFileSchema("schemas/players.graphql");
 ```
+
+### Schema providers
 
 Choose where the schema comes from:
 

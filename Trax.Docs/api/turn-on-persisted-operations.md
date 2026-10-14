@@ -186,8 +186,9 @@ builder.Services.AddTraxGraphQL(graphql =>
 - `WithCacheMaxAge` bounds how long a node serves a change it missed. The default is five minutes.
 - When a mutation returns `CHANGE_NOT_BROADCAST`, the change is saved and in force on the node that
   made it, and the broker did not confirm the broadcast. Repeat the change to send it again.
-- `WithInMemoryCache()` adds a cache of the store's lookups. Add it only when measurements show the
-  lookup is hot; its TTL may not exceed the maximum age.
+- `WithInMemoryCache()` adds a cache of the store's lookups (`IPersistedOperationCache`; a change
+  on this node, or one heard from the broker, calls its `Invalidate` for that id). Add it only when
+  measurements show the lookup is hot; its TTL may not exceed the maximum age.
 
 Every builder method is on
 [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder).
