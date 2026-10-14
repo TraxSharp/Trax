@@ -1,6 +1,8 @@
 ---
-title: Core
+title: Trax.Core
 description: "Trax.Core overview: trains, junctions, Memory and railway error propagation with no database or DI container, and when to use Core on its own."
+source:
+  - Trax.Core/src/Trax.Core
 type: explanation
 area: trains
 nav_order: 1
@@ -36,7 +38,7 @@ Left Track:              Exception  ->   [Skip]    ->   [Skip]    -> Exception
 
 Trax.Core represents this with its own `Either<Exception, T>`, in the `Trax.Core.Functional` namespace. A value is either `Left` (an exception on the left track) or `Right` (successful delivery on the right track):
 
-```csharp
+```csharp compile=core
 using Trax.Core.Functional;
 using Trax.Core.Train;
 
@@ -53,7 +55,10 @@ If `ValidateUserJunction` throws, the train switches to the left track immediate
 
 ## Running a Train
 
-```csharp
+```csharp compile=core
+var train = new CreateUserTrain();
+var input = new CreateUserRequest("ada@example.com");
+
 // Run and unwrap (throws on failure)
 var user = await train.Run(input);
 
@@ -61,7 +66,7 @@ var user = await train.Run(input);
 var result = await train.RunEither(input);
 result.Match(
     Left: ex => Console.WriteLine($"Failed: {ex.Message}"),
-    Right: user => Console.WriteLine($"Created: {user.Email}")
+    Right: created => Console.WriteLine($"Created: {created.Email}")
 );
 ```
 

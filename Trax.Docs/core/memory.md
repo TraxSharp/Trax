@@ -1,6 +1,9 @@
 ---
 title: Memory
-description: How Memory, the type-keyed store a train carries, passes junction outputs to later junction inputs, including storage by type, references and tuples.
+description: "How Memory, the type-keyed store a train carries, passes junction outputs to later junction inputs: storage by type, references, tuples and their limits."
+source:
+  - Trax.Core/src/Trax.Core/Monad/Monad.cs
+  - Trax.Core/src/Trax.Core/Extensions/MonadExtensions.cs
 type: explanation
 area: trains
 nav_order: 2
@@ -12,9 +15,11 @@ Memory is how junctions communicate in a train. Think of it as the cargo the tra
 
 ## How It Works
 
-When a train starts, Memory is seeded with two entries: the input type and `Unit`. As each junction runs, its output is stored in Memory under that output's type:
+When a train starts, Memory holds `Unit` and the train's input, stored under the input's declared
+type, its runtime type and every interface that type implements. As each junction runs, its
+output is stored in Memory under the junction's declared output type:
 
-```csharp
+```csharp fragment
 // Memory starts with: { CreateUserRequest, Unit }
 Chain<ValidateEmailJunction>()         // Takes CreateUserRequest, returns Unit -> Memory unchanged
     .Chain<CreateUserJunction>()       // Takes CreateUserRequest, returns User -> Memory: { CreateUserRequest, Unit, User }
@@ -22,13 +27,13 @@ Chain<ValidateEmailJunction>()         // Takes CreateUserRequest, returns Unit 
 // User is resolved from Memory automatically
 ```
 
-Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. If `TIn` isn't in Memory, the train fails at runtime, though the [startup chain verification](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) catches this before the host serves traffic.
+Each junction declares what it needs (its `TIn`) and what it produces (its `TOut`). The chain looks up `TIn` in Memory, passes it to the junction, and stores `TOut` back. A `TIn` that is not in Memory is taken from the train's container, when it has one (a `ServiceTrain` does). If neither has it, the run fails, though the [startup chain verification](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) catches this before the host serves traffic.
 
 ## Storage by Type
 
 Memory stores one value per type. If two junctions both return `string`, the second one overwrites the first. This is by design. Use distinct types to avoid collisions:
 
-```csharp
+```csharp fragment
 // These would collide in Memory (both produce string)
 .Chain<GetFirstNameJunction>()   // Returns string
 .Chain<GetLastNameJunction>()    // Returns string, overwrites the first!
@@ -38,27 +43,32 @@ Memory stores one value per type. If two junctions both return `string`, the sec
 .Chain<GetLastNameJunction>()    // Returns LastName
 ```
 
+A junction's output is stored under its declared output type only, not its runtime type or interfaces, so a later junction that takes an interface finds the value only when the producing junction declares that interface as its output.
+
 This is why Trax encourages specific types (records, value objects) over primitives. A junction signature like `Junction<User, EmailAddress>` tells you exactly what goes in and what comes out, while `Junction<User, string>` doesn't.
 
 ## References, Not Copies
 
 Memory stores references, not copies. When you modify an object in a junction, every subsequent junction sees the modification:
 
-```csharp
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Core.Junction;
+
 public class EnrichUserJunction : Junction<User, Unit>
 {
-    public override async Task<Unit> Run(User user)
+    public override Task<Unit> Run(User user)
     {
         user.EnrichedData = "some data";
         // No need to return the User. The reference in Memory is already updated
-        return Unit.Default;
+        return Task.FromResult(Unit.Default);
     }
 }
 ```
 
 This means you don't need to "pass through" a type just to keep it in Memory. If a junction receives a `User` and modifies it in place, return `Unit`. The next junction that needs `User` will get the same (now modified) reference:
 
-```csharp
+```csharp fragment
 Chain<CreateUserJunction>()            // Returns User -> stored in Memory
     .Chain<ValidateUserJunction>()     // Takes User, returns Unit (validation only)
     .Chain<EnrichUserJunction>()       // Takes User, returns Unit (modifies in place)
@@ -69,10 +79,12 @@ Only return a type from a junction when you're producing something **new** for M
 
 ## Tuples
 
-When a junction returns a tuple, Memory deconstructs it and stores each element individually:
+When a junction returns a tuple, Memory deconstructs it and stores each element individually, under its declared type, its runtime type and its interfaces:
 
-```csharp
-public class LoadEntitiesJunction : Junction<LoadRequest, (User, Order, Payment)>
+```csharp compile=checkout
+using Trax.Core.Junction;
+
+public class LoadEntitiesJunction(IRepository repo) : Junction<LoadRequest, (User, Order, Payment)>
 {
     public override async Task<(User, Order, Payment)> Run(LoadRequest input)
     {
@@ -88,26 +100,31 @@ public class LoadEntitiesJunction : Junction<LoadRequest, (User, Order, Payment)
 
 When a junction takes a tuple as input, Memory reconstructs it from the individual elements:
 
-```csharp
-public class ProcessCheckoutJunction : Junction<(User, Order, Payment), Receipt>
+```csharp compile=checkout
+using Trax.Core.Junction;
+
+public class ProcessCheckoutJunction(ICheckout checkout)
+    : Junction<(User User, Order Order, Payment Payment), Receipt>
 {
-    public override async Task<Receipt> Run((User User, Order Order, Payment Payment) input)
-    {
-        return await checkout.ProcessAsync(input.User, input.Order, input.Payment);
-    }
+    public override Task<Receipt> Run((User User, Order Order, Payment Payment) input) =>
+        checkout.ProcessAsync(input.User, input.Order, input.Payment);
 }
 // Memory finds User, Order, and Payment individually, constructs the tuple, and passes it in
 ```
 
-Two limits, both refused by the startup chain check rather than left to fail when the train runs:
+Element names belong on the junction's type argument, as here: C# does not let `Run` rename the
+elements of the tuple it overrides.
 
-- **A tuple holds at most seven elements.** Memory cannot store a longer one, so group the extra values into a type of their own.
-- **Deconstruction is one level deep.** A tuple nested inside a tuple goes into Memory as a single value under its own type, and its inner elements are not separately findable. Returning `(int, (Guid, bool))` puts `int` and `(Guid, bool)` in Memory, not `Guid`. Return a flat tuple, or a type that names its parts.
+A tuple input is assembled from Memory alone: an element missing from Memory is missing, even
+when the container could supply it.
 
 This lets you load multiple entities in one junction and consume them individually, or as a group, in later junctions:
 
-```csharp
-public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
+```csharp compile=checkout
+using Trax.Core.Functional;
+using Trax.Core.Train;
+
+public class CheckoutTrain : Train<LoadRequest, Receipt>
 {
     protected override Task<Either<Exception, Receipt>> Junctions() =>
         Chain<LoadEntitiesJunction>()          // Returns (User, Order, Payment), deconstructed into Memory
@@ -116,6 +133,13 @@ public class CheckoutTrain : ServiceTrain<CheckoutRequest, Receipt>
             .Chain<ProcessCheckoutJunction>().Resolve(); // Takes (User, Order, Payment), reconstructed from Memory
 }
 ```
+
+### Tuple limits
+
+Two limits, both refused by the startup chain check rather than left to fail when the train runs:
+
+- **A tuple holds at most seven elements.** Memory cannot store a longer one, so group the extra values into a type of their own.
+- **Deconstruction is one level deep.** A tuple nested inside a tuple goes into Memory as a single value under its own type, and its inner elements are not separately findable. Returning `(int, (Guid, bool))` puts `int` and `(Guid, bool)` in Memory, not `Guid`. Return a flat tuple, or a type that names its parts.
 
 ## SDK Reference
 

@@ -9,12 +9,6 @@ api-graphql-client.md
 api-security.md
 api.md
 authorization.md
-core.md
-core/analyzer.md
-core/building-chains.md
-core/decisions.md
-core/ide-extensions.md
-core/memory.md
 dashboard.md
 effect.md
 effect/architecture.md

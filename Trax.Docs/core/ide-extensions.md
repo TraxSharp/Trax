@@ -1,93 +1,51 @@
 ---
-title: IDE Extensions
-description: The VSCode and Rider/ReSharper extensions that show each Chain and ShortCircuit call's input and output types as inlay hints, with installation and internals.
+title: IDE extensions
+description: "The VSCode and Rider/ReSharper extensions that show each Chain and ShortCircuit call's junction input and output types as inlay hints, and how to install them."
 type: reference
 area: tooling
 nav_order: 5
+source:
+  - Trax.Core/plugins/vscode/trax-hints
+  - Trax.Core/plugins/rider-resharper
 ---
 
-# IDE Extensions
+# IDE extensions
 
-Inlay hint extensions for **VSCode** and **Rider/ReSharper**. Both show `TIn -> TOut` types inline for each chain call.
+Inlay hint extensions for VSCode and for Rider and ReSharper. Each shows a junction's `TIn -> TOut`
+after the chain call that names it.
 
-## What They Show
-
-Given a train chain:
-
-```csharp
+```csharp fragment
 protected override Task<Either<Exception, OrderReceipt>> Junctions() =>
-        Chain<CheckInventoryJunction>()
-        .Chain<ChargePaymentJunction>()
-        .Chain<CreateShipmentJunction>().Resolve();
+    Chain<CheckInventoryJunction>()
+        .Chain<ChargePaymentJunction>()      // InventoryResult -> PaymentConfirmation
+        .Chain<CreateShipmentJunction>()     // PaymentConfirmation -> OrderReceipt
+        .Resolve();
 ```
 
-The extensions annotate each junction with its resolved types:
+| | VSCode | Rider / ReSharper |
+|---|---|---|
+| Name | Trax.Core Chain Hints (`trax-hints`) | Trax.Core Chain Hints |
+| Install | [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) | JetBrains Marketplace, or build from source |
+| Activates on | C# files | C# files |
+| Calls hinted | `.Chain<T>()`, `.ShortCircuit<T>()` and `.IChain<T>()` written after a dot, with a non-generic type argument | Every `Chain` and `ShortCircuit` invocation with a type argument |
+| How types are found | The editor's go-to-definition on the junction, reading the generic arguments of its class declaration | The semantic model, walking the junction's base types to `IJunction<TIn, TOut>` |
+| Source | `Trax.Core/plugins/vscode/trax-hints` | `Trax.Core/plugins/rider-resharper` |
 
-```
-.Chain<CheckInventoryJunction>()      // OrderRequest -> InventoryResult
-.Chain<ChargePaymentJunction>()       // InventoryResult -> PaymentConfirmation
-.Chain<CreateShipmentJunction>()      // PaymentConfirmation -> OrderReceipt
-```
+A chain's first step, written without a leading dot (`Chain<CheckInventoryJunction>()` above), gets
+no hint in VSCode.
 
-### Supported Methods
+Types are resolved through the junction's base types, so these all show:
 
-- `.Chain<TJunction>()`
-- `.ShortCircuit<TJunction>()`
+- direct inheritance: `class MyJunction : Junction<string, int>`
+- primary constructors: `class MyJunction(ILogger logger) : EffectJunction<string, int>`
+- generic type arguments: `EffectJunction<Unit, List<Manifest>>`
+- tuples: `EffectJunction<(List<A>, List<B>), List<C>>`
 
-### Type Resolution
-
-Types are resolved by walking the junction's type hierarchy to find `IJunction<TIn, TOut>`. This handles:
-- Direct inheritance: `class MyJunction : Junction<string, int>`
-- Primary constructors: `class MyJunction(ILogger logger) : EffectJunction<string, int>`
-- Nested generics: `EffectJunction<Unit, List<Manifest>>`
-- Tuple types: `EffectJunction<(List<A>, List<B>), List<C>>`
-
-## VSCode
-
-**Source:** `plugins/vscode/trax-hints/`
-
-### Installation
-
-Install from the [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints)
-
-### Internals
-
-Activates on C# files. Uses regex to find chain calls, then calls VSCode's definition provider to jump to each junction's source file and extract the generic arguments from the class definition.
-
-Resolved types are cached per junction class. The cache clears when any `.cs` file is modified.
-
-## Rider / ReSharper
-
-**Source:** `plugins/rider-resharper/`
-
-### Installation
-
-Search for **Trax.Core Chain Hints** in JetBrains Marketplace.
-
-Or build from source:
+## Building the Rider plugin from source
 
 ```bash
-cd plugins/rider-resharper
+cd Trax.Core/plugins/rider-resharper
 ./gradlew buildPlugin
 ```
 
-Output is in `build/distributions/`.
-
-### Internals
-
-Uses JetBrains' PSI (Program Structure Interface) for type resolution. A daemon analyzer (`ElementProblemAnalyzer<IInvocationExpression>`) fires on each invocation expression and:
-
-1. Checks if the method name is `Chain` or `ShortCircuit`
-2. Extracts the type argument from the generic call
-3. Walks the junction's super-type hierarchy to find `IJunction<TIn, TOut>`
-4. Places a `TIn -> TOut` hint after the closing parenthesis
-
-PSI resolution is fully semantic. Generics, inheritance chains, and type substitution are handled correctly without regex.
-
-### Architecture
-
-Dual-targeting project:
-- **ReSharper** (.NET 4.7.2): Standalone extension
-- **Rider** (Kotlin + .NET): .NET analysis runs in Rider's backend; Kotlin handles IDE integration
-
-Both targets share the C# analysis code in `src/dotnet/ReSharperPlugin.Trax.Core/`.
+The plugin is written to `build/distributions/`.
