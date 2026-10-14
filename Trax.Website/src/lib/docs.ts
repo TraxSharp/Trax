@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
-import { SITE_URL } from "./site";
+import { SITE_URL } from "./site.ts";
 import { asList, isDocType, type DocType, type SourceKinds } from "./doc-meta.ts";
 
 export interface DocPage {
@@ -100,10 +100,9 @@ export function summarize(markdown: string): string {
         .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
         .replace(/\*\*([^*]+)\*\*/g, "$1")
         .replace(/`([^`]*)`/g, "$1")
-        .replace(/<[^>]*>/g, "")
-        // One pass can rebuild a tag from the pieces it leaves ("<scr<b>ipt>"), so drop every
-        // remaining angle bracket: the summary is plain text and never needs one.
-        .replace(/[<>]/g, "")
+        // A tag, or else any lone angle bracket, in one pass: every < and > in the text is consumed,
+        // so no tag can be rebuilt from the pieces left ("<scr<b>ipt>"). The summary is plain text.
+        .replace(/<[^<>]*>|[<>]/g, "")
     );
     paragraph = [];
     if (!text) return undefined;
