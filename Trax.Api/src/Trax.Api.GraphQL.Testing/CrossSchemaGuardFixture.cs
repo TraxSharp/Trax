@@ -20,6 +20,7 @@ namespace Trax.Api.GraphQL.Testing;
 /// }
 /// </code>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/graphql-testing">SDK reference</seealso>
 [TestFixture]
 public abstract class CrossSchemaGuardFixture
 {

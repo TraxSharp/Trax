@@ -24,6 +24,7 @@ namespace Trax.Effect.Data.Testing;
 /// }
 /// </code>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/effect-data-testing">SDK reference</seealso>
 [TestFixture]
 public abstract class DomainDataLayerGuardFixture
 {

@@ -4,12 +4,6 @@
 #
 # Do NOT add to this list: mark the fence. Delete a page's line once its last unmarked fence is
 # marked, or when the page moves or is deleted; a stale line fails the test.
-sdk-reference/attributes.md
-sdk-reference/attributes/inject.md
-sdk-reference/attributes/trax-allow-anonymous.md
-sdk-reference/attributes/trax-authorize.md
-sdk-reference/attributes/trax-remote.md
-sdk-reference/attributes/trax-sensitive.md
 sdk-reference/mediator-api.md
 sdk-reference/mediator-api/add-service-train-bus.md
 sdk-reference/mediator-api/concurrency-limiting.md
@@ -44,30 +38,3 @@ sdk-reference/scheduler-api/use-local-workers.md
 sdk-reference/scheduler-api/use-remote-run.md
 sdk-reference/scheduler-api/use-remote-workers.md
 sdk-reference/scheduler-api/use-sqs-workers.md
-sdk-reference/testing.md
-sdk-reference/testing/core-testing.md
-sdk-reference/train-methods.md
-sdk-reference/train-methods/add-services.md
-sdk-reference/train-methods/chain-graph.md
-sdk-reference/train-methods/chain.md
-sdk-reference/train-methods/checkpoint.md
-sdk-reference/train-methods/decide.md
-sdk-reference/train-methods/declared-chain.md
-sdk-reference/train-methods/extract.md
-sdk-reference/train-methods/gate.md
-sdk-reference/train-methods/junctions.md
-sdk-reference/train-methods/parallel.md
-sdk-reference/train-methods/resolve.md
-sdk-reference/train-methods/run.md
-sdk-reference/train-methods/scale.md
-sdk-reference/train-methods/short-circuit.md
-sdk-reference/train-methods/switch.md
-sdk-reference/trains-and-junctions.md
-sdk-reference/trains-and-junctions/effect-junction.md
-sdk-reference/trains-and-junctions/i-route.md
-sdk-reference/trains-and-junctions/junction.md
-sdk-reference/trains-and-junctions/monad-task.md
-sdk-reference/trains-and-junctions/route-registration.md
-sdk-reference/trains-and-junctions/service-train.md
-sdk-reference/trains-and-junctions/train-exception.md
-sdk-reference/trains-and-junctions/train.md

@@ -15,6 +15,7 @@ namespace Trax.Api.GraphQL.Testing;
 /// reflects over a declared <see cref="CrossSchemaEdge"/> manifest; the source guards verify that edge
 /// resolvers live in (and route through) the dedicated cross-schema project.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/graphql-testing">SDK reference</seealso>
 public static class CrossSchemaGuards
 {
     private static readonly Regex CamelCase = new("^[a-z][A-Za-z0-9]*$", RegexOptions.Compiled);

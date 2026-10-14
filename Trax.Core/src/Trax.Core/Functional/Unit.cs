@@ -5,6 +5,7 @@ namespace Trax.Core.Functional;
 /// It stands in for <c>void</c> where C# needs a type, as in <c>Junction&lt;TInput, Unit&gt;</c> or
 /// <c>Task&lt;Unit&gt;</c>. It has one value, <see cref="Default"/>, and every <c>Unit</c> equals every other.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/either">SDK reference</seealso>
 public readonly struct Unit : IEquatable<Unit>, IComparable<Unit>
 {
     /// <summary>The only value of <see cref="Unit"/>.</summary>

@@ -3,6 +3,10 @@ title: TraxAuthorize
 description: "Reference for TraxAuthorize, which declares who may run a train, read a query model or call a field: how attributes combine, where enforced, startup checks."
 type: reference
 area: security
+package: Trax.Effect
+namespace: Trax.Effect.Attributes
+source:
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxAuthorizeAttribute.cs
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 1
@@ -16,7 +20,7 @@ Declares who may run a train, read a query model, or call a GraphQL field. It is
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Attributes;
 
 [AttributeUsage(
@@ -34,6 +38,8 @@ public class TraxAuthorizeAttribute : Attribute
 }
 ```
 
+## Properties
+
 | Member | Type | Description |
 |--------|------|-------------|
 | `TraxAuthorizeAttribute()` | | A bare gate: the caller must be authenticated, nothing more |
@@ -41,7 +47,9 @@ public class TraxAuthorizeAttribute : Attribute
 | `Policy` | `string?` | The name of an ASP.NET Core authorization policy the caller must pass |
 | `Roles` | `string?` | A comma-separated list of roles; the caller must hold at least one. Exact, case-sensitive match. |
 
-## How attributes combine
+## Behavior
+
+### How attributes combine
 
 | Attribute(s) | The caller must |
 |--------------|-----------------|
@@ -54,7 +62,7 @@ public class TraxAuthorizeAttribute : Attribute
 
 On a train, attributes on the class, its base classes and every interface it implements are collected together, so `[TraxAuthorize("Admin")]` on `IDeleteUserTrain` gates `DeleteUserTrain` even when the class carries none. Collected together, they still combine as above: class `Roles = "Admin"` and interface `Roles = "Support"` require both. Discovery hands the requirement over as [`TrainRegistration.RequiredRoleSets`](/docs/sdk-reference/mediator-api/train-discovery#properties), one set per attribute.
 
-## Where it is enforced
+### Where it is enforced
 
 | Placed on | Enforced by |
 |-----------|-------------|
@@ -64,7 +72,7 @@ On a train, attributes on the class, its base classes and every interface it imp
 
 A train run through `ITrainBus` in-process, by the scheduler, or inside an [ITrustedExecutionScope](/docs/sdk-reference/mediator-api/i-trusted-execution-scope) is not checked: authorization is enforced once, where a caller submits work.
 
-## Startup checks
+### Startup checks
 
 - A train with `[TraxAuthorize]` and no `ITrainAuthorizationService` registered stops the host at startup, unless the mediator was configured with `AllowMissingAuthorizationService()`. At run time the same case throws `TrainAuthorizationNotConfiguredException` outside a trusted scope.
 - An empty or whitespace `Policy`, or a `Roles` list with no non-empty entry, fails at startup.
@@ -74,8 +82,10 @@ A train run through `ITrainBus` in-process, by the scheduler, or inside an [ITru
 
 ## Example
 
-```csharp
+```csharp compile
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
+using Trax.Effect.Services.ServiceTrain;
 
 [TraxMutation]
 [TraxAuthorize("MustBeInternal")]
@@ -89,10 +99,9 @@ public class RefundOrderTrain : ServiceTrain<RefundInput, RefundResult>, IRefund
 
 The caller must pass `MustBeInternal` and hold `Admin` or `Manager`.
 
-See [Authorization](/docs/authorization) for the full model, including the exposure posture every GraphQL surface must declare, and the [Auth sample](/docs/samples/auth) for each form on a running host.
+## See also
 
-## Package
+- [Authorization](/docs/authorization), the full model and the exposure posture every GraphQL surface declares
+- [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) and [TraxAuthorization](/docs/sdk-reference/attributes/trax-authorization)
+- [Auth sample](/docs/samples/auth), each form on a running host
 
-```
-dotnet add package Trax.Effect
-```

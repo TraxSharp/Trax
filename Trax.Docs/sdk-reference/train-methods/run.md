@@ -1,113 +1,86 @@
 ---
-title: Run / RunEither
-description: Reference for Run and RunEither, which execute a train from outside, throwing on failure or returning an Either, and how ServiceTrain seals them.
+title: Run
+description: "Reference for Run, which executes a train from outside and throws its failure, on Train and the sealed overloads of ServiceTrain."
 type: reference
 area: trains
+package: Trax.Core
+namespace: Trax.Core.Train
+source:
+  - Trax.Core/src/Trax.Core/Train/Train.cs
+  - Trax.Effect/src/Trax.Effect/Services/ServiceTrain/ServiceTrain.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 8
 ---
 
-# Run / RunEither
+# Run
 
-Executes the train from the outside. `Run` throws on failure; `RunEither` returns an `Either<Exception, TReturn>` for Railway-oriented error handling.
-
-These are called by **consumers** of the train, not inside `Junctions()`.
+Executes the train from outside it and returns its result, throwing the failure. It is called by the train's consumers, not inside `Junctions()`. [RunEither](/docs/sdk-reference/train-methods/run-either) returns the failure instead.
 
 ## Signatures
 
-### Run (throws on failure)
+```csharp fragment
+// Train<TInput, TReturn> (Trax.Core)
+public virtual Task<TReturn> Run(TInput input, CancellationToken cancellationToken = default);
 
-```csharp
-public virtual async Task<TReturn> Run(TInput input, CancellationToken cancellationToken = default)
-```
-
-On a `ServiceTrain` it is a sealed override, and the two overloads that take a pre-created
-`Metadata` are not virtual:
-
-```csharp
-public sealed override Task<TOut> Run(TIn input, CancellationToken cancellationToken = default)
-public Task<TOut> Run(TIn input, Metadata metadata)
-public Task<TOut> Run(TIn input, Metadata metadata, CancellationToken cancellationToken)
-```
-
-A service train does its work in `Junctions()`, and `Run` owns the metadata row, the lifecycle
-hooks and the outcome write around it, so none of them can be overridden. A plain
-`Train<TInput, TReturn>` keeps a virtual `Run`.
-
-### RunEither (returns Either)
-
-```csharp
-public Task<Either<Exception, TReturn>> RunEither(TInput input)
+// ServiceTrain<TIn, TOut> (Trax.Effect, namespace Trax.Effect.Services.ServiceTrain)
+public sealed override Task<TOut> Run(TIn input, CancellationToken cancellationToken = default);
+public Task<TOut> Run(TIn input, Metadata metadata);
+public Task<TOut> Run(TIn input, Metadata metadata, CancellationToken cancellationToken);
 ```
 
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `input` | `TInput` | Yes | The input data for the train |
-| `cancellationToken` | `CancellationToken` | No | Token to monitor for cancellation requests. When provided, it is stored on the `Train.CancellationToken` property and propagated to every junction before execution. Defaults to `CancellationToken.None` when omitted. |
-
-> **Note:** `RunEither` does not accept a `CancellationToken` parameter, and a caller cannot assign `Train.CancellationToken` (its setter is not public). Pass the token to `Run`, or run the train through a host (a `ServiceTrain` resolved from the container, the mediator or the scheduler), which sets it.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `input` | `TInput` | The train's input |
+| `cancellationToken` | `CancellationToken` | Stored on the train's `CancellationToken` and handed to every junction before it runs. Defaults to `CancellationToken.None`. |
+| `metadata` | `Metadata` | `ServiceTrain` only: a `Pending` row the caller already created, which the run uses instead of creating one. The mediator and the scheduler pass it. |
 
 ## Returns
 
-- **`Run`**: `Task<TReturn>`, the train result. Throws the captured exception if the train failed. Throws `OperationCanceledException` if the token is cancelled.
-- **`RunEither`**: `Task<Either<Exception, TReturn>>`, `Left` on failure, `Right` on success. Nothing escapes it, cancellation included: a cancelled run returns `Left` holding the `OperationCanceledException`. Tell it apart from a business failure with `is OperationCanceledException` before treating the `Left` as one.
-
-## Examples
-
-### Using Run (imperative style)
-
-```csharp
-try
-{
-    var result = await train.Run(new OrderInput { OrderId = "123" });
-    Console.WriteLine($"Order processed: {result.ConfirmationId}");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Train failed: {ex.Message}");
-}
-```
-
-### Using RunEither (functional style)
-
-```csharp
-var result = await train.RunEither(new OrderInput { OrderId = "123" });
-
-result.Match(
-    Right: success => Console.WriteLine($"Order processed: {success.ConfirmationId}"),
-    Left: error => Console.WriteLine($"Train failed: {error.Message}")
-);
-```
-
-### With CancellationToken
-
-```csharp
-// From an ASP.NET controller
-public async Task<IActionResult> ProcessOrder(
-    OrderInput input,
-    CancellationToken cancellationToken)
-{
-    var result = await train.Run(input, cancellationToken);
-    return Ok(result);
-}
-```
+`Task<TReturn>`, the train's result.
 
 ## Behavior
 
-1. If a `CancellationToken` is provided, stores it on the `Train.CancellationToken` property.
-2. Seeds `Memory` with the input.
-3. Calls the train's `Junctions()` declaration.
-4. **`Run`**: Unwraps the `Either` result. If `Left`, rethrows the exception. If `Right`, returns the value.
-5. **`RunEither`**: Returns the `Either` directly without unwrapping.
+1. Stores the token on the train's `CancellationToken`. The overload with `metadata` and no token keeps the train's current one.
+2. Seeds Memory with the input and runs `Junctions()`.
+3. Returns the `Right` value, or rethrows the `Left` exception with its original stack trace.
 
-During junction execution, the train's `CancellationToken` is automatically propagated to each junction before its `Run` method is called. Junctions access the token via `this.CancellationToken`. Before each junction executes, `CancellationToken.ThrowIfCancellationRequested()` is called. If the token is already cancelled, the junction is skipped entirely.
+Before each junction runs, the token is checked; a cancelled token skips the junction and `Run` throws `OperationCanceledException`.
 
-## Remarks
+On a `ServiceTrain`, `Run` also creates (or takes over) the run's metadata row, fires the lifecycle hooks and writes the outcome; see [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train#run). The overloads that take `metadata` throw `TrainException` when the row is not `Pending`.
 
-- `RunEither` is useful when you want functional-style error handling without try/catch. Read it with `Either`'s `Match`, `IfRight` and `IfLeft`, or check `IsRight` and cast.
-- In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus](/docs/sdk-reference/mediator-api/train-bus).
-- The `cancellationToken` parameter stores the token before calling the train's route definition. All junctions in the chain then receive the token automatically. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details on how cancellation propagates through the pipeline.
-- `Run` is `virtual` on plain `Train<TInput, TReturn>`, for code that uses Trax.Core without Trax.Effect. An override that does not call `base.Run` never reaches `Junctions()`, so the chain that `DeclaredChain()` reads, and any check built on it, is not the chain that runs. Call `base.Run` from an override, or put the work in a junction. A `ServiceTrain` cannot override `Run` at all: its overloads are sealed. `Trax.Core/docs/adr/0003` records why.
+`Run` is virtual on `Train` and sealed on `ServiceTrain`. An override on a plain `Train` that does not call `base.Run` never reaches `Junctions()`, so what [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain) reads is not what runs.
+
+Trains in an application are usually run through [ITrainBus.RunAsync](/docs/sdk-reference/mediator-api/train-bus), which calls `Run`.
+
+## Example
+
+```csharp compile
+public class OrderEndpoint(IOrderTrain train)
+{
+    public async Task<string> Process(OrderInput input, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await train.Run(input, cancellationToken);
+            return $"Order processed: {result.ConfirmationId}";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return $"Train failed: {ex.Message}";
+        }
+    }
+}
+```
+
+## See also
+
+- [RunEither](/docs/sdk-reference/train-methods/run-either)
+- [Cancellation tokens](/docs/cross-cutting/cancellation-tokens), how a token reaches each junction
+- [Train](/docs/sdk-reference/trains-and-junctions/train) and [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train)

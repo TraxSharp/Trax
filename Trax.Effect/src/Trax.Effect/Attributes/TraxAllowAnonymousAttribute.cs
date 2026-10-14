@@ -42,6 +42,7 @@ namespace Trax.Effect.Attributes;
 /// fails host startup; remove one or the other.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/trax-allow-anonymous">SDK reference</seealso>
 [AttributeUsage(
     AttributeTargets.Class | AttributeTargets.Interface | AttributeTargets.Method,
     AllowMultiple = false,

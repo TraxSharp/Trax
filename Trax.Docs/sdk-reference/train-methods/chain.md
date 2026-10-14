@@ -1,8 +1,15 @@
 ---
 title: Chain
-description: Reference for Chain, which runs a junction with its input from Memory and stores its output back, its overloads, railway behaviour and MonadTask chaining.
+description: "Reference for Chain, which runs a junction with its input from Memory and stores its output back: every overload, its railway behaviour and its failures."
 type: reference
 area: trains
+package: Trax.Core
+namespace:
+  - Trax.Core.Train
+  - Trax.Core.Monad
+source:
+  - Trax.Core/src/Trax.Core/Train/Train.cs
+  - Trax.Core/src/Trax.Core/Monad/Monad.Chain.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 2
@@ -10,94 +17,87 @@ nav_order: 2
 
 # Chain
 
-Executes a junction, wiring its input from Memory and storing its output back into Memory. This is the primary method for composing junctions into a train pipeline. If any junction fails (returns `Left`), subsequent junctions are short-circuited.
+Runs a junction, taking its input from Memory and storing its output back in Memory. When an earlier step has failed, the junction is skipped and the failure passes on. Every overload is a protected method on `Train<TInput, TReturn>`, and a public method of the same shape on [MonadTask](/docs/sdk-reference/trains-and-junctions/monad-task) and `Monad`, so calls continue fluently. A chain always ends in [Resolve](/docs/sdk-reference/train-methods/resolve).
 
-Every `Chain` overload is a protected method on `Train<TInput, TReturn>` and returns a `MonadTask<TInput, TReturn>`, an awaitable wrapper around the chain that carries the same `Chain`, `IChain`, `ShortCircuit`, `Extract`, `AddServices` and `Resolve` methods, so calls continue fluently across async junctions. A chain always ends in `.Resolve()`.
+## Signatures
 
-## Chain\<TJunction\>()
+```csharp fragment
+// Train<TInput, TReturn>; MonadTask<TInput, TReturn> and Monad<TInput, TReturn> have the same, public
+protected MonadTask<TInput, TReturn> Chain<TJunction>()
+    where TJunction : class;
 
-Creates and executes a junction. Input is auto-extracted from Memory. The junction's `TIn`/`TOut` types are resolved via reflection from its `IJunction<TIn, TOut>` implementation.
-
-```csharp
-protected MonadTask<TInput, TReturn> Chain<TJunction>() where TJunction : class
-```
-
-| Type Parameter | Constraint | Description |
-|---------------|------------|-------------|
-| `TJunction` | `class` | The junction type. Must implement `IJunction<TIn, TOut>` for some `TIn`/`TOut`. |
-
-This is the overload used in most trains:
-
-```csharp
-protected override Task<Either<Exception, OrderResult>> Junctions() =>
-    Chain<ValidateOrder>()          // Creates ValidateOrder, extracts its input from Memory
-        .Chain<ProcessPayment>()    // Creates ProcessPayment, extracts its input from Memory
-        .Resolve();
-```
-
-## Chain\<TJunction\>(TJunction junctionInstance)
-
-Executes a pre-created junction instance. Input is auto-extracted from Memory.
-
-```csharp
-protected MonadTask<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance) where TJunction : class
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `junctionInstance` | `TJunction` | A pre-created junction instance |
-
-Useful when you need to configure a junction before executing it:
-
-```csharp
-protected override Task<Either<Exception, OrderResult>> Junctions() =>
-    Chain(new ProcessPayment { Gateway = "stripe" }).Resolve();
-```
-
-## Chain\<TJunction, TIn, TOut\>() and Chain\<TJunction, TIn\>()
-
-Explicit-typed overloads for a junction whose input and output types cannot be inferred from its interface, for example one that implements `IJunction<,>` more than once. The types are stated rather than discovered by reflection.
-
-```csharp
-protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
-    where TJunction : IJunction<TIn, TOut>
+protected MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
+    where TJunction : class;
 
 protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
-    where TJunction : IJunction<TIn, TOut>, new()
+    where TJunction : IJunction<TIn, TOut>, new();
 
-// Unit output
-protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
-    where TJunction : IJunction<TIn, Unit>
+protected MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
+    where TJunction : IJunction<TIn, TOut>;
 
 protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
-    where TJunction : IJunction<TIn, Unit>, new()
+    where TJunction : IJunction<TIn, Unit>, new();
+
+protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
+    where TJunction : IJunction<TIn, Unit>;
 ```
 
-| Type Parameter | Description |
-|---------------|-------------|
-| `TJunction` | The junction type |
-| `TIn` | The input type taken from Memory |
-| `TOut` | The output type stored in Memory (`Unit` for the two-parameter form) |
+## Parameters
 
-The parameterless forms construct the junction with `new()`, so they take no constructor dependencies. Pass an instance when the junction needs them.
+| Parameter | Description |
+|-----------|-------------|
+| `TJunction` | The junction type. For `Chain<TJunction>()`, it implements `IJunction<TIn, TOut>` for some `TIn` and `TOut`, found by reflection. |
+| `TIn`, `TOut` | The explicit-type overloads state the input and output types instead of discovering them, for a junction that implements `IJunction<,>` more than once. The two-parameter form's output is `Unit`. |
+| `instance`, `junction` | A junction already built, which the chain runs as it is |
 
----
+## Returns
+
+`MonadTask<TInput, TReturn>`, the next link of the chain.
 
 ## Behavior
 
-1. If the train already has an exception, the junction is **skipped** (short-circuited). Nothing is built for it: the junction, its constructor dependencies and its input are not resolved from Memory or the container.
-2. The junction's input is extracted from Memory by type.
-3. The junction is executed via `RailwayJunction`.
-4. On **success** (Right): the output is stored in Memory by its type. Tuple outputs are decomposed into individual Memory entries.
-5. On **failure** (Left): the exception is captured and all subsequent Chain calls are short-circuited.
+1. If an earlier step has failed, the junction is skipped. Nothing is built for it: the junction, its constructor arguments and its input are not resolved.
+2. `Chain<TJunction>()` builds the junction through its single public constructor, each parameter taken from Memory by type and then from the container. The parameterless explicit-type forms construct it with `new()`. An instance is used as it is.
+3. The junction's input is taken from Memory by type. A tuple input is assembled from Memory alone.
+4. The junction runs on the railway (see [Junction](/docs/sdk-reference/trains-and-junctions/junction#behavior)).
+5. On success, the output is stored in Memory under its type; a tuple output is stored as its elements. On failure, the exception is kept and every later step is skipped.
 
-## Remarks
+Each junction is awaited with `ConfigureAwait(false)` and nothing blocks on it, so a chain runs under a single-threaded `SynchronizationContext` (Blazor Server, WPF, WinForms) without deadlocking.
 
-- `Chain<TJunction>()` creates the junction itself, through its single public constructor, whose parameters are resolved from Memory by type, DI services included. A junction Trax cannot build that way (more or fewer than one public constructor, an abstract class, or an interface) is refused when the chain is read, so the [startup check](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) keeps the host from starting; outside a host it fails the train with a `TrainException` naming the junction and its constructor count. A junction passed as an instance, `Chain(instance)`, is not checked, because its constructors never run.
-- When a constructor argument or the junction's input is in neither Memory nor the container, the train fails with a `TrainException` naming the junction, the train and the missing type, for example `"Junction 'ClockJunction' (train 'ScheduleTrain') needs 'IClock' as a constructor argument, but nothing earlier in the chain produced one and it is not registered in the container. Register it or chain a junction that outputs it first."`. On a generic host the [startup check](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) finds a missing constructor argument before the first run and refuses to start; this run-time failure is what a host without the check (the Lambda runner, a bare `ServiceProvider`, `SkipChainVerification()`) sees.
-- `TIn`/`TOut` are discovered via reflection from the junction's `IJunction<,>` interface at runtime.
-- See [Memory](/docs/core/memory) for how type-based lookup works, including tuple handling.
+| Condition | Result |
+|-----------|--------|
+| `TJunction` has more or fewer than one public constructor, is abstract, or is an interface | Refused when the chain is read, so the [startup check](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) stops the host; outside a host the run fails with a `TrainException` naming the junction and its constructor count. An instance is not checked. |
+| A constructor argument or the input is in neither Memory nor the container | The run fails with a `TrainException` naming the junction, the train and the type: `Junction 'ClockJunction' (train 'ScheduleTrain') needs 'IClock' as a constructor argument, but nothing earlier in the chain produced one and it is not registered in the container. Register it, pass one with AddServices, or chain a junction that outputs it first.` (an interface, on a train with a container; the advice differs for a class or a plain `Train`) On a host with the startup check, a missing constructor argument stops the host instead. |
+| The junction's constructor throws | The run fails with that exception |
 
-## SynchronizationContext Safety
+## Examples
 
-The chain is asynchronous end to end: each junction is awaited with `ConfigureAwait(false)`, and nothing blocks on a junction's task. That keeps chains safe in environments with a single-threaded `SynchronizationContext` such as Blazor Server, WPF, WinForms, and legacy ASP.NET.
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Effect.Services.ServiceTrain;
+
+public class PlaceOrderTrain : ServiceTrain<OrderInput, OrderResult>
+{
+    protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        Chain<ValidateOrder>().Chain<ProcessPayment>().Resolve();
+}
+```
+
+A junction built before the chain runs it:
+
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Core.Train;
+
+public class PreviewOrderTrain : Train<OrderDetails, OrderResult>
+{
+    protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        Chain(new ProcessOrder()).Resolve();
+}
+```
+
+## See also
+
+- [IChain](/docs/sdk-reference/train-methods/i-chain), which resolves the junction by its interface
+- [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit)
+- [Memory](/docs/core/memory), how values are found by type, tuples included

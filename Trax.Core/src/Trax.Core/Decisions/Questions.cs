@@ -11,6 +11,7 @@ namespace Trax.Core.Decisions;
 /// <see cref="ScoreDecision{TLevel}"/> or <see cref="YesNoDecision{TQuestion}"/>) that a later
 /// <c>Switch</c>, <c>Scale</c> or <c>Gate</c> routes on, or that a junction reads.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/decide">SDK reference</seealso>
 public sealed class Questions<TState>
 {
     internal Questions() { }

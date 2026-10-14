@@ -8,6 +8,11 @@ using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
+/// <summary>The chain steps the train methods of the same name call.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/decide">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/switch">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/gate">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/scale">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
 {
     /// <summary>

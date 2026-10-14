@@ -1,8 +1,16 @@
 ---
 title: Switch
-description: Reference for Switch, which sends the train down one of several declared tracks, one per enum member, chosen by a decision.
+description: "Reference for Switch, which sends the train down one of several declared tracks, one per enum member, chosen by a decision."
 type: reference
 area: trains
+package: Trax.Core
+namespace:
+  - Trax.Core.Train
+  - Trax.Core.Decisions
+source:
+  - Trax.Core/src/Trax.Core/Monad/Monad.Decisions.cs
+  - Trax.Core/src/Trax.Core/Decisions/Tracks.cs
+  - Trax.Core/src/Trax.Core/Decisions/Decisions.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 11
@@ -11,40 +19,37 @@ nav_order: 11
 # Switch
 
 Sends the train down one of several declared tracks, one per member of an enum, chosen by a
-decision. Every track is verified at startup; only the chosen one runs. See
-[Decisions](/docs/core/decisions).
+decision. Every track is verified at startup; only the chosen one runs.
 
-## Switch\<TState, TTrack\>(tracks, asking)
+## Signatures
 
-Asks the registered decider which member of `TTrack` applies to the `TState` in Memory, offering
-only the members this switch has tracks for, then routes on the answer.
+```csharp fragment
+// Train<TInput, TReturn>; MonadTask<TInput, TReturn> and Monad<TInput, TReturn> have the same, public
 
-```csharp
+// Asks the decider which member of TTrack applies to the TState in Memory, then routes
 protected MonadTask<TInput, TReturn> Switch<TState, TTrack>(
     Func<Tracks<TInput, TReturn, TTrack>, Tracks<TInput, TReturn, TTrack>> tracks,
     string? asking = null
 )
-    where TTrack : struct, Enum
-```
+    where TTrack : struct, Enum;
 
-| Parameter | Description |
-|---|---|
-| `tracks` | Declares the tracks |
-| `asking` | The question. Defaults to the `[Asks]` attribute on `TTrack`. |
-
-## Switch\<TTrack\>(tracks)
-
-Routes on a `ChoiceDecision<TTrack>` already in Memory, made by an earlier
-[Decide](/docs/sdk-reference/train-methods/decide). Asks nothing.
-
-```csharp
+// Routes on a ChoiceDecision<TTrack> an earlier Decide put in Memory; asks nothing
 protected MonadTask<TInput, TReturn> Switch<TTrack>(
     Func<Tracks<TInput, TReturn, TTrack>, Tracks<TInput, TReturn, TTrack>> tracks
 )
-    where TTrack : struct, Enum
+    where TTrack : struct, Enum;
 ```
 
-## Tracks\<TInput, TReturn, TTrack\>
+## Parameters
+
+| Parameter | Description |
+|---|---|
+| `TState` | The value in Memory the question is about (asking form) |
+| `TTrack` | The enum whose members name the tracks |
+| `tracks` | Declares the tracks on the `Tracks<TInput, TReturn, TTrack>` it is handed |
+| `asking` | The question. Defaults to the `[Asks]` attribute on `TTrack`. |
+
+### Tracks\<TInput, TReturn, TTrack\>
 
 | Method | Description |
 |---|---|
@@ -56,28 +61,47 @@ protected MonadTask<TInput, TReturn> Switch<TTrack>(
 
 A track is written on the parameter it is handed, and may be empty (`t => t`).
 
-## Example
+## Returns
 
-```csharp
-Switch<LoanApplication, Underwriting>(tracks => tracks
-        .When(Underwriting.Approve, t => t.Chain<MakeOffer>(), requireConfidence: 0.95)
-        .When(Underwriting.Decline, t => t.Chain<SendAdverseActionNotice>(), requireConfidence: 0.95)
-        .When(Underwriting.ManualReview, t => t.Chain<AssignUnderwriter>()))
-    .Resolve();
-```
+`MonadTask<TInput, TReturn>`, the next link of the chain.
 
 ## Behavior
 
-1. With the asking form, asks as [Decide](/docs/sdk-reference/train-methods/decide) does, offering the declared members in declared order.
+1. With the asking form, asks as [Decide](/docs/sdk-reference/train-methods/decide) does, offering only the members this switch has tracks for, in declared order.
 2. Finds the track for the chosen member, and its bar (`requireConfidence`, else `RequireConfidence`).
 3. Takes that track when the choice has one and meets its bar; otherwise takes `Otherwise`, or fails the run (`Permanent`) when there is none.
-4. Puts `TrackTaken<TTrack>` in Memory (the track's name, and the reason when the decision was not followed), awaits the `IDecisionObserver`, and runs the track, unless the run was cancelled meanwhile.
+4. Puts `TrackTaken<TTrack>` in Memory, awaits the `IDecisionObserver`'s `Routed` with a `TrackRouted`, and runs the track, unless the run was cancelled meanwhile.
 
-## Remarks
+| Recorded | Members |
+|---|---|
+| `TrackTaken<TKey>` (in Memory) | `Track`: the track's name (an enum member, or `Otherwise`). `FallbackReason`: why the decision was not followed, or `null`. `TookFallback`: `FallbackReason` is not `null`. |
+| `TrackRouted` (to the observer) | `Train`, `RunId`, `On` (the enum routed on), `Track`, `FallbackReason` |
 
-- After the switch, the chain can rely only on what every track produces.
-- A switch with no tracks, a track declared twice, or a track on a value the enum does not define
-  (`When((Lane)7, ...)`) is refused at startup and at run time. The asking form checks its tracks
-  before it asks, so a refused declaration never costs a decision.
-- Shadows declared on the form that asks nothing are refused: it routes on a decision made earlier,
-  so shadow the `Decide` that made it.
+After the switch, the chain can rely only on what every track produces.
+
+| Condition | Result |
+|---|---|
+| No tracks, a track declared twice, or a track on a value the enum does not define (`When((Lane)7, ...)`) | Refused at startup and at run time. The asking form checks its tracks before it asks, so a refused declaration never costs a decision. |
+| Shadows declared on the form that asks nothing | Refused: it routes on a decision made earlier, so shadow the `Decide` that made it |
+
+## Example
+
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Effect.Services.ServiceTrain;
+
+public class UnderwriteTrain : ServiceTrain<LoanApplication, LoanOutcome>
+{
+    protected override Task<Either<Exception, LoanOutcome>> Junctions() =>
+        Switch<LoanApplication, Underwriting>(tracks => tracks
+                .When(Underwriting.Approve, t => t.Chain<MakeOffer>(), requireConfidence: 0.95)
+                .When(Underwriting.Decline, t => t.Chain<SendAdverseActionNotice>(), requireConfidence: 0.95)
+                .When(Underwriting.ManualReview, t => t.Chain<AssignUnderwriter>()))
+            .Resolve();
+}
+```
+
+## See also
+
+- [Decide](/docs/sdk-reference/train-methods/decide), [Gate](/docs/sdk-reference/train-methods/gate) and [Scale](/docs/sdk-reference/train-methods/scale)
+- [Decisions](/docs/core/decisions), including what happens [when the answer is not followed](/docs/core/decisions#when-the-answer-is-not-followed)

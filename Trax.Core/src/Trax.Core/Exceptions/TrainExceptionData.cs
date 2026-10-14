@@ -6,6 +6,7 @@ namespace Trax.Core.Exceptions;
 /// Structured data about an exception that occurs within a train junction.
 /// Used for serializing exception information with proper JSON escaping.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/train-exception">SDK reference</seealso>
 public class TrainExceptionData
 {
     /// <summary>

@@ -3,6 +3,10 @@ title: ChainGraph
 description: "Reference for ChainGraph: a train's declared chain as a graph with stable node ids, canonical JSON and a hash, and the id of the running step."
 type: reference
 area: trains
+package: Trax.Core
+namespace: Trax.Core.Monad
+source:
+  - Trax.Core/src/Trax.Core/Monad/ChainGraph.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 14
@@ -18,7 +22,7 @@ It is the shape a tool draws, diffs or checks in a test; `ChainRecorder` stays t
 
 ## Signatures
 
-```csharp
+```csharp fragment
 namespace Trax.Core.Monad;
 
 public sealed record ChainGraph(
@@ -31,6 +35,7 @@ public sealed record ChainGraph(
 {
     public static ChainGraph From(ChainRecorder chain, Type train, Type input, Type output);
     public static string? CurrentNodeId { get; }
+    public static string? CurrentBranchPath { get; }
     public string Hash { get; }
     public string ToJson();
 }
@@ -53,6 +58,8 @@ public sealed record ChainGraphTrack(
 );
 ```
 
+## Members
+
 | `ChainGraph` member | Description |
 |---|---|
 | `From(chain, train, input, output)` | Builds the graph of a recording from `DeclaredChain()`. `train`, `input` and `output` are the train type and its `TInput` and `TReturn` |
@@ -63,6 +70,7 @@ public sealed record ChainGraphTrack(
 | `ToJson()` | The graph as canonical JSON. See [Canonical JSON and Hash](#canonical-json-and-hash) |
 | `Hash` | SHA-256 of `ToJson()`, as 64 lowercase hex digits |
 | `CurrentNodeId` | The id of the node a run is executing on this async flow, or null. See [CurrentNodeId](#currentnodeid) |
+| `CurrentBranchPath` | The path of the `Parallel` branch the current step runs in, such as `Parallel#0/cocitation`, or null outside a branch |
 
 Two graphs are equal when their names, nodes, tracks and refusals are, in the same order: two reads
 of an unchanged train give equal graphs.
@@ -83,7 +91,9 @@ of an unchanged train give equal graphs.
 | `IsFallback` | True for the `Otherwise` or `Unsure` track |
 | `Nodes` | The track's own steps, in declared order |
 
-## Node ids
+## Behavior
+
+### Node ids
 
 An id names the step, not its position. It is the step's key, then `#` and how many earlier
 steps in the same chain or track share that key:
@@ -100,11 +110,7 @@ steps in the same chain or track share that key:
 A node inside a track is prefixed with its routing step's id and the track's name, and numbered
 within that track: `Switch<Source>#0/Papers/SearchPapers#0`.
 
-Naming the step is what keeps an id stable while a train changes. Insert a `Chain<Audit>()` at
-the head of a chain and every other node keeps its id, where a positional id would shift every
-step after it, and with it everything keyed on those ids: a recorded run, a drawing's layout, a
-review comment on one step. Only a second step with the same key takes a new ordinal, and only
-the occurrences after it move.
+Because an id names the step, inserting a step leaves every other node's id unchanged; only a second step with the same key takes a new ordinal, and only the occurrences after it move.
 
 A key uses a type's short name, so two different junctions (or checkpoint states) a chain names
 by the same short name, `Billing.Fetch` and `Search.Fetch` say, would be told apart only by their
@@ -113,14 +119,14 @@ declaration refuses that and names both types; rename one. A `Parallel` branch w
 refused (empty, repeated, or containing `/` or `#`) is left out of the graph, so its steps do not
 repeat another branch's ids.
 
-## Opaque nodes
+### Opaque nodes
 
 An `IChain<TJunction>()` step names an interface, and the junction behind it is whatever Memory
 or the container holds when the run gets there. The graph cannot say what that step does, so its
 node is marked `Opaque`, with the interface as its `Junction`. Every other node names the type
 that runs.
 
-## Canonical JSON and Hash
+### Canonical JSON and Hash
 
 `ToJson()` writes the graph with its properties in a fixed order, no insignificant whitespace, and
 absent values written as `null` rather than left out, so the same graph always gives the same
@@ -133,7 +139,7 @@ to see how.
 {"id":"Switch<Source>#0","kind":"Switch","junction":null,"in":"ChoiceDecision<Source>","out":"TrackTaken<Source>","opaque":false,"tracks":[{"name":"Web","description":null,"isFallback":false,"nodes":[{"id":"Switch<Source>#0/Web/SearchWeb#0", ...}]}, ...]}
 ```
 
-## CurrentNodeId
+### CurrentNodeId
 
 While a run executes a junction (`Chain`, `IChain` or `ShortCircuit`), asks a question
 (`Decide`) or routes (`Switch`, `Gate`, `Scale`), `CurrentNodeId` holds the id the graph drew for
@@ -146,7 +152,7 @@ ids for its own steps, and the outer id returns when the inner run does.
 The run numbers its steps the same way the graph does, so a running step's id is always the id of
 a node in that train's graph.
 
-## Reading it from a host
+### Reading it from a host
 
 A host serves the graph of each registered train through `ITrainChainGraphs.Find(name)`, by its
 canonical name, reading each chain once and keeping it. The operations API returns it as
@@ -162,22 +168,19 @@ can resume from a checkpoint; the scheduler's retries and the operator's resume 
 
 ## Example
 
-A test that fails when a train's shape changes, by comparing its graph to a committed copy:
+A check that fails when a train's shape changes, by comparing its graph to a committed copy:
 
-```csharp
-[Test]
-public void ResearchTopicTrain_KeepsItsShape()
-{
-    var chain = new ResearchTopicTrain().DeclaredChain();
-    var graph = ChainGraph.From(chain, typeof(ResearchTopicTrain), typeof(ResearchInput), typeof(ResearchReport));
+```csharp compile
+using Trax.Core.Monad;
 
-    graph.Refusals.Should().BeEmpty();
-    graph.ToJson().Should().Be(File.ReadAllText("ResearchTopicTrain.chain.json").TrimEnd());
-}
+var chain = new OrderTrain().DeclaredChain();
+var graph = ChainGraph.From(chain, typeof(OrderTrain), typeof(OrderInput), typeof(OrderResult));
+
+if (graph.Refusals.Count > 0 || graph.ToJson() != File.ReadAllText("OrderTrain.chain.json").TrimEnd())
+    throw new InvalidOperationException($"OrderTrain's chain changed: {graph.Hash}");
 ```
 
-## Package
+## See also
 
-```
-dotnet add package Trax.Core
-```
+- [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain), the recording a graph is built from
+- [declaredChain](/docs/sdk-reference/graphql-api/queries#declaredchain) and [runGraph](/docs/sdk-reference/graphql-api/queries#rungraph), the graph over GraphQL

@@ -11,5 +11,6 @@ namespace Trax.Effect.Attributes;
 /// This attribute is NOT intended for use in user code. Junctions should use standard
 /// constructor injection for their dependencies.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/inject">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Property)]
 public class InjectAttribute : Attribute { }

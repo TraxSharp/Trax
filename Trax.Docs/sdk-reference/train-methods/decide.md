@@ -3,6 +3,15 @@ title: Decide
 description: Reference for Decide, which asks a decider several typed questions about one value in Memory in a single call and stores each answer as a typed decision.
 type: reference
 area: trains
+package: Trax.Core
+namespace:
+  - Trax.Core.Train
+  - Trax.Core.Decisions
+source:
+  - Trax.Core/src/Trax.Core/Monad/Monad.Decisions.cs
+  - Trax.Core/src/Trax.Core/Decisions/Questions.cs
+  - Trax.Core/src/Trax.Core/Decisions/Decisions.cs
+  - Trax.Core/src/Trax.Core/Decisions/QuestionKey.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 10
@@ -14,19 +23,22 @@ Asks a decider several typed questions about one value in Memory, in a single ca
 each answer in Memory as a typed decision. Later [Switch](/docs/sdk-reference/train-methods/switch),
 [Gate](/docs/sdk-reference/train-methods/gate) and [Scale](/docs/sdk-reference/train-methods/scale)
 steps route on those decisions without asking again, and a junction can take one as its input.
-See [Decisions](/docs/core/decisions) for the concepts.
 
-## Decide\<TState\>(questions)
+## Signature
 
-```csharp
+```csharp fragment
+// Train<TInput, TReturn>; MonadTask<TInput, TReturn> and Monad<TInput, TReturn> have the same, public
 protected MonadTask<TInput, TReturn> Decide<TState>(
     Func<Questions<TState>, Questions<TState>> questions
-)
+);
 ```
 
-| Type Parameter | Description |
+## Parameters
+
+| Parameter | Description |
 |---|---|
 | `TState` | The value in Memory the questions are about. It is sent to the decider as the state. |
+| `questions` | Declares the questions on the `Questions<TState>` it is handed |
 
 ### Questions\<TState\>
 
@@ -42,27 +54,13 @@ protected MonadTask<TInput, TReturn> Decide<TState>(
 `asking` defaults to the `[Asks]` attribute on the type, and `yes` and `no` to the attribute's
 `Yes` and `No`. Each question may be asked once per `Decide`. Each is keyed by its type's name without
 the namespace, or by the `Key` set on `[Asks]`, as `QuestionKey.For<T>()` returns it; see
-[Question keys](/docs/core/decisions#question-keys).
+[Question keys](/docs/core/decisions#question-keys). `QuestionKey.IsValid(key)` tells whether a
+string can be set as `[Asks(Key = ...)]`: 1 to `QuestionKey.MaxLength` (100) characters, each an
+ASCII letter or digit, `_`, `-` or `.`.
 
-### Decisions
+## Returns
 
-| Type | Properties |
-|---|---|
-| `ChoiceDecision<TTrack>` | `Choice`, `Confidence`, `Probabilities` (per member, when given), `Model` |
-| `ScoreDecision<TLevel>` | `Score` (0 to the top level), `Nearest` (the level it rounds to, halves up), `Confidence`, `Probabilities`, `Model` |
-| `YesNoDecision<TQuestion>` | `Probability` of yes, `Model` |
-
-## Example
-
-```csharp
-protected override Task<Either<Exception, ModerationOutcome>> Junctions() =>
-    Decide<Post>(q => q.YesNo<ContainsThreat>().Choice<Verdict>().Score<Severity>())
-        .Gate<ContainsThreat>(gate => gate
-            .Yes(t => t.Chain<TakeDownPost>(), atLeast: 0.7)
-            .No(t => t.Switch<Verdict>(...), below: 0.3)
-            .Unsure(t => t.Chain<PageTrustAndSafety>()))
-        .Resolve();
-```
+`MonadTask<TInput, TReturn>`, the next link of the chain.
 
 ## Behavior
 
@@ -82,7 +80,15 @@ the run with its own exception and failure class. A shadow that fails or is slow
 not thrown. A shadow that neither Memory nor the container supplies fails the run, `Permanent`, as
 a missing live decider does.
 
-## Remarks
+### Decisions in Memory
+
+| Type | Properties |
+|---|---|
+| `ChoiceDecision<TTrack>` | `Choice`, `Confidence`, `Probabilities` (per member, when given), `Model` |
+| `ScoreDecision<TLevel>` | `Score` (0 to the top level), `Nearest` (the level it rounds to, halves up), `Confidence`, `Probabilities`, `Model` |
+| `YesNoDecision<TQuestion>` | `Probability` of yes, `Model` |
+
+### What the startup check verifies
 
 - The startup check records one step per question, verifies the state and every decider and
   shadow are supplied, and counts each decision as available to the steps after it. It refuses two
@@ -90,3 +96,28 @@ a missing live decider does.
   that implements `IVetsQuestions` says it cannot answer.
 - A decider handed to `AddServices` is passed as an interface; for `DecidedBy` or `Shadow` from
   Memory, declare an interface of your own that extends `IDecider`.
+
+## Example
+
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Effect.Services.ServiceTrain;
+
+public class ModeratePostTrain : ServiceTrain<Post, ModerationOutcome>
+{
+    protected override Task<Either<Exception, ModerationOutcome>> Junctions() =>
+        Decide<Post>(q => q.YesNo<ContainsThreat>().Choice<Verdict>().Score<Severity>())
+            .Gate<ContainsThreat>(gate => gate
+                .Yes(t => t.Chain<TakeDownPost>(), atLeast: 0.7)
+                .No(t => t.Switch<Verdict>(v => v
+                    .When(Verdict.Publish, p => p.Chain<PublishPost>())
+                    .When(Verdict.Hide, h => h.Chain<HidePost>())), below: 0.3)
+                .Unsure(t => t.Chain<PageTrustAndSafety>()))
+            .Resolve();
+}
+```
+
+## See also
+
+- [Decisions](/docs/core/decisions), how deciders, questions and replays fit together
+- [Switch](/docs/sdk-reference/train-methods/switch), [Gate](/docs/sdk-reference/train-methods/gate) and [Scale](/docs/sdk-reference/train-methods/scale)

@@ -40,6 +40,7 @@ namespace Trax.Effect.Attributes;
 /// the full answer in <c>trax.decision</c> either way, because a requeue replays it from there.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/trax-sensitive">SDK reference</seealso>
 [AttributeUsage(
     AttributeTargets.Property
         | AttributeTargets.Field

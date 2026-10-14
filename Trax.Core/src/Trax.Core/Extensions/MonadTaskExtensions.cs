@@ -15,6 +15,7 @@ namespace Trax.Core.Train;
 /// already knows TInput and TReturn at the type level, calls only need to specify
 /// the junction type, matching the Monad&lt;,&gt; instance method shape exactly.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/monad-task">SDK reference</seealso>
 public readonly struct MonadTask<TInput, TReturn>
 {
     internal readonly Task<Monad<TInput, TReturn>> Source;

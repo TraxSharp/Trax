@@ -27,6 +27,7 @@ namespace Trax.Effect.Data.Testing;
 /// connection string or open connection, and the same tables on SQLite, by open connection. The
 /// checks are the same on both.</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/effect-data-testing">SDK reference</seealso>
 public static class TraxInvariants
 {
     /// <summary>A <c>trax.metadata</c> row is still <c>in_progress</c>.</summary>

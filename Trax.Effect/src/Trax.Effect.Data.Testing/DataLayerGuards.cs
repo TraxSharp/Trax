@@ -17,6 +17,7 @@ namespace Trax.Effect.Data.Testing;
 /// contexts on disk; the reflection guard verifies the EF model. Each returns a
 /// <see cref="GuardResult"/> the consumer asserts on with its own test framework.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/effect-data-testing">SDK reference</seealso>
 public static class DataLayerGuards
 {
     private const string DefaultBaseTypeName = "DomainDataContext";

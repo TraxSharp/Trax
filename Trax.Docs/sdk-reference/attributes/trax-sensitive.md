@@ -3,6 +3,10 @@ title: TraxSensitive
 description: Reference for TraxSensitive, which masks a member of a train's input or output in stored copies, and withholds a question type's answers from junction events.
 type: reference
 area: security
+package: Trax.Effect
+namespace: Trax.Effect.Attributes
+source:
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxSensitiveAttribute.cs
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 3
@@ -16,7 +20,7 @@ On the enum or marker type a routing step asks about, it withholds that question
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Attributes;
 
 [AttributeUsage(
@@ -35,7 +39,9 @@ public sealed class TraxSensitiveAttribute : Attribute
 }
 ```
 
-## What is masked
+## Behavior
+
+### What is masked
 
 A marked value is written as `{"_redacted": true}` under the same JSON name in:
 
@@ -47,20 +53,20 @@ A marked value is written as `{"_redacted": true}` under the same JSON name in:
 
 and so everywhere those copies travel: the dashboard, the API's execution detail, logs and subscriptions.
 
-## Rules
+### Rules
 
-- **Opt-in.** Nothing is masked because of its name.
+- **Explicit.** Nothing is masked because of its name.
 - **A marked member hides its whole value.** An object under it is not walked; a collection is replaced whole.
 - **An unmarked member is walked.** A marked property on a nested object, or on each element of a collection, is masked where it sits.
 - **Records.** On a positional record, write the attribute on the parameter, with or without `property:`.
 - **Inheritance.** A mark on a base property, or on an interface property, applies to the override or implementation.
 - **Dictionaries are not masked.** Keys and values have no member to mark.
 
-## What it does not cover
+### What it does not cover
 
-The copy a train is *run* from keeps the real value, because the train needs it: a queued entry's input (`work_queue.input`) and a manifest's properties. Those are JSON strings the mark cannot reach into, so Trax keeps them out of its logs instead: a model's `ToString()`, the JSON effect and the junction logger write each as `{"_omitted": true}`. They are still readable wherever those columns are. Keep a secret out of an input where you can, and pass a reference to it instead.
+The copy a train is *run* from keeps the real value, because the train needs it: a queued entry's input (`work_queue.input`) and a manifest's properties. Those are JSON strings the mark cannot reach into, so Trax keeps them out of its logs instead: a model's `ToString()`, the JSON effect and the junction logger write each as `{"_omitted": true}`. They are still readable wherever those columns are. An input that carries a reference to a secret, rather than the secret, keeps it out of those columns.
 
-## On a question type
+### On a question type
 
 On the enum or marker type a `Decide`, `Switch`, `Gate` or `Scale` asks about, the mark withholds
 the answer. Junction events ([AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events))
@@ -69,7 +75,9 @@ and `trax.junction_run` then record that the question was asked and answered, wi
 GraphQL `onJunctionEvent` subscription, `operations.junctionRuns`, the SignalR sink and the
 dashboard's timeline show it as withheld.
 
-```csharp
+```csharp compile
+using Trax.Effect.Attributes;
+
 [TraxSensitive]
 public enum CreditTier { Prime, NearPrime, Subprime }
 ```
@@ -97,7 +105,7 @@ public enum CreditTier { Prime, NearPrime, Subprime }
   replayed as withheld. After a route on a sensitive question, the log also withholds the question
   key, answer, track and decider of every later decision, refusal and route of the run.
 
-## On a member of a decision's state
+### On a member of a decision's state
 
 A recorded decision stores the hash of the state the question was asked about, and that hash
 covers every value in the state, marked members included. Without a state hash key, the journal
@@ -114,8 +122,9 @@ skipped.
 
 ## Example
 
-```csharp
+```csharp compile
 using Trax.Effect.Attributes;
+using Trax.Effect.Models.Manifest;
 
 public record ConnectAccountInput(
     string AccountId,
@@ -125,8 +134,7 @@ public record ConnectAccountInput(
 
 The run's stored input holds `{"_redacted": true}` where the token would be; the junctions receive the token.
 
-## Package
+## See also
 
-```
-dotnet add package Trax.Effect
-```
+- [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) and [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger), the copies it masks
+- [Junction events](/docs/effect/junction-events#withholding-an-answer), withheld answers

@@ -35,6 +35,7 @@ public enum BranchFailurePolicy
 /// <para>Branches compute; the step after the join commits. Each branch has its own dependency
 /// injection scope, so its writes are not in the same transaction as its siblings'.</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/parallel">SDK reference</seealso>
 [Experimental(ExperimentalIds.Parallel)]
 public sealed class Branches<TInput, TReturn>
 {

@@ -12,6 +12,7 @@ namespace Trax.Core.Testing;
 /// <c>result.Offenders.Should().BeEmpty(result.FailureMessage)</c> and, where a guard must find work,
 /// <c>result.Inspected.Should().BeGreaterThan(0)</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/core-testing">SDK reference</seealso>
 public sealed record GuardResult(
     IReadOnlyList<string> Offenders,
     int Inspected,

@@ -1,8 +1,17 @@
 ---
 title: Parallel
-description: Reference for Parallel, which runs a fixed set of named branches side by side in one run, each on its own copy of Memory, then joins them.
+description: "Reference for Parallel, which runs a fixed set of named branches side by side in one run, each on its own copy of Memory, then joins them."
 type: reference
 area: trains
+package: Trax.Core
+namespace:
+  - Trax.Core.Train
+  - Trax.Core.Monad
+  - Trax.Core.Exceptions
+source:
+  - Trax.Core/src/Trax.Core/Monad/Monad.Parallel.cs
+  - Trax.Core/src/Trax.Core/Monad/Branches.cs
+  - Trax.Core/src/Trax.Core/Exceptions/BranchesFailedException.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 15
@@ -14,36 +23,58 @@ Runs a fixed set of named branches side by side within one run, each on its own 
 and joins them before the next step. The branches are part of the chain's declaration, so every
 one of them is verified at startup.
 
-`Parallel` is experimental. Using it reports the diagnostic `TRAXEXP001` as an error; opt in by
-adding it to the project's `NoWarn`:
+## Signature
 
-```xml
-<!-- TRAXEXP001: this project uses the experimental Parallel step. -->
-<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
-```
-
-## Parallel(branches)
-
-```csharp
+```csharp fragment
+// Train<TInput, TReturn>; MonadTask<TInput, TReturn> and Monad<TInput, TReturn> have the same, public
+[Experimental("TRAXEXP001")]
 protected MonadTask<TInput, TReturn> Parallel(
     Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
-)
+);
+
+namespace Trax.Core.Monad;
+
+[Experimental("TRAXEXP001")]
+public sealed class Branches<TInput, TReturn>
+{
+    public Branches<TInput, TReturn> Branch(string name, Func<MonadTask<TInput, TReturn>, MonadTask<TInput, TReturn>> body);
+    public Branches<TInput, TReturn> OnFailure(BranchFailurePolicy policy);
+}
+
+[Experimental("TRAXEXP001")]
+public enum BranchFailurePolicy
+{
+    CancelSiblings = 0,
+    WaitForAll = 1,
+}
+
+[Experimental("TRAXEXP001")]
+public interface IBranchScopeInitializer
+{
+    Task Initialize(IServiceProvider run, IServiceProvider branch, CancellationToken cancellationToken);
+}
 ```
 
-Also available on the chain itself (`Chain<A>().Parallel(...)`), and inside a track or another
-branch.
+## Parameters
 
-## Branches\<TInput, TReturn\>
-
-| Method | Description |
+| Parameter | Description |
 |---|---|
-| `Branch(string name, Func<MonadTask, MonadTask> body)` | Declares a branch. The name is unique within the step and cannot contain `/` or `#`; it is part of the id of every step in the branch. |
+| `branches` | Declares the branches on the `Branches<TInput, TReturn>` it is handed |
+
+| `Branches` method | Description |
+|---|---|
+| `Branch(string name, Func<MonadTask, MonadTask> body)` | Declares a branch. The name is unique within the step and cannot contain `/` or `#`; it is part of the id of every step in the branch. A branch is written on the parameter it is handed (`b => b.Chain<ScoreEmbedding>()`), the way a track is. |
 | `OnFailure(BranchFailurePolicy policy)` | `CancelSiblings` (the default) cancels the other branches as soon as one fails; `WaitForAll` lets every branch finish first. |
 
-A branch is written on the parameter it is handed (`b => b.Chain<ScoreEmbedding>()`), the way a
-track is.
+## Returns
 
-## How it runs
+`MonadTask<TInput, TReturn>`, the next link of the chain. `Parallel` is also available inside a track and inside another branch.
+
+## Behavior
+
+`Parallel` is experimental: using it reports the diagnostic `TRAXEXP001` as an error until the project adds it to `NoWarn` (`<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`) or suppresses it with `#pragma warning disable TRAXEXP001`.
+
+### How it runs
 
 - **Memory.** Each branch starts from a copy of Memory as it was at the step. When every branch
   has finished, the types each one added are merged into the run's Memory for the steps after the
@@ -59,7 +90,7 @@ track is.
 - **Cancellation.** A junction in a branch is handed the branch's `CancellationToken`, cancelled
   when the run is cancelled and, under `CancelSiblings`, when a sibling fails.
 
-## Failures
+### Failures
 
 A branch that fails fails the step with a `BranchesFailedException`:
 
@@ -76,7 +107,7 @@ cancel flag, which raises a `CancellationRequestedException` in the branch that 
 recorded as cancelled, never as failed branches. Any other `OperationCanceledException` a branch
 raises on its own, such as an `HttpClient` timeout, is that branch's failure.
 
-## What the startup check refuses
+### What the startup check refuses
 
 - two branches producing the same type: the join would have two values for one type
 - a branch producing a type that was in Memory before the step, a tuple element included
@@ -87,25 +118,35 @@ raises on its own, such as an `HttpClient` timeout, is that branch's failure.
   in Memory or registered as a singleton, fails the step when a second branch runs it)
 - a branch with no name, a repeated name, or a name containing `/` or `#`
 
-## Branches compute; the join commits
-
-Each branch has its own scope and so its own transaction. Do the work in the branches and write
-what must be all-or-nothing in the step after the join.
-
-## Example
-
-```csharp
-protected override Task<Either<Exception, TopicMap>> Junctions() =>
-    Chain<LoadCorpus>()
-        .Parallel(p => p
-            .Branch("embedding", b => b.Chain<EmbeddingSimilarity>())
-            .Branch("cocitation", b => b.Chain<CoCitationOverlap>())
-            .Branch("authors", b => b.Chain<SharedAuthorOverlap>()))
-        .Chain<CombineSignals>()   // reads every branch's output, and is the one step that writes
-        .Resolve();
-```
+### In the declared graph
 
 In the [declared graph](/docs/sdk-reference/train-methods/chain-graph), a `Parallel` step is a
 node whose tracks are its branches, and a step in a branch has an id such as
 `Parallel#0/cocitation/CoCitationOverlap#0`. While it runs, `ChainGraph.CurrentBranchPath` is
 `Parallel#0/cocitation`.
+
+## Example
+
+```csharp compile
+#pragma warning disable TRAXEXP001 // this train uses the experimental Parallel step
+using Trax.Core.Functional;
+using Trax.Effect.Services.ServiceTrain;
+
+public class MapTopicsTrain : ServiceTrain<CorpusRequest, TopicMap>
+{
+    protected override Task<Either<Exception, TopicMap>> Junctions() =>
+        Chain<LoadCorpus>()
+            .Parallel(p => p
+                .Branch("embedding", b => b.Chain<EmbeddingSimilarity>())
+                .Branch("cocitation", b => b.Chain<CoCitationOverlap>())
+                .Branch("authors", b => b.Chain<SharedAuthorOverlap>()))
+            .Chain<CombineSignals>()   // reads every branch's output
+            .Resolve();
+}
+```
+
+## See also
+
+- [Checkpoints and branches](/docs/core/checkpoints-and-branches), what to do in a branch and what after the join
+- [Checkpoint](/docs/sdk-reference/train-methods/checkpoint), inside a branch
+- [ChainGraph](/docs/sdk-reference/train-methods/chain-graph)

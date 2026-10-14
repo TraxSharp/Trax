@@ -93,6 +93,7 @@ internal sealed record DeclaredTrack<TInput, TReturn>(
 /// (<c>t =&gt; t.Chain&lt;IssueRefund&gt;()</c>). Every track is read when the chain is declared and
 /// verified at startup; only the chosen one runs. A track may be empty (<c>t =&gt; t</c>).
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/switch">SDK reference</seealso>
 public sealed class Tracks<TInput, TReturn, TTrack>
     where TTrack : struct, Enum
 {

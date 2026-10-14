@@ -11,6 +11,7 @@ namespace Trax.Core.Junction;
 /// </summary>
 /// <typeparam name="TIn">The input type for this junction</typeparam>
 /// <typeparam name="TOut">The output type produced by this junction</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/junction">SDK reference</seealso>
 public interface IJunction<TIn, TOut>
 {
     /// <summary>
