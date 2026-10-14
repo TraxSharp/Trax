@@ -72,7 +72,15 @@ Terminal methods on `FieldMatcher`, each returning a `Rule`:
 
 The numeric comparisons export as a `compare` rule whose `op` is `gt`, `gte`, `lt`, `lte` or `eq`
 ([the IR format](/docs/sdk-reference/statemachine-api/ir-format)). There is no negation rule: write the
-opposite comparison (`AtMost(12)`, not "not greater than 12").
+opposite comparison (`AtMost(12)` for "not greater than 12"). The two differ on a field that is missing, null or
+not a number: `AtMost(12)` is false there, where "not greater than 12" would be true. To accept a missing field as
+well, write `Any(Field(...).Absent(), Field(...).AtMost(12))`.
+
+A comparison reads a number, so `Build` refuses one on a field whose schema type is not `number` or `integer`
+(an enum, a string, a `DateTime` or `DateTimeOffset`, which are strings on the wire), naming the field and its
+type; a nullable number is fine. The bound must be finite: `double.NaN` or an infinity is refused when the rule is
+written. Both runtimes compare as IEEE doubles, so a decimal value is compared as the nearest double
+(`99.99999999999999999` reads as `100`).
 
 ### Combinators
 

@@ -988,6 +988,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         var timers = BuildTimers(invokes);
 
         var declaredInputs = DeclaredInputs();
+        var inputSchemas = InputSchemas(declaredInputs);
+        RefuseUnreadableComparisons(invokes, inputSchemas);
         var rules = BuildRules();
 
         var definition = new MachineDefinition<TState, TTrigger>
@@ -1000,7 +1002,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             ContextValidators = _validators,
             Migrations = _migrations,
             Invokes = invokes,
-            InputSchemas = InputSchemas(declaredInputs),
+            InputSchemas = inputSchemas,
             Timers = timers,
         };
 
@@ -1796,6 +1798,104 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                         + $"Add `.CustomReducer(\"{name}\", (context, input) => ...)` in Configure."
                 );
     }
+
+    // A comparison reads a number, so on a field whose schema holds something else (an enum, a string, a DateTime,
+    // which are strings on the wire) it is false for every value: a guard that never holds, built without a word.
+    // Refuse it, naming the field and its type. A field the schema does not describe (an untyped context, a field it
+    // does not list) is left alone. A bound that is not finite is refused too, for a Rule.Compare written by hand.
+    private void RefuseUnreadableComparisons(
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes,
+        IReadOnlyDictionary<TTrigger, ContextSchema> inputSchemas
+    )
+    {
+        var problems = new List<string>();
+        foreach (var t in _declarativeTransitions)
+            if (t.Guard is { } guard)
+                Check(
+                    guard,
+                    $"the guard of {t.From} -> {t.Trigger}",
+                    t.From,
+                    inputSchemas.GetValueOrDefault(t.Trigger),
+                    $"the input of {t.Trigger}"
+                );
+        foreach (var (state, invariants) in _stateInvariants)
+        foreach (var rule in invariants)
+            Check(rule, $"the Requires of {state}", state, null, null);
+        foreach (var invoke in invokes.Values)
+        foreach (var edge in invoke.Done)
+            if (edge.Guard is { } guard)
+                Check(
+                    guard,
+                    $"the OnDone guard of {invoke.State} -> {edge.To}",
+                    invoke.State,
+                    invoke.OutputSchema,
+                    $"the output of {invoke.TrainType.Name}"
+                );
+
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                $"The machine '{_id}' cannot be built: "
+                    + string.Join(
+                        " ",
+                        problems.Distinct().Select(p => char.ToUpperInvariant(p[0]) + p[1..])
+                    )
+            );
+
+        void Check(Rule rule, string site, TState state, ContextSchema? input, string? inputName)
+        {
+            switch (rule)
+            {
+                case Rule.All all:
+                    foreach (var inner in all.Rules)
+                        Check(inner, site, state, input, inputName);
+                    break;
+                case Rule.Any any:
+                    foreach (var inner in any.Rules)
+                        Check(inner, site, state, input, inputName);
+                    break;
+                case Rule.Compare compare:
+                    var method = CompareMethod(compare.Op);
+                    if (!double.IsFinite(compare.Value))
+                    {
+                        problems.Add(
+                            $"{site} compares '{compare.Field}' with {method}"
+                                + $"({compare.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}), "
+                                + "but a comparison needs a finite bound. NaN makes every comparison false, and "
+                                + "the IR has no number for an infinity."
+                        );
+                        break;
+                    }
+                    var (schema, owner) =
+                        compare.Source == RuleSource.Input
+                            ? (input, inputName)
+                            : (_contextSchemas.GetValueOrDefault(state), $"the context of {state}");
+                    var described = schema?.Fields.FirstOrDefault(f =>
+                        string.Equals(f.Name, compare.Field, StringComparison.Ordinal)
+                    );
+                    if (
+                        described is not null
+                        && described.Type is not (JsonFieldType.Number or JsonFieldType.Integer)
+                    )
+                        problems.Add(
+                            $"{site} compares the field '{compare.Field}' of {owner} with {method}, but its "
+                                + $"schema type is {described.Type.ToString().ToLowerInvariant()}, not a number, "
+                                + "so the comparison would be false for every value. Compare a number field, or "
+                                + "use a rule for its type (IsOneOf for an enum or a string)."
+                        );
+                    break;
+            }
+        }
+    }
+
+    private static string CompareMethod(CompareOp op) =>
+        op switch
+        {
+            CompareOp.GreaterThan => "GreaterThan",
+            CompareOp.GreaterOrEqual => "AtLeast",
+            CompareOp.LessThan => "LessThan",
+            CompareOp.LessOrEqual => "AtMost",
+            _ => "EqualTo",
+        };
 
     private static IEnumerable<string> CustomNames(Rule rule) =>
         rule switch

@@ -42,7 +42,10 @@ public static class Rules
         new(MemberPath.Of(field));
 }
 
-/// <summary>A field to build a guard/validator rule over. Terminal methods return the <see cref="Rule"/>.</summary>
+/// <summary>
+/// A field to build a guard/validator rule over. Terminal methods return the <see cref="Rule"/>. A comparison's bound
+/// must be finite: <see cref="double.NaN"/> or an infinity throws <see cref="ArgumentOutOfRangeException"/>.
+/// </summary>
 public sealed class FieldMatcher(RuleSource source, string field)
 {
     /// <summary>The field is present and not null.</summary>
@@ -62,22 +65,35 @@ public sealed class FieldMatcher(RuleSource source, string field)
 
     /// <summary>A numeric field greater than a constant.</summary>
     public Rule GreaterThan(double value) =>
-        new Rule.Compare(source, field, CompareOp.GreaterThan, value);
+        new Rule.Compare(source, field, CompareOp.GreaterThan, Finite(value, nameof(GreaterThan)));
 
     /// <summary>A numeric field less than a constant (<c>lt</c> in the IR).</summary>
     public Rule LessThan(double value) =>
-        new Rule.Compare(source, field, CompareOp.LessThan, value);
+        new Rule.Compare(source, field, CompareOp.LessThan, Finite(value, nameof(LessThan)));
 
     /// <summary>A numeric field greater than or equal to a constant (<c>gte</c> in the IR).</summary>
     public Rule AtLeast(double value) =>
-        new Rule.Compare(source, field, CompareOp.GreaterOrEqual, value);
+        new Rule.Compare(source, field, CompareOp.GreaterOrEqual, Finite(value, nameof(AtLeast)));
 
     /// <summary>A numeric field less than or equal to a constant (<c>lte</c> in the IR).</summary>
     public Rule AtMost(double value) =>
-        new Rule.Compare(source, field, CompareOp.LessOrEqual, value);
+        new Rule.Compare(source, field, CompareOp.LessOrEqual, Finite(value, nameof(AtMost)));
 
     /// <summary>A numeric field equal to a constant.</summary>
-    public Rule EqualTo(double value) => new Rule.Compare(source, field, CompareOp.EqualTo, value);
+    public Rule EqualTo(double value) =>
+        new Rule.Compare(source, field, CompareOp.EqualTo, Finite(value, nameof(EqualTo)));
+
+    // A NaN bound makes every comparison false, and an infinite one cannot be written to the IR, whose JSON has no
+    // number for it; both are refused here, where the rule is written, rather than later.
+    private double Finite(double value, string method) =>
+        double.IsFinite(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value),
+                value,
+                $"{method}({value.ToString(System.Globalization.CultureInfo.InvariantCulture)}) on '{field}' "
+                    + "needs a finite bound. NaN makes every comparison false, and the IR has no number for an infinity."
+            );
 
     /// <summary>An array field with more than <paramref name="value"/> elements.</summary>
     public Rule CountGreaterThan(int value) =>
