@@ -4,18 +4,22 @@ namespace Trax.Effect.Attributes;
 /// Specifies authorization requirements for a train when executed via the Trax API.
 /// </summary>
 /// <remarks>
-/// When a train is executed through the REST or GraphQL API, the framework checks
-/// for this attribute and enforces the specified authorization requirements against
-/// the current HTTP user before allowing execution.
+/// When a train is executed through the Trax API (<c>ITrainExecutionService</c>, which the
+/// GraphQL mutations and queries call), the framework checks for this attribute and enforces
+/// the specified authorization requirements against the current HTTP user before allowing
+/// execution.
 ///
-/// Trains without this attribute have no per-train authorization requirements
-/// (though endpoint-level auth from the <c>configure</c> callback still applies).
+/// Trains without this attribute have no per-train authorization requirements (though an
+/// endpoint gate, <c>RequireAuthorization</c> on the GraphQL builder, still applies). A train
+/// exposed over GraphQL on an open endpoint must carry this attribute or
+/// <see cref="TraxAllowAnonymousAttribute"/>, or the host refuses to start.
 /// <para>
 /// Combinator semantics when the attribute is present:
 /// <list type="bullet">
 /// <item>Bare <c>[TraxAuthorize]</c> (no policy, no roles) requires an authenticated user.</item>
 /// <item>Policies across all applied attributes are AND'd: every <see cref="Policy"/> must pass.</item>
-/// <item>Roles across all applied attributes are unioned and OR'd: the user must hold at least one of the listed roles. Within a single attribute, <see cref="Roles"/> is a comma-separated list that is also OR'd.</item>
+/// <item>Within a single attribute, <see cref="Roles"/> is a comma-separated list that is OR'd: the user must hold at least one of the listed roles.</item>
+/// <item>Roles across applied attributes are AND'd: each attribute's list is a requirement of its own, so <c>[TraxAuthorize(Roles = "A")]</c> with <c>[TraxAuthorize(Roles = "B")]</c> requires both roles. List them in one attribute (<c>Roles = "A,B"</c>) to accept either.</item>
 /// <item>When policies and roles are both specified, both sides must be satisfied.</item>
 /// </list>
 /// </para>
