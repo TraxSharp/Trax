@@ -71,11 +71,11 @@ namespace Trax.Effect.StateMachine
         where TState :  struct, System.Enum
         where TTrigger :  struct, System.Enum
     {
-        public DifferentialModel(System.Collections.Generic.IReadOnlyDictionary<TTrigger, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Samples, System.Collections.Generic.IReadOnlyDictionary<TState, System.Text.Json.Nodes.JsonNode> Seeds, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode> Contexts) { }
+        public DifferentialModel(System.Collections.Generic.IReadOnlyDictionary<TTrigger, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Samples, System.Collections.Generic.IReadOnlyDictionary<TState, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Seeds, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode> Contexts) { }
         public System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode> Contexts { get; init; }
         public bool IsEmpty { get; }
         public System.Collections.Generic.IReadOnlyDictionary<TTrigger, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Samples { get; init; }
-        public System.Collections.Generic.IReadOnlyDictionary<TState, System.Text.Json.Nodes.JsonNode> Seeds { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<TState, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Seeds { get; init; }
     }
     public sealed class EffectBinding<TState, TTrigger> : System.IEquatable<Trax.Effect.StateMachine.EffectBinding<TState, TTrigger>>
         where TState :  struct, System.Enum

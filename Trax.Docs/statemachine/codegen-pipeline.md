@@ -78,8 +78,10 @@ m.Differential(d => d
 - **Samples** are a few representative inputs per trigger; a no-input case is always added. A guard that accepts
   `quarter` or `dollar` wants one input that passes, one that fails, and an empty one.
 - **Seeds** are a representative valid context for a state no trigger reaches (context that arrives through
-  autosave rather than a transition). The initial state and everything reachable from it need none. One seed per
-  state: `Build` refuses a second for the same state.
+  autosave rather than a transition). The initial state and everything reachable from it need none. A state may
+  take several seeds, one per context worth starting from, and the corpus expands each of them; the same context
+  twice for one state is refused at `Build`. A probe is different: it is crossed with every state once and never
+  expanded, so it checks guards and validators where it lands but reaches nothing beyond.
 - **Probes** and **outcome samples** cover snapshots a client could send but no walk reaches, and the outputs of an
   invoked train.
 

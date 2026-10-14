@@ -12,7 +12,8 @@ import type { Snapshot } from "./types";
  *   1. BFS from the initial snapshot over the machine's own transitions — reaches every state whose
  *      context a trigger can populate.
  *   2. Declared `seeds` (the IR's `differential.seeds`) — representative valid contexts for states a
- *      trigger cannot reach (e.g. checkout's Review/Paid, whose items/total arrive via autosave).
+ *      trigger cannot reach (e.g. checkout's Review/Paid, whose items/total arrive via autosave). A state may
+ *      have several seeds, and each is a start point the search expands like the initial snapshot.
  * At every reachable snapshot we fire every trigger x sample-input; the bulk of the corpus is rejections.
  */
 export interface DifferentialSpec {
@@ -26,7 +27,8 @@ export interface DifferentialSpec {
   timers?: ReadonlyArray<{ trigger: string }>;
   differential?: {
     samples?: Record<string, unknown[]>;
-    seeds?: Record<string, Record<string, unknown>>;
+    /** A state's seed context, or a list of them when the state is seeded more than once. */
+    seeds?: Record<string, Record<string, unknown> | Record<string, unknown>[]>;
     /**
      * A dense validator/guard probe: each context is crossed with EVERY state, producing given snapshots
      * that may be unreachable on purpose (a machine never lands in state X with context C, but a client or
@@ -35,6 +37,13 @@ export interface DifferentialSpec {
      */
     contexts?: Record<string, unknown>[];
   };
+}
+
+// Every seed context of a state: the IR writes a single seed as the context itself, several as a list.
+function seedContexts(
+  seeds: Record<string, unknown> | Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return Array.isArray(seeds) ? seeds : [seeds];
 }
 
 export type DifferentialCase = {
@@ -91,8 +100,10 @@ export function enumerate<S extends string, T extends string>(
   // initial snapshot and each declared seed.
   const reachable = new Map<string, Snapshot>();
   const queue: Snapshot[] = [machine.createInitialSnapshot()];
-  for (const [state, context] of Object.entries(seeds)) {
-    queue.push({ machine: spec.id, version: spec.version, state, context });
+  for (const [state, contexts] of Object.entries(seeds)) {
+    for (const context of seedContexts(contexts)) {
+      queue.push({ machine: spec.id, version: spec.version, state, context });
+    }
   }
   while (queue.length > 0) {
     const snap = queue.shift() as Snapshot;

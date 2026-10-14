@@ -49,3 +49,41 @@ describe('differential enumerate: contexts cross-product', () => {
     expect(outcomeAt(false)).toEqual({ outcome: 'rejected', reason: 'guard-failed' });
   });
 });
+
+// A state seeded more than once: every seed is a start point the search expands, so a context only the second
+// seed leads to is still reached. The IR writes one seed as the context itself and several as a list.
+describe('differential enumerate: several seeds for one state', () => {
+  const def: MachineDefinition<'A' | 'B' | 'C', 'Go'> = {
+    id: 'seeds',
+    version: 1,
+    initialState: 'A',
+    createInitialContext: () => ({}),
+    states: ['A', 'B', 'C'],
+    transitions: [{ from: 'B', trigger: 'Go', to: 'C', guard: (ctx) => ctx.ok === true }],
+  };
+  const machine = new SnapshotMachine(def);
+  const base = { id: 'seeds', version: 1, states: ['A', 'B', 'C'], triggers: ['Go'] };
+
+  const givens = (spec: DifferentialSpec) =>
+    new Set(
+      enumerate(machine, spec).cases.map(
+        (c) => `${c.given.state}:${JSON.stringify(c.given.context)}`,
+      ),
+    );
+
+  it('expands every seed in a list, including what only a later one reaches', () => {
+    const seen = givens({
+      ...base,
+      differential: { seeds: { B: [{ ok: false }, { ok: true }] } },
+    });
+    expect(seen.has('B:{"ok":false}')).toBe(true);
+    expect(seen.has('B:{"ok":true}')).toBe(true);
+    // C is reached only by firing Go from the second seed.
+    expect(seen.has('C:{"ok":true}')).toBe(true);
+  });
+
+  it('reads a single seed written as the context itself', () => {
+    const seen = givens({ ...base, differential: { seeds: { B: { ok: true } } } });
+    expect(seen.has('C:{"ok":true}')).toBe(true);
+  });
+});

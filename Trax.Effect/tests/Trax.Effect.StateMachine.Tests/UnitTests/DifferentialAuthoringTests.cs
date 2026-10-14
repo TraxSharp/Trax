@@ -108,25 +108,66 @@ public class DifferentialAuthoringTests
             .WithMessage("*only valid on a declaratively-authored machine*");
     }
 
-    [Test]
-    public void Second_seed_for_a_state_is_refused()
+    private static MachineBuilder<TurnstileState, TurnstileTrigger> Plain()
     {
-        // The corpus keeps one seed per state. A second for the same state used to replace the first without a
-        // word, so the corpus covered less than the author wrote.
         var m = new MachineBuilder<TurnstileState, TurnstileTrigger>();
         m.Id("x").Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
         m.In(TurnstileState.Locked).Context().On(TurnstileTrigger.Coin).To(TurnstileState.Unlocked);
         m.In(TurnstileState.Unlocked).Context().On(TurnstileTrigger.Push).To(TurnstileState.Locked);
+        return m;
+    }
+
+    [Test]
+    public void Several_seeds_for_a_state_are_all_exported_in_order()
+    {
+        // A state seeded more than once keeps every seed, so the corpus search starts from each of them. Several
+        // seeds are written as a list, in the order they were declared.
+        var m = Plain();
         m.Differential(d =>
             d.Seed(TurnstileState.Unlocked, new JsonObject { ["paidWith"] = "a" })
                 .Seed(TurnstileState.Unlocked, new JsonObject { ["paidWith"] = "b" })
+                .Seed(TurnstileState.Locked, new JsonObject())
+        );
+
+        var built = m.Build();
+        built.Declarative!.Differential!.Seeds[TurnstileState.Unlocked].Should().HaveCount(2);
+
+        var seeds = JsonNode.Parse(IrExporter.Export(built))!["differential"]!["seeds"]!;
+        var unlocked = seeds["Unlocked"]!.AsArray();
+        unlocked.Select(s => s!["paidWith"]!.GetValue<string>()).Should().Equal("a", "b");
+        // A state seeded once is written as the context itself, as it was before a state could take several.
+        seeds["Locked"]!.Should().BeOfType<JsonObject>();
+    }
+
+    [Test]
+    public void The_same_seed_twice_for_a_state_is_refused()
+    {
+        // An equal context adds nothing to the corpus, so the copy is a mistake worth naming.
+        var m = Plain();
+        m.Differential(d =>
+            d.Seed(TurnstileState.Unlocked, new JsonObject { ["paidWith"] = "a" })
+                .Seed(TurnstileState.Unlocked, new JsonObject { ["paidWith"] = "a" })
         );
 
         var act = () => m.Build();
 
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*Unlocked*one seed per state*");
+            .WithMessage("*seeds Unlocked with the same context more than once*");
+    }
+
+    [Test]
+    public void The_same_context_may_seed_two_different_states()
+    {
+        var m = Plain();
+        m.Differential(d =>
+            d.Seed(TurnstileState.Unlocked, new JsonObject())
+                .Seed(TurnstileState.Locked, new JsonObject())
+        );
+
+        var act = () => m.Build();
+
+        act.Should().NotThrow();
     }
 
     [Test]
@@ -134,7 +175,7 @@ public class DifferentialAuthoringTests
     {
         var empty = new DifferentialModel<TurnstileState, TurnstileTrigger>(
             new Dictionary<TurnstileTrigger, IReadOnlyList<JsonNode>>(),
-            new Dictionary<TurnstileState, JsonNode>(),
+            new Dictionary<TurnstileState, IReadOnlyList<JsonNode>>(),
             []
         );
         empty.IsEmpty.Should().BeTrue();

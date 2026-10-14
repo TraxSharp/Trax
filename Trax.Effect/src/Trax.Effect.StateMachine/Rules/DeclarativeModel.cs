@@ -48,13 +48,13 @@ public sealed record DeclarativeModel<TState, TTrigger>(
 /// <summary>
 /// The differential fuzzing inputs authored on a machine (test-only) with <c>.Differential(...)</c>:
 /// representative per-trigger input <see cref="Samples"/>, per-state <see cref="Seeds"/> contexts (BFS start
-/// points), and dense probe <see cref="Contexts"/> (crossed with every state). The IR exporter emits these so
+/// points, one or more per state), and dense probe <see cref="Contexts"/> (crossed with every state). The IR exporter emits these so
 /// the cross-language differential harness enumerates off the one C# source, with no hand-written machine.json.
 /// The harness always adds a no-input case per trigger, so an explicit empty (<c>{}</c>) sample is distinct.
 /// </summary>
 public sealed record DifferentialModel<TState, TTrigger>(
     IReadOnlyDictionary<TTrigger, IReadOnlyList<JsonNode>> Samples,
-    IReadOnlyDictionary<TState, JsonNode> Seeds,
+    IReadOnlyDictionary<TState, IReadOnlyList<JsonNode>> Seeds,
     IReadOnlyList<JsonNode> Contexts
 )
     where TState : struct, Enum

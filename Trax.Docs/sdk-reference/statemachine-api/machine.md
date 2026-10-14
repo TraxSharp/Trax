@@ -144,7 +144,7 @@ raw `JsonObject` overloads give exact control.
 | `Sample<TInput>(TTrigger trigger, TInput input)` | A representative input for a trigger, from a typed record. |
 | `Sample(TTrigger trigger, JsonObject input)` | The same, as a raw JSON object. |
 | `EmptySample(TTrigger trigger)` | An empty (`{}`) input for a trigger, distinct from the always-added no-input case. |
-| `Seed<TContext>(TState state, TContext context)` / `Seed(TState state, JsonObject context)` | A seed context used as a BFS start point, reaching states the initial snapshot can't. One seed per state: a second `Seed` for the same state is refused at `Build`, naming the state; add further contexts with `Probe`. |
+| `Seed<TContext>(TState state, TContext context)` / `Seed(TState state, JsonObject context)` | A seed context used as a BFS start point, reaching states the initial snapshot can't. A state may be seeded more than once, and the search starts from every seed, so each one's successors are in the corpus too. The same context twice for one state is refused at `Build`, naming the state. |
 | `Probe<TContext>(TContext context)` / `Probe(JsonObject context)` | A dense probe context crossed with every state, exercising guards and validators on unreachable-but-sendable snapshots. |
 | `OutcomeSample<TOutput>(TState invokingState, TOutput output)` | A representative output of the train the state invokes, fired as its `<State>.done` outcome trigger. Every outcome trigger is also fired with no input. `Build` refuses a sample for a state that invokes nothing. |
 

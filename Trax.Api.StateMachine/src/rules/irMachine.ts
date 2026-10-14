@@ -94,7 +94,8 @@ export interface IrDocument {
   // an IrDocument is a valid DifferentialSpec for enumerate(). Stripped from the generated runtime machine.
   differential?: {
     samples?: Record<string, unknown[]>;
-    seeds?: Record<string, Record<string, unknown>>;
+    // A state's seed context, or a list of them when the state is seeded more than once.
+    seeds?: Record<string, Record<string, unknown> | Record<string, unknown>[]>;
     contexts?: Record<string, unknown>[];
   };
 }

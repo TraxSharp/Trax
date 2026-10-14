@@ -59,7 +59,7 @@ The message names each offending edge and state. `Rule.Custom` and `Reduction.Cu
 | `transitions` | object[] | the edges, sorted by `(from, trigger, to)` |
 | `outcomes` | object | outcome trigger name to its outcome, for states that [invoke a train](#outcomes); omitted when the machine invokes nothing |
 | `timers` | object[] | the [timers](#timers) of the timed states, sorted by state; omitted when the machine has none |
-| `differential` | object | the test-only fuzzing inputs authored with `.Differential(...)`: `samples` (per trigger), `seeds` (per state), and `contexts` (probes). Omitted when the machine declares none, and stripped from the generated runtime machine (it drives only the cross-language differential test). |
+| `differential` | object | the test-only fuzzing inputs authored with `.Differential(...)`: `samples` (per trigger), `seeds` (per state: the context itself, or a list of contexts when the state is seeded more than once), and `contexts` (probes). Omitted when the machine declares none, and stripped from the generated runtime machine (it drives only the cross-language differential test). |
 
 A schema (under `context`, `inputs`, or an outcome's `output`) is
 `{ "fields": [ { "name", "type", "nullable", "constraints", "minimum"?, "maximum"?, "enum"?, "enumExact"?, "format"?, "fields"?, "values"?, "keys"? } ] }`,

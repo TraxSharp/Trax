@@ -247,8 +247,11 @@ public static class IrExporter
         if (diff.Seeds.Count > 0)
         {
             var seeds = new JsonObject();
-            foreach (var (state, context) in diff.Seeds)
-                seeds[state.ToString()!] = context.DeepClone();
+            // One seed is written as the context itself and several as a list of them, so the IR of a machine that
+            // seeds each state once is the same as before a state could take more than one, and so is its hash.
+            foreach (var (state, contexts) in diff.Seeds)
+                seeds[state.ToString()!] =
+                    contexts.Count == 1 ? contexts[0].DeepClone() : Copy(contexts);
             obj["seeds"] = seeds;
         }
 
