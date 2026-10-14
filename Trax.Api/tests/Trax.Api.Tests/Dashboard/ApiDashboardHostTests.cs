@@ -123,6 +123,40 @@ public partial class ApiDashboardHostTests
         Config(html).Should().Be(("/trax/dashboard/", "/trax/graphql"));
     }
 
+    [TestCase("/trax/dashboard/trains/Trax.Samples.Orders.IShipOrderTrain")]
+    [TestCase("/trax/dashboard/trains/Trax.Samples.Orders.IShipOrderTrain/")]
+    [TestCase(
+        "/trax/dashboard/state-machines/Trax.Samples.Orders.OrderMachine/Trax.Samples.Orders.Order/order.42"
+    )]
+    [TestCase("/trax/dashboard/state-machines/Trax.Samples.Orders.OrderMachine")]
+    public async Task A_reload_of_a_route_naming_a_dotted_NET_name_gets_the_page(string path)
+    {
+        await using var app = await StartAsync(e => Anonymous(e));
+
+        var response = await GetAsync(app, path);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, "a train or machine name is not a file");
+        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
+        Config(await response.Content.ReadAsStringAsync())
+            .Should()
+            .Be(("/trax/dashboard/", "/trax/graphql"));
+    }
+
+    [TestCase("assets/index-000000.js", true)]
+    [TestCase("assets/Trax.Samples.Foo", true)]
+    [TestCase("favicon.ico", true)]
+    [TestCase("executions/app.js", true)]
+    [TestCase("robots.txt", true)]
+    [TestCase("trains/Trax.Samples.Orders.IShipOrderTrain", false)]
+    [TestCase("trains/Trax.Samples.Json", false)]
+    [TestCase("state-machines/Orders.OrderMachine/Orders.Order/order.42", false)]
+    [TestCase("trains/Trax.Samples.Orders.", false)]
+    [TestCase("executions/42", false)]
+    public void A_path_names_a_file_only_under_assets_or_with_a_file_extension(
+        string relative,
+        bool isFile
+    ) => DashboardEndpoint.IsFileRequest(relative).Should().Be(isFile, relative);
+
     [Test]
     public async Task A_hashed_asset_is_served_with_its_type_and_cached_for_good()
     {

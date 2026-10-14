@@ -105,9 +105,9 @@ pages.
 | Request | Answer |
 |---------|--------|
 | `{path}` | A redirect to `{path}/`, keeping the query string. |
-| `{path}/` and any route of the app, such as `{path}/executions/42` | The app's page, with `Cache-Control: no-cache` and an ETag. |
+| `{path}/` and any route of the app, such as `{path}/executions/42` or `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` | The app's page, with `Cache-Control: no-cache` and an ETag. |
 | `{path}/assets/<name>-<hash>.js` and the app's other files | The file, with its content type. Files under `assets/` are named by their content and sent with `Cache-Control: public, max-age=31536000, immutable`; the others are revalidated. |
-| A path that looks like a file (its last segment has an extension) and is not one of the app's files | `404`. A missing script is never answered with the page. |
+| Any other path under `{path}/assets/`, or one whose last segment ends in a lower-case file extension (`.js`, `.png`, `.json`) | `404`. A missing script is never answered with the page. The dots in a .NET name, such as a train's, are not an extension. |
 
 `GET` and `HEAD` are served, and a matching `If-None-Match` is answered with `304`.
 

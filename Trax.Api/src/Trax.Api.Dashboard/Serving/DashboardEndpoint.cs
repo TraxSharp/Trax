@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace Trax.Api.Dashboard.Serving;
 
@@ -15,9 +16,11 @@ namespace Trax.Api.Dashboard.Serving;
 /// <list type="bullet">
 /// <item>The bare path redirects to itself with a trailing slash, so the page's relative URLs
 /// resolve under it.</item>
-/// <item>A path whose last segment has no extension is a route of the app (a deep link), answered
-/// with the entry page. A path that looks like a file is answered only with that file, and is a
-/// 404 when the build has none: a missing script must never come back as HTML.</item>
+/// <item>A path that is one of the build's files is answered with that file. Anything else under
+/// <c>assets/</c>, or whose last segment ends in a file extension (<see cref="IsFileRequest"/>), is
+/// a 404: a missing script must never come back as HTML. Every other path is a route of the app (a
+/// deep link, such as a train's page named <c>Trax.Samples.Orders.IShipOrderTrain</c>), answered
+/// with the entry page.</item>
 /// <item>The entry page is revalidated on every load (<c>no-cache</c>, with an ETag), so a new
 /// build is picked up at once; files under <c>assets/</c> are named by their content and cached
 /// for good.</item>
@@ -33,6 +36,8 @@ internal sealed partial class DashboardEndpoint(DashboardAssets assets, Func<str
     private const string Revalidate = "no-cache";
 
     private static readonly JsonSerializerOptions ConfigJson = new(JsonSerializerDefaults.Web);
+
+    private static readonly FileExtensionContentTypeProvider FileTypes = new();
 
     public async Task HandleAsync(HttpContext context)
     {
@@ -59,30 +64,51 @@ internal sealed partial class DashboardEndpoint(DashboardAssets assets, Func<str
         }
         var basePath = request.PathBase.Add(new PathString(path[..^relative.Length].TrimEnd('/')));
 
-        if (
-            relative.Length == 0
-            || relative == DashboardAssets.IndexPath
-            || !LooksLikeAFile(relative)
-        )
+        if (relative.Length == 0 || relative == DashboardAssets.IndexPath)
         {
             await WriteIndexAsync(context, basePath);
             return;
         }
 
-        if (!assets.TryGet(relative, out var asset))
+        if (assets.TryGet(relative, out var asset))
+        {
+            await WriteAsync(
+                context,
+                asset.Content,
+                asset.ContentType,
+                asset.ETag,
+                DashboardAssets.IsContentHashed(asset.Path) ? ImmutableCache : Revalidate
+            );
+            return;
+        }
+
+        if (IsFileRequest(relative))
         {
             response.StatusCode = StatusCodes.Status404NotFound;
             response.Headers.CacheControl = Revalidate;
             return;
         }
 
-        await WriteAsync(
-            context,
-            asset.Content,
-            asset.ContentType,
-            asset.ETag,
-            DashboardAssets.IsContentHashed(asset.Path) ? ImmutableCache : Revalidate
-        );
+        await WriteIndexAsync(context, basePath);
+    }
+
+    /// <summary>
+    /// Whether a path the build does not have names a file rather than a route of the app: it is
+    /// under <c>assets/</c>, or its last segment ends in a lower-case extension that names a type of
+    /// file (<c>.js</c>, <c>.png</c>, <c>.json</c>). Route values are .NET names, such as
+    /// <c>Trax.Samples.Orders.IShipOrderTrain</c>, whose dots are not extensions.
+    /// </summary>
+    internal static bool IsFileRequest(string relative)
+    {
+        if (relative.StartsWith("assets/", StringComparison.Ordinal))
+            return true;
+        var last = relative[(relative.LastIndexOf('/') + 1)..];
+        var dot = last.LastIndexOf('.');
+        if (dot < 0 || dot == last.Length - 1)
+            return false;
+        var extension = last[(dot + 1)..];
+        return extension.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c))
+            && FileTypes.TryGetContentType(last, out _);
     }
 
     /// <summary>
@@ -185,12 +211,6 @@ internal sealed partial class DashboardEndpoint(DashboardAssets assets, Func<str
             + "form-action 'self'; "
             + "frame-ancestors 'none'; "
             + "object-src 'none'";
-    }
-
-    private static bool LooksLikeAFile(string relative)
-    {
-        var last = relative[(relative.LastIndexOf('/') + 1)..];
-        return last.Contains('.');
     }
 
     [GeneratedRegex("<head(?:\\s[^>]*)?>", RegexOptions.IgnoreCase)]
