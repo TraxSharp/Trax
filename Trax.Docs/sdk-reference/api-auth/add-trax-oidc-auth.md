@@ -1,25 +1,29 @@
 ---
 title: AddTraxOidcAuth
-description: "Reference for AddTraxOidcAuth, the OpenID Connect code-flow scheme: configuration, claim mapping, OidcBuilder methods, session cookie and subscriptions."
+description: "Reference for AddTraxOidcAuth, the OpenID Connect code-flow scheme: OidcBuilder methods, the default claim mapping, the session cookie and policies."
 type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
 nav_order: 4
+package: Trax.Api.Auth.Oidc
+namespace: Trax.Api.Auth.Oidc
+source:
+  - Trax.Api/src/Trax.Api.Auth.Oidc/OidcAuthServiceCollectionExtensions.cs
+  - Trax.Api/src/Trax.Api.Auth.Oidc/OidcBuilder.cs
+  - Trax.Api/src/Trax.Api.Auth.Oidc/DefaultOidcPrincipalResolver.cs
+  - Trax.Api/src/Trax.Api.Auth.Oidc/OidcTokenInput.cs
 ---
 
 # AddTraxOidcAuth
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Registers the Trax OpenID Connect code-flow scheme (`OidcDefaults.SchemeName`), its session cookie (`OidcDefaults.CookieSchemeName`), the `OidcDefaults.PolicyName` authorization policy, the combined `TraxAuthPolicy`, `IHttpContextAccessor`, and a one-shot startup disclaimer log.
-
-OIDC is a browser protocol. A challenge against the OIDC scheme issues a redirect to the identity provider; on callback, the handler validates the id-token and signs the user into the cookie scheme. Subsequent requests authorize against the cookie, not the OIDC scheme. For token-based API clients, use [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) instead.
+Extension methods on `IServiceCollection`, declared on `OidcAuthServiceCollectionExtensions`, that register the Trax OpenID Connect authorization-code scheme (`OidcDefaults.SchemeName`) and its session cookie (`OidcDefaults.CookieSchemeName`). A challenge against the OIDC scheme redirects the browser to the identity provider; on the callback the handler validates the id-token, an `ITraxPrincipalResolver<OidcTokenInput>` maps it to a `TraxPrincipal`, and the user is signed into the cookie scheme. For API clients that send tokens, the scheme is [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth).
 
 ## Signatures
 
-```csharp
-// Shortest path: authority + clientId, default scopes (openid, profile).
+```csharp fragment
 public static AuthenticationBuilder AddTraxOidcAuth(
     this IServiceCollection services,
     string authority,
@@ -31,7 +35,6 @@ public static AuthenticationBuilder AddTraxOidcAuth<TResolver>(
     string clientId)
     where TResolver : class, ITraxPrincipalResolver<OidcTokenInput>;
 
-// Full control: client secret, extra scopes, callback paths, event handlers.
 public static AuthenticationBuilder AddTraxOidcAuth(
     this IServiceCollection services,
     Action<OidcBuilder> configure);
@@ -42,126 +45,150 @@ public static AuthenticationBuilder AddTraxOidcAuth<TResolver>(
     where TResolver : class, ITraxPrincipalResolver<OidcTokenInput>;
 ```
 
-## Basic configuration
+```csharp fragment
+public sealed class OidcBuilder
+{
+    public OidcBuilder UseAuthority(string authority, string clientId);
+    public OidcBuilder WithClientSecret(string clientSecret);
+    public OidcBuilder AddScope(string scope);
+    public OidcBuilder WithCallbackPath(string callbackPath);
+    public OidcBuilder WithSignedOutCallbackPath(string path);
+    public OidcBuilder AllowHttpMetadata();
+    public OidcBuilder DoNotSaveTokens();
+    public OidcBuilder CustomizeOidcOptions(Action<OpenIdConnectOptions> configure);
+    public OidcBuilder CustomizeCookieOptions(Action<CookieAuthenticationOptions> configure);
+}
 
-For public clients (SPA, native) with PKCE, the positional overload covers the common case:
+public sealed record OidcTokenInput(ClaimsPrincipal Principal, string? IdToken, string? AccessToken);
 
-```csharp
+public sealed class DefaultOidcPrincipalResolver : ITraxPrincipalResolver<OidcTokenInput>
+{
+    public ValueTask<TraxPrincipal?> ResolveAsync(OidcTokenInput input, CancellationToken ct);
+}
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `authority` | `string` | The OIDC issuer URL. `AddTraxOidcAuth(authority, clientId)` is `AddTraxOidcAuth(oidc => oidc.UseAuthority(authority, clientId))`. |
+| `clientId` | `string` | The client id registered with the provider. |
+| `configure` | `Action<OidcBuilder>` | Configures the scheme. `UseAuthority` is required. |
+| `TResolver` | type argument | The resolver, registered scoped. Without it the scheme registers a singleton `DefaultOidcPrincipalResolver`. |
+
+## Members
+
+`OidcBuilder`, passed to `configure`:
+
+| Member | Description |
+|---|---|
+| `UseAuthority(authority, clientId)` | The issuer URL and client id. |
+| `WithClientSecret(secret)` | The secret of a confidential client. Without it the client is public. |
+| `AddScope(scope)` | Requests another scope. `openid` and `profile` are requested by default; a scope already present is not added twice. |
+| `WithCallbackPath(path)` | Replaces `/signin-oidc`. |
+| `WithSignedOutCallbackPath(path)` | Replaces `/signout-callback-oidc`. |
+| `AllowHttpMetadata()` | Permits non-HTTPS authority metadata. |
+| `DoNotSaveTokens()` | Stops the handler saving the id and access tokens in the session. |
+| `CustomizeOidcOptions(configure)` | Edits `OpenIdConnectOptions` after Trax has set them and wired `OnTokenValidated` to the resolver. A second call replaces the first. Replacing `Events` wholesale removes the resolver hook. |
+| `CustomizeCookieOptions(configure)` | Edits the session cookie's `CookieAuthenticationOptions` after Trax has set them. A second call replaces the first. |
+
+`OidcTokenInput`, passed to the resolver: `Principal` (the validated id-token's claims), and `IdToken` and `AccessToken` as the raw strings the provider sent, or `null`.
+
+## Returns
+
+The `AuthenticationBuilder` from `services.AddAuthentication()`.
+
+## Behavior
+
+The scheme uses the authorization-code flow (`response_type=code`) with PKCE, saves the tokens in the session unless `DoNotSaveTokens()` is called, requires HTTPS metadata unless `AllowHttpMetadata()` is called, and validates the id-token's issuer, audience, lifetime and signature. `AddTraxOidcAuth` throws `InvalidOperationException` when `UseAuthority` was not called or the callback path is not a valid absolute path.
+
+| Request | Result |
+|---|---|
+| No session cookie | `AuthenticateResult.NoResult()`. On a protected endpoint the cookie scheme answers 401, not a redirect. |
+| Callback id-token invalid (signature, nonce, audience, lifetime) | The handler fails the callback; the user is not signed in. |
+| Callback valid, resolver returns `null` | `Fail("OIDC id-token did not map to a known Trax principal.")` |
+| Callback valid, resolver throws | Fails with the exception. |
+| Callback valid, resolver returns a principal | The user is signed into the cookie scheme; later requests authenticate against the cookie. |
+
+### Session cookie
+
+The cookie is `trax.oidc`: HTTP-only, `SameSite=Lax`, always `Secure`, with an 8-hour sliding expiration. A redirect to a login page is answered with 401 and a redirect to an access-denied page with 403, because the host is an API. `CustomizeCookieOptions` replaces those events for a host with its own login page.
+
+### DefaultOidcPrincipalResolver
+
+Returns `null`, failing the sign-in, when the id-token has no subject.
+
+| Claim | Lands on |
+|---|---|
+| `sub`, then `ClaimTypes.NameIdentifier` | `TraxPrincipal.Id` |
+| The first non-empty of `name`, `ClaimTypes.Name`, `preferred_username`, `email`, `ClaimTypes.Email`, then the id | `TraxPrincipal.DisplayName` |
+| `role`, `roles`, `groups`, `ClaimTypes.Role` | `TraxPrincipal.Roles`, without blanks or duplicates |
+| Every other claim | `TraxPrincipal.Claims`, the first value of each type |
+| | `TraxPrincipal.PrincipalType` is `oidc`. |
+
+### Policies
+
+`OidcDefaults.PolicyName` authenticates against the cookie scheme and is satisfied only by a caller the OIDC session signed in. The cookie scheme joins `TraxAuthClaimTypes.TraxAuthPolicy`. On the Trax GraphQL endpoint, the builder's `RequireAuthorization(...)` is the gate the startup checks for the `operations` namespace and `[TraxAllowAnonymous]` see; a convention on the route is an extra layer those checks do not count. See [Authorization](/docs/authorization#combining-with-endpoint-level-auth).
+
+### Subscriptions
+
+The session cookie authenticates the WebSocket upgrade like any other request. The schema accepts an upgrade only from origins the host serves: the endpoint's own host, or the origins `AllowSocketOrigins(...)` allows, which default to the origins the CORS default policy names. A policy built with `AllowAnyOrigin()` names none. The socket closes when the sign-in it opened with expires, or at the connection's maximum lifetime. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins).
+
+### Registered services
+
+| Service | Lifetime |
+|---|---|
+| Authentication services, the `TraxOidc` OpenID Connect scheme and the `TraxOidc.Cookie` cookie scheme | |
+| `ITraxPrincipalResolver<OidcTokenInput>`: `DefaultOidcPrincipalResolver` or `TResolver` | Singleton or scoped |
+| `OidcPolicy`, and the cookie scheme in `TraxAuthPolicy` | |
+| [`TraxPrincipal` and `TraxCaller`](/docs/sdk-reference/api-auth/add-trax-principal-accessor), through `AddTraxPrincipalAccessor()` | Scoped |
+| The NO WARRANTY startup log, registered once | Hosted service |
+
+## Examples
+
+A public client:
+
+```csharp compile
 services.AddTraxOidcAuth("https://login.example.com", "my-client-id");
 ```
 
-For confidential clients or extra scopes, use the builder:
+A confidential client with another scope, gated GraphQL, and a sign-in route:
 
-```csharp
+```csharp compile
 services.AddTraxOidcAuth(oidc => oidc
     .UseAuthority("https://login.example.com", "my-client-id")
     .WithClientSecret(builder.Configuration["Oidc:ClientSecret"]!)
     .AddScope("email"));
+
+services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(OidcDefaults.PolicyName));
+
+app.MapGet("/login", () =>
+    Results.Challenge(new AuthenticationProperties { RedirectUri = "/" }, [OidcDefaults.SchemeName]));
 ```
 
-PKCE is enabled by default on both paths.
+A resolver for Entra's `oid` and `groups` claims:
 
-## Claim mapping
+```csharp compile
+services.AddTraxOidcAuth<EntraOidcResolver>(oidc =>
+    oidc.UseAuthority("https://login.microsoftonline.com/contoso.onmicrosoft.com/v2.0", "my-client-id"));
 
-The default resolver reads standard OIDC claims:
-
-| Claim | Maps to |
-|---|---|
-| `sub` (then `nameidentifier`) | `TraxPrincipal.Id` |
-| `name` (then `preferred_username`, `email`) | `TraxPrincipal.DisplayName` |
-| `role`, `roles`, `groups` | `TraxPrincipal.Roles` |
-| Everything else | `TraxPrincipal.Claims` (verbatim) |
-
-For provider-specific mapping (Okta, Auth0, Entra, Cognito), supply a custom resolver:
-
-```csharp
 public sealed class EntraOidcResolver : ITraxPrincipalResolver<OidcTokenInput>
 {
     public ValueTask<TraxPrincipal?> ResolveAsync(OidcTokenInput input, CancellationToken ct)
     {
         var oid = input.Principal.FindFirst("oid")?.Value;
-        if (oid is null) return new(default(TraxPrincipal));
+        if (oid is null)
+            return ValueTask.FromResult<TraxPrincipal?>(null);
 
         var groups = input.Principal.FindAll("groups").Select(c => c.Value).ToArray();
-        return new(new TraxPrincipal(oid, input.Principal.FindFirst("name")?.Value ?? oid, groups,
-            PrincipalType: OidcDefaults.PrincipalType));
+        var name = input.Principal.FindFirst("name")?.Value ?? oid;
+        return ValueTask.FromResult<TraxPrincipal?>(
+            new TraxPrincipal(oid, name, groups, PrincipalType: OidcDefaults.PrincipalType));
     }
 }
-
-services.AddTraxOidcAuth<EntraOidcResolver>(oidc => oidc.UseAuthority("...", "..."));
 ```
 
-## `OidcBuilder` methods
+## See also
 
-| Method | Purpose |
-|---|---|
-| `UseAuthority(string authority, string clientId)` | Required. OIDC issuer URL and registered client id. |
-| `WithClientSecret(string)` | Confidential-client secret. Omit for public clients. |
-| `AddScope(string)` | Request additional scopes. `openid` and `profile` are registered by default. |
-| `WithCallbackPath(string)` | Override the default `/signin-oidc`. |
-| `WithSignedOutCallbackPath(string)` | Override the default `/signout-callback-oidc`. |
-| `AllowHttpMetadata()` | Permit non-HTTPS authority metadata. Dev/test only. |
-| `DoNotSaveTokens()` | Disable storing id/access tokens on the cookie. |
-| `CustomizeOidcOptions(Action<OpenIdConnectOptions>)` | Raw access to OIDC options (event handlers, protocol validator). Do not overwrite `Events` wholesale. |
-| `CustomizeCookieOptions(Action<CookieAuthenticationOptions>)` | Session cookie tweaks (expiration, SameSite, domain). |
-
-## Session cookie
-
-The cookie is `trax.oidc`, HTTP-only, `SameSite=Lax`, `Secure`, with a sliding 8-hour expiration. Unauthenticated requests return `401` (not a redirect to `/Account/Login`), because this is an API-auth package. If you embed an MVC login page, override via `CustomizeCookieOptions`:
-
-```csharp
-services.AddTraxOidcAuth(oidc => oidc
-    .UseAuthority("...", "...")
-    .CustomizeCookieOptions(cookie =>
-    {
-        cookie.LoginPath = "/login";
-        cookie.Events.OnRedirectToLogin = context =>
-        {
-            context.Response.Redirect(context.RedirectUri);
-            return Task.CompletedTask;
-        };
-    }));
-```
-
-## Protecting endpoints
-
-Gate GraphQL on the builder. `OidcDefaults.PolicyName` authorizes against the cookie scheme (not the
-OIDC scheme), so a signed-in browser session passes:
-
-```csharp
-// Only OIDC sessions
-services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(OidcDefaults.PolicyName));
-
-// Or the combined Trax policy, to accept API-key / JWT / OIDC interchangeably
-services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
-```
-
-The builder's gate applies to every operation on every transport, and it is the gate the startup
-checks for the `operations` namespace and `[TraxAllowAnonymous]` see. A convention on the route,
-`app.UseTraxGraphQL(configure: endpoint => endpoint.RequireAuthorization(OidcDefaults.PolicyName))`,
-can be added as an extra layer. On its own those checks do not count it, so a host that exposes the
-operations namespace with no `GateOperations(...)` refuses to start (see
-[Authorization](/docs/authorization#combining-with-endpoint-level-auth)).
-
-Issue a sign-in challenge by challenging the OIDC scheme:
-
-```csharp
-app.MapGet("/login", (HttpContext ctx) =>
-    Results.Challenge(
-        new AuthenticationProperties { RedirectUri = "/" },
-        new[] { OidcDefaults.SchemeName }));
-```
-
-## Subscriptions
-
-The session cookie authenticates the WebSocket upgrade for GraphQL subscriptions like any other request. The Trax schema accepts that upgrade only from origins the host serves: the endpoint's own host, or the origins allowed by `AllowSocketOrigins(...)`, which default to the origins your CORS default policy names. A default policy built with `AllowAnyOrigin()` names none, so if your SPA is on another origin, list it with `WithOrigins(...)` in the CORS default policy or pass it to `AllowSocketOrigins(...)`. The socket closes when the sign-in it was opened with expires, and at the connection's maximum lifetime (one hour by default) if that comes first; see [Connection lifetime](/docs/sdk-reference/graphql-api/subscriptions#connection-lifetime). See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins).
-
-## Return Semantics
-
-| Condition | Result |
-|---|---|
-| No session cookie | `AuthenticateResult.NoResult()` (permits `[AllowAnonymous]`) |
-| Callback id-token invalid (signature, nonce, audience, lifetime) | Handler fails the callback; user is not signed in |
-| Callback valid, resolver returns `null` | `context.Fail("OIDC id-token did not map to a known Trax principal.")` |
-| Callback valid, resolver throws | `context.Fail(exception)` |
-| Callback valid, resolver returns `TraxPrincipal` | User signed into the cookie scheme; subsequent requests authenticate against the cookie |
+- [OpenID Connect authentication](/docs/api-security#openid-connect-authentication)
+- [OidcDefaults](/docs/sdk-reference/api-auth/oidc-defaults), [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)

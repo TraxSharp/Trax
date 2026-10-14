@@ -1,53 +1,91 @@
 ---
 title: UseCognito
-description: Reference for UseCognito, which configures AddTraxJwtAuth for an Amazon Cognito user pool, and CognitoJwtPrincipalResolver for groups and federated identities.
+description: Reference for UseCognito, which configures a JwtBuilder for an Amazon Cognito user pool, and CognitoJwtPrincipalResolver for groups and federation.
 type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
 nav_order: 16
+package: Trax.Api.Auth.Jwt.Cognito
+namespace: Trax.Api.Auth.Jwt.Cognito
+source:
+  - Trax.Api/src/Trax.Api.Auth.Jwt.Cognito/CognitoJwtBuilderExtensions.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt.Cognito/CognitoTokenUse.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt.Cognito/CognitoJwtPrincipalResolver.cs
 ---
 
 # UseCognito
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Builder helpers from `Trax.Api.Auth.Jwt.Cognito` that wire `AddTraxJwtAuth` to validate tokens from an Amazon Cognito user pool. Also provides a Cognito-aware `ITraxPrincipalResolver<JwtTokenInput>` that normalizes `cognito:groups`, `cognito:username`, and the `identities` JSON array.
+Extension method on `JwtBuilder`, declared on `CognitoJwtBuilderExtensions`, that configures an [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) scheme to validate tokens from an Amazon Cognito user pool. The package also ships `CognitoJwtPrincipalResolver`, a resolver for Cognito's claim shapes.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static JwtBuilder UseCognito(
     this JwtBuilder builder,
     string region,
     string userPoolId,
     string clientId,
     CognitoTokenUse tokenUse = CognitoTokenUse.IdAndAccess);
+
+public enum CognitoTokenUse
+{
+    Id,
+    Access,
+    IdAndAccess,
+}
+
+public sealed class CognitoJwtPrincipalResolver : ITraxPrincipalResolver<JwtTokenInput>
+{
+    public ValueTask<TraxPrincipal?> ResolveAsync(JwtTokenInput input, CancellationToken ct);
+}
 ```
 
-| Parameter | Purpose |
+## Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `region` | `string` | The user pool's AWS region, such as `us-east-1`. |
+| `userPoolId` | `string` | The user pool id, such as `us-east-1_AbCdEfGhI`. |
+| `clientId` | `string` | The app client id. An ID token must carry it in `aud`, an access token in `client_id`. |
+| `tokenUse` | `CognitoTokenUse` | Which token shapes to accept: `Id`, `Access`, or `IdAndAccess` (the default). |
+
+## Returns
+
+The same `JwtBuilder`, for chaining.
+
+## Behavior
+
+`UseCognito` calls `UseAuthority("https://cognito-idp.{region}.amazonaws.com/{userPoolId}", clientId)`, so it cannot be combined with `UseSymmetricKey` or `UseSigningKey` on the same builder. It then calls `CustomizeTokenValidation` to install two validators:
+
+- **`AudienceValidator`**: accepts a token whose `aud` contains `clientId` when `tokenUse` admits ID tokens, and a token whose `client_id` claim is `clientId` when it admits access tokens. `ValidAudience` and `ValidAudiences` are not consulted.
+- **`LifetimeValidator`**: runs any lifetime validator set earlier on the builder, then checks `token_use`. It refuses an `id` token when only `Access` is admitted, and an `access` token when only `Id` is. Where access tokens are admitted, a token that carries `client_id` but no `token_use` is refused. A token that carries neither claim is not affected. It then checks `exp`, which is required, and `nbf` against the clock skew.
+
+A later `CustomizeTokenValidation` call that assigns `AudienceValidator` or `LifetimeValidator` replaces the one `UseCognito` installed, and with it these checks.
+
+A null or blank `region`, `userPoolId` or `clientId` throws `ArgumentException`.
+
+### CognitoJwtPrincipalResolver
+
+Returns `null`, failing authentication, when the token has no subject.
+
+| Token claim | Lands on |
 |---|---|
-| `region` | AWS region of the user pool, e.g. `us-east-1`. |
-| `userPoolId` | Full user pool identifier, e.g. `us-east-1_AbCdEfGhI`. |
-| `clientId` | App client id registered on the pool. Used for both ID-token `aud` and access-token `client_id` validation. |
-| `tokenUse` | Which token shapes to accept (`Id`, `Access`, `IdAndAccess`). Defaults to both. |
+| `sub`, then `ClaimTypes.NameIdentifier` | `TraxPrincipal.Id` |
+| The first non-empty of `name`, `ClaimTypes.Name`, `preferred_username`, `cognito:username`, `email`, `ClaimTypes.Email`, then the id | `TraxPrincipal.DisplayName` |
+| `cognito:groups`, `role`, `roles`, `ClaimTypes.Role` | `TraxPrincipal.Roles`, without blanks or duplicates |
+| `identities`: the `providerName` of the entry with `primary` true, else of the first entry | `Claims["identity_provider"]` |
+| No `identities`, or one that cannot be read | `Claims["identity_provider"] = "cognito"` |
+| Every other claim (`token_use`, `email`, `email_verified`, scopes) | `TraxPrincipal.Claims`, the first value of each type |
+| | `TraxPrincipal.PrincipalType` is `cognito`. |
 
-The helper sets `Authority` to `https://cognito-idp.{region}.amazonaws.com/{userPoolId}` (Cognito's JWKS lives at that URL plus `/.well-known/jwks.json`), the audience to `clientId`, and installs an `AudienceValidator` plus a `LifetimeValidator` that together honor the `tokenUse` selection.
+A token with no `email`, such as Apple's after the first sign-in, still resolves: `sub` identifies the user.
 
-## ID vs access tokens
+## Example
 
-Cognito issues two token shapes per session:
-
-- **ID tokens** carry user identity claims (`email`, `name`, federated `identities`) and place the app client id in `aud`.
-- **Access tokens** carry only OAuth scopes and a `token_use: "access"` claim, and place the app client id in `client_id` (not `aud`).
-
-Many SDKs send access tokens by default. Pick `CognitoTokenUse.IdAndAccess` (default) to accept either, `Access` if your client only ever sends access tokens, or `Id` if you specifically want identity-rich tokens with user attributes.
-
-`token_use` is validated, not merely read. Where the configured value admits access tokens, a token carrying `client_id` but **no** `token_use` is rejected: Cognito always stamps `token_use` on an access token, so its absence means the token is not one, and admitting it on the strength of `client_id` alone would accept a token nothing has vouched for. A token carrying neither claim is unaffected, so a symmetric-key issuer is not caught by this.
-
-## Usage
-
-```csharp
+```csharp compile
 services.AddTraxJwtAuth<CognitoJwtPrincipalResolver>("cognito", jwt =>
     jwt.UseCognito(
         region: "us-east-1",
@@ -55,40 +93,8 @@ services.AddTraxJwtAuth<CognitoJwtPrincipalResolver>("cognito", jwt =>
         clientId: "mobile-app-client-id"));
 ```
 
-For multi-issuer setups (Cognito plus an internal HS256 scheme, for example), see [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) and [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher).
+## See also
 
-## `CognitoJwtPrincipalResolver`
-
-A resolver tuned for Cognito's claim shapes. Use it instead of `DefaultJwtPrincipalResolver` when you want Cognito groups, federated provider names, and the username claim normalized for you.
-
-| Token claim | Lands on |
-|---|---|
-| `sub` (then `nameidentifier`) | `TraxPrincipal.Id` |
-| `name`, `preferred_username`, `cognito:username`, `email` (first non-empty) | `TraxPrincipal.DisplayName` |
-| `cognito:groups` (repeats) + standard role claims | `TraxPrincipal.Roles` |
-| Federated `identities[].providerName` of the `primary: "true"` entry | `Claims["identity_provider"]` |
-| Native users (no `identities` claim) | `Claims["identity_provider"] = "cognito"` |
-| `token_use`, `email_verified`, scope claims, etc. | `Claims` (verbatim) |
-| `TraxPrincipal.PrincipalType` | `cognito` |
-
-The resolver tolerates Apple's second-login behavior (no `email` claim) since `sub` is sufficient to identify the user.
-
-## Federation
-
-Cognito user pools can broker Google, Apple, SAML, and arbitrary OIDC providers. The resulting tokens land in your `AddTraxJwtAuth` handler with the user pool as the issuer, the Cognito-assigned UUID as `sub`, and an `identities` JSON array describing the upstream provider. `CognitoJwtPrincipalResolver` parses the array and exposes the upstream provider name as the synthetic `identity_provider` claim.
-
-Hosts that need a stable user identity across federated providers should configure account linking in Cognito (typically via a `PreSignUp` Lambda trigger that calls `AdminLinkProviderForUser`). The Trax side stays the same: validate the token, look up the user by Cognito `sub`.
-
-## Local development
-
-To run Trax against a Cognito stand-in (a Docker service speaking the user-pool dialect, an integration-test harness, etc.), use [`Trax.Api.Auth.Jwt.Cognito.Issuer`](/docs/sdk-reference/api-auth/cognito-issuer). It mints tokens with the same claim shapes Cognito emits, so the same `UseCognito` validator handles both real and local tokens without conditional code.
-
-## Caveats
-
-- The `LifetimeValidator` installed by `UseCognito` replaces the framework default. If you need additional lifetime checks, chain them via a follow-up `CustomizeTokenValidation` call.
-- Audience validation runs through `AudienceValidator`, not the default `ValidAudience`/`ValidAudiences` arrays. Setting `ValidAudiences` manually has no effect on Cognito tokens through this helper.
-- `UseCognito` calls `UseAuthority` internally; do not call `UseAuthority`, `UseSymmetricKey`, or `UseSigningKey` on the same builder.
-
-## SDK Reference
-
-> [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) | [Cognito Issuer](/docs/sdk-reference/api-auth/cognito-issuer) | [JWT Testing](/docs/sdk-reference/api-auth/jwt-testing) | [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)
+- [Cognito tokens in Trax](/docs/security/cognito-tokens): ID and access tokens, federation, local development.
+- [CognitoDefaults](/docs/sdk-reference/api-auth/cognito-defaults), [CognitoTokenIssuer](/docs/sdk-reference/api-auth/cognito-token-issuer)
+- [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth), [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher)

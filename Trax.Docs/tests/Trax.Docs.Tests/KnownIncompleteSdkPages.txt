@@ -6,22 +6,6 @@
 # or `surface: typescript`). Delete a page's line once it states them, or when the page moves or is
 # deleted; a stale line fails the test.
 
-sdk-reference/api-auth/add-trax-api-key-auth.md
-sdk-reference/api-auth/add-trax-jwt-auth.md
-sdk-reference/api-auth/add-trax-jwt-dispatcher.md
-sdk-reference/api-auth/add-trax-oidc-auth.md
-sdk-reference/api-auth/api-key-authentication-options.md
-sdk-reference/api-auth/api-key-defaults.md
-sdk-reference/api-auth/cognito-issuer.md
-sdk-reference/api-auth/i-trax-principal-resolver.md
-sdk-reference/api-auth/injecting-trax-principal.md
-sdk-reference/api-auth/jwt-defaults.md
-sdk-reference/api-auth/jwt-testing.md
-sdk-reference/api-auth/oidc-defaults.md
-sdk-reference/api-auth/trax-auth-claim-types.md
-sdk-reference/api-auth/trax-caller.md
-sdk-reference/api-auth/trax-principal.md
-sdk-reference/api-auth/use-cognito.md
 sdk-reference/attributes/inject.md
 sdk-reference/attributes/trax-allow-anonymous.md
 sdk-reference/attributes/trax-authorize.md
