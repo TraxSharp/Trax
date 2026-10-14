@@ -56,4 +56,4 @@ A run's `decision` and `junction_run` rows are deleted with its `metadata` row b
 
 ## SDK Reference
 
-> [IDataContext](/docs/sdk-reference/configuration/i-data-context) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseSqlite](/docs/sdk-reference/configuration/use-sqlite)
+> [IDataContext](/docs/sdk-reference/configuration/i-data-context) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [UseSqlite](/docs/sdk-reference/configuration/use-sqlite)

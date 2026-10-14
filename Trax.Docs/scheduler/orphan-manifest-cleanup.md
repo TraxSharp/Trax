@@ -6,7 +6,7 @@ source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/ManifestPruning/ManifestPruner.cs
 type: explanation
 area: scheduling
-nav_order: 6
+nav_order: 9
 ---
 
 # Orphan Manifest Cleanup

@@ -73,7 +73,7 @@ a `JunctionEventPayload`:
 | `Position`, `Kind`, `Name` | Where the step falls, what it is, and the junction's class name without its namespace, or a question's key. `(withheld)` when `NameWithheld` is set. |
 | `State` | `InProgress`, `Completed`, `Failed` or `Cancelled` |
 | `StartedAt`, `EndedAt`, `DurationMs` | UTC times, and the junction's duration once it ends |
-| `FailureClass`, `FailureException` | How a failed junction's failure is [classified](/docs/core/trains-and-junctions#classifying-failures), and its exception's type name |
+| `FailureClass`, `FailureException` | How a failed junction's failure is [classified](/docs/effect/failure-classification), and its exception's type name |
 | `QuestionKey`, `Answer`, `Confidence` | For a question or track: its [key](/docs/core/decisions#question-keys), the option, score or probability the run acted on, and the decider's confidence. Null on a withheld track. |
 | `Replayed` | True when the answer was [replayed](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions) from an earlier run. Set on the question's step only: a `Route` step carries false even when the decision it routes on was replayed. False on a retry that asked afresh, whatever the reason; why is in `trax.decision` (see [Recover a deciding train without asking the model again](/docs/effect/recover-a-deciding-train#4-check-what-the-retry-did)). |
 | `Decider` | The decider's type name. Live events only, and null on a withheld track. |
@@ -269,7 +269,7 @@ is full it gives up junction events before train events.
 
 ## RabbitMQ
 
-With [`UseRabbitMq`](/docs/sdk-reference/configuration/use-broadcaster#rabbitmq), junction events
+With [`UseRabbitMq`](/docs/sdk-reference/configuration/use-rabbit-mq), junction events
 are published to a fanout exchange of their own, `<ExchangeName>.junctions` by default
 (`trax.lifecycle.junctions`), set with `JunctionExchangeName`. It must differ from `ExchangeName`,
 or `UseRabbitMq` throws.
@@ -298,7 +298,7 @@ Trax.Api forwards junction events to one subscription and reads the stored steps
 | Field | Returns | Who may use it |
 |---|---|---|
 | [`onJunctionEvent(metadataId: Long!)`](/docs/sdk-reference/graphql-api/subscriptions#onjunctionevent) | The steps of one run, live | Exactly who would receive that run's train events: every train for the operations view, `[TraxBroadcast]` trains whose posture admits the caller for everyone else |
-| [`operations.junctionRuns(metadataId, afterPosition, take)`](/docs/sdk-reference/graphql-api/queries#junctionruns) | The stored steps of one run, in order | The operations gate, as `operations.execution` |
+| [`operations.junctionRuns(metadataId, afterPosition, take)`](/docs/sdk-reference/graphql-api/queries/executions#junctionruns) | The stored steps of one run, in order | The operations gate, as `operations.execution` |
 
 The run is a required argument: there is no feed of every run's steps. Outside the operations view
 a step loses host detail, as a train event does: the decider's type name, and a failure's exception
@@ -331,7 +331,7 @@ question and answer, with no confidence), and a failed step's failure class and 
 shown when its rows carry one. It reads at most the first 500 steps and says so when the run
 recorded more. While the run is running it re-reads only new and in-progress steps; once the run
 has finished it reads every step twice more and stops, so a later change shows after a reload. A run with no stored steps shows a hint naming `AddJunctionEvents()`.
-See [Dashboard: Metadata Detail Page](/docs/dashboard#metadata-detail-page).
+See [Dashboard: Metadata Detail Page](/docs/dashboard/pages#metadata-detail-page).
 
 ## SDK Reference
 

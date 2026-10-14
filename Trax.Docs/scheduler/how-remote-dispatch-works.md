@@ -3,7 +3,7 @@ title: How remote dispatch works
 description: "What the scheduler's HTTP, SQS and Lambda submitters and run executors do with a run, how a train is routed to one, and the limits of each transport."
 type: explanation
 area: scheduling
-nav_order: 32
+nav_order: 12
 ---
 
 # How remote dispatch works

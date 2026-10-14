@@ -1,6 +1,6 @@
 ---
 title: Test Conventions
-description: "Trax test conventions: folder layout, fixtures, naming, assertions, coverage, determinism, skipping, and red tests written before their code."
+description: "Trax test conventions: layout, fixtures, naming, assertions, determinism, skipping, red tests, dashboard and Postgres query tests, and the IDE extensions."
 type: reference
 area: contributing
 nav_order: 3
@@ -160,3 +160,63 @@ The attribute is `tests/RedAttribute.cs` in each .NET folder, linked into every 
 by `tests/Directory.Build.props`. The copies are identical, and `RedAttributeTests` in
 Trax.Core checks its behaviour. Remove the attribute, and its `using`, in the change that
 makes the test pass.
+
+## Dashboard component tests
+
+Trax.Dashboard's components are rendered with [bUnit](https://bunit.dev) in
+`Trax.Dashboard/tests/Trax.Dashboard.Tests.Integration`, under `UnitTests/Components/`. Each
+fixture builds a fresh context per test and disposes it after:
+
+```csharp fragment
+[SetUp]
+public void SetUp()
+{
+    _ctx = new Bunit.TestContext();
+    _ctx.Services.AddRadzenComponents();
+    _ctx.JSInterop.Mode = JSRuntimeMode.Loose;
+}
+
+[TearDown]
+public void TearDown() => _ctx.Dispose();
+```
+
+- Write `Bunit.TestContext` in full: NUnit has a `TestContext` of its own, and both namespaces
+  are imported.
+- `AddRadzenComponents()` registers the services Radzen's components inject (dialogs,
+  notifications, tooltips), without which a page does not render.
+- `JSRuntimeMode.Loose` answers every JavaScript interop call Radzen makes with a default, so a
+  test does not have to set up each one.
+
+## Operations query tests
+
+`CountEstimatorTests` and `OperationsQueriesTests` in `Trax.Api/tests/Trax.Api.Tests` run against
+Postgres, not InMemory, because `CountEstimator` reads the planner's row estimate from
+`pg_class.reltuples`. Both use the `trax_api_operations` database on the port `TRAX_TEST_PG_PORT`
+names (5432 when unset), and empty the tables they touch in `[SetUp]` with
+`TRUNCATE ... RESTART IDENTITY CASCADE`, so each test starts from empty tables and fresh ids.
+`CountEstimatorTests` seeds a table past `CountEstimator.EstimateThreshold` and runs `ANALYZE` on
+it before asserting, because the estimate is only as fresh as the table's last analysis, and
+compares within a tolerance rather than exactly.
+
+## Working on the IDE extensions
+
+The two inlay hint extensions in `Trax.Core/plugins` have no test suite in CI. What each one does
+is on [IDE extensions](/docs/core/ide-extensions); how they work, for changing them:
+
+- **VSCode** (`plugins/vscode/trax-hints`). `provider.ts` finds `.Chain<T>()`,
+  `.ShortCircuit<T>()` and `.IChain<T>()` calls with a regular expression, asks the editor's
+  definition provider (`vscode.executeDefinitionProvider`) where `T` is declared, and reads the
+  generic arguments from that class declaration (`typeParser.ts`). Resolved types are cached by
+  junction name, and the cache is cleared whenever a `.cs` file is created, changed or deleted.
+  When the language server has not answered yet, the hints are refreshed again after five seconds.
+  `build.sh` compiles the extension and packages a `.vsix`.
+- **Rider and ReSharper** (`plugins/rider-resharper`). `ChainJunctionHintAnalyzer` is an
+  `ElementProblemAnalyzer<IInvocationExpression>`: on each `Chain`, `ShortCircuit` or `IChain`
+  invocation with a type argument, `PsiJunctionTypeResolver` walks the junction's base types to
+  `IJunction<TIn, TOut>` through the PSI, so generics and inheritance are resolved semantically.
+  `./gradlew buildPlugin` builds it into `build/distributions/`.
+
+The Roslyn analyzer is a separate thing: inside the Trax.Core solution, `Trax.Core/Directory.Build.props`
+adds `Trax.Core.Analyzers` to every other project as an analyzer reference
+(`OutputItemType="Analyzer"`, `ReferenceOutputAssembly="false"`), so Trax.Core's own projects are
+built with it.

@@ -1,5 +1,5 @@
 ---
-title: MetadataCleanup
+title: MetadataCleanupTrain
 description: "The MetadataCleanup train that deletes old Metadata rows for internal and chosen trains: how it runs, deletion order, safety boundary and per-train retention."
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/MetadataCleanup

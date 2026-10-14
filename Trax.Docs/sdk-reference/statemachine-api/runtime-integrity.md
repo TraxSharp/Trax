@@ -18,7 +18,7 @@ source:
 
 Three checks that compare the C# machine a server runs with the TypeScript twin a client loaded, which may come from
 an older bundle: the schema-hash handshake, divergence detection on an advance, and the self-check that replays the
-committed corpus through the deployed engine. The [differential tests](/docs/statemachine#two-runtimes-one-behavior)
+committed corpus through the deployed engine. The [differential tests](/docs/statemachine/codegen-pipeline#the-differential-corpus)
 prove the two agree at build time, from one commit; these run in production. All three are opt in from the client
 side: a client that sends nothing is not checked.
 
@@ -81,7 +81,7 @@ advance it would then report as refused.
 
 ### Startup self-check
 
-The running server replays the same committed [differential corpus](/docs/statemachine#two-runtimes-one-behavior)
+The running server replays the same committed [differential corpus](/docs/statemachine/codegen-pipeline#the-differential-corpus)
 the CI test replays, through the deployed C# engine.
 
 The check is Healthy when every machine reproduces its corpus, and Unhealthy with every diff in its

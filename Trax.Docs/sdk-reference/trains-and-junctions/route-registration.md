@@ -10,6 +10,10 @@ source:
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 8
+redirect_from:
+  - /docs/cross-cutting/di-registration
+  - /docs/cross-cutting/di-registration/junction-registration
+  - /docs/cross-cutting/di-registration/train-registration
 ---
 
 # Route and Junction Registration
@@ -86,7 +90,9 @@ Resolve the interface. Resolving `TImplementation` directly returns an instance 
 
 ### Trains
 
-[AddMediator](/docs/sdk-reference/configuration/add-mediator) registers every train it discovers this way, transient by default. A train outside the scanned assemblies is registered with these methods directly.
+[AddMediator](/docs/sdk-reference/configuration/add-mediator) registers every train it discovers this way: through `AddTransientTraxRoute` by default, or `AddScopedTraxRoute` when `TrainLifetime(ServiceLifetime.Scoped)` is set. `TrainLifetime(ServiceLifetime.Singleton)` throws `ArgumentException`. A train outside the scanned assemblies is registered with these methods directly.
+
+A resolved train instance carries the state of one run: its metadata row, effect runner and data context. Each `Run` call records its own metadata row, so a scoped instance run twice in one scope records two runs.
 
 ### Junctions
 

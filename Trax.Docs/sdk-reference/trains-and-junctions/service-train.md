@@ -108,7 +108,7 @@ Everything on [Train](/docs/sdk-reference/trains-and-junctions/train) (`Junction
 | `QueueSubjectKey` | At enqueue time. Return a key to stop two entries for the same subject being dispatched at once; `null` (the default) serializes nothing | Propagates and aborts the enqueue |
 | `DeferQueuePromotion` | Read at enqueue time. `true` commits the entry unconfirmed and confirms it after `OnQueue` returns; no effect unless `OnQueue` is overridden | |
 
-The enqueue-time hooks are covered in depth in [OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) and [QueueSubjectKey](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). For hooks that apply to every train, register an `ITrainLifecycleHook` with [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook).
+The enqueue-time hooks are covered in depth in [OnQueue](/docs/mediator/enqueue-hooks) and [QueueSubjectKey](/docs/mediator/queued-work#two-mutations-for-one-record). For hooks that apply to every train, register an `ITrainLifecycleHook` with [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook).
 
 ### Registration
 

@@ -18,7 +18,7 @@ source:
 A state declared with `Invokes<TTrain, TInput, TOutput>` queues one run of the train each time it is entered, and
 applies the run's outcome to that entry of the state. Declaring one is covered in
 [Invoke a train from a state](/docs/statemachine/invoking-trains); the builder methods are under
-[IInvokeBuilder](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder).
+[IInvokeBuilder](/docs/sdk-reference/statemachine-api/machine#iinvokebuilder).
 
 ## Outcome triggers
 
@@ -194,10 +194,10 @@ junction is not cancelled with its parent.
 
 | Surface | Behaviour |
 | --- | --- |
-| The dashboard's State Machines pages, the GraphQL [`machineInstances` and `machineInstance`](/docs/sdk-reference/graphql-api/queries#machineinstances) queries | every instance, system-owned and users' drafts alike: its state, timestamps, owner kind, and the runs it invoked, newest first, with the one its state waits on marked live. Never its context, and never a run's input or output. |
+| The dashboard's State Machines pages, the GraphQL [`machineInstances` and `machineInstance`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances) queries | every instance, system-owned and users' drafts alike: its state, timestamps, owner kind, and the runs it invoked, newest first, with the one its state waits on marked live. Never its context, and never a run's input or output. |
 | Runs listed for a system instance | every run it invoked (a system instance is unique by machine and id) |
 | Runs listed for a user's draft | only its live run, the one its own token names |
-| The dashboard's Cancel on an instance, [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) | one service method, the same outcome and message. Cancels a system-owned instance's live run, and the instance then moves through `OnCancelled`. Refused for a user's draft, an instance whose state waits on no run, and one whose run has already ended. |
+| The dashboard's Cancel on an instance, [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance) | one service method, the same outcome and message. Cancels a system-owned instance's live run, and the instance then moves through `OnCancelled`. Refused for a user's draft, an instance whose state waits on no run, and one whose run has already ended. |
 | `cancelExecution`, `cancelWorkQueueEntry`, the dashboard's Cancel on a run's or an entry's page | refused, with one message on both surfaces, for a run or a queued entry a step of a user's draft started; their bulk forms skip such rows and say how many. A system-owned instance's run can be cancelled, and the instance moves through `OnCancelled`. |
 
 A run records the machine, the instance id and the owner kind that queued it, not the user. No Trax-provided

@@ -12,7 +12,7 @@ source:
   - Trax.Core/src/Trax.Core/Monad/Monad.Resolve.cs
 parent: Train Methods
 grand_parent: SDK Reference
-nav_order: 7
+nav_order: 6
 ---
 
 # Resolve

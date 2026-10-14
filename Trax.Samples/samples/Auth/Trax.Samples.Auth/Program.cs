@@ -6,7 +6,8 @@
 //   * Two authentication schemes side by side: Trax API keys (X-Api-Key) and JWT bearer
 //     (Authorization: Bearer). Either one authenticates any request.
 //   * [TraxAuthorize] on trains and query models: a bare gate, a role gate, a policy AND a role,
-//     and two stacked role attributes, which union. [TraxAllowAnonymous] on the public surfaces.
+//     and one attribute naming two roles, either of which is enough. [TraxAllowAnonymous] on the
+//     public surfaces.
 //   * GateOperations: the `operations` namespace (executions, health, queueing work) needs the
 //     Operator role, while the public trains and articles stay reachable anonymously.
 //   * Scheme-qualified principal ids: Alice's key is `TraxApiKey:alice`, her token `TraxJwt:alice`.
@@ -118,9 +119,8 @@ builder.Services.AddAuthentication();
 builder.Services.AddTraxPrincipalAccessor();
 
 // ── Authorization policies ───────────────────────────────────────────────────
-// Roles need no registration. A policy does. A query model naming an unregistered policy stops
-// the host at startup; a train or GateOperations naming one fails every call at request time, so
-// register every policy you name.
+// Roles need no registration. A policy does: a train, a query model or GateOperations naming an
+// unregistered policy stops the host at startup, so register every policy you name.
 builder.Services.AddAuthorization(options =>
     options.AddPolicy(
         AuthPolicies.VerifiedEmail,

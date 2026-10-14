@@ -5,7 +5,7 @@ type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 10
+nav_order: 11
 package: Trax.Effect
 namespace:
   - Trax.Effect.Models.PersistedOperation

@@ -71,7 +71,7 @@ with `customGuards` / `customReducers`. A C# machine that names a custom rule or
 fails at `Build()`, rather than refusing that edge forever. A guard or reducer written as a plain C# delegate cannot
 be carried by the IR at all, so export refuses a declarative machine that still has one, naming the edge, rather
 than emit it as an unconditional edge (see
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). The
+[Delegate vs declarative](/docs/statemachine/delegates-and-declarative-rules)). The
 snapshot itself carries only structure and data, never logic.
 
 Agreement on structure is not enough on its own, because a custom guard exists once per language and the two
@@ -111,7 +111,7 @@ the receipt, the move and the end of the mark are one write, and a retry replays
 fence token keeps the mark live: if a runner marks the draft and then dies, the lease expires and the next send, or
 the outcome reconciler on any host that registers the effect, takes the mark over and runs the effect again under the
 same key, which the effect passes to the system it calls. A revived stuck runner is fenced out of recording over the
-new claimant's work. [Effects](/docs/sdk-reference/statemachine-api/effects) is the reference.
+new claimant's work. [Effects](/docs/sdk-reference/statemachine-api/i-snapshot-effect) is the reference.
 
 Outside a machine, the same guarantee is `IdempotentEffect`, over the `effect_claim` ledger. There, reclaim happens
 on demand, on the next attempt at that intent, so an abandoned claim stays in `effect_claim` until someone tries
@@ -124,7 +124,7 @@ snapshot. A background sweep on every host that registers machines deletes a use
 `DraftTtl` or has lived past `MaxDraftLifetime`, so a returning user starts fresh rather than wedged behind a finished
 one. The sweep never deletes the record of something the server did (an instance in a state only the server puts it
 in), and a load never deletes. The defaults and every exception are under
-[AddStateMachines options](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options).
+[AddStateMachines options](/docs/sdk-reference/statemachine-api/add-state-machines#options).
 
 ## The frontend surface
 

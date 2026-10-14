@@ -19,4 +19,4 @@ The test-support packages Trax ships for a consumer's own test projects. The arc
 | [Trax.Mediator.Testing](/docs/sdk-reference/testing/mediator-testing) | The guard that every train has its own train interface |
 | [Trax.Api.GraphQL.Testing](/docs/sdk-reference/testing/graphql-testing) | Cross-schema GraphQL guards and fixture |
 | [Trax.Effect.StateMachine.Testing](/docs/sdk-reference/testing/effect-statemachine-testing) | `MachineConformance` and `DifferentialCorpus` |
-| [Trax.Api.Auth.Jwt.Testing](/docs/sdk-reference/api-auth/jwt-testing) | Signed test tokens for JWT-authenticated hosts |
+| [Trax.Api.Auth.Jwt.Testing](/docs/sdk-reference/api-auth/test-jwks-server) | Signed test tokens for JWT-authenticated hosts |

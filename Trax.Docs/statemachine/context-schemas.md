@@ -61,7 +61,7 @@ The full constraint set (formats, enum names, dictionary keys) is listed under
 
 Both engines refuse a trigger input that does not match its schema as `invalid-input`, before any guard reads it. A
 trigger declared without `WithInput` takes no input. See
-[Trigger input](/docs/sdk-reference/statemachine-api/fluent-authoring#trigger-input).
+[Trigger input](/docs/sdk-reference/statemachine-api/machine#trigger-input).
 
 ## Refusals
 
@@ -81,4 +81,4 @@ non-exportable, or with a custom rule (`Rule.Custom`), which keeps it exportable
 
 - [Write guards and reducers as data](/docs/statemachine/declarative-authoring)
 - [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model)
-- [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring)
+- [Machine authoring](/docs/sdk-reference/statemachine-api/machine)

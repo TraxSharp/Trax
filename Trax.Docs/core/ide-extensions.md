@@ -27,7 +27,7 @@ protected override Task<Either<Exception, OrderReceipt>> Junctions() =>
 | Name | Trax.Core Chain Hints (`trax-hints`) | Trax.Core Chain Hints |
 | Install | [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) | JetBrains Marketplace, or build from source |
 | Activates on | C# files | C# files |
-| Calls hinted | `.Chain<T>()`, `.ShortCircuit<T>()` and `.IChain<T>()` written after a dot, with a non-generic type argument | Every `Chain` and `ShortCircuit` invocation with a type argument |
+| Calls hinted | `.Chain<T>()`, `.ShortCircuit<T>()` and `.IChain<T>()` written after a dot, with a non-generic type argument | Every `Chain`, `ShortCircuit` and `IChain` invocation with a type argument |
 | How types are found | The editor's go-to-definition on the junction, reading the generic arguments of its class declaration | The semantic model, walking the junction's base types to `IJunction<TIn, TOut>` |
 | Source | `Trax.Core/plugins/vscode/trax-hints` | `Trax.Core/plugins/rider-resharper` |
 

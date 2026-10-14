@@ -60,7 +60,7 @@ public class TraxAuthorizeAttribute : Attribute
 | `[TraxAuthorize(Roles = "A")] [TraxAuthorize(Roles = "B")]` | Hold `A` and `B`: each attribute is a requirement of its own. List both in one attribute (`Roles = "A,B"`) for either |
 | `[TraxAuthorize("P", Roles = "A")]` | Pass `P` and hold `A` |
 
-On a train, attributes on the class, its base classes and every interface it implements are collected together, so `[TraxAuthorize("Admin")]` on `IDeleteUserTrain` gates `DeleteUserTrain` even when the class carries none. Collected together, they still combine as above: class `Roles = "Admin"` and interface `Roles = "Support"` require both. Discovery hands the requirement over as [`TrainRegistration.RequiredRoleSets`](/docs/sdk-reference/mediator-api/train-discovery#properties), one set per attribute.
+On a train, attributes on the class, its base classes and every interface it implements are collected together, so `[TraxAuthorize("Admin")]` on `IDeleteUserTrain` gates `DeleteUserTrain` even when the class carries none. Collected together, they still combine as above: class `Roles = "Admin"` and interface `Roles = "Support"` require both. Discovery hands the requirement over as [`TrainRegistration.RequiredRoleSets`](/docs/sdk-reference/mediator-api/i-train-discovery-service#properties), one set per attribute.
 
 ### Where it is enforced
 
@@ -76,7 +76,7 @@ A train run through `ITrainBus` in-process, by the scheduler, or inside an [ITru
 
 - A train with `[TraxAuthorize]` and no `ITrainAuthorizationService` registered stops the host at startup, unless the mediator was configured with `AllowMissingAuthorizationService()`. At run time the same case throws `TrainAuthorizationNotConfiguredException` outside a trusted scope.
 - An empty or whitespace `Policy`, or a `Roles` list with no non-empty entry, fails at startup.
-- A query model naming a policy that `AddAuthorization` never registered fails at startup. A train naming one does not: every call to it fails at request time with a masked `"Unexpected Execution Error"`, so register every policy a train names.
+- A query model or a train naming a policy that `AddAuthorization` never registered fails at startup on a host that calls `AddTraxGraphQL`, which registers both checks.
 - A surface carrying both `[TraxAuthorize]` and [`[TraxAllowAnonymous]`](/docs/sdk-reference/attributes/trax-allow-anonymous) fails at startup.
 - A surface declaring its posture with HotChocolate's `[Authorize]` or `[AllowAnonymous]` instead fails at startup, naming the Trax replacement.
 

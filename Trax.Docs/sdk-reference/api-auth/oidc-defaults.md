@@ -5,7 +5,7 @@ type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
-nav_order: 12
+nav_order: 15
 package: Trax.Api.Auth.Oidc
 namespace: Trax.Api.Auth.Oidc
 source:

@@ -3,7 +3,7 @@ title: Checkpoints and branches
 description: "Why a checkpoint stores a declared state rather than Memory, what follows for its contents and placement, and why Parallel branches leave writes to the join."
 type: explanation
 area: trains
-nav_order: 5
+nav_order: 7
 ---
 
 # Checkpoints and branches

@@ -147,7 +147,7 @@ train.
   whitespace, a key containing a NUL character or an unpaired surrogate, or a key longer than 512
   Unicode characters (an emoji counts once). From Trax.Mediator 1.23.0 the rules are
   `WorkQueue.Create`'s, and its `ArgumentException` is the inner exception.
-- Any exception the train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook)
+- Any exception the train's [`OnQueue`](/docs/mediator/enqueue-hooks)
   hook throws. The enqueue is aborted and leaves no entry: on the default path the hook runs before
   the entry is committed, and for a train that defers promotion the staged entry is removed (only
   while it is still staged, never once promoted or dispatched), whether or not the caller has
@@ -188,7 +188,7 @@ train.
 5. Creates a `WorkQueue` entry with the train name, serialized input, input type name, priority,
    and `scheduledAt` converted to UTC.
 6. Stamps the entry's subject key from the train's
-   [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing)
+   [`QueueSubjectKey`](/docs/mediator/queued-work#two-mutations-for-one-record)
    override, if it has one.
 7. Tracks the entry, then, if the train overrides `OnQueue`, enters the enqueue context and calls
    the hook with the entry's metadata (its `ExternalId` and input), then saves and commits, all in
@@ -203,7 +203,7 @@ long time, such as a Blazor circuit, keeps no train alive between enqueues, and 
 a hook takes are fresh for each enqueue. Tracking the entry before the hook runs does not insert it
 (`Track` is change tracking only), so the hook still runs before the row exists.
 
-A train that sets [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable)
+A train that sets [`DeferQueuePromotion`](/docs/mediator/queued-work#accepting-a-mutation-is-two-writes)
 takes three steps instead: the entry is committed unconfirmed and undispatchable, the hook runs
 outside that transaction, and a second commit promotes it. A throwing hook removes the staged entry
 if it is still staged. Once the hook has returned the mutation counts as accepted, so the promotion
@@ -409,4 +409,4 @@ public class TrainController(ITrainDiscoveryService discovery, ITrainExecutionSe
 - [TrainInputReader](/docs/sdk-reference/mediator-api/train-input-reader)
 - [Mediator exceptions](/docs/sdk-reference/mediator-api/exceptions)
 - [Concurrency limits](/docs/sdk-reference/mediator-api/concurrency-limiting)
-- [OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook)
+- [OnQueue](/docs/mediator/enqueue-hooks)

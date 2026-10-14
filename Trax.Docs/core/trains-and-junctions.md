@@ -3,7 +3,7 @@ title: Trains and junctions
 description: "What trains and junctions are, why Junctions() is a declaration the host can check, how EffectJunction differs from Junction, and the lifecycle hooks."
 type: explanation
 area: trains
-nav_order: 2
+nav_order: 3
 source:
   - Trax.Core/src/Trax.Core/Junction/Junction.cs
   - Trax.Effect/src/Trax.Effect/Services/EffectJunction/EffectJunction.cs
@@ -194,30 +194,18 @@ Each hook receives the run's metadata as it stands at that point: `OnStarted` se
 `OnCompleted` the output too, `OnFailed` and `OnCancelled` the failure. A hook that throws is
 logged and never fails the run, because a notification that failed is not a reason to report the
 work as failed. [Global lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) see
-every train's runs and fire before the train's own.
+every train's runs and fire before the train's own. `OnFailed` sees the failure's `FailureClass`,
+which an `IFailureClassifier` the host registers decides; see
+[Failure classification](/docs/effect/failure-classification).
 
 ### OnQueue (enqueue-time hook)
 
 `OnQueue`, `DeferQueuePromotion` and `QueueSubjectKey` are a different kind of hook: the mediator's
 queue path calls them when it accepts a mutation, before the train runs, and a throw refuses the
-mutation. [Enqueue hooks](/docs/mediator/enqueue-hooks) describes each one.
-
-#### Making the side-effect durable
-
-A side effect written in `OnQueue` and the work queue row are two writes.
-[How queued work stays durable and serialized](/docs/mediator/queued-work) explains how a train
-keeps them together.
-
-### QueueSubjectKey (serializing work that touches the same thing)
-
-A train that returns a subject key stops two queued mutations for the same record from running at
-once. [How queued work stays durable and serialized](/docs/mediator/queued-work#two-mutations-for-one-record)
-explains the guarantee and what bounds it.
-
-### Classifying failures
-
-`OnFailed` sees the failure's `FailureClass`, which an `IFailureClassifier` the host registers
-decides. [Failure classification](/docs/effect/failure-classification) explains how.
+mutation. [Enqueue hooks](/docs/mediator/enqueue-hooks) describes each one. A side effect written
+in `OnQueue` and the work queue row are two writes, and a train that returns a subject key stops
+two queued mutations for the same record from running at once;
+[How queued work stays durable and serialized](/docs/mediator/queued-work) explains both.
 
 ## SDK Reference
 

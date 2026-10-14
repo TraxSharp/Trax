@@ -30,7 +30,7 @@ Six features working together, against Postgres, in one process:
 | Feature | What the sample shows | Page |
 |---|---|---|
 | Train decisions | A `Switch` (what went wrong with the order) and a `Gate` (whether to pay it), answered by an `IDecider` | [Decisions](/docs/core/decisions) |
-| Retries replay decisions | The manifest's automatic retry replays every recorded answer whose state hashes the same, asks afresh when the data changed, and asks afresh on purpose with `askAfresh` | [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) |
+| Retries replay decisions | The manifest's automatic retry replays every recorded answer whose state hashes the same, asks afresh when the data changed, and asks afresh on purpose with `askAfresh` | [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions) |
 | Checkpoints and resume | The refund checkpoints its outcome before it emails the customer; the manifest's retry resumes after it, and an operator resumes the failed run at `NotifyCustomer` with `resumeExecution` or the dashboard's **Resume** | [Resuming from a checkpoint](#resuming-from-a-checkpoint) |
 | Junction events | `onJunctionEvent` and `operations.junctionRuns` drive the page | [Junction Events](/docs/effect/junction-events) |
 | Parallel branches | The topic map's three signals run side by side; a failed branch fails the run by name, and only the step after the join writes | [The topic map](#the-topic-map) |

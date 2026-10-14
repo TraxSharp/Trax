@@ -168,7 +168,7 @@ public sealed class GetProductRequest : TypedRequest<ProductView>
 
 The record's properties are the selection set; `Path` wraps the root field in the `discover` and
 namespace levels Trax generates, and the response is unwrapped along the same path. See
-[GraphQL Client: Nested envelopes](/docs/api-graphql-client#nested-envelopes-path).
+[GraphQL Client: Nested envelopes](/docs/api/typed-requests#graphqloperation-properties).
 
 ## Tests
 
@@ -186,4 +186,4 @@ checks that both servers serve their schema in Development and refuse introspect
 
 ## SDK Reference
 
-> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [AddKeyedTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client) | [Builder](/docs/sdk-reference/graphql-client/builder) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [AddKeyedTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client) | [Builder](/docs/sdk-reference/graphql-client/trax-graphql-client-builder) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)

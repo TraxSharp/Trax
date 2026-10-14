@@ -166,4 +166,4 @@ the convenient shared view, not the system of record.
 
 ## SDK Reference
 
-> [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging) | [Metadata](/docs/effect/metadata)
+> [AddDataContextLogging](/docs/sdk-reference/configuration/add-data-context-logging) | [Metadata](/docs/effect/metadata)

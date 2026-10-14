@@ -160,9 +160,9 @@ explains what that means for the guarantee.
 ## See also
 
 - [How queued work stays durable and serialized](/docs/mediator/queued-work)
-- [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train), [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution), [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor), [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)
+- [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train), [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service), [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor), [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)
 - [Trusted execution scope](/docs/sdk-reference/mediator-api/i-trusted-execution-scope)
 
 ## SDK Reference
 
-> [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)
+> [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service) | [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)

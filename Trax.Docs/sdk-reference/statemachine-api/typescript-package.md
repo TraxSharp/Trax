@@ -72,7 +72,7 @@ From `@trax/state-machine/client` (`useServerMachine` from `@trax/state-machine/
 
 `useServerMachine(machine, { server, id?, startInput?, startRequestId?, startStorageKey?, newRequestId?, retryDelays? })`, from
 `@trax/state-machine/react`, is `ServerMachineController` as a hook. Its options, its answer and an example are under
-[Driving an instance from React](/docs/sdk-reference/graphql-api/machines#driving-an-instance-from-react).
+[Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react).
 
 ## See also
 

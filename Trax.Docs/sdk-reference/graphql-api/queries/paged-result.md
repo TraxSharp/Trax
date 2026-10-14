@@ -26,7 +26,7 @@ All paginated queries return the same wrapper type:
 | `skip` | `Int!` | The `skip` value that was applied, after a negative value was read as `0` |
 | `take` | `Int!` | The `take` value that was applied, after clamping to 1 through 500 |
 | `isEstimatedCount` | `Boolean!` | `true` when `totalCount` is a fast estimate rather than an exact count. See [Pagination](#estimated-counts) |
-| `isCountCapped` | `Boolean!` | `true` when `totalCount` stopped at its cap, so the list holds at least that many and probably more: show it as "10,000+". A lower bound, not an estimate. Only [`logs`](/docs/sdk-reference/graphql-api/queries#logs-nested-under-operations) filtered by text and [`executions`](/docs/sdk-reference/graphql-api/queries/executions#executions) filtered by `failureReasonContains` cap their count; every other list returns `false` |
+| `isCountCapped` | `Boolean!` | `true` when `totalCount` stopped at its cap, so the list holds at least that many and probably more: show it as "10,000+". A lower bound, not an estimate. Only [`logs`](/docs/sdk-reference/graphql-api/queries/logs) filtered by text and [`executions`](/docs/sdk-reference/graphql-api/queries/executions#executions) filtered by `failureReasonContains` cap their count; every other list returns `false` |
 | `nextCursor` | `Long` | ID of the last item in the page. Pass as `afterId` to fetch the next page via keyset pagination. `null` when no items are returned |
 
 ## Pagination

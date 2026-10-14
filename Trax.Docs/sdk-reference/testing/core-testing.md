@@ -124,7 +124,8 @@ public static class SourceText
 
 ### ArchitectureGuardOptions
 
-| Property | Default | Description ||----------|---------|-------------|
+| Property | Default | Description |
+|----------|---------|-------------|
 | `RepoRootOverride` | `null` | The root to scan instead of the detected one, mainly for testing a guard against a synthetic tree |
 | `TestScanRoots` | `["tests"]` | Top-level folders holding test code, scanned by the hygiene guards |
 | `SourceScanRoots` | `["src"]` | Top-level folders holding production code |
@@ -133,8 +134,6 @@ public static class SourceText
 | `ExpectedDirectoryBuildPropsVersion` | `"1.99.99"` | The `<Version>` the root `Directory.Build.props` must declare |
 | `TraxPackagePrefix` | `"Trax."` | Package ids that count as Trax packages consumed from another repository |
 | `CrossRepoPackageKnownExceptions` | empty | Repo-relative project files exempt from the cross-repo package guard |
-
-Allowlist paths are repo-relative with forward slashes.
 
 Allowlist paths are repo-relative with forward slashes.
 
@@ -180,7 +179,8 @@ These encode a build convention for a codebase split across several repositories
 
 `TraxVocabularyIsUsed` reports every use of a listed third-party attribute where Trax has its own, in both `SourceScanRoots` and `TestScanRoots`. Comments and string literals are ignored.
 
-| Parameter | Description ||-----------|-------------|
+| Parameter | Description |
+|-----------|-------------|
 | `banned` | The vocabularies to refuse. `Library` is a token that must appear in a file (normally the library's root namespace) before its attributes count, unless a global or project-level `using` imports it. `Attributes` are names without the `Attribute` suffix. `Replacement` is what to write instead. |
 | `options` | Scan roots and repo root; defaults apply when `null` |
 | `allowed` | Repo-relative paths exempt from the scan, each mapped to the reason: the translation layer that has to speak the library's language, and the tests that write the refused attribute on purpose |

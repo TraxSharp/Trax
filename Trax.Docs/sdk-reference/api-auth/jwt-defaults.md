@@ -5,7 +5,7 @@ type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
-nav_order: 11
+nav_order: 14
 package: Trax.Api.Auth.Jwt
 namespace: Trax.Api.Auth.Jwt
 source:

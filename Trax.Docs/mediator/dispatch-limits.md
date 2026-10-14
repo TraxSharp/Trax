@@ -72,7 +72,7 @@ see [ICurrentPrincipalProvider](/docs/sdk-reference/mediator-api/i-current-princ
 
 Input is read without JSON reference handling: `$id`, `$ref` and `$values` are not honoured, so the
 parsed input is the tree the caller sent. A property given twice, in any casing, is refused. The
-reading rules are listed under [TrainInputReader](/docs/sdk-reference/mediator-api/train-execution).
+reading rules are listed under [TrainInputReader](/docs/sdk-reference/mediator-api/i-train-execution-service).
 
 A remote runner's HTTP entry points read at most `TraxJobRunnerOptions.MaxRequestBodyBytes`
 (8 MiB by default), which holds an input at the default stored-form cap. Raise both together.
@@ -90,7 +90,7 @@ A remote runner's HTTP entry points read at most `TraxJobRunnerOptions.MaxReques
 | Deferring trains | A train that defers queue promotion (`DeferQueuePromotion`) runs its hook holding no connection, and this limit does not apply to it. |
 
 The hook itself is described under
-[OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook).
+[OnQueue](/docs/mediator/enqueue-hooks).
 
 ## See also
 
@@ -101,4 +101,4 @@ The hook itself is described under
 
 ## SDK Reference
 
-> [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration) | [Concurrency limiting](/docs/sdk-reference/mediator-api/concurrency-limiting) | [ICurrentPrincipalProvider](/docs/sdk-reference/mediator-api/i-current-principal-provider) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
+> [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration) | [Concurrency limiting](/docs/sdk-reference/mediator-api/concurrency-limiting) | [ICurrentPrincipalProvider](/docs/sdk-reference/mediator-api/i-current-principal-provider) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service)

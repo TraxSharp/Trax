@@ -102,4 +102,4 @@ work is the [scheduler](/docs/scheduler)'s, which runs trains through the same l
 
 ## SDK Reference
 
-> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [ITrainBus](/docs/sdk-reference/mediator-api/train-bus) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
+> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [ITrainBus](/docs/sdk-reference/mediator-api/i-train-bus) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service)

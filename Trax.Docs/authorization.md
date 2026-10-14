@@ -484,4 +484,4 @@ the union of every attribute's roles; it does not say which attributes they came
 
 ## SDK Reference
 
-> [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) | [ITrustedExecutionScope](/docs/sdk-reference/mediator-api/i-trusted-execution-scope) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)
+> [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) | [ITrustedExecutionScope](/docs/sdk-reference/mediator-api/i-trusted-execution-scope) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)

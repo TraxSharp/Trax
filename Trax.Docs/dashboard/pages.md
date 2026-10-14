@@ -33,7 +33,7 @@ the API show the same rows and refuse the same requests with the same messages. 
 ## Trains
 
 `/trax/trains`. Every `IServiceTrain<TIn, TOut>` the host registers, from
-[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery).
+[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/i-train-discovery-service).
 
 | Column | Value |
 |---|---|
@@ -53,13 +53,13 @@ type, or a **JSON** tab.
 | Button | Calls | GraphQL | Writes a work queue entry |
 |---|---|---|---|
 | **Queue** | `IOperationsService.QueueTrainAsync`, through `ITrainExecutionService.QueueAsync` | `queueTrain` | yes |
-| **Run** | `IOperationsService.RunTrainAsync`, then opens the run's page | [`runTrain`](/docs/sdk-reference/graphql-api/mutations#runtrain) | no |
+| **Run** | `IOperationsService.RunTrainAsync`, then opens the run's page | [`runTrain`](/docs/sdk-reference/graphql-api/mutations/work-queue#runtrain) | no |
 
 Both run the train's `OnQueue` hook on the input and apply the input size cap. Queue also stamps
 the subject key. Run runs `OnQueue` before the run's row is written (a hook that throws refuses
 the run), writes the row and submits the run to the job submitter the train is routed to; with no
 work queue entry it skips dispatch priority, the group's `MaxActiveJobs` and
-[subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing).
+[subject serialization](/docs/mediator/queued-work#two-mutations-for-one-record).
 `RunTrainAsync` runs a train that overrides `QueueSubjectKey` only for a trusted caller such as the
 dashboard, and refuses any other caller; for such a train the Run dialog shows a warning pointing
 at **Queue**. `Trax.Docs/adr/0019` records why Run bypasses serialization.
@@ -112,7 +112,7 @@ A run's train state, timing, input, output, exception, and its log entries oldes
 | Part | Shows |
 |---|---|
 | **State Transition Timeline** | Pending -> InProgress -> Completed, Failed or Cancelled, each with the time it was reached and the durations between them. |
-| **Failure Class** | The run's [failure classification](/docs/core/trains-and-junctions#classifying-failures), `Unclassified` unless a registered classifier assigned one. |
+| **Failure Class** | The run's [failure classification](/docs/effect/failure-classification), `Unclassified` unless a registered classifier assigned one. |
 | **Stack trace** | A collapsible viewer with C# highlighting, a **Copy** button, inner exception separators; long traces start collapsed. |
 | **Replays Decisions Of** | The run whose [decisions](/docs/effect/decisions) this run was queued to replay, by a re-queue or a manifest's retry. |
 | **Resumes** | The run this one resumed from a [checkpoint](/docs/sdk-reference/train-methods/checkpoint), and the step it resumed at or "after that run's latest checkpoint". |
@@ -124,7 +124,7 @@ A run's train state, timing, input, output, exception, and its log entries oldes
 |---|---|---|
 | **Cancel** (Pending or InProgress) | `IOperationsService.CancelExecutionsAsync` | `cancelExecution` |
 | **Re-queue**, **Re-queue, Ask Afresh** | `IOperationsService.RequeueExecutionAsync` (with `askAfresh`) | `requeueExecution` |
-| **Resume** | `IOperationsService.ResumeExecutionAsync` with no step | [`resumeExecution`](/docs/sdk-reference/graphql-api/mutations#resumeexecution) without `from` |
+| **Resume** | `IOperationsService.ResumeExecutionAsync` with no step | [`resumeExecution`](/docs/sdk-reference/graphql-api/mutations/executions#resumeexecution) without `from` |
 | **Resume from here** (on the run graph) | `IOperationsService.ResumeExecutionAsync` with the step's node id | `resumeExecution` with `from` |
 
 #### Cancel
@@ -156,7 +156,7 @@ resume. On success the page opens the new work queue entry. A resume records no 
 #### Run graph
 
 The train's [declared chain](/docs/sdk-reference/train-methods/chain-graph) with this run on it,
-matched by `RunGraphs.Match` as [`operations.runGraph`](/docs/sdk-reference/graphql-api/queries#rungraph)
+matched by `RunGraphs.Match` as [`operations.runGraph`](/docs/sdk-reference/graphql-api/queries/executions#rungraph)
 does:
 
 - Each declared step in order, with its kind and name, and each routing step's tracks under it;
@@ -290,7 +290,7 @@ Entries waiting for dispatch.
 
 | Column | Value |
 |---|---|
-| **Subject** | The entry's [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), when the train sets one. Computed by your train, so it may carry record identifiers. |
+| **Subject** | The entry's [subject key](/docs/mediator/queued-work#two-mutations-for-one-record), when the train sets one. Computed by your train, so it may carry record identifiers. |
 | **Confirmed** | **Yes** for a confirmed entry; a **Staged** badge on a queued entry not yet confirmed, which the dispatcher will not claim; a dash for an unconfirmed entry no longer queued. |
 
 #### Work queue entry detail page
@@ -327,14 +327,14 @@ drafts alike. Read-only except for cancelling a system-owned instance's run.
   only its live run.
 - **Cancel**, on a system-owned instance waiting on a run, cancels that run after a confirmation,
   and the instance moves through the state's `OnCancelled` edge. It calls
-  `CancelMachineInstanceAsync`, as [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance).
+  `CancelMachineInstanceAsync`, as [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance).
   Drafts offer no Cancel.
 
 Neither page shows an instance's context or the user who owns a draft: the context is untyped
 JSON that nothing could mask. Reads go through `GetMachineInstanceStateCountsAsync`,
 `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync` and
 `GetMachineInstanceRunsAsync`, the calls behind
-[`machineInstanceCounts`, `machineInstances` and `machineInstance`](/docs/sdk-reference/graphql-api/queries#machineinstances).
+[`machineInstanceCounts`, `machineInstances` and `machineInstance`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances).
 
 ### Persisted operations
 
@@ -379,7 +379,7 @@ dispatcher claimed first still replays, counted as "already dispatched and still
 `/trax/settings/effects`, under **Settings**. Every registered effect and junction effect provider
 factory, read and written through
 [`IEffectSettingsService`](/docs/sdk-reference/scheduler-api/i-effect-settings-service), the service
-behind the API's effects query and [`setEffectEnabled`](/docs/sdk-reference/graphql-api/mutations#seteffectenabled).
+behind the API's effects query and [`setEffectEnabled`](/docs/sdk-reference/graphql-api/mutations/effects#seteffectenabled).
 
 | Action | Behaviour |
 |---|---|
@@ -410,7 +410,7 @@ refusal keeps the dialog open. Settings are per process and not persisted.
 | **Metadata Cleanup** | With [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) registered |
 
 **Save** sends only the changed fields through `IOperationsService.UpdateSchedulerConfigAsync`, the
-call behind [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace),
+call behind [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations/config),
 then reloads the settings in force. A saved setting reaches every scheduler host and replaces the
 value configured in code (see [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler#remarks));
 there is no button to return to the code value. **Discard Changes** drops unsaved edits. A duration

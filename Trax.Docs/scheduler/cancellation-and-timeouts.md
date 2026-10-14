@@ -3,7 +3,7 @@ title: Cancellation and timeouts in the scheduler
 description: "How the scheduler stops runs: the worker's shutdown grace period, CancelAsync and the dashboard's cancel, job timeouts, and what each records."
 type: explanation
 area: scheduling
-nav_order: 10
+nav_order: 11
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/LocalWorkerService/LocalWorkerService.cs
   - Trax.Scheduler/src/Trax.Scheduler/Services/CancellationRegistry
@@ -58,7 +58,7 @@ not started at all. Its `fetched_at` is cleared so another worker can claim it a
 each remaining job getting a grace period of its own.
 
 `ShutdownTimeout` and `BatchSize` are set with
-[ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers):
+[ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers):
 
 ```csharp compile
 services.AddTrax(trax => trax
@@ -147,4 +147,4 @@ still compiles. The built-in submitters implement them: the Postgres submitter p
 
 ## SDK Reference
 
-> [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [CancelAsync / CancelGroupAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress)
+> [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) | [CancelAsync / CancelGroupAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress)

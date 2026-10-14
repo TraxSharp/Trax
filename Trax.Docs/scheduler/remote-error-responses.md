@@ -24,7 +24,7 @@ A runner answers both endpoints with a structured body. `/trax/execute` (queued 
 | `ExceptionType` | yes | yes | The .NET exception type name, such as `"InvalidOperationException"` |
 | `StackTrace` | yes | yes | Always null. No stack trace leaves the runner; the run's metadata row and the runner's log hold it |
 | `FailureJunction` | | yes | The junction where the failure occurred |
-| `FailureClass` | | yes | The [failure class](/docs/core/trains-and-junctions#classifying-failures) the runner's classifier assigned, or null when it sent none. A class outside the `FailureClass` values is sent as `Unclassified` |
+| `FailureClass` | | yes | The [failure class](/docs/effect/failure-classification) the runner's classifier assigned, or null when it sent none. A class outside the `FailureClass` values is sent as `Unclassified` |
 | `PublicMessage` | | yes | The message a client of the calling side may see: the message of a plain `TrainException`, null for every other failure |
 
 `RemoteRunResponse` also carries `MetadataId`, `ExternalId`, and on success `OutputJson` and

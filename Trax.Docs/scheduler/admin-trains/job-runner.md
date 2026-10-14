@@ -1,5 +1,5 @@
 ---
-title: JobRunner
+title: JobRunnerTrain
 description: "The JobRunner train that runs a scheduled train on a worker: loading its Metadata, claiming the start, recording success and handling duplicate deliveries."
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/JobRunner
@@ -38,7 +38,7 @@ Two trains may take the same input type, so the train is found by the name on th
 
 ### RunScheduledTrainJunction
 
-If the loaded row is no longer `Pending`, another delivery of the same job already started it, and this one completes without running anything (see [Duplicate deliveries](#duplicate-deliveries)). Otherwise it runs the train `LoadMetadataJunction` resolved, by name, through [`ITrainBus.RunByNameAsync`](/docs/sdk-reference/mediator-api/train-bus), with the deserialized input. The input-keyed `ITrainBus.RunAsync` reaches only one train per input type, so it is not used here: the train that runs is always the one the row names. This is where your train's `Junctions()` declaration gets run. The train runs as the `Pending` metadata record the dispatcher created (the request's `MetadataId`), passed to `RunByNameAsync`, so its execution is recorded on that row. The JobRunner's own run is a separate record, and the two are not linked by `ParentId`.
+If the loaded row is no longer `Pending`, another delivery of the same job already started it, and this one completes without running anything (see [Duplicate deliveries](#duplicate-deliveries)). Otherwise it runs the train `LoadMetadataJunction` resolved, by name, through [`ITrainBus.RunByNameAsync`](/docs/sdk-reference/mediator-api/i-train-bus), with the deserialized input. The input-keyed `ITrainBus.RunAsync` reaches only one train per input type, so it is not used here: the train that runs is always the one the row names. This is where your train's `Junctions()` declaration gets run. The train runs as the `Pending` metadata record the dispatcher created (the request's `MetadataId`), passed to `RunByNameAsync`, so its execution is recorded on that row. The JobRunner's own run is a separate record, and the two are not linked by `ParentId`.
 
 Once the train has returned, the same junction records the success on the manifest: it sets `Manifest.LastSuccessfulRun` to the database's current time (not the worker's clock), computes `NextScheduledRun`, and disables a `ScheduleType.Once` manifest. `LastSuccessfulRun` is what drives [dependent train](/docs/scheduler/dependent-trains) evaluation: a dependent is queued when its parent's `LastSuccessfulRun` is later than the dispatch time of the dependent's own latest run, which the database also stamps, so clock skew between the worker and the dispatcher cannot requeue a dependent after every run. `Trax.Scheduler/docs/adr/0014` records the comparison. If there's no manifest (e.g., an ad-hoc execution), this step is a no-op.
 

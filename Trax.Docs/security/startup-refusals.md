@@ -3,7 +3,7 @@ title: Startup refusals
 description: "Every security posture a Trax host refuses to start with: the cause, when the refusal is raised, how its message begins, and what answers it."
 type: reference
 area: security
-nav_order: 3
+nav_order: 4
 source:
   - Trax.Api/src/Trax.Api.GraphQL/Startup
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/ExposureAuthorizationRule.cs
@@ -82,7 +82,7 @@ Roles are never checked at startup: Trax has no list of the roles that can exist
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
 | A registered train carries `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered | Host start | `One or more registered trains declare [TraxAuthorize] but no ITrainAuthorizationService is registered in the DI container. ...`, ending with the trains | `AddTraxGraphQL()` or `AddTraxApi()` registers the default; a host that serves no submissions calls [`AllowMissingAuthorizationService()`](/docs/authorization#opting-out-for-scheduler-only-hosts) |
-| A junction takes `TraxPrincipal` in its constructor and nothing registers it (every `AddTrax*Auth` call was skipped) | Host start | `<n> of <m> registered trains cannot run:`, naming the junction and `Trax.Api.Auth.TraxPrincipal` | `services.AddTraxPrincipalAccessor()`. See [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) |
+| A junction takes `TraxPrincipal` in its constructor and nothing registers it (every `AddTrax*Auth` call was skipped) | Host start | `<n> of <m> registered trains cannot run:`, naming the junction and `Trax.Api.Auth.TraxPrincipal` | `services.AddTraxPrincipalAccessor()`. See [Injecting TraxPrincipal](/docs/security/inject-the-current-principal) |
 
 ## Credentials
 

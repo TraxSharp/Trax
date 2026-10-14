@@ -85,7 +85,7 @@ Choose where the schema comes from:
 | `UseFileSchema(path)` | You check in an SDL snapshot of the server. The usual choice against a production Trax server. |
 | `UseAssemblySchema(configure)` (`.Trax`) | The server's HotChocolate configuration is in a .NET assembly you can reference. |
 
-The calls are on [TraxGraphQLClientBuilder](/docs/sdk-reference/graphql-client/builder).
+The calls are on [TraxGraphQLClientBuilder](/docs/sdk-reference/graphql-client/trax-graphql-client-builder).
 
 ## 4. Add authentication and timeouts
 
@@ -134,7 +134,7 @@ await app.Services.ValidateGraphQLClientAssembliesAsync(typeof(Program).Assembly
 ```
 
 Which request types each call checks, and what it throws, is on
-[ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-assemblies).
+[ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-graphql-client-assemblies).
 
 ## 6. Run a request
 
@@ -233,4 +233,4 @@ suite, against two Trax servers with a keyed client each.
 
 ## SDK Reference
 
-> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [AddKeyedTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client) | [TraxGraphQLClientBuilder](/docs/sdk-reference/graphql-client/builder) | [ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-assemblies) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [GraphQLResourceRequest](/docs/sdk-reference/graphql-client/graphql-resource-request) | [ResponseStrictness](/docs/sdk-reference/graphql-client/response-strictness) | [Typed requests](/docs/api/typed-requests)
+> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [AddKeyedTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client) | [TraxGraphQLClientBuilder](/docs/sdk-reference/graphql-client/trax-graphql-client-builder) | [ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-graphql-client-assemblies) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [GraphQLResourceRequest](/docs/sdk-reference/graphql-client/graphql-resource-request) | [ResponseStrictness](/docs/sdk-reference/graphql-client/response-strictness) | [Typed requests](/docs/api/typed-requests)

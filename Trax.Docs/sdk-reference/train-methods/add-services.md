@@ -12,7 +12,7 @@ source:
   - Trax.Core/src/Trax.Core/Monad/Monad.AddServices.cs
 parent: Train Methods
 grand_parent: SDK Reference
-nav_order: 6
+nav_order: 5
 ---
 
 # AddServices
@@ -84,4 +84,4 @@ public class NotifyingOrderTrain(IPaymentGateway payments, INotificationService 
 ## See also
 
 - [Extract](/docs/sdk-reference/train-methods/extract)
-- [Dependency Injection in Junctions](/docs/cross-cutting/di-registration)
+- [Dependency Injection in Junctions](/docs/sdk-reference/trains-and-junctions/route-registration)

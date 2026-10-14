@@ -124,7 +124,7 @@ Extends `TraxEffectBuilderWithData` only, so it comes after a data provider. Cal
 - A host with no logging registered still records.
 - A manifest's retry and a requeue of its dead letter name a run to replay only under the
   scheduler's checks. See
-  [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+  [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions).
 
 ### Registered services
 

@@ -57,7 +57,7 @@ A draft whose version has no migration path to the current definition, or is new
 
 The machines in `Trax.Api.StateMachine/machines/` pin a migration with a migration golden,
 `machines/<machine>/migration.json`: a committed set of stored older-version snapshots and the exact
-[canonical wire](/docs/statemachine#two-runtimes-one-behavior) each must become. The tests of both runtimes replay it, so a migration that drops, renames or reorders a surviving field fails, and the two runtimes
+[canonical wire](/docs/statemachine/canonical-wire) each must become. The tests of both runtimes replay it, so a migration that drops, renames or reorders a surviving field fails, and the two runtimes
 cannot upgrade the same draft differently.
 
 ## Example

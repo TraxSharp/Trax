@@ -3,7 +3,7 @@ title: Move work around a chain into junctions
 description: "Where work that sits before, after or beside a train's chain goes once Junctions() is the only declaration: setup, extra Memory values, failures, nested trains."
 type: how-to
 area: trains
-nav_order: 4
+nav_order: 3
 ---
 
 # Move work around a chain into junctions
@@ -59,9 +59,9 @@ The child runs as a train of its own and is not linked to the parent run. `RunAs
 
 - [Junctions](/docs/sdk-reference/train-methods/junctions), what the startup check refuses in a declaration
 - [AddServices](/docs/sdk-reference/train-methods/add-services) and [Extract](/docs/sdk-reference/train-methods/extract)
-- [TrainBus](/docs/sdk-reference/mediator-api/train-bus)
+- [TrainBus](/docs/sdk-reference/mediator-api/i-train-bus)
 - [Removal of RunInternal and Activate](/docs/migration-guides/runinternal-and-activate)
 
 ## SDK Reference
 
-> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [ITrainBus](/docs/sdk-reference/mediator-api/train-bus)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [ITrainBus](/docs/sdk-reference/mediator-api/i-train-bus)

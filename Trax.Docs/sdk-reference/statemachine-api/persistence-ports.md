@@ -357,7 +357,7 @@ internal: a host neither implements nor calls them, and `AddStateMachines` and `
 - **The outcome delivery** applies the outcome of an ended run to the instance waiting on it, now, through the
   delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
   outcome is applied once however many callers deliver it. The operations service calls it after an operator's
-  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued
+  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance) cancels a still-queued
   run, so the instance moves in that request on a host that registers the machine.
 
 ## ISnapshotMachineRegistry
@@ -409,7 +409,7 @@ apart from a real failure, on Postgres and SQLite alike. Without one, such a rac
 Over the EF snapshot store, a machine's effects do not use the claim ledger: the effect is pending on the draft's
 row. The ledger serves `IdempotentEffect` outside machines, a host whose snapshot store is its own, and claims recorded
 before the upgrade, which a send records or drops (see migration
-[`081`](/docs/migration-guides/database-migrations#state-machine-pending-effect-and-server-record-081-sqlite-041)).
+[`081`](/docs/reference/schema-migrations#state-machine-pending-effect-and-server-record-081-sqlite-041)).
 
 `IEffectClaimStore.ReleaseForReset(effectKey, receiptRecorded, ct)` is the release a reset uses: it keeps an
 in-flight claim whose lease has not passed, and deletes a completed claim only when `receiptRecorded` accepts its

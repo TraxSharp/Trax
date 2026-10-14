@@ -126,5 +126,5 @@ services.AddTrax(trax => trax
 
 ## See also
 
-- [TrainBus](/docs/sdk-reference/mediator-api/train-bus), [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration)
+- [TrainBus](/docs/sdk-reference/mediator-api/i-train-bus), [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration)
 - [AddEffects](/docs/sdk-reference/configuration/add-effects), [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)

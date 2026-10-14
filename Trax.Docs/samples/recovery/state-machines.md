@@ -169,7 +169,7 @@ twin was generated from (`TRAX_UPDATE_MACHINE_DOCUMENTS=1 dotnet test --filter T
 
 The page drives its draft with `useServerMachine` from `@trax/state-machine/react`, over
 `createMachineServer` from `@trax/state-machine/client`
-([Driving an instance from React](/docs/sdk-reference/graphql-api/machines#driving-an-instance-from-react)). The
+([Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react)). The
 server owns the draft; the twin only predicts:
 
 - It starts the draft with `machines { topicMap { start } }`, which answers with the id the server minted, and moves
@@ -229,4 +229,4 @@ lists both attempts. A closed restaurant (`RESTAURANT_CLOSED`) fails the run at 
 
 ## SDK Reference
 
-> [Invoking a train](/docs/statemachine/invoking-trains) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machines](/docs/sdk-reference/graphql-api/machines)
+> [Invoking a train](/docs/statemachine/invoking-trains) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines) | [Machines](/docs/sdk-reference/graphql-api/machines)

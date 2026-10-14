@@ -7,7 +7,7 @@ surface: graphql
 package: Trax.Api.GraphQL.PersistedOperations
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 4
+nav_order: 5
 source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationMutations.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationQueries.cs

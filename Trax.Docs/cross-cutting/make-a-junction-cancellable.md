@@ -3,7 +3,7 @@ title: Make a junction cancellable
 description: "How to pass a request's CancellationToken into a train, use it in a junction's async calls and loops, let a run stop from another host, and test it."
 type: how-to
 area: trains
-nav_order: 6
+nav_order: 4
 source:
   - Trax.Core/src/Trax.Core/Junction/Junction.cs
   - Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Extensions/ServiceExtensions.cs
@@ -207,4 +207,4 @@ cancel the source with `CancelAfter`; the run throws `OperationCanceledException
 
 ## SDK Reference
 
-> [Run / RunEither](/docs/sdk-reference/train-methods/run) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management)
+> [Run / RunEither](/docs/sdk-reference/train-methods/run) | [RunAsync](/docs/sdk-reference/mediator-api/i-train-bus) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management)

@@ -1,7 +1,7 @@
 ---
 title: Architecture Guards
-description: "The Trax architecture-guard packages, their base fixtures and options, and what they check: schemas, cross-schema reads, train interfaces, test hygiene."
-type: reference
+description: "What the Trax architecture-guard packages check and why: schemas, cross-schema reads, owner scoping, train interfaces, database invariants, test hygiene."
+type: explanation
 area: tooling
 nav_order: 3
 ---
@@ -12,50 +12,46 @@ Trax ships per-concern guard packages that let a repository enforce the same arc
 
 ## Packages
 
-Each package lives in the folder of the Trax repository that owns the concern it checks. Each depends on `Trax.Core.Testing` and NUnit; `Trax.Effect.Data.Testing` also brings in `Trax.Effect.Data`, Roslyn and the Npgsql EF Core provider, and `Trax.Api.GraphQL.Testing` brings in `Trax.Api.GraphQL`:
+Each package lives in the folder of the Trax repository that owns the concern it checks, and each
+depends on `Trax.Core.Testing` and NUnit. The checkers, fixtures and options of each are on its
+SDK page:
 
-| Package | Owns | Guards |
-|---|---|---|
-| `Trax.Core.Testing` | Infrastructure + hygiene | `RepoRoot` / `SourceFiles` / `SourceText`, `ArchitectureGuardOptions`, `GuardResult`; `HygieneGuards` (no `[Ignore]` in any form, including a qualified or suffixed name, an attribute list split across lines, and `Ignore =` or `IgnoreReason =` on a `TestCase`; no legacy asserts, including `ClassicAssert`, `CollectionAssert` and `StringAssert`; no fixed delays); `RepoConventionGuards` (`Directory.Build.props` version; Trax packages consumed from another repository pinned centrally in `Directory.Packages.props` with no inline `Version` or `VersionOverride`, for a codebase split across repositories); `VocabularyGuards` (a listed third-party attribute, found wherever it sits in an attribute list, with or without its `Attribute` suffix, including in files that see its library only through a global or project-level using) |
-| `Trax.Effect.Data.Testing` | Data layer | `DomainContextsDeriveBase`, `CompanionInterfaces`, `OneSchemaPerContext`, `NoPendingModelChanges`, `OwnerScopeCompleteness`, `OwnerScopeFilterBypasses`; `TraxInvariants` (a database left consistent after a test) |
-| `Trax.Api.GraphQL.Testing` | GraphQL | `EdgeManifestIsValid`, `EdgeResolversUseLoader` |
-| `Trax.Mediator.Testing` | Trains | `EveryTrainHasInterface` |
+| Package | Owns | Checks | Reference |
+|---|---|---|---|
+| `Trax.Core.Testing` | Infrastructure and hygiene | No `[Ignore]`, no legacy asserts, no fixed delays; the repository's version and centrally pinned Trax packages; no third-party attribute where Trax has its own | [Trax.Core.Testing](/docs/sdk-reference/testing/core-testing) |
+| `Trax.Effect.Data.Testing` | Data layer | Domain contexts derive the shared base and have companion interfaces; one schema per context; no pending model changes; the owner-scope census; database invariants after a test | [Trax.Effect.Data.Testing](/docs/sdk-reference/testing/effect-data-testing) |
+| `Trax.Api.GraphQL.Testing` | GraphQL | The cross-schema edge manifest is valid, edge resolvers batch through the loader, and `[Parent]` resolvers declare what they read | [Trax.Api.GraphQL.Testing](/docs/sdk-reference/testing/graphql-testing) |
+| `Trax.Mediator.Testing` | Trains | Every train has its own train interface | [Trax.Mediator.Testing](/docs/sdk-reference/testing/mediator-testing) |
 
-A checker returns a `GuardResult` with the offenders it found, how many items it inspected, and a ready-to-use failure message. The `Trax.Core.Testing` fixtures, the two source guards in `DomainDataLayerGuardFixture`, and `TrainGuardFixture` (when its `TrainAssemblies` hold no train) also fail when a guard inspected nothing: scan roots that point at the wrong directory would otherwise pass every check. Assert `Inspected > 0` yourself if you call a checker directly. The data-layer source checkers (`DomainContextsDeriveBase`, `CompanionInterfaces`, `OwnerScopeFilterBypasses`) also report a scan root that does not exist as an offender.
+A checker returns a `GuardResult` with the offenders it found, how many items it inspected, and a
+ready-to-use failure message. The shipped fixtures also fail when a guard inspected nothing,
+because scan roots that point at the wrong directory would otherwise pass every check; a test that
+calls a checker directly asserts `Inspected > 0` itself.
 
-`DomainContextsDeriveBase` and `CompanionInterfaces` parse each file with Roslyn and judge every class declaration by its own base list. A context counts whether it has a primary or an ordinary constructor, a file holding several contexts has each one checked, and the base named anywhere else in the file does not excuse a context that does not derive it.
+The source guards parse C# with Roslyn rather than matching text where the shape of a declaration
+matters: `DomainContextsDeriveBase` judges every class by its own base list, so a file holding
+several contexts has each one checked, and a base named elsewhere in the file excuses nothing.
+`NoPendingModelChanges` and `OwnerScopeCompleteness` read the EF model instead of source, built
+offline with no database. `NoPendingModelChanges` catches a model edit that shipped without
+`dotnet ef migrations add` before it trips `PendingModelChangesWarning` at host startup.
 
-Most guards scan source on disk. `NoPendingModelChanges` and `OwnerScopeCompleteness` are the exceptions. `NoPendingModelChanges` builds each migration-based context offline (no database) and asserts its EF model matches the latest migration snapshot, catching a model edit that shipped without `dotnet ef migrations add` before it trips `PendingModelChangesWarning` at host startup.
+`EveryTrainHasInterface` applies the rule the train registry applies when it scans. A train with
+no train interface of its own would be listed only under the shared `IServiceTrain<TIn, TOut>`,
+and one with two unrelated train interfaces is refused by the registry, so the guard reports both
+at test time rather than at startup.
 
 ## Base fixtures
 
 Each package ships abstract NUnit base fixtures with the `[Test]` methods already written. A test
 project subclasses them, marks each subclass `[TestFixture]` (the runner discovers the inherited
-tests through it), and overrides the members below. [Adopt the architecture guards](/docs/reference/adopt-the-architecture-guards)
-has the steps.
+tests through it), and overrides the members its SDK page lists.
+[Adopt the architecture guards](/docs/reference/adopt-the-architecture-guards) has the steps.
 
-| Fixture | Package | Member | Default |
-|---|---|---|---|
-| `DomainDataLayerGuardFixture` | `Trax.Effect.Data.Testing` | `Options` | abstract |
-| | | `DomainContexts`, `MigrationContexts`, `OwnerScopedModels` | empty |
-| | | `OwnerScope` (`OwnerScopeCensusOptions`) | `null`: the census does not run |
-| | | `ScanForOwnerScopeFilterBypasses` | `true` |
-| | | `BaseTypeName` | `"DomainDataContext"` |
-| `CrossSchemaGuardFixture` | `Trax.Api.GraphQL.Testing` | `Options` | `new()` |
-| | | `Edges` | empty |
-| | | `ExpectsCrossSchemaResolvers`, `ExpectsParentResolvers` | `true` |
-| `TrainGuardFixture` | `Trax.Mediator.Testing` | `TrainAssemblies` | abstract |
-
-An optional type list left empty makes its guard pass vacuously. `TrainAssemblies` is abstract,
-and an empty list fails rather than passing. `CrossSchemaGuardFixture` fails when its scan roots
-hold no cross-schema `[ExtendObjectType]` resolver, or no `[Parent]` resolver, naming the roots it
-scanned, unless `ExpectsCrossSchemaResolvers` or `ExpectsParentResolvers` returns `false`.
-
-`ArchitectureGuardOptions` carries the per-repo configuration: scan roots, allowlists, and the expected versions. Allowlist entries are repo-relative paths; the source guards walk up from the test assembly to the nearest `*.slnx` to find the repo root.
-
-If you prefer not to use NUnit, the same checks are available as framework-agnostic methods (`DataLayerGuards.*`, `CrossSchemaGuards.*`, `TrainGuards.*`, `HygieneGuards.*`) that return a `GuardResult` you assert on however you like.
-
-`EveryTrainHasInterface` applies the rule the train registry applies when it scans. A train is any concrete class that derives from `ServiceTrain<,>` or implements `IServiceTrain<,>` directly, and each one needs exactly one most-derived non-generic interface deriving `IServiceTrain<TIn, TOut>`, whose `FullName` is the train's canonical name. The interface is conventionally named `I{Name}`, but any name passes. The guard flags a train with no such interface, which the registry would list only under the shared `IServiceTrain<TIn, TOut>`, and a train with two train interfaces neither of which extends the other, which the registry refuses.
+An optional type list left empty makes its guard pass vacuously, so a repository adopts one check
+at a time. A list a check cannot do without, such as `TrainAssemblies`, is abstract, and an empty
+one fails rather than passing. The same checks are available as framework-agnostic methods
+(`DataLayerGuards`, `CrossSchemaGuards`, `TrainGuards`, `HygieneGuards`) for a test suite that does
+not use NUnit.
 
 ## The owner-scope census
 
@@ -94,39 +90,22 @@ What catches those is a cross-user test against the running API, one per per-use
 
 ## Database invariants after a test
 
-`TraxInvariants` (`Trax.Effect.Data.Testing`) checks a Trax Postgres or SQLite database once every host a test started has stopped. The first three checks fail on states that are normal while a host runs; after it stops, each is work that was started and lost. The rest hold whenever no write is half done, because one statement or transaction keeps each of them:
+`TraxInvariants` (`Trax.Effect.Data.Testing`) checks a Trax database once every host a test
+started has stopped. Some of its checks fail on states that are normal while a host runs, such as
+a run still in progress or an effect claimed without a receipt; after the host stops, each is work
+that was started and lost. The rest hold whenever no write is half done, because one statement or
+transaction keeps each of them: a dispatched entry has its run, a completed run has no
+checkpoints, an instance waiting on an invoked run holds the token that brings its outcome back.
 
-| Check | Fails on |
-|---|---|
-| `run-in-progress` | a `trax.metadata` row still `in_progress` |
-| `effect-claim-in-flight` | a `trax.effect_claim` row with no receipt: a state-machine effect claimed and neither completed nor released |
-| `dispatched-without-run` | a `trax.work_queue` row `dispatched` whose run does not exist |
-| `checkpoint-of-completed-run` | a `trax.checkpoint` row of a run that completed: a run that completes deletes its checkpoints, since nothing may resume it |
-| `resume-from-missing-run` | a `trax.work_queue` or `trax.metadata` row whose `resume_from` names no run: the metadata cleanup keeps a run while something resumes it |
-| `invoke-token-without-run` | a `trax.snapshot_draft` row whose invoke token names no queue entry or run that carries the instance as its invoker |
-| `invoking-state-without-token` | a `trax.snapshot_draft` row in a state that invokes a train with no invoke token, so no outcome can move it on. A row whose `invoke_stranded_state` is its state is exempt: its run ended, not even the failure could be applied, and the instance was left to leave the state through a declared transition |
-| `invoke-token-outside-invoking-state` | a `trax.snapshot_draft` row holding an invoke token in a state that invokes nothing: leaving the invoking state did not clear it |
+The database does not record which states invoke a train or carry a timer, so the checks that
+depend on them run only for the machines a test passes in. A claim names its effect's intent, not
+a run, so the claim check cannot ask whether the claim's run finished; it reports every claim
+left without a receipt.
 
-Each check's name is a constant on `TraxInvariants` (`RunInProgress`, `EffectClaimInFlight`, `DispatchedWithoutRun`, `CheckpointOfCompletedRun`, `ResumeFromMissingRun`, `InvokeTokenWithoutRun`, `InvokingStateWithoutToken`, `InvokeTokenOutsideInvokingState`).
-
-| Member | What it does |
-|---|---|
-| `FindViolationsAsync(connectionString)` | Every violation in a Postgres database, ordered by check, then by id |
-| `FindViolationsAsync(connectionString, invokingStates)` | The same, and checks that each instance of a machine named in `invokingStates` holds a token exactly when it is in one of those states |
-| `FindViolationsAsync(connection, invokingStates)` | The same checks over an open connection, Postgres or SQLite; the caller keeps owning it. On SQLite a violation names its table without the `trax.` schema. Any other connection throws `NotSupportedException` |
-| `AssertConsistentAsync(connectionString)`, `AssertConsistentAsync(connectionString, invokingStates)` | Throws `InvalidOperationException` listing every violation, not only the first |
-| `Describe(violations)` | That failure message: one line per violation, and how to mark a test that leaves the state on purpose |
-| `IsExempt(fixtureType, methodName)` | True when the test method, its fixture or a base class of the fixture carries `[LeavesStuckRuns]` |
-
-A violation is a `TraxInvariantViolation(Invariant, Table, Id, Detail)`; its `ToString()` is `[invariant] table id: detail`.
-
-The database does not record which states invoke a train, so the two token-and-state checks run only for the machines you pass as `InvokingState(Machine, State)` records, one per invoking state, with the names `trax.snapshot_draft` stores. A machine you do not pass is checked only for tokens that name no run.
-
-`FindViolationsAsync(connectionString, invokingStates, timedStates, maxDraftLifetime, maxDraftsPerUser, keptStates)` and its open-connection twin also take each machine's timed states as `TimedState(Machine, State)` records, the longest a user's draft may live, the most drafts one user may hold, and the states the draft sweep keeps an instance in however old it is as `KeptState(Machine, State)` records (a committed state, an effect's target, an invoked train's outcome target, a gated event's target). With `maxDraftsPerUser` set they report each user holding more drafts than it, across machines and never counting system rows, once, as `DraftsAboveCap` (`drafts-above-cap`) with the user's key as its id. They also run the revision, owner and row-id checks (`RevisionBelowOne`, `UserDraftWithoutOwner`, `DuplicateRowId`), the timer checks for the machines whose timed states you pass (`DueAtOutsideTimedState`, `TimedStateWithoutDueAt`, `DueAtOfARemovedTimer`), and, with `maxDraftLifetime` set, the lifetime check (`DraftOlderThanMaxLifetime`): a user's draft created longer ago than the lifetime, counted from its last write when it has no creation time, whether or not it waits on an invoked run, unless it is in one of `keptStates`, as the sweep counts it.
-
-The checks are meant to run after every host a test started has stopped. A test that leaves one of these states on purpose, such as a crash simulation or a cancelled effect whose claim must hold until its lease passes, carries `[LeavesStuckRuns("why")]` (`LeavesStuckRunsAttribute`, on the method or the fixture), and `TraxInvariants.IsExempt(fixtureType, methodName)` returns true for it.
-
-A claim names its effect's intent, not a run, so the claim check cannot ask whether the claim's run finished; it reports every claim left without a receipt.
+A test that leaves one of these states on purpose, such as a crash simulation, carries
+`[LeavesStuckRuns("why")]`, and `TraxInvariants.IsExempt` returns true for it. The checks, their
+names and every overload are on
+[Trax.Effect.Data.Testing](/docs/sdk-reference/testing/effect-data-testing#traxinvariants).
 
 ## The patterns the guards enforce
 
@@ -141,4 +120,4 @@ The Bookworm sample is the reference consumer of every package and pattern above
 
 ## SDK Reference
 
-> [DomainDataContext](/docs/effect/effect-providers/domain-data-contexts) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) | [Query models](/docs/sdk-reference/graphql-api/query-models)
+> [Trax.Core.Testing](/docs/sdk-reference/testing/core-testing) | [Trax.Effect.Data.Testing](/docs/sdk-reference/testing/effect-data-testing) | [Trax.Api.GraphQL.Testing](/docs/sdk-reference/testing/graphql-testing) | [Trax.Mediator.Testing](/docs/sdk-reference/testing/mediator-testing) | [DomainDataContext](/docs/effect/effect-providers/domain-data-contexts) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) | [Query models](/docs/sdk-reference/graphql-api/query-models)

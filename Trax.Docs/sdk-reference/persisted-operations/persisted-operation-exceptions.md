@@ -5,7 +5,7 @@ type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 12
+nav_order: 13
 package: Trax.Api.GraphQL.PersistedOperations
 namespace:
   - Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions

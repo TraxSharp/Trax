@@ -1,5 +1,5 @@
 ---
-title: CLI
+title: Trax CLI
 description: "The trax CLI: generate scaffolds a hub and a trains library from GraphQL SDL or OpenAPI, and machine scaffolds and exports state machines."
 type: reference
 area: tooling
@@ -417,4 +417,4 @@ that never happened.
 
 ## SDK Reference
 
-> [ExportIr](/docs/sdk-reference/statemachine-api/fluent-authoring#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format)
+> [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format)

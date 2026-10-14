@@ -43,7 +43,7 @@ mutation {
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `externalId` | `String!` | Yes | The manifest's external ID |
-| `askAfresh` | `Boolean!` | No | Default `false`. When `true` and the trigger releases a queued retry that would [replay the failed run's decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions), the run asks its deciders afresh instead |
+| `askAfresh` | `Boolean!` | No | Default `false`. When `true` and the trigger releases a queued retry that would [replay the failed run's decisions](/docs/scheduler/how-retries-work#retries-replay-decisions), the run asks its deciders afresh instead |
 
 **Returns**: `OperationResponse`. With `askAfresh: true`, a retry the dispatcher claimed before the
 trigger reached it can no longer be changed. The mutation still succeeds, and its message says so:
@@ -288,7 +288,7 @@ whose flag differs are written. It calls `IOperationsService.SetManifestsReplayD
 the call the dashboard makes. Turning it off also clears the replay link of each manifest's queued
 entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh, and the
 message counts them (`"2 queued retry(s) no longer replay a failed run's decisions."`). See
-[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+[Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions).
 
 ```graphql
 mutation {

@@ -18,7 +18,7 @@ source:
 
 The `operations.config` namespace returns the live scheduler runtime settings (the dashboard-editable subset of `SchedulerConfiguration`, `LocalWorkerOptions`, and `MetadataCleanupConfiguration`). The dashboard's Server Settings page and this query both read from the same in-memory singleton, so they agree. The page saves through the same operations call as `updateScheduler`, sending only the fields the operator changed, and reloads from this snapshot afterwards.
 
-Persistence: settings written via `operations.config.updateScheduler` (or the dashboard) are stored in the singleton-row `trax.scheduler_config` table, only the ones a save names. Every running scheduler applies them to its in-memory singleton at startup and re-reads the row every few seconds, so they survive restarts and reach every scheduler host. A setting never saved keeps each host's configured value. See [config](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) for which fields a save stores.
+Persistence: settings written via `operations.config.updateScheduler` (or the dashboard) are stored in the singleton-row `trax.scheduler_config` table, only the ones a save names. Every running scheduler applies them to its in-memory singleton at startup and re-reads the row every few seconds, so they survive restarts and reach every scheduler host. A setting never saved keeps each host's configured value. See [config](/docs/sdk-reference/graphql-api/mutations/config) for which fields a save stores.
 
 ## scheduler
 
@@ -117,7 +117,7 @@ the configured section as written, with `overridden` always `false`, and `setLog
 | `recoverStuckJobsOnStartup` | `Boolean!` | Whether stuck-job recovery runs on startup |
 | `deadLetterRetentionPeriod` | `TimeSpan!` | How long resolved dead letters are kept before purging |
 | `autoPurgeDeadLetters` | `Boolean!` | Whether the dead letter cleanup service runs |
-| `localWorkerCount` | `Int` | In-process worker thread count. Null when the scheduler runs no local worker pool (no database provider, or a replaced job submitter). Local workers are on by default with a database provider; [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) tunes them |
+| `localWorkerCount` | `Int` | In-process worker thread count. Null when the scheduler runs no local worker pool (no database provider, or a replaced job submitter). Local workers are on by default with a database provider; [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) tunes them |
 | `metadataCleanupInterval` | `TimeSpan` | Metadata cleanup poll interval. Null when cleanup is not configured |
 | `metadataCleanupRetention` | `TimeSpan` | How long completed metadata is kept. Null when cleanup is not configured |
 

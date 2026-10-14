@@ -1,5 +1,5 @@
 ---
-title: ManifestManager
+title: ManifestManagerTrain
 description: The ManifestManager train that cancels timed-out runs, reaps stale ones, and queues due manifests, with its advisory-lock and state-guard concurrency model.
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager
@@ -38,7 +38,7 @@ A run whose own timeout, resolved as `CancelTimedOutJobsJunction` resolves it, i
 
 Newly-failed metadata from both stale reapers is counted by `LoadManifestsJunction` in the same ManifestManager cycle, enabling dead-lettering if retries are exhausted.
 
-Failing a run, from either reaper, also releases its [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), so a run still pending past `StalePendingTimeout` or still working past its stale threshold stops holding its subject.
+Failing a run, from either reaper, also releases its [subject key](/docs/mediator/queued-work#two-mutations-for-one-record), so a run still pending past `StalePendingTimeout` or still working past its stale threshold stops holding its subject.
 
 ### LoadManifestsJunction
 
@@ -50,7 +50,7 @@ The projection uses `AsNoTracking()`, the results are read-only snapshots used f
 
 ### ResolveStaleStagedEntriesJunction
 
-Resolves work queue entries that a crash left unconfirmed. A train with [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) commits its entry unconfirmed, runs `OnQueue`, then confirms it; a process that stopped in between leaves an entry the dispatcher will never claim. Any entry still `Queued` and unconfirmed after `StaleStagedEntryTimeout` (default: 10 minutes) is:
+Resolves work queue entries that a crash left unconfirmed. A train with [`DeferQueuePromotion`](/docs/mediator/queued-work#accepting-a-mutation-is-two-writes) commits its entry unconfirmed, runs `OnQueue`, then confirms it; a process that stopped in between leaves an entry the dispatcher will never claim. Any entry still `Queued` and unconfirmed after `StaleStagedEntryTimeout` (default: 10 minutes) is:
 
 | Setting | Outcome |
 |---|---|

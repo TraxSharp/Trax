@@ -69,7 +69,7 @@ throw a plain `InvalidOperationException`, the same type as an empty subject key
 derives from `InvalidOperationException`, so existing catches still work, and carries
 `WorkQueueId` and `TrainName` for a caller that has to compensate for the hook's side-effect.
 
-See [TrainExecution](/docs/sdk-reference/mediator-api/train-execution#queueasync).
+See [TrainExecution](/docs/sdk-reference/mediator-api/i-train-execution-service#queueasync).
 
 ## Every caller-built enqueue goes through the mediator
 
@@ -101,7 +101,7 @@ What to check:
   truncation placeholder, rather than re-running it with an empty input.
 
 [ADR 0017](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0017-a-callers-enqueue-goes-through-the-mediator.md) records why, and
-[mutations](/docs/sdk-reference/graphql-api/mutations#queuetrain) lists the failure messages.
+[mutations](/docs/sdk-reference/graphql-api/mutations/work-queue#queuetrain) lists the failure messages.
 
 ## A cancelled caller can get a completed run
 
@@ -155,10 +155,10 @@ runs the JobDispatcher before any train uses them:
 
 - `DeferQueuePromotion`: an older dispatcher does not check `confirmed_at` and would dispatch a
   staged entry before its hook returns. See
-  [Making the side-effect durable](/docs/core/trains-and-junctions#making-the-side-effect-durable).
+  [Making the side-effect durable](/docs/mediator/queued-work#accepting-a-mutation-is-two-writes).
 - `QueueSubjectKey`: an older dispatcher claims without the subject check, so two entries for one
   subject can run at once. See
-  [QueueSubjectKey](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing).
+  [QueueSubjectKey](/docs/mediator/queued-work#two-mutations-for-one-record).
 
 Postgres migration 041 adds `work_queue.confirmed_at` and backfills it from `created_at` on every
 row that can still be dispatched: queued and cancelled entries, and anything created in the last
@@ -169,4 +169,4 @@ query of your own that does will see null there.
 
 ## SDK Reference
 
-> [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Junctions](/docs/sdk-reference/train-methods/junctions)
+> [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Junctions](/docs/sdk-reference/train-methods/junctions)

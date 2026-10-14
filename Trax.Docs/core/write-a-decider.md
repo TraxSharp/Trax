@@ -3,7 +3,7 @@ title: Write a decider
 description: "Implement IDecider, register it, write policy as a RuleDecider, put a slower decider behind a fast one, and refuse questions at startup."
 type: how-to
 area: trains
-nav_order: 6
+nav_order: 5
 source:
   - Trax.Core/src/Trax.Core/Decisions/IDecider.cs
   - Trax.Core/src/Trax.Core/Decisions/RuleDecider.cs

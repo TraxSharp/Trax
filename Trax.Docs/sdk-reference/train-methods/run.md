@@ -10,7 +10,7 @@ source:
   - Trax.Effect/src/Trax.Effect/Services/ServiceTrain/ServiceTrain.cs
 parent: Train Methods
 grand_parent: SDK Reference
-nav_order: 8
+nav_order: 7
 ---
 
 # Run
@@ -53,7 +53,7 @@ On a `ServiceTrain`, `Run` also creates (or takes over) the run's metadata row, 
 
 `Run` is virtual on `Train` and sealed on `ServiceTrain`. An override on a plain `Train` that does not call `base.Run` never reaches `Junctions()`, so what [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain) reads is not what runs.
 
-Trains in an application are usually run through [ITrainBus.RunAsync](/docs/sdk-reference/mediator-api/train-bus), which calls `Run`.
+Trains in an application are usually run through [ITrainBus.RunAsync](/docs/sdk-reference/mediator-api/i-train-bus), which calls `Run`.
 
 ## Example
 

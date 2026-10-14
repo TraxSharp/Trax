@@ -3,7 +3,7 @@ title: Decisions
 description: "Why a chain declares every track it can take and lets a decider, from a typed decision model to a rule table, choose one per run."
 type: explanation
 area: trains
-nav_order: 4
+nav_order: 6
 source:
   - Trax.Core/src/Trax.Core/Decisions
 ---
@@ -185,7 +185,7 @@ it.
 
 An answer Trax cannot trust is never acted on. The run fails and the failure names the step
 (`Switch<Ticket, TicketTrack>`). How it is
-[classified](/docs/core/trains-and-junctions#classifying-failures) depends on whose mistake it is.
+[classified](/docs/effect/failure-classification) depends on whose mistake it is.
 
 A decider's answer that does not fit is classified `Transient`, because a model asked again
 usually answers properly:

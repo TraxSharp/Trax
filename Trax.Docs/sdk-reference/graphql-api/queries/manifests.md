@@ -80,7 +80,7 @@ query {
 | `dependsOnManifestId` | `Long` | ID of the manifest this one depends on |
 | `priority` | `Int!` | Dispatch priority (0-31, higher runs first) |
 | `manifestGroupName` | `String` | Name of the parent group |
-| `replayDecisionsOnRetry` | `Boolean!` | Whether a retry of the manifest's failed run, automatic or a requeue of its dead letter, replays the decisions that run recorded. Set with [`ScheduleOptions.ReplayDecisionsOnRetry`](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions); see [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) |
+| `replayDecisionsOnRetry` | `Boolean!` | Whether a retry of the manifest's failed run, automatic or a requeue of its dead letter, replays the decisions that run recorded. Set with [`ScheduleOptions.ReplayDecisionsOnRetry`](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions); see [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions) |
 
 A manifest's `properties` (the train input it runs with) are not on this type. Read them from
 [`manifestDetail`](#manifestdetail), one manifest at a time.

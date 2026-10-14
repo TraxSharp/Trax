@@ -86,7 +86,7 @@ The host refuses to build the schema, naming both, when two exposed machines' id
 host's own field named `machines` on either root is refused at startup. Two registered machine types with one id,
 served or not, refuse the host's start too, naming both: a subclass has its base's id, so a host serving a machine
 through a marked subclass registers only the subclass
-([AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines#serving-a-machine)).
+([AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines#serving-a-machine)).
 
 The machine's types come from `IMachine.Triggers` (each trigger's kind and input record), `IMachine.States` (each
 state's `MachineState`: its `Name` and the `ContextType` its `Context<TContext>()` declares) and
@@ -144,7 +144,7 @@ on.
   100 operations.
 - **Cost.** A node holds one listening session however many streams it serves, and reads a written row once per
   burst of notices, only when something on the node watches it
-  ([Snapshot change feed](/docs/sdk-reference/statemachine-api/add-trax-state-machines)).
+  ([Snapshot change feed](/docs/sdk-reference/statemachine-api/add-state-machines)).
 
 Operators watch every instance through `onMachineInstanceChanged` instead, behind the operations gate, which carries
 an instance's state, revision and runs and never its context or owner
@@ -247,7 +247,7 @@ query { machines { topicMap { get(id: "...") { id revision state context { field
 
 ## See also
 
-- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines)
+- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines)
 - [Result codes](/docs/sdk-reference/statemachine-api/result-codes)
 - [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
 - [Call a machine from TypeScript](/docs/statemachine/call-a-machine-from-typescript)

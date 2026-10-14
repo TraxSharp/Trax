@@ -86,10 +86,9 @@ only from the train exchange and steps only from the junction exchange, and drop
 arrives on the other. A receiver from a Trax version before junction events binds only the train
 exchange, so it never receives one.
 
-No upgrade order is required. Upgrade the hosts that should show steps (they bind the junction
-exchange once they have a junction event handler), then turn on `AddJunctionEvents` on the
-workers; until a host binds it, the steps a worker publishes go nowhere. Rolling a worker back
-stops its steps and nothing else.
+Hosts of mixed versions share a broker. A host binds the junction exchange once it has a junction
+event handler; until one does, the steps a worker publishes reach no receiver. A worker without
+`AddJunctionEvents` publishes no steps and its train events are unchanged.
 
 A step and its run's own events travel through different exchanges, so a subscriber can see a
 run's `Completed` before its last step. Each step carries its position and timestamps; order by

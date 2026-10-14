@@ -16,7 +16,7 @@ source:
 
 # IDeadLetterRequeueJobs
 
-Requeues every dead letter awaiting intervention as a background job on this node, and reads the job back by id. The dashboard's **Requeue All** and the GraphQL API's [`requeueAllDeadLetters`](/docs/sdk-reference/graphql-api/mutations#deadletters-nested-namespace) both start the job here, so the fold over a large backlog (about 36 s at 500,000 dead letters) is bound by neither a request nor an operator's dashboard connection. Registered as a singleton by `AddScheduler(...)`.
+Requeues every dead letter awaiting intervention as a background job on this node, and reads the job back by id. The dashboard's **Requeue All** and the GraphQL API's [`requeueAllDeadLetters`](/docs/sdk-reference/graphql-api/mutations/dead-letters) both start the job here, so the fold over a large backlog (about 36 s at 500,000 dead letters) is bound by neither a request nor an operator's dashboard connection. Registered as a singleton by `AddScheduler(...)`.
 
 ## Signature
 

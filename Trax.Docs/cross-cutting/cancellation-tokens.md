@@ -3,7 +3,7 @@ title: How cancellation works
 description: "How a CancellationToken reaches every junction of a train, when a cancelled run stops, and why a ServiceTrain records it as Cancelled rather than Failed."
 type: explanation
 area: trains
-nav_order: 5
+nav_order: 8
 source:
   - Trax.Core/src/Trax.Core/Junction/Junction.cs
   - Trax.Core/src/Trax.Core/Train/Train.cs
@@ -160,4 +160,4 @@ A test runs the train with a token it controls and checks which junctions ran. T
 
 ## SDK Reference
 
-> [Run / RunEither](/docs/sdk-reference/train-methods/run) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management)
+> [Run / RunEither](/docs/sdk-reference/train-methods/run) | [RunAsync](/docs/sdk-reference/mediator-api/i-train-bus) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [CancelAsync](/docs/sdk-reference/scheduler-api/manifest-management)

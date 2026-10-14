@@ -100,8 +100,8 @@ ORDER BY failures DESC;
 
 ## GraphQL
 
-- The [`executions`](/docs/sdk-reference/graphql-api/queries#executions), [`execution`](/docs/sdk-reference/graphql-api/queries#execution) and [`executionDetail`](/docs/sdk-reference/graphql-api/queries#executiondetail) queries under `operations` return `hostName`, `hostEnvironment` and `hostInstanceId`.
-- [`hosts`](/docs/sdk-reference/graphql-api/queries#hosts) lists the hosts that have run trains.
+- The [`executions`](/docs/sdk-reference/graphql-api/queries/executions#executions), [`execution`](/docs/sdk-reference/graphql-api/queries/executions#execution) and [`executionDetail`](/docs/sdk-reference/graphql-api/queries/executions#executiondetail) queries under `operations` return `hostName`, `hostEnvironment` and `hostInstanceId`.
+- [`hosts`](/docs/sdk-reference/graphql-api/queries/operations#hosts) lists the hosts that have run trains.
 - The lifecycle subscriptions (`onTrainStarted`, `onTrainCompleted` and the rest) carry `hostName` and `hostEnvironment`.
 
 ## Dashboard
@@ -110,4 +110,4 @@ The metadata detail page shows an "Execution Host" card with the hostname, envir
 
 ## SDK Reference
 
-> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)
+> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)

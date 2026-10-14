@@ -94,7 +94,7 @@ query {
 | `isMutation` | `Boolean!` | Whether the train carries `[TraxMutation]` |
 | `graphQLName` | `String` | The `Name` set on `[TraxQuery]` or `[TraxMutation]`; null when the field name is derived |
 | `isBroadcastEnabled` | `Boolean!` | Whether the train carries [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) |
-| `hasQueueSubjectKey` | `Boolean!` | Whether the train overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), so its queued runs for one subject run one at a time (an override may still return no key for a given input). A run started with [`runTrain`](/docs/sdk-reference/graphql-api/mutations/work-queue#runtrain) bypasses that serialization and may run alongside queued or in-flight work for the same subject; the dashboard's Run dialog warns about it, and a client offering Run should too |
+| `hasQueueSubjectKey` | `Boolean!` | Whether the train overrides [`QueueSubjectKey`](/docs/mediator/queued-work#two-mutations-for-one-record), so its queued runs for one subject run one at a time (an override may still return no key for a given input). A run started with [`runTrain`](/docs/sdk-reference/graphql-api/mutations/work-queue#runtrain) bypasses that serialization and may run alongside queued or in-flight work for the same subject; the dashboard's Run dialog warns about it, and a client offering Run should too |
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|

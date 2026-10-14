@@ -86,4 +86,4 @@ public class ErpFailureClassifier : IFailureClassifier
 
 ## See also
 
-- [Classifying failures](/docs/core/trains-and-junctions#classifying-failures)
+- [Classifying failures](/docs/effect/failure-classification)

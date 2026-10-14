@@ -90,7 +90,7 @@ When no operations are passed to the `TraxMutationAttribute` constructor, both `
 
 `QUEUE` writes the run to the scheduler's work queue and answers with its `workQueueId`; a JobDispatcher picks it up from there. Only a scheduler on a database provider (`UsePostgres()`, `UseSqlite()`) runs one. On `UseInMemory()` nothing can dispatch the entry, so a `QUEUE` request is refused with the error code `TRAX_QUEUE_UNAVAILABLE` and nothing is enqueued; `RUN` is unaffected, and the host still starts but logs a warning naming every train mutation that can queue. The [project templates](/docs/reference/templates), which run on the in-memory provider, expose `GraphQLOperation.Run` alone, which drops the `mode` argument. A host on a database provider queues whether or not it runs the scheduler itself, since a scheduler on another host can dispatch the entry. See [Trax.Api ADR 0038](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0038-a-queued-mutation-is-refused-where-nothing-dispatches-it.md).
 
-The mutation's `externalId` is the external id the dispatched run carries, so a client correlates the queued mutation with that run's [subscription events](/docs/sdk-reference/graphql-api/subscriptions) by it (see [Queued runs](/docs/sdk-reference/graphql-api/mutations/dispatch#queued-runs) and [Watch a queued run](/docs/api/watch-a-queued-run)). A queued run has no manifest, so if it fails it is not retried and does not become a dead letter; retries belong to manifests (see [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)).
+The mutation's `externalId` is the external id the dispatched run carries, so a client correlates the queued mutation with that run's [subscription events](/docs/sdk-reference/graphql-api/subscriptions) by it (see [Queued runs](/docs/sdk-reference/graphql-api/mutations/dispatch#queued-runs) and [Watch a queued run](/docs/api/watch-a-queued-run)). A queued run has no manifest, so if it fails it is not retried and does not become a dead letter; retries belong to manifests (see [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions)).
 
 The train must declare its authorization posture: `[TraxAuthorize]` to gate it or
 `[TraxAllowAnonymous]` to open it. A train with neither fails at host startup (`AddTraxGraphQL`),
@@ -215,7 +215,7 @@ mutation {
 
 Trains without `Namespace` remain at the root level of `discover` or `dispatch`. Both namespaced and non-namespaced trains can coexist. The `[TraxQueryModel]` attribute also supports `Namespace` for entity queries.
 
-Typed GraphQL clients targeting a namespaced train pair `Namespace` with the client's `Path` property on `[GraphQLOperation]`. For the schema above, a typed client would use `Path = "discover.players"` and `RootField = "lookupPlayer"`. See [GraphQL client](/docs/api-graphql-client#nested-envelopes-path).
+Typed GraphQL clients targeting a namespaced train pair `Namespace` with the client's `Path` property on `[GraphQLOperation]`. For the schema above, a typed client would use `Path = "discover.players"` and `RootField = "lookupPlayer"`. See [GraphQL client](/docs/api/typed-requests#graphqloperation-properties).
 
 ### Discovery
 

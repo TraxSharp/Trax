@@ -5,9 +5,10 @@ namespace Trax.Samples.Auth.E2E.Tests;
 
 /// <summary>
 /// Query models carry the same attributes as trains. <c>Article</c> is
-/// <c>[TraxAllowAnonymous]</c>; the <c>EditorNote</c> it links to is for editors or auditors (two
-/// stacked role attributes, which union); <c>AuditRecord</c> is for auditors. Openness does not
-/// cascade from a public parent to a gated child, and a gated model cannot be counted.
+/// <c>[TraxAllowAnonymous]</c>; the <c>EditorNote</c> it links to is for editors or auditors (one
+/// attribute naming both roles, either of which is enough); <c>AuditRecord</c> is for auditors.
+/// Openness does not cascade from a public parent to a gated child, and a gated model cannot be
+/// counted.
 /// </summary>
 [TestFixture]
 public class QueryModelAuthorizationTests : AuthTestFixture
@@ -69,7 +70,7 @@ public class QueryModelAuthorizationTests : AuthTestFixture
     [Test]
     public async Task EditorNote_IsServedToAnEditorOrAnAuditor()
     {
-        // Two stacked [TraxAuthorize(Roles = ...)] attributes union: either role is enough.
+        // One [TraxAuthorize(Roles = "Editor,Auditor")]: either role is enough.
         foreach (var caller in new[] { AliceKey, AliceToken, OscarKey, OscarToken })
         {
             var result = await GraphQL.SendAsync(ArticlesWithNotes, caller);

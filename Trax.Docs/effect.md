@@ -1,5 +1,5 @@
 ---
-title: Effect
+title: Trax.Effect
 description: "How Trax.Effect works: ServiceTrain, the record it writes for every run, junctions resolved from DI, and the effect pattern behind its providers."
 type: explanation
 area: effects
@@ -68,4 +68,4 @@ When callers should not know which train handles a request, add [Trax.Mediator](
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook)

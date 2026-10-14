@@ -3,7 +3,7 @@ title: Administrative Trains
 description: "The internal trains and hosted services AddScheduler registers, which provider each needs, how they meet at the work queue and why they skip MaxActiveJobs."
 type: explanation
 area: scheduling
-nav_order: 2
+nav_order: 3
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.Build.cs
   - Trax.Scheduler/src/Trax.Scheduler/Configuration/AdminTrains.cs
@@ -72,7 +72,7 @@ Dashboard, queue mutations ───┘
 ```
 
 That gives capacity one place to be enforced. `MaxActiveJobs`, per-group limits, priority and
-[subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing)
+[subject serialization](/docs/mediator/queued-work#two-mutations-for-one-record)
 are all applied by the dispatcher, whatever wrote the entry. The ManifestManager can decide what is
 due without knowing how busy the system is, and the two run on their own intervals, so each can be
 tuned on its own.

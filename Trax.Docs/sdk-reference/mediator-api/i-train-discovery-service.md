@@ -116,7 +116,7 @@ public class TrainRegistration
 | `RequiredRoleSets` | `IReadOnlyList<IReadOnlyList<string>>` | The role requirement, described below. Added in Trax.Mediator 1.25.0 |
 | `HasAuthorizeAttribute` | `bool` | Whether the train carries any `[TraxAuthorize]`, the bare form included |
 | `HasAllowAnonymousAttribute` | `bool` | Whether the train carries `[TraxAllowAnonymous]`. Carries no runtime gate of its own |
-| `HasQueueSubjectKey` | `bool` | Whether the implementation overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), directly or through a base class |
+| `HasQueueSubjectKey` | `bool` | Whether the implementation overrides [`QueueSubjectKey`](/docs/mediator/queued-work#two-mutations-for-one-record), directly or through a base class |
 | `IsQuery` | `bool` | Whether the train has `[TraxQuery]`, which exposes it as a typed GraphQL query |
 | `IsMutation` | `bool` | Whether the train has `[TraxMutation]`, which exposes it as typed GraphQL mutations |
 | `IsBroadcastEnabled` | `bool` | Whether the train has `[TraxBroadcast]`, which broadcasts its lifecycle events to subscribers |

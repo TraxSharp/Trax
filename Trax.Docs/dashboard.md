@@ -15,23 +15,6 @@ Trax.Dashboard is a Blazor Server UI, mounted at `/trax`, for inspecting trains 
 manifests and dead letters, and changing scheduler and effect settings at runtime. What each page
 shows and does is in [Dashboard pages](/docs/dashboard/pages).
 
-### State machines
-
-Every persisted state machine instance, system-owned and users' drafts, is listed under **Data**,
-read-only except for cancelling a system-owned instance's run; see
-[State machines](/docs/dashboard/pages#state-machines).
-
-### Effects page
-
-Effect and junction effect providers are enabled and configured at runtime from **Settings**; see
-[Effects page](/docs/dashboard/pages#effects-page).
-
-### Metadata detail page
-
-Each execution opens on a page of its own, with its state, input, output, exception and log
-entries, and the cancel, re-queue and resume actions; see
-[Metadata detail page](/docs/dashboard/pages#metadata-detail-page).
-
 ## 1. Install the package
 
 ```bash
@@ -203,9 +186,9 @@ host. Keep one, with every option in it: a second would have replaced the first 
 
 The trains' assembly was not passed to `AddMediator`, or the train's interface does not extend
 `IServiceTrain<TIn, TOut>`. Discovery reads the host's registrations through
-[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery); a class registered
+[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/i-train-discovery-service); a class registered
 only through a factory cannot be read and is not listed.
 
 ## SDK Reference
 
-> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery)
+> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/i-train-discovery-service)

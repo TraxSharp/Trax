@@ -3,7 +3,7 @@ title: How retries work
 description: "How the scheduler counts a manifest's failures, delays its retries, decides when a retry runs, replays recorded decisions and resumes from checkpoints."
 type: explanation
 area: scheduling
-nav_order: 4
+nav_order: 5
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager/Utilities/RetryDecisionReplay.cs
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager/Utilities/RetryResume.cs
@@ -18,7 +18,7 @@ manifest's run is retried this way: a train run directly, queued through the ope
 `queueTrain` mutation, or queued by a `[TraxMutation]` dispatch mutation with `mode: QUEUE` (or
 `GraphQLOperation.Queue`) has no retry, never replays and never becomes a dead letter. A train that
 should recover runs from a manifest (`Schedule`, or `ScheduleOnceAsync` for a single run).
-[Building a train that recovers](/docs/effect/decisions#building-a-train-that-recovers) lists every
+[Building a train that recovers](/docs/effect/recover-a-deciding-train) lists every
 piece it needs.
 
 ## Counting failures
@@ -233,7 +233,7 @@ refused. `requeueExecution` always reruns from the top.
 
 The InMemory provider has no work queue: its ManifestManager dispatches inline. It does not delay
 retries the way Postgres does and does not replay decisions, so retries are best tested against a
-real database, as the [Scheduling sample's E2E suite](/docs/samples/scheduling#testing-it) does.
+real database, as the [Scheduling sample's E2E suite](/docs/samples/scheduling#tests) does.
 
 ## SDK Reference
 

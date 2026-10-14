@@ -233,8 +233,7 @@ builder.Services.AddAuthorization(options =>
 
 `AuthPolicies.VerifiedEmail` is `"VerifiedEmail"` and `AuthPolicies.EmailVerifiedClaim` is
 `"email_verified"`, both in `Auth/AuthRoles.cs`. Roles need no registration. A policy does: a
-query model naming an unregistered policy stops the host at startup, and a train or
-`GateOperations` naming one fails every call at request time.
+train, a query model or `GateOperations` naming an unregistered policy stops the host at startup.
 
 | Surface | Declaration | Who gets in |
 |---|---|---|
@@ -408,18 +407,18 @@ none, the name the document gives its operation (`query Feed { ... }` is recorde
 |---|---|
 | `AuthenticationTests` | ids `TraxApiKey:alice` and `TraxJwt:alice`; an unknown key, a forged, expired or wrong-audience token is anonymous; the first registered scheme wins when both are sent |
 | `TrainAuthorizationTests` | `publishArticle` refused to anonymous, readers, operators and the unverified editor, over both schemes, without running; served to Alice over both |
-| `QueryModelAuthorizationTests` | public articles; the gated note through the public article, selected or filtered on; either stacked role reads it; the audit model is refused and cannot be counted without `Auditor` |
+| `QueryModelAuthorizationTests` | public articles; the gated note through the public article, selected or filtered on; either of its two roles reads it; the audit model is refused and cannot be counted without `Auditor` |
 | `OperationsGateTests` | `operations` reads and mutations refused without `Operator`; served to Oscar over both schemes; `queueTrain` still applies the train's own gate; an operator reads no editor note from an execution's saved input |
 | `AuditTrailTests` | every call recorded with its qualified principal, refused ones as unsuccessful, without literal values; an auditor reads it back over GraphQL |
 | `SubscriptionAuthTests` | socket credentials accepted or refused; the operator sees every train, the reader is refused |
 | `DemoCredentialsEnvironmentTests` | in Production no demo scheme exists and the demo key and token authenticate nobody, `/dev/token` is gone, a copied demo key refuses startup, and configured hashed keys and an identity provider's tokens work |
 
 The Production test signs in with an identity provider's token using `TestJwksServer` from
-`Trax.Api.Auth.Jwt.Testing`; see [JWT Testing](/docs/sdk-reference/api-auth/jwt-testing).
+`Trax.Api.Auth.Jwt.Testing`; see [JWT Testing](/docs/sdk-reference/api-auth/test-jwks-server).
 
 ## SDK Reference
 
-> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context)
+> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [Injecting TraxPrincipal](/docs/security/inject-the-current-principal) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context)
 
 See also [Authorization](/docs/authorization), [API Security](/docs/api-security) and
 [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids).

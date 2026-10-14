@@ -78,4 +78,4 @@ store, and it does not change when the implementing class is renamed.
 
 ## SDK Reference
 
-> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [ITrainBus](/docs/sdk-reference/mediator-api/train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
+> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [ITrainBus](/docs/sdk-reference/mediator-api/i-train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/i-train-discovery-service) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service)

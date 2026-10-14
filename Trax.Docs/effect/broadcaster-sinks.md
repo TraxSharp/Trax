@@ -15,7 +15,7 @@ The broadcaster has two extension points: **transports** carry events between pr
 
 ## Transports
 
-A transport implements both `ITrainEventBroadcaster` (publish side) and `ITrainEventReceiver` (subscribe side). The shipped one is RabbitMQ via [`UseRabbitMq`](/docs/sdk-reference/configuration/use-broadcaster#rabbitmq). You can write your own (see [UseBroadcaster: Implementing a Custom Transport](/docs/sdk-reference/configuration/use-broadcaster#implementing-a-custom-transport)).
+A transport implements both `ITrainEventBroadcaster` (publish side) and `ITrainEventReceiver` (subscribe side). The shipped one is RabbitMQ via [`UseRabbitMq`](/docs/sdk-reference/configuration/use-rabbit-mq). You can write your own (see [UseBroadcaster: Implementing a Custom Transport](/docs/effect/implement-a-broadcast-transport)).
 
 Within a single host, the broadcaster wiring looks like:
 

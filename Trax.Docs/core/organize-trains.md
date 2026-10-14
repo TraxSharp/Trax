@@ -3,7 +3,7 @@ title: Organize trains in a project
 description: "Lay out a project's trains one folder each: the input type, the train's interface and class, its junctions, and where shared junctions go."
 type: how-to
 area: trains
-nav_order: 3
+nav_order: 2
 ---
 
 # Organize trains in a project
@@ -127,4 +127,4 @@ back into one junction per train.
 
 ## SDK Reference
 
-> [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [EffectJunction](/docs/sdk-reference/trains-and-junctions/effect-junction) | [Chain](/docs/sdk-reference/train-methods/chain) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [TrainBus](/docs/sdk-reference/mediator-api/train-bus)
+> [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [EffectJunction](/docs/sdk-reference/trains-and-junctions/effect-junction) | [Chain](/docs/sdk-reference/train-methods/chain) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [TrainBus](/docs/sdk-reference/mediator-api/i-train-bus)

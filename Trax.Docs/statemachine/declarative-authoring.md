@@ -97,12 +97,12 @@ export does not accept the mix: once a machine makes any declarative call, `Expo
 and the message names each one. Otherwise the generated twin would treat such an edge as unconditional and keep the
 context while the server runs the delegate. Run [`trax machine generate`](/docs/reference/cli#trax-machine-generate)
 or [`trax machine check`](/docs/reference/cli#trax-machine-check) to export it. See
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative) and
-[Exporting the IR](/docs/sdk-reference/statemachine-api/fluent-authoring#exporting-the-ir).
+[Delegate vs declarative](/docs/statemachine/delegates-and-declarative-rules) and
+[Exporting the IR](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir).
 
 To serve the machine to clients, add the caller rules and the `[TraxMachine]` mark described in
 [Author and serve a machine](/docs/statemachine/authoring).
 
 ## SDK Reference
 
-> [Context&lt;T&gt;](/docs/sdk-reference/statemachine-api/fluent-authoring#istatebuilder) | [WithInput&lt;T&gt;](/docs/sdk-reference/statemachine-api/fluent-authoring#trigger-input) | [When(Rule) / Reduce(Reduction)](/docs/sdk-reference/statemachine-api/fluent-authoring) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model)
+> [Context&lt;T&gt;](/docs/sdk-reference/statemachine-api/machine#istatebuilder) | [WithInput&lt;T&gt;](/docs/sdk-reference/statemachine-api/machine#trigger-input) | [When(Rule) / Reduce(Reduction)](/docs/sdk-reference/statemachine-api/machine) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model)

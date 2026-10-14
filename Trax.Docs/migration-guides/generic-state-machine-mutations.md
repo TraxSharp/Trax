@@ -99,7 +99,7 @@ m.In(TopicMapState.ChoosingRange)
 ```
 
 The rules are checked below the resolver, where every surface meets, so the same rule holds for host code acting for
-a client. The [authoring page](/docs/sdk-reference/statemachine-api/add-trax-state-machines) lists every startup check.
+a client. The [authoring page](/docs/sdk-reference/statemachine-api/add-state-machines) lists every startup check.
 
 Whatever the `discard` rule, an instance in a state only the server puts it in (a committed state, an effect's
 target, a state that invokes a train, an invoked train's outcome target, or the target of an event gated by
@@ -131,8 +131,8 @@ that changes the context a declared event with an input record, and let the serv
 In TypeScript, `createMachineExecutor(endpoint, { machines })` drives the typed API through the same
 `createSnapshotClient`, `createDraftSession` and `startDraft` as before, and `createMachineServer` with
 `useServerMachine` drives one instance from React, with the server applying every transition and pushing each
-change. Both are described under [The TypeScript client](/docs/sdk-reference/graphql-api/machines#the-typescript-client)
-and [Driving an instance from React](/docs/sdk-reference/graphql-api/machines#driving-an-instance-from-react).
+change. Both are described under [The TypeScript client](/docs/statemachine/call-a-machine-from-typescript)
+and [Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react).
 
 ## Opting back in
 
@@ -168,7 +168,7 @@ The opt-in and exposed machines can be combined, for instance while a client mov
 ## Defaults an upgraded host gets
 
 These apply to every host that calls `AddStateMachines`, whichever surface serves its machines. Set each on
-`StateMachineOptions` to change it (see [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options)):
+`StateMachineOptions` to change it (see [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines#options)):
 
 | Option | Default | Effect |
 | --- | --- | --- |
@@ -185,7 +185,7 @@ Each is described, with what a rolling deploy sees, in [Schema migrations](/docs
 
 - [Machines root](/docs/sdk-reference/graphql-api/machines): the typed API, its answers, the TypeScript client and the
   persisted documents.
-- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines): the options and the startup
+- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines): the options and the startup
   checks.
 - [Result codes](/docs/sdk-reference/statemachine-api/result-codes): `forbidden`, `save-not-allowed`,
   `request-id-reused` and the rest.
