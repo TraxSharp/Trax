@@ -1,8 +1,13 @@
 ---
 title: Checkpoint
-description: Reference for Checkpoint, which stores a state the chain declares so a later run of the same input resumes after it instead of running every step again.
+description: "Reference for Checkpoint, which stores a state the chain declares so a later run of the same input resumes after it instead of running every step again."
 type: reference
 area: trains
+package: Trax.Core
+namespace: Trax.Core.Train
+source:
+  - Trax.Core/src/Trax.Core/Monad/Monad.Checkpoint.cs
+  - Trax.Core/src/Trax.Core/Monad/CheckpointState.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 16
@@ -11,27 +16,33 @@ nav_order: 16
 # Checkpoint
 
 Stores a state the chain declares, so a later run of the same input resumes after it instead of
-running every step before it again. A run that fails at its last junction no longer repeats the
-expensive ones before it.
+running every step before it again.
 
-## Checkpoint\<TState\>()
+## Signature
 
-```csharp
-protected MonadTask<TInput, TReturn> Checkpoint<TState>()
+```csharp fragment
+// Train<TInput, TReturn>; MonadTask<TInput, TReturn> and Monad<TInput, TReturn> have the same, public
+protected MonadTask<TInput, TReturn> Checkpoint<TState>();
 ```
 
-Also available on the chain itself (`Chain<A>().Checkpoint<TState>()`), inside a track and inside
-a `Parallel` branch.
+## Parameters
+
+| Parameter | Description |
+|---|---|
+| `TState` | The type in Memory to store. It must read back from JSON as the same value (see below). |
+
+## Returns
+
+`MonadTask<TInput, TReturn>`, the next link of the chain. `Checkpoint` is also available inside a track and inside a `Parallel` branch.
+
+## Behavior
 
 When the run reaches the step, the `TState` in Memory is stored, with the track each routing step
 before it took. Nothing else in Memory is stored: services, data contexts and objects changed in
-place do not survive being written down and read back. Choose a `TState` that holds what the steps
-after the checkpoint need, as pointers (ids, fingerprints, dataset URIs) rather than rows.
+place are not written down. A run with no data provider (a plain `Train`, or a host without
+`UsePostgres`, `UseSqlite` or `UseInMemory`) takes no checkpoint, and the step does nothing.
 
-A run with no data provider (a plain `Train`, or a host without `UsePostgres`, `UseSqlite` or
-`UseInMemory`) takes no checkpoint, and the step does nothing.
-
-## What a state must be
+### What a state must be
 
 The state is stored as JSON and read back, so it must come back as the same value. The startup
 check refuses, naming the member:
@@ -44,21 +55,16 @@ check refuses, naming the member:
 
 It also refuses a state that reaches a member marked `[TraxSensitive]`, and a checkpoint inside a
 track whose routing key is sensitive, whose route is withheld from every record. A sealed record of
-data is always accepted:
+data is always accepted, such as `public sealed record CheckedFindings(Findings Findings, string Depth);`.
 
-```csharp
-public sealed record CheckedFindings(Findings Findings, string Depth);
-```
-
-## When it is written
+### When it is written
 
 A checkpoint is written through a data context of its own, in its own transaction, and commits
 nothing else the run tracks. Writing one fails the step, classified permanent, and stores nothing,
 when:
 
 - the step's Trax data context still holds unsaved changes or an open transaction: a run resumed
-  after the checkpoint would skip work that never committed. Commit first, or move the checkpoint
-  after the commit.
+  after the checkpoint would skip work that never committed.
 - the state's JSON is larger than the cap a requeue's stored input has: four times the mediator's
   `MaxInputJsonBytes`, 1 MiB by default.
 - a string in the state holds a NUL character (`\u0000`). Postgres cannot store one, and would read
@@ -67,7 +73,7 @@ when:
 A run that completes deletes its checkpoints. A failed or cancelled run's checkpoints are deleted
 with it by metadata cleanup, which keeps a run while a queued resume still needs it.
 
-## Resuming
+### Resuming
 
 A run resumes from an earlier run of the same train and the same input that failed or was
 cancelled, and that no resume has already completed:
@@ -86,8 +92,7 @@ decisions after the point replay from the run it resumes. The checkpoint's state
 Memory, beside the run's input and its services. A resumed run that fails again resumes from the
 same checkpoint next time, not from the top.
 
-Steps after the checkpoint run again on every resume, so they must be idempotent, as every retried
-step must. Anything that must not happen twice takes its own claim.
+Steps after the checkpoint run again on every resume.
 
 ### What can resume where
 
@@ -127,7 +132,7 @@ each branch from its own latest checkpoint, and from its start when it has none.
 last step is a checkpoint it reached runs nothing, and gives the join only what its checkpoint
 holds:
 
-```csharp
+```csharp fragment
 .Parallel(p => p
     .Branch("embedding", b => b.Chain<EmbeddingSimilarity>().Checkpoint<EmbeddingScores>())
     .Branch("cocitation", b => b.Chain<CoCitationOverlap>()))
@@ -140,21 +145,34 @@ resumes at the `Parallel` itself, or after a main checkpoint with nothing betwee
 `Parallel` but values handed to the chain and extractions. Resuming at a step before the
 `Parallel` runs every branch from its start.
 
+### In the declared graph
+
+A checkpoint is a node of kind `Checkpoint` in the [declared graph](/docs/sdk-reference/train-methods/chain-graph), whose input is its state, with an id such as `Checkpoint<CheckedFindings>#0`.
+
 ## Example
 
-```csharp
-protected override Task<Either<Exception, ResearchReport>> Junctions() =>
-    Chain<PlanResearch>()
-        .Switch<ResearchBrief, Source>(s => s
-            .When(Source.Web, w => w.Chain<SearchWeb>())
-            .When(Source.Papers, p => p.Chain<SearchPapers>()))
-        .Scale<Findings, Depth>(s => s
-            .AtLeast(Depth.Skim, k => k.Chain<SkimSources>())
-            .AtLeast(Depth.CrossCheck, c => c.Chain<FetchFullTexts>()))
-        .Checkpoint<CheckedFindings>()   // a crash in Summarize no longer fetches again
-        .Chain<Summarize>()
-        .Resolve();
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Effect.Services.ServiceTrain;
+
+public class ResearchTopicTrain : ServiceTrain<ResearchRequest, ResearchReport>
+{
+    protected override Task<Either<Exception, ResearchReport>> Junctions() =>
+        Chain<PlanResearch>()
+            .Switch<ResearchBrief, Source>(s => s
+                .When(Source.Web, w => w.Chain<SearchWeb>())
+                .When(Source.Papers, p => p.Chain<SearchPapers>()))
+            .Scale<Findings, Depth>(s => s
+                .AtLeast(Depth.Skim, k => k.Chain<SkimSources>())
+                .AtLeast(Depth.CrossCheck, c => c.Chain<FetchFullTexts>()))
+            .Checkpoint<CheckedFindings>()   // a crash in Summarize no longer fetches again
+            .Chain<Summarize>()
+            .Resolve();
+}
 ```
 
-In the [declared graph](/docs/sdk-reference/train-methods/chain-graph), a checkpoint is a node of
-kind `Checkpoint` whose input is its state, with an id such as `Checkpoint<CheckedFindings>#0`.
+## See also
+
+- [Checkpoints and branches](/docs/core/checkpoints-and-branches), what to put in a state and where to place the step
+- [resumeExecution](/docs/sdk-reference/graphql-api/mutations#resumeexecution)
+- [Parallel](/docs/sdk-reference/train-methods/parallel)

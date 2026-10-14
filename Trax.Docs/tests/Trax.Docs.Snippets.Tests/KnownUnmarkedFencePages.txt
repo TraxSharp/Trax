@@ -209,9 +209,7 @@ sdk-reference/testing.md
 sdk-reference/testing/core-testing.md
 sdk-reference/train-methods.md
 sdk-reference/train-methods/chain-graph.md
-sdk-reference/train-methods/checkpoint.md
 sdk-reference/train-methods/declared-chain.md
-sdk-reference/train-methods/parallel.md
 statemachine/authoring.md
 statemachine/declarative-authoring.md
 statemachine/invoking-trains.md
