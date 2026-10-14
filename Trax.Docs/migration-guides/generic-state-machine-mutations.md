@@ -9,7 +9,7 @@ nav_order: 1
 
 # Move off the generic state-machine mutations
 
-Applies from: the first release after Trax 1.62.0 (not yet released on 2026-10-13).
+Applies from: Trax 1.63.1.
 
 The generic `stateMachine` mutations are no longer served by default. Each machine a host names is served as its own
 typed API instead, under the [machines root](/docs/sdk-reference/graphql-api/machines). The decision is

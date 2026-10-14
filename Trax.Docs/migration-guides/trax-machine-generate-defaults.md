@@ -9,7 +9,7 @@ nav_order: 1
 
 # Regenerate twins after the trax machine generate defaults changed
 
-Applies from: the first release after Trax 1.62.0 (not yet released on 2026-10-13).
+Applies from: Trax 1.63.1.
 
 The defaults of [`trax machine generate`](/docs/reference/cli#trax-machine-generate) changed when the engine began
 shipping inside the tool and on npm as `@traxsharp/state-machine`:
