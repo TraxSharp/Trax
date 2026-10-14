@@ -45,6 +45,12 @@ internal sealed partial class DashboardEndpoint(
     /// <summary>The fingerprint of a page loaded by nobody in particular.</summary>
     internal const string AnonymousPrincipal = "anonymous";
 
+    /// <summary>
+    /// The fingerprint of a page loaded by someone signed in whom nothing identifies. The app keeps
+    /// the credential entered on such a page in memory only (<c>src/lib/auth.ts</c>).
+    /// </summary>
+    internal const string UnidentifiedPrincipal = "unidentified";
+
     private const string PrivateImmutableCache = "private, max-age=31536000, immutable";
     private const string PublicImmutableCache = "public, max-age=31536000, immutable";
     private const string Revalidate = "no-cache";
@@ -194,25 +200,33 @@ internal sealed partial class DashboardEndpoint(
 
     /// <summary>
     /// An opaque, stable name for who loaded the page: a SHA-256 of the authentication type and
-    /// the caller's identifier (the name identifier claim, else <c>sub</c>, else the name, else
-    /// every claim), or <see cref="AnonymousPrincipal"/> when nobody is signed in. The app forgets
-    /// the credential it stored when the page it loads names someone else, so the next person to
-    /// pass the shell's posture in a shared browser does not inherit the last one's key, and
-    /// signing out of the shell drops it.
+    /// the claim that identifies the caller (the name identifier claim, else <c>sub</c>, else the
+    /// identity's name claim), qualified by that claim's type and issuer. It is
+    /// <see cref="AnonymousPrincipal"/> when nobody is signed in, and
+    /// <see cref="UnidentifiedPrincipal"/> when someone is but carries none of those claims. The app
+    /// forgets the credential it stored when the page it loads names someone else, so the next
+    /// person to pass the shell's posture in a shared browser does not inherit the last one's key.
     /// </summary>
+    /// <remarks>
+    /// The other claims are never hashed: they include ones that change on every sign-in or token
+    /// refresh (<c>iat</c>, <c>exp</c>, <c>auth_time</c>, <c>jti</c>, session ids), and a name that
+    /// changes per load would forget the credential on every reload, while one that drops them
+    /// could merge two people into one. An unidentifiable caller gets a fixed name instead, which
+    /// the app treats as "keep the credential for this page only, never store it".
+    /// </remarks>
     internal static string PrincipalFingerprint(ClaimsPrincipal user)
     {
         if (user.Identity is not { IsAuthenticated: true } identity)
             return AnonymousPrincipal;
 
-        var id =
-            user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? user.FindFirst("sub")?.Value
-            ?? identity.Name
-            ?? string.Join(
-                "\n",
-                user.Claims.Select(c => $"{c.Type}={c.Value}").Order(StringComparer.Ordinal)
-            );
+        var claim =
+            user.FindFirst(ClaimTypes.NameIdentifier)
+            ?? user.FindFirst("sub")
+            ?? (identity is ClaimsIdentity claims ? claims.FindFirst(claims.NameClaimType) : null);
+        var id = claim is null ? identity.Name : $"{claim.Type}\n{claim.Issuer}\n{claim.Value}";
+        if (string.IsNullOrEmpty(claim?.Value ?? id))
+            return UnidentifiedPrincipal;
+
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{identity.AuthenticationType}\n{id}"));
         return Convert.ToHexStringLower(hash);
     }

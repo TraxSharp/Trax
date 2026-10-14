@@ -405,6 +405,91 @@ public partial class ApiDashboardHostTests
     }
 
     [Test]
+    public void The_fingerprint_ignores_claims_that_change_on_every_sign_in()
+    {
+        ClaimsPrincipal Load(string iat, string session) =>
+            new(
+                new ClaimsIdentity(
+                    [
+                        new Claim("sub", "ada", ClaimValueTypes.String, "https://idp.example"),
+                        new Claim("iat", iat),
+                        new Claim("exp", iat + "3600"),
+                        new Claim("auth_time", iat),
+                        new Claim("jti", Guid.NewGuid().ToString()),
+                        new Claim("sid", session),
+                    ],
+                    "OpenIdConnect"
+                )
+            );
+
+        DashboardEndpoint
+            .PrincipalFingerprint(Load("1700000000", "s1"))
+            .Should()
+            .Be(
+                DashboardEndpoint.PrincipalFingerprint(Load("1700009999", "s2")),
+                "a fingerprint that changed per load would forget the credential on every reload"
+            );
+    }
+
+    [Test]
+    public void The_fingerprint_is_qualified_by_the_identifying_claim_s_issuer()
+    {
+        ClaimsPrincipal From(string issuer) =>
+            new(
+                new ClaimsIdentity(
+                    [new Claim("sub", "42", ClaimValueTypes.String, issuer)],
+                    "Bearer"
+                )
+            );
+
+        DashboardEndpoint
+            .PrincipalFingerprint(From("https://a.example"))
+            .Should()
+            .NotBe(DashboardEndpoint.PrincipalFingerprint(From("https://b.example")));
+    }
+
+    [Test]
+    public void The_identity_s_name_claim_identifies_a_caller_without_a_subject()
+    {
+        var ada = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim("upn", "ada@example")], "Negotiate", "upn", "role")
+        );
+        var grace = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim("upn", "grace@example")], "Negotiate", "upn", "role")
+        );
+
+        DashboardEndpoint
+            .PrincipalFingerprint(ada)
+            .Should()
+            .MatchRegex("^[0-9a-f]{64}$")
+            .And.NotBe(DashboardEndpoint.PrincipalFingerprint(grace));
+    }
+
+    [Test]
+    public void A_caller_nothing_identifies_is_unidentified_however_their_claims_vary()
+    {
+        ClaimsPrincipal Load(string iat) =>
+            new(
+                new ClaimsIdentity(
+                    [new Claim("iat", iat), new Claim("jti", Guid.NewGuid().ToString())],
+                    "Cookies"
+                )
+            );
+
+        DashboardEndpoint
+            .PrincipalFingerprint(Load("1700000000"))
+            .Should()
+            .Be(
+                DashboardEndpoint.UnidentifiedPrincipal,
+                "the app keeps the credential of a caller it cannot tell apart for the page alone"
+            );
+        DashboardEndpoint
+            .PrincipalFingerprint(Load("1700009999"))
+            .Should()
+            .Be(DashboardEndpoint.UnidentifiedPrincipal);
+    }
+
+    [Test]
     public void A_host_header_that_is_not_a_plain_host_does_not_reach_the_policy()
     {
         var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
