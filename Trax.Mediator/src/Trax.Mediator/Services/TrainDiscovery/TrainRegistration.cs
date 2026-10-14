@@ -167,7 +167,9 @@ public class TrainRegistration
 
     /// <summary>
     /// Maximum concurrent RUN executions for this train, from <see cref="TraxConcurrencyLimitAttribute"/>.
-    /// Null means no per-train limit (falls back to the global default or no limit).
+    /// Null means no per-train limit. The global limit (<c>GlobalConcurrentRunLimit</c>) and the
+    /// per-principal limit are separate and apply on top of this one, not in its place: a run
+    /// takes a slot from each limit that is set.
     /// Builder-level overrides via <c>ConcurrentRunLimit&lt;T&gt;()</c> take precedence over this value.
     /// </summary>
     public int? MaxConcurrentRun { get; init; }
