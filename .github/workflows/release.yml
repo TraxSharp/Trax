@@ -80,7 +80,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           disable-telemetry: true
@@ -100,7 +100,7 @@ jobs:
           # token does not need to be persisted into .git/config.
           persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install release tooling (locked, no install scripts)
@@ -144,7 +144,7 @@ jobs:
       npm-digests: ${{ steps.npm-digests.outputs.digests }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           disable-telemetry: true
@@ -178,7 +178,7 @@ jobs:
             exit 1
           fi
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: ${{ env.BUILD_NODE_VERSION }}
       - name: Setup .NET
@@ -241,7 +241,7 @@ jobs:
         id: digests
         run: echo "digests=$(cd nupkg && sha256sum -- *.nupkg | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: nupkg
           path: nupkg/*.nupkg
@@ -252,7 +252,7 @@ jobs:
         id: npm-digests
         run: echo "digests=$(cd npm && sha256sum -- *.tgz | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload npm package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: npm
           path: npm/*.tgz
@@ -279,7 +279,7 @@ jobs:
       attestations: write   # write the SLSA build-provenance attestation
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           disable-telemetry: true
@@ -306,12 +306,12 @@ jobs:
             rekor.sigstore.dev:443
             tuf-repo-cdn.sigstore.dev:443
       - name: Download package artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: nupkg
           path: nupkg
       - name: Download npm package artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: npm
           path: npm
@@ -338,7 +338,7 @@ jobs:
             nupkg/*.nupkg
             npm/*.tgz
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: ${{ env.PUBLISH_NODE_VERSION }}
           registry-url: 'https://registry.npmjs.org'
