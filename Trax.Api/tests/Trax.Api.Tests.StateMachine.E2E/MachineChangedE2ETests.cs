@@ -604,10 +604,19 @@ public class MachineChangedE2ETests
 
             var (freed, op) = accepted[0];
             await freed.CompleteAsync(op);
-            await freed.SubscribeAsync("after-free", MachineChangedOps.Subscribe(started.Id));
-            (await freed.NextChangeAsync("after-free"))
-                .State.Should()
-                .NotBeNull("a completed stream frees its place");
+            // The server frees the place once it has handled the complete, after this returns, so a
+            // subscription sent straight away can still be refused. A refused one takes no place, so
+            // try again until one is accepted.
+            var tries = 0;
+            (
+                await E2EWait.UntilAsync(async () =>
+                {
+                    var retry = $"after-free-{tries++}";
+                    await freed.SubscribeAsync(retry, MachineChangedOps.Subscribe(started.Id));
+                    var (refused, _, _) = await freed.RefusalAsync(retry);
+                    return !refused;
+                })
+            ).Should().BeTrue("a completed stream frees its place");
         }
         finally
         {
