@@ -1,10 +1,12 @@
 // release.yml's split: the release job only tags; the build job packs every package, and
 // @traxsharp/state-machine, at the released version with a read-only token and records their
 // digests; the publish job checks the digests, attests and publishes with trusted publishing,
-// skipping a version npm already has, and installs nothing. The shell steps are run here as
+// npm before NuGet, skipping a version npm already has only when it is the tarball in hand, and
+// installs nothing. The shell steps are run here as
 // written in the workflow, against fake folders and a fake curl and npm.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -152,6 +154,15 @@ describe('publish job', () => {
     assert.match(publish.steps[attest].with['subject-path'], /^npm\/\*\.tgz$/m);
   });
 
+  it('publishes to npm before NuGet, so no NuGet package ships unless npm holds our engine', () => {
+    const npmPublish = indexOf(publish, 'Publish to npm');
+    assert.ok(npmPublish >= 0);
+    assert.ok(indexOf(publish, 'Setup Node.js') < npmPublish);
+    assert.ok(indexOf(publish, 'The bundled npm can publish with OIDC') < npmPublish);
+    assert.ok(npmPublish < indexOf(publish, 'NuGet login (OIDC -> short-lived key)'));
+    assert.ok(npmPublish < indexOf(publish, 'Push to NuGet'));
+  });
+
   describe('the digest check', () => {
     const verify = step(publish, 'Verify the packages are the ones build built');
 
@@ -188,19 +199,38 @@ describe('publish job', () => {
 
   describe('the npm publish', () => {
     const publishStep = step(publish, 'Publish to npm');
+    const tarball = 'engine'; // the sandbox's tarball bytes
+    const ours = {
+      integrity: `sha512-${createHash('sha512').update(tarball).digest('base64')}`,
+      shasum: createHash('sha1').update(tarball).digest('hex'),
+    };
 
-    // A fake curl answering `status`, and a fake npm that records its arguments.
-    const run = (status) => {
+    // A fake curl answering `status` with `body` written where -o says, and a fake npm that
+    // records its arguments.
+    const run = (status, body = '') => {
       const root = sandbox();
       const bin = join(root, 'bin');
       mkdirSync(bin);
-      writeFileSync(join(bin, 'curl'), `#!/bin/sh\nprintf '%s' '${status}'\n`);
+      writeFileSync(join(root, 'body'), body);
+      writeFileSync(
+        join(bin, 'curl'),
+        `#!/bin/sh
+out=
+while [ $# -gt 0 ]; do
+  if [ "$1" = -o ]; then out="$2"; shift; fi
+  shift
+done
+[ -n "$out" ] && cp '${join(root, 'body')}' "$out"
+printf '%s' '${status}'
+`,
+      );
       writeFileSync(join(bin, 'npm'), `#!/bin/sh\necho "$@" >> "${join(root, 'npm-calls')}"\n`);
       chmodSync(join(bin, 'curl'), 0o755);
       chmodSync(join(bin, 'npm'), 0o755);
       const result = runStep(publishStep.run, root, {
         PATH: `${bin}:${process.env.PATH}`,
         PKG_VERSION: '1.63.0',
+        RUNNER_TEMP: join(root, 'tmp'),
       });
       let calls = '';
       try {
@@ -210,6 +240,7 @@ describe('publish job', () => {
       }
       return { result, calls };
     };
+    const manifest = (dist) => JSON.stringify({ name: '@traxsharp/state-machine', version: '1.63.0', dist });
 
     it('publishes the packed tarball with provenance when npm does not have the version', () => {
       const { result, calls } = run('404');
@@ -220,9 +251,36 @@ describe('publish job', () => {
       );
     });
 
-    it('skips a version npm already has, so a re-run is safe', () => {
-      const { result, calls } = run('200');
+    it('skips a version npm already has when it is the tarball in hand, so a re-run is safe', () => {
+      const { result, calls } = run('200', manifest(ours));
       assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /is the tarball this run built; skipping/);
+      assert.equal(calls, '');
+    });
+
+    it('fails a version npm already has with other bytes, which someone else published', () => {
+      const theirs = createHash('sha512').update('not ours').digest('base64');
+      const { result, calls } = run('200', manifest({ ...ours, integrity: `sha512-${theirs}` }));
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /not the tarball this run built/);
+      assert.equal(calls, '');
+    });
+
+    it('fails when only the shasum differs', () => {
+      const { result, calls } = run('200', manifest({ ...ours, shasum: '0'.repeat(40) }));
+      assert.notEqual(result.status, 0);
+      assert.equal(calls, '');
+    });
+
+    it('fails when npm gives no digests for the version', () => {
+      const { result, calls } = run('200', manifest({}));
+      assert.notEqual(result.status, 0);
+      assert.equal(calls, '');
+    });
+
+    it('fails when the registry answers found with something that is not JSON', () => {
+      const { result, calls } = run('200', '<html>');
+      assert.notEqual(result.status, 0);
       assert.equal(calls, '');
     });
 

@@ -163,8 +163,7 @@ jobs:
         # package.json keeps a placeholder version in git; the released one is written here,
         # into this checkout only, and never committed. prepack builds dist/ from this tree.
         # build-test already typechecked and tested this commit's engine. It runs before the
-        # NuGet packs because packing Trax.Cli bundles the generators from this install, and
-        # the bundle reports this version to the twins it generates.
+        # NuGet packs because packing Trax.Cli bundles the generators from this install.
         working-directory: Trax.Api.StateMachine
         env:
           PKG_VERSION: ${{ needs.release.outputs.version }}
@@ -286,6 +285,77 @@ jobs:
           subject-path: |
             nupkg/*.nupkg
             npm/*.tgz
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: ${{ env.PUBLISH_NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+      - name: The bundled npm can publish with OIDC
+        # Trusted publishing needs npm 11.5.1 or later. The npm checked here is the one bundled with
+        # PUBLISH_NODE_VERSION; nothing is installed over it.
+        run: |
+          version=$(npm --version)
+          if [ "$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)" != 11.5.1 ]; then
+            echo "::error::npm $version cannot publish with OIDC; trusted publishing needs 11.5.1 or later."
+            exit 1
+          fi
+      # npm publishes first, before NuGet: Trax.Cli writes twins that import
+      # @traxsharp/state-machine, so no NuGet package of a version ships until npm holds
+      # that version and it is the tarball this run built.
+      #
+      # npm trusted publishing: npm exchanges the GitHub OIDC token for a short-lived
+      # publish credential itself. No stored NPM_TOKEN. Requires a trusted publisher on
+      # npmjs.com for @traxsharp/state-machine scoped to this repo + this workflow file +
+      # the `release` environment. The tarball's package.json names this repository, which
+      # npm checks against the provenance it signs.
+      #
+      # First publish: npm lets a trusted publisher be configured only on a package that
+      # already exists, and @traxsharp/state-machine has never been published, so the first
+      # version needs a one-off manual bootstrap. Until it is done this step fails, and
+      # nothing reaches NuGet. In order:
+      #   1. Create the `traxsharp` organisation on npmjs.com. It does not exist yet, and the
+      #      scope belongs to whoever creates it.
+      #   2. Publish the version once by hand, from a maintainer's 2FA-protected login: download
+      #      this run's `npm` artifact (kept one day) and `npm publish <tarball> --access public`.
+      #      Publish that file as it is, not a repack: the re-run below accepts the version only
+      #      if npm holds these exact bytes. That version carries no npm provenance; the
+      #      attestation above still covers it.
+      #   3. On the package's settings page, add the trusted publisher: this repository, this
+      #      workflow file, the `release` environment.
+      #   4. Re-run this job: this step finds the version on npm, confirms it is the tarball
+      #      this run built and skips it, and NuGet then publishes.
+      - name: Publish to npm
+        # Publishing a version that exists fails on npm, so a re-run first asks the registry
+        # whether this one is already there. If it is, it is skipped only when npm's
+        # integrity (sha512) and shasum for it are those of the tarball in hand, which the
+        # digest check tied to the build job: a version someone else published first, under
+        # a scope they registered, stops the job before NuGet rather than stand as ours.
+        # Anything but found or not found stops it too, rather than guess.
+        env:
+          PKG_VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          tarball="npm/traxsharp-state-machine-$PKG_VERSION.tgz"
+          manifest="$RUNNER_TEMP/npm-version.json"
+          status=$(curl -sS --retry 3 -o "$manifest" -w '%{http_code}' \
+            "https://registry.npmjs.org/@traxsharp%2Fstate-machine/$PKG_VERSION")
+          case "$status" in
+            200)
+              ours_integrity="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
+              ours_shasum=$(sha1sum "$tarball" | cut -d ' ' -f 1)
+              npm_integrity=$(jq -r '.dist.integrity // ""' "$manifest")
+              npm_shasum=$(jq -r '.dist.shasum // ""' "$manifest")
+              if [ "$npm_integrity" = "$ours_integrity" ] && [ "$npm_shasum" = "$ours_shasum" ]; then
+                echo "@traxsharp/state-machine@$PKG_VERSION is already on npm, and is the tarball this run built; skipping."
+                exit 0
+              fi
+              echo "::error::@traxsharp/state-machine@$PKG_VERSION is already on npm, but it is not the tarball this run built (npm: integrity '$npm_integrity', shasum '$npm_shasum'; built: '$ours_integrity', '$ours_shasum'). Someone else may have published it. Nothing was published to NuGet; find out who published the version before releasing again."
+              exit 1 ;;
+            404) ;;
+            *)
+              echo "::error::npm answered $status when asked for @traxsharp/state-machine@$PKG_VERSION."
+              exit 1 ;;
+          esac
+          npm publish "$tarball" --provenance --access public --ignore-scripts
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
@@ -306,58 +376,6 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: dotnet nuget push "nupkg/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
-        with:
-          node-version: ${{ env.PUBLISH_NODE_VERSION }}
-          registry-url: 'https://registry.npmjs.org'
-      - name: The bundled npm can publish with OIDC
-        # Trusted publishing needs npm 11.5.1 or later. The npm checked here is the one bundled with
-        # PUBLISH_NODE_VERSION; nothing is installed over it.
-        run: |
-          version=$(npm --version)
-          if [ "$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)" != 11.5.1 ]; then
-            echo "::error::npm $version cannot publish with OIDC; trusted publishing needs 11.5.1 or later."
-            exit 1
-          fi
-      # npm trusted publishing: npm exchanges the GitHub OIDC token for a short-lived
-      # publish credential itself. No stored NPM_TOKEN. Requires a trusted publisher on
-      # npmjs.com for @traxsharp/state-machine scoped to this repo + this workflow file +
-      # the `release` environment. The tarball's package.json names this repository, which
-      # npm checks against the provenance it signs.
-      #
-      # First publish: npm lets a trusted publisher be configured only on a package that
-      # already exists, and @traxsharp/state-machine has never been published, so the first
-      # version needs a one-off manual bootstrap. Until it is done this step fails after NuGet
-      # has published. In order:
-      #   1. Create the `traxsharp` organisation on npmjs.com. It does not exist yet, and the
-      #      scope belongs to whoever creates it.
-      #   2. Publish the version once by hand, from a maintainer's 2FA-protected login: download
-      #      this run's `npm` artifact (kept one day) and `npm publish <tarball> --access public`.
-      #      That version carries no npm provenance; the attestation above still covers it.
-      #   3. On the package's settings page, add the trusted publisher: this repository, this
-      #      workflow file, the `release` environment.
-      #   4. Re-run this job if it failed: NuGet skips what it already has, and this step skips
-      #      a version npm already has.
-      - name: Publish to npm
-        # Publishing a version that exists fails on npm, so a re-run first asks the registry
-        # whether this one is already there, the same way --skip-duplicate does for NuGet.
-        # Anything but found or not found stops the job rather than guess.
-        env:
-          PKG_VERSION: ${{ needs.release.outputs.version }}
-        run: |
-          status=$(curl -sS --retry 3 -o /dev/null -w '%{http_code}' \
-            "https://registry.npmjs.org/@traxsharp%2Fstate-machine/$PKG_VERSION")
-          case "$status" in
-            200)
-              echo "@traxsharp/state-machine@$PKG_VERSION is already on npm; skipping."
-              exit 0 ;;
-            404) ;;
-            *)
-              echo "::error::npm answered $status when asked for @traxsharp/state-machine@$PKG_VERSION."
-              exit 1 ;;
-          esac
-          npm publish "npm/traxsharp-state-machine-$PKG_VERSION.tgz" --provenance --access public --ignore-scripts
 
   # ---------------------------------------------------------------------------
   # Publish the site from the tag just cut, once the packages it documents are on
