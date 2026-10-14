@@ -21,7 +21,7 @@ namespace Trax.Testing.Red;
 /// </remarks>
 /// <param name="because">What the test is waiting for, shown in its result message.</param>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
-internal sealed class RedAttribute(string because) : NUnitAttribute, IWrapTestMethod, IApplyToTest
+internal sealed class RedAttribute(string because) : Attribute, IWrapTestMethod, IApplyToTest
 {
     /// <summary>The category every red test carries.</summary>
     public const string Category = "Red";
