@@ -14,6 +14,7 @@ namespace Trax.Effect.Services.TrainLifecycleHookFactory;
 /// scope, so the hook's constructor receives that scope's services. <see cref="Create()"/> builds
 /// from the provider the factory was resolved from, which is the root container.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-lifecycle-hook">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class LifecycleHookFactory<THook>(IServiceProvider serviceProvider)
     : ITrainLifecycleHookFactory

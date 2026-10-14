@@ -6,6 +6,7 @@ namespace Trax.Effect.Data.Decisions;
 /// How <c>AddDecisionRecording</c> records and replays decisions. Configure it with
 /// <c>AddDecisionRecording(o =&gt; ...)</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-decision-recording">SDK reference</seealso>
 public sealed class DecisionRecordingOptions
 {
     /// <summary>The default for <see cref="ReplayAnswersFor"/>: 24 hours.</summary>

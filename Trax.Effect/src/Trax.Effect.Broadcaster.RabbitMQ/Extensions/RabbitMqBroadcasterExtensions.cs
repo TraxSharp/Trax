@@ -8,6 +8,7 @@ namespace Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 /// Adds <c>UseRabbitMq</c> to the broadcaster builder, which makes RabbitMQ the transport that
 /// carries train lifecycle events between processes.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-rabbit-mq">SDK reference</seealso>
 public static class RabbitMqBroadcasterExtensions
 {
     /// <summary>

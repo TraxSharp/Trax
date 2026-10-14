@@ -11,6 +11,7 @@ namespace Trax.Effect.Configuration.BroadcasterBuilder;
 /// <see cref="Trax.Effect.Services.TrainEventBroadcaster.ITrainEventBroadcaster"/> and
 /// <see cref="Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver"/> implementations.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-broadcaster">SDK reference</seealso>
 public class BroadcasterBuilder
 {
     internal BroadcasterBuilder(TraxEffectBuilder.TraxEffectBuilder parent)

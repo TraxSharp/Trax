@@ -11,6 +11,7 @@ namespace Trax.Effect.Data.Services.DomainContext;
 /// the framework's own effect/metadata store. A domain context is consumer data, registered alongside
 /// the Trax effect layer via <c>AddDomainDataContext</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/domain-data-context">SDK reference</seealso>
 public interface IDomainDataContext
 {
     /// <summary>Persists pending changes. Mirrors <see cref="Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(System.Threading.CancellationToken)"/>.</summary>

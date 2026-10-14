@@ -1,20 +1,27 @@
 ---
 title: SetEffectLogLevel
-description: Reference for SetEffectLogLevel, which sets the log level at which the junction logger and JSON effect write every entry.
+description: Reference for SetEffectLogLevel, which sets the log level at which the junction logger and the JSON effect write every entry.
 type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 12
+nav_order: 24
+package: Trax.Effect
+namespace: Trax.Effect.Extensions
+source:
+  - Trax.Effect/src/Trax.Effect/Extensions/TraxEffectConfigurationBuilderExtensions.cs
 ---
 
 # SetEffectLogLevel
 
-Sets the level at which the logging effects write their entries. It is not a filter: the junction logger (`AddJunctionLogger`) and the JSON effect (`AddJson`) write every entry at this level, and your logging configuration decides whether that level is kept.
+Sets the level the logging effects write their entries at. The junction logger
+([AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger)) and the JSON effect
+([AddJson](/docs/sdk-reference/configuration/add-json)) write every entry at this level; the host's logging
+configuration decides whether that level is kept.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static TBuilder SetEffectLogLevel<TBuilder>(
     this TBuilder builder,
     LogLevel logLevel
@@ -22,31 +29,37 @@ public static TBuilder SetEffectLogLevel<TBuilder>(
     where TBuilder : TraxEffectBuilder
 ```
 
-The generic type parameter `TBuilder` is inferred by the compiler, so callers just write `.SetEffectLogLevel(...)`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
-
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `logLevel` | `LogLevel` | Yes | The level the effect log entries are written at (e.g., `LogLevel.Debug`, `LogLevel.Trace`) |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `logLevel` | `LogLevel` | The level the effects' entries are written at |
 
 ## Returns
 
-`TBuilder`, the same builder type that was passed in, for continued fluent chaining.
+`TBuilder`, the builder type it was called on.
+
+## Behavior
+
+Sets the builder's `LogLevel`, which defaults to `LogLevel.Debug` and becomes `ITraxEffectConfiguration.LogLevel`.
+It is the level entries are written at, not a filter: `LogLevel.Warning` writes each junction's metadata, serialized
+output included, as a warning. The categories are the providers' type names, so the host's logging configuration can
+filter them. It does not affect [AddDataContextLogging](/docs/sdk-reference/configuration/add-data-context-logging),
+which has its own minimum level.
 
 ## Example
 
-```csharp
+```csharp compile
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .SetEffectLogLevel(LogLevel.Trace)
         .UsePostgres(connectionString)
+        .AddJunctionLogger()
     )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
 );
 ```
 
-## Remarks
+## See also
 
-- The default level is `LogLevel.Debug`.
-- Raising it raises the volume. `LogLevel.Warning` would write each junction's metadata, serialized output included, as a warning, which most production sinks keep. To quiet the effects, leave the level low and filter it in your logging configuration (the categories are the providers' type names), or lower it to `LogLevel.Trace`.
-- It applies to the junction logger and the JSON effect, not to the data context logging (which is controlled by [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging)).
+- [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger), [AddJson](/docs/sdk-reference/configuration/add-json)

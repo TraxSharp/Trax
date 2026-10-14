@@ -11,6 +11,7 @@ namespace Trax.Effect.Data.Services.SqlDialect;
 /// an implementation because its code path (gated by <c>HasDatabaseProvider = false</c>)
 /// never executes raw SQL.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-sql-dialect">SDK reference</seealso>
 public interface ISqlDialect
 {
     /// <summary>

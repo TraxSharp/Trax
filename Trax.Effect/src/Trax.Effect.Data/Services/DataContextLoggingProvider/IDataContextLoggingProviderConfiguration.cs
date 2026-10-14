@@ -6,6 +6,7 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 /// Settings for <see cref="DataContextLoggingProvider"/>. Consumers set them through the parameters
 /// of <c>AddDataContextLogging</c>; not intended to be implemented directly.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-data-context-logging">SDK reference</seealso>
 public interface IDataContextLoggingProviderConfiguration
 {
     /// <summary>The lowest level stored; entries below it are ignored.</summary>

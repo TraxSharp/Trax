@@ -17,6 +17,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Models;
 /// because which junctions ran would give the answer away. A null is left off the wire. Field
 /// meanings are those of <c>JunctionEventPayload</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-signalr-hub">SDK reference</seealso>
 public record TraxJunctionClientEvent(
     [property: JsonPropertyName("metadataId")] long MetadataId,
     [property: JsonPropertyName("externalId")] string ExternalId,

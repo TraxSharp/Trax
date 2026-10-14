@@ -5,7 +5,15 @@ type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 24
+nav_order: 26
+package: Trax.Effect.Data
+namespace:
+  - Trax.Effect.Data.Extensions
+  - Trax.Effect.Data.Decisions
+source:
+  - Trax.Effect/src/Trax.Effect.Data/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.Data/Decisions/DecisionRecordingOptions.cs
+  - Trax.Effect/src/Trax.Effect.Data/Decisions/DecisionReplays.cs
 ---
 
 # AddDecisionRecording
@@ -15,9 +23,9 @@ Records every [decision](/docs/core/decisions) a train makes against the run tha
 decisions of the run it repeats, into the same state and only while they are fresh. Each decision is also logged. See
 [Decision Recording and Models](/docs/effect/decisions).
 
-## Signature
+## Signatures
 
-```csharp
+```csharp fragment
 public static TraxEffectBuilderWithData AddDecisionRecording(
     this TraxEffectBuilderWithData configurationBuilder
 )
@@ -28,71 +36,20 @@ public static TraxEffectBuilderWithData AddDecisionRecording(
 )
 ```
 
+## Parameters
+
 | Parameter | Type | Description |
 |---|---|---|
 | `configure` | `Action<DecisionRecordingOptions>` | Sets how long a recorded answer is replayed for and the key state hashes are taken under. Called again, it changes the same options. |
-
-Defined on `TraxEffectBuilderWithData`, so it comes after a data provider. Called before one, it
-is a compile error that says so.
 
 ## Returns
 
 `TraxEffectBuilderWithData`, for continued chaining.
 
-## Example
+## Behavior
 
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-        .AddDecisionRecording()
-    )
-);
-```
-
-## DecisionRecordingOptions
-
-```csharp
-// Trax.Effect.Data.Decisions
-public sealed class DecisionRecordingOptions
-{
-    public static readonly TimeSpan DefaultMaxReplayAge;   // 24 hours
-    public const string StateHashKeyConfigurationKey = "Trax:Decisions:StateHashKey";
-    public TimeSpan MaxReplayAge { get; }
-    public DecisionRecordingOptions ReplayAnswersFor(TimeSpan maxAge);
-    public DecisionRecordingOptions HashStatesWith(byte[] key);
-}
-```
-
-| Member | Default | Description |
-|---|---|---|
-| `ReplayAnswersFor(TimeSpan)` | 24 hours | Replays a recorded answer into a repeated run only while it is younger than this, counted from when a decider gave it, not from a later run that replayed it. An older answer is asked afresh and the reason logged at `Information`. `TimeSpan.MaxValue`, or any span longer than the calendar goes back, means no bound. Throws `ArgumentOutOfRangeException` under one second. |
-| `MaxReplayAge` | 24 hours | The bound in effect |
-| `HashStatesWith(byte[])` | none | Keys the hash of each decision's state: an HMAC-SHA256 under `key` (`k1:`), which only a holder of the key can compute, instead of a SHA-256 (`s1:`). Throws `ArgumentException` when `key` is null or shorter than 32 bytes. Every process that may repeat a run must use the same key; adding or changing it means each answer recorded before it is asked afresh once. |
-| `StateHashKeyConfigurationKey` | `Trax:Decisions:StateHashKey` | The configuration key read, as base64 of at least 32 bytes, when `HashStatesWith` was not called. A value that is not base64 or is too short leaves states unhashed, so nothing replays, rather than falling back to an unkeyed hash. |
-
-A [`StateHashKey`](/docs/core/decisions#keying-the-state-hash) the host registers in the container
-itself is kept, and wins over both. Without any key the hash is unkeyed; see
-[Keying the state hash](/docs/effect/decisions#keying-the-state-hash).
-
-```csharp
-effects.UsePostgres(connectionString)
-    .AddDecisionRecording(o => o.ReplayAnswersFor(TimeSpan.FromHours(6)))
-```
-
-## What it registers
-
-| Service | Lifetime | Role |
-|---|---|---|
-| `DecisionJournal` | Singleton | Writes each decision as it is made, and serves a replaying run its original's answers. Built by the container, so a journal the host registers itself is handed the same options. |
-| `IDecisionObserver` | Singleton | A composite that tells the journal, and every other observer, about every decision and routing. The journal is `Required` and told first, so a failed write fails the step. See [Other decision observers](/docs/effect/decisions#other-decision-observers). |
-| `DecisionRecordingOptions` | Singleton | The options `configure` set |
-| `StateHashKey` | Singleton | The key from `HashStatesWith`, else from configuration, else none (the hash is unkeyed). Not registered over one the host registered. |
-| `IDecisionReplay` | Singleton | The journal, which Trax.Core asks before it asks a decider |
-
-Calling `AddDecisionRecording()` more than once registers these once.
-
-## Remarks
+Extends `TraxEffectBuilderWithData` only, so it comes after a data provider. Called before one, it fails to compile
+(CS0619) with `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDecisionRecording().`
 
 - Each decision is written before the train acts on it, through a short-lived data context from
   `IDataContextProviderFactory` rather than the run's own, so it never flushes what the run's
@@ -153,7 +110,7 @@ Calling `AddDecisionRecording()` more than once registers these once.
   train changed its `ExternalId` while running, fails its step, `Permanent`.
 - A run whose metadata names an earlier run in `ReplayDecisionsOf` loads, before its first
   junction, the answers of that run and, for questions it never reached, of the runs it replayed
-  in turn, nearest first, up to 32 runs back. It fails there, classified `Permanent`, rather than
+  in turn, nearest first, up to 32 runs back (`DecisionJournal.MaxReplayChain`). It fails there, classified `Permanent`, rather than
   asking afresh, when a run in that chain does not exist, is a run of another train, or ran without
   recording its decisions, when the chain loops or goes back further, or when a recorded answer
   cannot be read; and classified `Transient` when the database fails. A question no run in the
@@ -169,10 +126,46 @@ Calling `AddDecisionRecording()` more than once registers these once.
   scheduler's checks. See
   [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
 
-## HasDecisionsToReplay
+### Registered services
 
-```csharp
-// Trax.Effect.Data.Decisions
+| Service | Lifetime | Role |
+|---|---|---|
+| `DecisionJournal` | Singleton | Writes each decision as it is made, and serves a replaying run its original's answers. Built by the container, so a journal the host registers itself is handed the same options. |
+| `IDecisionObserver` | Singleton | A composite that tells the journal, and every other observer, about every decision and routing. The journal is `Required` and told first, so a failed write fails the step. See [Other decision observers](/docs/effect/decisions#other-decision-observers). |
+| `DecisionRecordingOptions` | Singleton | The options `configure` set |
+| `StateHashKey` | Singleton | The key from `HashStatesWith`, else from configuration, else none (the hash is unkeyed). Not registered over one the host registered. |
+| `IDecisionReplay` | Singleton | The journal, which Trax.Core asks before it asks a decider |
+| `IDecisionRunRecorder` | Singleton | The journal |
+
+Calling `AddDecisionRecording()` more than once registers these once.
+
+### DecisionRecordingOptions
+
+```csharp fragment
+public sealed class DecisionRecordingOptions
+{
+    public static readonly TimeSpan DefaultMaxReplayAge;   // 24 hours
+    public const string StateHashKeyConfigurationKey = "Trax:Decisions:StateHashKey";
+    public TimeSpan MaxReplayAge { get; }
+    public DecisionRecordingOptions ReplayAnswersFor(TimeSpan maxAge);
+    public DecisionRecordingOptions HashStatesWith(byte[] key);
+}
+```
+
+| Member | Default | Description |
+|---|---|---|
+| `ReplayAnswersFor(TimeSpan)` | 24 hours | Replays a recorded answer into a repeated run only while it is younger than this, counted from when a decider gave it, not from a later run that replayed it. An older answer is asked afresh and the reason logged at `Information`. `TimeSpan.MaxValue`, or any span longer than the calendar goes back, means no bound. Throws `ArgumentOutOfRangeException` under one second. |
+| `MaxReplayAge` | 24 hours | The bound in effect |
+| `HashStatesWith(byte[])` | none | Keys the hash of each decision's state: an HMAC-SHA256 under `key` (`k1:`), which only a holder of the key can compute, instead of a SHA-256 (`s1:`). Throws `ArgumentException` when `key` is null or shorter than 32 bytes. Every process that may repeat a run must use the same key; adding or changing it means each answer recorded before it is asked afresh once. |
+| `StateHashKeyConfigurationKey` | `Trax:Decisions:StateHashKey` | The configuration key read, as base64 of at least 32 bytes, when `HashStatesWith` was not called. A value that is not base64 or is too short leaves states unhashed, so nothing replays, rather than falling back to an unkeyed hash. |
+
+A [`StateHashKey`](/docs/core/decisions#keying-the-state-hash) the host registers in the container
+itself is kept, and wins over both. Without any key the hash is unkeyed; see
+[Keying the state hash](/docs/effect/decisions#keying-the-state-hash).
+
+### HasDecisionsToReplay
+
+```csharp fragment
 public static Task<bool> HasDecisionsToReplay(
     this IDataContext context,
     long metadataId,
@@ -180,7 +173,7 @@ public static Task<bool> HasDecisionsToReplay(
 )
 ```
 
-Whether a requeue of the run `metadataId` should replay its decisions rather than be queued as an
+An extension method on `IDataContext`, in the static class `DecisionReplays`. Whether a requeue of the run `metadataId` should replay its decisions rather than be queued as an
 ordinary run that asks afresh. True when the run recorded a decision it acted on (a refused answer
 does not count, since it is never replayed), or was itself queued to
 replay another run's: a requeue of a requeue that failed before reaching a question recorded
@@ -189,12 +182,31 @@ train that never decides, a run on a host that records nothing, and a run that d
 [`IOperationsService.RequeueExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#requeueexecutionasync)
 asks it; a host that requeues runs its own way should too.
 
-## Package
+## Examples
 
-```
-dotnet add package Trax.Effect.Data
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddDecisionRecording()
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
 ```
 
-The extension is in namespace `Trax.Effect.Data.Extensions`; `DecisionRecordingOptions` is in
-`Trax.Effect.Data.Decisions`. A data provider package (`Trax.Effect.Data.Postgres`,
-`Trax.Effect.Data.Sqlite`) brings `Trax.Effect.Data` with it.
+With a shorter replay window:
+
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddDecisionRecording(o => o.ReplayAnswersFor(TimeSpan.FromHours(6)))
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
+```
+
+## See also
+
+- [Decision Recording and Models](/docs/effect/decisions), [Decisions](/docs/core/decisions)
+- [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events), [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-decider)

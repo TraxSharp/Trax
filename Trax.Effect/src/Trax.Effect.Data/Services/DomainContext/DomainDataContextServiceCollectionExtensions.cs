@@ -13,6 +13,7 @@ namespace Trax.Effect.Data.Services.DomainContext;
 /// Registration and schema-bootstrap helpers for <see cref="DomainDataContext{TSelf}"/>-derived
 /// domain contexts.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/domain-data-context">SDK reference</seealso>
 public static class DomainDataContextServiceCollectionExtensions
 {
     /// <summary>

@@ -12,6 +12,7 @@ namespace Trax.Effect.Extensions;
 /// signals to other processes through a transport package such as Trax.Effect.Broadcaster.RabbitMQ.
 /// See https://traxsharp.net/docs/sdk-reference/configuration/use-broadcaster.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-broadcaster">SDK reference</seealso>
 public static class BroadcasterExtensions
 {
     /// <summary>

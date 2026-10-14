@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: "Reference for AddTrax and AddEffects: the step builder types that enforce registration order, builder properties, extension methods and services you register."
+description: "Index of the configuration reference: AddTrax, AddEffects and AddMediator, the data providers, effects, deciders, broadcasters and data services, by package."
 type: landing
 area: effects
 parent: SDK Reference
@@ -10,202 +10,61 @@ nav_order: 4
 
 # Configuration
 
-All Trax services are configured through a single entry point: `AddTrax`. This method accepts a lambda that receives a `TraxBuilder`, which provides a fluent API for adding effects, the mediator, and the scheduler.
+Every Trax host is configured through [AddTrax](/docs/sdk-reference/configuration/add-trax), whose builder takes
+[AddEffects](/docs/sdk-reference/configuration/add-effects), then [AddMediator](/docs/sdk-reference/configuration/add-mediator),
+then [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler). The pages below are grouped by the package
+each member ships in.
 
-The builder uses a **step builder pattern** that enforces ordering at compile time. Each configuration step returns a different type that only exposes valid next steps:
+## Trax.Effect
 
-1. `TraxBuilder` -- the initial builder, exposes `AddEffects()`
-2. `TraxBuilderWithEffects` -- returned by `AddEffects()`, exposes `AddMediator()`
-3. `TraxBuilderWithMediator` -- returned by `AddMediator()`, exposes `AddScheduler()`
+- [AddTrax](/docs/sdk-reference/configuration/add-trax): the entry point, `TraxBuilder` and what it registers
+- [AddEffects](/docs/sdk-reference/configuration/add-effects): `TraxEffectBuilder`, `TraxEffectBuilderWithData` and the effect configuration
+- [Host Tracking](/docs/sdk-reference/configuration/host-tracking): the host identity methods and `TraxHostInfo`
+- [AddEffect / AddJunctionEffect](/docs/sdk-reference/configuration/add-effect): custom effect provider factories and the effect registry
+- [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook): `ITrainLifecycleHook` and its factory
+- [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level): the level the logging effects write at
+- [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier): how a failed run's exception becomes a `FailureClass`
+- [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider): code run before and after every `EffectJunction`
+- [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster): carries lifecycle events between processes
 
-This means you cannot call `AddMediator()` without first calling `AddEffects()`, and you cannot call `AddScheduler()` without first calling `AddMediator()`. The compiler catches incorrect ordering before you run your application. A wrong order in Trax.Mediator's calls fails with an error that says which call comes first, for example `Call AddEffects(...) before AddMediator(...).` ([Builder Pattern](/docs/contributing/api-conventions#builder-pattern) lists them).
+## Trax.Mediator
 
-Effect-specific methods are nested inside `.AddEffects(effects => ...)`, which receives a `TraxEffectBuilder`. The `AddEffects` lambda must return the builder from the last chained call (`Func<TraxEffectBuilder, TraxEffectBuilder>`).
+- [AddMediator](/docs/sdk-reference/configuration/add-mediator): train discovery, `TraxMediatorBuilder` and the startup chain check
 
-Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, a subclass of `TraxEffectBuilder` that unlocks data-dependent methods like `AddDataContextLogging()`. This provides compile-time safety: you cannot call `AddDataContextLogging()` without first configuring a data provider.
+## Trax.Effect.Data
 
-## Entry Point
+- [AddDataContextLogging](/docs/sdk-reference/configuration/add-data-context-logging): stores `ILogger` lines in `trax.log`
+- [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording): records decisions and replays them into repeated runs
+- [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events): publishes and records each step of a run
+- [IDataContext](/docs/sdk-reference/configuration/i-data-context): Trax's EF Core context over the `trax` tables
+- [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context): the base class and helpers for your own contexts
+- [ISqlDialect](/docs/sdk-reference/configuration/i-sql-dialect): the SQL that differs between providers
+- [IQueuedWorkListener](/docs/sdk-reference/configuration/i-queued-work-listener): the notice that wakes the job dispatcher
+- [LikePattern](/docs/sdk-reference/configuration/like-pattern): escaped, lowered `LIKE` patterns for text search
 
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-        .AddDataContextLogging()
-        .AddJson()
-        .SaveTrainParameters()
-        .AddJunctionLogger()
-        .AddJunctionProgress()
-    )
-    .AddMediator(typeof(Program).Assembly)
-    .AddScheduler(scheduler => scheduler
-        .MaxActiveJobs(10)
-    )
-);
-```
+## Data providers
 
-## AddEffects Signature
+- [UsePostgres](/docs/sdk-reference/configuration/use-postgres) (`Trax.Effect.Data.Postgres`): the PostgreSQL provider
+- [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) (`Trax.Effect.Data.Postgres`): turns off the startup migration
+- [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator) (`Trax.Effect.Data.Postgres`): applies the Postgres schema
+- [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) (`Trax.Effect.Data.Sqlite`): the SQLite provider
+- [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) (`Trax.Effect.Data.InMemory`): the in-memory provider
 
-```csharp
-// With configuration
-public static TraxBuilderWithEffects AddEffects(
-    this TraxBuilder builder,
-    Func<TraxEffectBuilder, TraxEffectBuilder> configure
-)
+## Effect providers
 
-// Parameterless defaults (no data provider)
-public static TraxBuilderWithEffects AddEffects(
-    this TraxBuilder builder
-)
-```
+- [AddJson](/docs/sdk-reference/configuration/add-json) (`Trax.Effect.Provider.Json`): logs tracked models when they change
+- [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) (`Trax.Effect.Provider.Parameter`): stores inputs and outputs
+- [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) (`Trax.Effect.JunctionProvider.Logging`): logs each junction
+- [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) (`Trax.Effect.JunctionProvider.Progress`): records the running junction and checks for cancellation
 
-The `AddEffects` callback is a `Func`, so the lambda must return the builder from the last chained call. For expression-body lambdas (the common case), this happens naturally:
+## Trax.Effect.Decisions.SystemOne
 
-```csharp
-.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
-```
+- [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-decider): answers decisions with a Nimble server
+- [AddSystemOneDecider](/docs/sdk-reference/configuration/add-system-one-decider): answers decisions through a System One model
 
-For multi-statement lambdas, explicitly return the builder:
+## Broadcasters
 
-```csharp
-.AddEffects(effects =>
-{
-    effects.ServiceCollection.AddSingleton(myService);
-    return effects.UsePostgres(connectionString).AddJson();
-})
-```
-
-The parameterless overload registers effects with no data provider. Features that require a data provider (such as `AddScheduler()` or `AddJunctionProgress()`) will throw at build time with a helpful error message.
-
-## AddTrax Signature
-
-```csharp
-public static IServiceCollection AddTrax(
-    this IServiceCollection services,
-    Action<TraxBuilder> configure
-)
-```
-
-`AddTrax` registers a `TraxMarker` singleton in the DI container. This marker is checked at runtime by `AddTraxDashboard()` and `AddTraxGraphQL()` -- if the marker is missing, they throw `InvalidOperationException` with a message directing you to call `AddTrax()` first.
-
-## Step Builder Types
-
-| Type | Returned By | Exposes |
-|------|-------------|---------|
-| `TraxBuilder` | `AddTrax()` lambda | `AddEffects()` |
-| `TraxBuilderWithEffects` | `AddEffects()` | `AddMediator()` |
-| `TraxBuilderWithMediator` | `AddMediator()`, `AddScheduler()` | `AddScheduler()` |
-
-### Effect Builder Types
-
-Inside the `AddEffects()` callback, data provider methods return a more specific type:
-
-| Type | Returned By | Exposes |
-|------|-------------|---------|
-| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseSqlite()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()`, `AddNimbleDecider()`, `AddSystemOneDecider()` |
-| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseSqlite()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()`, `AddDecisionRecording()` and `AddJunctionEvents()` |
-
-Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`, `AddNimbleDecider`, `AddSystemOneDecider`) preserve the concrete builder type through chaining. If you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
-
-## Ordering Enforcement
-
-The step builder pattern provides two levels of ordering enforcement:
-
-### Compile-Time (Step Builder)
-
-The fluent chain `AddEffects()` -> `AddMediator()` -> `AddScheduler()` is enforced by the type system. Each method returns a different builder type that only exposes valid next steps. If you try to call methods out of order, the code will not compile:
-
-```csharp
-// Compiles -- correct order
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects.UsePostgres(connectionString))
-    .AddMediator(typeof(Program).Assembly)
-    .AddScheduler()
-);
-
-// Compiles -- AddDataContextLogging() is available because UsePostgres() returns TraxEffectBuilderWithData
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-        .AddDataContextLogging()
-    )
-    .AddMediator(typeof(Program).Assembly)
-);
-
-// Does NOT compile -- AddDataContextLogging() requires TraxEffectBuilderWithData
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .AddJson()
-        .AddDataContextLogging()  // Error: AddDataContextLogging is not available on TraxEffectBuilder
-    )
-    .AddMediator(typeof(Program).Assembly)
-);
-
-// Does NOT compile -- AddMediator() is not available on TraxBuilder
-services.AddTrax(trax => trax
-    .AddMediator(typeof(Program).Assembly)  // Error CS0619: Call AddEffects(...) before AddMediator(...).
-);
-
-// Does NOT compile -- AddScheduler() is not available on TraxBuilderWithEffects
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects.UsePostgres(connectionString))
-    .AddScheduler()  // Error: TraxBuilderWithEffects has no AddScheduler
-);
-```
-
-### Runtime (TraxMarker)
-
-`AddTraxDashboard()` and `AddTraxGraphQL()` are called on `IServiceCollection` / `WebApplicationBuilder`, not on the step builder chain. They perform a runtime check instead: if `AddTrax()` was not called first, they throw `InvalidOperationException` with a clear message:
-
-```
-InvalidOperationException: AddTrax() must be called before AddTraxDashboard().
-Call services.AddTrax(...) in your service configuration before calling AddTraxDashboard().
-```
-
-## Builder Properties
-
-These properties can be set directly on the `TraxEffectBuilder`:
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `ServiceCollection` | `IServiceCollection` | (from constructor) | Direct access to the DI container for manual registrations |
-| `SerializeJunctionData` | `bool` | `false` | Whether junction input/output data should be serialized globally |
-| `LogLevel` | `LogLevel` | `LogLevel.Debug` | Minimum log level for effect logging |
-| `TrainParameterJsonSerializerOptions` | `JsonSerializerOptions` | `TraxJsonSerializationOptions.Default` | System.Text.Json options for parameter serialization |
-
-## Extension Methods
-
-| Method | Description |
-|--------|-------------|
-| [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) | Disables automatic database migration in `UsePostgres()` for Lambda/serverless environments |
-| [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | Adds PostgreSQL database support for metadata persistence |
-| [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | Adds in-memory database support for testing/development |
-| [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging) | Enables logging for database operations |
-| [AddJson](/docs/sdk-reference/configuration/add-json-effect) | Adds JSON change detection for tracking model mutations |
-| [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | Serializes train input/output to JSON for persistence (optionally configurable) |
-| [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | Adds per-junction execution logging |
-| [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | Adds junction progress tracking and cross-server cancellation checking |
-| [AddMediator](/docs/sdk-reference/configuration/add-mediator) | Registers the TrainBus and discovers trains via assembly scanning. Accepts `params Assembly[]` shorthand or `Func<TraxMediatorBuilder, TraxMediatorBuilder>` for full control (custom lifetime, multiple assemblies). Called on `TraxBuilderWithEffects`, returns `TraxBuilderWithMediator` |
-| [AddEffect / AddJunctionEffect](/docs/sdk-reference/configuration/add-effect) | Registers custom effect provider factories |
-| [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | Registers lifecycle hooks that fire on train state transitions |
-| [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level) | Sets the level the junction logger and JSON effect write their entries at |
-| [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | Records every decision a run makes in `trax.decision`, and replays them into a re-queued or retried run |
-| [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | Publishes each step of a run live and records it in `trax.junction_run` |
-
-### Services you register
-
-| Service | Description |
-|--------|-------------|
-| [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | Classifies a failed run's exception into a `FailureClass`; registered in the container, not through the builder |
-| [ISqlDialect](/docs/sdk-reference/configuration/i-sql-dialect) | The provider-specific SQL, including a table's estimated row count; registered by `UsePostgres` and `UseSqlite` |
-| [IQueuedWorkListener](/docs/sdk-reference/configuration/i-queued-work-listener) | The provider's notice that work was queued, which wakes the job dispatcher; registered by `UsePostgres` and `UseSqlite` |
-| [IDataContext](/docs/sdk-reference/configuration/i-data-context) | Trax's own data context: the `trax` tables, transactions, and the scoped registration a data provider adds |
-| [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context) | The base class and registration helpers for your own schema-per-context EF data contexts |
-| [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider) | What a junction effect implements: code run before and after every `EffectJunction` |
-| [ITraxTrainEventClient](/docs/sdk-reference/configuration/i-trax-train-event-client) | The SignalR hub's client surface: the `TrainEvent` and `JunctionEvent` methods clients subscribe to |
-| [IJunctionEventHandler](/docs/sdk-reference/configuration/add-junction-events#ijunctioneventhandler) | Receives each step of a run from a host that calls `AddJunctionEvents()` |
-
-### Query helpers
-
-| Helper | Description |
-|--------|-------------|
-| [LikePattern](/docs/sdk-reference/configuration/like-pattern) | Builds the escaped, lowered `LIKE` pattern for a case-insensitive search inside a column, in the shape the Postgres trigram indexes serve |
+- [UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq) (`Trax.Effect.Broadcaster.RabbitMQ`): the RabbitMQ transport
+- [UseSignalRHub](/docs/sdk-reference/configuration/use-signalr-hub) (`Trax.Effect.Broadcaster.SignalR`): the SignalR sink
+- [MapTraxTrainEventHub](/docs/sdk-reference/configuration/map-trax-train-event-hub) (`Trax.Effect.Broadcaster.SignalR`): maps the hub endpoint
+- [ITraxTrainEventClient](/docs/sdk-reference/configuration/i-trax-train-event-client) (`Trax.Effect.Broadcaster.SignalR`): the methods clients receive

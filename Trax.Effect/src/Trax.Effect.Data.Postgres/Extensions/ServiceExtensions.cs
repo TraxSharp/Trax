@@ -45,6 +45,8 @@ namespace Trax.Effect.Data.Postgres.Extensions;
 /// By using these extensions, applications can easily configure and use the
 /// Trax.Effect.Data.Postgres system with minimal boilerplate code.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-postgres">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/skip-migrations">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

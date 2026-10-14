@@ -28,6 +28,7 @@ namespace Trax.Effect.Data.InMemory.Extensions;
 /// By using these extensions, applications can easily configure and use the
 /// Trax.Effect.Data.InMemory system with minimal boilerplate code.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-in-memory">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

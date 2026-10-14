@@ -34,6 +34,7 @@ namespace Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 /// services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
 /// ```
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-in-memory">SDK reference</seealso>
 public class InMemoryContextProviderFactory(InMemoryDatabaseRoot databaseRoot)
     : IDataContextProviderFactory
 {

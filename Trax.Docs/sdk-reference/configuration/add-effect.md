@@ -1,133 +1,207 @@
 ---
 title: AddEffect / AddJunctionEffect
-description: Reference for AddEffect and AddJunctionEffect, which register custom train-level and junction-level effect provider factories, including configurable ones.
+description: Reference for AddEffect and AddJunctionEffect, which register train-level and junction-level effect provider factories, including configurable ones.
 type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 11
+nav_order: 30
+package: Trax.Effect
+namespace:
+  - Trax.Effect.Extensions
+  - Trax.Effect.Services.EffectProviderFactory
+  - Trax.Effect.Services.JunctionEffectProviderFactory
+  - Trax.Effect.Services.EffectRegistry
+source:
+  - Trax.Effect/src/Trax.Effect/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect/Services/EffectProviderFactory
+  - Trax.Effect/src/Trax.Effect/Services/JunctionEffectProviderFactory
 ---
 
 # AddEffect / AddJunctionEffect
 
-Registers custom effect provider factories. `AddEffect` registers train-level effects (run once per train execution); `AddJunctionEffect` registers junction-level effects (run once per junction).
+Register effect provider factories. `AddEffect` registers a train-level effect, whose provider tracks a run's models
+and saves when the run's rows are written. `AddJunctionEffect` registers a junction-level effect, whose provider runs
+before and after every `EffectJunction`; see [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider).
 
-## AddEffect Signatures
+## Signatures
 
-```csharp
-// Type only, auto-created via DI
+```csharp fragment
 public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
     this TraxEffectBuilder builder,
     bool toggleable = true
-) where TEffectProviderFactory : class, IEffectProviderFactory
+)
+    where TEffectProviderFactory : class, IEffectProviderFactory
 
-// Pre-created instance
 public static TraxEffectBuilder AddEffect<TEffectProviderFactory>(
     this TraxEffectBuilder builder,
     TEffectProviderFactory factory,
     bool toggleable = true
-) where TEffectProviderFactory : class, IEffectProviderFactory
+)
+    where TEffectProviderFactory : class, IEffectProviderFactory
 
-// Interface + implementation, auto-created
 public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
     this TraxEffectBuilder builder,
     bool toggleable = true
-) where TIEffectProviderFactory : class, IEffectProviderFactory
-  where TEffectProviderFactory : class, TIEffectProviderFactory
+)
+    where TIEffectProviderFactory : class, IEffectProviderFactory
+    where TEffectProviderFactory : class, TIEffectProviderFactory
 
-// Interface + implementation, pre-created instance
 public static TraxEffectBuilder AddEffect<TIEffectProviderFactory, TEffectProviderFactory>(
     this TraxEffectBuilder builder,
     TEffectProviderFactory factory,
     bool toggleable = true
-) where TIEffectProviderFactory : class, IEffectProviderFactory
-  where TEffectProviderFactory : class, TIEffectProviderFactory
+)
+    where TIEffectProviderFactory : class, IEffectProviderFactory
+    where TEffectProviderFactory : class, TIEffectProviderFactory
 ```
 
-## AddJunctionEffect Signatures
-
-```csharp
-// Type only, auto-created
+```csharp fragment
 public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
     this TraxEffectBuilder builder,
     bool toggleable = true
-) where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
+)
+    where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
 
-// Pre-created instance
 public static TraxEffectBuilder AddJunctionEffect<TJunctionEffectProviderFactory>(
     this TraxEffectBuilder builder,
     TJunctionEffectProviderFactory factory,
     bool toggleable = true
-) where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
+)
+    where TJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
 
-// Interface + implementation, pre-created instance
 public static TraxEffectBuilder AddJunctionEffect<TIJunctionEffectProviderFactory, TJunctionEffectProviderFactory>(
     this TraxEffectBuilder builder,
     TJunctionEffectProviderFactory factory,
     bool toggleable = true
-) where TIJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
-  where TJunctionEffectProviderFactory : class, TIJunctionEffectProviderFactory
+)
+    where TIJunctionEffectProviderFactory : class, IJunctionEffectProviderFactory
+    where TJunctionEffectProviderFactory : class, TIJunctionEffectProviderFactory
+```
+
+```csharp fragment
+public interface IEffectProviderFactory
+{
+    IEffectProvider Create();
+}
+
+public interface IJunctionEffectProviderFactory
+{
+    IJunctionEffectProvider Create();
+}
+
+public interface IConfigurableProviderFactory
+{
+    object GetConfiguration();
+    Type GetConfigurationType();
+}
+
+public interface IConfigurableEffectProviderFactory<TConfiguration>
+    : IEffectProviderFactory, IConfigurableProviderFactory
+    where TConfiguration : class
+{
+    TConfiguration Configuration { get; }
+}
+
+public interface IConfigurableJunctionEffectProviderFactory<TConfiguration>
+    : IJunctionEffectProviderFactory, IConfigurableProviderFactory
+    where TConfiguration : class
+{
+    TConfiguration Configuration { get; }
+}
 ```
 
 ## Parameters
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `toggleable` | `bool` | No | `true` | Whether the effect can be enabled/disabled at runtime via the effect registry. Set to `false` for essential effects (like data persistence). |
-| `factory` | `TEffectProviderFactory` | No | N/A | A pre-created factory instance (instance overloads only) |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `factory` | the factory type | | An instance to register, on the overloads that take one; the others let the container build the factory |
+| `toggleable` | `bool` | `true` | Whether the effect registry, and so the dashboard's Effects page, may turn the effect off at runtime. `false` for an effect a run cannot do without, as the data providers register theirs. |
 
 ## Returns
 
-`TraxEffectBuilder`, for continued fluent chaining.
+`TraxEffectBuilder`, for chaining. These do not keep `TraxEffectBuilderWithData`; call them before the data
+provider when a later call needs it.
 
-## Example
+## Behavior
 
-```csharp
+Each overload registers the factory as a singleton under `IEffectProviderFactory` (or `IJunctionEffectProviderFactory`)
+and records its type in the `IEffectRegistry` with `toggleable`.
+
+| Overload | Registered under |
+|----------|------------------|
+| Type only | The factory type, and the provider factory interface |
+| Instance | The provider factory interface only |
+| Interface and implementation | The implementation, the interface you name, and the provider factory interface, all the same instance |
+
+`IEffectRegistry` tracks each registered type and whether it is enabled. `IsToggleable(type)` and
+`IsToggleable<TFactory>()` say whether it may be switched; `Enable` and `Disable` switch it, and runners created
+afterwards leave a disabled factory out. `GetToggleable()` lists the switchable ones.
+
+A factory that implements `IConfigurableEffectProviderFactory<TConfiguration>` (or
+`IConfigurableJunctionEffectProviderFactory<TConfiguration>`) exposes a configuration object. The default
+implementations of `GetConfiguration()` and `GetConfigurationType()` return `Configuration` and `typeof(TConfiguration)`.
+The dashboard's [Effects page](/docs/dashboard#effects-page) shows a settings button for it and edits that object's
+properties in place, so the factory and its providers read the configuration rather than copy it.
+
+## Examples
+
+```csharp compile
+using Trax.Effect.Services.EffectProvider;
+using Trax.Effect.Services.EffectProviderFactory;
+using Trax.Effect.Services.JunctionEffectProvider;
+using Trax.Effect.Services.JunctionEffectProviderFactory;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
-        .AddEffect<MyCustomEffectProviderFactory>()
-        .AddJunctionEffect<MyCustomJunctionEffectProviderFactory>(toggleable: false)
+        .AddEffect<AuditEffectFactory>()
+        .AddJunctionEffect<TimingEffectFactory>(toggleable: false)
+        .UsePostgres(connectionString)
     )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
 );
-```
 
-## Configurable Factories
-
-Factories can optionally expose runtime-configurable settings by implementing `IConfigurableEffectProviderFactory<TConfiguration>` (or `IConfigurableJunctionEffectProviderFactory<TConfiguration>` for junction effects). The configuration type is a POCO class registered as a singleton in DI.
-
-```csharp
-public class MyEffectConfiguration
+public sealed class AuditEffectFactory : IEffectProviderFactory
 {
-    public bool EnableDetailedLogging { get; set; } = false;
+    public IEffectProvider Create() => throw new NotImplementedException();
 }
 
-public class MyEffectProviderFactory(MyEffectConfiguration config)
-    : IConfigurableEffectProviderFactory<MyEffectConfiguration>
+public sealed class TimingEffectFactory : IJunctionEffectProviderFactory
 {
-    public MyEffectConfiguration Configuration => config;
-
-    public IEffectProvider Create() => new MyEffectProvider(config);
+    public IJunctionEffectProvider Create() => throw new NotImplementedException();
 }
 ```
 
-Register the configuration alongside the factory:
+A configurable factory, with its configuration registered beside it:
 
-```csharp
+```csharp compile
+using Trax.Effect.Services.EffectProvider;
+using Trax.Effect.Services.EffectProviderFactory;
+
 services.AddTrax(trax => trax
     .AddEffects(effects =>
     {
-        var config = new MyEffectConfiguration { EnableDetailedLogging = true };
-        effects.ServiceCollection.AddSingleton(config);
-        return effects.AddEffect<MyEffectProviderFactory>();
+        effects.ServiceCollection.AddSingleton(new AuditConfiguration { Detailed = true });
+        return effects.AddEffect<ConfigurableAuditFactory>().UsePostgres(connectionString);
     })
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
 );
+
+public class AuditConfiguration
+{
+    public bool Detailed { get; set; }
+}
+
+public sealed class ConfigurableAuditFactory(AuditConfiguration configuration)
+    : IConfigurableEffectProviderFactory<AuditConfiguration>
+{
+    public AuditConfiguration Configuration => configuration;
+
+    public IEffectProvider Create() => throw new NotImplementedException();
+}
 ```
 
-Configurable factories appear with a settings button on the dashboard's [Effects page](/docs/dashboard#effects-page), where their configuration properties can be modified at runtime.
+## See also
 
-## Remarks
-
-- **Train-level effects** (`AddEffect`): Implement `IEffectProviderFactory`. Called at train start and end. Used for cross-cutting concerns like data persistence, audit logging, etc.
-- **Junction-level effects** (`AddJunctionEffect`): Implement `IJunctionEffectProviderFactory`. Called before and after each junction. Used for junction-level logging, metrics, etc.
-- The interface+implementation overloads register the factory under both the interface type and `IEffectProviderFactory`, enabling resolution by either type.
-- See [Effect Providers](/docs/effect/effect-providers) for conceptual background on the effect system.
+- [Effect Providers](/docs/effect/effect-providers)
+- [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider), [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook)

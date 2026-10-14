@@ -17,6 +17,7 @@ namespace Trax.Effect.Configuration.TraxEffectBuilder;
 /// <c>AddDataContextLogging()</c>. All general effect methods (e.g., <c>AddJson()</c>,
 /// <c>SaveTrainParameters()</c>) are available on both types via generic self-type preservation.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effects">SDK reference</seealso>
 public partial class TraxEffectBuilder
 {
     private readonly TraxBuilder.TraxBuilder _parent;

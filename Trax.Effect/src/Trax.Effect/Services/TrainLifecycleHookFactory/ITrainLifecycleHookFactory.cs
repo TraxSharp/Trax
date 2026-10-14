@@ -12,6 +12,7 @@ namespace Trax.Effect.Services.TrainLifecycleHookFactory;
 /// return something that is not disposable (a forwarder to the shared instance), or the first run to
 /// end disposes it for every later run.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-lifecycle-hook">SDK reference</seealso>
 public interface ITrainLifecycleHookFactory
 {
     /// <summary>

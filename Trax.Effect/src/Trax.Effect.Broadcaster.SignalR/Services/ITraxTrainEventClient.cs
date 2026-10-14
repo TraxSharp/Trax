@@ -11,6 +11,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Services;
 /// forcing a generic parameter on the hub. Clients deserialize via
 /// <c>connection.On&lt;TShape&gt;("TrainEvent", ...)</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-trax-train-event-client">SDK reference</seealso>
 public interface ITraxTrainEventClient
 {
     /// <summary>

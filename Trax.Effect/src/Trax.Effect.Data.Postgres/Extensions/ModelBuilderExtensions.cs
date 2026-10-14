@@ -24,6 +24,7 @@ namespace Trax.Effect.Data.Postgres.Extensions;
 /// By using these extensions, the system can leverage PostgreSQL-specific features
 /// while maintaining a clean separation of concerns.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-postgres">SDK reference</seealso>
 public static class ModelBuilderExtensions
 {
     /// <summary>

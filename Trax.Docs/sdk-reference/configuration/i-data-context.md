@@ -5,18 +5,25 @@ type: reference
 area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 21
+nav_order: 40
+package: Trax.Effect.Data
+namespace:
+  - Trax.Effect.Data.Services.DataContext
+  - Trax.Effect.Data.Services.DataContextTransaction
+source:
+  - Trax.Effect/src/Trax.Effect.Data/Services/DataContext/IDataContext.cs
+  - Trax.Effect/src/Trax.Effect.Data/Services/DataContextTransaction/IDataContextTransaction.cs
 ---
 
 # IDataContext
 
-Trax's own data context: an EF Core context over the `trax` tables (runs, logs, manifests, the work queue, dead letters and the rest), and the effect provider that persists a train's metadata. [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect), [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) and [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) each register an implementation.
+Trax's own data context: an EF Core context over the `trax` tables (runs, logs, manifests, the work queue, dead letters and the rest), and the effect provider that persists a train's metadata. [UsePostgres](/docs/sdk-reference/configuration/use-postgres), [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) and [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) each register an implementation.
 
-Inject it to read Trax's tables, or to make a write commit with an enqueue through [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor). Your own tables belong in a [domain data context](/docs/sdk-reference/configuration/domain-data-context), not here.
+It is what [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) takes to make a write commit with an enqueue. Application tables live in a [domain data context](/docs/sdk-reference/configuration/domain-data-context).
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Data.Services.DataContext;
 
 public interface IDataContext : IEffectProvider, IAsyncDisposable  // IEffectProvider is IDisposable
@@ -61,12 +68,14 @@ public interface IDataContextTransaction : IDisposable
 
 From `IEffectProvider` it also has `Track(IModel)`, `Update(IModel)` and `SaveChanges(CancellationToken)`, which the effect runner uses to persist a run.
 
-## Tables
+## Members
+
+### Tables
 
 | Property | Table | Holds |
 |----------|-------|-------|
 | `Metadatas` | `trax.metadata` | One row per train run: state, input, output, timing, failure |
-| `Logs` | `trax.log` | Log entries written by [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging) |
+| `Logs` | `trax.log` | Log entries written by [AddDataContextLogging](/docs/sdk-reference/configuration/add-data-context-logging) |
 | `Manifests` | `trax.manifest` | Scheduled jobs: train, input properties, schedule |
 | `ManifestGroups` | `trax.manifest_group` | Groups of manifests that share dispatch settings |
 | `WorkQueues` | `trax.work_queue` | Runs waiting to be dispatched |
@@ -89,7 +98,7 @@ either differs. `CreatedAt` is when it was written. See [Checkpoint](/docs/sdk-r
 
 `RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts`, `EffectClaims` and `Checkpoints` have default implementations on the interface, so an implementation written before they existed still loads.
 
-## Members
+### Methods
 
 | Member | Description |
 |--------|-------------|
@@ -99,16 +108,21 @@ either differs. `CreatedAt` is when it was written. See [Checkpoint](/docs/sdk-r
 | `Changes` | A count of tracked changes not yet saved |
 | `Raw<TDbContext>()` | Casts to the concrete `DataContext<TDbContext>`, for EF members the interface does not surface. Throws `InvalidCastException` when the implementation is not that type. |
 
-## Getting one
+## Behavior
+
+### Getting one
 
 | How | Lifetime | Use |
 |-----|----------|-----|
 | Inject `IDataContext` | Scoped: one per scope, created from the provider's context factory | Reads and writes inside a request or a train's scope |
 | Inject `IDataContextProviderFactory` and call `CreateDbContextAsync(ct)` | A new context per call; dispose it | Background services and anything outside a scope |
 
+Trax's services write the `trax` tables. A row changed outside them (a run's state, a work queue entry's status)
+can break the scheduler's invariants.
+
 ## Example
 
-```csharp
+```csharp compile
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -124,12 +138,7 @@ public class FailedRunReport(IDataContext data)
 }
 ```
 
-Treat the `trax` tables as read-only from application code. Trax's services write them, and a row changed behind their back (a run's state, a work queue entry's status) can break the scheduler's invariants.
+## See also
 
-## Package
-
-```
-dotnet add package Trax.Effect.Data
-```
-
-A data provider package (`Trax.Effect.Data.Postgres`, `Trax.Effect.Data.Sqlite` or `Trax.Effect.Data.InMemory`) brings it in.
+- [UsePostgres](/docs/sdk-reference/configuration/use-postgres), [UseSqlite](/docs/sdk-reference/configuration/use-sqlite), [UseInMemory](/docs/sdk-reference/configuration/use-in-memory)
+- [Data Persistence](/docs/effect/effect-providers/data-persistence)

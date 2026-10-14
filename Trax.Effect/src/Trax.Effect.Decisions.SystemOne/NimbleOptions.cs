@@ -20,6 +20,7 @@ namespace Trax.Effect.Decisions.SystemOne;
 /// concurrent evaluation per container with a 529. Token and body limits cannot be checked here,
 /// so a request over them is answered 413 or 422 and fails as permanent.</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-nimble-decider">SDK reference</seealso>
 public sealed class NimbleOptions
 {
     /// <summary>

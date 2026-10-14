@@ -29,6 +29,9 @@ namespace Trax.Effect.Data.Extensions;
 /// By using these extensions, applications can easily configure and use the
 /// Trax.Effect.Data system with minimal boilerplate code.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-data-context-logging">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-decision-recording">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-junction-events">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

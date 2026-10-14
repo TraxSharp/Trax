@@ -19,6 +19,7 @@ namespace Trax.Effect.Services.EffectProviderFactory;
 /// Implementations of this interface are typically registered in the dependency injection
 /// container using the AddEffect extension methods in ServiceExtensions.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effect">SDK reference</seealso>
 public interface IEffectProviderFactory
 {
     /// <summary>

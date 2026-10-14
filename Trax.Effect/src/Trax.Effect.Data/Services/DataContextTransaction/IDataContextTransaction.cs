@@ -23,6 +23,7 @@ namespace Trax.Effect.Data.Services.DataContextTransaction;
 /// This interface is typically used in conjunction with the BeginTransaction, CommitTransaction,
 /// and RollbackTransaction methods on the IDataContext interface.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-data-context">SDK reference</seealso>
 public interface IDataContextTransaction : IDisposable
 {
     /// <summary>

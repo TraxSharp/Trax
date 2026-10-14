@@ -12,6 +12,7 @@ namespace Trax.Effect.JunctionProvider.Progress.Extensions;
 /// Adds <c>AddJunctionProgress</c> to the effect builder, which records which junction a run is on and
 /// lets a requested cancellation stop the run between junctions.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-junction-progress">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

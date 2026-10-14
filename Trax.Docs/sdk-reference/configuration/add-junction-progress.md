@@ -1,59 +1,65 @@
 ---
 title: AddJunctionProgress
-description: Reference for AddJunctionProgress, the junction effects that record the running junction and check for cross-server cancellation before each junction.
+description: Reference for AddJunctionProgress, the junction effects that record the running junction and stop a run whose cancellation was requested, before each junction.
 type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 9
+nav_order: 23
+package: Trax.Effect.JunctionProvider.Progress
+namespace:
+  - Trax.Effect.JunctionProvider.Progress.Extensions
+  - Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckProvider
+source:
+  - Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Services/CancellationCheckProvider/CancellationCheckProvider.cs
 ---
 
 # AddJunctionProgress
 
-Adds junction-level progress tracking and cross-server cancellation checking as junction effects. Before each junction, checks the database for a cancellation signal and writes the currently running junction name to metadata. After each junction, clears the progress columns.
+Adds two junction effects: a cancellation check that stops a run whose cancellation was requested from another
+process, and a progress writer that records which junction the run is on.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static TBuilder AddJunctionProgress<TBuilder>(
-    this TBuilder effectBuilder
+    this TBuilder configurationBuilder
 )
     where TBuilder : TraxEffectBuilder
 ```
 
-The generic type parameter `TBuilder` is inferred by the compiler, so callers just write `.AddJunctionProgress()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
-
-## Parameters
-
-None.
-
 ## Returns
 
-`TBuilder`, the same builder type that was passed in, for continued fluent chaining.
+`TBuilder`, the builder type it was called on.
+
+## Behavior
+
+Sets the builder's `JunctionProgressEnabled` and registers both providers with `AddJunctionEffect`, as toggleable
+junction effects that show on the dashboard's Effects page, the cancellation check first. Without a data provider,
+`AddEffects` throws `InvalidOperationException` naming `UsePostgres()`, `UseSqlite()` and `UseInMemory()`.
+
+| Provider | Before each `EffectJunction` | After it |
+|----------|------------------------------|----------|
+| `CancellationCheckProvider` | Reads the run's `Metadata.CancellationRequested` from the database through a context of its own. When it is set, sets it on the run and throws `CancellationRequestedException` (an `OperationCanceledException`), and the run is recorded as `Cancelled`. | Nothing |
+| `JunctionProgressProvider` | Writes `Metadata.CurrentlyRunningJunction` and `Metadata.JunctionStartedAt` | Clears them. The clearing write runs on `CancellationToken.None` and logs a failure instead of throwing, so it never replaces the result of a junction whose work already returned. |
+
+The progress writer writes those two columns, and only those, through a data context of its own. It does not save
+the run's other effects: everything else the run tracks is committed when the run's outcome is written.
 
 ## Example
 
-```csharp
+```csharp compile
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
         .AddJunctionProgress()
     )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
 );
 ```
 
-## Remarks
+## See also
 
-- This is a **junction-level effect** (runs per junction, not per train).
-- Registers two providers: `CancellationCheckProvider` (runs first) and `JunctionProgressProvider`.
-- `CancellationCheckProvider` queries the database before each junction to check `Metadata.CancellationRequested`. If `true`, it throws `OperationCanceledException`, which `FinishServiceTrain` maps to `TrainState.Cancelled`.
-- `JunctionProgressProvider` sets `Metadata.CurrentlyRunningJunction` and `Metadata.JunctionStartedAt` before each junction, and clears them after. The clearing write runs on `CancellationToken.None` and logs a failure instead of throwing, so it never replaces the result of a junction whose work already returned.
-- It writes those two columns, and only those, through a database context of its own. It does not save the run's other effects: everything else the run tracks is committed once, when the run finishes, so a run that fails partway leaves none of its tracked writes behind, and other effect providers (such as `AddJson`) are not saved once per junction.
-- Both providers are registered as toggleable junction effects visible on the dashboard Effects page.
-- Requires a data provider (`UsePostgres` or `UseInMemory`) to be registered. **Build-time validation:** If no data provider is configured, the application throws `InvalidOperationException` at startup with a message explaining the required configuration.
-
-## Package
-
-```
-dotnet add package Trax.Effect.JunctionProvider.Progress
-```
+- [Junction Progress](/docs/effect/effect-providers/junction-progress)
+- [AddJunctionEffect](/docs/sdk-reference/configuration/add-effect)

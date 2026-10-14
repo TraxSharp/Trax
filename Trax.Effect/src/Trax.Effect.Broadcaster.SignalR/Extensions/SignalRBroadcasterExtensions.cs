@@ -12,6 +12,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Extensions;
 /// browser and other SignalR clients. Pair it with <see cref="SignalRHubEndpointExtensions"/> to
 /// map the hub those clients connect to.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-signalr-hub">SDK reference</seealso>
 public static class SignalRBroadcasterExtensions
 {
     /// <summary>

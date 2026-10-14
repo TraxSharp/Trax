@@ -18,6 +18,7 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 /// already queued before it stops. If a batch fails, its entries are retried
 /// one at a time and any that still fail are dropped, so logging never throws into the caller.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-data-context-logging">SDK reference</seealso>
 public class DataContextLoggingProvider : IDataContextLoggingProvider
 {
     private readonly IDataContextProviderFactory _dbContextFactory;

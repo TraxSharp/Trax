@@ -5,7 +5,14 @@ type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 25
+nav_order: 28
+package: Trax.Effect.Decisions.SystemOne
+namespace:
+  - Trax.Effect.Decisions.SystemOne.Extensions
+  - Trax.Effect.Decisions.SystemOne
+source:
+  - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/NimbleOptions.cs
 ---
 
 # AddNimbleDecider
@@ -15,9 +22,9 @@ typed decision model, on a Nimble server you run from Nimble's own serving code.
 `SystemOneDecider` as the `IDecider`, or, with a name, as a keyed `SystemOneDecider` only. See
 [Nimble](/docs/effect/decisions#nimble).
 
-## Signature
+## Signatures
 
-```csharp
+```csharp fragment
 public static TBuilder AddNimbleDecider<TBuilder>(
     this TBuilder configurationBuilder,
     Action<NimbleOptions> configure
@@ -32,7 +39,14 @@ public static TBuilder AddNimbleDecider<TBuilder>(
     where TBuilder : TraxEffectBuilder
 ```
 
-## NimbleOptions
+## Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | Registers the decider as a keyed `SystemOneDecider` under this name, and nothing else |
+| `configure` | `Action<NimbleOptions>` | Sets the options below |
+
+### NimbleOptions
 
 | Property | Type | Default | Description |
 |---|---|---|---|
@@ -57,30 +71,7 @@ your confidence bars when you change it.
 
 `TBuilder`, the same builder type that was passed in.
 
-## Examples
-
-```csharp
-// A Nimble server on this machine.
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-        .AddDecisionRecording()
-        .AddNimbleDecider(o => o.Endpoint = new Uri("http://localhost:8000/v1/systemone"))
-    )
-);
-
-// One GPU machine serving Nimble to several hosts, behind an API key.
-effects.AddNimbleDecider(o =>
-{
-    o.Endpoint = new Uri("https://nimble.internal.example/v1/systemone");
-    o.ApiKey = configuration["Nimble:ApiKey"];
-});
-
-// Named, as the first tier of a cascade you compose yourself.
-effects.AddNimbleDecider("nimble", o => o.Endpoint = new Uri("http://localhost:8000/v1/systemone"));
-```
-
-## Remarks
+## Behavior
 
 - The options are checked when this is called, so a missing endpoint, an endpoint that is not
   `http` or `https`, a floating model name or plain HTTP to another machine stops the host from
@@ -96,8 +87,50 @@ effects.AddNimbleDecider("nimble", o => o.Endpoint = new Uri("http://localhost:8
   as the `IDecider`; see
   [Putting the model in front of a larger one](/docs/effect/decisions#putting-the-model-in-front-of-a-larger-one).
 
-## Package
+## Examples
 
+A Nimble server on this machine:
+
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddDecisionRecording()
+        .AddNimbleDecider(o => o.Endpoint = new Uri("http://localhost:8000/v1/systemone"))
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
 ```
-dotnet add package Trax.Effect.Decisions.SystemOne
+
+One GPU machine serving several hosts, behind an API key:
+
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddNimbleDecider(o =>
+        {
+            o.Endpoint = new Uri("https://nimble.internal.example/v1/systemone");
+            o.ApiKey = configuration["Nimble:ApiKey"];
+        })
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
 ```
+
+Named, for a cascade composed by the host:
+
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddNimbleDecider("nimble", o => o.Endpoint = new Uri("http://localhost:8000/v1/systemone"))
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
+```
+
+## See also
+
+- [Nimble](/docs/effect/decisions#nimble), [Decisions](/docs/core/decisions)
+- [AddSystemOneDecider](/docs/sdk-reference/configuration/add-system-one-decider), [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording)

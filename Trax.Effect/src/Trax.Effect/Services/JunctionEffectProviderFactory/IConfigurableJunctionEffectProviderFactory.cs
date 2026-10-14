@@ -9,6 +9,7 @@ namespace Trax.Effect.Services.JunctionEffectProviderFactory;
 /// </summary>
 /// <typeparam name="TConfiguration">The configuration POCO type. Must be a reference type so
 /// mutations to the singleton are visible to all consumers.</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effect">SDK reference</seealso>
 public interface IConfigurableJunctionEffectProviderFactory<TConfiguration>
     : IJunctionEffectProviderFactory,
         IConfigurableProviderFactory

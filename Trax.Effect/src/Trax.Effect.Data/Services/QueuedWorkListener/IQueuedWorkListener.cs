@@ -15,6 +15,7 @@ namespace Trax.Effect.Data.Services.QueuedWorkListener;
 /// <para>A notice says only that something may be ready. It carries no entry, and a receiver
 /// that then loads nothing is behaving correctly.</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-queued-work-listener">SDK reference</seealso>
 public interface IQueuedWorkListener
 {
     /// <summary>

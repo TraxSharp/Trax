@@ -13,6 +13,7 @@ namespace Trax.Effect.Provider.Parameter.Configuration;
 /// This configuration is registered as a singleton and can be modified at runtime via the dashboard.
 /// Changes take effect on the next train execution scope.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/save-train-parameters">SDK reference</seealso>
 public class ParameterEffectConfiguration
 {
     /// <summary>

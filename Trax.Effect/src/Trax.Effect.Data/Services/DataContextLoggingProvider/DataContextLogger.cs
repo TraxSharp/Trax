@@ -17,6 +17,7 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 /// <param name="minimumLogLevel">Calls below this level are ignored.</param>
 /// <param name="exactBlacklist">Categories ignored by exact, case-sensitive match.</param>
 /// <param name="wildcardBlacklist">Compiled wildcard patterns; a matching category is ignored.</param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-data-context-logging">SDK reference</seealso>
 public class DataContextLogger(
     ChannelWriter<Effect.Models.Log.Log> logChannel,
     string categoryName,

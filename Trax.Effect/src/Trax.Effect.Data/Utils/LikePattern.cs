@@ -12,6 +12,7 @@ namespace Trax.Effect.Data.Utils;
 /// translates, and the trigram indexes are built over the lowered column, so a search written any
 /// other way reads the whole table.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/like-pattern">SDK reference</seealso>
 public static class LikePattern
 {
     /// <summary>The escape character of the patterns <see cref="Contains"/> builds.</summary>

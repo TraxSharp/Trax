@@ -5,20 +5,20 @@ type: reference
 area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 19
+nav_order: 42
+package: Trax.Effect.Data
+namespace: Trax.Effect.Data.Services.SqlDialect
+source:
+  - Trax.Effect/src/Trax.Effect.Data/Services/SqlDialect/ISqlDialect.cs
 ---
 
 # ISqlDialect
 
-The SQL that differs between database providers, kept in one place so that nothing above the data layer writes provider SQL of its own. `UsePostgres` registers the Postgres dialect and `UseSqlite` the SQLite one; the InMemory provider registers none, because it never runs raw SQL. Resolve it from the container:
-
-```csharp
-var dialect = serviceProvider.GetRequiredService<ISqlDialect>();
-```
+The SQL that differs between database providers, kept in one place so that nothing above the data layer writes provider SQL of its own. `UsePostgres` registers the Postgres dialect and `UseSqlite` the SQLite one; the InMemory provider registers none, because it never runs raw SQL. It is resolved from the container.
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Data.Services.SqlDialect;
 
 public interface ISqlDialect
@@ -34,9 +34,11 @@ public interface ISqlDialect
 }
 ```
 
+## Behavior
+
 The SQL members return SQL for the caller to run, with EF-style `{0}` parameter placeholders. The dispatch members are what the scheduler's claim and load run. Both pass over an entry whose manifest is disabled unless the entry is an explicit trigger (`WorkQueue.IsExplicitTrigger`); see [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher#loadqueuedjobsjunction). `IsUniqueViolation` and `IsTransient` classify a failure instead of returning SQL. This page documents the members meant for other callers.
 
-## EstimateRowCount
+### EstimateRowCount
 
 Returns SQL that reads the database's own estimate of how many rows a Trax table holds, or `null` when the provider keeps no estimate.
 
@@ -52,22 +54,10 @@ The query returns one `bigint` column aliased as `"Value"`, and **no row** when 
 | SQLite | `null` |
 | A custom implementation that does not override it | `null` (the interface default) |
 
-An estimate is for a number shown to a person, such as the total over millions of log rows, where an exact `COUNT(*)` would scan the whole table. It is as stale as the table's last analyze, so never branch on it. When the method returns `null` or the query returns no row, count exactly:
+An estimate is for a number shown to a person, such as the total over millions of log rows, where an exact `COUNT(*)` would scan the whole table. It is as stale as the table's last analyze, so it is for display. When the method returns `null` or the query returns no row, the caller counts exactly.
 
-```csharp
-using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-var sql = dialect.EstimateRowCount();
-var estimate = sql is null
-    ? new List<long>()
-    : await ((DbContext)db).Database.SqlQueryRaw<long>(sql, "log").ToListAsync(ct);
-
-var (total, isEstimate) = estimate is [var rows] && rows >= 10_000
-    ? (rows, true)
-    : (await db.Logs.LongCountAsync(ct), false);
-```
-
-## IsTransient
+### IsTransient
 
 Whether a failure may succeed if the same work is tried again. The exception and everything it wraps are examined, so a `DbUpdateException`, or the `InvalidOperationException` EF's retry strategy throws around the last failure, is classified by the database error inside it.
 
@@ -77,25 +67,61 @@ Whether a failure may succeed if the same work is tried again. The exception and
 | SQLite | A `SqliteException` whose primary code is `SQLITE_BUSY` or `SQLITE_LOCKED`, which another connection's write causes and which clears when it commits. Also a `TimeoutException` |
 | A custom implementation that does not override it | Nothing (the interface default) |
 
-Everything else is not transient: a constraint violation, a missing table or a syntax error fails the same way on every try. That is the reason to ask the dialect rather than match the provider's exception types by name, which would retry every database error:
+Everything else is not transient: a constraint violation, a missing table or a syntax error fails the same way on every try. Matching the provider's exception types by name instead would treat every database error as transient.
 
-```csharp
-for (var attempt = 1; ; attempt++)
+
+## Examples
+
+A row count shown to a person, estimated over large tables:
+
+```csharp compile
+using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
+
+public class LogTotal(IDataContextProviderFactory dataContextFactory, ISqlDialect dialect)
 {
-    try
+    public async Task<(long Total, bool IsEstimate)> GetAsync(CancellationToken ct)
     {
-        await SeedAsync(ct);
-        break;
-    }
-    catch (Exception ex) when (attempt < 5 && dialect.IsTransient(ex))
-    {
-        await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), ct);
+        await using var db = await dataContextFactory.CreateDbContextAsync(ct);
+
+        var sql = dialect.EstimateRowCount();
+        var estimate = sql is null
+            ? new List<long>()
+            : await ((DbContext)db).Database.SqlQueryRaw<long>(sql, "log").ToListAsync(ct);
+
+        return estimate is [var rows] && rows >= 10_000
+            ? (rows, true)
+            : (await db.Logs.LongCountAsync(ct), false);
     }
 }
 ```
 
-## Package
+A retry of transient failures only:
 
+```csharp compile
+using Trax.Effect.Data.Services.SqlDialect;
+
+public class Seeder(ISqlDialect dialect)
+{
+    public async Task SeedWithRetryAsync(Func<CancellationToken, Task> seed, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await seed(ct);
+                return;
+            }
+            catch (Exception ex) when (attempt < 5 && dialect.IsTransient(ex))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), ct);
+            }
+        }
+    }
+}
 ```
-dotnet add package Trax.Effect.Data
-```
+
+## See also
+
+- [UsePostgres](/docs/sdk-reference/configuration/use-postgres), [UseSqlite](/docs/sdk-reference/configuration/use-sqlite)

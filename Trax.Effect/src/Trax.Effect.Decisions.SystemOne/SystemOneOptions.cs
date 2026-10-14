@@ -3,6 +3,7 @@ namespace Trax.Effect.Decisions.SystemOne;
 /// <summary>
 /// Where and how <see cref="SystemOneDecider"/> reaches a typed decision model.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-system-one-decider">SDK reference</seealso>
 public sealed class SystemOneOptions
 {
     /// <summary>

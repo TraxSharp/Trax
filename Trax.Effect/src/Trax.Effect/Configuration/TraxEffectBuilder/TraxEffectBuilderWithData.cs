@@ -11,6 +11,7 @@ namespace Trax.Effect.Configuration.TraxEffectBuilder;
 /// This type inherits from <see cref="TraxEffectBuilder"/>, so all general effect extension methods
 /// (e.g., <c>AddJson()</c>, <c>SaveTrainParameters()</c>) remain available via method chaining.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effects">SDK reference</seealso>
 public class TraxEffectBuilderWithData : TraxEffectBuilder
 {
     /// <summary>
