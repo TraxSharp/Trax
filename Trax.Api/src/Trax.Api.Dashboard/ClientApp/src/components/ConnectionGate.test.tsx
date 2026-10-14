@@ -16,13 +16,13 @@ test("gates the app until a credential is entered, then renders children", async
   await userEvent.type(screen.getByLabelText("API key"), "admin-key-123");
   await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-  // Credential stored in api-key mode; children now render.
+  // Credential held in api-key mode; children now render.
   expect(await screen.findByText("protected content")).toBeInTheDocument();
   expect(getAuthMode()).toBe("apikey");
   expect(authHttpHeaders()).toEqual({ "X-Api-Key": "admin-key-123" });
 });
 
-test("bearer mode stores a JWT and connects via authToken", async () => {
+test("bearer mode holds a JWT and connects via authToken", async () => {
   render(
     <ConnectionGate>
       <div>protected content</div>

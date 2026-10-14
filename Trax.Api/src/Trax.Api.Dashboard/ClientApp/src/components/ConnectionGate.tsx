@@ -2,7 +2,8 @@ import { useState, useSyncExternalStore } from "react";
 import { hasCredential, setCredential, onAuthChange, type AuthMode } from "../lib/auth";
 
 // Gates the app behind a credential. Until one is set, an operator picks a mode and pastes a
-// credential here; it is stored in localStorage and used for every HTTP request and subscription.
+// credential here; it is held in memory for the life of the page (never stored, so a reload asks
+// again) and used for every HTTP request and subscription.
 // API-key mode sends X-Api-Key / connection_init { apiKey }; Bearer mode sends
 // Authorization: Bearer / connection_init { authToken }, so the dashboard can target a
 // JWT-secured Trax API.

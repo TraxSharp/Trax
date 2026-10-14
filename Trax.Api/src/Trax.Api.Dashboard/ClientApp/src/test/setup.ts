@@ -11,6 +11,7 @@ import { resetActivity } from "../lib/activity";
 import { resetOverviewPanels } from "../lib/overviewPanels";
 import { resetRefreshStatus } from "../lib/refreshStatus";
 import { setHideAdminTrains } from "../lib/adminTrains";
+import { clearCredential } from "../lib/auth";
 
 // Reset persisted + module-global state between tests so nothing (theme, a mock overlay delta,
 // a lingering toast) leaks across stories.
@@ -26,6 +27,7 @@ afterEach(() => {
   resetOverviewPanels(); // module-global panel visibility; reset so a hidden panel can't leak
   resetRefreshStatus(); // module-global "last refresh failed" mark; reset so an error story can't leak
   setHideAdminTrains(true); // module-global preference; reset so a story that shows admin trains can't leak
+  clearCredential(); // held in memory only (lib/auth.ts); reset so one test's credential can't leak
   document.documentElement.classList.remove("dark");
 });
 

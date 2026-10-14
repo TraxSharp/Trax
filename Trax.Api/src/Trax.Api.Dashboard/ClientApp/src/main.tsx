@@ -5,7 +5,7 @@ import { Provider } from "urql";
 import type { Client } from "@urql/core";
 import "./lib/theme"; // applies persisted/system theme before first paint
 import { ConnectionGate } from "./components/ConnectionGate";
-import { forgetCredentialOfAnotherPrincipal } from "./lib/auth";
+import { removeStoredCredentials } from "./lib/auth";
 import { AppRoutes } from "./AppRoutes";
 import { readRuntimeConfig, routerBasename } from "./lib/runtimeConfig";
 import "./index.css";
@@ -17,6 +17,9 @@ const root = createRoot(document.getElementById("root")!);
 // (graphql-tools, the embedded SDL) live behind a dynamic import, so a production build never
 // pulls them into the main bundle.
 async function boot() {
+  // The credential is held in memory only (lib/auth.ts); delete any an earlier version stored.
+  removeStoredCredentials();
+
   // The demo build answers from recordings of real hosts, with no API and no credential (src/demo).
   // The test is a build-time literal, so the normal build drops this branch and the recordings.
   if (import.meta.env.VITE_DEMO === "1") {
@@ -49,8 +52,6 @@ async function boot() {
     return;
   }
 
-  // A credential stored under someone else's sign-in to the shell is dropped before anything uses it.
-  forgetCredentialOfAnotherPrincipal();
   const { client } = await import("./lib/graphql");
   // The path the host serves the app under (Trax.Api.Dashboard writes it into index.html).
   const basename = routerBasename(readRuntimeConfig());

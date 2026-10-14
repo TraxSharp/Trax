@@ -60,6 +60,15 @@ cannot gate the shell with it: such a host uses a cookie or OpenID Connect sign-
 or `AllowAnonymousShell()` with something in front of it. The app itself still authenticates to
 GraphQL with the key or token the operator enters, as it always has.
 
+**The operator's credential is held in memory only.** The app keeps the key or token in the page
+for its life and never writes it to `localStorage`, `sessionStorage`, IndexedDB or a cookie, so
+the operator pastes it again on every page load, and nothing on the origin can read it after the
+tab closes or the shell's sign-in ends. Storing it per dashboard and binding it to a fingerprint
+of who loaded the page was tried first and dropped: it still left a key in storage that any page
+on the origin could read, and that the shell's sign-out could not reach because the posture
+refuses the next load before the app runs. The page therefore names no one. The app's
+`src/lib/auth.test.ts` and the Samples' `ApiDashboardBrowserTests` pin it.
+
 ## Exemplars
 
 - `ApiDashboardHostTests` pins the refusal without a posture, the contradiction between the
@@ -76,6 +85,8 @@ loaded, and everything it does afterwards is a GraphQL request, authorized there
 
 ## Changelog
 
+- **2026-10-14**: The operator's credential is held in memory only; the page no longer carries a
+  fingerprint of who loaded it.
 - **2026-10-13**: Recorded.
 - **2026-10-13**: `AllowAnonymous()` over a policy or roles posture fails at startup; gated files
   are cached `private`.

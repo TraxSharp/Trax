@@ -169,8 +169,8 @@ public class ApiDashboardBrowserTests
             var document = await page.GotoAsync(url.ToString());
             document!.Status.Should().Be(200, $"{url} is a route of the app, not a missing file");
 
-            await page.GetByLabel("API key").FillAsync(ApiKey, new() { Timeout = Ms(Render) });
-            await page.GetByRole(AriaRole.Button, new() { Name = "Connect" }).ClickAsync();
+            // Nothing is stored, so every load asks for the key again.
+            var connected = await ConnectAsync(page);
 
             await Assertions
                 .Expect(page.GetByText(landmark, new() { Exact = true }).First)
@@ -179,6 +179,12 @@ public class ApiDashboardBrowserTests
                 .Expect(page.Locator(drawn).First)
                 .ToBeVisibleAsync(new() { Timeout = Ms(Render) });
             page.Url.Should().Be(url.ToString(), "the router kept the route it was loaded at");
+
+            var request = await connected.FirstRequest;
+            (await request.HeaderValueAsync("x-api-key")).Should().Be(ApiKey);
+            (await connected.Acknowledged.WaitAsync(Render))
+                .Should()
+                .Be($"ws://{_address.Authority}/trax/graphql");
 
             (await ViolationsAsync(page, violations))
                 .Should()
@@ -189,6 +195,102 @@ public class ApiDashboardBrowserTests
             await context.CloseAsync();
         }
     }
+
+    [Test]
+    public async Task The_key_is_never_stored_so_a_reload_asks_for_it_again()
+    {
+        var context = await _browser.NewContextAsync();
+        try
+        {
+            var page = await context.NewPageAsync();
+            var violations = await WatchForViolationsAsync(page);
+            var url = new Uri(_address, "/trax/dashboard/executions").ToString();
+
+            await page.GotoAsync(url);
+            var connected = await ConnectAsync(page);
+            (await (await connected.FirstRequest).HeaderValueAsync("x-api-key"))
+                .Should()
+                .Be(ApiKey);
+            await connected.Acknowledged.WaitAsync(Render);
+
+            (await StoredAsync(page))
+                .Should()
+                .NotContain(ApiKey, "the key is held in the page's memory, never in storage");
+            (await context.CookiesAsync()).Should().BeEmpty();
+
+            // What an earlier version stored is deleted at startup and never used.
+            await page.EvaluateAsync(
+                $$"""
+                () => {
+                  localStorage.setItem("trax-dashboard-api-key", "{{ApiKey}}");
+                  localStorage.setItem("trax-dashboard-auth-mode", "apikey");
+                  localStorage.setItem('trax-dashboard-credential:["/trax/dashboard/","/trax/graphql"]',
+                    JSON.stringify({ owner: "anonymous", mode: "apikey", credential: "{{ApiKey}}" }));
+                }
+                """
+            );
+            await page.ReloadAsync();
+
+            await Assertions
+                .Expect(page.GetByLabel("API key"))
+                .ToBeVisibleAsync(new() { Timeout = Ms(Render) });
+            (await StoredAsync(page))
+                .Should()
+                .NotContain(ApiKey)
+                .And.NotContain("trax-dashboard-api-key");
+
+            await ConnectAsync(page);
+            await Assertions
+                .Expect(page.GetByTestId("dashboard-footer"))
+                .ToContainTextAsync("Trax Dashboard — v", new() { Timeout = Ms(Render) });
+            (await StoredAsync(page)).Should().NotContain(ApiKey);
+
+            (await ViolationsAsync(page, violations)).Should().BeEmpty();
+        }
+        finally
+        {
+            await context.CloseAsync();
+        }
+    }
+
+    // The operator enters the key through the app's own prompt, as on every page load. Returns the
+    // first GraphQL request the app sends after it, and the URL of the subscription socket the
+    // server acknowledges.
+    private static async Task<(
+        Task<IRequest> FirstRequest,
+        Task<string> Acknowledged
+    )> ConnectAsync(IPage page)
+    {
+        var acknowledged = new TaskCompletionSource<string>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        page.WebSocket += (_, socket) =>
+            socket.FrameReceived += (_, frame) =>
+            {
+                if (frame.Text?.Contains("\"connection_ack\"") == true)
+                    acknowledged.TrySetResult(socket.Url);
+            };
+
+        await page.GetByLabel("API key").FillAsync(ApiKey, new() { Timeout = Ms(Render) });
+        var request = page.WaitForRequestAsync(
+            r => r.Url.EndsWith("/trax/graphql") && r.Method == "POST",
+            new() { Timeout = Ms(Render) }
+        );
+        await page.GetByRole(AriaRole.Button, new() { Name = "Connect" }).ClickAsync();
+        return (request, acknowledged.Task);
+    }
+
+    // Everything the page's origin keeps in localStorage, sessionStorage and IndexedDB, as text.
+    private static Task<string> StoredAsync(IPage page) =>
+        page.EvaluateAsync<string>(
+            """
+            async () => {
+              const dump = (s) => Object.keys(s).map((k) => `${k}=${s.getItem(k)}`).join("\n");
+              const dbs = indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name) : [];
+              return [dump(localStorage), dump(sessionStorage), dbs.join(",")].join("\n");
+            }
+            """
+        );
 
     // Every policy violation the page reports, and every console error that names the policy.
     private static async Task<ConcurrentQueue<string>> WatchForViolationsAsync(IPage page)

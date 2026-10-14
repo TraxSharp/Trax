@@ -362,131 +362,28 @@ public partial class ApiDashboardHostTests
     // ---- Who loaded the page ----------------------------------------------------------------
 
     [Test]
-    public async Task The_page_names_who_loaded_it_by_an_opaque_fingerprint()
+    public async Task The_page_is_the_same_whoever_loads_it_and_no_shared_cache_keeps_it()
     {
         await using var app = await StartAsync(
             e => e.UseTraxApiDashboard(o => o.RequireRoles("Admin")),
             auth: AuthSetup.SchemeOnly
         );
 
-        var ada = Principal(await PageAsync(app, "ada;Admin"));
-        var adaAgain = Principal(await PageAsync(app, "ada;Admin"));
-        var grace = Principal(await PageAsync(app, "grace;Admin"));
+        var ada = await GetAsync(app, "/trax/dashboard/", "ada;Admin");
+        var grace = await GetAsync(app, "/trax/dashboard/", "grace;Admin");
+        var adaPage = await ada.Content.ReadAsStringAsync();
 
-        ada.Should().MatchRegex("^[0-9a-f]{64}$").And.NotContain("ada");
-        adaAgain.Should().Be(ada, "the same person keeps the credential they stored");
-        grace
+        ConfigKeys(adaPage)
             .Should()
-            .NotBe(ada, "the next person in a shared browser must not inherit the last one's key");
-    }
-
-    [Test]
-    public async Task An_anonymous_page_names_nobody()
-    {
-        await using var app = await StartAsync(e => Anonymous(e));
-
-        Principal(await PageAsync(app, user: null)).Should().Be("anonymous");
-    }
-
-    [Test]
-    public void The_fingerprint_is_qualified_by_the_authentication_type()
-    {
-        ClaimsPrincipal Signed(string type) =>
-            new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "42")], type));
-
-        DashboardEndpoint
-            .PrincipalFingerprint(Signed("Cookies"))
-            .Should()
-            .NotBe(DashboardEndpoint.PrincipalFingerprint(Signed("OpenIdConnect")));
-        DashboardEndpoint
-            .PrincipalFingerprint(new ClaimsPrincipal(new ClaimsIdentity()))
-            .Should()
-            .Be(DashboardEndpoint.AnonymousPrincipal);
-    }
-
-    [Test]
-    public void The_fingerprint_ignores_claims_that_change_on_every_sign_in()
-    {
-        ClaimsPrincipal Load(string iat, string session) =>
-            new(
-                new ClaimsIdentity(
-                    [
-                        new Claim("sub", "ada", ClaimValueTypes.String, "https://idp.example"),
-                        new Claim("iat", iat),
-                        new Claim("exp", iat + "3600"),
-                        new Claim("auth_time", iat),
-                        new Claim("jti", Guid.NewGuid().ToString()),
-                        new Claim("sid", session),
-                    ],
-                    "OpenIdConnect"
-                )
+            .BeEquivalentTo(
+                ["basePath", "graphqlPath"],
+                "the app holds its credential in memory, so the page names nobody"
             );
-
-        DashboardEndpoint
-            .PrincipalFingerprint(Load("1700000000", "s1"))
-            .Should()
-            .Be(
-                DashboardEndpoint.PrincipalFingerprint(Load("1700009999", "s2")),
-                "a fingerprint that changed per load would forget the credential on every reload"
-            );
-    }
-
-    [Test]
-    public void The_fingerprint_is_qualified_by_the_identifying_claim_s_issuer()
-    {
-        ClaimsPrincipal From(string issuer) =>
-            new(
-                new ClaimsIdentity(
-                    [new Claim("sub", "42", ClaimValueTypes.String, issuer)],
-                    "Bearer"
-                )
-            );
-
-        DashboardEndpoint
-            .PrincipalFingerprint(From("https://a.example"))
-            .Should()
-            .NotBe(DashboardEndpoint.PrincipalFingerprint(From("https://b.example")));
-    }
-
-    [Test]
-    public void The_identity_s_name_claim_identifies_a_caller_without_a_subject()
-    {
-        var ada = new ClaimsPrincipal(
-            new ClaimsIdentity([new Claim("upn", "ada@example")], "Negotiate", "upn", "role")
-        );
-        var grace = new ClaimsPrincipal(
-            new ClaimsIdentity([new Claim("upn", "grace@example")], "Negotiate", "upn", "role")
-        );
-
-        DashboardEndpoint
-            .PrincipalFingerprint(ada)
-            .Should()
-            .MatchRegex("^[0-9a-f]{64}$")
-            .And.NotBe(DashboardEndpoint.PrincipalFingerprint(grace));
-    }
-
-    [Test]
-    public void A_caller_nothing_identifies_is_unidentified_however_their_claims_vary()
-    {
-        ClaimsPrincipal Load(string iat) =>
-            new(
-                new ClaimsIdentity(
-                    [new Claim("iat", iat), new Claim("jti", Guid.NewGuid().ToString())],
-                    "Cookies"
-                )
-            );
-
-        DashboardEndpoint
-            .PrincipalFingerprint(Load("1700000000"))
-            .Should()
-            .Be(
-                DashboardEndpoint.UnidentifiedPrincipal,
-                "the app keeps the credential of a caller it cannot tell apart for the page alone"
-            );
-        DashboardEndpoint
-            .PrincipalFingerprint(Load("1700009999"))
-            .Should()
-            .Be(DashboardEndpoint.UnidentifiedPrincipal);
+        adaPage.Should().NotContain("ada");
+        (await grace.Content.ReadAsStringAsync()).Should().Be(adaPage);
+        grace.Headers.ETag.Should().Be(ada.Headers.ETag);
+        ada.Headers.CacheControl!.Private.Should().BeTrue("no shared cache may keep the shell");
+        ada.Headers.CacheControl.NoCache.Should().BeTrue();
     }
 
     [Test]
@@ -963,13 +860,6 @@ public partial class ApiDashboardHostTests
         string? host = null
     ) => SendAsync(app, HttpMethod.Get, path, user, host);
 
-    private static async Task<string> PageAsync(WebApplication app, string? user)
-    {
-        var response = await GetAsync(app, "/trax/dashboard/", user);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return await response.Content.ReadAsStringAsync();
-    }
-
     private static async Task<HttpResponseMessage> SendAsync(
         WebApplication app,
         HttpMethod method,
@@ -1004,12 +894,12 @@ public partial class ApiDashboardHostTests
         );
     }
 
-    private static string Principal(string html)
+    private static string[] ConfigKeys(string html)
     {
         var content = ConfigMeta().Match(html);
         content.Success.Should().BeTrue("the page carries its runtime config");
         using var json = JsonDocument.Parse(WebUtility.HtmlDecode(content.Groups["json"].Value));
-        return json.RootElement.GetProperty("principal").GetString()!;
+        return json.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
     }
 
     [GeneratedRegex("""<meta name="trax-dashboard-config" content="(?<json>[^"]*)" />""")]

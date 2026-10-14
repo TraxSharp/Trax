@@ -1,5 +1,3 @@
-using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -24,7 +22,7 @@ namespace Trax.Api.Dashboard.Serving;
 /// with the entry page.</item>
 /// <item>The entry page is revalidated on every load (<c>no-cache</c>, with an ETag), so a new
 /// build is picked up at once, and is never stored by a shared cache (<c>private</c>), because it
-/// carries a fingerprint of who loaded it. Files under <c>assets/</c> are named by their content
+/// is the gated shell a shared cache must not hand to someone the posture would refuse. Files under <c>assets/</c> are named by their content
 /// and cached for good, by the browser alone unless the shell is anonymous
 /// (<see cref="AssetCacheControl"/>).</item>
 /// <item>Only <c>GET</c> and <c>HEAD</c> are served; any other method is a 405.</item>
@@ -41,15 +39,6 @@ internal sealed partial class DashboardEndpoint(
 {
     /// <summary>The route value the catch-all segment of the dashboard's route binds to.</summary>
     internal const string PathRouteValue = "dashboardPath";
-
-    /// <summary>The fingerprint of a page loaded by nobody in particular.</summary>
-    internal const string AnonymousPrincipal = "anonymous";
-
-    /// <summary>
-    /// The fingerprint of a page loaded by someone signed in whom nothing identifies. The app keeps
-    /// the credential entered on such a page in memory only (<c>src/lib/auth.ts</c>).
-    /// </summary>
-    internal const string UnidentifiedPrincipal = "unidentified";
 
     private const string PrivateImmutableCache = "private, max-age=31536000, immutable";
     private const string PublicImmutableCache = "public, max-age=31536000, immutable";
@@ -146,24 +135,14 @@ internal sealed partial class DashboardEndpoint(
     /// The entry page with a <c>&lt;base href&gt;</c> at the app's base path, which the build's
     /// relative URLs resolve against, and the runtime config the app reads at startup
     /// (<c>src/lib/runtimeConfig.ts</c>), both written first in its <c>&lt;head&gt;</c>. The config
-    /// carries <paramref name="principal"/>, the <see cref="PrincipalFingerprint"/> of who loaded the
-    /// page, which the app binds its stored credential to.
+    /// names no one: the app holds the operator's credential in memory only, so it has nothing to
+    /// bind to who loaded the page.
     /// </summary>
-    internal static string RenderIndex(
-        string template,
-        PathString basePath,
-        string graphQLPath,
-        string principal = AnonymousPrincipal
-    )
+    internal static string RenderIndex(string template, PathString basePath, string graphQLPath)
     {
         var baseHref = basePath.Add(new PathString("/")).ToUriComponent();
         var config = JsonSerializer.Serialize(
-            new
-            {
-                basePath = baseHref,
-                graphqlPath = graphQLPath,
-                principal,
-            },
+            new { basePath = baseHref, graphqlPath = graphQLPath },
             ConfigJson
         );
         var head =
@@ -181,14 +160,7 @@ internal sealed partial class DashboardEndpoint(
     private async Task WriteIndexAsync(HttpContext context, PathString basePath)
     {
         var graphQL = context.Request.PathBase.Add(new PathString(graphQLPath())).ToUriComponent();
-        var html = Encoding.UTF8.GetBytes(
-            RenderIndex(
-                assets.IndexTemplate!,
-                basePath,
-                graphQL,
-                PrincipalFingerprint(context.User)
-            )
-        );
+        var html = Encoding.UTF8.GetBytes(RenderIndex(assets.IndexTemplate!, basePath, graphQL));
         await WriteAsync(
             context,
             html,
@@ -196,39 +168,6 @@ internal sealed partial class DashboardEndpoint(
             DashboardAssets.ETagOf(html),
             PrivateRevalidate
         );
-    }
-
-    /// <summary>
-    /// An opaque, stable name for who loaded the page: a SHA-256 of the authentication type and
-    /// the claim that identifies the caller (the name identifier claim, else <c>sub</c>, else the
-    /// identity's name claim), qualified by that claim's type and issuer. It is
-    /// <see cref="AnonymousPrincipal"/> when nobody is signed in, and
-    /// <see cref="UnidentifiedPrincipal"/> when someone is but carries none of those claims. The app
-    /// forgets the credential it stored when the page it loads names someone else, so the next
-    /// person to pass the shell's posture in a shared browser does not inherit the last one's key.
-    /// </summary>
-    /// <remarks>
-    /// The other claims are never hashed: they include ones that change on every sign-in or token
-    /// refresh (<c>iat</c>, <c>exp</c>, <c>auth_time</c>, <c>jti</c>, session ids), and a name that
-    /// changes per load would forget the credential on every reload, while one that drops them
-    /// could merge two people into one. An unidentifiable caller gets a fixed name instead, which
-    /// the app treats as "keep the credential for this page only, never store it".
-    /// </remarks>
-    internal static string PrincipalFingerprint(ClaimsPrincipal user)
-    {
-        if (user.Identity is not { IsAuthenticated: true } identity)
-            return AnonymousPrincipal;
-
-        var claim =
-            user.FindFirst(ClaimTypes.NameIdentifier)
-            ?? user.FindFirst("sub")
-            ?? (identity is ClaimsIdentity claims ? claims.FindFirst(claims.NameClaimType) : null);
-        var id = claim is null ? identity.Name : $"{claim.Type}\n{claim.Issuer}\n{claim.Value}";
-        if (string.IsNullOrEmpty(claim?.Value ?? id))
-            return UnidentifiedPrincipal;
-
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{identity.AuthenticationType}\n{id}"));
-        return Convert.ToHexStringLower(hash);
     }
 
     private static async Task WriteAsync(

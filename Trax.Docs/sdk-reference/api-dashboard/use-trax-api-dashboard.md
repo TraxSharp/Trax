@@ -94,65 +94,29 @@ ingress as the gate.
 
 ## How the app authenticates
 
-Once loaded, the app asks the operator for an API key or a bearer token, keeps it in the
-browser's `localStorage` for the host's origin, and sends it on every GraphQL request
-(`X-Api-Key`, or `Authorization: Bearer`) and in the subscription socket's `connection_init`
-payload (`apiKey` or `authToken`), which the GraphQL endpoint's socket interceptor reads. The
-endpoint is on the same origin as the app, so CORS is not involved, and a socket from the host's
-own origin passes the GraphQL endpoint's origin check. Anything else served from the same origin
-can read that `localStorage`, so serve the dashboard from a host that does not serve untrusted
-pages.
+Once loaded, the app asks the operator for an API key or a bearer token and sends it on every
+GraphQL request (`X-Api-Key`, or `Authorization: Bearer`) and in the subscription socket's
+`connection_init` payload (`apiKey` or `authToken`), which the GraphQL endpoint's socket
+interceptor reads. The endpoint is on the same origin as the app, so CORS is not involved, and a
+socket from the host's own origin passes the GraphQL endpoint's origin check.
 
-**Each dashboard keeps its own credential.** The app stores it under a `localStorage` key named
-after the page's base path and its GraphQL path, `trax-dashboard-credential:` followed by both, so
-two `UseTraxApiDashboard` mappings on one origin never send one's credential to the other's
-endpoint. A credential an earlier version stored under the single shared key
-`trax-dashboard-api-key` is deleted when the app loads, not moved, because nothing records which
-endpoint it was for.
+**The credential is held in memory only.** The app keeps it in the page for as long as the page
+is open and never writes it to `localStorage`, `sessionStorage`, IndexedDB or a cookie. Nothing
+else on the origin can read it later, and the operator pastes it again after every page load: a
+reload, a new tab, or a deep link opened from elsewhere. Closing the tab, or signing out of the
+shell, leaves nothing behind, and the next person at a shared browser is asked for their own key.
+A tab left open keeps working until it is closed or reloaded, because the key, not the shell's
+sign-in, authorizes its GraphQL requests; **Change credential** forgets it at once.
 
-**The stored credential belongs to whoever signed in to the shell.** The page's runtime config
-carries an opaque fingerprint of the principal that loaded it: a SHA-256 of the authentication type
-and the claim that identifies the caller (the name identifier claim, else `sub`, else the
-identity's name claim), qualified by that claim's type and issuer, or `anonymous` when nobody
-signed in. No other claim is hashed, so claims that change on every sign-in (`iat`, `exp`,
-`auth_time`, `jti`, session ids) do not change it. A caller who is signed in but carries none of
-those claims is `unidentified`, and the app keeps the credential they enter in memory for that
-page only, never in `localStorage`, so they enter it again on the next load. The app stores the
-credential with the fingerprint it was entered under, and forgets it when a page loads with a
-different one. So in a shared browser the next person to pass the posture is asked for their own
-key rather than reusing the last one's. Under `AllowAnonymousShell()` with nothing signed in, every
-load is `anonymous` and the key stays until the operator chooses **Change credential**.
-
-**Signing out of the shell does not remove the stored key.** The app forgets a credential only when
-it runs, and after a sign-out the posture refuses the next request for the dashboard, so no app code
-runs. The key stays in `localStorage`, readable by any page on the same origin, until a page loads
-under someone else's fingerprint, or the operator chooses **Change credential** first, which removes
-it. A tab left open keeps working too: the key, not the shell's sign-in, authorizes its GraphQL
-requests. Clear it on the host's own sign-out path. The broad way is a `Clear-Site-Data: "storage"`
-header on the sign-out response, which removes all of the origin's storage, not only the dashboard's
-(browsers honor it only over HTTPS):
-
-```csharp compile
-using Microsoft.AspNetCore.Authentication;
-
-app.MapPost("/signout", async context =>
-{
-    await context.SignOutAsync();
-    context.Response.Headers["Clear-Site-Data"] = "\"storage\"";
-    context.Response.Redirect("/");
-});
-```
-
-A sign-out page that runs script can instead remove only the dashboard's keys, the ones that start
-with `trax-dashboard-credential:`. The dashboard never sends `Clear-Site-Data` itself, refusals
-included, because it would wipe storage the rest of the origin owns.
+Earlier versions stored the credential in `localStorage`. The app deletes whatever they left there
+when it loads, without using it.
 
 ## What it serves
 
 | Request | Answer |
 |---------|--------|
 | `{path}` | A redirect to `{path}/`, keeping the query string. |
-| `{path}/` and any other path, a route of the app, such as `{path}/executions/42`, `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` or `{path}/manifests/nightly.log` | The app's page, with `Cache-Control: private, no-cache` and an ETag. It names who loaded it, so no shared cache may keep it. |
+| `{path}/` and any other path, a route of the app, such as `{path}/executions/42`, `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` or `{path}/manifests/nightly.log` | The app's page, with `Cache-Control: private, no-cache` and an ETag. It is served behind the posture, so no shared cache may keep it. |
 | `{path}/assets/<name>-<hash>.js` and the app's other files | The file, with its content type. Files under `assets/` are named by their content and cached for a year as `immutable`: `private` under `RequirePolicy` or `RequireRoles`, or whenever the caller was signed in, so a shared cache never hands a gated file to someone else; `public` only for an anonymous shell nobody signed in to. The other files are revalidated. |
 | Any other path under `{path}/assets/` | `404`. A missing script is never answered with the page. |
 

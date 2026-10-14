@@ -123,14 +123,12 @@ cannot answer, other than a scenario's own row id and a filter the play types.
 - **Client**: [urql](https://formidable.com/open-source/urql/) at the GraphQL path the host names
   (`/trax/graphql` by default, and through the Vite proxy in development), with a `graphql-ws`
   link for subscriptions (`src/lib/graphql.ts`).
-- **Auth**: the API key is stored in `localStorage` (`src/lib/auth.ts`) and sent as the
-  `X-Api-Key` header on every request. Browsers cannot set headers on a WebSocket upgrade,
-  so subscriptions send the key in the `graphql-ws` `connection_init` payload, which the
-  API's `TraxApiKeySocketInterceptor` reads. It is stored under a key named after the page's
-  base path and GraphQL path (prefix `trax-dashboard-credential:`), so two dashboards on one
-  origin keep separate credentials. The stored key is bound to the `principal` fingerprint the
-  host writes into the page's runtime config (`src/lib/runtimeConfig.ts`), and forgotten when a
-  page loads under a different one; under `unidentified` it is held in memory only.
+- **Auth**: the API key (or Bearer token) is held in memory only, for the life of the page
+  (`src/lib/auth.ts`), and sent as the `X-Api-Key` header on every request. It is never written
+  to `localStorage`, `sessionStorage`, IndexedDB or a cookie, so a reload or a new tab asks for it
+  again. Browsers cannot set headers on a WebSocket upgrade, so subscriptions send the key in the
+  `graphql-ws` `connection_init` payload, which the API's `TraxApiKeySocketInterceptor` reads.
+  At startup the app deletes any credential an earlier version stored in `localStorage`.
 
 ## GraphQL mock (offline dev)
 

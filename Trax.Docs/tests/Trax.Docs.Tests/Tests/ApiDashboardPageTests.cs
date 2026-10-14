@@ -1,11 +1,10 @@
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
-/// Facts about the API dashboard's stored credential that a host needs to secure it and that the
-/// page once stated wrongly: signing out of the shell does not remove the stored key, because the
-/// posture refuses the next load before any app code runs, so the host clears it on its own
-/// sign-out path; and the key's name, which a sign-out page needs to remove only the dashboard's
-/// keys.
+/// Facts about the API dashboard's credential that a host relies on to secure it: the app holds
+/// it in memory only and never in browser storage, so a page load asks for it again and signing
+/// out or closing the tab leaves nothing behind. The page once told hosts to clear a stored key
+/// on their own sign-out path; that advice is moot now and must not come back.
 ///
 /// <para>Not ADR-enforcing: it pins page content that was found to overclaim, not a recorded
 /// decision.</para>
@@ -23,28 +22,25 @@ public class ApiDashboardPageTests
         string.Join(' ', Page().Split((char[])[' ', '\n'], StringSplitOptions.RemoveEmptyEntries));
 
     [Test]
-    public void Signing_out_of_the_shell_is_not_said_to_drop_the_key()
+    public void The_credential_is_said_to_be_held_in_memory_and_never_stored()
     {
         Flat()
             .Should()
-            .NotContain(
-                "drops the key",
-                "after a sign-out the posture refuses the next load, so no app code runs to drop it"
-            )
-            .And.Contain("**Signing out of the shell does not remove the stored key.**")
+            .Contain("**The credential is held in memory only.**")
             .And.Contain(
-                "the posture refuses the next request for the dashboard, so no app code runs"
-            );
+                "never writes it to `localStorage`, `sessionStorage`, IndexedDB or a cookie"
+            )
+            .And.Contain("the operator pastes it again after every page load")
+            .And.Contain("Closing the tab, or signing out of the shell, leaves nothing behind");
     }
 
     [Test]
-    public void The_host_is_told_to_clear_the_key_on_its_sign_out_path()
+    public void The_host_is_not_told_to_clear_a_stored_key()
     {
         Flat()
             .Should()
-            .Contain("Clear it on the host's own sign-out path")
-            .And.Contain("`Clear-Site-Data: \"storage\"`")
-            .And.Contain("removes all of the origin's storage, not only the dashboard's")
-            .And.Contain("start with `trax-dashboard-credential:`");
+            .NotContain("Clear-Site-Data", "nothing is stored for a sign-out path to clear")
+            .And.NotContain("trax-dashboard-credential:")
+            .And.NotContain("fingerprint");
     }
 }

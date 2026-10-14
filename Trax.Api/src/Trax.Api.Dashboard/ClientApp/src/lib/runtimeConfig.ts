@@ -1,28 +1,22 @@
 // Where the app is served and where its GraphQL endpoint is, read when the page loads.
 //
 // One build runs under any path: the Trax.Api.Dashboard package writes this into index.html as it
-// serves it, as <meta name="trax-dashboard-config" content='{"basePath":…,"graphqlPath":…,"principal":…}'>,
+// serves it, as <meta name="trax-dashboard-config" content='{"basePath":…,"graphqlPath":…}'>,
 // beside a <base href> at the same base path that the build's relative asset URLs resolve against.
 // Without the tag (vite dev, the tests) the app is at the root and talks to /trax/graphql, which
 // the dev server proxies to the API host.
 //
-// principal is an opaque fingerprint of who loaded the page ("anonymous" when nobody signed in to
-// the shell, "unidentified" when someone did but the host could not tell who); the stored GraphQL
-// credential is bound to it (lib/auth.ts).
-//
 // Both values must be paths on this origin. Anything else is ignored rather than followed, so a
-// page can never be pointed at another host's API with this browser's credential.
+// page can never be pointed at another host's API with the credential an operator entered.
 
 export interface RuntimeConfig {
   /** The path the app is served under, with a trailing slash. */
   basePath: string;
   /** The path of the Trax GraphQL endpoint, on this origin. */
   graphqlPath: string;
-  /** Who loaded the page, as the host fingerprints them; "" when the host wrote nothing. */
-  principal: string;
 }
 
-const DEFAULTS: RuntimeConfig = { basePath: "/", graphqlPath: "/trax/graphql", principal: "" };
+const DEFAULTS: RuntimeConfig = { basePath: "/", graphqlPath: "/trax/graphql" };
 
 const isLocalPath = (value: unknown): value is string =>
   typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\");
@@ -43,7 +37,6 @@ export function readRuntimeConfig(doc: Document = document): RuntimeConfig {
   return {
     basePath: isLocalPath(raw.basePath) ? withTrailingSlash(raw.basePath) : DEFAULTS.basePath,
     graphqlPath: isLocalPath(raw.graphqlPath) ? raw.graphqlPath : DEFAULTS.graphqlPath,
-    principal: typeof raw.principal === "string" ? raw.principal : DEFAULTS.principal,
   };
 }
 
