@@ -37,7 +37,7 @@ export type TypedRehydrationResult<Spec extends MachineSpec> =
   | { result: 'error'; code: string; message: string };
 
 /**
- * A thin, types-only wrapper over the raw engine. Adds no behavior — just compile-time safety.
+ * A thin, types-only wrapper over the raw engine. Adds no behavior, only compile-time safety.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#the-engine-and-the-typed-view
  */
 export class TypedMachine<Spec extends MachineSpec> {
