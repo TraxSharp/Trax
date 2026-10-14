@@ -4,6 +4,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// Codes a draft operation is refused with when the cause is the caller or the request rather than the machine.
 /// They are part of the wire contract the client twins read.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/result-codes">SDK reference</seealso>
 public static class DraftRefusalCodes
 {
     /// <summary>The caller does not meet the rule the event, start or read declares.</summary>

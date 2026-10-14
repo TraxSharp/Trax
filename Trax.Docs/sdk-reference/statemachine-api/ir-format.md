@@ -6,22 +6,41 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 5
+package: Trax.Effect.StateMachine
+namespace: Trax.Effect.StateMachine
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/IrExporter.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/SchemaReflection.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/ValueFormats.cs
 ---
 
 # IR format
 
-`IrExporter.Export(builtMachine)` serializes a declaratively-authored machine to its IR: one canonical JSON
-document (`<machine>.ir.json`) that carries identity, structure, per-state context schema, per-trigger input
-schema, and every transition's guard and reducer as data. It is the single artifact the per-language
-generators consume, so the C# machine is the source and the IR is the contract. Output is
-[canonical JSON](/docs/statemachine#two-runtimes-one-behavior), so the file is a stable golden.
+`IrExporter.Export(builtMachine)` serializes a declaratively authored machine to its IR: one canonical JSON document
+(`<machine>.ir.json`) that carries identity, structure, per-state context schema, per-trigger input schema, and every
+transition's guard and reducer as data. The per-language generators read it. The output is
+[canonical JSON](/docs/statemachine#two-runtimes-one-behavior), so the same machine always exports the same bytes.
+`IMachine.ExportIr()` calls it.
 
-Export requires a declarative machine: `Export` throws `InvalidOperationException` if the machine made no
-declarative call at all (nothing to serialize), or if it mixes the styles and any edge still has a C# delegate
-guard or reducer, or any state a `Holds` validator. The IR cannot carry a delegate, and an edge without its
-`guard` or `reduce` would read as an unconditional edge that keeps the context. The message names each
-offending edge and state; `Rule.Custom` and `Reduction.Custom` keep such logic exportable. See
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).
+## Signature
+
+```csharp fragment
+namespace Trax.Effect.StateMachine;
+
+public static class IrExporter
+{
+    public static string Export<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
+        where TState : struct, Enum
+        where TTrigger : struct, Enum;
+}
+```
+
+## Behavior
+
+`Export` throws `InvalidOperationException` if the machine made no declarative call at all (nothing to serialize),
+or if it mixes the styles and any edge still has a C# delegate guard or reducer, or any state a `Holds` validator.
+The message names each offending edge and state. `Rule.Custom` and `Reduction.Custom` are exported by name. See
+[Delegates and declarative rules](/docs/statemachine/delegates-and-declarative-rules).
 
 ## Top level
 
@@ -164,7 +183,7 @@ is never in `triggers` or `inputs`, which name what a client sends. Each entry o
 | `state` | string | the timed state |
 | `trigger` | string | the timer's trigger, `<State>.after` |
 | `target` | string | the state the timer moves the instance to |
-| `rules` | string[] | the rules the timer acts under, sorted: the union of the rules of everything that enters the timed state, each written as the [census](/docs/sdk-reference/statemachine-api/add-trax-state-machines#census-and-instruments) writes it (`AnyAuthenticated`, `Anonymous`, `Requires(Editor)`, `Requires(one of A, B)`, `RequiresPolicy(name)`, several joined by ` and `, or `undeclared` for an event that declares none). An event entering the state contributes its rule, the start its rule when the state is the initial one, and a timer or an outcome entering it the rules its own source state was entered under |
+| `rules` | string[] | the rules the timer acts under, sorted: the union of the rules of everything that enters the timed state, each written as the [census](/docs/sdk-reference/statemachine-api/add-state-machines#census-and-instruments) writes it (`AnyAuthenticated`, `Anonymous`, `Requires(Editor)`, `Requires(one of A, B)`, `RequiresPolicy(name)`, several joined by ` and `, or `undeclared` for an event that declares none). An event entering the state contributes its rule, the start its rule when the state is the initial one, and a timer or an outcome entering it the rules its own source state was entered under |
 | `after` | string | a fixed duration, as an ISO-8601 duration (`PT10M`); present when the timer has one |
 | `field` | object | `{ "name", "min", "max" }`: the context field the duration is read from when the state is entered, and its bounds as ISO-8601 durations; present instead of `after` |
 
@@ -181,13 +200,14 @@ key, so its IR is unchanged.
 
 ## Example
 
-The turnstile, exported:
+The turnstile, exported (its `differential` block left out):
 
 ```json
 {
   "id": "turnstile",
   "version": 1,
   "initialState": "Locked",
+  "initialContext": {},
   "states": ["Locked", "Unlocked"],
   "triggers": ["Coin", "Push"],
   "committedStates": [],
@@ -212,3 +232,10 @@ The turnstile, exported:
   ]
 }
 ```
+
+## See also
+
+- [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model), the shapes of a rule and a reduction.
+- [Machine](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir), `ExportIr()`.
+- [The codegen pipeline](/docs/statemachine/codegen-pipeline), what is generated from the IR.
+- [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package), `IrDocument` and `machineFromIr`.

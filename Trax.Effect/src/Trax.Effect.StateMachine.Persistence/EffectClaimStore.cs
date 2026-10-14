@@ -42,6 +42,7 @@ public sealed record CompletedEffect(string Receipt, string? ContentFingerprint)
 /// INTENT. The unique key is the lock; a <b>lease + fence token</b> make it safe against a claimant that
 /// wins and then dies without completing.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#ieffectclaimstore">SDK reference</seealso>
 public interface IEffectClaimStore
 {
     /// <summary>

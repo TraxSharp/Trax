@@ -224,6 +224,7 @@ public abstract record DiscardOutcome
 /// return only strings/JSON and the non-generic result unions, so a registry can hold one of these per
 /// machine keyed by name and a single generic mutation can serve every machine.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#isnapshotdraftservice">SDK reference</seealso>
 public interface ISnapshotDraftService
 {
     /// <summary>

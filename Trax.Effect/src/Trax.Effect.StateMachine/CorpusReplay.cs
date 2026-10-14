@@ -13,6 +13,7 @@ namespace Trax.Effect.StateMachine;
 /// <para>This lives in the core engine (not the test-only package) so a running host can replay a committed
 /// corpus at startup as a self-check, the same proof the differential test runs in CI.</para>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine-conformance">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class CorpusReplay
 {

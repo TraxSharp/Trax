@@ -192,15 +192,6 @@ sdk-reference/scheduler-api/use-local-workers.md
 sdk-reference/scheduler-api/use-remote-run.md
 sdk-reference/scheduler-api/use-remote-workers.md
 sdk-reference/scheduler-api/use-sqs-workers.md
-sdk-reference/statemachine-api/add-trax-state-machine-self-check.md
-sdk-reference/statemachine-api/add-trax-state-machines.md
-sdk-reference/statemachine-api/effects.md
-sdk-reference/statemachine-api/fluent-authoring.md
-sdk-reference/statemachine-api/machine-instances.md
-sdk-reference/statemachine-api/migrations.md
-sdk-reference/statemachine-api/persistence-ports.md
-sdk-reference/statemachine-api/rules.md
-sdk-reference/statemachine-api/runtime-integrity.md
 sdk-reference/testing.md
 sdk-reference/testing/core-testing.md
 sdk-reference/train-methods.md

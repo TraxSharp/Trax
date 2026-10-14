@@ -7,6 +7,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// idempotency key of the last applied advance (if any), and when the row was last written (the sliding
 /// window the draft-TTL expiry checks against).
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#storedsnapshot">SDK reference</seealso>
 public sealed record StoredSnapshot(
     string Json,
     Guid Token,
@@ -122,6 +123,7 @@ public sealed record AppliedRequest(string RequestId, string? Trigger, string? F
 /// (created by <see cref="IMachineInstances.Start{TMachine}"/>) is never reached through this port, even under the
 /// same id, so an implementation must not return or touch a row a user does not own.</para>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#isnapshotstore">SDK reference</seealso>
 public interface ISnapshotStore
 {
     /// <summary>
@@ -340,6 +342,7 @@ internal interface IConditionalDraftDelete
 /// scope every draft to its owner, so the draft id is NOT a bearer capability. In an HTTP host this is
 /// backed by the request's principal (e.g. a Trax principal claim); in unit tests it is a fake.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#isnapshotprincipal">SDK reference</seealso>
 public interface ISnapshotPrincipal
 {
     /// <summary>
@@ -355,6 +358,7 @@ public interface ISnapshotPrincipal
 /// through <see cref="IdempotentEffect"/> so it fires exactly once per intent. The receipt must be non-empty:
 /// a null or empty one is treated as a failed delivery, and the send reports <c>delivery-failed</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/i-snapshot-effect">SDK reference</seealso>
 public interface ISnapshotEffect
 {
     /// <summary>

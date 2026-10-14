@@ -61,6 +61,7 @@ public enum CompareOp
 /// hand-written per runtime (the ~8% escape hatch). Field names are strings at this layer because they are
 /// JSON keys; the authoring surface supplies them from strongly-typed member expressions.</para>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/declarative-data-model#rule">SDK reference</seealso>
 public abstract record Rule
 {
     /// <summary>The field exists and is not JSON null.</summary>

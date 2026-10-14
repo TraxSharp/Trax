@@ -1,21 +1,29 @@
 ---
-title: Machine instances
-description: Reference for IMachineInstances, which creates and advances system-owned machine instances from code, and how their ids are derived from a key.
+title: IMachineInstances
+description: Reference for IMachineInstances, which creates and advances system-owned machine instances from code, and for how their ids are derived from a MachineKey.
 type: reference
 area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 13
+package: Trax.Effect.StateMachine.Persistence
+namespace: Trax.Effect.StateMachine.Persistence
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/MachineInstances.cs
 ---
 
-# Machine instances
+# IMachineInstances
 
+Creates and advances the instances of a system-owned machine (one that declares `SystemOwned()`): instances no user
+owns, such as one per partition of a source, each moving through its stages on its own. Host code calls it, from a
+train or at startup. [`AddStateMachines`](/docs/sdk-reference/statemachine-api/add-state-machines) registers it,
+scoped.
 
-Most drafts belong to a user. Some work needs instances no user owns: one per partition of a source, say, each
-moving through its stages on its own. `IMachineInstances.Start` creates those, from a train or at startup.
-[`AddStateMachines`](/docs/sdk-reference/statemachine-api/add-trax-state-machines) registers it, scoped.
+## Signature
 
-```csharp
+```csharp fragment
+namespace Trax.Effect.StateMachine.Persistence;
+
 public interface IMachineInstances
 {
     Task<MachineInstance> Start<TMachine>(
@@ -33,14 +41,30 @@ public interface IMachineInstances
 }
 
 public sealed record MachineInstance(Guid Id, string Machine, string State, bool Created);
+
+public static class MachineInstanceId
+{
+    public static readonly Guid Root;
+    public static Guid For(string machine, MachineKey key);
+    public static Guid Namespace(string machine);
+}
 ```
 
-```csharp
-var instance = await instances.Start<IngestMachine>(MachineKey.Of("orders-db", "partition-7"));
-// instance.Created is true the first time, false on every call after it
-```
+## Members
 
-## What Start does
+| Member | Description |
+|--------|-------------|
+| `Start<TMachine>(key, context, cancellationToken)` | Creates the instance for `key`, or returns the one that exists. See [Start](#start). |
+| `Advance<TMachine>(key, trigger, input, cancellationToken)` | Fires one trigger on the instance for `key`, as the system. See [Advance](#advance). |
+| `MachineInstance` | `Id`, `Machine`, `State`, and `Created`: true when this call created the instance. |
+| `MachineKey.Of(params string[] parts)` | A key of one or more parts. A `string` converts to a one-part key. `Parts` lists them. |
+| `MachineInstanceId.For(machine, key)` | The instance id a key maps to. |
+| `MachineInstanceId.Namespace(machine)` | The machine's UUID namespace. |
+| `MachineInstanceId.Root` | `0d3cd492-3485-4ca5-8fdc-e20b35ed5a85`, the root every machine's namespace is derived from. |
+
+## Behavior
+
+### Start
 
 It creates the instance in the machine's initial state with `context` (or the context the machine declares in
 `StartsAt` when `context` is null), or returns the instance that already exists for the key. The context is
@@ -65,16 +89,11 @@ user holds a draft under the same id. See
 [persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) for how the rows are kept apart. A
 system instance is never expired by the draft TTL.
 
-## What Advance does
+### Advance
 
 It fires one trigger on the system instance for `key`, as the system: the code path through which a system
 instance moves other than by its trains' outcomes, such as a `Retry` out of a failure state back into the state
 that invokes the train.
-
-```csharp
-var outcome = await instances.Advance<IngestMachine>(MachineKey.Of("orders-db", "partition-7"), "Retry");
-// AdvanceOutcome.Advanced: the instance is in its invoking state again, with a new run under a new token
-```
 
 It is checked exactly as a user's advance is: the edge's guard, the target state's context rule and the 64 KiB
 cap. An invoked train's outcome trigger (`Ingesting.done`) is refused as `outcome-bound` and a trigger bound to the
@@ -91,14 +110,7 @@ A machine that is not registered, or not system-owned, throws `InvalidOperationE
 No GraphQL operation calls it. A host that lets a person retry a system instance writes its own operation over it,
 under its own authorization; the [Recovery sample](/docs/samples/recovery) does, for operators only.
 
-## How the id is derived
-
-```csharp
-MachineKey.Of(params string[] parts)            // one or more parts; a string converts to a one-part key
-MachineInstanceId.For(string machine, MachineKey key)
-MachineInstanceId.Namespace(string machine)
-MachineInstanceId.Root                          // 0d3cd492-3485-4ca5-8fdc-e20b35ed5a85
-```
+### How the id is derived
 
 The id is an RFC 9562 version 5 UUID, in two steps:
 
@@ -110,3 +122,21 @@ The encoding can be split back into its parts, so two different keys never share
 `("a", "b|c")` and `("a|b|c")` are three ids. A part may be empty; a null part or one holding an unpaired
 surrogate is refused. The id changes if the machine is renamed, as every draft of the machine does. The root and
 the encoding are fixed: changing either would orphan every instance already stored.
+
+## Example
+
+```csharp compile
+var instances = serviceProvider.GetRequiredService<IMachineInstances>();
+
+var instance = await instances.Start<IngestMachine>(MachineKey.Of("orders-db", "partition-7"));
+// instance.Created is true the first time, false on every call after it
+
+var outcome = await instances.Advance<IngestMachine>(MachineKey.Of("orders-db", "partition-7"), "Retry");
+// AdvanceOutcome.Advanced when the instance was in a state Retry leaves
+```
+
+## See also
+
+- [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to), how a system-owned instance's runs are authorized.
+- [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#owners-users-and-the-system), how system rows are kept apart from users' drafts.
+- [The Recovery sample](/docs/samples/recovery), which drives system-owned instances.

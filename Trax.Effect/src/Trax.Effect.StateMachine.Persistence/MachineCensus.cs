@@ -4,6 +4,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// Lists every event and read each machine declares, with the rule that guards it and the surfaces that reach
 /// it, so a host can review what clients and its own code may do.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/add-state-machines#census-and-instruments">SDK reference</seealso>
 public static class MachineCensus
 {
     /// <summary>The rule text of an event, start or read that declares none.</summary>

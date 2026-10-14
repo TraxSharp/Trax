@@ -140,6 +140,7 @@ function startSettled(view: ServerMachineView<MachineSpec>): boolean {
  *
  * Changing `server`, `machine`, `id` or `startRequestId` closes the old instance's stream and opens the new one; unmounting closes it
  * and drops every late answer. Built over the framework-free {@link ServerMachineController}.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function useServerMachine<Spec extends MachineSpec>(
   machine: TypedMachine<Spec>,

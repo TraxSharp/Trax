@@ -1,31 +1,45 @@
 ---
 title: Persistence ports
-description: Reference for the state machine persistence ports ISnapshotPrincipal and ISnapshotStore, StoredSnapshot, request id matching and the EF Core stores.
+description: "Reference for the state machine persistence ports: ISnapshotPrincipal, ISnapshotStore, StoredSnapshot, ISnapshotDraftService, Actor, the claim store and the EF stores."
 type: reference
 area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 8
+package: Trax.Effect.StateMachine.Persistence
+namespace: Trax.Effect.StateMachine.Persistence
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Ports.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotDraftService.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Actor.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/CallerAuthorization.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/EfSnapshotStore.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/EffectClaimStore.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/IdempotentEffect.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/RequestIdRing.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotLimits.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotMachineRegistry.cs
 ---
 
 # Persistence ports
 
-Two ports sit under the draft operations. A host always supplies `ISnapshotPrincipal`;
-[`AddStateMachines`](/docs/sdk-reference/statemachine-api/add-trax-state-machines) provides a default
-`ISnapshotStore`, `EfSnapshotStore`, over the data context your provider registers, so you implement the store
-only for a custom backend.
+The ports under the draft operations. A host always supplies `ISnapshotPrincipal`.
+[`AddStateMachines`](/docs/sdk-reference/statemachine-api/add-state-machines) registers the rest: `ISnapshotStore`
+as `EfSnapshotStore` and `IEffectClaimStore` as `EfEffectClaimStore`, over the data context the provider registers,
+and the `ISnapshotDraftService` each machine's registry entry builds. A host implements a store only for a custom
+backend.
 
 ## ISnapshotPrincipal
 
-The authenticated user behind a request. Every draft is scoped to `CurrentUserKey`, so the draft id is not a
-bearer capability: one user cannot load another's draft by guessing the id.
-
-```csharp
+```csharp fragment
 public interface ISnapshotPrincipal
 {
-    string? CurrentUserKey { get; }   // null when the request is unauthenticated
+    string? CurrentUserKey { get; }
 }
 ```
+
+The authenticated user behind a request. Every draft is scoped to `CurrentUserKey`, so the draft id is not a
+bearer capability: one user cannot load another's draft by guessing the id.
 
 An empty or whitespace key is treated as unauthenticated, the same as `null`, and the draft service refuses one
 with an `ArgumentException`.
@@ -107,29 +121,7 @@ on the row id, revision and invoke token that were checked, and on no effect bei
 between (moved into a committed state, say, or marked by a send) is kept, and is read and checked again. The draft's
 ledger claims go in the delete's transaction.
 
-### Invoked-run ports
-
-Three ports connect a state that [invokes a train](/docs/statemachine/invoking-trains) to the rest of Trax. They are
-internal: a host neither implements nor calls them, and `AddStateMachines` and `AddMediator` register them.
-
-- **The launcher** queues the run. Trax.Mediator implements it. It authorizes the run and writes its work queue entry
-  into the outbox's data context, inside the transaction that moves the snapshot, so the two commit together; it
-  commits nothing itself. It refuses a train whose output reaches a `[TraxSensitive]` member, and, for a user-owned
-  instance, a `[TraxBroadcast]` train, as the startup check does. A user-owned instance's run is authorized against
-  the current caller. A system-owned instance's run is authorized in Trax's trusted execution scope, including one that the previous run's outcome started (no user is
-  present). A user-owned instance never launches from an outcome: the startup check refuses such a machine, and the
-  launcher refuses such a launch with `UnauthorizedAccessException`. The launcher also tells the startup check what
-  about a train stops a machine from invoking it. It lives in the persistence package rather than the engine because
-  it writes through `IDataContext`, and the engine depends on no data provider.
-- **The run cancellation** cancels a run by its invoke token, as described under
-  [Draft expiry and live runs](#draft-expiry-and-live-runs).
-- **The outcome delivery** applies the outcome of an ended run to the instance waiting on it, now, through the
-  delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
-  outcome is applied once however many callers deliver it. The operations service calls it after an operator's
-  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued
-  run, so the instance moves in that request on a host that registers the machine.
-
-### StoredSnapshot
+## StoredSnapshot
 
 A stored draft as read back:
 
@@ -168,7 +160,7 @@ the time set at entry. The EF store does this on every path, `Upsert` and `Inser
 
 The EF store also keeps, beside the snapshot and never inside it, the effect pending on the row
 (`SnapshotDraft.EffectToken`, `EffectKey`, `EffectTrigger`, `EffectRequestId` and `EffectLeaseUntil`; see
-[Effects](/docs/sdk-reference/statemachine-api/effects)) and whether the server put the row in its state
+[ISnapshotEffect](/docs/sdk-reference/statemachine-api/i-snapshot-effect)) and whether the server put the row in its state
 (`SnapshotDraft.ServerRecord`). Every write the EF store makes matches only a row with no pending effect, apart from
 the writes of that effect itself, so nothing moves or changes a row while its effect runs.
 
@@ -230,7 +222,16 @@ added by migration `048_snapshot_draft_request_scope.sql` (Postgres) and `013_sn
 (SQLite). A row written before that migration has neither, so a retry of its last request is refused once as
 `request-id-reused` instead of being replayed.
 
-## Actors, start and discard
+## ISnapshotDraftService
+
+The draft service each machine's registry entry builds (`ISnapshotMachineRegistry.Service(machine)`). Besides the
+actor members below, it declares the `userKey` overloads of `Advance` and `Load` (each acting as a client that holds
+no role), `Autosave(userKey, id, snapshotJson, ct)`, the generic save, which answers an `AutosaveResult`
+(`Saved`, `Conflict` or `Rejected(Code, Message)`), and `Serialize(snapshot)`, the canonical wire of a snapshot.
+`Load` answers a `LoadResult` (`Loaded`, `NotFound` or `Invalid(Code, Message)`), and `Advance` and `Send` an
+`AdvanceOutcome` (`Advanced`, `NotFound`, `Rejected(Reason, Detail)`, `LoadError(Code, Message)` or `Conflict`).
+
+### Actors, start and discard
 
 `ISnapshotDraftService` declares the operations of the typed machine surface, implemented by the draft service a
 host gets from `ISnapshotMachineRegistry`.
@@ -302,7 +303,7 @@ policies exist (`IsPolicyRegistered(policy)`). Trax.Api registers one over the r
 event or a gated `start` (a rule that names a role or a policy), a timer, an invoked train or an effect as
 `save-not-allowed`, and writes nothing; such a machine moves through its declared events.
 
-## What each path may write
+### What each path may write
 
 Autosave stores a snapshot the client computed; advance fires one trigger on the stored draft; send runs the
 machine's effect and then fires its trigger. Only send puts a draft into a committed state or into the state an
@@ -337,14 +338,69 @@ draft instead: a reset releases a claim once its outcome is settled on the draft
 kept, and so is a completed claim whose receipt, under `receipt`, the draft never recorded), and the next send
 replays that receipt only onto the content the effect ran on, `draft-changed` otherwise.
 
+### Invoked-run ports
+
+Three ports connect a state that [invokes a train](/docs/statemachine/invoking-trains) to the rest of Trax. They are
+internal: a host neither implements nor calls them, and `AddStateMachines` and `AddMediator` register them.
+
+- **The launcher** queues the run. Trax.Mediator implements it. It authorizes the run and writes its work queue entry
+  into the outbox's data context, inside the transaction that moves the snapshot, so the two commit together; it
+  commits nothing itself. It refuses a train whose output reaches a `[TraxSensitive]` member, and, for a user-owned
+  instance, a `[TraxBroadcast]` train, as the startup check does. A user-owned instance's run is authorized against
+  the current caller. A system-owned instance's run is authorized in Trax's trusted execution scope, including one that the previous run's outcome started (no user is
+  present). A user-owned instance never launches from an outcome: the startup check refuses such a machine, and the
+  launcher refuses such a launch with `UnauthorizedAccessException`. The launcher also tells the startup check what
+  about a train stops a machine from invoking it. It lives in the persistence package rather than the engine because
+  it writes through `IDataContext`, and the engine depends on no data provider.
+- **The run cancellation** cancels a run by its invoke token, as described under
+  [Draft expiry and live runs](#draft-expiry-and-live-runs).
+- **The outcome delivery** applies the outcome of an ended run to the instance waiting on it, now, through the
+  delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
+  outcome is applied once however many callers deliver it. The operations service calls it after an operator's
+  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued
+  run, so the instance moves in that request on a host that registers the machine.
+
+## ISnapshotMachineRegistry
+
+| Member | Returns | Description |
+| --- | --- | --- |
+| `Service(machine)` | `ISnapshotDraftService?` | the draft service for the machine with that id, or `null` for an unknown or system-owned one |
+| `EffectRunner(machine)` | `ISnapshotEffectRunner?` | the machine's effect runner, or `null` when it binds no effect |
+| `SchemaHash(machine)` | `string?` | the machine's IR hash, or `null` (see [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity)) |
+
+`ISnapshotEffectRunner.Run(userKey, id, requestId, ct)` is the send: it runs the machine's effect once and fires its
+trigger, acting as a client that holds no role.
+
+## IEffectClaimStore
+
+The effect-claim ledger. A machine's effects use it only over a snapshot store a host substituted, and for claims
+recorded before the pending effect moved onto the draft's row; `IdempotentEffect` uses it outside machines.
+
+| Member | Returns | Description |
+| --- | --- | --- |
+| `TryClaim(effectKey, lease, ct)` | `ClaimResult` | claims the key under a lease: `Won(OwnerToken)` by inserting a row or reclaiming an in-flight one whose lease expired, `Lost` when the key is held or completed |
+| `TryClaim(effectKey, lease, contentFingerprint, ct)` | `ClaimResult` | the same, recording the fingerprint of the content the effect runs on |
+| `Complete(effectKey, ownerToken, receipt, ct)` | `bool` | records the receipt, only while `ownerToken` still holds the claim |
+| `GetReceipt(effectKey, ct)` | `string?` | the receipt, or `null` when the key is unclaimed or in flight |
+| `GetCompleted(effectKey, ct)` | `CompletedEffect?` | the receipt and its `ContentFingerprint` in one read |
+| `Release(effectKey, ct)` | `Task` | deletes the claim, completed or in flight; idempotent |
+| `ReleaseForReset(effectKey, receiptRecorded, ct)` | `Task` | the release a reset uses (below) |
+| `ReleaseOwned(effectKey, ownerToken, ct)` | `bool` | deletes the claim only while `ownerToken` owns it and it is in flight |
+| `ReclaimStale(cutoff, ct)` | `int` | deletes in-flight claims whose lease expired before `cutoff`, and returns the count |
+
+`IdempotentEffect.RunOnce(effectKey, effect, lease, ct)` (and the overload with a `contentFingerprint`) claims the
+key, runs `effect` and records its receipt, answering an `EffectOutcome`: `Ran(Receipt)`, `AlreadyRan(Receipt)` with
+the recorded `ContentFingerprint`, or `InProgress`. A null `lease` is `SnapshotLimits.DefaultEffectLease`.
+`EffectClaimSweeper.Sweep(cutoff, ct)` calls `ReclaimStale`.
+
 ## EfSnapshotStore and EfEffectClaimStore
 
-The default stores take the `IDataContext` their tables are reached through and the provider's `ISqlDialect`:
-
-```csharp
+```csharp fragment
 public EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null)
 public EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = null)
 ```
+
+The default stores take the `IDataContext` their tables are reached through and the provider's `ISqlDialect`:
 
 The dialect is how a lost race (a concurrent create of one draft, a claim on a key someone else holds) is told
 apart from a real failure, on Postgres and SQLite alike. Without one, such a race throws instead of returning
@@ -370,3 +426,20 @@ recorded, and keeps every in-flight claim until the lease lets the next send rec
 and a lost claim's `EffectOutcome.AlreadyRan` carries the recorded `ContentFingerprint`; the effect runner compares it
 with the draft's before replaying. Both members have defaults, so a custom claim store keeps compiling: one that does
 not override them records no fingerprint, and its claims replay without the content check.
+
+## Limits
+
+| Constant | Value | Description |
+| --- | --- | --- |
+| `SnapshotLimits.MaxSnapshotBytes` | 65536 | the largest snapshot, trigger input or start input, as JSON (64 KiB); past it a request is `too-large` |
+| `SnapshotLimits.DefaultEffectLease` | 5 minutes | how long an effect stays pending before the next send or the reconciler may take it over |
+| `RequestIdRing.Capacity` | 16 | the client requests a draft remembers |
+| `RequestIdRing.MaxBytes` | 131072 | the ring's size bound, in bytes of the column's JSON text |
+| `RequestIdRing.MaxRequestIdLength` | 200 | the longest request id |
+
+## See also
+
+- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines), what registers these.
+- [ISnapshotEffect](/docs/sdk-reference/statemachine-api/i-snapshot-effect).
+- [Result codes](/docs/sdk-reference/statemachine-api/result-codes).
+- [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances), system-owned instances.

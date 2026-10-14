@@ -7,6 +7,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <see cref="StateMachinesBuilderExtensions.AddStateMachines(Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects, System.Action{StateMachineOptions}, System.Reflection.Assembly[])"/>
 /// overload and read by the machine registry when it builds a per-machine draft service.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/add-state-machines#options">SDK reference</seealso>
 public sealed class StateMachineOptions
 {
     /// <summary>The draft TTL a host has unless it sets <see cref="DraftTtl"/>: 30 days.</summary>

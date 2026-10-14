@@ -15,6 +15,7 @@ namespace Trax.Effect.StateMachine;
 /// state missing either of the last two, naming it. Every target joins the machine's reserved states, and no
 /// ordinary transition may enter one.</para>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine#iinvokebuilder">SDK reference</seealso>
 public interface IInvokeBuilder<TState, TTrigger> : IStateBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum

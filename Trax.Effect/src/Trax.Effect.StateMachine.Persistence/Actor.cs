@@ -6,6 +6,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// through the <c>userKey</c> overloads); there is no trusted actor for a user's instance. Host code drives a
 /// system-owned instance through <see cref="IMachineInstances"/>, which takes no actor.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#actors-start-and-discard">SDK reference</seealso>
 public abstract record Actor
 {
     /// <summary>

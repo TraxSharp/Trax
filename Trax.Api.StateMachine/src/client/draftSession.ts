@@ -143,6 +143,7 @@ const settleOutput = async (
  * Creates a draft from the machine's declared start: the server mints its id and builds its first snapshot,
  * so the client never writes one. Total, like every {@link DraftSession} method; bind the returned id with
  * {@link createDraftSession} to move the draft on.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export async function startDraft(options: StartDraftOptions): Promise<StartResult> {
   const machine = nameOf(options.machine);
@@ -161,6 +162,9 @@ export async function startDraft(options: StartDraftOptions): Promise<StartResul
   return { ok: true, id, snapshot, created: created ?? true, ...(revision != null ? { revision } : {}) };
 }
 
+/**
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
+ */
 export function createDraftSession(options: DraftSessionOptions): DraftSession {
   const { client, id } = options;
   const machine = nameOf(options.machine);

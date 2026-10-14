@@ -22,6 +22,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// stores reach their tables through the <see cref="IDataContext"/> the host's data provider registers, so the
 /// host writes one call and nothing else: no <c>DbContext</c> of its own, no naming of the mutations' assembly.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/add-state-machines">SDK reference</seealso>
 public static class StateMachinesBuilderExtensions
 {
     /// <summary>

@@ -7,6 +7,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// engine still reproduces each machine's committed corpus. Empty result == every machine agrees (or ships no
 /// corpus, which is skipped). A machine with no corpus is not a failure — only a genuine divergence is.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/runtime-integrity">SDK reference</seealso>
 public static class SnapshotSelfCheck
 {
     /// <summary>Self-check every machine that ships a corpus; returns one diff per divergent case, machine-prefixed.</summary>

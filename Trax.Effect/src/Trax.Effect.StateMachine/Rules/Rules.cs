@@ -10,6 +10,7 @@ namespace Trax.Effect.StateMachine;
 /// of a raw record with a magic string. These are thin factories: they only build the data the engine and the
 /// IR exporter already handle.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/rules">SDK reference</seealso>
 public static class Rules
 {
     /// <summary>Match a field on the trigger input.</summary>

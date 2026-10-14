@@ -18,6 +18,7 @@ namespace Trax.Effect.StateMachine.Testing;
 /// }
 /// </code>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine-conformance">SDK reference</seealso>
 public static class DifferentialCorpus
 {
     /// <summary>

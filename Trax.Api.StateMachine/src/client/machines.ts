@@ -170,6 +170,7 @@ type Answered = { answer: TypedAnswer | null | undefined } | { refused: Snapshot
  * sessions above it are unchanged. A GraphQL error (an unauthenticated caller, a document the schema refuses) throws,
  * which the session reports as a transport error; a refusal is a problem, as data, and so is `client-outdated` or
  * `server-outdated`, the host's answer to a persisted document of another version of the machine.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineExecutor(
   endpoint: string,

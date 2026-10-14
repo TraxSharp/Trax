@@ -246,6 +246,7 @@ public sealed record BuiltMachine<TState, TTrigger>(
 }
 
 /// <summary>The root of the fluent configuration. See <see cref="MachineBuilder{TState,TTrigger}"/>.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine#imachinebuilder">SDK reference</seealso>
 public interface IMachineBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
@@ -444,6 +445,7 @@ public interface ITimerBuilder<TState, TTrigger>
 /// distinct case. Typed overloads serialize the record with camelCase names (nulls kept), matching the field
 /// names the guards and reducers read; raw <see cref="JsonObject"/> overloads give exact control.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine#idifferentialbuilder">SDK reference</seealso>
 public interface IDifferentialBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
@@ -481,6 +483,7 @@ public interface IDifferentialBuilder<TState, TTrigger>
 }
 
 /// <summary>Per-state configuration: its context validator, whether it is committed, and its transitions.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine#istatebuilder">SDK reference</seealso>
 public interface IStateBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
@@ -570,6 +573,7 @@ public interface IStateBuilder<TState, TTrigger>
 }
 
 /// <summary>A single transition: its guard, message, reducer, optional exactly-once effect, and destination.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine#itransitionbuilder">SDK reference</seealso>
 public interface ITransitionBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
