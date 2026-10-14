@@ -51,6 +51,8 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
       - name: Move the website branch
         env:
           REF: ${{ inputs.ref }}

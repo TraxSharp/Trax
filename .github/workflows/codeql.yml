@@ -34,6 +34,8 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
       - name: Checkout
         if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -79,6 +81,8 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
             aka.ms:443
             builds.dotnet.microsoft.com:443
             ci.dot.net:443

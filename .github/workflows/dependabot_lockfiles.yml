@@ -91,6 +91,8 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
             aka.ms:443
             builds.dotnet.microsoft.com:443
             ci.dot.net:443
@@ -209,6 +211,8 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
 
       # Downloaded outside the workspace, so the patch can never be picked up as
       # a file change by the commit below.
