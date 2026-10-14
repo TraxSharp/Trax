@@ -46,10 +46,26 @@
     <TraxDashboardAppInput Include="$(TraxDashboardAppDir)index.html;$(TraxDashboardAppDir)package-lock.json;$(TraxDashboardAppDir)vite.config.ts;$(TraxDashboardAppDir)tsconfig*.json;$(TraxDashboardAppDir)scripts/check-bundle.mjs" />
   </ItemGroup>
 
+  <!-- The list of the app's source files, rewritten only when the list changes. It is an input of
+       the build below, so deleting or renaming a file rebuilds the app: a deleted file leaves no
+       newer input behind, and without the list vite would be skipped and the old app embedded. -->
+  <Target Name="ListTraxDashboardAppInputs" Condition="'$(TraxDashboardAppInstalled)' == 'true'">
+    <PropertyGroup>
+      <_TraxDashboardAppInputList>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.inputs</_TraxDashboardAppInputList>
+    </PropertyGroup>
+    <WriteLinesToFile
+      File="$(_TraxDashboardAppInputList)"
+      Lines="@(TraxDashboardAppInput->'%(FullPath)')"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true"
+    />
+  </Target>
+
   <Target
     Name="BuildTraxDashboardApp"
     Condition="'$(TraxDashboardAppInstalled)' == 'true'"
-    Inputs="@(TraxDashboardAppInput)"
+    DependsOnTargets="ListTraxDashboardAppInputs"
+    Inputs="@(TraxDashboardAppInput);$(_TraxDashboardAppInputList)"
     Outputs="$(TraxDashboardAppDir)dist/index.html"
   >
     <Exec
@@ -91,34 +107,92 @@
     </ItemGroup>
   </Target>
 
-  <!-- Records, after each compile, whether the assembly it compiled carries the app, for the pack
-       check below. After the compile rather than with the items above, because a pack with
-       no-build can run the resource targets without compiling anything. -->
+  <!-- Records, after each compile, what the assembly it compiled carries of the app, for the pack
+       check below: the names of the embedded TraxApiDashboard/* files, and the files the embedded
+       index.html names (its relative src and href URLs). After the compile rather than with the
+       items above, because a pack with no-build can run the resource targets without compiling
+       anything. -->
   <Target Name="RecordTraxDashboardAppEmbedded" AfterTargets="CoreCompile">
     <PropertyGroup>
       <_TraxDashboardAppMarker>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.embedded</_TraxDashboardAppMarker>
+      <_TraxDashboardAppReferences>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.references</_TraxDashboardAppReferences>
+      <_TraxDashboardAppIndex>$(TraxDashboardAppDir)dist/index.html</_TraxDashboardAppIndex>
+      <!-- Every relative src or href in the page, as "a;b;", and a ";" for every other character:
+           empty items, which MSBuild drops once the list is unescaped into items below. -->
+      <_TraxDashboardAppReferenceList
+        Condition="'$(TraxDashboardAppInstalled)' == 'true' And Exists('$(_TraxDashboardAppIndex)')"
+        >$([System.Text.RegularExpressions.Regex]::Replace($([System.IO.File]::ReadAllText('$(_TraxDashboardAppIndex)')), '(?s)\b(?:src|href)="(?:\./)?(?![a-zA-Z][a-zA-Z0-9+.-]*:|/|#)([^"?#]+)[^"]*"|.', '$1;'))</_TraxDashboardAppReferenceList>
     </PropertyGroup>
+    <ItemGroup Condition="'$(TraxDashboardAppInstalled)' == 'true'">
+      <_TraxDashboardAppEmbeddedName
+        Include="@(EmbeddedResource->'%(LogicalName)')"
+        Condition="$([System.String]::Copy('%(EmbeddedResource.LogicalName)').StartsWith('TraxApiDashboard/'))"
+      />
+      <_TraxDashboardAppReference Include="$([MSBuild]::Unescape($(_TraxDashboardAppReferenceList)))" />
+    </ItemGroup>
     <WriteLinesToFile
       Condition="'$(TraxDashboardAppInstalled)' == 'true'"
       File="$(_TraxDashboardAppMarker)"
-      Lines="@(EmbeddedResource->'%(LogicalName)')"
+      Lines="@(_TraxDashboardAppEmbeddedName)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true"
+    />
+    <WriteLinesToFile
+      Condition="'$(TraxDashboardAppInstalled)' == 'true'"
+      File="$(_TraxDashboardAppReferences)"
+      Lines="@(_TraxDashboardAppReference->'TraxApiDashboard/%(Identity)')"
       Overwrite="true"
       WriteOnlyWhenDifferent="true"
     />
     <Delete
       Condition="'$(TraxDashboardAppInstalled)' != 'true'"
-      Files="$(_TraxDashboardAppMarker)"
+      Files="$(_TraxDashboardAppMarker);$(_TraxDashboardAppReferences)"
     />
   </Target>
 
+  <!-- Refuses to pack an assembly that does not carry a working app: index.html and every file it
+       names must be among the embedded resources, so a build whose dist/ came out empty or partial
+       fails here rather than in a host. -->
   <Target Name="VerifyTraxDashboardAppIsEmbedded">
+    <PropertyGroup>
+      <_TraxDashboardAppMarker>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.embedded</_TraxDashboardAppMarker>
+      <_TraxDashboardAppReferences>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.references</_TraxDashboardAppReferences>
+    </PropertyGroup>
     <Error
       Condition="'$(TraxDashboardAppInstalled)' != 'true'"
       Text="Packing Trax.Api.Dashboard needs its React app built into it, with node, and $(TraxDashboardAppDir) has no node_modules. Run `npm ci --ignore-scripts` there, then build and pack again."
     />
     <Error
-      Condition="!Exists('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.embedded')"
+      Condition="!Exists('$(_TraxDashboardAppMarker)') Or !Exists('$(_TraxDashboardAppReferences)')"
       Text="Packing Trax.Api.Dashboard needs its React app built into it, and the last build of this project ran before $(TraxDashboardAppDir) had its npm packages. Build it again, then pack."
+    />
+    <ReadLinesFromFile File="$(_TraxDashboardAppMarker)">
+      <Output TaskParameter="Lines" ItemName="_TraxDashboardAppEmbeddedLine" />
+    </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(_TraxDashboardAppReferences)">
+      <Output TaskParameter="Lines" ItemName="_TraxDashboardAppReferenceLine" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_TraxDashboardAppIndexLine
+        Include="@(_TraxDashboardAppEmbeddedLine)"
+        Condition="'%(Identity)' == 'TraxApiDashboard/index.html'"
+      />
+      <_TraxDashboardAppMissing
+        Include="@(_TraxDashboardAppReferenceLine)"
+        Exclude="@(_TraxDashboardAppEmbeddedLine)"
+      />
+    </ItemGroup>
+    <Error
+      Condition="'@(_TraxDashboardAppIndexLine)' == ''"
+      Text="Packing Trax.Api.Dashboard needs its React app built into it, and the last build embedded no TraxApiDashboard/index.html: $(TraxDashboardAppDir)dist/ was empty or incomplete. Run `npm run build` there, then build and pack again."
+    />
+    <Error
+      Condition="'@(_TraxDashboardAppReferenceLine)' == ''"
+      Text="Packing Trax.Api.Dashboard needs its React app built into it, and the embedded index.html names no script or stylesheet, so it is not the app's build. Run `npm run build` in $(TraxDashboardAppDir), then build and pack again."
+    />
+    <Error
+      Condition="'@(_TraxDashboardAppMissing)' != ''"
+      Text="Packing Trax.Api.Dashboard needs its React app built into it, and the embedded index.html names files the last build did not embed: @(_TraxDashboardAppMissing, ', '). Run `npm run build` in $(TraxDashboardAppDir), then build and pack again."
     />
   </Target>
 </Project>
