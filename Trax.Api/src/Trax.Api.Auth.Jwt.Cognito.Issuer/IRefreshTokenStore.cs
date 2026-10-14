@@ -26,6 +26,7 @@ namespace Trax.Api.Auth.Jwt.Cognito.Issuer;
 /// with per-key TTL, etc.).
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/i-refresh-token-store">SDK reference</seealso>
 public interface IRefreshTokenStore
 {
     /// <summary>

@@ -22,6 +22,7 @@ namespace Trax.Api.Auth.Jwt;
 /// translates that into <see cref="Microsoft.AspNetCore.Authentication.AuthenticateResult.Fail(string)"/>.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-jwt-auth">SDK reference</seealso>
 public sealed class DefaultJwtPrincipalResolver : ITraxPrincipalResolver<JwtTokenInput>
 {
     private static readonly string[] SubjectClaimTypes = ["sub", ClaimTypes.NameIdentifier];

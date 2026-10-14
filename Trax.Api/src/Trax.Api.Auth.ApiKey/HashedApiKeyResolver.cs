@@ -18,6 +18,7 @@ namespace Trax.Api.Auth.ApiKey;
 /// resolver is safe to register as a singleton.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/hashed-api-key-resolver">SDK reference</seealso>
 public sealed class HashedApiKeyResolver : ITraxPrincipalResolver<string>
 {
     /// <summary>

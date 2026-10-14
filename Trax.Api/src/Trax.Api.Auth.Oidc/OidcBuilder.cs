@@ -20,6 +20,7 @@ namespace Trax.Api.Auth.Oidc;
 /// <c>Trax.Api.Auth.Jwt</c> instead.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-oidc-auth">SDK reference</seealso>
 public sealed class OidcBuilder
 {
     internal string? Authority { get; private set; }

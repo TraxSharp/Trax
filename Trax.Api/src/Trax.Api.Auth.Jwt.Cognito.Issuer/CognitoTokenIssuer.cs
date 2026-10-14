@@ -43,6 +43,7 @@ namespace Trax.Api.Auth.Jwt.Cognito.Issuer;
 /// <c>TestJwksServer.CreateCognitoIssuer</c> extension wires this for tests.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/cognito-token-issuer">SDK reference</seealso>
 public sealed class CognitoTokenIssuer
 {
     private static readonly JsonWriterOptions JsonWriterOptions = new()
