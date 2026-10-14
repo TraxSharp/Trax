@@ -9,6 +9,7 @@ namespace Trax.Api.GraphQL.Mutations;
 /// <see cref="IOperationsService.UpdateManifestGroupAsync"/> so the dashboard and API
 /// share validation and persistence.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/manifest-groups">SDK reference</seealso>
 public class ManifestGroupMutations
 {
     /// <summary>

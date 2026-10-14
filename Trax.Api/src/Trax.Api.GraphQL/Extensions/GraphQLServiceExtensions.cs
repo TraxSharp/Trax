@@ -50,6 +50,7 @@ namespace Trax.Api.GraphQL.Extensions;
 /// Registers and maps the Trax GraphQL API. Call <c>AddTraxGraphQL</c> on the service collection
 /// after <c>AddTrax(...)</c>, then <c>UseTraxGraphQL</c> on the application to map the endpoint.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/add-trax-graphql">SDK reference</seealso>
 public static class GraphQLServiceExtensions
 {
     private const string SchemaName = "trax";

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Trax.Api.GraphQL.DataLoaders.CrossSchema;
 
 /// <summary>Registration for cross-schema data loaders.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/cross-schema-data-loaders">SDK reference</seealso>
 public static class CrossSchemaServiceCollectionExtensions
 {
     /// <summary>

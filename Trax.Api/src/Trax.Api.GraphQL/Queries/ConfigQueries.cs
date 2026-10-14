@@ -12,6 +12,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// matches what the dashboard's ServerSettingsPage reads, since both go through
 /// <see cref="IOperationsService"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/config">SDK reference</seealso>
 public class ConfigQueries
 {
     /// <summary>

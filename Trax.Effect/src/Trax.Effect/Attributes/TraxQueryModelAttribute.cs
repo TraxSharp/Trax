@@ -13,6 +13,7 @@ namespace Trax.Effect.Attributes;
 /// Each feature (paging, filtering, sorting, projection) can be individually disabled
 /// via the corresponding property. All default to <c>true</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/query-models">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxQueryModelAttribute : Attribute
 {

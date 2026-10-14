@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.Mutations;
 /// Mutations under <c>operations.config</c>. Patches mutable scheduler runtime
 /// settings; the same service powers the dashboard's ServerSettingsPage save action.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/config">SDK reference</seealso>
 public class ConfigMutations
 {
     /// <summary>

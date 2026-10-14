@@ -12,6 +12,7 @@ namespace Trax.Effect.Attributes;
 /// Trains without this attribute (or <see cref="TraxMutationAttribute"/>) are not exposed
 /// as GraphQL endpoints. A train cannot have both attributes.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/trax-graphql-attribute">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxQueryAttribute : Attribute
 {

@@ -7,6 +7,7 @@ namespace Trax.Api.GraphQL.Mutations;
 // The operator's one action on a state-machine instance. It calls the operations service method
 // the dashboard's Cancel button calls (central docs/0022) and sits under the operations field, so
 // the host's operations gate decides who may call it (central docs/0046).
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/machine-instances">SDK reference</seealso>
 public partial class OperationsMutations
 {
     /// <summary>

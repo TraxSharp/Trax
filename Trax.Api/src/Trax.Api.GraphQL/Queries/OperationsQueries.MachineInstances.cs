@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.Queries;
 // IOperationsService, the calls the dashboard's State machines page makes (central docs/0022),
 // and sits under the operations field, so the host's operations gate decides who reads it. No
 // field returns a snapshot's context or its owner's key (central docs/0046).
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/machine-instances">SDK reference</seealso>
 public partial class OperationsQueries
 {
     /// <summary>The error code a user's draft looked up without its row id is refused with.</summary>

@@ -21,6 +21,7 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// authorization or each train's own posture admits them to, and one who could see nothing is
 /// refused when subscribing.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/subscriptions">SDK reference</seealso>
 public class LifecycleSubscriptions
 {
     private const string PrincipalState = "ClaimsPrincipal";

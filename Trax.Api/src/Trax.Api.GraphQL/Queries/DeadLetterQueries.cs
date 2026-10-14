@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// <summary>
 /// Queries for dead letter records with optional status filtering and pagination.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/dead-letters">SDK reference</seealso>
 public class DeadLetterQueries
 {
     /// <summary>

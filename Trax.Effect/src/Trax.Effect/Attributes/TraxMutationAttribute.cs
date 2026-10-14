@@ -31,6 +31,7 @@ namespace Trax.Effect.Attributes;
 /// </code>
 /// </example>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/trax-graphql-attribute">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxMutationAttribute : Attribute
 {

@@ -21,6 +21,7 @@ namespace Trax.Api.GraphQL.DataLoaders.CrossSchema;
 /// rather than sharing the request-scoped instance.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/cross-schema-data-loaders">SDK reference</seealso>
 public sealed class CrossSchemaLoader<TContext, TEntity>(
     IDbContextFactory<TContext> contextFactory,
     IBatchScheduler batchScheduler,

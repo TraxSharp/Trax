@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.Mutations;
 /// <summary>
 /// Dead letter management mutations: requeue, acknowledge, and batch operations.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/dead-letters">SDK reference</seealso>
 public class DeadLetterMutations
 {
     /// <summary>

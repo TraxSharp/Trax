@@ -31,6 +31,9 @@ namespace Trax.Api.GraphQL.Queries;
 /// Predefined operational queries: health, trains, manifests, manifest groups, execution
 /// history, and the nested <c>deadLetters</c> namespace.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/operations">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/manifests">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/executions">SDK reference</seealso>
 public partial class OperationsQueries
 {
     /// <summary>
