@@ -127,6 +127,20 @@ describe("generateContextTypes", () => {
       );
       expect(out).toContain('size?: "s" | null;');
     });
+
+    // What the C# exporter writes for a `List<string>?` property: the element schema in `values`,
+    // with no constraint to read it from.
+    it("gives a nullable list its element type", () => {
+      const out = generateContextTypes(
+        schemaFor({
+          name: "fields",
+          type: "array",
+          nullable: true,
+          values: { type: "string", nullable: false },
+        }),
+      );
+      expect(out).toContain("fields?: string[] | null;");
+    });
   });
 
   it("emits unions and a context interface derived from the schema", () => {

@@ -219,4 +219,11 @@ describe("bundleModule", () => {
       }),
     ).rejects.toThrow(/Could not load esbuild/);
   });
+
+  it("names the folder to run npm ci in when esbuild is missing", async () => {
+    const failure = bundleModule(join(engineSrc, "index.ts"), () => {
+      throw new Error("not installed");
+    });
+    await expect(failure).rejects.toThrow(`run \`npm ci\` in ${join(repoRoot, ".")}`);
+  });
 });

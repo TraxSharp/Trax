@@ -1,4 +1,9 @@
 import { Buffer } from "node:buffer";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The engine's folder, two up from this file (tools/lib), whose node_modules esbuild resolves from.
+const engineRoot = join(fileURLToPath(new URL("../..", import.meta.url)), ".");
 
 /**
  * Bundle a TypeScript entry module (and everything it imports) into a single in-memory ESM with esbuild, then
@@ -18,9 +23,8 @@ export async function bundleModule(
     esbuild = await importEsbuild();
   } catch (cause) {
     throw new Error(
-      "Could not load esbuild, which is needed to bundle the engine source. It ships transitively with the " +
-        "engine's tsup/vitest devDependencies; run `npm install` in the engine repo, or invoke the CLI from a " +
-        "directory where `esbuild` resolves.",
+      "Could not load esbuild, which is needed to bundle the engine source. It is one of the engine's " +
+        `devDependencies and is not installed: run \`npm ci\` in ${engineRoot}, then generate again.`,
       { cause },
     );
   }
