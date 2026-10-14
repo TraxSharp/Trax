@@ -1,56 +1,29 @@
 ---
-title: Declarative authoring
-description: Declarative state machine authoring, where guards, reducers and context rules are data built from records, so the machine can export its IR.
+title: Write guards and reducers as data
+description: "Author a state machine's guards, reducers and context rules as data from records and the Rules vocabulary, so the machine exports its IR and can be served."
 type: how-to
 area: machines
 nav_order: 2
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine/Rules
 ---
 
-# Declarative authoring
+# Write guards and reducers as data
 
-[Authoring a machine](/docs/statemachine/authoring) writes guards, reducers, and validators as C# delegates.
-They run, but they are opaque closures: the engine can execute them, and nothing more. Declarative authoring
-writes the same three things as data. A guard becomes a `Rule`, a reducer becomes a `Reduction`, and a state's
-context rule becomes a schema reflected from a record. The machine then behaves identically (the data compiles
-to the same engine delegates) and, because the behaviour is now inspectable, it exports a neutral IR that
-generates the frontend twin instead of you hand-writing it.
+A guard written as `When(Func...)`, a reducer as `Reduce(Func...)` and a state rule as `Holds(...)` run, but they
+are closures nothing can read. Written as data instead (a `Rule`, a `Reduction`, a schema reflected from a record),
+the machine behaves the same and exports an [IR](/docs/sdk-reference/statemachine-api/ir-format), which is what
+serving it to clients and generating its TypeScript twin both need. Why the IR matters is in
+[The codegen pipeline](/docs/statemachine/codegen-pipeline).
 
-## Context and input are records
+## 1. Describe each context and input as a record
 
-The state's context and the trigger's input are C# records. The schema, its field names, JSON types,
-nullability, and constraints, falls out of the type. `[MinLength(1)]` on a string or array becomes a
-non-empty constraint, and `[MaxLength(n)]` bounds a string's length or a collection's count at n, checked when the
-value is present (a `Length` or `Count` rule with `LessOrEqual`).
+Give every state that carries data a context record, and every trigger that takes input an input record. The
+schema (field names, JSON types, nullability, constraints) comes from the type, and attributes add constraints:
+`[MinLength(1)]` is non-empty, `[MaxLength(n)]` bounds a length or a count.
 
-Each field's JSON type is the one System.Text.Json writes for its CLR type, so a record always validates
-against its own camelCase JSON:
-
-| CLR type | JSON type |
-| --- | --- |
-| `string`, `char`, `Guid`, `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri`, any enum | string (an enum under `JsonStringEnumConverter`) |
-| every integral type, signed or unsigned, including `Int128` and `UInt128` | integer (a number with no fractional part) |
-| `float`, `double`, `decimal`, `Half` | number |
-| `bool` | boolean |
-| `IDictionary<K, V>`, `IReadOnlyDictionary<K, V>`, `JsonObject`, a record or class | object |
-| any other `IEnumerable`, `JsonArray` | array, with an element-type constraint when the element is one of the scalars above |
-
-A property's name is its `[JsonPropertyName]` when it has one, else its name under
-`JsonNamingPolicy.CamelCase` (`PaidWith` is `paidWith`, `ID` is `id`, `URLValue` is `urlValue`), and a
-`[JsonIgnore]` property is left out, as System.Text.Json writes the record. An integer field is refused outside its
-CLR type's range (an `int` refuses `1e10`), and a dictionary's values and a list's elements are checked against their
-own type (a `Dictionary<string, int>` refuses `{"a": "one"}`); see
-[the IR format](/docs/sdk-reference/statemachine-api/ir-format). A property with no fixed JSON type (`object`, `JsonNode`, `JsonElement`,
-`BigInteger`, a delegate) makes `Context<T>()` and `WithInput<T>()` throw `InvalidOperationException` naming it,
-when the machine is configured. Validate such a state with `Holds(...)` instead. So does a context or input
-record that contains itself, which has no finite shape.
-
-A trigger's input record is described as strictly as its CLR type, nested records included, and both engines
-refuse an input that does not match it as `invalid-input` before any guard reads it. A trigger without
-`WithInput` takes no input. See [Trigger input](/docs/sdk-reference/statemachine-api/fluent-authoring#trigger-input).
-
-```csharp
+```csharp compile=turnstile
 using System.ComponentModel.DataAnnotations;
-using static Trax.Effect.StateMachine.Rules;
 
 public sealed record UnlockedContext
 {
@@ -64,13 +37,22 @@ public sealed record CoinInput
 }
 ```
 
-## The machine
+[Context and input schemas](/docs/statemachine/context-schemas) lists the JSON type each CLR type maps to and the
+property types that refuse to configure.
 
-`Context<T>()` declares a state's shape from its record. `WithInput<T>()` declares a trigger's input shape.
-`When(Rule)` and `Reduce(Reduction)` take the data forms built by the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules).
-Fields are referenced by member expression (`i => i.Coin`), never by string.
+## 2. Declare states and edges with rules
 
-```csharp
+`Context<T>()` declares a state's shape from its record, and `Context()` a state that carries none.
+`WithInput<T>()` declares a trigger's input. `When(Rule)` and `Reduce(Reduction)` take the data forms built by the
+[Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and fields are referenced by member expression
+(`i => i.Coin`), never by string.
+
+```csharp compile=turnstile
+using System.Text.Json.Nodes;
+using Trax.Effect.StateMachine;
+using Trax.Effect.StateMachine.Persistence;
+using static Trax.Effect.StateMachine.Rules;
+
 public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 {
     protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
@@ -78,45 +60,49 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
         m.Id("turnstile").Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
 
         m.In(TurnstileState.Locked)
-            .Context()                                              // Locked carries no context
+            .Context()
             .On(TurnstileTrigger.Coin)
-                .WithInput<CoinInput>()
-                .When(Input((CoinInput i) => i.Coin).IsOneOf("quarter", "dollar"))
-                .Because("Only a quarter or a dollar is accepted.")
-                .Reduce(Set((UnlockedContext u) => u.PaidWith).FromInput((CoinInput i) => i.Coin))
-                .To(TurnstileState.Unlocked);
+            .WithInput<CoinInput>()
+            .When(Input((CoinInput i) => i.Coin).IsOneOf("quarter", "dollar"))
+            .Because("Only a quarter or a dollar is accepted.")
+            .Reduce(Set((UnlockedContext u) => u.PaidWith).FromInput((CoinInput i) => i.Coin))
+            .To(TurnstileState.Unlocked);
 
         m.In(TurnstileState.Unlocked)
-            .Context<UnlockedContext>()                            // schema comes from the record
-                .On(TurnstileTrigger.Push)
-                .Reduce(Clear())
-                .To(TurnstileState.Locked);
+            .Context<UnlockedContext>()
+            .On(TurnstileTrigger.Push)
+            .Reduce(Clear())
+            .To(TurnstileState.Locked);
     }
 }
 ```
 
-This is the same turnstile as the delegate version, down to the byte on the wire. The `Locked -Coin-> Unlocked`
-guard, the reducer that records `paidWith`, and the `Unlocked` context rule are now data the engine evaluates
-through a shared interpreter, so a differential corpus proves the two authoring styles produce identical
-behaviour.
+`TurnstileState` (`Locked`, `Unlocked`) and `TurnstileTrigger` (`Coin`, `Push`) are plain enums. The guard on
+`Locked -Coin-> Unlocked`, the reduction that records `paidWith` and the `Unlocked` context rule are now data, which
+both engines evaluate through the same interpreter.
 
-## What you get
+## 3. Name what the vocabulary cannot express
 
-A fully declarative machine records a `DeclarativeModel`, which `IrExporter` serializes to the machine's
-`.ir.json`: identity, per-state context schema, per-trigger input schema, and every transition's guard and
-reducer as data. From that one file the generators emit the frontend's state and trigger types, the context
-type per state, the validators, and a runnable typed machine, so the only thing hand-written per frontend is
-the UI that drives it.
+For a guard or reduction the vocabulary has no form for (arithmetic, a lookup), use a custom one rather than a
+delegate: `new Rule.Custom(name)` with `CustomGuard(name, handler)`, or `new Reduction.Custom(name)` with
+`CustomReducer(name, handler)`, on the machine builder. The IR carries the name, and each runtime binds a handler
+for it (`customGuards` and `customReducers` in TypeScript). `Build()` throws for a name with no handler. See
+[Beyond the vocabulary](/docs/sdk-reference/statemachine-api/rules#beyond-the-vocabulary).
 
-Mixing styles is allowed while you build and run a machine (the delegate and data overloads live on one
-builder), which lets you migrate a machine edge by edge. The export refuses it: the IR cannot carry a delegate,
-so once a machine makes any declarative call, `ExportIr()` throws `InvalidOperationException` while any edge
-still has a delegate guard or reducer, or any state a `Holds` validator, and the message names each one.
-Otherwise the generated twin would treat such an edge as unconditional and keep the context while the server
-runs the delegate. For the rare case the vocabulary cannot express, name a custom rule (`Rule.Custom` with
-`CustomGuard`, or `Reduction.Custom` with `CustomReducer`) rather than dropping to a delegate. See
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).
+## 4. Check that the machine exports
+
+A machine may mix delegate and data forms while you migrate it edge by edge, because both live on one builder. The
+export does not accept the mix: once a machine makes any declarative call, `ExportIr()` throws
+`InvalidOperationException` while any edge still has a delegate guard or reducer, or any state a `Holds` validator,
+and the message names each one. Otherwise the generated twin would treat such an edge as unconditional and keep the
+context while the server runs the delegate. Run [`trax machine generate`](/docs/reference/cli#trax-machine-generate)
+or [`trax machine check`](/docs/reference/cli#trax-machine-check) to export it. See
+[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative) and
+[Exporting the IR](/docs/sdk-reference/statemachine-api/fluent-authoring#exporting-the-ir).
+
+To serve the machine to clients, add the caller rules and the `[TraxMachine]` mark described in
+[Author and serve a machine](/docs/statemachine/authoring).
 
 ## SDK Reference
 
-> [Context&lt;T&gt;](/docs/sdk-reference/statemachine-api/fluent-authoring) | [WithInput&lt;T&gt;](/docs/sdk-reference/statemachine-api/fluent-authoring) | [When(Rule)](/docs/sdk-reference/statemachine-api/fluent-authoring) | [Reduce(Reduction)](/docs/sdk-reference/statemachine-api/fluent-authoring) | [Input / Field](/docs/sdk-reference/statemachine-api/rules) | [IsOneOf](/docs/sdk-reference/statemachine-api/rules) | [Set / FromInput](/docs/sdk-reference/statemachine-api/rules) | [Clear](/docs/sdk-reference/statemachine-api/rules)
+> [Context&lt;T&gt;](/docs/sdk-reference/statemachine-api/fluent-authoring#istatebuilder) | [WithInput&lt;T&gt;](/docs/sdk-reference/statemachine-api/fluent-authoring#trigger-input) | [When(Rule) / Reduce(Reduction)](/docs/sdk-reference/statemachine-api/fluent-authoring) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model)

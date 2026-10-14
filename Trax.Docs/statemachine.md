@@ -1,12 +1,15 @@
 ---
-title: State Machines
-description: "Trax.Effect.StateMachine overview: the snapshot and definition documents, the three guarantees, matching C# and TypeScript runtimes, and exactly-once effects."
+title: State machines
+description: "How Trax state machines work: the definition and snapshot documents, the three guarantees, matching C# and TypeScript runtimes, and exactly-once effects."
 type: explanation
 area: machines
 nav_order: 1
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence
 ---
 
-# State Machines
+# State machines
 
 Trax.Effect.StateMachine represents a multi-step flow (a wizard, an application form, a checkout) as a
 small, language-neutral snapshot, so a C# backend and a TypeScript client agree on where a user is in the
@@ -15,14 +18,13 @@ can be stored in Postgres and rebuilt from any point, so a user can start on one
 another. Illegal (state, data) combinations are made unrepresentable, and neither the API nor the client can
 produce an unhandled exception.
 
-To author a machine and wire it into a host, start with [Authoring a machine](/docs/statemachine/authoring).
-To author it as data (guards and reducers the engine can export to an IR and generate the frontend from), see
-[Declarative authoring](/docs/statemachine/declarative-authoring). For a state that runs a train and routes its
-outcome, see [Invoking a train](/docs/statemachine/invoking-trains).
+To build one, follow [Author and serve a machine](/docs/statemachine/authoring). Guards and reducers written as data
+are covered in [Write guards and reducers as data](/docs/statemachine/declarative-authoring), and a state that runs
+a train in [Invoke a train from a state](/docs/statemachine/invoking-trains).
 
 ## The two-document model
 
-Keep these two things separate. Conflating them is the classic mistake.
+A machine has two documents, and most mistakes come from treating them as one.
 
 | | Definition | Snapshot |
 | --- | --- | --- |
@@ -37,8 +39,8 @@ the data for that step, and only that step, so its shape is discriminated by `st
 
 ## The three guarantees
 
-1. **Resumable from any point.** A snapshot fully determines an instance. Rebuilding it is just a
-   `Rehydrate` of the stored JSON. There is no hidden in-memory state to reconstruct.
+1. **Resumable from any point.** A snapshot fully determines an instance. Rebuilding it is a `Rehydrate` of the
+   stored JSON. There is no hidden in-memory state to reconstruct.
 2. **Illegal states unrepresentable.** Each state validates its own context on the way in (rehydrate) and on
    the way out (advance). A snapshot that claims a state but carries the wrong data is rejected as a typed
    error, never quietly accepted.
@@ -55,115 +57,83 @@ the declared name, so the value that is stored and served is canonical.
 ## Two runtimes, one behavior
 
 The engine is implemented twice, once in C# (`Trax.Effect.StateMachine`) and once in TypeScript
-(`@trax/state-machine`). They are kept identical not by generating one from the other but by a shared set of
-language-neutral conformance fixtures that both engines drive and must agree on. Only the engine's result
-codes (`no-transition`, `guard-failed`, `invalid-context`, `internal-error`, `malformed`, `unknown-machine`,
-`version-mismatch`, `unknown-state`) are contract. Human-readable detail text is free to differ. The snapshot
-mutations add their own codes on top (`not-found`, `conflict`, `unauthenticated` and more); the
-[result codes](/docs/sdk-reference/statemachine-api/result-codes) page lists every code a client can receive.
+(`@trax/state-machine`). They are kept identical not by generating one engine from the other but by a shared set of
+language-neutral conformance fixtures that both engines drive and must agree on. Only the result codes are contract;
+human-readable detail text is free to differ. [Result codes](/docs/sdk-reference/statemachine-api/result-codes)
+lists every code a client can receive, the engine's and the persistence layer's.
 
-The machine is authored in C#, which is the source of truth, and exported to a neutral IR
-(`<machine>.ir.json`). Common guards and reducers are authored declaratively and travel in the IR as data;
-a small interpreter on each side runs them, so they are single-sourced rather than hand-written per language.
-A genuinely-custom guard or reducer is bound by name in the IR and hand-written per runtime (the escape
-hatch): in C# with `CustomGuard(name, fn)` / `CustomReducer(name, fn)` on the builder, in TypeScript with
-`customGuards` / `customReducers`. A C# machine that names a custom rule or reduction with no handler bound
-fails at `Build()`, rather than refusing that edge forever. A guard or reducer written as a plain C# delegate
-(`When(Func...)`, `Reduce(Func...)`) cannot be carried by the IR at all, so export refuses a declarative machine
-that still has one, naming the edge, rather than emit it as an unconditional edge (see
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). The snapshot itself still carries only structure and data, never logic. A machine's structure and its
-declarative logic are generated for the frontend from that IR, and a drift check fails the build if a
-committed generated file goes stale.
+The machine is authored in C#, which is the source of truth, and exported to a neutral
+[IR](/docs/sdk-reference/statemachine-api/ir-format) (`<machine>.ir.json`). Common guards and reducers are authored
+declaratively and travel in the IR as data; a small interpreter on each side runs them, so they are single-sourced
+rather than hand-written per language. A guard or reducer the vocabulary cannot express is bound by name in the IR
+and hand-written once per runtime: in C# with `CustomGuard(name, fn)` / `CustomReducer(name, fn)`, in TypeScript
+with `customGuards` / `customReducers`. A C# machine that names a custom rule or reduction with no handler bound
+fails at `Build()`, rather than refusing that edge forever. A guard or reducer written as a plain C# delegate cannot
+be carried by the IR at all, so export refuses a declarative machine that still has one, naming the edge, rather
+than emit it as an unconditional edge (see
+[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). The
+snapshot itself carries only structure and data, never logic.
 
-Structure agreement is not enough on its own: any custom (hand-written) guard or reducer exists once per
-language, and the interpreters that run the declarative rules must agree too, so behavior can still drift.
-That is caught by an exhaustive **differential corpus**. TypeScript is the oracle:
-it drives the engine over every reachable snapshot (discovered by walking the machine's own transitions from
-the initial snapshot, plus a few declared `seeds` for states whose context arrives out of band), times every
-trigger, times a few representative `samples` per trigger, and records each outcome as canonical wire (on a
-transition) or a rejection code. The corpus is committed as `machines/<machine>/differential.json`; both
-engines replay it and must reproduce every outcome byte-for-byte. Turnstile is 18 cases, checkout 30, most
-of them rejections, which is exactly what a hand-written fixture set never covers exhaustively.
-
-The corpus is machine-managed; you never hand-write it. The `samples` and `seeds` are authored in C# with
-`.Differential(...)` and exported into the IR's `differential` block. Regenerate deliberately, and the git diff of the golden is the review of what changed. Each side replays the committed file independently, so the C# suite needs no Node and the
-TypeScript suite needs no .NET.
-
-The **canonical wire** is what makes a byte-for-byte comparison meaningful. The envelope (`machine`,
-`version`, `state`, `context`) is emitted in fixed order; the context is canonicalized per RFC 8785 (JCS):
-object keys sorted by UTF-16 code unit (recursively, with array order preserved), numbers formatted by the
-ECMAScript `Number` algorithm (so `1e21` is `1e+21`, not .NET's `1E+21`), and strings escaped exactly as
-`JSON.stringify` (non-ASCII and valid surrogate pairs stay literal; control characters use the short escapes
-or lowercase `\u00xx`, and a lone surrogate, which has no UTF-8 encoding, is escaped as lowercase `\udxxx`).
-Integer-like keys are ordered like any other (`"10"` before `"2"`), and a key named `__proto__` is an
-ordinary key.
-Both engines emit identical bytes regardless of how the snapshot was constructed, which is the prerequisite
-for the differential's byte-exact compare and for any hash or signature over a stored snapshot.
-
-Forward migration of stored snapshots is guarded the same way. When a machine bumps its `version`, a
-per-source-version migration function upgrades an older stored snapshot on rehydrate (a missing step in the
-chain is a typed `version-mismatch`, never a silent misread). Correctness against real stored shapes is pinned
-by a **migration golden**, `machines/<machine>/migration.json`: a committed set of stored older-version
-snapshots and the exact canonical wire each must become. Both engines replay it, so a migration that drops,
-renames, or reorders a surviving field fails, and the two runtimes cannot migrate the same draft differently.
-Where the differential guards machine logic, the migration golden guards schema evolution.
+Agreement on structure is not enough on its own, because a custom guard exists once per language and the two
+interpreters must agree too. Two committed goldens, the differential corpus and the migration golden, are replayed by
+both engines and compared byte for byte; [The codegen pipeline](/docs/statemachine/codegen-pipeline) explains how
+they are produced and what each one catches. A byte-for-byte compare needs one serialization that both engines emit
+whatever built the snapshot: the [canonical wire](/docs/statemachine/canonical-wire), RFC 8785 with the
+`JSON.stringify` number and string rules. It is also what makes a hash or a signature over a stored snapshot
+meaningful.
 
 ## Persistence and exactly-once effects
 
 The persistence layer is generic over a machine's (state, trigger) pair and stores the context in a real
-`jsonb` column. Its two tables (`snapshot_draft` and `effect_claim`) ship as migrations in the core data
-providers, so registering `UsePostgres` or `UseSqlite` creates them automatically. There is no manual DDL and
-no `EnsureCreated` step. A draft is scoped to its owner by a composite key, and every authoritative write
-carries an app-managed optimistic-concurrency token, so concurrent writers get a typed conflict rather than a
-lost update or a thrown exception. Two write paths have different trust levels. Autosave is the soft path: the
-client sends a whole snapshot, the server validates it and stores it. Advance is the authoritative path: the
-client sends only a trigger, and the server re-drives the transition from the stored snapshot, never
-trusting a client-computed state. The soft path serves only machines with no server-side behaviour: a machine
-with a gated event or start (one whose rule names a role or a policy), a timer, an invoked train or an effect
-refuses every save as `save-not-allowed`, and moves only through its declared events.
+`jsonb` column. Its tables (`snapshot_draft` and `effect_claim`) ship as migrations in the core data
+providers, so registering `UsePostgres` or `UseSqlite` creates them. There is no manual DDL and no `EnsureCreated`
+step. A draft is scoped to its owner by a composite key, and every authoritative write carries an app-managed
+optimistic-concurrency token, so concurrent writers get a typed conflict rather than a lost update or a thrown
+exception.
 
-Autosave stores the context the client wrote, so any value an effect will act on must be held to its
-true value by the state's `Holds`, not just to its type. A checkout whose context carries a `total`
-holds `total == items x price` in every state; checking only that `total` is a number would let a
-browser save two items at one cent and have the charge take one cent. The
-[State Machine sample](/docs/samples/state-machine) shows the check and its test.
+Two write paths have different trust levels. Autosave is the soft path: the client sends a whole snapshot, the
+server validates it and stores it. Advance is the authoritative path: the client sends only a trigger, and the
+server re-drives the transition from the stored snapshot, never trusting a client-computed state. The soft path
+serves only machines with no server-side behaviour: a machine with an event or a start gated by a role or a policy,
+a timer, an invoked train or an effect refuses every save as `save-not-allowed`, and moves only through its declared
+events.
 
-Some transitions carry an irreversible side effect: charge a card, send a letter, provision a resource.
-Those must run exactly once per intent, even under retries, two devices, or a crash mid-flight. A send marks
-the draft's row before it runs the effect, so two concurrent sends deliver once and nothing else writes the draft
-while the effect runs; the receipt, the move and the end of the mark are one write, and a retry replays the
-recorded result. A lease with a fence token keeps it live: if a runner marks the draft and then dies, the lease
-expires and the next send, or the outcome reconciler on any host that registers the effect, takes the mark over and
-runs the effect again under the same key, which the effect passes to the system it calls; a revived stuck runner is
-fenced out of recording over the new claimant's work. See [Effects](/docs/sdk-reference/statemachine-api/effects).
+Autosave stores the context the client wrote, so any value an effect will act on has to be held to its true value
+by the state's rule, not just to its type. A checkout whose context carries a `total` holds
+`total == items x price` in every state; checking only that `total` is a number would let a browser save two items
+at one cent and have the charge take one cent. The [State Machine sample](/docs/samples/state-machine) shows the
+check and its test.
+
+Some transitions carry an irreversible side effect: charge a card, send a letter, provision a resource. Those run
+exactly once per intent, even under retries, two devices, or a crash mid-flight. A send marks the draft's row before
+it runs the effect, so two concurrent sends deliver once and nothing else writes the draft while the effect runs;
+the receipt, the move and the end of the mark are one write, and a retry replays the recorded result. A lease with a
+fence token keeps the mark live: if a runner marks the draft and then dies, the lease expires and the next send, or
+the outcome reconciler on any host that registers the effect, takes the mark over and runs the effect again under the
+same key, which the effect passes to the system it calls. A revived stuck runner is fenced out of recording over the
+new claimant's work. [Effects](/docs/sdk-reference/statemachine-api/effects) is the reference.
 
 Outside a machine, the same guarantee is `IdempotentEffect`, over the `effect_claim` ledger. There, reclaim happens
-on demand, on the next attempt at that intent: an abandoned claim stays in `effect_claim` until someone tries again.
-`EffectClaimSweeper` releases every claim whose lease has expired, but Trax neither registers nor schedules it. If you
-want that backstop, run it yourself, for example from a scheduled train:
-`await new EffectClaimSweeper(claimStore).Sweep(DateTimeOffset.UtcNow)`, with the scoped `IEffectClaimStore`
-that `AddStateMachines` registers.
+on demand, on the next attempt at that intent, so an abandoned claim stays in `effect_claim` until someone tries
+again. `EffectClaimSweeper` releases every claim whose lease has expired, and Trax neither registers nor schedules
+it: a host that wants that backstop runs it itself, for example from a scheduled train, with the scoped
+`IEffectClaimStore` that `AddStateMachines` registers.
 
 A draft has no natural end. A user can abandon a half-filled form, and a completed one lingers as a committed
-snapshot. `DraftTtl` on `AddStateMachines` bounds that: it defaults to 30 days, and a background sweep
-(`DraftSweeper`, on every host that registers machines) deletes a user's draft idle past it, so a returning user
-starts fresh and is never wedged behind a finished one. The window slides with every write, so an active session is
-left alone. A load never deletes: it reads the draft as stored. The sweep keeps a draft whose state waits on an
-invoked run, whose timer is still pending (up to `MaxDraftLifetime`) or that an effect is running on, and never
-touches a system-owned instance. It also keeps, however idle or old, an instance in a state only the server puts it
-in (a committed state, an effect's target, an invoked train's outcome target, a gated event's target): that is the
-record of what the server did, and how long it stays is yours to decide. `MaxDraftLifetime` (90 days by default)
-bounds every other draft from its creation, whatever its timers or activity. Setting `DraftTtl` to `null` turns idle
-expiry off; set `MaxDraftLifetime` to `null` as well for drafts to live until they are discarded.
+snapshot. A background sweep on every host that registers machines deletes a user's draft once it has been idle past
+`DraftTtl` or has lived past `MaxDraftLifetime`, so a returning user starts fresh rather than wedged behind a finished
+one. The sweep never deletes the record of something the server did (an instance in a state only the server puts it
+in), and a load never deletes. The defaults and every exception are under
+[AddStateMachines options](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options).
 
 ## The frontend surface
 
 A React engineer works through one hook. It owns the snapshot, persists after every successful step, and
-re-renders on every change, including a declined action so the reason is never silently swallowed. Types
+re-renders on every change, including a declined action, so the reason is never silently swallowed. Types
 flow from the machine's spec: the current step is a typed string, the context is discriminated by that step,
-and a trigger's input is required or forbidden at the type level. Persistence is transition-driven, not a
+and a trigger's input is required or forbidden at the type level. Persistence is driven by transitions, not by a
 decoupled timer, which is what prevents a save from landing after the state has already advanced past a
-terminal step.
+terminal step. The [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package) is the reference.
 
 ## Where the code lives
 
