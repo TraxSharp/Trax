@@ -5,81 +5,31 @@ type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 14
+nav_order: 3
+package: Trax.Effect
+namespace:
+  - Trax.Effect.Configuration.TraxBuilder
+  - Trax.Effect.Models.Host
+source:
+  - Trax.Effect/src/Trax.Effect/Configuration/TraxBuilder/TraxBuilder.Host.cs
+  - Trax.Effect/src/Trax.Effect/Models/Host/TraxHostInfo.cs
 ---
 
 # Host Tracking
 
-Methods on `TraxBuilder` for configuring host identity. All are optional. Host tracking works with zero configuration via auto-detection.
+The methods on `TraxBuilder` that override or extend the host identity Trax stamps on every run, and `TraxHostInfo`,
+the identity they build. All are optional: without them the identity is auto-detected.
 
-## SetHostEnvironment
+## Signatures
 
-Overrides the auto-detected host environment type.
-
-```csharp
+```csharp fragment
 public TraxBuilder SetHostEnvironment(string environment)
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `environment` | `string` | Yes | Environment identifier (e.g., `"lambda"`, `"ecs"`, `"my-custom-env"`) |
-
-## SetHostInstanceId
-
-Overrides the auto-detected host instance ID.
-
-```csharp
 public TraxBuilder SetHostInstanceId(string instanceId)
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `instanceId` | `string` | Yes | Instance identifier |
-
-## AddHostLabel
-
-Adds a custom key-value label to the host identity. Labels are stored as JSONB on every metadata record.
-
-```csharp
 public TraxBuilder AddHostLabel(string key, string value)
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `key` | `string` | Yes | Label key (e.g., `"region"`, `"service"`) |
-| `value` | `string` | Yes | Label value (e.g., `"us-east-1"`) |
-
-## AddHostLabels
-
-Adds multiple custom labels at once.
-
-```csharp
 public TraxBuilder AddHostLabels(Dictionary<string, string> labels)
 ```
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `labels` | `Dictionary<string, string>` | Yes | Key-value pairs to add |
-
-## Example
-
-```csharp
-services.AddTrax(trax => trax
-    .SetHostEnvironment("ecs")
-    .AddHostLabel("region", "us-east-1")
-    .AddHostLabel("service", "content-shield")
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(assemblies)
-);
-```
-
-## TraxHostInfo
-
-The identity these methods build, readable from code.
-
-```csharp
+```csharp fragment
 namespace Trax.Effect.Models.Host;
 
 public record TraxHostInfo
@@ -94,18 +44,50 @@ public record TraxHostInfo
 }
 ```
 
+## Parameters
+
+| Method | Parameter | Description |
+|--------|-----------|-------------|
+| `SetHostEnvironment` | `environment` | Replaces the detected environment, such as `"lambda"`, `"ecs"` or `"my-custom-env"` |
+| `SetHostInstanceId` | `instanceId` | Replaces the detected instance id |
+| `AddHostLabel` | `key`, `value` | Adds one label, such as `"region"` = `"us-east-1"` |
+| `AddHostLabels` | `labels` | Adds every pair in the dictionary |
+
+Each throws `ArgumentNullException` for a null argument, and returns the builder for chaining.
+
+## Members
+
 | Member | Description |
 |--------|-------------|
 | `HostName` | The machine name, or `unknown` when it cannot be read |
-| `HostEnvironment` | `lambda`, `ecs`, `kubernetes`, `azure-app-service` or `server`, unless `SetHostEnvironment` overrode it |
-| `HostInstanceId` | The Lambda log stream, the ECS or Kubernetes `HOSTNAME`, the Azure `WEBSITE_INSTANCE_ID`, or `{MachineName}-{ProcessId}`, unless `SetHostInstanceId` overrode it |
-| `Labels` | The labels added with `AddHostLabel` and `AddHostLabels` |
+| `HostEnvironment` | `lambda`, `ecs`, `kubernetes`, `azure-app-service` or `server`, unless `SetHostEnvironment` replaced it |
+| `HostInstanceId` | The Lambda log stream, the ECS or Kubernetes `HOSTNAME`, the Azure `WEBSITE_INSTANCE_ID`, or `{MachineName}-{ProcessId}`, unless `SetHostInstanceId` replaced it |
+| `Labels` | The labels added with `AddHostLabel` and `AddHostLabels`, stored as JSONB on every metadata row |
 | `Current` | The identity `AddTrax` built, or `null` before `AddTrax` runs. Process-wide: a second `AddTrax` in the same process (two test hosts, say) replaces it. |
 | `AutoDetect()` | Probes the environment and returns a new identity with no labels. It does not change `Current`. |
 
-## Remarks
+## Behavior
 
-- Host identity is detected once at startup and applied to all train executions in the process.
-- Auto-detection probes environment variables for Lambda, ECS, Kubernetes, and Azure App Service. See [Host Tracking](/docs/effect/host-tracking) for the full detection table.
-- Duplicate label keys use last-write-wins semantics.
-- When a remote worker executes a train, host fields are overwritten when the run starts, so the metadata reflects the actual execution host, not the dispatcher.
+[AddTrax](/docs/sdk-reference/configuration/add-trax) builds the identity once, after its callback runs: it
+auto-detects, applies the overrides, and merges the labels. A label key added twice keeps the last value. Every
+run in the process is stamped with it when it starts, so a run executed by a remote worker carries the worker's
+identity, not the dispatcher's.
+
+## Example
+
+```csharp compile
+services.AddTrax(trax => trax
+    .SetHostEnvironment("ecs")
+    .AddHostLabel("region", "us-east-1")
+    .AddHostLabel("service", "content-shield")
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
+```
+
+## See also
+
+- [Host Tracking](/docs/effect/host-tracking), the detection table and how to query by host
+- [AddTrax](/docs/sdk-reference/configuration/add-trax)
