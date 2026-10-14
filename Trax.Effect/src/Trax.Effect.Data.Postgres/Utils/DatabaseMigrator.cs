@@ -23,6 +23,7 @@ namespace Trax.Effect.Data.Postgres.Utils;
 /// See <c>docs/adr/0014-postgres-migrations-are-serialized-and-rerunnable.md</c>.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/database-migrator">SDK reference</seealso>
 public static partial class DatabaseMigrator
 {
     /// <summary>

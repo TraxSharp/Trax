@@ -26,6 +26,7 @@ namespace Trax.Effect.Configuration.TraxBuilder;
 /// );
 /// </code>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-trax">SDK reference</seealso>
 public partial class TraxBuilder(IServiceCollection services, IEffectRegistry registry)
 {
     /// <summary>

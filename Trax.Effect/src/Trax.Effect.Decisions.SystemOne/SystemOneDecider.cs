@@ -37,6 +37,7 @@ namespace Trax.Effect.Decisions.SystemOne;
 /// or its TLS handshake fails) are classified permanent and not retried. Cancelling the train
 /// cancels the request.</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-system-one-decider">SDK reference</seealso>
 public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
 {
     private static readonly JsonSerializerOptions StateJson = new(JsonSerializerDefaults.Web);

@@ -13,6 +13,7 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 /// Each receiver instance creates its own exclusive, auto-delete queue
 /// so multiple hub instances can independently consume all events.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-rabbit-mq">SDK reference</seealso>
 public class RabbitMqTrainEventReceiver : ITrainEventReceiver
 {
     private readonly RabbitMqBroadcasterOptions _options;

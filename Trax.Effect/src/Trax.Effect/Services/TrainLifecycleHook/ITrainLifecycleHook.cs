@@ -7,6 +7,7 @@ namespace Trax.Effect.Services.TrainLifecycleHook;
 /// Implement this to create custom side effects (e.g., metrics, alerts, subscriptions).
 /// Default interface methods allow implementations to override only the events they care about.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-lifecycle-hook">SDK reference</seealso>
 public interface ITrainLifecycleHook
 {
     /// <summary>

@@ -16,6 +16,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Extensions;
 /// receive the events <c>UseSignalRHub</c> pushes. The hub carries the host's authorization: it is
 /// mapped with an explicit posture or not at all.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/map-trax-train-event-hub">SDK reference</seealso>
 public static class SignalRHubEndpointExtensions
 {
     /// <summary>

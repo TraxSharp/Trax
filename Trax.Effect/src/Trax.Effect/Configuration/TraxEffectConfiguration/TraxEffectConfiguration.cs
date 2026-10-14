@@ -9,6 +9,7 @@ namespace Trax.Effect.Configuration.TraxEffectConfiguration;
 /// registered as a singleton. Also holds <see cref="StaticSystemJsonSerializerOptions"/>, the process-wide options
 /// the models' <c>ToString()</c> overrides and lifecycle-hook output copies serialize with.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effects">SDK reference</seealso>
 public class TraxEffectConfiguration : ITraxEffectConfiguration
 {
     /// <inheritdoc/>

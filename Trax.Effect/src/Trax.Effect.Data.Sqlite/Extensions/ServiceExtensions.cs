@@ -21,6 +21,7 @@ namespace Trax.Effect.Data.Sqlite.Extensions;
 /// <summary>
 /// Extension methods for configuring Trax.Effect with a SQLite data provider.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-sqlite">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

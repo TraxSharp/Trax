@@ -1,6 +1,7 @@
 namespace Trax.Effect.Data.Services.QueuedWorkListener;
 
 /// <summary>One listening session opened by <see cref="IQueuedWorkListener.SubscribeAsync"/>.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-queued-work-listener">SDK reference</seealso>
 public interface IQueuedWorkSubscription : IAsyncDisposable
 {
     /// <summary>

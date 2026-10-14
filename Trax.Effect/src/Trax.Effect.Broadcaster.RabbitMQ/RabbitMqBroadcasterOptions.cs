@@ -3,6 +3,7 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 /// <summary>
 /// Configuration options for the RabbitMQ lifecycle event broadcaster.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-rabbit-mq">SDK reference</seealso>
 public class RabbitMqBroadcasterOptions
 {
     /// <summary>

@@ -10,6 +10,7 @@ namespace Trax.Effect.JunctionProvider.Logging.Extensions;
 /// Adds <c>AddJunctionLogger</c> to the effect builder, which logs every junction of every service
 /// train through <see cref="Microsoft.Extensions.Logging.ILogger"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-junction-logger">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

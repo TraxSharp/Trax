@@ -6,6 +6,7 @@ namespace Trax.Effect.Data.Sqlite.Utils;
 /// <summary>
 /// Applies embedded SQL migrations to a SQLite database using DbUp.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-sqlite">SDK reference</seealso>
 public static class DatabaseMigrator
 {
     /// <remarks>

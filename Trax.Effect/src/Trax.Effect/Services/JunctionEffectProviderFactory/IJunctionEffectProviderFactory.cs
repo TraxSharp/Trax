@@ -6,6 +6,8 @@ namespace Trax.Effect.Services.JunctionEffectProviderFactory;
 /// Creates the <see cref="IJunctionEffectProvider"/> for one train run. Registered as a singleton by
 /// <c>AddJunctionEffect</c>; its concrete type is the key the effect registry uses to enable or disable the effect.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-junction-effect-provider">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effect">SDK reference</seealso>
 public interface IJunctionEffectProviderFactory
 {
     /// <summary>

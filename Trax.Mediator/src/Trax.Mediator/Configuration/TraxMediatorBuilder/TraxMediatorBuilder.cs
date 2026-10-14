@@ -7,6 +7,7 @@ namespace Trax.Mediator.Configuration;
 /// <summary>
 /// Builder for configuring the Trax mediator system (train bus, train discovery, assembly scanning).
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-mediator">SDK reference</seealso>
 public partial class TraxMediatorBuilder
 {
     private readonly TraxBuilderWithEffects _parent;

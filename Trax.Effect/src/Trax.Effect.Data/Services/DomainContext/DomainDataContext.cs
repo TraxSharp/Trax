@@ -27,6 +27,7 @@ namespace Trax.Effect.Data.Services.DomainContext;
 /// contract). A domain context is a separate, plain EF context registered alongside the Trax effect
 /// layer via <c>AddDomainDataContext</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/domain-data-context">SDK reference</seealso>
 public abstract class DomainDataContext<TSelf>(DbContextOptions<TSelf> options)
     : DbContext(options),
         IDomainDataContext

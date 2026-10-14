@@ -12,6 +12,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Models;
 /// whatever the failing code put in its exception message. A projection that should send it
 /// sets it.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/use-signalr-hub">SDK reference</seealso>
 public record TraxClientEvent(
     [property: JsonPropertyName("metadataId")] long MetadataId,
     [property: JsonPropertyName("externalId")] string ExternalId,

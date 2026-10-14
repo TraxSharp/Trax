@@ -9,6 +9,7 @@ namespace Trax.Effect.Services.JunctionEffectProvider;
 /// <see cref="JunctionEffectProviderFactory.IJunctionEffectProviderFactory"/> for each train run and disposed when
 /// the run ends. Register one with <c>AddJunctionEffect</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-junction-effect-provider">SDK reference</seealso>
 public interface IJunctionEffectProvider : IDisposable
 {
     /// <summary>

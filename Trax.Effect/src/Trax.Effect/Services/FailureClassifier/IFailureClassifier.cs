@@ -24,6 +24,7 @@ namespace Trax.Effect.Services.FailureClassifier;
 /// Throwing is not fatal — the exception is logged and the failure records as unclassified. A
 /// classifier must never be able to mask the failure it was asked about.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/i-failure-classifier">SDK reference</seealso>
 public interface IFailureClassifier
 {
     /// <summary>

@@ -31,6 +31,8 @@ namespace Trax.Effect.Decisions.SystemOne.Extensions;
 /// decision. The decider itself is built on first use and owned by the container, which disposes
 /// its HTTP client when the host stops.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-nimble-decider">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-system-one-decider">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

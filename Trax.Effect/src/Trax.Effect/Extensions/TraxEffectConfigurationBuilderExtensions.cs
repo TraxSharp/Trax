@@ -7,6 +7,7 @@ namespace Trax.Effect.Extensions;
 /// General settings on the effect builder that apply regardless of which providers are added, such as
 /// <c>SetEffectLogLevel()</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/set-effect-log-level">SDK reference</seealso>
 public static class TraxEffectBuilderExtensions
 {
     /// <summary>

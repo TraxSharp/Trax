@@ -35,6 +35,10 @@ namespace Trax.Effect.Extensions;
 ///     .AddMediator(typeof(Program).Assembly));
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-trax">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effects">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effect">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-lifecycle-hook">SDK reference</seealso>
 public static class ServiceExtensions
 {
     #region Configuration

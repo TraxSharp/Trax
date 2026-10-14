@@ -6,6 +6,7 @@ namespace Trax.Effect.Data.Decisions;
 /// <summary>
 /// What a host that requeues runs asks before it queues one to replay the decisions of another.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-decision-recording">SDK reference</seealso>
 public static class DecisionReplays
 {
     /// <summary>

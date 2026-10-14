@@ -7,6 +7,7 @@ namespace Trax.Effect.Models.Host;
 /// Auto-detected at startup and stamped onto every <see cref="Metadata.Metadata"/> record
 /// so the shared database records WHERE each train ran.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/host-tracking">SDK reference</seealso>
 public record TraxHostInfo
 {
     /// <summary>

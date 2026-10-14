@@ -7,6 +7,7 @@ namespace Trax.Effect.Configuration.TraxEffectConfiguration;
 /// The effect settings built from <c>AddEffects(...)</c>, registered as a singleton. Effect providers inject it to
 /// learn how to serialize train parameters, whether to capture junction output, and which level to log at.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effects">SDK reference</seealso>
 public interface ITraxEffectConfiguration
 {
     /// <summary>

@@ -5,6 +5,7 @@ namespace Trax.Effect.Services.EffectProviderFactory;
 /// Allows the dashboard to detect and interact with configurable factories without knowing
 /// the configuration type at compile time.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-effect">SDK reference</seealso>
 public interface IConfigurableProviderFactory
 {
     /// <summary>

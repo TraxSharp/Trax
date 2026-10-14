@@ -12,4 +12,5 @@ namespace Trax.Effect.Data.Models;
 /// would compile everywhere and then throw at query time wherever it is traversed. Keeping reference
 /// interfaces scalar-only makes that failure impossible.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/domain-data-context">SDK reference</seealso>
 public interface IEntityReference;

@@ -20,6 +20,7 @@ namespace Trax.Effect.Provider.Json.Extensions;
 /// By using these extensions, applications can easily configure and use the
 /// Trax.Effect.Json system with minimal boilerplate code.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-json">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

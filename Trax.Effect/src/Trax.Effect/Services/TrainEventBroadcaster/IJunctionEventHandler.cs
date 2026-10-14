@@ -24,6 +24,7 @@ namespace Trax.Effect.Services.TrainEventBroadcaster;
 /// applies to the train's own events (for example only trains marked <c>[TraxBroadcast]</c>, or only
 /// callers allowed to see the train).</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-junction-events">SDK reference</seealso>
 public interface IJunctionEventHandler
 {
     /// <summary>Handles one junction event.</summary>

@@ -27,6 +27,7 @@ namespace Trax.Mediator.Extensions;
 /// <summary>
 /// Provides extension methods for configuring Trax.Mediator services in the dependency injection container.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-mediator">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

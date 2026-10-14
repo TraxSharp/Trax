@@ -25,6 +25,7 @@ namespace Trax.Effect.Provider.Json.Services.JsonEffect;
 /// </remarks>
 /// <param name="logger">The logger used to log model changes</param>
 /// <param name="configuration">The Trax.Core effect configuration containing JSON serialization options</param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-json">SDK reference</seealso>
 public class JsonEffectProvider(
     ILogger<JsonEffectProvider> logger,
     ITraxEffectConfiguration configuration

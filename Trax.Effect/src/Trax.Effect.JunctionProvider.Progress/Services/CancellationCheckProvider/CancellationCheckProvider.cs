@@ -16,6 +16,7 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckProvid
 /// it. Each check opens its own short-lived data context and reads one column.
 /// </remarks>
 /// <param name="dataContextFactory">Creates the context used to read the run's cancellation flag.</param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-junction-progress">SDK reference</seealso>
 public class CancellationCheckProvider(IDataContextProviderFactory dataContextFactory)
     : ICancellationCheckProvider
 {

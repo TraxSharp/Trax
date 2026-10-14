@@ -5,6 +5,7 @@ namespace Trax.Effect.Data.JunctionEvents;
 /// <summary>
 /// Reads a run's timeline back from <c>trax.junction_run</c>, as <c>AddJunctionEvents</c> wrote it.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/add-junction-events">SDK reference</seealso>
 public static class JunctionRunQueries
 {
     /// <summary>
