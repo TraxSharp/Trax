@@ -436,7 +436,7 @@ public class SdkReferenceFrontMatterTests
     [Test]
     public void Check_ReportsMissingFieldsApart_FromWrongOnes()
     {
-        var npm = new HashSet<string>(StringComparer.Ordinal) { "@trax/state-machine" };
+        var npm = new HashSet<string>(StringComparer.Ordinal) { "@traxsharp/state-machine" };
 
         Check(FrontMatter.Of("---\ntitle: X\n---\n"), npm)
             .Missing.Should()
@@ -453,7 +453,7 @@ public class SdkReferenceFrontMatterTests
 
         var typescript = Check(
             FrontMatter.Of(
-                "---\npackage: \"@trax/state-machine\"\nsurface: typescript\nsource:\n  - Trax.Api.StateMachine\n---\n"
+                "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.Api.StateMachine\n---\n"
             ),
             npm
         );

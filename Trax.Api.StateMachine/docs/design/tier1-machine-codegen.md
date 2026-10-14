@@ -318,7 +318,7 @@ first product consumer ships. **The consuming repo vendors the TypeScript engine
 commit and checks the generated artifacts into its own tree.** Concretely, in nwyc:
 
 - The engine `src/` is mirrored into `libs/shared/frontend/state-machine/` and imported through a path alias
-  (`@trax/state-machine` -> `libs/shared/frontend/state-machine/src/index.ts` in `tsconfig.base.json`). A
+  (`@traxsharp/state-machine` -> `libs/shared/frontend/state-machine/src/index.ts` in `tsconfig.base.json`). A
   `VENDORED.md` records the exact upstream commit the mirror is pinned to.
 - The generated **twin** (`<machine>.contexts.g.ts` + `<machine>.machine.g.ts`) lives next to the frontend
   that consumes it (`apps/web/src/app/<machine>/`). The **IR** and the differential **corpus** live in a
@@ -442,7 +442,7 @@ The generator writes many files across repos, so its failure and concurrency beh
   (`UPDATE_IR` writes the IR from a C# test, then `UPDATE_GEN` and `UPDATE_GOLDEN` write the twin and corpus
   from two Jest tests). It works but is brittle: driving generation through a test runner means an unrelated
   failing test can abort the regen under `set -e`, and the twin's three relative engine imports
-  (`../../machine`, `../../rules/irMachine`, `../../typed`) are collapsed into one `@trax/state-machine` import
+  (`../../machine`, `../../rules/irMachine`, `../../typed`) are collapsed into one `@traxsharp/state-machine` import
   by three hard-coded string `.replace()` calls in the codegen test (two deletions plus one rewrite), because
   `generateMachineFactory` has no import-style option. A real `trax machine generate` that runs
   the exporter and generators directly (§9) replaces the whole chain.
@@ -554,7 +554,7 @@ fighting. Every machine in this repo is now regenerated through it.
   interpret-at-runtime the only generators are TypeScript. It takes an output root per artifact (`--ir-out`,
   `--twin-out`, `--corpus-out`, since the IR/corpus and the twin live in different trees, §4), runs against an
   arbitrary engine `src` (`--engine-src`, because the consumer vendors it, §4), and takes an `--import-style`
-  (plus `--specifier`) so the twin's imports collapse to the `@trax/state-machine` specifier without the
+  (plus `--specifier`) so the twin's imports collapse to the `@traxsharp/state-machine` specifier without the
   hard-coded string `.replace()` the codegen test used to do; `--tools-dir` and `--node` locate the entrypoints
   and the interpreter. **Consequence:** the twin and corpus steps need `node` on `PATH` *and* an engine
   checkout with its `node_modules` installed, because the entrypoints bundle the engine `src` with esbuild and

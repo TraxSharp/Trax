@@ -1,11 +1,11 @@
 /**
- * `@trax/state-machine` — the TypeScript half of the Trax portable snapshot state machine.
+ * `@traxsharp/state-machine` — the TypeScript half of the Trax portable snapshot state machine.
  *
  * A machine's behavior is authored once in C# (`Trax.Effect.StateMachine`) and exported as a neutral
  * IR; this package interprets that IR so a browser and the server enforce the same guards, and a
  * shared differential corpus proves the two runtimes agree. Everything below is pure — no I/O. The
- * server-facing client lives behind `@trax/state-machine/client`, the React binding behind
- * `@trax/state-machine/react`.
+ * server-facing client lives behind `@traxsharp/state-machine/client`, the React binding behind
+ * `@traxsharp/state-machine/react`.
  *
  * The exports are grouped by the layer you are working at, outermost first:
  *
@@ -59,7 +59,7 @@ export type {
 // ── 4. Driving a UI ───────────────────────────────────────────────────────────────────────────────
 // A framework-free store over a TypedMachine: it holds the snapshot, transitions it, and re-renders on
 // a REJECTION too, so a declined action is surfaced rather than silently dropped. `Problem` is the
-// display-shaped view of a rejection. The React hook over this is at `@trax/state-machine/react`.
+// display-shaped view of a rejection. The React hook over this is at `@traxsharp/state-machine/react`.
 
 export {
   MachineController,

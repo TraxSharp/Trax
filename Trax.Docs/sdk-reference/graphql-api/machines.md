@@ -207,7 +207,7 @@ mutations only.
 
 ### The TypeScript client
 
-`@trax/state-machine/client` drives this root with `createMachineExecutor`. [Call a machine from TypeScript](/docs/statemachine/call-a-machine-from-typescript) shows it.
+`@traxsharp/state-machine/client` drives this root with `createMachineExecutor`. [Call a machine from TypeScript](/docs/statemachine/call-a-machine-from-typescript) shows it.
 
 ### Driving an instance from React
 

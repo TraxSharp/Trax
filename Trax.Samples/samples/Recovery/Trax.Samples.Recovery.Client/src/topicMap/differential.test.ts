@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enumerate, serializeCorpus, type DifferentialSpec } from "@trax/state-machine";
+import { enumerate, serializeCorpus, type DifferentialSpec } from "@traxsharp/state-machine";
 import ir from "./topic-map.ir.json";
 import committed from "./differential.json?raw";
 import { topicMap } from "./topic-map.machine.g";

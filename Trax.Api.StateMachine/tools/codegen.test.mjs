@@ -89,7 +89,7 @@ describe("generate-twin entrypoint", () => {
     expect(machinePath).toBe(join(out, "turnstile.machine.g.ts"));
   });
 
-  it("specifier style emits the collapsed @trax/state-machine import", async () => {
+  it("specifier style emits the collapsed @traxsharp/state-machine import", async () => {
     const { machinePath, contextsPath } = await generateTwin({
       irPath: turnstileIr,
       engineSrc,
@@ -98,7 +98,7 @@ describe("generate-twin entrypoint", () => {
     });
     const machine = read(machinePath);
     expect(machine).toContain(
-      `import { typedMachineFromIr, type IrDocument } from "@trax/state-machine";`,
+      `import { typedMachineFromIr, type IrDocument } from "@traxsharp/state-machine";`,
     );
     expect(machine).not.toContain(`from "../../machine"`);
     // Context types are independent of import style, so they stay byte-identical to the committed file.

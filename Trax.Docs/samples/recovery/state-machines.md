@@ -167,8 +167,8 @@ and the page sends each by the id `topic-map.documents.json` lists, exported fro
 twin was generated from (`TRAX_UPDATE_MACHINE_DOCUMENTS=1 dotnet test --filter TopicMapDocumentsTests` in
 `Trax.Samples.Recovery.E2E` writes it again).
 
-The page drives its draft with `useServerMachine` from `@trax/state-machine/react`, over
-`createMachineServer` from `@trax/state-machine/client`
+The page drives its draft with `useServerMachine` from `@traxsharp/state-machine/react`, over
+`createMachineServer` from `@traxsharp/state-machine/client`
 ([Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react)). The
 server owns the draft; the twin only predicts:
 

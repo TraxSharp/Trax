@@ -57,6 +57,10 @@ scaffolded project lives outside the repository. In the repository those referen
 swapped for project references at build time, and the packed template carries every Trax
 package at the version being released.
 
+**The TypeScript engine releases at the same version.** `@traxsharp/state-machine` is packed
+by the same release run and published to npm at the shared version, so the engine a twin
+imports and the `trax` tool that generated it carry one number.
+
 ## Exemplars
 
 **Enforced elsewhere:** `TraxReferencesAreProjectReferencesTests` (no `PackageReference` to a
@@ -70,4 +74,5 @@ not by a test.
 
 ## Changelog
 
+- **2026-10-13**: The TypeScript engine, `@traxsharp/state-machine`, publishes to npm at the shared version.
 - **2026-10-06**: Recorded.

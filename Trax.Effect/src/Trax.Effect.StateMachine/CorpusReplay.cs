@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Trax.Effect.StateMachine;
 
 /// <summary>
-/// Replays a shared, TypeScript-generated differential corpus (produced by the <c>@trax/state-machine</c>
+/// Replays a shared, TypeScript-generated differential corpus (produced by the <c>@traxsharp/state-machine</c>
 /// oracle) through the C# engine and returns one human-readable diff per case the machine does NOT reproduce
 /// (an empty list means exact agreement). TypeScript enumerates the reachable behaviour space and records
 /// each outcome as canonical wire (on a transition) or a rejection code; this reproduces every case. Only

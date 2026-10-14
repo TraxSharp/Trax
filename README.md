@@ -52,7 +52,7 @@ folder depends only on folders above it in this table; take the layers you need,
 | [Trax.Dashboard](Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
 | [Trax.Cli](Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
 | [Trax.Samples](Trax.Samples) | **Start here.** Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
-| [Trax.Api.StateMachine](Trax.Api.StateMachine) | `@trax/state-machine`, the TypeScript twin of the state-machine engine |
+| [Trax.Api.StateMachine](Trax.Api.StateMachine) | `@traxsharp/state-machine`, the TypeScript twin of the state-machine engine |
 | [Trax.Docs](Trax.Docs) | The documentation published at [traxsharp.net/docs](https://traxsharp.net/docs), and the decision records |
 | [Trax.Website](Trax.Website) | The source of [traxsharp.net](https://traxsharp.net) |
 

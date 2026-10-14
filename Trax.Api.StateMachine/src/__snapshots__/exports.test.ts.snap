@@ -2,7 +2,7 @@
 
 exports[`the published exports > match the committed baseline 1`] = `
 {
-  "@trax/state-machine": [
+  "@traxsharp/state-machine": [
     "AdvanceResult",
     "CheckoutSpec",
     "CheckoutState",
@@ -85,7 +85,7 @@ exports[`the published exports > match the committed baseline 1`] = `
     "validateInput",
     "validateSchema",
   ],
-  "@trax/state-machine/client": [
+  "@traxsharp/state-machine/client": [
     "AdvanceOptions",
     "DEFAULT_RESUBSCRIBE_DELAYS",
     "DEFAULT_RETRY_DELAYS",
@@ -132,7 +132,7 @@ exports[`the published exports > match the committed baseline 1`] = `
     "persistedMessageReplacer",
     "startDraft",
   ],
-  "@trax/state-machine/react": [
+  "@traxsharp/state-machine/react": [
     "UseMachineOptions",
     "UseMachineResult",
     "UseServerMachineOptions",

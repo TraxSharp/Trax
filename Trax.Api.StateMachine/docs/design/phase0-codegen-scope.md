@@ -285,8 +285,8 @@ requirements, not incidental:
 | Friction in the script | Requirement on `trax machine` |
 |---|---|
 | Artifacts are split across two trees: the IR + corpus under a shared `machines/<name>/` dir, the twin (`*.contexts.g.ts` + `*.machine.g.ts`) next to the frontend that consumes it (`apps/web/src/app/<name>/`). | `generate` / `check` take an **output root per artifact** (`--ir-out`, `--twin-out`, `--corpus-out`), not one directory. |
-| The consumer **vendors** the engine `src` (pinned in `VENDORED.md`) and imports it via a `@trax/state-machine` path alias, rather than depending on a published package. | The twin generator runs against an **arbitrary engine `src`** (`--engine-src <path>`); it must not hard-wire a package layout. |
-| `generateMachineFactory` emits imports relative to the engine's own `src` (`../../machine`, `../../rules/irMachine`, `../../typed`). nwyc's codegen test collapses the three into one `@trax/state-machine` import with three hard-coded string `.replace()` calls (two deletions + one rewrite) because the generator has no option for it. | The twin generator takes an **import style** (`--import-style relative|specifier`, with the specifier configurable), so no consumer re-implements the rewrite. This is a change to `generateMachineFactory`'s signature (add an options arg), currently `(ir: IrDocument)`. |
+| The consumer **vendors** the engine `src` (pinned in `VENDORED.md`) and imports it via a `@traxsharp/state-machine` path alias, rather than depending on a published package. | The twin generator runs against an **arbitrary engine `src`** (`--engine-src <path>`); it must not hard-wire a package layout. |
+| `generateMachineFactory` emits imports relative to the engine's own `src` (`../../machine`, `../../rules/irMachine`, `../../typed`). nwyc's codegen test collapses the three into one `@traxsharp/state-machine` import with three hard-coded string `.replace()` calls (two deletions + one rewrite) because the generator has no option for it. | The twin generator takes an **import style** (`--import-style relative|specifier`, with the specifier configurable), so no consumer re-implements the rewrite. This is a change to `generateMachineFactory`'s signature (add an options arg), currently `(ir: IrDocument)`. |
 | Generation is driven through a test runner. Under nx, `nx test web --testPathPattern` does not filter, so it runs the whole web suite and one unrelated failing test aborts the regen under `set -e`. The script works around this by calling `npx jest` directly. | `generate` runs the exporter and generators **directly**, never through a test runner. This is the substantive argument for a CLI over "wrap the tests in a better script." |
 
 **Command surface** (mirrors the existing `trax` generator architecture, `GenerateCommand` / a code renderer):
@@ -359,7 +359,7 @@ oracle for what the CLI must reproduce, so the CLI is correct iff its output is 
 2. **Idempotence.** A second `generate` with no source change yields no diff; `check` exits zero.
 3. **Drift detection.** Mutate the C# source (add a state), run `check`, assert non-zero exit and a message
    naming the drifted artifact. Revert.
-4. **Import style.** `--import-style specifier` emits the single `@trax/state-machine` import; `relative`
+4. **Import style.** `--import-style specifier` emits the single `@traxsharp/state-machine` import; `relative`
    emits the three `../../…` imports. Both typecheck in their respective layouts.
 5. **Split roots.** `generate` writes each artifact to its own `--*-out` root and touches nothing else.
 6. **`checkout` end to end.** Re-author `checkout` declaratively (multi-key context, count guards, the
@@ -399,7 +399,7 @@ against `describe()`, and retiring it (or regenerating it from the IR) is the on
   authoring/generator work, and E is oracle-agnostic so it does not need the flip.
 - **Decision F: deploy topology. LOCKED (2026-08-13): vendor the engine, check the artifacts in.** The
   consuming repo mirrors the TypeScript engine `src` at a pinned upstream commit (recorded in `VENDORED.md`)
-  and imports it through a path alias (`@trax/state-machine`), and commits the generated twin, the IR, and the
+  and imports it through a path alias (`@traxsharp/state-machine`), and commits the generated twin, the IR, and the
   differential corpus into its own tree (twin next to the frontend, IR + corpus in a shared `machines/<name>/`
   dir). The C# side consumes Trax by exact-pinned NuGet (`Trax.Effect.StateMachine`). Rationale: the engine and
   machines co-evolve tightly, the twin must build against an arbitrary engine `src` (not a fixed package

@@ -57,7 +57,7 @@ test("source links are blob URLs for files and tree URLs for directories, at the
 
 test("a package links to nuget.org, a scoped npm name to npm", () => {
   assert.equal(packageUrl("Trax.Scheduler"), "https://www.nuget.org/packages/Trax.Scheduler");
-  assert.equal(packageUrl("@trax/state-machine"), "https://www.npmjs.com/package/@trax/state-machine");
+  assert.equal(packageUrl("@traxsharp/state-machine"), "https://www.npmjs.com/package/@traxsharp/state-machine");
 });
 
 test("More on <area> lists the area's other pages by type and skips the page itself", () => {

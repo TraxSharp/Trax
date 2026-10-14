@@ -1,6 +1,6 @@
 ---
 title: Supply Chain Security
-description: "The controls protecting every Trax package from source to nuget.org: pinned dependencies, split release jobs, keyless publishing, provenance and gated releases."
+description: "How every Trax package gets from source to nuget.org and npm: pinned dependencies, split release jobs, keyless publishing, provenance and gated releases."
 type: explanation
 area: general
 nav_order: 4
@@ -8,7 +8,7 @@ nav_order: 4
 
 # Supply Chain Security
 
-Trax is built and published through a defense-in-depth pipeline. No single control is load-bearing: each layer bounds what a compromise of any other layer can reach, so a poisoned dependency, a hijacked action, or a tampered runner yields little on its own. This page describes the controls that protect every Trax package from source to nuget.org, as they stand today, including where they stop short.
+Trax is built and published through a defense-in-depth pipeline. No single control is load-bearing: each layer bounds what a compromise of any other layer can reach, so a poisoned dependency, a hijacked action, or a tampered runner yields little on its own. This page describes the controls that protect every Trax package from source to nuget.org and npm, as they stand today, including where they stop short.
 
 The working assumption throughout is that any code in a CI job may be compromised and any externally-influenced input may be hostile. The controls keep untrusted code and input away from the publish credential, bound what a compromised component reaches, and keep credentials short-lived wherever the service at the other end allows it.
 
@@ -38,8 +38,8 @@ The release workflow (`.github/workflows/release.yml`) is split into jobs, becau
 
 - **build / test** runs the full CI (`.github/workflows/ci.yml`) over every folder: restore, compile and test. It holds no release or publish credential.
 - **coverage**, a job of the same CI workflow, uploads the test coverage to Codecov. It holds the Codecov token, and runs no restore, build or project code.
-- **release** runs only for a manual dispatch of `main`. It runs semantic-release with a token that can write tags and GitHub releases. When a version is cut, the same job runs `dotnet restore --locked-mode` and `dotnet pack` for every package at that one version, so it builds the package artifact, and records the SHA-256 digest of each package as a job output. It does not hold the publish credential.
-- **publish** downloads that artifact, checks that the set of packages and every digest match what the release job recorded, then attests and pushes them unchanged. It installs the exact SDK version in `global.json` to run `dotnet nuget push`, and runs no restore, build, test or package code. It holds the only credential that can publish.
+- **release** runs only for a manual dispatch of `main`. It runs semantic-release with a token that can write tags and GitHub releases. When a version is cut, the same job runs `dotnet restore --locked-mode` and `dotnet pack` for every package at that one version, and `npm ci --ignore-scripts`, the tests and `npm pack` for the TypeScript engine, `@traxsharp/state-machine`, at the same version. It records the SHA-256 digest of every package as a job output. It does not hold a publish credential.
+- **publish** downloads those artifacts, checks that the set of packages and every digest match what the release job recorded, then attests and publishes them unchanged. It installs the exact SDK version in `global.json` to run `dotnet nuget push`, and an exact npm version to run `npm publish`, and runs no restore, build, test or package code. It holds the only credentials that can publish.
 
 The publish credential is therefore never present in a job that executes dependency code, and publish refuses any package that is not byte-for-byte what the release job built. The release job is not as clean: restoring and packing runs dependency code (MSBuild targets, analyzers, source generators) in the same job as its `contents: write` token, and that code shapes the `.nupkg` that publish attests.
 
@@ -59,13 +59,13 @@ On every pull request, CodeQL analyses the C# sources and the workflows (with `b
 
 ## Keyless publishing
 
-Packages are published to nuget.org with Trusted Publishing. The publish job exchanges a short-lived GitHub OIDC token for a temporary, single-use nuget.org API key (valid roughly one hour) scoped by a publishing policy to the exact repository, workflow file, and deployment environment. No long-lived publishing key is stored, rotated, or exposed.
+Packages are published to nuget.org with Trusted Publishing. The publish job exchanges a short-lived GitHub OIDC token for a temporary, single-use nuget.org API key (valid roughly one hour) scoped by a publishing policy to the exact repository, workflow file, and deployment environment. `@traxsharp/state-machine` is published to npm the same way: npm's trusted publisher for the package names the same repository, workflow file and environment, and `npm publish` exchanges the OIDC token itself. No long-lived publishing key is stored, rotated, or exposed.
 
 One long-lived secret remains, bound to one job: the Codecov upload token, held only by the coverage job. The website is published by moving the `website` branch with the workflow's own token, behind the protected `website-deploy` environment.
 
 ## Signed build provenance
 
-Every package version published since 2026-07-02, when trusted publishing and attestation were introduced, carries SLSA build provenance, generated keylessly in the publish job and recorded in the Sigstore transparency log. Versions published before that date have none. The attestation binds each package digest to the repository, workflow, and commit that produced it. From 1.61.0 that repository is `TraxSharp/Trax`; earlier versions were attested to the separate repository each package was built in then, such as `TraxSharp/Trax.Core`.
+Every package version published since 2026-07-02, when trusted publishing and attestation were introduced, carries SLSA build provenance, generated keylessly in the publish job and recorded in the Sigstore transparency log. Versions published before that date have none. The attestation binds each package digest to the repository, workflow, and commit that produced it. The npm package also carries npm's own provenance statement, shown on its npmjs.com page and checked by `npm audit signatures`. From 1.61.0 that repository is `TraxSharp/Trax`; earlier versions were attested to the separate repository each package was built in then, such as `TraxSharp/Trax.Core`.
 
 nuget.org adds its own repository signature to a package after it is pushed, as a `.signature.p7s` entry inside the `.nupkg`. That changes the file's digest, so `gh attestation verify` fails on the package exactly as downloaded. Deleting that one entry gives back the bytes the publish job attested. Verify a copy, not the package your restore uses:
 

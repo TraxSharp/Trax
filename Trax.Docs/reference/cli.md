@@ -362,8 +362,8 @@ before writing anything.
 | `--twin-out` | No | Directory to write `<id>.contexts.g.ts` and `<id>.machine.g.ts`. |
 | `--corpus-out` | No | Directory to write `differential.json`. |
 | `--engine-src` | For twin/corpus | The TypeScript engine's `src` directory. |
-| `--import-style` | No | Twin engine imports: `relative` (default, for a machine inside the engine repo) or `specifier` (one collapsed import from `--specifier`, for a consumer that vendors the engine behind a path alias). |
-| `--specifier` | No | Module specifier used with `--import-style specifier` (default `@trax/state-machine`). |
+| `--import-style` | No | Twin engine imports: `relative` (default, for a machine inside the engine repo) or `specifier` (one collapsed import from `--specifier`, for a consumer that installs `@traxsharp/state-machine` from npm). |
+| `--specifier` | No | Module specifier used with `--import-style specifier` (default `@traxsharp/state-machine`). |
 | `--tools-dir` | No | The engine's `tools/` directory (default: a sibling of `--engine-src`). |
 | `--node` | No | Path to the `node` executable (default: `node`). |
 

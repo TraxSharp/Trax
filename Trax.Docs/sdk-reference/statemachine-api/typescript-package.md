@@ -1,13 +1,13 @@
 ---
 title: TypeScript package
-description: "Reference for @trax/state-machine: the engine twin, the typed view, the React hooks, the server clients and the rule interpreter, entry point by entry point."
+description: "Reference for @traxsharp/state-machine: the engine twin, the typed view, the React hooks, the server clients and the rule interpreter, by entry point."
 type: reference
 area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 14
 surface: typescript
-package: "@trax/state-machine"
+package: "@traxsharp/state-machine"
 source:
   - Trax.Api.StateMachine/src/index.ts
   - Trax.Api.StateMachine/src/client/index.ts
@@ -17,16 +17,23 @@ source:
 
 # TypeScript package
 
-`@trax/state-machine` is the TypeScript twin of `Trax.Effect.StateMachine`, published from `Trax.Api.StateMachine`.
+`@traxsharp/state-machine` is the TypeScript twin of `Trax.Effect.StateMachine`, published from `Trax.Api.StateMachine`.
 Its exports are pinned by a committed baseline (`src/exports.test.ts`).
+
+```bash
+npm install @traxsharp/state-machine
+```
+
+It is published to npm with every Trax release, at the same version as the NuGet packages: install the version
+that matches your `Trax.*` packages.
 
 ## Members
 
 | Entry point | Holds |
 | --- | --- |
-| `@trax/state-machine` | The engine, the typed view, the framework-free stores, the IR interpreter and the generators. Pure: no I/O. |
-| `@trax/state-machine/client` | Everything that talks to a Trax server: the generic and typed executors, draft sessions, and the server-authoritative controller. |
-| `@trax/state-machine/react` | `useMachine` and `useServerMachine`. React is an optional peer dependency. |
+| `@traxsharp/state-machine` | The engine, the typed view, the framework-free stores, the IR interpreter and the generators. Pure: no I/O. |
+| `@traxsharp/state-machine/client` | Everything that talks to a Trax server: the generic and typed executors, draft sessions, and the server-authoritative controller. |
+| `@traxsharp/state-machine/react` | `useMachine` and `useServerMachine`. React is an optional peer dependency. |
 
 ### The engine and the typed view
 
@@ -45,19 +52,19 @@ Its exports are pinned by a committed baseline (`src/exports.test.ts`).
 
 ### Driving a machine the client owns
 
-From `@trax/state-machine` (`useMachine` from `@trax/state-machine/react`), for a snapshot the browser holds:
+From `@traxsharp/state-machine` (`useMachine` from `@traxsharp/state-machine/react`), for a snapshot the browser holds:
 
 | Export | What it is |
 | --- | --- |
 | `MachineController` | A framework-free store: `send`, `can`, `available`, `reset`, `subscribe`, `getSnapshot`. It persists through `persist` after every successful transition, and a refused action still emits a view with its `problem`. |
-| `useMachine(machine, { initial, persist?, observer?, devtools? })` | From `@trax/state-machine/react`: the controller as a hook. It returns `snapshot`, `state`, `context`, `send`, `can`, `available`, `lastProblem` and `reset`. |
+| `useMachine(machine, { initial, persist?, observer?, devtools? })` | From `@traxsharp/state-machine/react`: the controller as a hook. It returns `snapshot`, `state`, `context`, `send`, `can`, `available`, `lastProblem` and `reset`. |
 | `createFormView(machine, { steps, toContext })` | For a UI that owns its data and asks the machine: maps each UI step to a state (one to one), and gives `advance`, `can`, `snapshotFor`, `serialize`, `resume` and `isCommitted` in the UI's own step names. |
 | `problemFromAdvance`, `problemFromRehydration`, `Problem` | A refusal shaped for display. |
 | `createDevLogger` | Logs transitions and refusals in development. |
 
 ### Talking to a server
 
-From `@trax/state-machine/client` (`useServerMachine` from `@trax/state-machine/react`):
+From `@traxsharp/state-machine/client` (`useServerMachine` from `@traxsharp/state-machine/react`):
 
 | Export | What it is |
 | --- | --- |
@@ -71,7 +78,7 @@ From `@trax/state-machine/client` (`useServerMachine` from `@trax/state-machine/
 | `TRANSPORT_FAILED` | The problem code (`transport-error`) of a send or read the controller could not deliver. It is the same string as `TRANSPORT_ERROR`, the sessions' code, exported under both names. |
 
 `useServerMachine(machine, { server, id?, startInput?, startRequestId?, startStorageKey?, newRequestId?, retryDelays? })`, from
-`@trax/state-machine/react`, is `ServerMachineController` as a hook. Its options, its answer and an example are under
+`@traxsharp/state-machine/react`, is `ServerMachineController` as a hook. Its options, its answer and an example are under
 [Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react).
 
 ## See also

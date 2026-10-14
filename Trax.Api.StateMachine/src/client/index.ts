@@ -1,5 +1,5 @@
 /**
- * `@trax/state-machine/client` — talking to a Trax server about a stored draft.
+ * `@traxsharp/state-machine/client` — talking to a Trax server about a stored draft.
  *
  * The core package is pure: a reducer, a rule interpreter, and codegen, with no I/O anywhere. This
  * subpath is the one place that knows a server exists. It is a separate entry point so importing the
@@ -12,7 +12,7 @@
  *                   startDraft, which creates a draft under an id the server mints
  *   machineServer.ts createMachineServer: the typed operations and the machineChanged stream of one exposed
  *                   machine, as the MachineServer a ServerMachineController (or useServerMachine, at
- *                   `@trax/state-machine/react`) drives an instance through: the server owns it, the twin predicts
+ *                   `@traxsharp/state-machine/react`) drives an instance through: the server owns it, the twin predicts
  *
  * Typical wiring:
  *

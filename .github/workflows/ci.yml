@@ -490,6 +490,10 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Pack (what a release publishes)
+        # The release packs this folder the same way and publishes the tarball to npm, so a
+        # broken prepack or a file left out of it fails here rather than after a version is cut.
+        run: npm pack --dry-run
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
 

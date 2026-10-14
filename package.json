@@ -7,10 +7,11 @@
     "test": "node --test '.github/release/*.test.mjs'"
   },
   "devDependencies": {
-    "semantic-release": "^25.0.9",
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/github": "^12.0.10",
     "@semantic-release/release-notes-generator": "^14.1.1",
-    "conventional-commits-parser": "^7.1.2"
+    "conventional-commits-parser": "^7.1.2",
+    "js-yaml": "^4.3.2",
+    "semantic-release": "^25.0.9"
   }
 }

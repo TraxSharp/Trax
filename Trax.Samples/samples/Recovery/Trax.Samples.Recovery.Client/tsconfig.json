@@ -18,9 +18,9 @@
     "noUncheckedSideEffectImports": true,
     "resolveJsonModule": true,
     "paths": {
-      "@trax/state-machine": ["../../../../Trax.Api.StateMachine/src/index.ts"],
-      "@trax/state-machine/client": ["../../../../Trax.Api.StateMachine/src/client/index.ts"],
-      "@trax/state-machine/react": ["../../../../Trax.Api.StateMachine/src/react.ts"]
+      "@traxsharp/state-machine": ["../../../../Trax.Api.StateMachine/src/index.ts"],
+      "@traxsharp/state-machine/client": ["../../../../Trax.Api.StateMachine/src/client/index.ts"],
+      "@traxsharp/state-machine/react": ["../../../../Trax.Api.StateMachine/src/react.ts"]
     }
   },
   "include": ["src"]

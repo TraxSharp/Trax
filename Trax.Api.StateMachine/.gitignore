@@ -3,3 +3,5 @@ dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
+# Copied from the repository root by prepack, so the tarball carries the licence.
+/LICENSE

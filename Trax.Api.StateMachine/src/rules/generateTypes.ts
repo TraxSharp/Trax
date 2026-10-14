@@ -101,13 +101,13 @@ export function generateContextTypes(ir: IrDocument): string {
  *
  * - `"relative"` (default): three imports relative to the engine's own `src`
  *   (`../../machine`, `../../rules/irMachine`, `../../typed`). Right for a machine living inside this repo.
- * - `"specifier"`: one collapsed import from a module specifier (`@trax/state-machine` by default). Right for
+ * - `"specifier"`: one collapsed import from a module specifier (`@traxsharp/state-machine` by default). Right for
  *   a consumer that vendors the engine behind a path alias, e.g. nwyc's `apps/web`. This replaces the
  *   hard-coded string-`.replace()` rewrite consumers used to do by hand.
  */
 export interface MachineFactoryOptions {
   importStyle?: "relative" | "specifier";
-  /** The module specifier used when `importStyle` is `"specifier"`. Defaults to `@trax/state-machine`. */
+  /** The module specifier used when `importStyle` is `"specifier"`. Defaults to `@traxsharp/state-machine`. */
   specifier?: string;
   /**
    * SHA-256 of the machine's canonical IR (the committed `ir.json`). Emitted as an `irHash` export and passed
@@ -128,7 +128,7 @@ export function generateMachineFactory(
 ): string {
   const machine = pascal(ir.id);
   const importStyle = options.importStyle ?? "relative";
-  const specifier = options.specifier ?? "@trax/state-machine";
+  const specifier = options.specifier ?? "@traxsharp/state-machine";
   const irHash = options.irHash ?? "";
   // The differential block is test-only fuzzing data (samples/seeds/contexts); the runtime machine never
   // reads it. Strip it so the generated module stays lean and doesn't ship test inputs to the browser.

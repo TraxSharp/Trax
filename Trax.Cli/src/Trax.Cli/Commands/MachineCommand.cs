@@ -464,7 +464,7 @@ internal static class MachineCommand
                 new Option<string?>("--specifier")
                 {
                     Description =
-                        "Module specifier when --import-style specifier (default @trax/state-machine).",
+                        "Module specifier when --import-style specifier (default @traxsharp/state-machine).",
                 },
                 new Option<DirectoryInfo?>("--tools-dir")
                 {

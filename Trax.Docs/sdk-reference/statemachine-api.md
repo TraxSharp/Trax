@@ -37,6 +37,6 @@ Reference for authoring and hosting portable snapshot state machines. The concep
 
 - [MachineConformance](/docs/sdk-reference/statemachine-api/machine-conformance): checking a machine against its committed IR and corpus in a test.
 
-## @trax/state-machine (npm)
+## @traxsharp/state-machine (npm)
 
 - [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package): the engine twin, the stores and hooks, and the server clients.

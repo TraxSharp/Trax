@@ -9,11 +9,11 @@ nav_order: 20
 # Call a machine from TypeScript
 
 The [machines root](/docs/sdk-reference/graphql-api/machines) serves each exposed machine as typed
-operations. `@trax/state-machine/client` sends them.
+operations. `@traxsharp/state-machine/client` sends them.
 
 ## Build an executor
 
-`@trax/state-machine/client` drives the typed root with `createMachineExecutor(endpoint, { machines })`, an executor
+`@traxsharp/state-machine/client` drives the typed root with `createMachineExecutor(endpoint, { machines })`, an executor
 for the same `createSnapshotClient`, `createDraftSession` and `startDraft` the generic mutations use. Each machine is
 listed with its twin, the `context` selection to read back, and its `effectEvent` when it has one:
 
@@ -45,4 +45,4 @@ createMachineExecutor('/trax/graphql', { machines: [{ machine: topicMap, documen
 
 ## SDK Reference
 
-> [Machines root](/docs/sdk-reference/graphql-api/machines) | [@trax/state-machine](/docs/sdk-reference/statemachine-api/typescript-package)
+> [Machines root](/docs/sdk-reference/graphql-api/machines) | [@traxsharp/state-machine](/docs/sdk-reference/statemachine-api/typescript-package)

@@ -1,16 +1,22 @@
-# @trax/state-machine
+# @traxsharp/state-machine
 
 The TypeScript half of the Trax portable snapshot state-machine: a small engine that represents a
 multi-step flow's state as language-neutral JSON so a browser client and a C# backend
 (`Trax.Effect.StateMachine`) agree on it. Illegal `(state, context)` pairs are unrepresentable and every
 operation is total (it never throws).
 
+```bash
+npm install @traxsharp/state-machine
+```
+
+It is published with every Trax release, at the same version as the `Trax.*` NuGet packages.
+
 This repo owns four things:
 
 | Piece | Location |
 | --- | --- |
-| The `@trax/state-machine` package (engine, rule interpreter, typed facade, React hook) | [`src/`](src) |
-| The `@trax/state-machine/client` subpath (a host's typed `machines` operations and `machineChanged` stream, and the opt-in generic snapshot mutations) | [`src/client/`](src/client) |
+| The `@traxsharp/state-machine` package (engine, rule interpreter, typed facade, React hook) | [`src/`](src) |
+| The `@traxsharp/state-machine/client` subpath (a host's typed `machines` operations and `machineChanged` stream, and the opt-in generic snapshot mutations) | [`src/client/`](src/client) |
 | The server-authoritative controller and its React hook, `useServerMachine` | [`src/server/`](src/server) |
 | The shared, language-neutral fixtures both engines drive (the cross-language oracle) | [`machines/`](machines) |
 | The IR-driven generators (`generateContextTypes` / `generateMachineFactory`) and the node entrypoints the `trax machine` CLI shells out to | [`src/rules/generateTypes.ts`](src/rules/generateTypes.ts), [`tools/`](tools) |
@@ -89,7 +95,7 @@ map is rejected at construction, where the inverse would be ambiguous). Snapshot
 machine's own id and version. `resume` returns null for a COMMITTED run, and which states those are
 comes from the machine's IR (`.Committed()` in C#) — never a state name repeated in the app.
 
-## Talking to the server — `@trax/state-machine/client`
+## Talking to the server — `@traxsharp/state-machine/client`
 
 The engine above is pure: a reducer and a rule interpreter, no I/O. Persisting a draft is a separate
 subpath, so importing the engine never pulls a transport into a bundle that only wanted the reducer.
@@ -104,7 +110,7 @@ each carrying a `machine` discriminator the server resolves in its registry. So 
 one per machine:
 
 ```ts
-import { createSnapshotClient, createHttpExecutor, createDraftSession } from '@trax/state-machine/client';
+import { createSnapshotClient, createHttpExecutor, createDraftSession } from '@traxsharp/state-machine/client';
 
 const client  = createSnapshotClient(createHttpExecutor('/graphql'));
 const session = createDraftSession({ client, machine: writeToCongress, id: DRAFT_ID });
@@ -134,12 +140,12 @@ disagree on.
 A host serves each machine marked `[TraxMachine]` as its own typed operations, by persisted id, and pushes every
 write of an instance on `machineChanged`. `createMachineServer` binds those to one machine, from the documents in
 the host's manifest and a graphql-ws socket the page owns;
-`useServerMachine` (at `@trax/state-machine/react`) drives one instance through it:
+`useServerMachine` (at `@traxsharp/state-machine/react`) drives one instance through it:
 
 ```ts
 import { createClient } from 'graphql-ws';
-import { createMachineServer, persistedMessageReplacer } from '@trax/state-machine/client';
-import { useServerMachine } from '@trax/state-machine/react';
+import { createMachineServer, persistedMessageReplacer } from '@traxsharp/state-machine/client';
+import { useServerMachine } from '@traxsharp/state-machine/react';
 import documents from './topic-map.documents.json';
 
 const server = createMachineServer('/trax/graphql', {

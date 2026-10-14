@@ -8,17 +8,17 @@ nav_order: 21
 
 # Drive a machine instance from React
 
-`createMachineServer(endpoint, { machine, documents, socket })`, from `@trax/state-machine/client`, binds one exposed
+`createMachineServer(endpoint, { machine, documents, socket })`, from `@traxsharp/state-machine/client`, binds one exposed
 machine's typed operations and its [`machineChanged`](/docs/sdk-reference/graphql-api/machines#machinechanged) stream into the `MachineServer` that
-`useServerMachine` (from `@trax/state-machine/react`) and its framework-free `ServerMachineController` drive an instance
+`useServerMachine` (from `@traxsharp/state-machine/react`) and its framework-free `ServerMachineController` drive an instance
 through. The server applies every transition, stores it and answers what it stored; the twin only predicts.
 
 ## Bind the server and use the hook
 
 ```ts
 import { createClient } from 'graphql-ws';
-import { createMachineServer, persistedMessageReplacer } from '@trax/state-machine/client';
-import { useServerMachine } from '@trax/state-machine/react';
+import { createMachineServer, persistedMessageReplacer } from '@traxsharp/state-machine/client';
+import { useServerMachine } from '@traxsharp/state-machine/react';
 import documents from './topic-map.documents.json';
 
 const server = createMachineServer('/trax/graphql', {
@@ -94,4 +94,4 @@ It returns `status`, `id`, `snapshot`, `state`, `context`, `revision`, `dueAt`, 
 
 ## SDK Reference
 
-> [Machines root](/docs/sdk-reference/graphql-api/machines) | [@trax/state-machine](/docs/sdk-reference/statemachine-api/typescript-package)
+> [Machines root](/docs/sdk-reference/graphql-api/machines) | [@traxsharp/state-machine](/docs/sdk-reference/statemachine-api/typescript-package)

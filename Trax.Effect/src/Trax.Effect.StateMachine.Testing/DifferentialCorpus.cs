@@ -1,7 +1,7 @@
 namespace Trax.Effect.StateMachine.Testing;
 
 /// <summary>
-/// Replays a shared, TypeScript-generated differential corpus (produced by the <c>@trax/state-machine</c>
+/// Replays a shared, TypeScript-generated differential corpus (produced by the <c>@traxsharp/state-machine</c>
 /// oracle) through the C# engine. TypeScript enumerates the reachable behavior space and records each
 /// outcome as canonical wire (on a transition) or a rejection code; this reproduces every case and returns
 /// the ones it fails to match, which is the exhaustive proof that the hand-written twin reducers stay

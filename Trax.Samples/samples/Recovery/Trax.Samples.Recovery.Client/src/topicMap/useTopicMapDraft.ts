@@ -15,9 +15,9 @@
 // new one started.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TypedSnapshot } from "@trax/state-machine";
-import { createMachineServer, persistedMessageReplacer } from "@trax/state-machine/client";
-import { useServerMachine, type UseServerMachineResult } from "@trax/state-machine/react";
+import type { TypedSnapshot } from "@traxsharp/state-machine";
+import { createMachineServer, persistedMessageReplacer } from "@traxsharp/state-machine/client";
+import { useServerMachine, type UseServerMachineResult } from "@traxsharp/state-machine/react";
 import { createClient } from "graphql-ws";
 import { API_KEY, API_URL, WS_URL } from "../apollo";
 import type { TopicMapSpec } from "./topic-map.contexts.g";

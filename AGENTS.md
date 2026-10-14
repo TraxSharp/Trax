@@ -46,7 +46,7 @@ Trax.Api/               GraphQL API layer
 Trax.Dashboard/         Blazor Server dashboard UI
 Trax.Cli/               The `trax` tool
 Trax.Samples/           Sample applications and the dotnet new templates
-Trax.Api.StateMachine/  @trax/state-machine, the TypeScript twin of the state-machine engine
+Trax.Api.StateMachine/  @traxsharp/state-machine, the TypeScript twin of the state-machine engine
 Trax.Docs/              Documentation content, the central ADRs, the ADR guard
 Trax.Website/           Next.js site for traxsharp.net, and the React operations dashboard
 .github/                CI, release, Dependabot; per-folder CI settings in .github/ci/packages.json
@@ -91,7 +91,7 @@ title, the body below it. A security change or an open hotspot uses GitHub's `> 
 | 🟨 | Data (`data`) | `Trax.Effect.Data.*` (Postgres, Sqlite, InMemory), migrations, SQL, the run-record tables |
 | 🟫 | Plumbing (`plumbing`) | Effect providers, junction providers, broadcasters (RabbitMQ, SignalR), lifecycle hooks |
 | 🟩 | Trains (`trains`) | `Train` (Core), `ServiceTrain` (Effect), junctions, chains, Memory, decisions, `Parallel` |
-| 🟪 | Machines (`machines`) | `Trax.Effect.StateMachine*` and `@trax/state-machine`, its TypeScript twin |
+| 🟪 | Machines (`machines`) | `Trax.Effect.StateMachine*` and `@traxsharp/state-machine`, its TypeScript twin |
 | 🟧 | Dispatch (`dispatch`) | Mediator (train bus, authorization), Scheduler (jobs, manifests, recovery), remote runners, Lambda |
 | 🟦 | Surface (`surface`) | Api (GraphQL, auth, persisted operations, generated clients) and Dashboard, which mirrors it action for action |
 | ⬛ | Tooling (`tooling`) | CLI, analyzers, architecture and ADR guards, CI, release, docs |
@@ -180,7 +180,8 @@ so the title's type is what counts.
 
 Merging to `main` publishes nothing. To release, dispatch **Release** in the Actions tab. It runs
 the full CI over every folder, then semantic-release reads every commit since the last `v*` tag
-and cuts **one** version for **every** package, at the highest bump those commits call for. Both
+and cuts **one** version for **every** package, at the highest bump those commits call for:
+the NuGet packages, and the TypeScript engine, `@traxsharp/state-machine`, on npm. Both
 the versioning and the publish job wait on the protected `release` environment. After the
 packages are on nuget.org it moves the `website` branch to the new tag, which publishes the site.
 

@@ -1,7 +1,17 @@
 {
-  "name": "@trax/state-machine",
+  "name": "@traxsharp/state-machine",
   "version": "0.0.0",
   "description": "Portable, resumable snapshot state-machine engine — the TypeScript twin of Trax.Effect.StateMachine. Represents a multi-step flow's state as language-neutral JSON so a client and a C# backend agree on it, with illegal (state, context) pairs unrepresentable and every operation total.",
+  "license": "MIT",
+  "homepage": "https://traxsharp.net",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TraxSharp/Trax.git",
+    "directory": "Trax.Api.StateMachine"
+  },
+  "bugs": {
+    "url": "https://github.com/TraxSharp/Trax/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -27,8 +37,14 @@
       "require": "./dist/client/index.cjs"
     }
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsup",
+    "prepack": "npm run build && node -e \"require('node:fs').copyFileSync('../LICENSE', 'LICENSE')\"",
+    "postpack": "node -e \"require('node:fs').rmSync('LICENSE', { force: true })\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

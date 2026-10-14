@@ -10,9 +10,9 @@ import { describe, expect, it } from 'vitest';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 const entryPoints = {
-  '@trax/state-machine': path.join(here, 'index.ts'),
-  '@trax/state-machine/client': path.join(here, 'client', 'index.ts'),
-  '@trax/state-machine/react': path.join(here, 'react.ts'),
+  '@traxsharp/state-machine': path.join(here, 'index.ts'),
+  '@traxsharp/state-machine/client': path.join(here, 'client', 'index.ts'),
+  '@traxsharp/state-machine/react': path.join(here, 'react.ts'),
 };
 
 function exportNames(): Record<string, string[]> {

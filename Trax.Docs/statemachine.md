@@ -57,7 +57,7 @@ the declared name, so the value that is stored and served is canonical.
 ## Two runtimes, one behavior
 
 The engine is implemented twice, once in C# (`Trax.Effect.StateMachine`) and once in TypeScript
-(`@trax/state-machine`). They are kept identical not by generating one engine from the other but by a shared set of
+(`@traxsharp/state-machine`). They are kept identical not by generating one engine from the other but by a shared set of
 language-neutral conformance fixtures that both engines drive and must agree on. Only the result codes are contract;
 human-readable detail text is free to differ. [Result codes](/docs/sdk-reference/statemachine-api/result-codes)
 lists every code a client can receive, the engine's and the persistence layer's.
@@ -141,5 +141,5 @@ terminal step. The [TypeScript package](/docs/sdk-reference/statemachine-api/typ
 | --- | --- |
 | C# engine (pure, total, dependency-free) | Trax.Effect.StateMachine |
 | C# persistence, exactly-once effects, mutation trains | Trax.Effect.StateMachine.Persistence |
-| TypeScript engine, typed facade, React hook | the @trax/state-machine package |
+| TypeScript engine, typed facade, React hook | the @traxsharp/state-machine package |
 | Shared machines (the exported IR, differential and migration goldens) and the frontend generators | the shared machines directory and the codegen tools |

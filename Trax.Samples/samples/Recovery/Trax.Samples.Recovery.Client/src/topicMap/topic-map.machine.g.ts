@@ -1,6 +1,6 @@
 // AUTO-GENERATED from topic-map.ir.json by generateMachineFactory. Do not edit by hand.
 
-import { typedMachineFromIr, type IrDocument } from "@trax/state-machine";
+import { typedMachineFromIr, type IrDocument } from "@traxsharp/state-machine";
 import type { TopicMapSpec } from "./topic-map.contexts.g";
 
 const ir = {

@@ -46,7 +46,7 @@ public static class DifferentialCorpus
 | `CheckCorpus(machine, corpusPath)` | The committed `differential.json` at `corpusPath` equals the corpus embedded in the machine's assembly (`machine.Corpus`). A machine with no embedded corpus passes when nothing is committed, and is reported when something is. |
 | `Check(machine, irPath, corpusPath)` | `CheckIr`, `CheckCorpus`, and `machine.SelfCheck()`: the embedded corpus replays clean through this build's engine. Each self-check diff is reported as `self-check: the embedded corpus no longer replays: <diff>`. |
 | `WriteIr(machine, irPath)` | Writes `machine.ExportIr()` to `irPath`, with a trailing newline |
-| `DifferentialCorpus.Replay(machine, goldenJson)` | Replays a corpus produced by the `@trax/state-machine` oracle through the C# engine and returns one diff per case it does not reproduce. Only reason codes and canonical wire are compared, not rejection detail. |
+| `DifferentialCorpus.Replay(machine, goldenJson)` | Replays a corpus produced by the `@traxsharp/state-machine` oracle through the C# engine and returns one diff per case it does not reproduce. Only reason codes and canonical wire are compared, not rejection detail. |
 
 `IMachine` is in `Trax.Effect.StateMachine.Persistence`; see [State Machine API](/docs/sdk-reference/statemachine-api).
 
