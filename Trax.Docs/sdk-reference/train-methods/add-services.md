@@ -84,4 +84,4 @@ public class NotifyingOrderTrain(IPaymentGateway payments, INotificationService 
 ## See also
 
 - [Extract](/docs/sdk-reference/train-methods/extract)
-- [Dependency Injection in Junctions](/docs/core/trains-and-junctions#dependency-injection-in-junctions)
+- [Dependency Injection in Junctions](/docs/cross-cutting/di-registration)

@@ -83,5 +83,5 @@ public class FulfilOrderTrain(INotificationService notifications)
 ## See also
 
 - [Move work around a chain into junctions](/docs/core/move-work-into-the-chain)
-- [Trains and Junctions](/docs/core/trains-and-junctions#defining-a-train), why the declaration is the only way
+- [Trains and Junctions](/docs/core/trains-and-junctions#declaring-the-chain), why the declaration is the only way
 - [Train Methods](/docs/sdk-reference/train-methods), every step a chain can take
