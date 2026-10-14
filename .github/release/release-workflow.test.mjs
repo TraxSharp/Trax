@@ -251,7 +251,7 @@ cat "${root}/status-$i"
       }
       return { result, calls };
     };
-    const staged = 'stage publish npm/traxsharp-state-machine-1.63.0.tgz --provenance --access public --ignore-scripts';
+    const staged = 'stage publish ./npm/traxsharp-state-machine-1.63.0.tgz --provenance --access public --ignore-scripts';
 
     it('stages the packed tarball with provenance, and passes once the approved version is ours', () => {
       const { result, calls } = run([['404'], ['404'], ['404'], ['200', manifest(ours)]]);
@@ -259,6 +259,12 @@ cat "${root}/status-$i"
       assert.equal(calls.trim(), staged);
       assert.match(result.stdout, new RegExp(`staged shasum is ${ours.shasum}`));
       assert.match(result.stdout, /is the tarball this run built/);
+    });
+
+    it('names the tarball as a local path, which npm would otherwise read as a GitHub repository', () => {
+      const { calls } = run([['404'], ['200', manifest(ours)]]);
+      const tarball = calls.trim().split(' ')[2];
+      assert.match(tarball, /^(\.\/|\/)/, `npm reads ${tarball} as owner/repo on GitHub`);
     });
 
     it('never publishes directly or moves a dist-tag', () => {

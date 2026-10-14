@@ -333,7 +333,8 @@ jobs:
           PKG_VERSION: ${{ needs.release.outputs.version }}
         run: |
           : "${NPM_APPROVAL_SECONDS:=3600}" "${NPM_POLL_SECONDS:=30}"
-          tarball="npm/traxsharp-state-machine-$PKG_VERSION.tgz"
+          # ./ makes it a local file: npm reads a bare a/b.tgz as the GitHub repository a/b.tgz.
+          tarball="./npm/traxsharp-state-machine-$PKG_VERSION.tgz"
           manifest="$RUNNER_TEMP/npm-version.json"
           mkdir -p "$RUNNER_TEMP"
           ours_integrity="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
