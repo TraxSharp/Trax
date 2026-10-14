@@ -24,7 +24,7 @@ namespace Trax.Effect.Models.Log;
 /// There is no timestamp column: order by <see cref="Id"/>. <see cref="MetadataId"/> is the run
 /// that wrote the line, or 0 for a line written outside any run (startup, a background service,
 /// the scheduler's own polling). See
-/// https://traxsharp.net/docs/effect/debugging-with-the-log-table.
+/// https://traxsharp.net/docs/effect/debug-across-processes-with-the-log-table.
 /// </para>
 /// </remarks>
 public class Log : ILog

@@ -18,8 +18,8 @@ The full disclaimer, including the consumer responsibility checklist, ships in t
 | `Trax.Api.Auth.ApiKey` | Header-based API keys (`X-Api-Key` by default), salted and hashed at startup. | [AddTraxApiKeyAuth](https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-api-key-auth) |
 | `Trax.Api.Auth.Jwt` | JWT bearer tokens, validated by `Microsoft.AspNetCore.Authentication.JwtBearer`. | [AddTraxJwtAuth](https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-jwt-auth) |
 | `Trax.Api.Auth.Jwt.Cognito` | `UseCognito(...)` on the JWT builder: Amazon Cognito ID and access tokens and their claims. | [UseCognito](https://traxsharp.net/docs/sdk-reference/api-auth/use-cognito) |
-| `Trax.Api.Auth.Jwt.Cognito.Issuer` | Mints Cognito-shaped RS256 tokens, with a refresh-token store contract. | [Cognito issuer](https://traxsharp.net/docs/sdk-reference/api-auth/cognito-issuer) |
-| `Trax.Api.Auth.Jwt.Testing` | A self-hosted JWKS server and token minters for integration tests. | [JWT testing](https://traxsharp.net/docs/sdk-reference/api-auth/jwt-testing) |
+| `Trax.Api.Auth.Jwt.Cognito.Issuer` | Mints Cognito-shaped RS256 tokens, with a refresh-token store contract. | [Cognito issuer](https://traxsharp.net/docs/sdk-reference/api-auth/cognito-token-issuer) |
+| `Trax.Api.Auth.Jwt.Testing` | A self-hosted JWKS server and token minters for integration tests. | [JWT testing](https://traxsharp.net/docs/sdk-reference/api-auth/test-jwks-server) |
 | `Trax.Api.Auth.Oidc` | OpenID Connect code flow with PKCE and a session cookie, for browser sign-in. | [AddTraxOidcAuth](https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-oidc-auth) |
 | `Trax.Api.GraphQL.Audit` | Records each GraphQL request to your `ITraxAuditSink` from a bounded channel and a background writer. | [API Security](https://traxsharp.net/docs/api-security) |
 
