@@ -41,6 +41,12 @@ public class GraphQLConfiguration
     internal IReadOnlyList<Action<IRequestExecutorBuilder>> SchemaConfigurations { get; }
 
     /// <summary>
+    /// The route prefix the last <c>UseTraxGraphQL</c> call mapped the endpoint at, or
+    /// <see langword="null"/> before it is mapped. Trax.Api.Dashboard points its app at it.
+    /// </summary>
+    internal string? MappedRoutePrefix { get; set; }
+
+    /// <summary>
     /// Max GraphQL execution depth (default 15). Queries deeper than this are rejected
     /// during validation.
     /// </summary>

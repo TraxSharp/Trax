@@ -1,0 +1,18 @@
+namespace Trax.Api.Dashboard.Configuration
+{
+    public sealed class TraxApiDashboardOptions
+    {
+        public TraxApiDashboardOptions() { }
+        public string? GraphQLPath { get; set; }
+        public Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions AllowAnonymousShell() { }
+        public Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions RequirePolicy(string policy) { }
+        public Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions RequireRoles(params string[] roles) { }
+    }
+}
+namespace Trax.Api.Dashboard.Extensions
+{
+    public static class ApiDashboardEndpointExtensions
+    {
+        public static Microsoft.AspNetCore.Builder.IEndpointConventionBuilder UseTraxApiDashboard(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, System.Action<Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions> configure, string path = "/trax/dashboard") { }
+    }
+}

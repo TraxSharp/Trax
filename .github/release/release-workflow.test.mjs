@@ -60,6 +60,14 @@ describe('release job', () => {
     assert.ok(indexOf(release, 'Pack the TypeScript engine') < indexOf(release, 'Pack every package'));
   });
 
+  it('installs the API dashboard before the NuGet packs, which build it into Trax.Api.Dashboard', () => {
+    const install = step(release, 'Install the API dashboard (locked, no install scripts)');
+    assert.equal(install.if, "steps.version.outputs.released == 'true'");
+    assert.equal(install['working-directory'], 'Trax.Api/src/Trax.Api.Dashboard/ClientApp');
+    assert.equal(install.run, 'npm ci --ignore-scripts');
+    assert.ok(indexOf(release, 'Install the API dashboard (locked, no install scripts)') < indexOf(release, 'Pack every package'));
+  });
+
   it('hands publish the tarball and its digest', () => {
     assert.equal(release.outputs['npm-digests'], '${{ steps.npm-digests.outputs.digests }}');
     assert.match(step(release, 'Record npm package digest').run, /sha256sum -- \*\.tgz/);

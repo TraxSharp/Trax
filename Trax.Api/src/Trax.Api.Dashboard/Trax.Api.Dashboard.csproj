@@ -1,0 +1,124 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api.Dashboard</AssemblyName>
+    <RootNamespace>Trax.Api.Dashboard</RootNamespace>
+    <PackageDescription>The Trax .NET operations dashboard as a single-page app your Trax.Api host serves: runs, the work queue, dead letters, manifests, logs, trains, effects and state machines, read and changed through the host's Trax GraphQL operations surface. The built app ships inside the package, so the host needs no Node. Map it with app.UseTraxApiDashboard().</PackageDescription>
+    <PackageTags>trax;dotnet;graphql;dashboard;react;operations</PackageTags>
+    <TraxPackageReadme>$(MSBuildThisFileDirectory)README.md</TraxPackageReadme>
+    <!-- Not yet released, so there is no baseline to validate against. Remove after its first release. -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+    <!-- The React app's source is its own npm project; nothing in it is an item of this project. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+  </ItemGroup>
+
+  <!-- The app (ClientApp/, Vite and React) is built with node and embedded in this assembly, from
+       where UseTraxApiDashboard() serves it (DashboardAssets). A build compiles and embeds it when
+       ClientApp has its npm packages installed, and otherwise builds without it, so a plain
+       `dotnet build` needs no node; mapping a build without it fails at startup, naming the fix.
+       Packing refuses an assembly without it, so a package always carries the app. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);VerifyTraxDashboardAppIsEmbedded</TargetsForTfmSpecificContentInPackage>
+    <TraxDashboardAppDir>$(MSBuildThisFileDirectory)ClientApp/</TraxDashboardAppDir>
+    <TraxDashboardAppInstalled
+      Condition="Exists('$(TraxDashboardAppDir)node_modules/vite/package.json')"
+      >true</TraxDashboardAppInstalled>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TraxDashboardAppInstalled)' == 'true'">
+    <TraxDashboardAppInput Include="$(TraxDashboardAppDir)src/**/*" />
+    <TraxDashboardAppInput Include="$(TraxDashboardAppDir)public/**/*" />
+    <TraxDashboardAppInput Include="$(TraxDashboardAppDir)index.html;$(TraxDashboardAppDir)package-lock.json;$(TraxDashboardAppDir)vite.config.ts;$(TraxDashboardAppDir)tsconfig*.json;$(TraxDashboardAppDir)scripts/check-bundle.mjs" />
+  </ItemGroup>
+
+  <Target
+    Name="BuildTraxDashboardApp"
+    Condition="'$(TraxDashboardAppInstalled)' == 'true'"
+    Inputs="@(TraxDashboardAppInput)"
+    Outputs="$(TraxDashboardAppDir)dist/index.html"
+  >
+    <Exec
+      Command="node --version"
+      ContinueOnError="true"
+      IgnoreExitCode="true"
+      StandardOutputImportance="low"
+      EchoOff="true"
+    >
+      <Output TaskParameter="ExitCode" PropertyName="_TraxNodeExitCode" />
+    </Exec>
+    <Error
+      Condition="'$(_TraxNodeExitCode)' != '0'"
+      Text="Building Trax.Api.Dashboard compiles its React app with node, because $(TraxDashboardAppDir) has its npm packages installed, and node is not on PATH. Install Node.js 22 or later, or delete that node_modules folder to build without the app."
+    />
+    <!-- tsc typechecks it, vite builds it into dist/, and check-bundle refuses a build that carries
+         the mock or the demo, or that the host's Content-Security-Policy would refuse. -->
+    <Exec
+      Command="npm run build"
+      WorkingDirectory="$(TraxDashboardAppDir)"
+      StandardOutputImportance="low"
+    />
+  </Target>
+
+  <Target
+    Name="EmbedTraxDashboardApp"
+    BeforeTargets="PrepareResourceNames"
+    DependsOnTargets="BuildTraxDashboardApp"
+    Condition="'$(TraxDashboardAppInstalled)' == 'true'"
+  >
+    <ItemGroup>
+      <_TraxDashboardAppFile Include="$(TraxDashboardAppDir)dist/**/*" />
+      <EmbeddedResource
+        Include="@(_TraxDashboardAppFile)"
+        LogicalName="TraxApiDashboard/$([MSBuild]::MakeRelative('$(TraxDashboardAppDir)dist/', '%(_TraxDashboardAppFile.FullPath)').Replace('\', '/'))"
+        WithCulture="false"
+        Type="Non-Resx"
+      />
+    </ItemGroup>
+  </Target>
+
+  <!-- Records, after each compile, whether the assembly it compiled carries the app, for the pack
+       check below. After the compile rather than with the items above, because a pack with
+       no-build can run the resource targets without compiling anything. -->
+  <Target Name="RecordTraxDashboardAppEmbedded" AfterTargets="CoreCompile">
+    <PropertyGroup>
+      <_TraxDashboardAppMarker>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.embedded</_TraxDashboardAppMarker>
+    </PropertyGroup>
+    <WriteLinesToFile
+      Condition="'$(TraxDashboardAppInstalled)' == 'true'"
+      File="$(_TraxDashboardAppMarker)"
+      Lines="@(EmbeddedResource->'%(LogicalName)')"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true"
+    />
+    <Delete
+      Condition="'$(TraxDashboardAppInstalled)' != 'true'"
+      Files="$(_TraxDashboardAppMarker)"
+    />
+  </Target>
+
+  <Target Name="VerifyTraxDashboardAppIsEmbedded">
+    <Error
+      Condition="'$(TraxDashboardAppInstalled)' != 'true'"
+      Text="Packing Trax.Api.Dashboard needs its React app built into it, with node, and $(TraxDashboardAppDir) has no node_modules. Run `npm ci --ignore-scripts` there, then build and pack again."
+    />
+    <Error
+      Condition="!Exists('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)trax-dashboard-app.embedded')"
+      Text="Packing Trax.Api.Dashboard needs its React app built into it, and the last build of this project ran before $(TraxDashboardAppDir) had its npm packages. Build it again, then pack."
+    />
+  </Target>
+</Project>

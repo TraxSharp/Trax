@@ -6,6 +6,7 @@ import type { Client } from "@urql/core";
 import "./lib/theme"; // applies persisted/system theme before first paint
 import { ConnectionGate } from "./components/ConnectionGate";
 import { AppRoutes } from "./AppRoutes";
+import { readRuntimeConfig, routerBasename } from "./lib/runtimeConfig";
 import "./index.css";
 
 const root = createRoot(document.getElementById("root")!);
@@ -48,11 +49,13 @@ async function boot() {
   }
 
   const { client } = await import("./lib/graphql");
+  // The path the host serves the app under (Trax.Api.Dashboard writes it into index.html).
+  const basename = routerBasename(readRuntimeConfig());
   root.render(
     <StrictMode>
       <Provider value={client}>
         <ConnectionGate>
-          <BrowserRouter>
+          <BrowserRouter basename={basename}>
             <AppRoutes />
           </BrowserRouter>
         </ConnectionGate>

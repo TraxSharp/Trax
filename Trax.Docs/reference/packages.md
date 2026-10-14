@@ -47,7 +47,7 @@ Each layer depends on the one before it, and installing a package brings the lay
 | Dispatch by input type, startup chain checks | add `Trax.Mediator` |
 | Cron and interval schedules, retries, dead letters | add `Trax.Scheduler` (needs a data provider; Postgres when several servers share the work) |
 | A GraphQL API over your trains | add `Trax.Api.GraphQL`, plus an auth package such as `Trax.Api.Auth.ApiKey` or `Trax.Api.Auth.Jwt` |
-| The monitoring UI | add `Trax.Dashboard` |
+| The monitoring UI | add `Trax.Dashboard` (Blazor, in the host's process), or `Trax.Api.Dashboard` (a React app the host serves over its GraphQL API) |
 
 A typical API host with a scheduler and the dashboard:
 
@@ -112,6 +112,7 @@ dotnet add package Trax.Dashboard
 |---|---|---|---|
 | [Trax.Api](https://www.nuget.org/packages/Trax.Api) | The services behind the GraphQL API: `AddTraxApi` (which `AddTraxGraphQL` calls for you) and `AddTraxHealthCheck`. See [API](/docs/api). | `Trax.Api.Extensions` | Comes with `Trax.Api.GraphQL`. |
 | [Trax.Api.GraphQL](https://www.nuget.org/packages/Trax.Api.GraphQL) | `AddTraxGraphQL(...)` and `UseTraxGraphQL()`: a HotChocolate schema with queries, mutations and subscriptions generated from your trains. See [API](/docs/api) and [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql). | `Trax.Api.GraphQL.Extensions` | A data provider and an auth package below. It brings `Trax.Api`, `Trax.Mediator` and `Trax.Scheduler` with it. |
+| [Trax.Api.Dashboard](https://www.nuget.org/packages/Trax.Api.Dashboard) | `UseTraxApiDashboard(...)`: serves the operations dashboard, a React app built into the package, at `/trax/dashboard`, behind the authorization posture you choose. It reads and changes everything through the Trax GraphQL endpoint. See [API Dashboard](/docs/sdk-reference/api-dashboard). | `Trax.Api.Dashboard.Extensions` | `Trax.Api.GraphQL`, mapped with `UseTraxGraphQL()`. |
 | [Trax.Api.GraphQL.Audit](https://www.nuget.org/packages/Trax.Api.GraphQL.Audit) | `AddAudit<TSink>()` on the GraphQL builder: an audit entry for each operation, written to your sink. See [AddAudit](/docs/sdk-reference/api-audit/add-audit). | `Trax.Api.GraphQL.Audit` | `Trax.Api.GraphQL`. |
 | [Trax.Api.GraphQL.PersistedOperations](https://www.nuget.org/packages/Trax.Api.GraphQL.PersistedOperations) | `UsePersistedOperations(...)` on the GraphQL builder and `AddPersistedOperationStore`: an allow-list of operations that callers run by id. See [Persisted Operations](/docs/persisted-operations). | `Trax.Api.GraphQL.PersistedOperations.Extensions` | `Trax.Api.GraphQL`. |
 | [Trax.Api.GraphQL.Testing](https://www.nuget.org/packages/Trax.Api.GraphQL.Testing) | Cross-schema GraphQL guards through `CrossSchemaGuards` and `CrossSchemaGuardFixture`. See [Architecture Guards](/docs/reference/architecture-guards). | `Trax.Api.GraphQL.Testing` | `Trax.Core.Testing`, in a test project. |

@@ -38,8 +38,21 @@ hosts (see [The demo](#the-demo)).
 
 ## Running
 
-The dashboard talks to whatever host embeds `Trax.Api.GraphQL`. Point the dev proxy at it
-and start Vite:
+**In a host.** The `Trax.Api.Dashboard` package carries the production build (`npm run build`) and
+serves it from any Trax.Api host with `app.UseTraxApiDashboard(o => o.RequirePolicy(...))`, at
+`/trax/dashboard` by default. Building that project from this repository compiles the app and
+embeds it when this folder has its npm packages installed (`npm ci --ignore-scripts`), and
+otherwise builds without it; packing refuses an assembly without it. See
+[UseTraxApiDashboard](https://traxsharp.net/docs/sdk-reference/api-dashboard/use-trax-api-dashboard).
+
+The production build is relative (`base: "./"`): the host writes a `<base href>` and the runtime
+config (`<meta name="trax-dashboard-config">`, read by `src/lib/runtimeConfig.ts`) into
+`index.html` as it serves it, so one build works under any path and talks to the host's GraphQL
+path. It runs under the host's strict Content-Security-Policy (no inline script or style element,
+no `eval`, no inline data fonts), which `scripts/check-bundle.mjs` checks on every build.
+
+**In development.** The dashboard talks to whatever host embeds `Trax.Api.GraphQL`. Point the dev
+proxy at it and start Vite:
 
 ```bash
 npm ci
@@ -107,8 +120,9 @@ cannot answer, other than a scenario's own row id and a filter the play types.
 
 ## How it talks to the API
 
-- **Client**: [urql](https://formidable.com/open-source/urql/) over the Vite proxy at
-  `/trax/graphql`, with a `graphql-ws` link for subscriptions (`src/lib/graphql.ts`).
+- **Client**: [urql](https://formidable.com/open-source/urql/) at the GraphQL path the host names
+  (`/trax/graphql` by default, and through the Vite proxy in development), with a `graphql-ws`
+  link for subscriptions (`src/lib/graphql.ts`).
 - **Auth**: the API key is stored in `localStorage` (`src/lib/auth.ts`) and sent as the
   `X-Api-Key` header on every request. Browsers cannot set headers on a WebSocket upgrade,
   so subscriptions send the key in the `graphql-ws` `connection_init` payload, which the
@@ -221,6 +235,7 @@ findings shape this UI:
 ```
 src/
   lib/graphql.ts        urql client (HTTP + graphql-ws) with X-Api-Key auth
+  lib/runtimeConfig.ts  the base path and GraphQL path the host writes into index.html
   lib/auth.ts           API key storage
   graphql/              operations.* queries, mutations, subscriptions
   types.ts              TS mirrors of the Trax.Api DTOs / enums

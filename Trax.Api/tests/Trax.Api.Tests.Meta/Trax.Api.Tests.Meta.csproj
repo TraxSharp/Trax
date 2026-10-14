@@ -37,6 +37,7 @@
     <ProjectReference Include="../../src/Trax.Api.GraphQL.Client.Trax/Trax.Api.GraphQL.Client.Trax.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL.Client.Typed/Trax.Api.GraphQL.Client.Typed.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL.Testing/Trax.Api.GraphQL.Testing.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Dashboard/Trax.Api.Dashboard.csproj" />
   </ItemGroup>
 
   <ItemGroup>

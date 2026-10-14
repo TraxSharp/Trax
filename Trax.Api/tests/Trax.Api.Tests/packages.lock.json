@@ -907,6 +907,12 @@
           "Trax.Api.Auth": "[1.99.99, )"
         }
       },
+      "trax.api.dashboard": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.GraphQL": "[1.99.99, )"
+        }
+      },
       "trax.api.graphql": {
         "type": "Project",
         "dependencies": {

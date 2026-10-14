@@ -58,6 +58,7 @@ public class PackagesPageTests
         "Trax.Api.Auth.Jwt.Cognito.Issuer",
         "Trax.Api.Auth.Jwt.Testing",
         "Trax.Api.Auth.Oidc",
+        "Trax.Api.Dashboard",
         "Trax.Api.GraphQL",
         "Trax.Api.GraphQL.Audit",
         "Trax.Api.GraphQL.Client",

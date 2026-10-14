@@ -9,16 +9,16 @@ import { authConnectionParams, authHttpHeaders, onAuthChange } from "./auth";
 import { activityExchange } from "./activity-exchange";
 import { connection, setConnectionStatus, type ConnectionStatus } from "./connection";
 import { shouldRetryWs } from "./wsRetry";
+import { graphqlUrls, readRuntimeConfig } from "./runtimeConfig";
 
 // Re-exported for existing importers (useConnection, ConnectionIndicator).
 export { connection };
 export type { ConnectionStatus };
 
-// Vite proxies /trax (HTTP + WebSocket) to the API host, so both are same-origin here.
-const HTTP_URL = "/trax/graphql";
-const WS_URL = `${
-  window.location.protocol === "https:" ? "wss" : "ws"
-}://${window.location.host}/trax/graphql`;
+// The endpoint is always on this page's origin: the host that serves the app names its path in
+// index.html (lib/runtimeConfig), and in development Vite proxies /trax (HTTP + WebSocket) to the
+// API host. Same-origin, so CORS is never involved.
+const { http: HTTP_URL, ws: WS_URL } = graphqlUrls(readRuntimeConfig().graphqlPath);
 
 // Browsers cannot set headers on a WebSocket upgrade, so the API reads the credential from the
 // graphql-ws connection_init payload — `apiKey` for API-key mode, `authToken` for Bearer/JWT mode

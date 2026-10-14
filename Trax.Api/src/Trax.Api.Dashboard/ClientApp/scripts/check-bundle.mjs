@@ -50,5 +50,27 @@ for (const [marker, wanted, what] of rules) {
     failed = true;
   }
 }
+
+// The app build is served by Trax.Api.Dashboard under any path and a strict Content-Security-Policy
+// (script-src 'self', no inline script): its index.html loads everything relative to the <base
+// href> the host writes, runs no inline script, and nothing is inlined as a data: URL.
+if (kind === "app") {
+  const html = readFileSync(join(dir, "index.html"), "utf8");
+  const urls = [...html.matchAll(/\b(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
+  const absolute = urls.filter((u) => !u.startsWith("./"));
+  if (absolute.length > 0) {
+    console.error(`${dir}: index.html references ${absolute.join(", ")}; every URL must be relative (./)`);
+    failed = true;
+  }
+  if (/<script(?![^>]*\bsrc=)[^>]*>/.test(html)) {
+    console.error(`${dir}: index.html has an inline <script>, which the host's CSP refuses`);
+    failed = true;
+  }
+  const inlined = files.filter((f) => f.endsWith(".css") && /url\(\s*["']?data:/.test(readFileSync(f, "utf8")));
+  if (inlined.length > 0) {
+    console.error(`${dir}: ${inlined.join(", ")} inlines a data: URL, which the host's CSP refuses for fonts`);
+    failed = true;
+  }
+}
 if (failed) process.exit(1);
 console.log(`${dir}: the ${kind} build carries what it should`);

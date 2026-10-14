@@ -15,6 +15,9 @@ Trax.Dashboard is a Blazor Server UI, mounted at `/trax`, for inspecting trains 
 manifests and dead letters, and changing scheduler and effect settings at runtime. What each page
 shows and does is in [Dashboard pages](/docs/dashboard/pages).
 
+For the same dashboard as a single-page app that a Trax.Api host serves over its GraphQL endpoint, see
+[API Dashboard](/docs/sdk-reference/api-dashboard).
+
 ## 1. Install the package
 
 ```bash

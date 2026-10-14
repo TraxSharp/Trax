@@ -72,6 +72,9 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(
             typeof(Trax.Api.GraphQL.Testing.CrossSchemaGuards).Assembly
         ).SetName("Trax.Api.GraphQL.Testing");
+        yield return new TestCaseData(
+            typeof(Trax.Api.Dashboard.Extensions.ApiDashboardEndpointExtensions).Assembly
+        ).SetName("Trax.Api.Dashboard");
     }
 
     /// <summary>

@@ -126,6 +126,24 @@ jobs:
       - name: No deprecated packages
         working-directory: ${{ matrix.package.folder }}
         run: ../.github/scripts/check-deprecated-packages.sh
+      - name: Setup Node
+        # Tests that drive Trax.Api.StateMachine's generators run them under node, packing Trax.Cli
+        # bundles them into it, the browser tests build the page they drive with vite, and building
+        # Trax.Api.Dashboard compiles its React app. Before the build for that last reason.
+        if: matrix.package['state-machine'] || matrix.package.playwright || matrix.package['api-dashboard']
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install Trax.Api.StateMachine (locked, no install scripts)
+        if: matrix.package['state-machine'] || matrix.package.playwright
+        working-directory: Trax.Api.StateMachine
+        run: npm ci --ignore-scripts
+      - name: Install the API dashboard (locked, no install scripts)
+        # With its packages installed, building Trax.Api.Dashboard compiles the app and embeds it,
+        # which the pack below requires and the dashboard's host and pack tests serve and open.
+        if: matrix.package['api-dashboard']
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
+        run: npm ci --ignore-scripts
       - name: Build
         working-directory: ${{ matrix.package.folder }}
         run: dotnet build "$SOLUTION" --configuration Release --no-restore -warnaserror
@@ -136,18 +154,6 @@ jobs:
         # the one browser the tests launch (Trax.Docs/adr/0049).
         if: matrix.package.playwright
         run: pwsh Trax.Samples/tests/Trax.Samples.Recovery.Browser/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
-      - name: Setup Node
-        # Tests that drive Trax.Api.StateMachine's generators run them under node, packing Trax.Cli
-        # bundles them into it, and the browser tests build the page they drive with vite. Before the
-        # pack for that reason.
-        if: matrix.package['state-machine'] || matrix.package.playwright
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
-        with:
-          node-version: '24'
-      - name: Install Trax.Api.StateMachine (locked, no install scripts)
-        if: matrix.package['state-machine'] || matrix.package.playwright
-        working-directory: Trax.Api.StateMachine
-        run: npm ci --ignore-scripts
       - name: Pack (package validation)
         # Package validation runs on pack, not build. Packing here compares every package with
         # its baseline release before a merge, instead of at release time, after

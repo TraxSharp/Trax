@@ -1,8 +1,9 @@
 # Trax.Api
 
 The GraphQL layer: schema generation over `[TraxQueryModel]` entities, authentication and
-authorization, subscriptions, persisted operations, audit, and the cross-schema data
-loaders. It sits above `Trax.Scheduler` and below `Trax.Dashboard` and `Trax.Samples`.
+authorization, subscriptions, persisted operations, audit, the cross-schema data
+loaders, and the React operations dashboard a host serves over them (Trax.Api.Dashboard). It
+sits above `Trax.Scheduler` and below `Trax.Dashboard` and `Trax.Samples`.
 
 This file is the entry point. It routes; it does not restate the rules.
 
@@ -29,6 +30,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | the audit pipeline (`Trax.Api.GraphQL.Audit`) | [0027](./docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md): no value the caller sent is recorded unless the host opts in, and [0035](./docs/adr/0035-a-refused-request-is-always-audited.md): the skip options drop only requests that succeeded |
 | `requeueAllDeadLetters`, or an operations mutation that can outlast a request | [0036](./docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md): it runs as a background job and returns a handle; the fold never shares the request's lifetime |
 | the `machines` root (`MachineTypeModule`, `MachineResolvers`, `MachineEventCountValidatorRule`) | central `docs/0048`: each machine a host exposes is its own typed API; every write dispatches the internal state-machine train through the mediator, one machine write per operation |
+| `UseTraxApiDashboard`, or anything Trax.Api.Dashboard serves | [0039](./docs/adr/0039-the-api-dashboard-requires-an-authorization-posture.md): it refuses to start without a posture (`RequirePolicy`, `RequireRoles` or `AllowAnonymousShell()`). The React app is in `src/Trax.Api.Dashboard/ClientApp`, its own npm project; a build embeds it only when its `node_modules` is installed, and packing refuses an assembly without it |
 | `queueTrain` or `requeueExecution` | central `docs/0017`, they enqueue through the mediator so per-train authorization applies; manifest triggers and dead-letter requeues are governed by the operations gate |
 | what `requeueExecution` replays | central `docs/0041`, the requeued run replays the decisions the execution recorded |
 | `failureClass` on executions, or the `executions(failureClass:)` filter | central `docs/0020`, a failure is classified where it happens |

@@ -123,6 +123,12 @@ jobs:
             echo "::error::Expected only traxsharp-state-machine-$PKG_VERSION.tgz, packed: $(ls ../npm)"
             exit 1
           fi
+      - name: Install the API dashboard (locked, no install scripts)
+        # Building Trax.Api.Dashboard compiles its React app with these packages and embeds it in
+        # the assembly; packing refuses an assembly without it.
+        if: steps.version.outputs.released == 'true'
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
+        run: npm ci --ignore-scripts
       - name: Pack every package
         # One version for every package. A folder packs its solution, or the one project
         # packages.json names under release-pack (Trax.Samples ships only its templates).

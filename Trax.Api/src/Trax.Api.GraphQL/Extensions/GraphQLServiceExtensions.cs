@@ -685,6 +685,7 @@ public static class GraphQLServiceExtensions
         });
 
         configure?.Invoke(endpoint);
+        graphQLConfiguration.MappedRoutePrefix = routePrefix;
         return app;
     }
 

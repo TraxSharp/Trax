@@ -47,6 +47,7 @@
     <ProjectReference Include="../../src/Trax.Api.Auth.Jwt.Cognito.Issuer/Trax.Api.Auth.Jwt.Cognito.Issuer.csproj" />
     <ProjectReference Include="../../src/Trax.Api.Auth.Jwt.Testing/Trax.Api.Auth.Jwt.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.Api.Auth.Oidc/Trax.Api.Auth.Oidc.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Dashboard/Trax.Api.Dashboard.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
