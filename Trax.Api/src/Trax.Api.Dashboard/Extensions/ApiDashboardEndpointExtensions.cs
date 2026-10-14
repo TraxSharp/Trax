@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -36,9 +37,10 @@ public static class ApiDashboardEndpointExtensions
     /// or bearer token the operator enters, which that endpoint authorizes.
     /// </para>
     /// <para>
-    /// The page is served with a strict Content-Security-Policy, <c>nosniff</c>,
-    /// <c>Referrer-Policy: no-referrer</c> and no framing. Any path under the dashboard that is
-    /// not one of its files is a route of the app and gets its page; a missing file is a 404.
+    /// Every response under the dashboard's path, refusals included, carries a strict
+    /// Content-Security-Policy, <c>nosniff</c>, <c>Referrer-Policy: no-referrer</c> and no
+    /// framing. Any path under the dashboard that is not one of its files is a route of the app
+    /// and gets its page; a missing file is a 404.
     /// </para>
     /// </remarks>
     /// <param name="endpoints">The host's endpoints, such as the built <c>WebApplication</c>.</param>
@@ -114,13 +116,23 @@ public static class ApiDashboardEndpointExtensions
             () => options.GraphQLPath ?? graphQL.MappedRoutePrefix ?? DefaultGraphQLPath,
             options.AnonymousShellAllowed
         );
+        var marker = new DashboardEndpointMetadata(options.AnonymousShellAllowed);
+        DashboardResponseHeaders.Subscribe(
+            services.GetService<DiagnosticListener>()
+                ?? throw new InvalidOperationException(
+                    "UseTraxApiDashboard() needs the host's DiagnosticListener, which ASP.NET Core "
+                        + "registers, to put its security headers on the refusals the "
+                        + "authorization middleware answers. Map it on an ASP.NET Core host."
+                ),
+            marker
+        );
+
+        // Every method, so a method the app does not serve is answered by the endpoint (405, with
+        // the security headers) rather than by routing.
         var builder = endpoints
-            .MapMethods(
-                $"{routePrefix}/{{**{DashboardEndpoint.PathRouteValue}}}",
-                [HttpMethods.Get, HttpMethods.Head],
-                endpoint.HandleAsync
-            )
-            .WithDisplayName($"Trax API dashboard ({routePrefix})");
+            .Map($"{routePrefix}/{{**{DashboardEndpoint.PathRouteValue}}}", endpoint.HandleAsync)
+            .WithDisplayName($"Trax API dashboard ({routePrefix})")
+            .WithMetadata(marker);
 
         if (options.AnonymousShellAllowed)
         {

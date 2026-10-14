@@ -109,7 +109,8 @@ pages.
 | `{path}/assets/<name>-<hash>.js` and the app's other files | The file, with its content type. Files under `assets/` are named by their content and cached for a year as `immutable`: `private` under `RequirePolicy` or `RequireRoles`, or whenever the caller was signed in, so a shared cache never hands a gated file to someone else; `public` only for an anonymous shell nobody signed in to. The other files are revalidated. |
 | Any other path under `{path}/assets/`, or one whose last segment ends in a lower-case file extension (`.js`, `.png`, `.json`) | `404`. A missing script is never answered with the page. The dots in a .NET name, such as a train's, are not an extension. |
 
-`GET` and `HEAD` are served, and a matching `If-None-Match` is answered with `304`.
+`GET` and `HEAD` are served, and a matching `If-None-Match` is answered with `304`. Any other
+method is answered `405` with `Allow: GET, HEAD`.
 
 The page is written for the path it is served at: a `<base href>` at the app's base path, which
 the app's relative asset URLs resolve against, and the runtime config it reads at startup, both
@@ -138,7 +139,9 @@ app.UseTraxApiDashboard(dashboard =>
 
 ## Security headers
 
-Every response carries:
+Every response to a request under the dashboard's path carries these, including the refusals the
+posture answers before the app is reached (a `401`, a `403`, a sign-in redirect) and a `405`. The
+host's other routes are not touched.
 
 | Header | Value |
 |--------|-------|

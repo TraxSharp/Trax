@@ -25,7 +25,10 @@ namespace Trax.Api.Dashboard.Serving;
 /// build is picked up at once, and is never stored by a shared cache (<c>private</c>). Files
 /// under <c>assets/</c> are named by their content and cached for good, by the browser alone
 /// unless the shell is anonymous (<see cref="AssetCacheControl"/>).</item>
-/// <item>Every response carries the security headers in <see cref="SetSecurityHeaders"/>.</item>
+/// <item>Only <c>GET</c> and <c>HEAD</c> are served; any other method is a 405.</item>
+/// <item>Every response carries the security headers in <see cref="SetSecurityHeaders"/>, including
+/// the refusals the authorization middleware answers before this endpoint runs
+/// (<see cref="DashboardResponseHeaders"/>).</item>
 /// </list>
 /// </remarks>
 internal sealed partial class DashboardEndpoint(
@@ -52,6 +55,13 @@ internal sealed partial class DashboardEndpoint(
         SetSecurityHeaders(context);
 
         var request = context.Request;
+        if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method))
+        {
+            response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+            response.Headers.Allow = "GET, HEAD";
+            return;
+        }
+
         var relative = context.GetRouteValue(PathRouteValue) as string ?? "";
         var path = request.Path.Value ?? "";
 

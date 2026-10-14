@@ -269,16 +269,43 @@ public partial class ApiDashboardHostTests
         (await response.Content.ReadAsByteArrayAsync()).Should().BeEmpty();
     }
 
-    [TestCase("/trax/dashboard/")]
-    [TestCase("/trax/dashboard/executions/42")]
-    [TestCase("/trax/dashboard/assets/index-3f2a9c.js")]
-    [TestCase("/trax/dashboard/assets/index-000000.js")]
-    public async Task Every_response_carries_the_security_headers(string path)
+    [TestCase("GET", "/trax/dashboard/", null, HttpStatusCode.OK)]
+    [TestCase("GET", "/trax/dashboard/executions/42", null, HttpStatusCode.OK)]
+    [TestCase("GET", "/trax/dashboard/assets/index-3f2a9c.js", null, HttpStatusCode.OK)]
+    [TestCase("GET", "/trax/dashboard/assets/index-000000.js", null, HttpStatusCode.NotFound)]
+    [TestCase("GET", "/trax/dashboard", null, HttpStatusCode.Redirect)]
+    [TestCase("POST", "/trax/dashboard/", null, HttpStatusCode.MethodNotAllowed)]
+    [TestCase("GET", "/trax/dashboard/", "gated", HttpStatusCode.Unauthorized)]
+    [TestCase(
+        "GET",
+        "/trax/dashboard/assets/index-3f2a9c.js",
+        "gated",
+        HttpStatusCode.Unauthorized
+    )]
+    [TestCase("GET", "/trax/dashboard/", "gated;ops;Viewer", HttpStatusCode.Forbidden)]
+    [TestCase("POST", "/trax/dashboard/", "gated", HttpStatusCode.Unauthorized)]
+    [TestCase("DELETE", "/trax/dashboard/runs", "gated;ada;Admin", HttpStatusCode.MethodNotAllowed)]
+    [TestCase("GET", "/trax/dashboard/", "gated;ada;Admin", HttpStatusCode.OK)]
+    public async Task Every_response_carries_the_security_headers(
+        string method,
+        string path,
+        string? posture,
+        HttpStatusCode status
+    )
     {
-        await using var app = await StartAsync(e => Anonymous(e));
+        // "gated" serves the app behind RequireRoles("Admin"); what follows it signs the caller in.
+        var gated = posture?.StartsWith("gated") == true;
+        var user = posture?.Split(';', 2) is [_, var who] ? who : null;
+        await using var app = gated
+            ? await StartAsync(
+                e => e.UseTraxApiDashboard(o => o.RequireRoles("Admin")),
+                auth: AuthSetup.SchemeOnly
+            )
+            : await StartAsync(e => Anonymous(e));
 
-        var response = await GetAsync(app, path);
+        var response = await SendAsync(app, new HttpMethod(method), path, user);
 
+        response.StatusCode.Should().Be(status);
         Header(response, "X-Content-Type-Options").Should().Be("nosniff");
         Header(response, "Referrer-Policy").Should().Be("no-referrer");
         Header(response, "X-Frame-Options").Should().Be("DENY");
@@ -291,6 +318,22 @@ public partial class ApiDashboardHostTests
         csp.Should().Contain("base-uri 'self'");
         csp.Should().Contain("connect-src 'self' ws://localhost wss://localhost;");
         csp.Should().NotContain("unsafe-inline").And.NotContain("unsafe-eval");
+        if (status == HttpStatusCode.MethodNotAllowed)
+            response.Content.Headers.Allow.Should().BeEquivalentTo(["GET", "HEAD"]);
+    }
+
+    [Test]
+    public async Task The_host_s_other_routes_do_not_get_the_dashboard_s_headers()
+    {
+        await using var app = await StartAsync(
+            e => e.UseTraxApiDashboard(o => o.RequireRoles("Admin")),
+            auth: AuthSetup.SchemeOnly
+        );
+
+        var response = await GetAsync(app, "/elsewhere");
+
+        Header(response, "Content-Security-Policy").Should().BeEmpty();
+        Header(response, "X-Frame-Options").Should().BeEmpty();
     }
 
     [Test]
@@ -717,14 +760,22 @@ public partial class ApiDashboardHostTests
         }
     }
 
-    private static async Task<HttpResponseMessage> GetAsync(
+    private static Task<HttpResponseMessage> GetAsync(
         WebApplication app,
+        string path,
+        string? user = null,
+        string? host = null
+    ) => SendAsync(app, HttpMethod.Get, path, user, host);
+
+    private static async Task<HttpResponseMessage> SendAsync(
+        WebApplication app,
+        HttpMethod method,
         string path,
         string? user = null,
         string? host = null
     )
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        using var request = new HttpRequestMessage(method, path);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
         if (user is not null)
             request.Headers.Add(TestUserHandler.Header, user);
