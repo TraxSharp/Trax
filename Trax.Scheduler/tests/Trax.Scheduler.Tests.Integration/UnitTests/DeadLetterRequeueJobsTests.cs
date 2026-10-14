@@ -248,6 +248,8 @@ public class DeadLetterRequeueJobsTests
         second.Id.Should().Be(first.Id);
         second.Started.Should().BeFalse();
         second.Message.Should().Be(first.Message);
+        // The fold runs in the background, so the scheduler is called after StartAsync returns.
+        await _foldStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await _scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(
