@@ -54,6 +54,7 @@ var tables = new[]
     (Name: "partner", SliceCount: 10),
 };
 
+// Flatten tables x slices into one list
 var slices = tables.SelectMany(t =>
     Enumerable.Range(0, t.SliceCount).Select(slice => (Table: t.Name, Slice: slice))
 );
