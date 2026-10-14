@@ -78,6 +78,12 @@ Playwright, so the browser tests and the script download one browser build (cent
 It builds the page with vite, so it needs `npm ci` in the page's folder and in
 `Trax.Api.StateMachine`, and chromium installed with the `playwright.ps1` beside its build output.
 
+`tests/Trax.Samples.ApiDashboard.Browser/` opens the dashboard Trax.Api.Dashboard serves in
+chromium, against a host it builds in-process on the in-memory provider, and fails on any
+Content-Security-Policy violation. It is here, not in Trax.Api, because browser tests live in this
+folder (central ADR `0049`). It needs `npm ci` in `Trax.Api/src/Trax.Api.Dashboard/ClientApp`
+before the build, which embeds the app, and the same chromium.
+
 This folder has no `PublicApiSurfaceTests`, which is right: the samples are applications, and
 the one package it does ship, `Trax.Samples.Templates`, is template content with no API
 surface. The samples reference Trax as projects, which `TraxReferencesAreProjectReferencesTests`
