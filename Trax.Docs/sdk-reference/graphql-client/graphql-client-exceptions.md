@@ -1,6 +1,6 @@
 ---
 title: Client exceptions
-description: "Reference for the GraphQL client exceptions: GraphQLValidationException, GraphQLExecutionException, GraphQLSchemaIntrospectionException and GraphQLResponseShapeException."
+description: "Reference for the exceptions the Trax GraphQL client throws: execution, validation, response shape and schema introspection failures."
 type: reference
 area: api
 parent: GraphQL Client
