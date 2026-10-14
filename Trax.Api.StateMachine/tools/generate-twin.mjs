@@ -34,17 +34,11 @@ export async function generateTwin({
   const irHash = createHash("sha256")
     .update(irRaw.replace(/\n+$/, ""), "utf8")
     .digest("hex");
-  const { generateContextTypes, generateMachineFactory, engineVersion } =
+  const { generateContextTypes, generateMachineFactory } =
     await loadEngine(engineSrc);
 
   const contexts = generateContextTypes(ir);
-  // The twin records the version of the engine generating it, and checks it against the installed one.
-  const factory = generateMachineFactory(ir, {
-    importStyle,
-    specifier,
-    irHash,
-    engineVersion,
-  });
+  const factory = generateMachineFactory(ir, { importStyle, specifier, irHash });
 
   mkdirSync(outDir, { recursive: true });
   const contextsPath = join(outDir, `${ir.id}.contexts.g.ts`);

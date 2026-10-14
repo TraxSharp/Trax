@@ -9,6 +9,7 @@ import type {
   MachineTimer,
   TransitionDefinition,
 } from "../types";
+import { requireReadableIrFormat } from "./irFormat";
 import {
   applyReduction,
   evaluateRule,
@@ -71,6 +72,9 @@ export interface IrTimer {
 }
 
 export interface IrDocument {
+  // The IR format a generated twin was generated for (irFormat.ts). The C# export does not write it, so it is part of
+  // neither the committed ir.json nor its hash; machineFromIr refuses a format this engine cannot read.
+  irFormat?: number;
   id: string;
   version: number;
   initialState: string;
@@ -108,6 +112,8 @@ export function machineFromIr(
   customGuards: CustomGuards = {},
   customReducers: CustomReducers = {},
 ): MachineDefinition<string, string> {
+  requireReadableIrFormat(ir.irFormat);
+
   // The machine's actual initial context (what StartsAt built) if the IR carries it, else derived from the
   // initial state's schema. The IR value is authoritative: it reproduces a constrained default (an enum) that
   // the schema alone would default to "" and reject.

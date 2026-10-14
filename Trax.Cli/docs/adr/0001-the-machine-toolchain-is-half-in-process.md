@@ -58,9 +58,10 @@ meant a Trax checkout and its `node_modules` beside the tool. Packing Trax.Cli n
 `generate-twin.mjs` and `generate-corpus.mjs`, with the engine compiled in, to plain
 JavaScript under `engine/` in the package, so an installed tool needs node and nothing else.
 They are still the engine's own generators, built from the same commit, so there is still one
-generator. A twin they write with specifier imports records the version they were released at
-and checks it against the installed `@traxsharp/state-machine` on load, since the tool's
-engine and the consumer's are separate installs that release together. `--engine-src` points the tool at a checkout's `tools/` instead, for work on the
+generator. The tool's engine and the consumer's are separate installs, so a twin they write
+with specifier imports records the IR format it was generated for, and the installed
+`@traxsharp/state-machine` refuses a format it cannot read on load. The package's version is no
+measure: every release bumps it, mostly without touching the IR. `--engine-src` points the tool at a checkout's `tools/` instead, for work on the
 engine itself.
 
 **The consumer's own dependencies resolve from their assembly's directory**, since the CLI
@@ -97,8 +98,10 @@ its own comment.
 ## Changelog
 
 - **2026-10-13**: On Windows node runs only from a `.exe` or `.com`, never a batch-file shim.
+- **2026-10-13**: A specifier twin records the IR format it was generated for, which the
+  installed engine checks on load, rather than the tool's version.
 - **2026-10-13**: node is resolved on PATH by the tool, not by the OS from the current
-  directory; a released twin checks the installed engine's version.
+  directory.
 - **2026-10-13**: The generators are bundled into the package at pack time; `--engine-src`
   became an override.
 - **2026-09-11**: Corrected two consequences. The node availability check runs once per node

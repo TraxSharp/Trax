@@ -115,6 +115,16 @@ field whose CLR type gives its text a shape carries `format`:
 Every digit is ASCII. Both runtimes check the same patterns and the same calendar, so a value gets one verdict in
 each; where the CLR reader is looser (a relative `Uri`, a time without seconds), the format is stricter.
 
+## The format's version
+
+The IR's shape is versioned as a whole, apart from any machine's `version`: the **IR format**, a number the C#
+exporter and the TypeScript engine both declare (`irFormatVersion` in the engine, held equal to the exporter's by a
+test). It changes only when the IR gains something an engine reading the previous format would misread or ignore,
+not with every release. The exported `<machine>.ir.json` does not carry it, so it moves no committed IR and no
+schema hash. A twin generated with specifier imports records it as `irFormat` in the IR it embeds, and the installed
+`@traxsharp/state-machine` refuses, when the twin is imported, a format newer than it reads or older than it still
+reads, saying whether to upgrade the package or regenerate. An IR without `irFormat` is not checked.
+
 ## Transitions
 
 Each transition carries its structure plus its guard and reducer as data:

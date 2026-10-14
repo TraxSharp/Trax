@@ -300,7 +300,8 @@ The IR is exported in-process from the compiled machine; the twin and corpus are
 generators, which ship inside the `trax` tool with the engine compiled in. Twin and corpus generation needs
 only `node` (>= 22) on `PATH`: no engine source and no npm install. The twin imports
 [`@traxsharp/state-machine`](/docs/sdk-reference/statemachine-api/typescript-package), which the frontend
-installs from npm at the same version as the tool.
+installs from npm. The installed package need not match the tool's version, only the IR format the twin records;
+see [the codegen pipeline](/docs/statemachine/codegen-pipeline#generation-and-drift).
 
 ```bash
 # Scaffold a new machine as one declarative C# file.
@@ -367,6 +368,22 @@ before writing anything.
 | `--specifier` | No | Module specifier used with `--import-style specifier` (default `@traxsharp/state-machine`): an npm package name, optionally with a subpath (`@acme/engine/machines`). Anything else is refused, and so is `--specifier` with relative imports, where it would be ignored. |
 | `--tools-dir` | No | The directory holding `generate-twin.mjs` and `generate-corpus.mjs` (default: the `tools/` beside `--engine-src`, else the ones bundled into the tool). It needs `--engine-src`, which those generators read the engine from. |
 | `--node` | No | The `node` executable: an absolute path, or a name looked up on `PATH` (default: `node`). Only absolute `PATH` entries are searched, never the current directory, so a `node` file at the root of the checkout you run in is not run. A relative path such as `./node` is refused. On Windows only a real executable (`node.exe`) is run: a `node.cmd` or `node.bat` shim, which some version managers put on `PATH`, runs through `cmd.exe`, which parses its arguments a second time, so it is skipped in favour of a `node.exe` later on `PATH`, or refused by name when it is the only one, and a `--node` naming one is refused. |
+
+#### Changes to `generate`'s defaults
+
+Earlier versions of the tool required `--engine-src` to generate a twin and imported the engine by relative path,
+and `--import-style specifier` defaulted to `state-machine` in the `@trax` scope, which Trax does not own on npm.
+Now:
+
+- without `--engine-src`, the twin imports the installed `@traxsharp/state-machine` (`--import-style specifier`);
+  with it, the default is still `relative`;
+- the default `--specifier` is `@traxsharp/state-machine`;
+- a specifier twin's first lines name the import it was generated with and the options that change it, and its IR
+  records the IR format the installed engine checks on load.
+
+To generate as before, pass `--import-style relative --engine-src <engine/src>`, or `--specifier <module>` with the
+name your frontend imports the engine by. See
+[Regenerate twins after the trax machine generate defaults changed](/docs/migration-guides/trax-machine-generate-defaults).
 
 ### `trax machine check`
 

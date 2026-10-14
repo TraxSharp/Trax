@@ -1,9 +1,13 @@
 // AUTO-GENERATED from topic-map.ir.json by generateMachineFactory. Do not edit by hand.
+// Imports the engine from "@traxsharp/state-machine" (trax machine generate --import-style specifier, the
+// default without --engine-src). Name another module with --specifier <module>, or import an engine
+// checkout by relative path with --import-style relative --engine-src <engine/src>.
 
 import { typedMachineFromIr, type IrDocument } from "@traxsharp/state-machine";
 import type { TopicMapSpec } from "./topic-map.contexts.g";
 
 const ir = {
+  "irFormat": 1,
   "committedStates": [],
   "context": {
     "BuildCancelled": {

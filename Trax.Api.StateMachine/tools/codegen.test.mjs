@@ -266,27 +266,16 @@ describe("bundleCli", () => {
     expect(read(join(out, "differential.json"))).toBe(read(committedCorpus));
   });
 
-  it("writes a twin that checks the engine version the tool was released at", async () => {
-    const released = mkdtempSync(join(tmpdir(), "trax-bundled-released-"));
-    try {
-      await bundleCli(released, "1.63.0");
-      execFileSync(
-        process.execPath,
-        [join(released, "generate-twin.mjs"), "--ir", turnstileIr, "--out-dir", out, "--import-style", "specifier"],
-        { encoding: "utf8" },
-      );
-      const twin = read(join(out, "turnstile.machine.g.ts"));
-      expect(twin).toContain('import { requireEngineVersion } from "@traxsharp/state-machine";');
-      expect(twin).toContain('requireEngineVersion("1.63.0");');
-    } finally {
-      rmSync(released, { recursive: true, force: true });
-    }
-  });
-
-  it("writes no version check from an unreleased build", () => {
+  it("writes a specifier twin that records its IR format and imports only what every engine exports", () => {
     node("generate-twin.mjs", "--ir", turnstileIr, "--out-dir", out, "--import-style", "specifier");
 
-    expect(read(join(out, "turnstile.machine.g.ts"))).not.toContain("requireEngineVersion");
+    const twin = read(join(out, "turnstile.machine.g.ts"));
+    expect(twin).toContain('const ir = {\n  "irFormat": 1,');
+    expect(twin).toContain('// Imports the engine from "@traxsharp/state-machine" (trax machine generate');
+    expect(twin.split("\n").filter((line) => line.startsWith("import "))).toEqual([
+      'import { typedMachineFromIr, type IrDocument } from "@traxsharp/state-machine";',
+      'import type { TurnstileSpec } from "./turnstile.contexts.g";',
+    ]);
   });
 
   it("refuses --engine-src, which only the engine's own tools take", () => {

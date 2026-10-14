@@ -18,6 +18,7 @@ each package had its own version, so older guides name the package too.
 
 | Guide | Applies from |
 |---|---|
+| [Regenerate twins after the trax machine generate defaults changed](/docs/migration-guides/trax-machine-generate-defaults) | the first release after Trax 1.62.0 |
 | [Move off the generic state-machine mutations](/docs/migration-guides/generic-state-machine-mutations) | the first release after Trax 1.62.0 |
 | [Upgrade schedulers from Trax.Effect 1.57.2 or earlier](/docs/migration-guides/scheduler-leader-lock) | Trax.Effect 1.57.3 |
 | [Migrate to qualified principal ids](/docs/migration-guides/qualified-principal-ids) | Trax.Api 1.44.0 |
