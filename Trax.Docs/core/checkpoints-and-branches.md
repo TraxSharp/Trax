@@ -1,6 +1,6 @@
 ---
 title: Checkpoints and branches
-description: "Why a checkpoint stores a declared state and not Memory, what that means for what goes in it and where it sits, and why Parallel branches compute while the join commits."
+description: "Why a checkpoint stores a declared state rather than Memory, what follows for its contents and placement, and why Parallel branches compute while the join commits."
 type: explanation
 area: trains
 nav_order: 5

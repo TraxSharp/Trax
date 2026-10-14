@@ -4,9 +4,7 @@ description: "Reference for Run, which executes a train from outside and throws 
 type: reference
 area: trains
 package: Trax.Core
-namespace:
-  - Trax.Core.Train
-  - Trax.Effect.Services.ServiceTrain
+namespace: Trax.Core.Train
 source:
   - Trax.Core/src/Trax.Core/Train/Train.cs
   - Trax.Effect/src/Trax.Effect/Services/ServiceTrain/ServiceTrain.cs
@@ -25,7 +23,7 @@ Executes the train from outside it and returns its result, throwing the failure.
 // Train<TInput, TReturn> (Trax.Core)
 public virtual Task<TReturn> Run(TInput input, CancellationToken cancellationToken = default);
 
-// ServiceTrain<TIn, TOut> (Trax.Effect)
+// ServiceTrain<TIn, TOut> (Trax.Effect, namespace Trax.Effect.Services.ServiceTrain)
 public sealed override Task<TOut> Run(TIn input, CancellationToken cancellationToken = default);
 public Task<TOut> Run(TIn input, Metadata metadata);
 public Task<TOut> Run(TIn input, Metadata metadata, CancellationToken cancellationToken);

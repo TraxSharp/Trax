@@ -142,5 +142,3 @@ sdk-reference/statemachine-api/rules.md
 sdk-reference/statemachine-api/runtime-integrity.md
 sdk-reference/statemachine-api/typescript-package.md
 sdk-reference/testing/core-testing.md
-sdk-reference/train-methods/chain-graph.md
-sdk-reference/train-methods/declared-chain.md
