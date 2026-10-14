@@ -53,5 +53,5 @@ TRAX_PG_PORT=5433 node dashboard.mjs --copy-to ../../../Trax.Api/src/Trax.Api.Da
 
 The website's copy combines the three hosts as one cluster on one database would show them; the script's header says
 how, and what it changes (ids renumbered, the machine's name and paths replaced). After re-recording, run the
-dashboard's `npm test` in Trax.Website: its strict check opens every page, filter and row of the demo and fails on any
-query the recording does not answer.
+dashboard's `npm test` in `Trax.Api/src/Trax.Api.Dashboard/ClientApp`: its strict check opens every page, filter and row
+of the demo and fails on any query the recording does not answer.
