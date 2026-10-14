@@ -12,21 +12,28 @@ using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
+using Trax.Samples.ApiDashboard.Browser.Host;
 using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.Scheduling;
 
 namespace Trax.Samples.ApiDashboard.Browser.Tests;
 
 /// <summary>
 /// The dashboard Trax.Api.Dashboard serves boots in a real browser under the Content-Security-Policy
 /// it is served with, and talks to the host's GraphQL endpoint on the same origin: the operator's
-/// API key reaches it over HTTP and over the subscription socket.
+/// API key reaches it over HTTP and over the subscription socket. Every kind of page it draws (the
+/// overview's charts, the groups' dependency graph, a train's page, the state-machine pages) runs
+/// under that policy too, each loaded from its own URL as a reload would.
 /// </summary>
 /// <remarks>
 /// The host runs in this process on Kestrel, on a port of its own: Trax on the in-memory provider,
-/// the GraphQL endpoint gated behind an API key, and the dashboard. It needs no database. The
-/// dashboard's app is the one the build embedded in Trax.Api.Dashboard, so the build needs the
-/// app's npm packages (CI installs them for this folder).
+/// the GraphQL endpoint gated behind an API key, and the dashboard. It needs no database. Two
+/// trains run on a schedule in two dependent manifest groups and a system-owned machine has one
+/// instance, so each page has something to draw (Host/BrowserHostModel.cs). The dashboard's app is
+/// the one the build embedded in Trax.Api.Dashboard, so the build needs the app's npm packages (CI
+/// installs them for this folder).
 /// </remarks>
 [TestFixture]
 [NonParallelizable]
@@ -38,6 +45,7 @@ public class ApiDashboardBrowserTests
 
     private WebApplication _host = null!;
     private Uri _address = null!;
+    private Guid _gate;
     private IPlaywright _playwright = null!;
     private IBrowser _browser = null!;
 
@@ -46,6 +54,12 @@ public class ApiDashboardBrowserTests
     {
         _host = BuildHost();
         await _host.StartAsync();
+        using (var scope = _host.Services.CreateScope())
+            _gate = (
+                await scope
+                    .ServiceProvider.GetRequiredService<IMachineInstances>()
+                    .Start<GateMachine>(MachineKey.Of("lane-1"))
+            ).Id;
         _address = new Uri(
             _host
                 .Services.GetRequiredService<IServer>()
@@ -73,21 +87,7 @@ public class ApiDashboardBrowserTests
         try
         {
             var page = await context.NewPageAsync();
-
-            // Every policy violation the page reports, and every console error that names the policy.
-            var violations = new ConcurrentQueue<string>();
-            await page.AddInitScriptAsync(
-                """
-                window.__cspViolations = [];
-                document.addEventListener("securitypolicyviolation", (e) =>
-                  window.__cspViolations.push(`${e.violatedDirective} ${e.blockedURI}`));
-                """
-            );
-            page.Console += (_, message) =>
-            {
-                if (message.Type == "error" && message.Text.Contains("Content Security Policy"))
-                    violations.Enqueue(message.Text);
-            };
+            var violations = await WatchForViolationsAsync(page);
 
             // The subscription socket: open on this origin's GraphQL path, and acknowledged.
             var acknowledged = new TaskCompletionSource<string>(
@@ -128,9 +128,7 @@ public class ApiDashboardBrowserTests
             // The router took the deep link under the base path the host wrote into the page.
             page.Url.Should().EndWith("/trax/dashboard/executions");
 
-            var reported = await page.EvaluateAsync<string[]>("window.__cspViolations");
-            reported
-                .Concat(violations)
+            (await ViolationsAsync(page, violations))
                 .Should()
                 .BeEmpty("the app runs under the policy it is served with");
         }
@@ -139,6 +137,82 @@ public class ApiDashboardBrowserTests
             await context.CloseAsync();
         }
     }
+
+    // Each page, loaded from its own URL (as a reload is), and something only it draws. {gate} is the
+    // machine instance the host started.
+    [TestCase("", "Overview", ".recharts-surface")]
+    [TestCase("groups", "Dependency graph", "svg[role=img]")]
+    [TestCase(
+        "trains/Trax.Samples.ApiDashboard.Browser.Host.IRefreshRatesTrain",
+        "Trax.Samples.ApiDashboard.Browser.Host.IRefreshRatesTrain",
+        "text=Total runs"
+    )]
+    [TestCase("state-machines", "State machines", "text=browser-gate")]
+    [TestCase(
+        "state-machines/browser-gate/system/{gate}",
+        "browser-gate",
+        "text=All state machines"
+    )]
+    public async Task Each_page_draws_under_the_CSP_when_loaded_from_its_own_URL(
+        string route,
+        string landmark,
+        string drawn
+    )
+    {
+        var context = await _browser.NewContextAsync();
+        try
+        {
+            var page = await context.NewPageAsync();
+            var violations = await WatchForViolationsAsync(page);
+
+            var url = new Uri(_address, "/trax/dashboard/" + route.Replace("{gate}", $"{_gate}"));
+            var document = await page.GotoAsync(url.ToString());
+            document!.Status.Should().Be(200, $"{url} is a route of the app, not a missing file");
+
+            await page.GetByLabel("API key").FillAsync(ApiKey, new() { Timeout = Ms(Render) });
+            await page.GetByRole(AriaRole.Button, new() { Name = "Connect" }).ClickAsync();
+
+            await Assertions
+                .Expect(page.GetByText(landmark, new() { Exact = true }).First)
+                .ToBeVisibleAsync(new() { Timeout = Ms(Render) });
+            await Assertions
+                .Expect(page.Locator(drawn).First)
+                .ToBeVisibleAsync(new() { Timeout = Ms(Render) });
+            page.Url.Should().Be(url.ToString(), "the router kept the route it was loaded at");
+
+            (await ViolationsAsync(page, violations))
+                .Should()
+                .BeEmpty($"/{route} draws under the policy it is served with");
+        }
+        finally
+        {
+            await context.CloseAsync();
+        }
+    }
+
+    // Every policy violation the page reports, and every console error that names the policy.
+    private static async Task<ConcurrentQueue<string>> WatchForViolationsAsync(IPage page)
+    {
+        var violations = new ConcurrentQueue<string>();
+        await page.AddInitScriptAsync(
+            """
+            window.__cspViolations = [];
+            document.addEventListener("securitypolicyviolation", (e) =>
+              window.__cspViolations.push(`${e.violatedDirective} ${e.blockedURI}`));
+            """
+        );
+        page.Console += (_, message) =>
+        {
+            if (message.Type == "error" && message.Text.Contains("Content Security Policy"))
+                violations.Enqueue(message.Text);
+        };
+        return violations;
+    }
+
+    private static async Task<List<string>> ViolationsAsync(
+        IPage page,
+        ConcurrentQueue<string> console
+    ) => [.. await page.EvaluateAsync<string[]>("window.__cspViolations"), .. console];
 
     private static float Ms(TimeSpan timeout) => (float)timeout.TotalMilliseconds;
 
@@ -152,10 +226,25 @@ public class ApiDashboardBrowserTests
 
         builder.Services.AddTraxApiKeyAuth(keys => keys.Add(ApiKey, id: "operator", "Admin"));
         builder.Services.AddAuthorization();
+        builder.Services.AddSingleton<ISnapshotPrincipal, NoSnapshotPrincipal>();
         builder.Services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UseInMemory())
+                .AddStateMachines(typeof(GateMachine).Assembly)
                 .AddMediator(typeof(ApiDashboardBrowserTests).Assembly)
-                .AddScheduler()
+                .AddScheduler(scheduler =>
+                    scheduler
+                        .Schedule<IRefreshRatesTrain>(
+                            "refresh-rates",
+                            new RatesInput(),
+                            Every.Seconds(2),
+                            o => o.Group("ingest")
+                        )
+                        .ThenInclude<IRepriceCatalogTrain>(
+                            "reprice-catalog",
+                            new RatesInput(),
+                            o => o.Group("publish")
+                        )
+                )
         );
         builder.Services.AddTraxGraphQL(graphql =>
             graphql.ExposeOperationQueries().ExposeOperationMutations().RequireAuthorization()
