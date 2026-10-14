@@ -16,6 +16,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 /// e.UsePostgres(...)))</c>) so that <c>IDataContextProviderFactory</c> is
 /// resolvable.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/add-persisted-operation-store">SDK reference</seealso>
 public static class ServiceCollectionPersistedOperationsExtensions
 {
     /// <summary>

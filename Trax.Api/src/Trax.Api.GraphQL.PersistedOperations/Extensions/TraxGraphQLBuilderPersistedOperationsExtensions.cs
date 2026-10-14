@@ -24,6 +24,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 /// Public entry point. Adds persisted GraphQL operations to a Trax GraphQL
 /// pipeline.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/use-persisted-operations">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement">SDK reference</seealso>
 public static class TraxGraphQLBuilderPersistedOperationsExtensions
 {
     /// <summary>

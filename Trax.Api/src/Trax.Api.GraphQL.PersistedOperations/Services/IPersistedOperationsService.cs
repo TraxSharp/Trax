@@ -13,6 +13,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// <c>SCHEMA_VALIDATION_FAILED</c>, <c>SHAPE_DIFF_VIOLATION</c>). Registered by
 /// <c>UsePersistedOperations</c> and <c>AddPersistedOperationStore</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/i-persisted-operations-service">SDK reference</seealso>
 public interface IPersistedOperationsService
 {
     /// <summary>

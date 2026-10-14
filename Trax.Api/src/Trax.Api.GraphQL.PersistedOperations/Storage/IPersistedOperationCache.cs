@@ -5,6 +5,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 /// registration is a no-op; an in-memory implementation is wired when the
 /// consumer opts in via <c>WithInMemoryCache()</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/i-persisted-operation-cache">SDK reference</seealso>
 public interface IPersistedOperationCache
 {
     /// <summary>

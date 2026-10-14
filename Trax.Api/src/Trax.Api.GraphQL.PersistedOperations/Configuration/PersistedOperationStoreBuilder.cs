@@ -9,6 +9,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 /// only if it reaches them. The store refuses to start until the host says how: a broker, or a
 /// declaration that this process is the only one that caches them.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/add-persisted-operation-store">SDK reference</seealso>
 public sealed class PersistedOperationStoreBuilder
 {
     // Created by AddPersistedOperationStore and handed to its callback.
