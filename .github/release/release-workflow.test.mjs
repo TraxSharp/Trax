@@ -1,8 +1,8 @@
 // release.yml's split: the release job only tags; the build job packs every package, and
 // @traxsharp/state-machine, at the released version with a read-only token and records their
 // digests; the publish job checks the digests, attests and publishes with trusted publishing,
-// npm before NuGet, skipping a version npm already has only when it is the tarball in hand, and
-// installs nothing. The shell steps are run here as
+// npm before NuGet: it stages the engine and waits for a maintainer to approve it, accepts a live
+// version only when it is the tarball in hand, and installs nothing. The shell steps are run here as
 // written in the workflow, against fake folders and a fake curl and npm.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -122,8 +122,8 @@ describe('publish job', () => {
     assert.equal(step(publish, 'Setup Node.js').with['node-version'], '${{ env.PUBLISH_NODE_VERSION }}');
   });
 
-  it('checks the bundled npm can publish with OIDC (11.5.1 or later)', () => {
-    const check = step(publish, 'The bundled npm can publish with OIDC').run;
+  it('checks the bundled npm can stage with OIDC (11.15.0 or later)', () => {
+    const check = step(publish, 'The bundled npm can stage with OIDC').run;
     const run = (version) => {
       const root = mkdtempSync(join(tmpdir(), 'trax-npm-version-'));
       writeFileSync(join(root, 'npm'), `#!/bin/sh\necho ${version}\n`);
@@ -131,9 +131,10 @@ describe('publish job', () => {
       return runStep(check, root, { PATH: `${root}:${process.env.PATH}` }).status;
     };
     assert.equal(run('11.19.0'), 0);
-    assert.equal(run('11.5.1'), 0);
+    assert.equal(run('11.15.0'), 0);
     assert.equal(run('12.0.0'), 0);
-    assert.notEqual(run('11.5.0'), 0);
+    assert.notEqual(run('11.14.9'), 0);
+    assert.notEqual(run('11.5.1'), 0);
     assert.notEqual(run('10.9.2'), 0);
   });
 
@@ -144,10 +145,10 @@ describe('publish job', () => {
     assert.equal(verify.env.NPM_DIGESTS, '${{ needs.build.outputs.npm-digests }}');
   });
 
-  it('verifies, then attests, then publishes the tarball', () => {
+  it('verifies, then attests, then stages the tarball', () => {
     const verify = indexOf(publish, 'Verify the packages are the ones build built');
     const attest = indexOf(publish, 'Attest build provenance (SLSA)');
-    const npmPublish = indexOf(publish, 'Publish to npm');
+    const npmPublish = indexOf(publish, 'Stage on npm and wait for approval');
 
     assert.ok(indexOf(publish, 'Download npm package artifact') < verify);
     assert.ok(verify < attest && attest < npmPublish);
@@ -155,10 +156,10 @@ describe('publish job', () => {
   });
 
   it('publishes to npm before NuGet, so no NuGet package ships unless npm holds our engine', () => {
-    const npmPublish = indexOf(publish, 'Publish to npm');
+    const npmPublish = indexOf(publish, 'Stage on npm and wait for approval');
     assert.ok(npmPublish >= 0);
     assert.ok(indexOf(publish, 'Setup Node.js') < npmPublish);
-    assert.ok(indexOf(publish, 'The bundled npm can publish with OIDC') < npmPublish);
+    assert.ok(indexOf(publish, 'The bundled npm can stage with OIDC') < npmPublish);
     assert.ok(npmPublish < indexOf(publish, 'NuGet login (OIDC -> short-lived key)'));
     assert.ok(npmPublish < indexOf(publish, 'Push to NuGet'));
   });
@@ -197,21 +198,25 @@ describe('publish job', () => {
     });
   });
 
-  describe('the npm publish', () => {
-    const publishStep = step(publish, 'Publish to npm');
+  describe('the npm stage', () => {
+    const stageStep = step(publish, 'Stage on npm and wait for approval');
     const tarball = 'engine'; // the sandbox's tarball bytes
     const ours = {
       integrity: `sha512-${createHash('sha512').update(tarball).digest('base64')}`,
       shasum: createHash('sha1').update(tarball).digest('hex'),
     };
+    const manifest = (dist) => JSON.stringify({ name: '@traxsharp/state-machine', version: '1.63.0', dist });
 
-    // A fake curl answering `status` with `body` written where -o says, and a fake npm that
-    // records its arguments.
-    const run = (status, body = '') => {
+    // A fake curl giving each call the next of `answers` ([status, body]; the last repeats), and a
+    // fake npm that records its arguments and exits with `npmExit`.
+    const run = (answers, { npmExit = 0, seconds = '5' } = {}) => {
       const root = sandbox();
       const bin = join(root, 'bin');
       mkdirSync(bin);
-      writeFileSync(join(root, 'body'), body);
+      answers.forEach(([status, body = ''], i) => {
+        writeFileSync(join(root, `status-${i}`), status);
+        writeFileSync(join(root, `body-${i}`), body);
+      });
       writeFileSync(
         join(bin, 'curl'),
         `#!/bin/sh
@@ -220,17 +225,23 @@ while [ $# -gt 0 ]; do
   if [ "$1" = -o ]; then out="$2"; shift; fi
   shift
 done
-[ -n "$out" ] && cp '${join(root, 'body')}' "$out"
-printf '%s' '${status}'
+n=$(cat '${join(root, 'calls')}' 2>/dev/null || echo 0)
+echo $((n + 1)) > '${join(root, 'calls')}'
+i=$n; [ "$i" -gt ${answers.length - 1} ] && i=${answers.length - 1}
+[ -n "$out" ] && cp "${root}/body-$i" "$out"
+cat "${root}/status-$i"
 `,
       );
-      writeFileSync(join(bin, 'npm'), `#!/bin/sh\necho "$@" >> "${join(root, 'npm-calls')}"\n`);
+      writeFileSync(join(bin, 'npm'), `#!/bin/sh\necho "$@" >> "${join(root, 'npm-calls')}"\nexit ${npmExit}\n`);
       chmodSync(join(bin, 'curl'), 0o755);
       chmodSync(join(bin, 'npm'), 0o755);
-      const result = runStep(publishStep.run, root, {
+      const result = runStep(stageStep.run, root, {
         PATH: `${bin}:${process.env.PATH}`,
         PKG_VERSION: '1.63.0',
         RUNNER_TEMP: join(root, 'tmp'),
+        NPM_APPROVAL_SECONDS: seconds,
+        NPM_POLL_SECONDS: '0',
+        GITHUB_STEP_SUMMARY: '',
       });
       let calls = '';
       try {
@@ -240,52 +251,80 @@ printf '%s' '${status}'
       }
       return { result, calls };
     };
-    const manifest = (dist) => JSON.stringify({ name: '@traxsharp/state-machine', version: '1.63.0', dist });
+    const staged = 'stage publish npm/traxsharp-state-machine-1.63.0.tgz --provenance --access public --ignore-scripts';
 
-    it('publishes the packed tarball with provenance when npm does not have the version', () => {
-      const { result, calls } = run('404');
+    it('stages the packed tarball with provenance, and passes once the approved version is ours', () => {
+      const { result, calls } = run([['404'], ['404'], ['404'], ['200', manifest(ours)]]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.equal(
-        calls.trim(),
-        'publish npm/traxsharp-state-machine-1.63.0.tgz --provenance --access public --ignore-scripts',
-      );
+      assert.equal(calls.trim(), staged);
+      assert.match(result.stdout, new RegExp(`staged shasum is ${ours.shasum}`));
+      assert.match(result.stdout, /is the tarball this run built/);
     });
 
-    it('skips a version npm already has when it is the tarball in hand, so a re-run is safe', () => {
-      const { result, calls } = run('200', manifest(ours));
+    it('never publishes directly or moves a dist-tag', () => {
+      assert.doesNotMatch(stageStep.run, /npm publish|npm dist-tag/);
+    });
+
+    it('keeps waiting through a registry error while the version is staged', () => {
+      const { result } = run([['404'], ['503'], ['200', manifest(ours)]]);
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.match(result.stdout, /is the tarball this run built; skipping/);
+    });
+
+    it('fails when the approved version is not the tarball in hand', () => {
+      const theirs = createHash('sha512').update('not ours').digest('base64');
+      const { result, calls } = run([['404'], ['200', manifest({ ...ours, integrity: `sha512-${theirs}` })]]);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /not the tarball this run built/);
+      assert.equal(calls.trim(), staged);
+    });
+
+    it('fails, and leaves NuGet alone, when nobody approves in time', () => {
+      const { result } = run([['404']], { seconds: '1' });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /staged but not approved/);
+    });
+
+    it('fails with what to do when npm refuses to stage, as for a version an earlier run staged', () => {
+      const { result } = run([['404']], { npmExit: 1 });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /refused to stage.*approve it, and re-run/);
+    });
+
+    it('accepts a version already live when it is the tarball in hand, so a re-run is safe', () => {
+      const { result, calls } = run([['200', manifest(ours)]]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /is the tarball this run built/);
       assert.equal(calls, '');
     });
 
-    it('fails a version npm already has with other bytes, which someone else published', () => {
+    it('fails a version already live with other bytes, which someone else published', () => {
       const theirs = createHash('sha512').update('not ours').digest('base64');
-      const { result, calls } = run('200', manifest({ ...ours, integrity: `sha512-${theirs}` }));
+      const { result, calls } = run([['200', manifest({ ...ours, integrity: `sha512-${theirs}` })]]);
       assert.notEqual(result.status, 0);
       assert.match(result.stdout, /not the tarball this run built/);
       assert.equal(calls, '');
     });
 
     it('fails when only the shasum differs', () => {
-      const { result, calls } = run('200', manifest({ ...ours, shasum: '0'.repeat(40) }));
+      const { result, calls } = run([['200', manifest({ ...ours, shasum: '0'.repeat(40) })]]);
       assert.notEqual(result.status, 0);
       assert.equal(calls, '');
     });
 
     it('fails when npm gives no digests for the version', () => {
-      const { result, calls } = run('200', manifest({}));
+      const { result, calls } = run([['200', manifest({})]]);
       assert.notEqual(result.status, 0);
       assert.equal(calls, '');
     });
 
     it('fails when the registry answers found with something that is not JSON', () => {
-      const { result, calls } = run('200', '<html>');
+      const { result, calls } = run([['200', '<html>']]);
       assert.notEqual(result.status, 0);
       assert.equal(calls, '');
     });
 
-    it('stops when the registry answers anything else', () => {
-      const { result, calls } = run('503');
+    it('stops before staging when the registry answers anything else', () => {
+      const { result, calls } = run([['503']]);
       assert.notEqual(result.status, 0);
       assert.equal(calls, '');
     });

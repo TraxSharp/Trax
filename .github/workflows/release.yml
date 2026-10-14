@@ -14,8 +14,8 @@ name: Release
 #
 # Trusted publishing on nuget.org and on npm matches this repository, this file's name and
 # the `release` environment. Renaming the file breaks publishing until both are updated.
-# npm's can be set up only once the package exists, so the first @traxsharp/state-machine
-# release needs a manual bootstrap: see the "Publish to npm" step.
+# npm's publisher may only stage: each version goes live when a maintainer approves it with
+# 2FA, while the publish job waits (see the "Stage on npm and wait for approval" step).
 #
 # Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
 # build (packs from the tag, read-only) -> publish (verifies, attests, publishes) -> website.
@@ -34,9 +34,9 @@ env:
   NODE_VERSION: '22'
   # The engine is built and packed on this, as CI's state-machine and Trax.Cli jobs build it.
   BUILD_NODE_VERSION: '24'
-  # npm publishes on this: Node 24.21.0 bundles npm 11.19.0, and npm trusted publishing needs 11.5.1 or
-  # later (Node 24.5.0 is the first 24.x to bundle 11.5.1). An exact version, so the npm that publishes
-  # is the one bundled with it and nothing is installed in the publish job.
+  # npm stages on this: Node 24.21.0 bundles npm 11.19.0, and staged publishing through trusted
+  # publishing needs 11.15.0 or later. An exact version, so the npm that stages is the one bundled
+  # with it and nothing is installed in the publish job.
   PUBLISH_NODE_VERSION: '24.21.0'
 
 jobs:
@@ -242,7 +242,9 @@ jobs:
     needs: [release, build]
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Most of it is the wait for a maintainer to approve the staged npm version (an hour at
+    # most, in that step).
+    timeout-minutes: 75
     environment: release
     permissions:
       contents: read
@@ -290,72 +292,95 @@ jobs:
         with:
           node-version: ${{ env.PUBLISH_NODE_VERSION }}
           registry-url: 'https://registry.npmjs.org'
-      - name: The bundled npm can publish with OIDC
-        # Trusted publishing needs npm 11.5.1 or later. The npm checked here is the one bundled with
-        # PUBLISH_NODE_VERSION; nothing is installed over it.
+      - name: The bundled npm can stage with OIDC
+        # Staged publishing needs npm 11.15.0 or later (trusted publishing alone, 11.5.1). The npm
+        # checked here is the one bundled with PUBLISH_NODE_VERSION; nothing is installed over it.
         run: |
           version=$(npm --version)
-          if [ "$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)" != 11.5.1 ]; then
-            echo "::error::npm $version cannot publish with OIDC; trusted publishing needs 11.5.1 or later."
+          if [ "$(printf '%s\n' 11.15.0 "$version" | sort -V | head -n 1)" != 11.15.0 ]; then
+            echo "::error::npm $version cannot stage with OIDC; staged publishing needs 11.15.0 or later."
             exit 1
           fi
-      # npm publishes first, before NuGet: Trax.Cli writes twins that import
+      # npm goes first, before NuGet: Trax.Cli writes twins that import
       # @traxsharp/state-machine, so no NuGet package of a version ships until npm holds
-      # that version and it is the tarball this run built.
+      # that version live and it is the tarball this run built.
       #
       # npm trusted publishing: npm exchanges the GitHub OIDC token for a short-lived
-      # publish credential itself. No stored NPM_TOKEN. Requires a trusted publisher on
-      # npmjs.com for @traxsharp/state-machine scoped to this repo + this workflow file +
-      # the `release` environment. The tarball's package.json names this repository, which
-      # npm checks against the provenance it signs.
+      # credential itself. No stored NPM_TOKEN. The trusted publisher on npmjs.com for
+      # @traxsharp/state-machine names this repository, this workflow file and the `release`
+      # environment, and allows staging only (neither "Allow npm publish" nor "Allow npm
+      # dist-tag"). The tarball's package.json names this repository, which npm checks
+      # against the provenance it signs.
       #
-      # First publish: npm lets a trusted publisher be configured only on a package that
-      # already exists, and @traxsharp/state-machine has never been published, so the first
-      # version needs a one-off manual bootstrap. Until it is done this step fails, and
-      # nothing reaches NuGet. In order:
-      #   1. Create the `traxsharp` organisation on npmjs.com. It does not exist yet, and the
-      #      scope belongs to whoever creates it.
-      #   2. Publish the version once by hand, from a maintainer's 2FA-protected login: download
-      #      this run's `npm` artifact (kept one day) and `npm publish <tarball> --access public`.
-      #      Publish that file as it is, not a repack: the re-run below accepts the version only
-      #      if npm holds these exact bytes. That version carries no npm provenance; the
-      #      attestation above still covers it.
-      #   3. On the package's settings page, add the trusted publisher: this repository, this
-      #      workflow file, the `release` environment.
-      #   4. Re-run this job: this step finds the version on npm, confirms it is the tarball
-      #      this run built and skips it, and NuGet then publishes.
-      - name: Publish to npm
-        # Publishing a version that exists fails on npm, so a re-run first asks the registry
-        # whether this one is already there. If it is, it is skipped only when npm's
+      # Staged publishing: this step stages the version, which is not public until a
+      # maintainer approves it with 2FA, so a credential taken from this job cannot put a
+      # version live on its own. The step prints the stage id and the tarball's shasum; the
+      # approver checks that `npm stage list @traxsharp/state-machine` shows that shasum for
+      # that id, then runs `npm stage approve <id>` (or approves it under the package's
+      # Staged Packages tab). The step waits for the version to go live and checks its bytes
+      # before NuGet runs. If no approval comes in time the job fails and nothing reaches
+      # NuGet; approve the staged version, then re-run the job, which finds it live and
+      # carries on.
+      - name: Stage on npm and wait for approval
+        # Staging a version that exists fails on npm, so the step first asks the registry
+        # whether this one is already live. If it is, it is accepted only when npm's
         # integrity (sha512) and shasum for it are those of the tarball in hand, which the
         # digest check tied to the build job: a version someone else published first, under
         # a scope they registered, stops the job before NuGet rather than stand as ours.
-        # Anything but found or not found stops it too, rather than guess.
+        # Anything but found or not found stops it too, rather than guess. The same check
+        # runs on the version once it goes live after approval.
         env:
           PKG_VERSION: ${{ needs.release.outputs.version }}
         run: |
+          : "${NPM_APPROVAL_SECONDS:=3600}" "${NPM_POLL_SECONDS:=30}"
           tarball="npm/traxsharp-state-machine-$PKG_VERSION.tgz"
           manifest="$RUNNER_TEMP/npm-version.json"
-          status=$(curl -sS --retry 3 -o "$manifest" -w '%{http_code}' \
-            "https://registry.npmjs.org/@traxsharp%2Fstate-machine/$PKG_VERSION")
+          mkdir -p "$RUNNER_TEMP"
+          ours_integrity="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
+          ours_shasum=$(sha1sum "$tarball" | cut -d ' ' -f 1)
+          # Prints the registry's status for the version, leaving its manifest in $manifest.
+          ask() {
+            curl -sS --retry 3 -o "$manifest" -w '%{http_code}' \
+              "https://registry.npmjs.org/@traxsharp%2Fstate-machine/$PKG_VERSION" || true
+          }
+          # Ends the step: passes when the live version holds the tarball in hand, fails otherwise.
+          accept() {
+            npm_integrity=$(jq -r '.dist.integrity // ""' "$manifest" || true)
+            npm_shasum=$(jq -r '.dist.shasum // ""' "$manifest" || true)
+            if [ -n "$npm_integrity" ] && [ "$npm_integrity" = "$ours_integrity" ] && [ "$npm_shasum" = "$ours_shasum" ]; then
+              echo "@traxsharp/state-machine@$PKG_VERSION is live on npm, and is the tarball this run built."
+              exit 0
+            fi
+            echo "::error::@traxsharp/state-machine@$PKG_VERSION is live on npm, but it is not the tarball this run built (npm: integrity '$npm_integrity', shasum '$npm_shasum'; built: '$ours_integrity', '$ours_shasum'). Someone else may have published it. Nothing was published to NuGet; find out who published the version before releasing again."
+            exit 1
+          }
+          status=$(ask)
           case "$status" in
-            200)
-              ours_integrity="sha512-$(openssl dgst -sha512 -binary "$tarball" | openssl base64 -A)"
-              ours_shasum=$(sha1sum "$tarball" | cut -d ' ' -f 1)
-              npm_integrity=$(jq -r '.dist.integrity // ""' "$manifest")
-              npm_shasum=$(jq -r '.dist.shasum // ""' "$manifest")
-              if [ "$npm_integrity" = "$ours_integrity" ] && [ "$npm_shasum" = "$ours_shasum" ]; then
-                echo "@traxsharp/state-machine@$PKG_VERSION is already on npm, and is the tarball this run built; skipping."
-                exit 0
-              fi
-              echo "::error::@traxsharp/state-machine@$PKG_VERSION is already on npm, but it is not the tarball this run built (npm: integrity '$npm_integrity', shasum '$npm_shasum'; built: '$ours_integrity', '$ours_shasum'). Someone else may have published it. Nothing was published to NuGet; find out who published the version before releasing again."
-              exit 1 ;;
+            200) accept ;;
             404) ;;
             *)
               echo "::error::npm answered $status when asked for @traxsharp/state-machine@$PKG_VERSION."
               exit 1 ;;
           esac
-          npm publish "$tarball" --provenance --access public --ignore-scripts
+          if ! npm stage publish "$tarball" --provenance --access public --ignore-scripts; then
+            echo "::error::npm refused to stage @traxsharp/state-machine@$PKG_VERSION. If an earlier run staged it, check that its shasum is $ours_shasum, approve it, and re-run this job."
+            exit 1
+          fi
+          note="Approve @traxsharp/state-machine@$PKG_VERSION on npm: check that the staged shasum is $ours_shasum, then run npm stage approve with the stage id printed above."
+          echo "::notice::$note"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then echo "$note" >> "$GITHUB_STEP_SUMMARY"; fi
+          deadline=$((SECONDS + NPM_APPROVAL_SECONDS))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            sleep "$NPM_POLL_SECONDS"
+            status=$(ask)
+            case "$status" in
+              200) accept ;;
+              404) ;;
+              *) echo "npm answered $status; asking again." ;;
+            esac
+          done
+          echo "::error::@traxsharp/state-machine@$PKG_VERSION was staged but not approved within $((NPM_APPROVAL_SECONDS / 60)) minutes. Nothing was published to NuGet. Approve it, then re-run this job."
+          exit 1
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
