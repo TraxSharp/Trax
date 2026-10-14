@@ -21,7 +21,8 @@ public class LoadCorpus : Junction<CorpusRequest, Corpus>
 
 public class EmbeddingSimilarity : Junction<Corpus, EmbeddingScores>
 {
-    public override Task<EmbeddingScores> Run(Corpus input) => Task.FromResult(new EmbeddingScores(0));
+    public override Task<EmbeddingScores> Run(Corpus input) =>
+        Task.FromResult(new EmbeddingScores(0));
 }
 
 public class CoCitationOverlap : Junction<Corpus, CoCitationScores>

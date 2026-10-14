@@ -1,5 +1,6 @@
 // What the examples under sdk-reference/persisted-operations/ take as given: the package's
 // namespaces, the GraphQL builder extension, and a manifest of documents to upload.
+global using static PersistedOperationSamples;
 global using Trax.Api.GraphQL.Extensions;
 global using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 global using Trax.Api.GraphQL.PersistedOperations.Configuration;
@@ -10,7 +11,6 @@ global using Trax.Api.GraphQL.PersistedOperations.ShapeDiff;
 global using Trax.Api.GraphQL.PersistedOperations.Storage;
 global using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 global using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
-global using static PersistedOperationSamples;
 
 public static class PersistedOperationSamples
 {

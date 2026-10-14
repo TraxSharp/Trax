@@ -8,7 +8,8 @@ global using Trax.Scheduler.Extensions;
 
 public static class RunnerAuthorizationHost
 {
-    public static byte[] runnerKey => Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
+    public static byte[] runnerKey =>
+        Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
 
     public static string schedulerToken => configuration["Trax:SchedulerToken"]!;
 }

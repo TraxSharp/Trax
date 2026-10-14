@@ -16,10 +16,12 @@ public enum Urgency
 
 public class QueueNormally : Junction<Ticket, TriageResult>
 {
-    public override Task<TriageResult> Run(Ticket input) => Task.FromResult(new TriageResult("normal"));
+    public override Task<TriageResult> Run(Ticket input) =>
+        Task.FromResult(new TriageResult("normal"));
 }
 
 public class PageOnCall : Junction<Ticket, TriageResult>
 {
-    public override Task<TriageResult> Run(Ticket input) => Task.FromResult(new TriageResult("on-call"));
+    public override Task<TriageResult> Run(Ticket input) =>
+        Task.FromResult(new TriageResult("on-call"));
 }
