@@ -8,6 +8,7 @@ namespace Trax.Scheduler.Extensions;
 /// <summary>
 /// Health-check registration for scheduler liveness.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness">SDK reference</seealso>
 public static class SchedulerLivenessHealthCheckExtensions
 {
     /// <summary>

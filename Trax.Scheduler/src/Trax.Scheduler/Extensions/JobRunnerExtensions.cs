@@ -31,6 +31,7 @@ namespace Trax.Scheduler.Extensions;
 /// Use this on the remote side — the process that receives and executes jobs dispatched
 /// by a scheduler configured with <c>UseRemoteWorkers()</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner">SDK reference</seealso>
 public static class JobRunnerExtensions
 {
     /// <summary>

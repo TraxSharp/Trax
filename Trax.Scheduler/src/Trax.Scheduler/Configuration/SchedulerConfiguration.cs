@@ -6,6 +6,7 @@ namespace Trax.Scheduler.Configuration;
 /// <summary>
 /// Configuration options for the Trax.Scheduler system.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler">SDK reference</seealso>
 public class SchedulerConfiguration
 {
     /// <summary>

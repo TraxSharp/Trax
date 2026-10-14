@@ -18,6 +18,7 @@ namespace Trax.Scheduler.Extensions;
 /// binds to the real methods in <see cref="SchedulerExtensions"/>, whose receiver type these never
 /// share. Trax.Mediator's <c>BuilderOrderExtensions</c> does the same for its own calls.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class SchedulerBuilderOrderExtensions
 {

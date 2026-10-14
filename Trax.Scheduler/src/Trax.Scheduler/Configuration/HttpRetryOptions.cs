@@ -8,6 +8,7 @@ namespace Trax.Scheduler.Configuration;
 /// Retries on HTTP 429 (Too Many Requests), 502 (Bad Gateway), and 503 (Service Unavailable)
 /// with exponential backoff and jitter. Set <see cref="MaxRetries"/> to 0 to disable retries.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-remote-workers#httpretryoptions">SDK reference</seealso>
 public class HttpRetryOptions
 {
     /// <summary>

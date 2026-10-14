@@ -15,6 +15,7 @@ namespace Trax.Scheduler.Configuration;
 /// Additional train types can be added via <see cref="AddTrainType{TTrain}()"/>
 /// or <see cref="AddTrainType(string)"/>, each optionally with a retention period of its own.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-metadata-cleanup#metadatacleanupconfiguration">SDK reference</seealso>
 public class MetadataCleanupConfiguration
 {
     /// <summary>

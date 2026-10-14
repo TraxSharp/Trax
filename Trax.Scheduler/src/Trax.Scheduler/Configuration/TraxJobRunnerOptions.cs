@@ -17,6 +17,7 @@ namespace Trax.Scheduler.Configuration;
 /// <item><term><see cref="AllowUnsignedRequests"/></term><description>Every entry point, logged as a warning at startup.</description></item>
 /// </list>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#traxjobrunneroptions">SDK reference</seealso>
 public sealed class TraxJobRunnerOptions
 {
     /// <summary>

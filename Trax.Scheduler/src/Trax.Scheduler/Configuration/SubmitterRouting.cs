@@ -14,6 +14,7 @@ namespace Trax.Scheduler.Configuration;
 ///         .ForTrain&lt;IAiInferenceTrain&gt;())
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-remote-workers">SDK reference</seealso>
 public class SubmitterRouting
 {
     internal HashSet<string> TrainNames { get; } = [];

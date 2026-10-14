@@ -7,6 +7,7 @@ namespace Trax.Scheduler.Extensions;
 /// Extension methods for setting up a standalone worker process that polls the
 /// <c>background_job</c> table and executes trains without the full scheduler.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-worker">SDK reference</seealso>
 public static class WorkerExtensions
 {
     /// <summary>

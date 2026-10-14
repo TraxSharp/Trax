@@ -12,6 +12,7 @@ namespace Trax.Scheduler.Lambda.Configuration;
 /// Access is controlled by IAM policies — no public endpoint is created. The calling service
 /// needs <c>lambda:InvokeFunction</c> permission on the target function.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-lambda-run">SDK reference</seealso>
 public class LambdaRunOptions
 {
     /// <summary>

@@ -18,4 +18,5 @@ namespace Trax.Scheduler.Configuration;
 /// When <c>null</c>, <c>IncludeMany</c> falls back to the root scheduled manifest.
 /// <c>ThenIncludeMany</c> requires this to be set.
 /// </param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/schedule-many#manifestitem">SDK reference</seealso>
 public sealed record ManifestItem(string Id, IManifestProperties Input, string? DependsOn = null);

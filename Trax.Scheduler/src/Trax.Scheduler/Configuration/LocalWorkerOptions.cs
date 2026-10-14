@@ -5,6 +5,7 @@ namespace Trax.Scheduler.Configuration;
 /// <summary>
 /// Configuration options for the local worker pool that dequeues and executes background jobs.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/configure-local-workers">SDK reference</seealso>
 public class LocalWorkerOptions
 {
     /// <summary>

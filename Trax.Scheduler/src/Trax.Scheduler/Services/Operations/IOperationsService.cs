@@ -6,6 +6,7 @@ namespace Trax.Scheduler.Services.Operations;
 /// behaviourally identical: a queue/cancel/update from the React (or Blazor) dashboard
 /// runs the same code path as the same call from the GraphQL API.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-operations-service">SDK reference</seealso>
 public interface IOperationsService
 {
     /// <summary>

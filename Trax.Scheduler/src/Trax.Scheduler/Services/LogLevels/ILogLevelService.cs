@@ -13,6 +13,7 @@ namespace Trax.Scheduler.Services.LogLevels;
 /// lasts until the process restarts; nothing is persisted. It is per process: it changes the
 /// logging of the process that served the call, not of the other processes of the deployment.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-log-level-service">SDK reference</seealso>
 public interface ILogLevelService
 {
     /// <summary>

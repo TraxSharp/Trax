@@ -34,6 +34,7 @@ namespace Trax.Scheduler.Services.DormantDependentContext;
 /// </code>
 /// </example>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-dormant-dependent-context">SDK reference</seealso>
 public interface IDormantDependentContext
 {
     /// <summary>
