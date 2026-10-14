@@ -190,5 +190,5 @@ public sealed class EntraOidcResolver : ITraxPrincipalResolver<OidcTokenInput>
 
 ## See also
 
-- [OpenID Connect authentication](/docs/api-security#openid-connect-authentication)
+- [OpenID Connect authentication](/docs/api-security#1-write-the-host)
 - [OidcDefaults](/docs/sdk-reference/api-auth/oidc-defaults), [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)

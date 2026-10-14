@@ -87,7 +87,7 @@ For a guard or reduction the vocabulary has no form for (arithmetic, a lookup), 
 delegate: `new Rule.Custom(name)` with `CustomGuard(name, handler)`, or `new Reduction.Custom(name)` with
 `CustomReducer(name, handler)`, on the machine builder. The IR carries the name, and each runtime binds a handler
 for it (`customGuards` and `customReducers` in TypeScript). `Build()` throws for a name with no handler. See
-[Beyond the vocabulary](/docs/sdk-reference/statemachine-api/rules#beyond-the-vocabulary).
+[Beyond the vocabulary](/docs/statemachine/delegates-and-declarative-rules#why-the-vocabulary-is-small).
 
 ## 4. Check that the machine exports
 

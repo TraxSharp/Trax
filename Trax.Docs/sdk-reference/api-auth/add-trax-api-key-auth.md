@@ -198,7 +198,7 @@ public sealed class DirectoryApiKeyResolver(IUserDirectory users) : ITraxPrincip
 
 ## See also
 
-- [API-key authentication](/docs/api-security#api-key-authentication)
+- [API-key authentication](/docs/api-security#1-write-the-host)
 - [HashedApiKeyResolver](/docs/sdk-reference/api-auth/hashed-api-key-resolver), [ApiKeyAuthenticationOptions](/docs/sdk-reference/api-auth/api-key-authentication-options), [ApiKeyDefaults](/docs/sdk-reference/api-auth/api-key-defaults)
 - [Authorization](/docs/authorization#combining-with-endpoint-level-auth)
 - The [Auth sample](/docs/samples/auth) registers keys conditionally.

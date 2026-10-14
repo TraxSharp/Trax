@@ -75,5 +75,5 @@ services.AddTraxGraphQL(graphql =>
 ## See also
 
 - [Tune the audit pipeline](/docs/security/tune-the-audit-pipeline)
-- [Drops and shutdown](/docs/api-security#drops-and-shutdown)
+- [Drops and shutdown](/docs/security/tune-the-audit-pipeline#watch-for-lost-entries)
 - [AddAudit](/docs/sdk-reference/api-audit/add-audit), [TraxAuditChannel](/docs/sdk-reference/api-audit/trax-audit-channel)

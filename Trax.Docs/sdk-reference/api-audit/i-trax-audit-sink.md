@@ -67,6 +67,6 @@ public sealed class PostgresAuditSink(IDbContextFactory<AppDbContext> factory) :
 
 ## See also
 
-- [Drops and shutdown](/docs/api-security#drops-and-shutdown)
+- [Drops and shutdown](/docs/security/tune-the-audit-pipeline#watch-for-lost-entries)
 - [Tune the audit pipeline](/docs/security/tune-the-audit-pipeline)
 - [AddAudit](/docs/sdk-reference/api-audit/add-audit), [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options), [TraxAuditChannel](/docs/sdk-reference/api-audit/trax-audit-channel)

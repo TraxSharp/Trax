@@ -64,5 +64,5 @@ builder.Services.AddOpenTelemetry()
 
 ## See also
 
-- [Drops and shutdown](/docs/api-security#drops-and-shutdown)
+- [Drops and shutdown](/docs/security/tune-the-audit-pipeline#watch-for-lost-entries)
 - [AddAudit](/docs/sdk-reference/api-audit/add-audit), [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink), [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options)
