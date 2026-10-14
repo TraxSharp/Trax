@@ -126,7 +126,9 @@ cannot answer, other than a scenario's own row id and a filter the play types.
 - **Auth**: the API key is stored in `localStorage` (`src/lib/auth.ts`) and sent as the
   `X-Api-Key` header on every request. Browsers cannot set headers on a WebSocket upgrade,
   so subscriptions send the key in the `graphql-ws` `connection_init` payload, which the
-  API's `TraxApiKeySocketInterceptor` reads.
+  API's `TraxApiKeySocketInterceptor` reads. The stored key is bound to the `principal`
+  fingerprint the host writes into the page's runtime config (`src/lib/runtimeConfig.ts`), and
+  forgotten when a page loads under a different one.
 
 ## GraphQL mock (offline dev)
 

@@ -5,6 +5,7 @@ import { Provider } from "urql";
 import type { Client } from "@urql/core";
 import "./lib/theme"; // applies persisted/system theme before first paint
 import { ConnectionGate } from "./components/ConnectionGate";
+import { forgetCredentialOfAnotherPrincipal } from "./lib/auth";
 import { AppRoutes } from "./AppRoutes";
 import { readRuntimeConfig, routerBasename } from "./lib/runtimeConfig";
 import "./index.css";
@@ -48,6 +49,8 @@ async function boot() {
     return;
   }
 
+  // A credential stored under someone else's sign-in to the shell is dropped before anything uses it.
+  forgetCredentialOfAnotherPrincipal();
   const { client } = await import("./lib/graphql");
   // The path the host serves the app under (Trax.Api.Dashboard writes it into index.html).
   const basename = routerBasename(readRuntimeConfig());

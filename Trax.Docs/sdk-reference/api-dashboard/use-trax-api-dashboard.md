@@ -103,12 +103,21 @@ own origin passes the GraphQL endpoint's origin check. Anything else served from
 can read that `localStorage`, so serve the dashboard from a host that does not serve untrusted
 pages.
 
+**The stored credential belongs to whoever signed in to the shell.** The page's runtime config
+carries an opaque fingerprint of the principal that loaded it: a SHA-256 of the authentication type
+and the caller's identifier (the name identifier claim, else `sub`, else the name), or `anonymous`
+when nobody signed in. The app stores the credential with the fingerprint it was entered under, and
+forgets it when a page loads with a different one. So in a shared browser the next person to pass
+the posture is asked for their own key rather than reusing the last one's, and signing out of the
+shell's sign-in drops the key at the next load. Under `AllowAnonymousShell()` with nothing signed
+in, every load is `anonymous` and the key stays until the operator disconnects.
+
 ## What it serves
 
 | Request | Answer |
 |---------|--------|
 | `{path}` | A redirect to `{path}/`, keeping the query string. |
-| `{path}/` and any route of the app, such as `{path}/executions/42` or `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` | The app's page, with `Cache-Control: private, no-cache` and an ETag. No shared cache may keep it. |
+| `{path}/` and any route of the app, such as `{path}/executions/42` or `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` | The app's page, with `Cache-Control: private, no-cache` and an ETag. It names who loaded it, so no shared cache may keep it. |
 | `{path}/assets/<name>-<hash>.js` and the app's other files | The file, with its content type. Files under `assets/` are named by their content and cached for a year as `immutable`: `private` under `RequirePolicy` or `RequireRoles`, or whenever the caller was signed in, so a shared cache never hands a gated file to someone else; `public` only for an anonymous shell nobody signed in to. The other files are revalidated. |
 | Any other path under `{path}/assets/`, or one whose last segment ends in a lower-case file extension (`.js`, `.png`, `.json`) | `404`. A missing script is never answered with the page. The dots in a .NET name, such as a train's, are not an extension. |
 
