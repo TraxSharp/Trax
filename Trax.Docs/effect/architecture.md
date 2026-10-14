@@ -1,45 +1,22 @@
 ---
-title: Architecture
+title: Effect architecture
 description: "How Trax.Effect works inside: the ServiceTrain lifecycle, EffectRunner, canonical train naming, the effect provider interfaces and the DataContext data layer."
 type: explanation
 area: effects
 nav_order: 2
+source:
+  - Trax.Effect/src/Trax.Effect/Services/ServiceTrain/ServiceTrain.cs
+  - Trax.Effect/src/Trax.Effect/Services/EffectRunner/EffectRunner.cs
+  - Trax.Effect/src/Trax.Effect.Data/Services/DataContext
 ---
 
-# Effect Architecture
+# Effect architecture
 
 How the Effect system works internally: the `ServiceTrain` lifecycle, `EffectRunner`, effect providers, and the data layer.
 
-## Trax.Core (Core Engine)
+## Trax.Core
 
-The foundation layer providing Railway Oriented Programming patterns: chaining junctions, propagating errors, and managing Memory.
-
-### Key Classes
-
-```csharp
-// Base train class: chains steps and propagates errors
-public abstract class Train<TIn, TOut>
-{
-    // Throws the exception that stopped the chain
-    public virtual Task<TOut> Run(TIn input, CancellationToken cancellationToken = default);
-
-    // Returns it as Left instead
-    public Task<Either<Exception, TOut>> RunEither(TIn input);
-}
-
-// Junction interface for individual operations
-public interface IJunction<TIn, TOut>
-{
-    Task<TOut> Run(TIn input);
-}
-
-// Chaining is done via methods on Train<TIn, TOut> itself
-// Primary:  override Junctions() => Chain<MyJunction>().Chain<MyOtherJunction>().Resolve();
-// A chain that names no junctions: Junctions() => Task.FromResult(Resolve());
-// See SDK Reference > Train Methods for all overloads
-```
-
-This layer handles chaining, error propagation, and the core train lifecycle.
+Chaining, the failure track and Memory belong to `Train<TIn, TOut>` in Trax.Core; see [Core](/docs/core). What follows is what Trax.Effect adds around it.
 
 ## Trax.Effect (Enhanced Trains)
 
@@ -49,7 +26,7 @@ Extends core trains with dependency injection, metadata tracking, and effect man
 
 `ServiceTrain` extends `Train` with framework-injected properties and a lifecycle that wraps `Junctions()`:
 
-```csharp
+```csharp fragment
 public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<TIn, TOut>
 {
     // Injected automatically by the framework
@@ -111,7 +88,7 @@ Effect providers implement the `IEffectProvider` interface to handle different c
 
 ### IEffectProvider Interface
 
-```csharp
+```csharp fragment
 public interface IEffectProvider : IDisposable
 {
     Task SaveChanges(CancellationToken cancellationToken);
@@ -120,14 +97,7 @@ public interface IEffectProvider : IDisposable
 }
 ```
 
-### Available Effect Providers
-
-| Provider | Package | Purpose | Performance Impact |
-|----------|---------|---------|-------------------|
-| **DataContext** | Trax.Effect.Data | Database persistence | Medium - Database I/O |
-| **JsonEffect** | Trax.Effect.Provider.Json | Debug logging | Low - JSON serialization |
-| **ParameterEffect** | Trax.Effect.Provider.Parameter | Parameter serialization | Medium - JSON + Storage |
-| **Custom Providers** | User-defined | Application-specific | Varies |
+The shipped providers are listed on [Choose effect providers](/docs/effect/effect-providers).
 
 ## Execution Flow
 
@@ -186,44 +156,8 @@ Junctions execute inside the "Execute Train Chain" box. Each mutation to the tra
 
 `DataContext<TDbContext>` extends EF Core's `DbContext` and implements both `IDataContext` and `IEffectProvider`. It maps `Track` and `Update` to direct entity state assignment (Added for new entities, Modified for existing), and `SaveChanges` to `SaveChangesAsync`. State is set on the target entity only. Navigation properties are not traversed, which prevents unnecessary UPDATE statements when entities cross DI scope boundaries (e.g., metadata loaded by `LoadMetadataJunction` passed into a child train's context). It also provides transaction support via `BeginTransaction`, `CommitTransaction`, and `RollbackTransaction`. `BeginTransaction(IsolationLevel)` opens the transaction at that level on Postgres and SQLite; InMemory has no transactions of its own and ignores it.
 
-**DbSets:**
-
-| DbSet | Entity |
-|-------|--------|
-| Metadatas | `Metadata` |
-| Logs | `Log` |
-| Manifests | `Manifest` |
-| DeadLetters | `DeadLetter` |
-| WorkQueues | `WorkQueue` |
-| ManifestGroups | `ManifestGroup` |
-| BackgroundJobs | `BackgroundJob` |
-
-### Data Model Structure
-
-```
-MANIFEST_GROUP (1:N) -> MANIFEST (1:N) -> METADATA (1:N) -> LOG
-                                  |               |
-                                  | 1:N           | self-ref (ParentId)
-                                  v               |
-                            DEAD_LETTER     WORK_QUEUE
-                                          BACKGROUND_JOB
-```
-
-Key tables:
-
-| Table | Purpose |
-|-------|---------|
-| **MANIFEST_GROUP** | Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) |
-| **MANIFEST** | Schedule definition (cron/interval, retry policy, timeout) |
-| **METADATA** | Execution record (state, timing, input/output, errors) |
-| **LOG** | Application log entries linked to a metadata record |
-| **WORK_QUEUE** | Transient queue between scheduling and dispatch |
-| **DEAD_LETTER** | Failed jobs that exceeded retry limits |
-| **BACKGROUND_JOB** | PostgreSQL job submission queue with visibility timeout |
-| **JUNCTION_METADATA** | In-memory junction tracking (not persisted to database) |
+The tables it maps, and how they relate, are on [Trax data model](/docs/effect/data-model).
 
 ### Implementation Variants
 
-**PostgreSQL** provides ACID transactions, JSON column support, automatic schema migration, and PostgreSQL-specific optimizations (enums, JSON queries).
-
-**InMemory** is fast and lightweight for testing, with no external dependencies and an API compatible with the production database.
+**PostgreSQL** provides ACID transactions, JSON column support, automatic schema migration, and PostgreSQL-specific optimizations (enums, JSON queries). **SQLite** is file-backed and single-server. **InMemory** is for tests, with no external dependencies and the same `IDataContext` API.

@@ -26,7 +26,6 @@ cross-cutting/functional-programming.md
 cross-cutting/testing.md
 cross-cutting/troubleshooting.md
 dashboard.md
-effect/architecture.md
 mediator.md
 migration-guides/async-chain.md
 migration-guides/enqueue-and-outcome-changes.md
