@@ -25,6 +25,7 @@ namespace Trax.Effect.Utils;
 /// These options can be used by any component that needs to serialize or deserialize
 /// JSON data in the Trax.Effect system, ensuring consistent behavior.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/save-train-parameters#serialization-members">SDK reference</seealso>
 public static class TraxJsonSerializationOptions
 {
     /// <summary>

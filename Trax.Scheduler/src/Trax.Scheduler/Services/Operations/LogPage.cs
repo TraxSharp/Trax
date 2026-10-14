@@ -70,6 +70,7 @@ public enum LogOrder
 }
 
 /// <summary>One log entry, as <see cref="IOperationsService.GetLogsAsync"/> returns it.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-operations-service#logrecord">SDK reference</seealso>
 public record LogRecord(
     long Id,
     long MetadataId,

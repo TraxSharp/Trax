@@ -11,6 +11,7 @@ namespace Trax.Scheduler.Services.RequestSigning;
 /// <summary>
 /// The outcome of <see cref="RunnerRequestVerifier.VerifyAsync"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
 public enum RunnerRequestVerdict
 {
     /// <summary>The request may run.</summary>
@@ -39,6 +40,7 @@ public enum RunnerRequestVerdict
 /// accepted are kept in an <see cref="INonceStore"/>, which instances of one runner share so that a
 /// request is accepted once across all of them (see scheduler/0009).
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
 public sealed class RunnerRequestVerifier
 {
     private readonly TraxJobRunnerOptions _options;

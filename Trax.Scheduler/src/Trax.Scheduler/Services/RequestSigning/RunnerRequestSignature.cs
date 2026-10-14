@@ -9,6 +9,7 @@ namespace Trax.Scheduler.Services.RequestSigning;
 /// What a signed runner request is for. Part of the signed text, so a signature made for one
 /// purpose does not verify for the other.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
 public enum RunnerRequestPurpose
 {
     /// <summary>A queued job: <c>/trax/execute</c>, a Lambda <c>Execute</c> envelope, or an SQS message.</summary>
@@ -33,6 +34,7 @@ public enum RunnerRequestPurpose
 /// and verifies, Trax.Scheduler.Lambda and Trax.Scheduler.Sqs sign, and Trax.Runner.Lambda verifies.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class RunnerRequestSignature
 {

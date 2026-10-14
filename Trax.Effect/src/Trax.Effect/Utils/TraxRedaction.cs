@@ -14,6 +14,7 @@ namespace Trax.Effect.Utils;
 /// <c>{"_redacted": true}</c>, for every copy of a train's input or output that Trax keeps, and
 /// the check of whether a recorded decision's answer must be withheld.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/save-train-parameters#serialization-members">SDK reference</seealso>
 public static class TraxRedaction
 {
     /// <summary>

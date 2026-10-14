@@ -24,6 +24,7 @@ namespace Trax.Effect.Utils;
 /// dashboard and requeue read the columns, not these options.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/save-train-parameters#serialization-members">SDK reference</seealso>
 public static class TraxLogSerialization
 {
     /// <summary>

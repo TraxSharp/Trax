@@ -6,6 +6,7 @@ namespace Trax.Effect.Services.LifecycleHookOutputPolicy;
 /// The policy for a host without <c>SaveTrainParameters</c>: every completed train's output is
 /// serialized for the lifecycle hooks, up to <see cref="DefaultMaxCopyBytes"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/save-train-parameters#serialization-members">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class DefaultLifecycleHookOutputPolicy : ILifecycleHookOutputPolicy
 {

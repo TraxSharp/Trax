@@ -23,6 +23,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// consumer pulled in a newer Trax.Scheduler than it was built against. Both options are read-only,
 /// so nothing that uses them can change the wire for everyone else.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class RemoteRunJson
 {

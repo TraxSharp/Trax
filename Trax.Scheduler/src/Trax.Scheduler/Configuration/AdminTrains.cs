@@ -12,6 +12,7 @@ namespace Trax.Scheduler.Configuration;
 /// These trains are excluded from dashboard statistics and max-active-job counts, and a runner
 /// refuses to run them (see scheduler/0006).
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler#infrastructure-types">SDK reference</seealso>
 public static class AdminTrains
 {
     /// <summary>
