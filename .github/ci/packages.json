@@ -51,7 +51,7 @@
     },
     {
       "folder": "Trax.Docs",
-      "upstream": ["Trax.Dashboard", "Trax.Cli"],
+      "upstream": ["Trax.Dashboard", "Trax.Cli", "Trax.Samples"],
       "dotnet": { "solution": "Trax.Docs.slnx", "pack": false, "coverage": false, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "adr", "known-areas": "testing,platform,packaging,ci,naming,data-model,graphql,docs,migrations,providers", "known-repos": "core,effect,mediator,scheduler,dashboard,api,cli,samples,docs,website", "require-repos-key": "true", "census-root": "tests/Trax.Docs.Tests" }
     },
