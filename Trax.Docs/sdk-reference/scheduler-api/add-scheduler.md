@@ -158,6 +158,16 @@ The polling services never wait less than one second between cycles, whatever in
 - At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains: Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection).
 - The dead-letter purge checks for expired dead letters every `SchedulerConfiguration.DeadLetterCleanupInterval`, one hour; the builder does not change it.
 
+### Infrastructure types
+
+| Type or member | Description |
+|----------------|-------------|
+| `IManifestManagerTrain` | The [ManifestManager](/docs/scheduler/admin-trains/manifest-manager) admin train's interface, an `IServiceTrain<Unit, Unit>` |
+| `IJobDispatcherTrain` | The [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) admin train's interface, an `IServiceTrain<Unit, Unit>` |
+| `AdminTrains.ShortNames` | The admin trains' unqualified type names, beside `AdminTrains.Types` and `AdminTrains.FullNames` |
+| `DagValidator.TopologicalSort(nodes, edges)` | Kahn's algorithm over the given nodes and `(From, To)` edges; the manifest group cycle check at build time uses it |
+| `TopologicalSortResult<TKey>` | Its result: `IsAcyclic`, the sorted order, and `CycleMembers`, the nodes on a cycle |
+
 ## Example
 
 ```csharp compile

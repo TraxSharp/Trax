@@ -119,6 +119,21 @@ A copy is bounded by `MaxParameterBytes`, or by 1 MiB (`DefaultLifecycleHookOutp
 when that is `null`. The same 1 MiB applies on a host without `SaveTrainParameters()`, and while the effect is
 switched off from the dashboard. The broadcaster, GraphQL and SignalR hooks publish this copy.
 
+### Serialization members
+
+These are in `Trax.Effect`, namespaces `Trax.Effect.Utils` and `Trax.Effect.Services.LifecycleHookOutputPolicy`.
+
+| Member | Description |
+|--------|-------------|
+| `TraxRedaction.WithRedaction(options)` | Options that serialize as `options` do, except that `[TraxSensitive]` members are written as `{"_redacted": true}`. For writing only: reading a mask back throws `JsonException` |
+| `TraxRedaction.MarkerProperty` | `"_redacted"`, the property of the object that stands in for a masked value |
+| `TraxLogSerialization.OmittedProperty` | `"_omitted"`, the property of the object that stands in for an omitted run-from copy |
+| `TraxJsonSerializationOptions.JunctionLogging` | The options the junction logger serializes a junction's output with when `serializeJunctionData` is on, wrapped by `TraxLogSerialization.ForLogging` |
+| `ILifecycleHookOutputPolicy.MaxCopyBytes(trainName)` | The ceiling, in UTF-8 bytes, on the output copy built for lifecycle hooks, or `null` to build none |
+| `DefaultLifecycleHookOutputPolicy.MaxCopyBytes(trainName)` | `DefaultMaxCopyBytes` for every train |
+| `TraxBoundedJson` | Serializes a value under a byte ceiling. Hidden from IntelliSense |
+| `TraxBoundedJson.TruncatedPlaceholder(maxBytes)` | `{"_truncated": true, "_maxBytes": N}`, written in place of a value past the ceiling |
+
 ### Registered services
 
 | Service | Lifetime | Role |

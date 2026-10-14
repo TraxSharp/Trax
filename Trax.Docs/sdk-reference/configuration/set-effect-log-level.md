@@ -22,11 +22,14 @@ configuration decides whether that level is kept.
 ## Signature
 
 ```csharp fragment
-public static TBuilder SetEffectLogLevel<TBuilder>(
-    this TBuilder builder,
-    LogLevel logLevel
-)
-    where TBuilder : TraxEffectBuilder
+public static class TraxEffectBuilderExtensions
+{
+    public static TBuilder SetEffectLogLevel<TBuilder>(
+        this TBuilder builder,
+        LogLevel logLevel
+    )
+        where TBuilder : TraxEffectBuilder;
+}
 ```
 
 ## Parameters
