@@ -28,7 +28,6 @@ cross-cutting/troubleshooting.md
 dashboard.md
 effect/architecture.md
 effect/broadcaster-sinks.md
-effect/junction-events.md
 mediator.md
 migration-guides/async-chain.md
 migration-guides/enqueue-and-outcome-changes.md
