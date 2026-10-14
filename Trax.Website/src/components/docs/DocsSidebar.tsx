@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   containsSlug,
   type NavEntry,
@@ -119,8 +119,28 @@ function Entry({ entry }: { entry: NavEntry }) {
 }
 
 export default function DocsSidebar({ navTree }: { navTree: NavSection[] }) {
+  const pathname = usePathname();
+  const asideRef = useRef<HTMLElement>(null);
+
+  // Bring the current page's link into view when it is outside the sidebar's
+  // visible part, as on a direct load of a deep page. A link the reader just
+  // clicked is already visible, so this leaves the scroll alone.
+  useEffect(() => {
+    const aside = asideRef.current;
+    const active = aside?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!aside || !active) return;
+    const a = aside.getBoundingClientRect();
+    const l = active.getBoundingClientRect();
+    if (l.top < a.top || l.bottom > a.bottom) {
+      active.scrollIntoView({ block: "center" });
+    }
+  }, [pathname]);
+
   return (
-    <aside className="order-1 w-64 flex-shrink-0 overflow-y-auto border-r border-border bg-bg-secondary p-4">
+    <aside
+      ref={asideRef}
+      className="sticky top-16 order-1 h-[calc(100vh-4rem)] w-64 flex-shrink-0 self-start overflow-y-auto overscroll-contain border-r border-border bg-bg-secondary p-4"
+    >
       <nav aria-label="Documentation">
         {navTree.map((section, i) => (
           <div

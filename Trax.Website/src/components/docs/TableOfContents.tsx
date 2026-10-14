@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 interface TocItem {
@@ -9,6 +10,9 @@ interface TocItem {
 }
 
 export default function TableOfContents() {
+  // The layout keeps this mounted across pages, so it re-reads the headings
+  // whenever the path changes.
+  const pathname = usePathname();
   const [headings, setHeadings] = useState<TocItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
 
@@ -45,7 +49,7 @@ export default function TableOfContents() {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, []);
+  }, [pathname]);
 
   if (headings.length === 0) return null;
 

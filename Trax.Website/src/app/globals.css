@@ -98,3 +98,9 @@ body {
 pre[data-fit="measure"] * {
   white-space: pre !important;
 }
+
+/* On docs pages, anything scrolled into view (an anchor, or the top of the next
+   page after a sidebar click) stops below the sticky header. */
+html:has([data-docs-content]) {
+  scroll-padding-top: 5rem;
+}

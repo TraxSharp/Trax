@@ -7,8 +7,6 @@ import {
   generateStaticParams as genParams,
   markdownPath,
 } from "@/lib/docs";
-import { buildNavTree } from "@/lib/nav-tree";
-import DocsLayout from "@/components/docs/DocsLayout";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
 import PageLinks from "@/components/docs/PageLinks";
 import DocArticle from "@/components/docs/DocArticle";
@@ -48,10 +46,9 @@ export default async function DocPage({ params }: PageProps) {
   }
 
   const allDocs = getAllDocs();
-  const navTree = buildNavTree(allDocs);
 
   return (
-    <DocsLayout navTree={navTree}>
+    <>
       <div className="mb-6 flex items-start justify-between gap-4">
         <DocsBreadcrumb
           title={doc.title}
@@ -61,6 +58,6 @@ export default async function DocPage({ params }: PageProps) {
         <PageLinks doc={doc} />
       </div>
       <DocArticle doc={doc} docs={allDocs} />
-    </DocsLayout>
+    </>
   );
 }
