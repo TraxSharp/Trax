@@ -30,7 +30,8 @@ site was published from:
 | `Npgsql` | 10.0.3 | `Trax.Effect.Data` |
 | `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 | `Trax.Effect.Data.Postgres` |
 | `EFCore.NamingConventions` | 10.0.1 | `Trax.Effect.Data.Postgres` |
-| `Microsoft.Extensions.*` | 10.0.12 | `Trax.Effect` and up |
+| `Microsoft.Extensions.DependencyInjection`, `.Logging` (and their `.Abstractions`) | 10.0.13 | `Trax.Effect` and up |
+| Other `Microsoft.Extensions.*` | 10.0.12 | `Trax.Effect` and up |
 | `HotChocolate.*` | 16.6.7 | `Trax.Api.GraphQL` |
 | `Microsoft.AspNetCore.Authentication.JwtBearer`, `.OpenIdConnect` | 10.0.9 | `Trax.Api.Auth.Jwt`, `Trax.Api.Auth.Oidc` |
 

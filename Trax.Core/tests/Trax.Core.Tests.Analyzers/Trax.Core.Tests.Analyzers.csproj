@@ -17,6 +17,8 @@
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="Microsoft.Testing.Extensions.VSTestBridge" />
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" />
+    <!-- CVE floor over the version NuGet.Packaging pulls in (Directory.Packages.props). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
 
   <ItemGroup>
