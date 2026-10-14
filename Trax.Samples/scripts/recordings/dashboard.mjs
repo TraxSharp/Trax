@@ -1005,7 +1005,8 @@ function scrubber(recording) {
     const machine = recording.hosts[host]?.machine;
     if (machine) r = r.split(machine).join(HOSTS[host].alias);
     // An absolute path up to the repository it is in: /…/Trax.Scheduler/src/x.cs -> /src/Trax.Scheduler/src/x.cs.
-    r = r.replace(/(?:\/[^\s"'():]+?)+?\/(Trax\.[A-Za-z]+(?:\.[A-Za-z]+)*)\/(?=src\/|samples\/|tests\/)/g, "/src/$1/");
+    // Each segment stops at the next "/", so a path splits into segments only one way (no backtracking blow-up).
+    r = r.replace(/(?:\/[^\s"'():/]*)+?\/(Trax\.[A-Za-z]+(?:\.[A-Za-z]+)*)\/(?=src\/|samples\/|tests\/)/g, "/src/$1/");
     r = r.replace(/[a-z]+(?:-[a-z]+)*-key-do-not-use-in-production/g, "demo-key-do-not-use-in-production");
     if (r === "1.99.99") r = version;
     return r;
