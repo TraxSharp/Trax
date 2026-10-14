@@ -6,7 +6,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.AspNetCore.StaticFiles;
 
 namespace Trax.Api.Dashboard.Serving;
 
@@ -19,9 +18,9 @@ namespace Trax.Api.Dashboard.Serving;
 /// <item>The bare path redirects to itself with a trailing slash, so the page's relative URLs
 /// resolve under it.</item>
 /// <item>A path that is one of the build's files is answered with that file. Anything else under
-/// <c>assets/</c>, or whose last segment ends in a file extension (<see cref="IsFileRequest"/>), is
-/// a 404: a missing script must never come back as HTML. Every other path is a route of the app (a
-/// deep link, such as a train's page named <c>Trax.Samples.Orders.IShipOrderTrain</c>), answered
+/// <c>assets/</c> (<see cref="IsFileRequest"/>) is a 404: a missing script must never come back as
+/// HTML. Every other path is a route of the app (a deep link, such as a train's page named
+/// <c>Trax.Samples.Orders.IShipOrderTrain</c> or a manifest named <c>nightly.log</c>), answered
 /// with the entry page.</item>
 /// <item>The entry page is revalidated on every load (<c>no-cache</c>, with an ETag), so a new
 /// build is picked up at once, and is never stored by a shared cache (<c>private</c>), because it
@@ -52,8 +51,6 @@ internal sealed partial class DashboardEndpoint(
     private const string PrivateRevalidate = "private, no-cache";
 
     private static readonly JsonSerializerOptions ConfigJson = new(JsonSerializerDefaults.Web);
-
-    private static readonly FileExtensionContentTypeProvider FileTypes = new();
 
     public async Task HandleAsync(HttpContext context)
     {
@@ -129,23 +126,15 @@ internal sealed partial class DashboardEndpoint(
             : PrivateImmutableCache;
 
     /// <summary>
-    /// Whether a path the build does not have names a file rather than a route of the app: it is
-    /// under <c>assets/</c>, or its last segment ends in a lower-case extension that names a type of
-    /// file (<c>.js</c>, <c>.png</c>, <c>.json</c>). Route values are .NET names, such as
-    /// <c>Trax.Samples.Orders.IShipOrderTrain</c>, whose dots are not extensions.
+    /// Whether a path the build does not have names a file rather than a route of the app. Only
+    /// the build's files are files: the ones it emitted are answered before this is asked, and
+    /// everything it emits besides <c>index.html</c> is under <c>assets/</c>, so a path there that
+    /// it did not emit is a missing file. Any other path is a route, whatever its last segment
+    /// looks like: a train named <c>Trax.Samples.Orders.IShipOrderTrain</c>, a manifest named
+    /// <c>nightly.log</c>, a machine instance named <c>report.zip</c>.
     /// </summary>
-    internal static bool IsFileRequest(string relative)
-    {
-        if (relative.StartsWith("assets/", StringComparison.Ordinal))
-            return true;
-        var last = relative[(relative.LastIndexOf('/') + 1)..];
-        var dot = last.LastIndexOf('.');
-        if (dot < 0 || dot == last.Length - 1)
-            return false;
-        var extension = last[(dot + 1)..];
-        return extension.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c))
-            && FileTypes.TryGetContentType(last, out _);
-    }
+    internal static bool IsFileRequest(string relative) =>
+        DashboardAssets.IsContentHashed(relative);
 
     /// <summary>
     /// The entry page with a <c>&lt;base href&gt;</c> at the app's base path, which the build's

@@ -147,18 +147,41 @@ public partial class ApiDashboardHostTests
 
     [TestCase("assets/index-000000.js", true)]
     [TestCase("assets/Trax.Samples.Foo", true)]
-    [TestCase("favicon.ico", true)]
-    [TestCase("executions/app.js", true)]
-    [TestCase("robots.txt", true)]
+    [TestCase("assets/fonts/missing.woff2", true)]
+    [TestCase("favicon.ico", false)]
+    [TestCase("executions/app.js", false)]
+    [TestCase("robots.txt", false)]
+    [TestCase("manifests/nightly.log", false)]
+    [TestCase("state-machines/m/o/report.zip", false)]
     [TestCase("trains/Trax.Samples.Orders.IShipOrderTrain", false)]
     [TestCase("trains/Trax.Samples.Json", false)]
     [TestCase("state-machines/Orders.OrderMachine/Orders.Order/order.42", false)]
     [TestCase("trains/Trax.Samples.Orders.", false)]
     [TestCase("executions/42", false)]
-    public void A_path_names_a_file_only_under_assets_or_with_a_file_extension(
-        string relative,
-        bool isFile
-    ) => DashboardEndpoint.IsFileRequest(relative).Should().Be(isFile, relative);
+    [TestCase("Assets/index-000000.js", false)]
+    public void A_missing_path_names_a_file_only_under_assets(string relative, bool isFile) =>
+        DashboardEndpoint.IsFileRequest(relative).Should().Be(isFile, relative);
+
+    [TestCase("/trax/dashboard/state-machines/m/o/report.zip")]
+    [TestCase("/trax/dashboard/manifests/nightly.log")]
+    [TestCase("/trax/dashboard/state-machines/Orders.OrderMachine/Orders.Order/invoice.pdf")]
+    [TestCase("/trax/dashboard/trains/Trax.Samples.Orders.app.js")]
+    public async Task A_reload_of_a_route_whose_id_ends_in_a_file_extension_gets_the_page(
+        string path
+    )
+    {
+        await using var app = await StartAsync(e => Anonymous(e));
+
+        var response = await GetAsync(app, path);
+
+        response
+            .StatusCode.Should()
+            .Be(HttpStatusCode.OK, "an id is not a file because it ends in .zip or .log");
+        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
+        Config(await response.Content.ReadAsStringAsync())
+            .Should()
+            .Be(("/trax/dashboard/", "/trax/graphql"));
+    }
 
     [Test]
     public async Task A_hashed_asset_is_served_with_its_type_and_cached_for_good()
@@ -227,8 +250,8 @@ public partial class ApiDashboardHostTests
     }
 
     [TestCase("/trax/dashboard/assets/index-000000.js")]
-    [TestCase("/trax/dashboard/missing.png")]
-    [TestCase("/trax/dashboard/executions/app.js")]
+    [TestCase("/trax/dashboard/assets/index-000000.css")]
+    [TestCase("/trax/dashboard/assets/nested/missing.png")]
     public async Task A_missing_file_is_a_404_never_the_page(string path)
     {
         await using var app = await StartAsync(e => Anonymous(e));

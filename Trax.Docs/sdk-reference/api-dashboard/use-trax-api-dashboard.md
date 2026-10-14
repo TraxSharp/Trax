@@ -117,9 +117,9 @@ in, every load is `anonymous` and the key stays until the operator disconnects.
 | Request | Answer |
 |---------|--------|
 | `{path}` | A redirect to `{path}/`, keeping the query string. |
-| `{path}/` and any route of the app, such as `{path}/executions/42` or `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` | The app's page, with `Cache-Control: private, no-cache` and an ETag. It names who loaded it, so no shared cache may keep it. |
+| `{path}/` and any other path, a route of the app, such as `{path}/executions/42`, `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` or `{path}/manifests/nightly.log` | The app's page, with `Cache-Control: private, no-cache` and an ETag. It names who loaded it, so no shared cache may keep it. |
 | `{path}/assets/<name>-<hash>.js` and the app's other files | The file, with its content type. Files under `assets/` are named by their content and cached for a year as `immutable`: `private` under `RequirePolicy` or `RequireRoles`, or whenever the caller was signed in, so a shared cache never hands a gated file to someone else; `public` only for an anonymous shell nobody signed in to. The other files are revalidated. |
-| Any other path under `{path}/assets/`, or one whose last segment ends in a lower-case file extension (`.js`, `.png`, `.json`) | `404`. A missing script is never answered with the page. The dots in a .NET name, such as a train's, are not an extension. |
+| Any other path under `{path}/assets/` | `404`. A missing script is never answered with the page. |
 
 `GET` and `HEAD` are served, and a matching `If-None-Match` is answered with `304`. Any other
 method is answered `405` with `Allow: GET, HEAD`.
