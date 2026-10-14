@@ -1,11 +1,17 @@
 ---
 title: Machines root
-description: "Reference for the machines GraphQL root: each exposed state machine served as its own typed start, events, discard and get."
+description: "Reference for the machines GraphQL root: each exposed state machine served as its own typed start, events, discard and get, and machineChanged."
 type: reference
 area: api
+surface: graphql
+package: Trax.Api.GraphQL
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 12
+source:
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineTypeModule.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineSurface.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/MachineChanged.cs
 ---
 
 # Machines root
@@ -18,41 +24,7 @@ trains together. The decision is
 Moving a client off the generic `stateMachine` mutations, which are no longer served by default, is covered in
 [Generic State-Machine Mutations](/docs/migration-guides/generic-state-machine-mutations).
 
-```csharp
-[TraxMachine]
-public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger> { ... }
-
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(connectionString))
-        .AddStateMachines(typeof(TopicMapMachine).Assembly)
-        .AddMediator(typeof(TopicMapMachine).Assembly));
-builder.Services.AddTraxGraphQL(graphql => graphql
-    .UsePersistedOperations(po => po.SingleNode()));
-```
-
-Exposing a machine requires [persisted operations](/docs/persisted-operations): each machine's operations are
-served as [persisted documents](#persisted-documents) that carry its version, and a node orders a machine's versions
-across a rolling deploy through them. A host that exposes a machine without `UsePersistedOperations` refuses to start,
-naming the machines and the call to add. `SingleNode()` suits one process; more than one node uses
-`UseRabbitMqInvalidation(connectionString)`.
-
-The `topic-map` machine then has:
-
-```graphql
-mutation {
-  machines {
-    topicMap {
-      start(requestId: "r-1") { id revision state context { fields } problem { code message } }
-      chooseFields(id: "...", input: { fields: ["Hydrology"] }, requestId: "r-2") { revision state }
-      discard(id: "...", requestId: "r-3") { id discarded problem { code message } }
-    }
-  }
-}
-
-query { machines { topicMap { get(id: "...") { id revision state context { fields mapId } } } } }
-```
-
-## Fields
+## Members
 
 | Field | Root | Arguments | Answers |
 | --- | --- | --- | --- |
@@ -70,7 +42,7 @@ Every operation field carries `@authorize`, so an anonymous caller is refused be
 own rule (`Requires`, `RequiresPolicy`, `AnyAuthenticated`) is checked below the field, where every surface meets,
 and a caller it refuses is answered with the problem `forbidden`, not an error.
 
-## Answers
+### Answers
 
 Every operation but `discard` answers with the machine's `<Machine>MachineResult`:
 
@@ -90,7 +62,15 @@ A refusal is data. The codes are those of the [result codes](/docs/sdk-reference
 server did not expect, such as the database going away, is `internal-error` with a fixed message and a reference
 the server logs the failure under; the answer carries no exception text, SQL or host.
 
-## Names
+## Behavior
+
+Exposing a machine requires [persisted operations](/docs/persisted-operations): each machine's operations are
+served as [persisted documents](#persisted-documents) that carry its version, and a node orders a machine's versions
+across a rolling deploy through them. A host that exposes a machine without `UsePersistedOperations` refuses to start,
+naming the machines and the call to add. `SingleNode()` suits one process; more than one node uses
+`UseRabbitMqInvalidation(connectionString)`.
+
+### Names
 
 The input types are the CLR records, named as HotChocolate names them (`WizardStartInput`), and registered once
 however many machines and trains take one record. Their fields, and the context's, carry the record's JSON names:
@@ -112,7 +92,7 @@ The machine's types come from `IMachine.Triggers` (each trigger's kind and input
 state's `MachineState`: its `Name` and the `ContextType` its `Context<TContext>()` declares) and
 `IMachine.StartInputType`, so any machine derived from `Machine<TState, TTrigger>` that has an IR can be exposed.
 
-## How an operation runs
+### How an operation runs
 
 Each write dispatches the internal train it stands for through the mediator, as the generic mutations do:
 `start` runs `IStartSnapshot`, an event `IAdvanceSnapshot`, an effect event `ISendSnapshot`, and `discard`
@@ -139,119 +119,7 @@ context reaches its owner only through `get` and `machineChanged`. Their runs ar
   one, so a prediction rebuilt from a typed answer matches. A retried request is compared with the result recorded
   for it.
 
-## The TypeScript client
-
-`@trax/state-machine/client` drives the typed root with `createMachineExecutor(endpoint, { machines })`, an executor
-for the same `createSnapshotClient`, `createDraftSession` and `startDraft` the generic mutations use. Each machine is
-listed with its twin, the `context` selection to read back, and its `effectEvent` when it has one:
-
-```ts
-const client = createSnapshotClient(
-  createMachineExecutor('/trax/graphql', {
-    headers: () => ({ 'X-Api-Key': key }),
-    machines: [{ machine: topicMap, context: 'fields fromYear toYear mapId papers topicPairs coCitationTrack' }],
-  }),
-);
-```
-
-It writes every value into the document as a literal, rebuilds the twin's snapshot from the answer with the null
-context fields left out, answers a missing instance as `not-found` (which a session reads as no draft) and a save as
-`save-not-allowed` without asking the server.
-
-Given the machine's `documents` (the [manifest](#persisted-documents) entries, `MachineDocument`), it sends each
-operation by its persisted id with its values as variables and never a document, and `context` is not read: each
-document selects the whole answer. It refuses, when it is built, documents of another machine or of another IR hash
-than the twin's, and returns `client-outdated` and `server-outdated` as problems with their codes:
-
-```ts
-import documents from './topic-map.documents.json';
-
-createMachineExecutor('/trax/graphql', { machines: [{ machine: topicMap, documents }] });
-```
-
-## Driving an instance from React
-
-`createMachineServer(endpoint, { machine, documents, socket })`, from `@trax/state-machine/client`, binds one exposed
-machine's typed operations and its [`machineChanged`](#machinechanged) stream into the `MachineServer` that
-`useServerMachine` (from `@trax/state-machine/react`) and its framework-free `ServerMachineController` drive an instance
-through. The server applies every transition, stores it and answers what it stored; the twin only predicts.
-
-```ts
-import { createClient } from 'graphql-ws';
-import { createMachineServer, persistedMessageReplacer } from '@trax/state-machine/client';
-import { useServerMachine } from '@trax/state-machine/react';
-import documents from './topic-map.documents.json';
-
-const server = createMachineServer('/trax/graphql', {
-  headers: () => ({ 'X-Api-Key': key }),
-  machine: topicMap,
-  documents,
-  socket: createClient({
-    url: 'wss://host/trax/graphql',
-    connectionParams: { apiKey: key },
-    lazy: true,
-    retryAttempts: Infinity,
-    jsonMessageReplacer: persistedMessageReplacer,
-  }),
-});
-
-function Wizard({ id }: { id?: string }) {
-  const map = useServerMachine(topicMap, { server, id });   // without id, it starts an instance
-  if (map.error) return <p>{map.error.code}</p>;           // gone, or client-outdated: reload
-  return <button disabled={!map.can('Back')} onClick={() => map.send('Back')}>Back</button>;
-}
-```
-
-`createMachineServer`:
-
-- **Sends every operation by its persisted id,** through the same executor as `createMachineExecutor`, so the same
-  document checks apply. `documents` must hold the `machineChanged` document, or it throws when it is built.
-- **Subscribes by id over the socket you pass,** with an empty document: graphql-ws requires one, and a host that
-  runs persisted documents refuses one beside an id, so pass `persistedMessageReplacer` as the client's
-  `jsonMessageReplacer` and it leaves the empty `query` out. The package does not depend on graphql-ws; any socket
-  with its `subscribe(payload, sink)` shape (`PersistedSubscriptionSocket`) does.
-- **Maps the stream:** a snapshot with its `rowId` and `revision`; `gone: true`, and the `not-found` a missing id is
-  answered with, as gone; `client-outdated` as client-outdated; `reload: true` as a read. A stream that ends any
-  other way (its host stopped, the socket gave up, `too-many-subscriptions`) is subscribed again after
-  `resubscribeDelays` (1, 2, then every 5 seconds); the new stream's first event is the instance as it is then, so
-  nothing is read again.
-- **Adds `discard(id, requestId)`**, for a page that throws an instance away.
-
-`useServerMachine(machine, { server, id?, startInput?, startRequestId?, startStorageKey?, newRequestId?, retryDelays? })`:
-
-- **Opens or starts.** With `id` it subscribes, then reads the instance. Without one it calls `start` once, under
-  `startRequestId` when you keep one (across a reload, so a start that was in flight answers with the instance it
-  created) and a minted one otherwise; StrictMode's second mount reuses it. A new `startRequestId` starts a new
-  instance. A start request id the hook minted is kept in `sessionStorage` under `startStorageKey` (by default
-  `trax-start:<machine id>`; `null` keeps nothing) until the start answers, so a reload while it is unanswered, or
-  after it failed, sends the same id and gets the instance the first request created. Give each hook that starts the
-  same machine on one page its own key. Without `sessionStorage` nothing is kept.
-- **Predicts, then confirms.** `send(trigger, input)` queues the event behind any earlier one of the instance, sends
-  it under its own requestId with the twin's prediction as `clientResult`, and shows the prediction until the answer
-  or a push replaces it. A refusal or a transport failure rolls it back and sets `problem`; `client-divergence`
-  also reads the instance again. `server-outdated` is retried under the same requestId after each of `retryDelays`.
-- **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included; it
-  reads the instance again only after `reload`, an incarnation change or a `client-divergence`.
-- **Stops for good** on `gone` or `client-outdated`: `status` is `stopped`, `error.code` says which, and nothing more
-  is sent. `dueAt` is shown, never fired: the server runs a state's timer and pushes the move. It is taken from
-  every answer and push the hook accepts, and null always clears it: the state has no timer, or the server gave up
-  on it and cleared it. An answer that does not carry the field, or cannot know it (`dueAtKnown: false`, a replay
-  whose recorded revision the row has moved past, which `createMachineServer` delivers with no `dueAt`), keeps the
-  due time held while the state stays the same; in a timed state it otherwise reads the instance once.
-- **Retries on request.** A transport failure is not retried by itself: `retry()` resends the failed start, or the
-  last event that failed (in transport, or `server-outdated` past every retry), under its first request id, so the
-  server replays its result rather than applying it twice. A later event the server confirms supersedes the failed
-  one: resending it then would apply it after the later one, so `retry()` answers `nothing-to-retry`. A refused
-  start is not resent. `send` again would be a new request.
-- **Mints request ids** with `newRequestId`, `crypto.randomUUID` by default, which never makes one the server
-  refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
-  and no unpaired surrogate; anything else is answered `invalid-request-id`.
-
-It returns `status`, `id`, `snapshot`, `state`, `context`, `revision`, `dueAt`, `pending`, `problem`, `error`, `send`,
-`retry`, `can` and `available`. The Recovery sample's topic map is built on it
-([Recovery](/docs/samples/recovery)).
-
-## machineChanged
+### machineChanged
 
 `subscription { machineChanged(machine: "topic-map", id: "...") { rowId revision state context dueAt gone reload problem { code message } } }`
 pushes the caller's instance whenever any path on any host writes it: a step from another tab, an invoked train's
@@ -282,7 +150,7 @@ Operators watch every instance through `onMachineInstanceChanged` instead, behin
 an instance's state, revision and runs and never its context or owner
 ([Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#onmachineinstancechanged)).
 
-## Persisted documents
+### Persisted documents
 
 With [persisted operations](/docs/sdk-reference/persisted-operations/use-persisted-operations) on, each exposed
 machine's operations are persisted documents the host generates and registers itself, so a host that requires
@@ -336,3 +204,51 @@ transport like any other.
 
 The id carries the IR hash, so the typed surface needs no `schemaHash`: the optional handshake stays on the generic
 mutations only.
+
+### The TypeScript client
+
+`@trax/state-machine/client` drives this root with `createMachineExecutor`. [Call a machine from TypeScript](/docs/statemachine/call-a-machine-from-typescript) shows it.
+
+### Driving an instance from React
+
+`createMachineServer` and `useServerMachine` drive one instance from a React component, with the server applying every transition. [Drive a machine instance from React](/docs/statemachine/drive-a-machine-instance-from-react) shows them.
+
+## Example
+
+A host serving a machine:
+
+```csharp fragment
+[TraxMachine]
+public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger> { ... }
+
+builder.Services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddStateMachines(typeof(TopicMapMachine).Assembly)
+        .AddMediator(typeof(TopicMapMachine).Assembly));
+builder.Services.AddTraxGraphQL(graphql => graphql
+    .UsePersistedOperations(po => po.SingleNode()));
+```
+
+The `topic-map` machine then has:
+
+```graphql
+mutation {
+  machines {
+    topicMap {
+      start(requestId: "r-1") { id revision state context { fields } problem { code message } }
+      chooseFields(id: "...", input: { fields: ["Hydrology"] }, requestId: "r-2") { revision state }
+      discard(id: "...", requestId: "r-3") { id discarded problem { code message } }
+    }
+  }
+}
+
+query { machines { topicMap { get(id: "...") { id revision state context { fields mapId } } } } }
+```
+
+## See also
+
+- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines)
+- [Result codes](/docs/sdk-reference/statemachine-api/result-codes)
+- [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
+- [Call a machine from TypeScript](/docs/statemachine/call-a-machine-from-typescript)
+- [Drive a machine instance from React](/docs/statemachine/drive-a-machine-instance-from-react)

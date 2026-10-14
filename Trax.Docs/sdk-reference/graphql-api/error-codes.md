@@ -1,14 +1,18 @@
 ---
-title: Error Codes
+title: Error codes
 description: "Every TRAX_* and PERSISTED_OPERATION_* code the Trax GraphQL endpoint returns in extensions.code, and what raises it."
 type: reference
 area: api
+surface: graphql
+package: Trax.Api.GraphQL
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 11
+source:
+  - Trax.Api/src/Trax.Api.GraphQL/Errors
 ---
 
-# Error Codes
+# Error codes
 
 Every error the Trax GraphQL endpoint raises itself carries a stable code in `extensions.code`, so a client branches on the code and never on the message. Messages are written for people and may change; codes do not.
 

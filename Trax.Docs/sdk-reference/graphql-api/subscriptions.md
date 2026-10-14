@@ -1,6 +1,6 @@
 ---
 title: Subscriptions
-description: "Reference for Trax GraphQL subscriptions: train lifecycle events, a run's junction events, machine instance changes, onDataChanged, WebSocket and authentication."
+description: "Reference for Trax GraphQL subscriptions: train lifecycle events, junction events, machine instance changes, onDataChanged, WebSocket and authentication."
 type: reference
 area: api
 surface: graphql
@@ -151,7 +151,7 @@ its answer belongs off broadcast, with its runs followed through the operations 
 | Field | Description |
 |-------|-------------|
 | `metadataId`, `externalId`, `trainName`, `timestamp` | As on `TrainLifecycleEvent` |
-| `eventType` | `JUNCTION_STARTED`, `JUNCTION_COMPLETED`, `JUNCTION_FAILED`, `JUNCTION_CANCELLED`, `DECIDED`, `DECISION_REFUSED` or `ROUTED` |
+| `eventType` | A `JunctionEventType`: `JUNCTION_STARTED`, `JUNCTION_COMPLETED`, `JUNCTION_FAILED`, `JUNCTION_CANCELLED`, `DECIDED`, `DECISION_REFUSED` or `ROUTED` |
 | `junction` | The step, a `JunctionStep`: `position`, `kind`, `name`, `state`, `startedAt`, `endedAt`, `durationMs`, `failureClass`, `failureException`, `questionKey`, `answer`, `confidence`, `replayed`, `decider`, `answerWithheld`, `nameWithheld: Boolean!`, `trackPosition: Int`, `attempt`, `nodeId: String` (the declared node the step ran for; null wherever its name is withheld), `branchPath: String` (the `Parallel` branch the step ran in, as in `Parallel#0/cocitation`; null outside any branch and wherever its name is withheld) |
 | `sequence` | Numbered as lifecycle events are. See [Lost events](#lost-events) |
 

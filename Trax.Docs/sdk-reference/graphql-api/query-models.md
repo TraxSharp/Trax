@@ -1,6 +1,6 @@
 ---
 title: TraxQueryModel
-description: "Reference for TraxQueryModel, which exposes an EF Core entity as a GraphQL query field with paging, filtering, sorting and projection, and its binding and authorization rules."
+description: "Reference for TraxQueryModel, which exposes an EF Core entity as a GraphQL query field with paging, filtering, sorting and projection."
 type: reference
 area: api
 package: Trax.Effect

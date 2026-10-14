@@ -1,6 +1,6 @@
 ---
 title: "operations: execution queries"
-description: "Reference for the operations queries over runs: executions, one execution, its detail and children, junction steps, the declared chain, the run graph and decisions."
+description: "Reference for the operations queries over runs: executions, an execution's detail and children, junction steps, the declared chain, run graph and decisions."
 type: reference
 area: api
 surface: graphql

@@ -71,7 +71,7 @@ type DiscoverQueries {
 
 ## `Unit` output
 
-When a query train has `Unit` output, it returns a response with the execution metadata:
+When a query train has `Unit` output, the field returns `RunTrainResponse` (`Trax.Api.DTOs`), the execution's metadata:
 
 | Field | Type | Description |
 |-------|------|-------------|

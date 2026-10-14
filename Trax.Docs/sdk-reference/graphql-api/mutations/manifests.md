@@ -307,7 +307,7 @@ mutation {
 
 ## updateManifest
 
-Patches mutable settings on a single manifest. Each field on `input` is independent; a `null`
+Patches mutable settings on a single manifest. `input` is an `UpdateManifestInput`; each of its fields is independent; a `null`
 value leaves it unchanged. Set `clearTimeout: true` to remove the per-execution timeout.
 
 It goes through `IOperationsService.UpdateManifestAsync`, which runs every check before writing a
