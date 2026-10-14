@@ -53,13 +53,15 @@ public static class ApiDashboardEndpointExtensions
     /// <returns>
     /// The convention builder for the dashboard's endpoint, so the host can add conventions of its
     /// own (<c>RequireHost</c>, rate limiting, a further <c>RequireAuthorization</c>). They add to
-    /// the posture; they do not replace it.
+    /// the posture; they do not replace it, and <c>AllowAnonymous()</c>, which would, makes a
+    /// policy or roles posture fail at startup.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// No posture was chosen; the named policy is not registered; a policy or roles posture has
     /// no authentication scheme to challenge a caller with; <c>AddTraxGraphQL()</c> was not
     /// called, or does not expose the operations namespace (<c>ExposeOperationQueries()</c>); or
-    /// this build of the package carries no app.
+    /// this build of the package carries no app; or <c>AllowAnonymous()</c> was added to a policy
+    /// or roles posture (thrown when the host starts).
     /// </exception>
     public static IEndpointConventionBuilder UseTraxApiDashboard(
         this IEndpointRouteBuilder endpoints,
@@ -133,6 +135,7 @@ public static class ApiDashboardEndpointExtensions
             .Map($"{routePrefix}/{{**{DashboardEndpoint.PathRouteValue}}}", endpoint.HandleAsync)
             .WithDisplayName($"Trax API dashboard ({routePrefix})")
             .WithMetadata(marker);
+        RefuseAllowAnonymousOverAPosture(endpoints, builder, marker, routePrefix);
 
         if (options.AnonymousShellAllowed)
         {
@@ -158,6 +161,43 @@ public static class ApiDashboardEndpointExtensions
             }
         );
         return builder;
+    }
+
+    // [AllowAnonymous] on the endpoint makes the authorization middleware skip every policy on it,
+    // so a host chaining AllowAnonymous() on the returned builder would remove the posture without
+    // a word. The convention runs when the endpoint is built, after every convention the host
+    // added; a WebApplication builds the dashboard's endpoints while it starts, so the refusal is
+    // a startup failure. Elsewhere it surfaces when routing first builds its endpoints.
+    private static void RefuseAllowAnonymousOverAPosture(
+        IEndpointRouteBuilder endpoints,
+        IEndpointConventionBuilder builder,
+        DashboardEndpointMetadata marker,
+        string routePrefix
+    )
+    {
+        if (marker.AnonymousShell)
+            return;
+
+        builder.Finally(endpoint =>
+        {
+            if (endpoint.Metadata.Any(m => m is IAllowAnonymous))
+                throw new InvalidOperationException(
+                    $"The Trax API dashboard at {routePrefix} was given AllowAnonymous(), which "
+                        + "removes its RequirePolicy()/RequireRoles() posture instead of adding to "
+                        + "it. To serve the app without authorization of its own, use "
+                        + "o => o.AllowAnonymousShell() in UseTraxApiDashboard() and remove "
+                        + "AllowAnonymous()."
+                );
+        });
+
+        if (endpoints is IApplicationBuilder app)
+            app.Use(next =>
+            {
+                // Runs once, while the host builds its pipeline at start, after every convention.
+                foreach (var source in endpoints.DataSources)
+                    _ = source.Endpoints.Count;
+                return next;
+            });
     }
 
     private static string NormalizePath(string path)

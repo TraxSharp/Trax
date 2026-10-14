@@ -606,6 +606,35 @@ public partial class ApiDashboardHostTests
     }
 
     [Test]
+    public async Task AllowAnonymous_on_the_returned_builder_fails_at_startup_under_a_posture()
+    {
+        var act = () =>
+            StartAsync(
+                e => e.UseTraxApiDashboard(o => o.RequireRoles("Admin")).AllowAnonymous(),
+                auth: AuthSetup.SchemeOnly
+            );
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>(
+                $"{Adr}: AllowAnonymous() would remove the posture, not add to it"
+            )
+            .WithMessage("*AllowAnonymous()*removes*AllowAnonymousShell()*");
+    }
+
+    [Test]
+    public async Task AllowAnonymous_on_an_anonymous_shell_is_the_host_s_choice()
+    {
+        await using var app = await StartAsync(
+            e => Anonymous(e).AllowAnonymous(),
+            auth: AuthSetup.FallbackPolicy
+        );
+
+        (await GetAsync(app, "/trax/dashboard/"))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.OK, "the host opted the shell out of its fallback policy itself");
+    }
+
+    [Test]
     public async Task The_returned_builder_adds_conventions_on_top_of_the_posture()
     {
         await using var app = await StartAsync(

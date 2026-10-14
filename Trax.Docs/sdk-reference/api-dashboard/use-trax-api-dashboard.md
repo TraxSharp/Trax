@@ -55,7 +55,10 @@ public static IEndpointConventionBuilder UseTraxApiDashboard(
 
 It returns the endpoint's convention builder, so the host can add conventions of its own
 (`RequireHost`, rate limiting, a further `RequireAuthorization`). They add to the posture; they
-do not replace it.
+do not replace it. `AllowAnonymous()` would replace it, since ASP.NET Core skips every policy on an
+endpoint that carries it, so chaining it after `RequirePolicy` or `RequireRoles` makes the host fail
+at startup, naming `AllowAnonymousShell()`. After `AllowAnonymousShell()` it is allowed, and opts
+the shell out of a fallback policy too.
 
 ## It refuses to start without a posture
 

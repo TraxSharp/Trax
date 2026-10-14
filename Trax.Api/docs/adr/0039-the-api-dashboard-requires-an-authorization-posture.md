@@ -45,6 +45,12 @@ gated.
 policy that is not registered, a policy naming a scheme that is not registered, no scheme to
 challenge with, or a default forbid scheme that is not registered.
 
+**`AllowAnonymous()` cannot quietly undo the posture.** ASP.NET Core skips every policy on an
+endpoint that carries `[AllowAnonymous]`, so chaining it on the returned builder would remove a
+`RequirePolicy` or `RequireRoles` posture rather than add to it. The dashboard's endpoint refuses it
+when built, which a `WebApplication` does as it starts, naming `AllowAnonymousShell()`. Under
+`AllowAnonymousShell()` it is the host's own opt-out of its fallback policy, and is allowed.
+
 **A gated file is never kept by a shared cache.** The page is `private, no-cache`; content-hashed
 files are `private` unless the shell is anonymous and nobody signed in.
 
@@ -60,7 +66,8 @@ GraphQL with the key or token the operator enters, as it always has.
   opt-in and a policy, the startup failures for an unregistered policy and for a posture with no
   scheme to challenge with, the posture on the page, a deep link and an asset (401, 403, 200), the
   warning and the fallback policy staying in force under `AllowAnonymousShell()`, that the
-  returned builder adds to the posture, and that gated files are cached `private`.
+  returned builder adds to the posture, that `AllowAnonymous()` on it fails at startup under a
+  policy or roles posture, and that gated files are cached `private`.
 - [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) is the rule this
   produces.
 
@@ -70,4 +77,5 @@ loaded, and everything it does afterwards is a GraphQL request, authorized there
 ## Changelog
 
 - **2026-10-13**: Recorded.
-- **2026-10-13**: Gated files are cached `private`.
+- **2026-10-13**: `AllowAnonymous()` over a policy or roles posture fails at startup; gated files
+  are cached `private`.
