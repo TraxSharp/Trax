@@ -4,6 +4,8 @@ description: SaveTrainParameters, the effect that stores train inputs and output
 type: reference
 area: effects
 nav_order: 4
+source:
+  - Trax.Effect/src/Trax.Effect.Provider.Parameter
 ---
 
 # Parameter Effect
@@ -16,7 +18,7 @@ The parameter effect serializes train inputs and outputs to JSON and stores them
 dotnet add package Trax.Effect.Provider.Parameter
 ```
 
-```csharp
+```csharp compile
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
@@ -31,32 +33,32 @@ services.AddTrax(trax => trax
 
 You can pass custom serialization options:
 
-```csharp
-.SaveTrainParameters(new JsonSerializerOptions
+```csharp compile
+effects.SaveTrainParameters(new JsonSerializerOptions
 {
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     WriteIndented = false
-})
+});
 ```
 
 ## Configuration
 
 By default, both inputs and outputs are serialized. You can control this with the `configure` parameter:
 
-```csharp
+```csharp compile
 // Save only inputs (skip output serialization)
-.SaveTrainParameters(configure: cfg =>
+effects.SaveTrainParameters(configure: cfg =>
 {
     cfg.SaveInputs = true;
     cfg.SaveOutputs = false;
-})
+});
 
 // Save only outputs
-.SaveTrainParameters(configure: cfg =>
+effects.SaveTrainParameters(configure: cfg =>
 {
     cfg.SaveInputs = false;
     cfg.SaveOutputs = true;
-})
+});
 ```
 
 | Property | Type | Default | Description |
@@ -75,39 +77,39 @@ Enabling parameter serialization turns it on for every train. When a process run
 
 **Skip output for known-large trains.** `ExcludeOutput` skips output serialization for named trains while keeping their (usually tiny) inputs:
 
-```csharp
-.SaveTrainParameters(configure: cfg =>
+```csharp compile
+effects.SaveTrainParameters(configure: cfg =>
 {
     cfg.ExcludeOutput<GetEntitiesQuery>();   // by type
     cfg.ExcludeOutput("GetLeadsQuery");      // or by name fragment
-})
+});
 ```
 
 Matching is a substring check against the canonical train name (`Metadata.Name`), so pass the type that appears in that name: the train interface for named routes, or the request/query type for trains dispatched by input type.
 
 **Skip input for trains whose input you do not want stored.** `ExcludeInput` is the mirror of `ExcludeOutput`, and the two are independent:
 
-```csharp
-.SaveTrainParameters(configure: cfg =>
+```csharp compile
+effects.SaveTrainParameters(configure: cfg =>
 {
     cfg.ExcludeInput<IDeltaImportAllTrain>();
     cfg.ExcludeInput("HealthProbe");
-})
+});
 ```
 
 Size is rarely the reason here. Inputs are usually small, but they are also where personal data arrives, so the question is normally which ones are worth storing rather than which are too big. When the list worth keeping is the short one, invert it with the predicate:
 
-```csharp
-.SaveTrainParameters(configure: cfg =>
-    cfg.ShouldSaveInputs = name => name.Contains(typeof(IPatchCustomerTrain).FullName!))
+```csharp compile
+effects.SaveTrainParameters(configure: cfg =>
+    cfg.ShouldSaveInputs = name => name.Contains(typeof(IPatchCustomerTrain).FullName!));
 ```
 
 That stores the mutation train's input and nothing else. How long it is then kept is a separate question, answered by [per-train metadata retention](/docs/scheduler/admin-trains/metadata-cleanup).
 
 **Cap every parameter.** `MaxParameterBytes` is the automatic safety net for the trains you did not predict, and it is on by default at 1 MiB per parameter. Raise it for a host whose trains legitimately carry more, or set it to `null` to store parameters of any size:
 
-```csharp
-.SaveTrainParameters(configure: cfg => cfg.MaxParameterBytes = 4 * 1_048_576)
+```csharp compile
+effects.SaveTrainParameters(configure: cfg => cfg.MaxParameterBytes = 4 * 1_048_576);
 ```
 
 A parameter that serializes past the ceiling is aborted before it is fully materialized (the serializer streams through a byte-counting writer and stops the moment the count is exceeded), and a small placeholder is stored instead. This bounds serialization work for collection and object graphs; it does not shrink the train's return value, which is already resident in memory. For a train that genuinely returns tens of MB, prefer `ExcludeOutput` and reduce what the train returns.
@@ -128,19 +130,17 @@ Unless `MaxParameterBytes` is set to `null`, both serializations run through a s
 
 A parameter that cannot be serialized at all is stored as `{"_unserializable": true, "_error": "<exception type>"}`, and the run's outcome is unaffected. That covers a reference cycle, an unsupported type, a contract `System.Text.Json` rejects (two members with the same `[JsonPropertyName]`, `[JsonInclude]` on a non-public member), and a property getter that throws.
 
-These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions (through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API), you can see exactly what went in and what came out.
+These fields are then persisted by the registered data provider (Postgres, Sqlite or InMemory). When you later inspect train executions (through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API), you can see exactly what went in and what came out.
 
 On disposal, the provider clears the input/output object references from metadata to release memory.
 
 ## Requires a Data Provider
 
-This effect populates fields on `Metadata`, but it doesn't persist the metadata itself. You need either `UsePostgres` or `UseInMemory` registered alongside it. Without a data provider, the serialized parameters are written to a `Metadata` object that's never saved anywhere.
+This effect populates fields on `Metadata`, but it doesn't persist the metadata itself. It needs `UsePostgres`, `UseSqlite` or `UseInMemory` registered alongside it. Without a data provider, the serialized parameters are written to a `Metadata` object that's never saved anywhere.
 
-## When to Use It
+## Dashboard
 
-- **Production**: When you need to query or debug train executions after the fact. "What input caused this failure?"
-- **Audit trails**: The serialized input/output gives you a record of what data each train processed.
-- **Dashboard**: The [Dashboard](/docs/dashboard) displays `Input` and `Output` in its metadata detail view. Without this provider, those fields show as empty.
+The [Dashboard](/docs/dashboard) shows `Input` and `Output` in its metadata detail view; without this provider those fields are empty.
 
 ## SDK Reference
 
