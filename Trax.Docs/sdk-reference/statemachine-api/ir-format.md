@@ -132,7 +132,8 @@ A rule is a tagged object keyed by `rule` (`present`, `absent`, `ofType`, `nonEm
 `clear`, `reset`, `set`, `custom`).
 See the [data model](/docs/sdk-reference/statemachine-api/declarative-data-model) for each shape.
 
-A rule on a field carries `source` (`"context"` or `"input"`) and `field` (the camelCase key). `compare`, `count`
+A rule on a field carries `source` (`"context"` or `"input"`) and `field` (the member's JSON name: its
+`[JsonPropertyName]` when it has one, else its name in camelCase). `compare`, `count`
 and `length` add `op` and a numeric `value`; `op` is `gt`, `gte`, `lt`, `lte` or `eq`. `compare` reads the number
 itself, `count` an array's length and `length` a string's:
 

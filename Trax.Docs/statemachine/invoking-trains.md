@@ -155,8 +155,10 @@ A scheduler dispatches the run. Entering the state only queues the run in `trax.
 which enqueues and does nothing more. Only `Trax.Scheduler`'s job dispatcher (registered by `AddScheduler()` on a host
 with a database provider) takes queued work and runs it, so there must be
 a scheduler on this host or another host sharing the database. The host does not check for one at startup, since
-the scheduler may live on a dedicated host; without one, the run stays queued and the instance waits in the
-invoking state.
+the scheduler may live on a dedicated host; without one, the run stays queued and no outcome arrives. The instance
+stays in the invoking state until something else moves it: an event the state declares, or a timer. An `After(...)`
+on the invoking state fires with or without a scheduler, because timers are fired by the outcome reconciler that
+every host registering machines runs, and leaving the state cancels the queued run.
 
 ## Who a run belongs to
 
