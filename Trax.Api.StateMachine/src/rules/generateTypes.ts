@@ -115,6 +115,14 @@ export interface MachineFactoryOptions {
    * Callers that read the IR from disk should hash those exact bytes.
    */
   irHash?: string;
+  /**
+   * The engine version the twin is generated for: the version of the engine generating it. With specifier
+   * imports and a released version, the twin calls `requireEngineVersion` with it when it is imported, so it
+   * refuses to run beside a different installed `@traxsharp/state-machine`. Relative imports reach the very
+   * engine that generated them, and a build from source (`0.0.0`) has no version to hold anyone to, so
+   * neither records one.
+   */
+  engineVersion?: string;
 }
 
 /**
@@ -141,12 +149,26 @@ export function generateMachineFactory(
           `import { typedMachineFromIr } from "../../typed";`,
           `import type { IrDocument } from "../../rules/irMachine";`,
         ];
+  const pinned =
+    importStyle === "specifier" &&
+    options.engineVersion !== undefined &&
+    !/^0\.0\.0(?:[-+]|$)/.test(options.engineVersion);
+  const versionCheck = pinned
+    ? [
+        `// Generated for ${specifier} ${options.engineVersion}, which must be the version installed: the two`,
+        `// release together. requireEngineVersion throws on load beside any other version.`,
+        `requireEngineVersion(${JSON.stringify(options.engineVersion)});`,
+        "",
+      ]
+    : [];
   return [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateMachineFactory. Do not edit by hand.`,
     "",
     ...engineImports,
+    ...(pinned ? [`import { requireEngineVersion } from ${JSON.stringify(specifier)};`] : []),
     `import type { ${machine}Spec } from "./${ir.id}.contexts.g";`,
     "",
+    ...versionCheck,
     `const ir = ${JSON.stringify(runtimeIr, null, 2)} as IrDocument;`,
     "",
     `/** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */`,

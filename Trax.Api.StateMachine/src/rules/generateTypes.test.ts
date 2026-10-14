@@ -292,6 +292,30 @@ describe("generateMachineFactory import styles", () => {
     expect(out).not.toContain(`from "x";`);
   });
 
+  it("pins a specifier twin to the released engine version that generated it", () => {
+    const out = generateMachineFactory(ir, {
+      importStyle: "specifier",
+      engineVersion: "1.63.0",
+    });
+    expect(out).toContain(
+      `${SPECIFIER_IMPORT}\nimport { requireEngineVersion } from "@traxsharp/state-machine";\n`,
+    );
+    expect(out).toContain('\nrequireEngineVersion("1.63.0");\n');
+    // The check runs before the machine is built.
+    expect(out.indexOf("requireEngineVersion(")).toBeLessThan(out.indexOf("const ir ="));
+  });
+
+  it.each([
+    ["a relative twin, which imports the engine that generated it", "relative", "1.63.0"],
+    ["a build from source", "specifier", "0.0.0"],
+    ["a prerelease of the source placeholder", "specifier", "0.0.0-packtest"],
+    ["no version given", "specifier", undefined],
+  ] as const)("pins nothing for %s", (_, importStyle, engineVersion) => {
+    expect(
+      generateMachineFactory(ir, { importStyle, engineVersion }),
+    ).not.toContain("requireEngineVersion");
+  });
+
   it("still strips the differential block regardless of import style", () => {
     expect(
       generateMachineFactory(ir, { importStyle: "specifier" }),

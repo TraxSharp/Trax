@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { invokedDirectly, parseFlags, requireFlags } from "./lib/args.mjs";
@@ -17,9 +17,10 @@ const NODE_GUARD = `if (Number(process.versions.node.split(".")[0]) < 22) {
 /**
  * Bundle the twin and corpus generators, with the engine compiled in, into `outDir` as plain JavaScript:
  * `generate-twin.mjs` and `generate-corpus.mjs`. Trax.Cli ships them in its package, so an installed `trax`
- * generates a twin and a corpus with node alone: no engine source, no npm install, no esbuild.
+ * generates a twin and a corpus with node alone: no engine source, no npm install, no esbuild. The engine reports
+ * `version`, by default the one in package.json.
  */
-export async function bundleCli(outDir) {
+export async function bundleCli(outDir, version = engineVersion()) {
   let esbuild;
   try {
     esbuild = await import("esbuild");
@@ -43,6 +44,9 @@ export async function bundleCli(outDir) {
     platform: "node",
     target: "node22",
     banner: { js: NODE_GUARD },
+    // The engine compiled in reports the version in package.json, which a release sets before it packs
+    // Trax.Cli; a twin these generators write records it (src/version.ts).
+    define: { __TRAX_ENGINE_VERSION__: JSON.stringify(version) },
     logLevel: "warning",
     plugins: [
       {
@@ -58,6 +62,10 @@ export async function bundleCli(outDir) {
     ],
   });
   return outputs;
+}
+
+function engineVersion() {
+  return JSON.parse(readFileSync(join(tools, "..", "package.json"), "utf8")).version;
 }
 
 async function main(argv) {
