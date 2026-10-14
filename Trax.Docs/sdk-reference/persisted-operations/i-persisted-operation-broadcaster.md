@@ -1,6 +1,6 @@
 ---
 title: IPersistedOperationBroadcaster
-description: "Reference for IPersistedOperationBroadcaster, PersistedOperationChangedMessage and PersistedOperationChangeType, which tell other nodes a persisted operation changed."
+description: "Reference for IPersistedOperationBroadcaster, PersistedOperationChangedMessage and PersistedOperationChangeType, which tell other nodes of a change."
 type: reference
 area: api
 parent: Persisted Operations

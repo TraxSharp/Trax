@@ -1,6 +1,6 @@
 ---
 title: Persisted Operations
-description: "Index of the Trax.Api.GraphQL.PersistedOperations reference: registration, the builders, the store, the service, caching, broadcasting and the management fields."
+description: "Index of the Trax.Api.GraphQL.PersistedOperations reference: registration, builders, store, service, caching, broadcasting and management fields."
 type: landing
 area: api
 parent: SDK Reference
