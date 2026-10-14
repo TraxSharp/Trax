@@ -144,9 +144,5 @@ sdk-reference/statemachine-api/typescript-package.md
 sdk-reference/testing/core-testing.md
 sdk-reference/train-methods/chain-graph.md
 sdk-reference/train-methods/checkpoint.md
-sdk-reference/train-methods/decide.md
 sdk-reference/train-methods/declared-chain.md
-sdk-reference/train-methods/gate.md
 sdk-reference/train-methods/parallel.md
-sdk-reference/train-methods/scale.md
-sdk-reference/train-methods/switch.md
