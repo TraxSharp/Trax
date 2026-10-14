@@ -146,7 +146,6 @@ Trax.Dashboard M:DagLayout.Height
 Trax.Dashboard M:PositionedEdge.PathData
 Trax.Dashboard M:PositionedNode.Height
 Trax.Dashboard T:DagLayout
-Trax.Dashboard T:DashboardServiceExtensions
 Trax.Dashboard T:PositionedEdge
 Trax.Dashboard T:PositionedNode
 Trax.Dashboard T:ServerDataResult
@@ -259,11 +258,9 @@ Trax.Effect.StateMachine M:MachineDefinition.CreateInitialContext
 Trax.Effect.StateMachine M:RehydrationErrorCodes.UnknownMachine
 Trax.Effect.StateMachine M:RehydrationErrorCodes.UnknownState
 Trax.Effect.StateMachine M:RehydrationErrorCodes.VersionMismatch
-Trax.Effect.StateMachine T:CorpusReplay
 Trax.Effect.StateMachine T:DeclarativeTransition
 Trax.Effect.StateMachine T:DifferentialModel
 Trax.Effect.StateMachine T:EffectBinding
-Trax.Effect.StateMachine T:StorableJson
 Trax.Effect.StateMachine.Persistence M:ClaimResult.Won.OwnerToken
 Trax.Effect.StateMachine.Persistence M:EfEffectClaimStore.ReclaimStale
 Trax.Effect.StateMachine.Persistence M:EfEffectClaimStore.ReleaseOwned
@@ -279,7 +276,6 @@ Trax.Effect.StateMachine.Persistence T:ClaimResult
 Trax.Effect.StateMachine.Persistence T:LoadSnapshotOutput
 Trax.Effect.StateMachine.Persistence T:SaveSnapshotOutput
 Trax.Effect.StateMachine.Persistence T:SendSnapshotOutput
-Trax.Effect.StateMachine.Persistence T:StateMachinesBuilderExtensions
 Trax.Effect.StateMachine.Testing M:MachineConformance.CheckCorpus
 Trax.Effect.StateMachine.Testing M:MachineConformance.CheckIr
 Trax.Effect.StateMachine.Testing M:MachineConformance.WriteIr
@@ -292,7 +288,6 @@ Trax.Mediator M:TrainNotFoundException.RequestedName
 Trax.Mediator M:TrainRegistration.IsRemote
 Trax.Mediator M:TrainRegistration.MaxConcurrentRun
 Trax.Mediator T:TrainDiscoveryService
-Trax.Mediator T:TrainExecutionService
 Trax.Mediator.Testing M:TrainGuardFixture.Every_train_has_a_companion_interface
 Trax.Scheduler M:AdminTrains.ShortNames
 Trax.Scheduler M:DagValidator.TopologicalSort

@@ -5,10 +5,6 @@
 # Do NOT add to this list: mark the fence. Delete a page's line once its last unmarked fence is
 # marked, or when the page moves or is deleted; a stale line fails the test.
 
-api-graphql-client.md
-api-security.md
-api.md
-authorization.md
 core.md
 core/analyzer.md
 core/building-chains.md
@@ -25,7 +21,6 @@ cross-cutting/e2e-testing.md
 cross-cutting/functional-programming.md
 cross-cutting/testing.md
 cross-cutting/troubleshooting.md
-dashboard.md
 effect.md
 effect/architecture.md
 effect/broadcaster-sinks.md
@@ -46,7 +41,6 @@ migration-guides/generic-state-machine-mutations.md
 migration-guides/hotchocolate-16.md
 migration-guides/qualified-principal-ids.md
 migration-guides/runinternal-and-activate.md
-persisted-operations.md
 reference/architecture-guards.md
 reference/comparison.md
 reference/templates.md
@@ -232,6 +226,3 @@ sdk-reference/trains-and-junctions/route-registration.md
 sdk-reference/trains-and-junctions/service-train.md
 sdk-reference/trains-and-junctions/train-exception.md
 sdk-reference/trains-and-junctions/train.md
-statemachine/authoring.md
-statemachine/declarative-authoring.md
-statemachine/invoking-trains.md
