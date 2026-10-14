@@ -79,7 +79,6 @@ public class SdkReferenceBlockTests
         // Tech debt: tracked for follow-up. These ARE concept pages with SDK code but the
         // SDK reference block was missed when authored. Fix by adding the block.
         "core/ide-extensions.md",
-        "cross-cutting/di-registration.md",
         "effect/architecture.md",
     };
 
