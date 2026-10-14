@@ -1,100 +1,107 @@
 ---
-title: Concurrency Limiting
-description: How to cap concurrent direct train runs per train, per principal and globally, so remote backends like Lambda are not throttled, configured on the mediator.
+title: Concurrency limits
+description: "Reference for ConcurrentRunLimit, PerPrincipalMaxConcurrentRun, GlobalConcurrentRunLimit and [TraxConcurrencyLimit], which cap concurrent direct train runs."
 type: reference
 area: mediator
 parent: Mediator API
 grand_parent: SDK Reference
-nav_order: 5
+nav_order: 6
+package: Trax.Mediator
+namespace: Trax.Mediator.Configuration
+source:
+  - Trax.Mediator/src/Trax.Mediator/Configuration/TraxMediatorBuilder/TraxMediatorBuilder.Concurrency.cs
+  - Trax.Mediator/src/Trax.Mediator/Configuration/TraxMediatorBuilder/TraxMediatorBuilder.Settings.cs
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxConcurrencyLimitAttribute.cs
 ---
 
-# Concurrency Limiting
+# Concurrency limits
 
-When trains execute against remote backends with limited capacity (e.g. AWS Lambda with reserved concurrency), high request volume can cause throttling (HTTP 429), retries, and tail latency. Concurrency limiting prevents this by holding excess requests in-process until a slot opens, matching the concurrency to the actual backend capacity.
+The methods on `TraxMediatorBuilder` that cap concurrent direct runs per train, per principal and
+across every train, and the `[TraxConcurrencyLimit]` attribute that sets a train's own limit. The
+limits apply to runs through `ITrainExecutionService.RunAsync` only; queued work is paced by the
+scheduler instead.
 
-Concurrency limits apply only to **RUN** executions (via `ITrainExecutionService.RunAsync`). Queue operations are not affected because queueing is a lightweight database write, and the scheduler already has its own `MaxActiveJobs` and `MaxConcurrentDispatch` controls.
+## Signatures
 
-## Configuration
+### Builder methods
 
-There are three kinds of limit, and each applies on its own:
+```csharp fragment
+public TraxMediatorBuilder ConcurrentRunLimit<TTrain>(int maxConcurrent)
+    where TTrain : class
 
-1. **Per-train**: `ConcurrentRunLimit<TTrain>(int)` on the mediator builder, or `[TraxConcurrencyLimit(int)]` on the train class. When both are set the builder override wins.
-2. **Per-principal**: `PerPrincipalMaxConcurrentRun(int)` on the mediator builder, one budget per caller.
-3. **Global**: `GlobalConcurrentRunLimit(int)` on the mediator builder, one budget across all trains.
+public TraxMediatorBuilder PerPrincipalMaxConcurrentRun(int limit)
 
-None is a fallback for another: a train with no per-train limit is still held by the global and per-principal ones, and a run must acquire a permit from every limit that applies to it. Acquisition order is deterministic (per-train → per-principal → global) so cross-lock deadlocks are impossible.
-
-### Per-Principal Limiting
-
-`PerPrincipalMaxConcurrentRun(int)` caps the number of concurrent `RunAsync` executions for any single authenticated principal (bucketed by the `trax:principal-id` claim). Use this to keep a single authenticated caller from saturating the global or per-train budget via request fan-out. Anonymous callers, scheduler runs, and remote-worker executions do not count against the cap.
-
-A principal's semaphore exists only while one of its runs holds or waits for a slot, and the last run to finish removes it, so the limiter's memory tracks the principals running now rather than every principal the process has served.
-
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects.UsePostgres(connStr))
-    .AddMediator(mediator => mediator
-        .ScanAssemblies(typeof(Program).Assembly)
-        .PerPrincipalMaxConcurrentRun(10)));
+public TraxMediatorBuilder GlobalConcurrentRunLimit(int maxConcurrent)
 ```
-
-The cap needs a principal provider that knows the caller. The mediator registers one that returns no principal, so on its own the cap limits nothing. `AddTraxApi` (which `AddTraxGraphQL` calls) replaces it with one that reads the `trax:principal-id` claim of the current request's authenticated user; call it after `AddTrax`, or the mediator's registration wins. A host without it, such as a scheduler-only worker, can configure the cap but it has no effect, unless it replaces that registration with its own `ICurrentPrincipalProvider`.
 
 ### Attribute
 
-Place `[TraxConcurrencyLimit]` on the concrete train class:
+`TraxConcurrencyLimitAttribute` is in `Trax.Effect.Attributes`, in the Trax.Effect package, and
+goes on the concrete train class:
+`[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)] public class TraxConcurrencyLimitAttribute(int maxConcurrent) : Attribute`,
+with one property, `int MaxConcurrent { get; }`.
 
-```csharp
-[TraxConcurrencyLimit(15)]
-[TraxMutation]
-public class ResolveCombatTrain : ServiceTrain<CombatInput, CombatResult>, IResolveCombatTrain
-{
-    // At most 15 concurrent RUN executions
-}
-```
+## Parameters
 
-### Builder
+| Member | Parameter | Description |
+|--------|-----------|-------------|
+| `ConcurrentRunLimit<TTrain>` | `TTrain` | The train interface, matched by its `FullName` |
+| `ConcurrentRunLimit<TTrain>` | `maxConcurrent` | Concurrent direct runs of that train. Overrides `[TraxConcurrencyLimit]` on it. At least 1 |
+| `PerPrincipalMaxConcurrentRun` | `limit` | Concurrent direct runs per principal, across every train. At least 1 |
+| `GlobalConcurrentRunLimit` | `maxConcurrent` | Concurrent direct runs across every train. At least 1 |
+| `[TraxConcurrencyLimit]` | `maxConcurrent` | Concurrent direct runs of the train it is on, read into `MaxConcurrent`. At least 1 |
 
-Override per-train limits or set a global default in `AddMediator`:
+## Returns
 
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects.UsePostgres(config))
-    .AddMediator(mediator => mediator
-        .ScanAssemblies(typeof(Program).Assembly)
-        .GlobalConcurrentRunLimit(50)
-        .ConcurrentRunLimit<IResolveCombatTrain>(15)
-        .ConcurrentRunLimit<ITransferGoldTrain>(10)
-    )
-);
-```
-
-| Method | Description |
-|--------|-------------|
-| `GlobalConcurrentRunLimit(int)` | Maximum concurrent RUN executions across **all** trains. Default: no limit. |
-| `ConcurrentRunLimit<TTrain>(int)` | Maximum concurrent RUN executions for a specific train. Overrides `[TraxConcurrencyLimit]`. |
+Each builder method returns the `TraxMediatorBuilder`, for chaining.
 
 ## Behavior
 
-- **Waiting, not rejecting**: When the limit is reached, excess requests block (async) until a slot opens. Every request eventually gets a response.
-- **CancellationToken**: If a request is cancelled while waiting for a slot, `OperationCanceledException` is thrown immediately. No slot is consumed.
-- **Auth and deserialization first**: Authorization and input deserialization happen before acquiring a concurrency slot. There is no point holding a slot while validating.
-- **Per-train independence**: Each train has its own semaphore. A limit on one train does not affect others (unless both share the global limit).
+- Each method throws `ArgumentOutOfRangeException` for a value below 1, as does the attribute's
+  constructor.
+- No limit is set by default. A limit that is not set is skipped.
+- The three kinds apply independently, and a run takes a permit from every limit that applies to
+  it, per train, then per principal, then global, in that order. A train with no per-train limit
+  is still held by the global and per-principal ones.
+- A run that reaches a limit waits asynchronously for a slot; it is never rejected. Cancelling its
+  token while it waits throws `OperationCanceledException` and takes no slot.
+- Authorization and input reading happen before a slot is taken.
+- Each train has its own per-train budget; a limit on one train does not hold another, except
+  through the global and per-principal limits.
+- The per-principal limit buckets by the id
+  [ICurrentPrincipalProvider](/docs/sdk-reference/mediator-api/i-current-principal-provider)
+  returns. The provider `AddMediator` registers returns no id, so the limit holds nothing until
+  `AddTraxApi` (called by `AddTraxGraphQL`, after `AddTrax`) replaces it with one that reads the
+  `trax:principal-id` claim of the request's authenticated user, or the host registers its own. A
+  run with no principal id (anonymous, the scheduler, a remote worker) is not limited per
+  principal. A principal's budget exists only while one of its runs holds or waits for a slot.
+- The resolved global and per-principal limits are readable on
+  [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration); per-train
+  limits are not exposed.
 
-## When to use
+## Examples
 
-| Scenario | Recommendation |
-|----------|---------------|
-| Lambda with 15 reserved concurrency | `[TraxConcurrencyLimit(15)]` or `ConcurrentRunLimit<TTrain>(15)` |
-| Shared API with overall capacity budget | `GlobalConcurrentRunLimit(50)` |
-| Mix of local and remote trains | Only annotate remote trains. Local trains have no external bottleneck |
-| Queue-only trains | Not needed. The scheduler handles dispatch pacing via `MaxActiveJobs` and `MaxConcurrentDispatch` |
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(mediator => mediator
+        .ScanAssemblies(assembly)
+        .GlobalConcurrentRunLimit(50)
+        .PerPrincipalMaxConcurrentRun(10)
+        .ConcurrentRunLimit<IProcessOrderTrain>(15)));
+```
 
-## Interaction with HTTP retry
+```csharp compile
+[TraxConcurrencyLimit(15)]
+public class ProcessOrderTrain : ServiceTrain<OrderInput, OrderResult>, IProcessOrderTrain
+{
+    protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        Chain<ChargeOrderJunction>().Resolve();
+}
+```
 
-Concurrency limiting and [HTTP retry](/docs/scheduler/remote-execution#1-retry-with-exponential-backoff) are complementary:
+## See also
 
-- **Concurrency limiting** prevents oversubscription proactively, so fewer requests hit the backend simultaneously
-- **HTTP retry** handles transient failures reactively, catching 429/502/503 that slip through
-
-With both in place, the concurrency limit prevents most throttling, and the retry layer handles edge cases (e.g. cold starts, brief capacity fluctuations).
+- [Limit concurrent train runs](/docs/mediator/limit-concurrent-train-runs), choosing and setting the limits
+- [IConcurrencyLimiter](/docs/sdk-reference/mediator-api/i-concurrency-limiter), the gate that enforces them
+- [AddMediator](/docs/sdk-reference/configuration/add-mediator), the rest of the mediator builder

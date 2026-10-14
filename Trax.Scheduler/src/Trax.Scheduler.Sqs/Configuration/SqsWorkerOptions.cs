@@ -5,6 +5,7 @@ namespace Trax.Scheduler.Sqs.Configuration;
 /// <summary>
 /// Configuration options for dispatching jobs to an SQS queue via <c>UseSqsWorkers()</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-sqs-workers">SDK reference</seealso>
 public class SqsWorkerOptions
 {
     /// <summary>

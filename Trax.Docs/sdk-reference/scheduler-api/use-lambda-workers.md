@@ -6,21 +6,26 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 14
+package: Trax.Scheduler.Lambda
+namespace:
+  - Trax.Scheduler.Lambda.Extensions
+  - Trax.Scheduler.Lambda.Configuration
+source:
+  - Trax.Scheduler/src/Trax.Scheduler.Lambda/Extensions/LambdaSchedulerExtensions.cs
+  - Trax.Scheduler/src/Trax.Scheduler.Lambda/Configuration/LambdaWorkerOptions.cs
+  - Trax.Scheduler/src/Trax.Scheduler.Lambda/Configuration/LambdaRetryOptions.cs
+  - Trax.Scheduler/src/Trax.Scheduler.Lambda/Services/LambdaJobSubmitter.cs
 ---
 
 # UseLambdaWorkers
 
-Routes specific trains to an AWS Lambda function for execution via direct SDK invocation. No public endpoint is created; access is governed entirely by IAM policies. Trains not included in the routing configuration continue to execute locally via `PostgresJobSubmitter` and `LocalWorkerService`.
-
-## Package
-
-```
-dotnet add package Trax.Scheduler.Lambda
-```
+Routes chosen trains' queued runs to an AWS Lambda function by direct SDK invocation. No public
+endpoint is involved; access is governed by IAM. Trains not routed here keep running on the local
+workers.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static SchedulerConfigurationBuilder UseLambdaWorkers(
     this SchedulerConfigurationBuilder builder,
     Action<LambdaWorkerOptions> configure,
@@ -28,178 +33,91 @@ public static SchedulerConfigurationBuilder UseLambdaWorkers(
 )
 ```
 
-Defined in `Trax.Scheduler.Lambda.Extensions.LambdaSchedulerExtensions`.
-
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `configure` | `Action<LambdaWorkerOptions>` | Yes | Callback to set the Lambda function name and client options |
-| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this Lambda function. When omitted, no train is routed here explicitly; `[TraxRemote]`-attributed trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. With none of the three, a `[TraxRemote]` train fails the scheduler's build. |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `configure` | `Action<LambdaWorkerOptions>` | Sets the function name, client and retry options |
+| `routing` | `Action<SubmitterRouting>?` | Names the trains sent to this function with `ForTrain<TTrain>()`, which returns the routing for chaining. When omitted, no train is routed here by name; `[TraxRemote]` trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. With none of the three, a `[TraxRemote]` train fails the scheduler's build |
 
-## Returns
-
-`SchedulerConfigurationBuilder`, for continued fluent chaining.
-
-## LambdaWorkerOptions
+### LambdaWorkerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `FunctionName` | `string` | _(required)_ | The Lambda function name, ARN, or partial ARN to invoke |
-| `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Optional callback to configure the `AmazonLambdaConfig` (set region, endpoint override for LocalStack, etc.) |
-| `Retry` | `LambdaRetryOptions` | _(see below)_ | Retry options for transient AWS failures (429, 502, 503, 504) |
+| `FunctionName` | `string` | required | The function name, ARN, or partial ARN to invoke |
+| `ConfigureLambdaClient` | `Action<AmazonLambdaConfig>?` | `null` | Configures the `AmazonLambdaConfig` the client is built from: region, a LocalStack `ServiceURL`, and so on |
+| `Retry` | `LambdaRetryOptions` | see below | Retries for transient AWS failures |
 | `SigningKey` | `byte[]?` | `null` | The key shared with the function's `ConfigureRunner`, at least 32 bytes. When set, each envelope carries a `Signature` over its `PayloadJson`. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
 ### LambdaRetryOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `MaxRetries` | `int` | 5 | Maximum retry attempts. Set to 0 to disable retries. |
-| `BaseDelay` | `TimeSpan` | 1 second | Starting delay between retries (doubled on each attempt with ±25% jitter) |
-| `MaxDelay` | `TimeSpan` | 30 seconds | Maximum delay cap to prevent unbounded exponential growth |
+| `MaxRetries` | `int` | 5 | Retry attempts; 0 disables retrying |
+| `BaseDelay` | `TimeSpan` | 1 second | The first delay, doubled on each attempt with plus or minus 25% jitter |
+| `MaxDelay` | `TimeSpan` | 30 seconds | The cap on any one delay |
 
-Retries on AWS status codes 429 (Throttling), 502 (Bad Gateway), 503 (Service Unavailable), and 504 (Gateway Timeout), as well as network-level `HttpRequestException`. Does not retry on `ResourceNotFoundException`, `InvalidParameterValueException`, or Lambda function errors.
+Retried: AWS status codes 429, 502, 503 and 504, and a network-level `HttpRequestException`. Not
+retried: `ResourceNotFoundException`, `InvalidParameterValueException` and function errors.
 
-## SubmitterRouting
+## Returns
 
-| Method | Description |
-|--------|-------------|
-| `ForTrain<TTrain>()` | Routes the specified train type to this Lambda function. Returns the routing instance for chaining. |
+`SchedulerConfigurationBuilder`, for chaining.
 
-## Examples
+## Behavior
 
-### Basic Usage
+- A routed entry is serialized as a `RemoteJobRequest` (the metadata id and the input, if any),
+  wrapped in a `LambdaEnvelope` with `Type = Execute`, and sent with `InvocationType.Event`. A
+  `FunctionError` on the response throws `TrainException`. The job id is `"lambda-{guid}"`.
+- A train can be routed to one submitter only. Routing it to two throws `InvalidOperationException`
+  when the scheduler is built.
+- `UseLambdaWorkers()` may be called once per function. Each call keeps its own
+  `LambdaWorkerOptions` and Lambda client and invokes only the trains it routes.
+- An asynchronous invocation payload is at most 256 KB.
+- [`TraxLambdaFunction`](/docs/sdk-reference/scheduler-api/trax-lambda-function) cancels a job
+  `TerminalWriteMargin` before the function's own timeout, so the run can record its outcome.
+- A cancel reaches the function through the database, as for
+  [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run#behavior).
+- The scheduler process needs `lambda:InvokeFunction` on the function.
 
-```csharp
-using Trax.Scheduler.Lambda.Extensions;
-
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(assemblies)
-    .AddScheduler(scheduler => scheduler
-        .UseLambdaWorkers(
-            lambda => lambda.FunctionName = "content-shield-runner",
-            routing => routing
-                .ForTrain<IReviewContentTrain>()
-                .ForTrain<ISendViolationNoticeTrain>())
-        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
-    )
-);
-```
-
-In this example, `IReviewContentTrain` and `ISendViolationNoticeTrain` are dispatched to Lambda. `IMyTrain` executes locally via the default `PostgresJobSubmitter`.
-
-### With Custom Region
-
-```csharp
-.UseLambdaWorkers(
-    lambda =>
-    {
-        lambda.FunctionName = "content-shield-runner";
-        lambda.ConfigureLambdaClient = config =>
-            config.RegionEndpoint = Amazon.RegionEndpoint.EUWest1;
-    },
-    routing => routing.ForTrain<IReviewContentTrain>())
-```
-
-### With LocalStack (Development)
-
-```csharp
-.UseLambdaWorkers(
-    lambda =>
-    {
-        lambda.FunctionName = "content-shield-runner";
-        lambda.ConfigureLambdaClient = config =>
-            config.ServiceURL = "http://localhost:4566";
-    },
-    routing => routing.ForTrain<IReviewContentTrain>())
-```
-
-### With Lambda Run (Full Offload)
-
-Combine `UseLambdaWorkers` with `UseLambdaRun` to offload both queued and synchronous trains to Lambda:
-
-```csharp
-.AddScheduler(scheduler => scheduler
-    .UseLambdaWorkers(
-        lambda => lambda.FunctionName = "content-shield-runner",
-        routing => routing
-            .ForTrain<IReviewContentTrain>()
-            .ForTrain<ISendViolationNoticeTrain>())
-    .UseLambdaRun(lambda => lambda.FunctionName = "content-shield-runner")
-)
-```
-
-### Mixed with Other Transports
-
-You can use Lambda workers alongside HTTP remote workers and SQS workers, each for different trains:
-
-```csharp
-.AddScheduler(scheduler => scheduler
-    .UseLambdaWorkers(
-        lambda => lambda.FunctionName = "content-shield-runner",
-        routing => routing.ForTrain<IReviewContentTrain>())
-    .UseRemoteWorkers(
-        remote => remote.BaseUrl = "https://gpu-workers/trax/execute",
-        routing => routing.ForTrain<IAiInferenceTrain>())
-    .UseSqsWorkers(
-        sqs => sqs.QueueUrl = "https://sqs.../trax-jobs",
-        routing => routing.ForTrain<IBatchProcessTrain>())
-)
-```
-
-Each train can only be routed to one submitter. Routing the same train to multiple submitters throws `InvalidOperationException` at build time.
-
-`UseLambdaWorkers()` can also be called more than once, one call per function. Each call keeps its own `LambdaWorkerOptions` and its own Lambda client, and invokes only the trains it routes.
-
-## How It Works
-
-When the JobDispatcher processes a work queue entry, it checks whether the entry's train is routed to this function. If it is, the Lambda submitter:
-
-1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
-2. Wraps it in a `LambdaEnvelope` with `Type = Execute`
-3. Calls `IAmazonLambda.InvokeAsync()` with `InvocationType.Event` (fire-and-forget)
-4. Checks `response.FunctionError` and throws `TrainException` if the Lambda failed
-5. Returns a synthetic job ID (`"lambda-{guid}"`)
-
-The Lambda function receives the `LambdaEnvelope` via `TraxLambdaFunction.FunctionHandler()`, deserializes the `RemoteJobRequest`, and executes the train through `ITraxRequestHandler.ExecuteJobAsync()`.
-
-## IAM Permissions
-
-The scheduler process needs:
-
-```json
-{
-  "Effect": "Allow",
-  "Action": "lambda:InvokeFunction",
-  "Resource": "arn:aws:lambda:us-east-1:123456789012:function:content-shield-runner"
-}
-```
-
-## Registered Services
-
-`UseLambdaWorkers()` registers:
+### Registered services
 
 | Service | Lifetime | Description |
 |---------|----------|-------------|
-| `IAmazonLambda` (keyed) | Singleton | The call's own Lambda client, configured by its `ConfigureLambdaClient` |
-| Lambda job submitter | Created per dispatch | An internal `IJobSubmitter` that invokes the call's function with its own options and client. The JobDispatcher creates it for each train routed to this call; application code does not resolve it |
-| `LambdaWorkerOptions`, `IAmazonLambda` | Singleton | The **first** call's options and client, also registered by type, as before (`UseLambdaRun()` registers its own `IAmazonLambda` too) |
+| `IAmazonLambda` (keyed) | Singleton | The call's own client, configured by its `ConfigureLambdaClient` |
+| Lambda job submitter | Created per dispatch | An internal `IJobSubmitter` the JobDispatcher creates for each train routed to this call |
+| `LambdaWorkerOptions`, `IAmazonLambda` | Singleton | The first call's options and client, also registered by type (`UseLambdaRun()` registers its own `IAmazonLambda` too) |
 
-> **Note:** `UseLambdaWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this function.
+The default `IJobSubmitter` is not replaced: local workers keep running the trains not routed here.
 
-## Limitations
+## Example
 
-- **Payload size limit:** Lambda invocation payloads are limited to 256 KB. If your serialized train input exceeds this, store the data externally and pass a reference.
-- **Function timeout:** `TraxLambdaFunction` cancels a job before the function's own timeout, holding back `TerminalWriteMargin` (5 seconds) or half the time left, whichever is smaller, so the run can record its outcome. Give the function a timeout comfortably longer than your longest job plus that margin; at or below the margin (AWS's default three seconds) jobs still run, with a warning logged once per instance, and a job out of time before it starts is recorded `Cancelled`. See [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function).
-- **Cancellation reaches the function through the database:** Dashboard "Cancel" sets the run's cancel flag, which the train sees at its next junction boundary when the function registers `CancellationCheckProvider` (via `AddJunctionProgress()`). A junction already running is not interrupted. See [Remote Execution](/docs/scheduler/remote-execution#limitations).
+```csharp compile
+using Trax.Scheduler.Lambda.Extensions;
 
-## See Also
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(assembly)
+    .AddScheduler(scheduler => scheduler
+        .UseLambdaWorkers(
+            lambda =>
+            {
+                lambda.FunctionName = "content-shield-runner";
+                lambda.Retry.MaxRetries = 3;
+            },
+            routing => routing
+                .ForTrain<IReviewContentTrain>()
+                .ForTrain<ISendViolationNoticeTrain>())
+        .Schedule<ISyncTrain>("sync", new SyncInput(), Every.Minutes(5))));
+```
 
-- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
-- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run): offload synchronous runs to Lambda
-- [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function): the Lambda receiver base class
-- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): HTTP-based per-train remote dispatch (alternative transport)
-- [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers): SQS-based per-train dispatch (alternative transport)
+`IReviewContentTrain` and `ISendViolationNoticeTrain` run on the function; `ISyncTrain` runs on the
+local workers.
+
+## See also
+
+- [Run trains on AWS Lambda](/docs/scheduler/run-trains-on-lambda)
+- [How remote dispatch works](/docs/scheduler/how-remote-dispatch-works)
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run), synchronous runs on Lambda
+- [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function)
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) and [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers), the other transports

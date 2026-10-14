@@ -30,6 +30,7 @@ namespace Trax.Scheduler.Configuration;
 ///         .Enabled(true)));
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/schedule#manifestgroupoptions">SDK reference</seealso>
 public class ManifestGroupOptions
 {
     internal int? _maxActiveJobs;

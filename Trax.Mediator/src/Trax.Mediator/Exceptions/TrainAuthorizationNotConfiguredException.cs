@@ -12,6 +12,7 @@ namespace Trax.Mediator.Exceptions;
 /// derives from <see cref="InvalidOperationException"/>, the type thrown here before it existed,
 /// so existing catches still see it.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class TrainAuthorizationNotConfiguredException : InvalidOperationException
 {
     /// <summary>The canonical name of the train that was refused.</summary>

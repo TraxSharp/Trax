@@ -24,6 +24,7 @@ namespace Trax.Scheduler.Services.Scheduling;
 ///     Every.Minutes(5));
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/scheduling-helpers#every">SDK reference</seealso>
 public static class Every
 {
     /// <summary>

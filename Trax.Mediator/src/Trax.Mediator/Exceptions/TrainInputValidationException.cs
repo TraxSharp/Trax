@@ -11,6 +11,7 @@ namespace Trax.Mediator.Exceptions;
 /// context (the offending size, the cap, etc.) is available on properties for
 /// server-side logging.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class TrainInputValidationException : InvalidOperationException
 {
     /// <summary>The short (unqualified) service type name of the train whose input was refused.</summary>

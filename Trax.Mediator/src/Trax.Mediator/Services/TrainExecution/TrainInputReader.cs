@@ -17,6 +17,7 @@ namespace Trax.Mediator.Services.TrainExecution;
 /// on another path should call it too, rather than keep a copy of these rules, and one that
 /// builds an input object and hands it on as JSON writes it with <see cref="Write"/>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/train-input-reader">SDK reference</seealso>
 public static class TrainInputReader
 {
     /// <summary>

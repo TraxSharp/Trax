@@ -79,6 +79,7 @@ namespace Trax.Runner.Lambda;
 /// </code>
 /// </example>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/trax-lambda-function">SDK reference</seealso>
 public abstract class TraxLambdaFunction
 {
     /// <summary>

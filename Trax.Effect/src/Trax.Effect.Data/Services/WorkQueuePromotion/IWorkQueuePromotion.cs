@@ -12,6 +12,7 @@ namespace Trax.Effect.Data.Services.WorkQueuePromotion;
 /// <see cref="CancelStaleAsync"/>, which the scheduler runs by default, or by
 /// <see cref="PromoteStaleAsync"/> for a host that opts into promotion.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-work-queue-promotion">SDK reference</seealso>
 public interface IWorkQueuePromotion
 {
     /// <summary>

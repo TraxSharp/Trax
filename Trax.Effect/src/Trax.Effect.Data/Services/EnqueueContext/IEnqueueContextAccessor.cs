@@ -33,6 +33,7 @@ namespace Trax.Effect.Data.Services.EnqueueContext;
 /// the lifetime.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-enqueue-context-accessor">SDK reference</seealso>
 public interface IEnqueueContextAccessor
 {
     /// <summary>

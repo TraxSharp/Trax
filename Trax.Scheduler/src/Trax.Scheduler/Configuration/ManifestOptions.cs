@@ -26,6 +26,7 @@ namespace Trax.Scheduler.Configuration;
 ///     });
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/scheduling-helpers#manifestoptions">SDK reference</seealso>
 public class ManifestOptions
 {
     /// <summary>

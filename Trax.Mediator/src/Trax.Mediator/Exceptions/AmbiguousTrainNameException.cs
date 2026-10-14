@@ -11,6 +11,7 @@ namespace Trax.Mediator.Exceptions;
 /// is not provided. This exception is thrown as a fail-closed guard rather than picking
 /// an arbitrary candidate.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class AmbiguousTrainNameException : InvalidOperationException
 {
     /// <summary>The name the caller passed, which matched more than one train's short name.</summary>

@@ -22,6 +22,7 @@ namespace Trax.Scheduler.Configuration;
 /// Local workers are enabled by default when PostgreSQL is configured.
 /// Use <c>UseRemoteWorkers()</c> to route specific trains to a remote endpoint.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler#schedulerconfigurationbuilder">SDK reference</seealso>
 public partial class SchedulerConfigurationBuilder
 {
     private readonly TraxBuilderWithMediator _parentBuilder;
@@ -89,6 +90,7 @@ public partial class SchedulerConfigurationBuilder
 /// two endpoints) each keep their own options and client. Without it, the submitter is resolved
 /// from the container by <see cref="SubmitterType"/>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler#extension-points">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public record RoutedSubmitterRegistration(
     SubmitterRouting Routing,

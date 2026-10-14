@@ -6,15 +6,22 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 12
+package: Trax.Scheduler
+namespace:
+  - Trax.Scheduler.Extensions
+  - Trax.Scheduler.Configuration
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Extensions/JobRunnerExtensions.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/TraxJobRunnerOptions.cs
 ---
 
 # AddTraxJobRunner
 
-Registers the minimal services needed to run `JobRunnerTrain` without the full scheduler. Used on the **remote receiver side**, the process that actually executes trains dispatched by a scheduler via `UseRemoteWorkers()`. Also documents `UseTraxRunEndpoint()` for handling synchronous `run` requests from `UseRemoteRun()`.
+`AddTraxJobRunner` registers what a runner needs to execute `JobRunnerTrain` without the full scheduler: the process that runs the trains a scheduler sends it through `UseRemoteWorkers()`, `UseSqsWorkers()` or `UseLambdaWorkers()`. `UseTraxJobRunner` maps its endpoint for queued jobs, and `UseTraxRunEndpoint` its endpoint for synchronous runs from `UseRemoteRun()`. The three are in `JobRunnerExtensions`.
 
 ## Signatures
 
-```csharp
+```csharp fragment
 public static IServiceCollection AddTraxJobRunner(
     this IServiceCollection services,
     Action<TraxJobRunnerOptions> configure
@@ -23,16 +30,12 @@ public static IServiceCollection AddTraxJobRunner(
 public static IServiceCollection AddTraxJobRunner(
     this IServiceCollection services
 )
-```
 
-```csharp
 public static RouteHandlerBuilder UseTraxJobRunner(
     this IEndpointRouteBuilder app,
     string route = "/trax/execute"
 )
-```
 
-```csharp
 public static RouteHandlerBuilder UseTraxRunEndpoint(
     this IEndpointRouteBuilder app,
     string route = "/trax/run"
@@ -57,8 +60,10 @@ The overload without `configure` registers the execution pipeline with no postur
 | `AuthorizationPolicy` | `string?` | `null` | An ASP.NET authorization policy applied to `UseTraxJobRunner` and `UseTraxRunEndpoint`. Must admit only the scheduler. Not applicable to SQS or Lambda |
 | `MaxRequestBodyBytes` | `long` | 8 MiB (`DefaultMaxRequestBodyBytes`) | The largest request body the HTTP entry points (`UseTraxJobRunner`, `UseTraxRunEndpoint`, and `TraxLambdaFunction`'s local routes) read; a larger one gets `413`. The default holds a train input at the mediator's default stored-input cap; raise it together with the scheduler's `MaxInputJsonBytes`. Must be positive |
 | `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed request's timestamp may be from the runner's clock, and how long a nonce is remembered |
-| `AllowUnsignedRequests()` | method | | Accepts requests with no signature. Each entry point logs a warning when it starts |
-| `UseInMemoryNonceStore()` | method | | Keeps accepted nonces in this process instead of the database. Only for a runner that runs as one instance: each instance keeps its own |
+| `AllowUnsignedRequests()` | method | | Accepts requests with no signature. Each entry point logs a warning when it starts. Returns the options |
+| `UnsignedRequestsAllowed` | `bool` | `false` | Whether `AllowUnsignedRequests()` was called |
+| `UseInMemoryNonceStore()` | method | | Keeps accepted nonces in this process instead of the database. Only for a runner that runs as one instance: each instance keeps its own. Returns the options |
+| `InMemoryNonceStore` | `bool` | `false` | Whether `UseInMemoryNonceStore()` was called |
 
 See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) for how the three combine and what each transport checks.
 
@@ -74,110 +79,15 @@ See [Authorization Posture](/docs/scheduler/remote-execution#authorization-postu
 |-----------|------|---------|-------------|
 | `route` | `string` | `"/trax/run"` | The route to map the POST endpoint for synchronous run requests |
 
-## Examples
+## Returns
 
-### Minimal Remote Executor (Queue Only)
+`AddTraxJobRunner` returns the `IServiceCollection`; `UseTraxJobRunner` and `UseTraxRunEndpoint` return the endpoint's `RouteHandlerBuilder`.
 
-```csharp
-var builder = WebApplication.CreateBuilder(args);
+## Behavior
 
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(MyTrain).Assembly)
-);
-builder.Services.AddTraxJobRunner(runner =>
-    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
-);
+### Registered services
 
-var app = builder.Build();
-app.UseTraxJobRunner("/trax/execute");
-app.Run();
-```
-
-### Remote Executor (Queue + Run)
-
-```csharp
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(MyTrain).Assembly)
-);
-builder.Services.AddTraxJobRunner(runner =>
-    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
-);
-
-var app = builder.Build();
-app.UseTraxJobRunner("/trax/execute");  // queue path
-app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
-app.Run();
-```
-
-Both endpoints need `AddTraxJobRunner(runner => ...)`: they resolve `ITraxRequestHandler` from it, and read the posture from its options while mapping.
-
-### With an Authorization Policy
-
-Name the policy in the runner options. The runner applies it to both endpoints and checks at startup that a posture exists, which it cannot do for a `.RequireAuthorization()` chained on afterwards. The policy must admit only the scheduler, because the runner runs what it is sent without per-train authorization:
-
-```csharp
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(MyTrain).Assembly)
-);
-builder.Services.AddAuthentication(/* your scheme */);
-builder.Services.AddAuthorization(o =>
-    o.AddPolicy("trax-scheduler", p => p.RequireClaim("scope", "trax:dispatch")));
-builder.Services.AddTraxJobRunner(runner => runner.AuthorizationPolicy = "trax-scheduler");
-
-var app = builder.Build();
-app.UseAuthentication();
-app.UseAuthorization();
-app.UseTraxJobRunner("/trax/execute");
-app.Run();
-```
-
-### AWS Lambda (via TraxLambdaFunction base class)
-
-For Lambda deployments, use the `Trax.Runner.Lambda` package which provides a base class that handles service provider lifecycle, request routing, and cancellation:
-
-```csharp
-using Amazon.Lambda.Core;
-using Amazon.Lambda.Serialization.SystemTextJson;
-using Trax.Runner.Lambda;
-
-[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
-
-public class Function : TraxLambdaFunction
-{
-    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
-    {
-        var connString = configuration.GetConnectionString("TraxDatabase")!;
-
-        services.AddTrax(trax => trax
-            .AddEffects(effects => effects.UsePostgres(connString))
-            .AddMediator(typeof(MyTrain).Assembly));
-    }
-
-    protected override void ConfigureRunner(TraxJobRunnerOptions runner, IConfiguration configuration) =>
-        runner.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
-}
-```
-
-See the [TraxLambdaFunction API reference](/docs/sdk-reference/scheduler-api/trax-lambda-function) for details.
-
-## What It Registers
-
-### AddTraxJobRunner
-
-Registers the minimum set of services to run `JobRunnerTrain`:
+`AddTraxJobRunner` registers the minimum set of services to run `JobRunnerTrain`:
 
 | Service | Lifetime | Description |
 |---------|----------|-------------|
@@ -196,7 +106,7 @@ Registers the minimum set of services to run `JobRunnerTrain`:
 
 The `SchedulerConfiguration`, `ICancellationRegistry`, `ITraxScheduler` and `IDormantDependentContext` registrations use `TryAdd`, and `AddScheduler` replaces the configuration and cancellation registry. A scheduler host that also maps a runner endpoint for another scheduler therefore keeps the configuration it built, whichever of `AddTraxJobRunner` and `AddScheduler` it calls first.
 
-### UseTraxJobRunner
+### What UseTraxJobRunner maps
 
 Throws while mapping when the runner options have no posture. Otherwise maps a `POST` endpoint at the specified route that:
 
@@ -209,7 +119,7 @@ Throws while mapping when the runner options have no posture. Otherwise maps a `
 
 With an `AuthorizationPolicy`, the endpoint requires it.
 
-### UseTraxRunEndpoint
+### What UseTraxRunEndpoint maps
 
 Enforces the same posture as `UseTraxJobRunner`, and throws while mapping without one. Maps a `POST` endpoint at the specified route that handles synchronous run requests from [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run):
 
@@ -220,23 +130,86 @@ Enforces the same posture as `UseTraxJobRunner`, and throws while mapping withou
 5. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
 6. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureJunction`, `FailureClass`). `StackTrace` is always null, and `ErrorMessage` is fixed text unless the failure is a `TrainException`. `FailureClass` is the classification this process's `IFailureClassifier` assigned, or null when none is registered or it did not recognise the failure. `PublicMessage` is the message of a plain `TrainException` and null for anything else, including a type derived from `TrainException`. The response is written with Trax's own JSON options (enums as integers), not the host's, so a host configured to write enums as strings does not change the wire. The reading side also accepts names, and reads a class it does not know as `Unclassified`. Uses in-band errors to distinguish from infrastructure failures
 
-## Shared Requirements
+### Shared requirements
 
-The remote process must:
+A runner process:
 
-- **Reference the same train assemblies** passed to `AddMediator()`. Input types are matched by fully-qualified name against the registered trains' input types.
-- **Connect to the same Postgres database.** Metadata, manifests, and state are shared across all processes.
-- **Register the effect system.** `AddTrax()` with `UsePostgres()` is required.
+- References the train assemblies the scheduler passes to `AddMediator()`. Input types are matched by fully-qualified name against the registered trains' input types.
+- Connects to the scheduler's database. Metadata, manifests, and state are shared across all processes.
+- Registers the effects with `AddTrax()` and a data provider such as `UsePostgres()`.
 
-## Package
+## Examples
 
+```csharp compile
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(ISyncTrain).Assembly)
+);
+builder.Services.AddTraxJobRunner(runner =>
+    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
+);
+
+var app = builder.Build();
+app.UseTraxJobRunner("/trax/execute");
+app.Run();
 ```
-dotnet add package Trax.Scheduler
+
+A runner that serves both paths:
+
+```csharp compile
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(ISyncTrain).Assembly)
+);
+builder.Services.AddTraxJobRunner(runner =>
+    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
+);
+
+var app = builder.Build();
+app.UseTraxJobRunner("/trax/execute");  // queue path
+app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
+app.Run();
 ```
 
-## See Also
+Both endpoints need `AddTraxJobRunner(runner => ...)`: they resolve `ITraxRequestHandler` from it, and read the posture from its options while mapping.
 
-- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+Name the policy in the runner options. The runner applies it to both endpoints and checks at startup that a posture exists, which it cannot do for a `.RequireAuthorization()` chained on afterwards. The policy must admit only the scheduler, because the runner runs what it is sent without per-train authorization:
+
+```csharp compile
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(ISyncTrain).Assembly)
+);
+builder.Services.AddAuthentication(/* your scheme */);
+builder.Services.AddAuthorization(o =>
+    o.AddPolicy("trax-scheduler", p => p.RequireClaim("scope", "trax:dispatch")));
+builder.Services.AddTraxJobRunner(runner => runner.AuthorizationPolicy = "trax-scheduler");
+
+var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseTraxJobRunner("/trax/execute");
+app.Run();
+```
+
+A Lambda runner derives from [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function), which calls `AddTraxJobRunner` itself.
+
+## See also
+
+- [How remote dispatch works](/docs/scheduler/how-remote-dispatch-works)
+- [Remote Execution](/docs/scheduler/remote-execution): choosing where trains run
 - [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): scheduler-side configuration for HTTP dispatch (queue path)
 - [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run): scheduler-side configuration for remote run execution
 - [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker): standalone worker (poll-based alternative)

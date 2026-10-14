@@ -6,15 +6,20 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 16
+package: Trax.Scheduler
+namespace: Trax.Scheduler.Extensions
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Extensions/WorkerExtensions.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/LocalWorkerOptions.cs
 ---
 
 # AddTraxWorker
 
-Registers a standalone worker process that polls the `background_job` table and executes trains. No scheduler logic, just execution.
+Registers a standalone worker: a process that polls the `background_job` table and runs the jobs in it, with no scheduling or dispatching of its own. It is the one method of `WorkerExtensions`.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static IServiceCollection AddTraxWorker(
     this IServiceCollection services,
     Action<LocalWorkerOptions>? configure = null
@@ -23,77 +28,58 @@ public static IServiceCollection AddTraxWorker(
 
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `configure` | `Action<LocalWorkerOptions>?` | No | Optional callback to customize worker count, polling interval, and timeouts |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `configure` | `Action<LocalWorkerOptions>?` | `null` | Sets the worker count, polling interval and timeouts |
 
-## LocalWorkerOptions
+### LocalWorkerOptions
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs. 1 to 256 |
 | `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs. Greater than zero, up to 30 days |
 | `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible before another worker can reclaim it (crash recovery). 1 second to 10 years |
+| `BatchSize` | `int` | `1` | Jobs each worker claims per poll. At least 1 |
 | `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown. 0 to 30 days |
 
-These are the same options used by [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers), with the same ranges (`BatchSize` at least 1 too). `AddTraxWorker` throws `InvalidOperationException` listing every option outside its range.
+The same options as [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers), with the same ranges.
 
-## Examples
+## Returns
 
-### Basic Standalone Worker
+The `IServiceCollection`, for chaining.
 
-```csharp
-using Trax.Effect.Data.Postgres.Extensions;
-using Trax.Effect.Extensions;
-using Trax.Mediator.Extensions;
-using Trax.Scheduler.Extensions;
+## Behavior
 
-var builder = WebApplication.CreateBuilder(args);
+- `AddTraxWorker` throws `InvalidOperationException` listing every option outside its range.
+- The scheduler that fills `background_job` for this process registers its submitter with `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())`; otherwise it starts local workers of its own that compete with this one (see [Remote Execution](/docs/scheduler/remote-execution)).
 
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(MyTrain).Assembly)
-);
-builder.Services.AddTraxWorker();
+### Registered services
 
-var app = builder.Build();
-app.Run();
-```
+`AddTraxWorker()` calls `AddTraxJobRunner()` and adds the worker service:
 
-The scheduler that fills `background_job` must not run the jobs itself: register its submitter with `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())`, or it starts local workers that compete with this process (see [Remote Execution: Standalone Workers](/docs/scheduler/remote-execution#model-3-standalone-workers-poll-based)).
+| Service | Lifetime | Description |
+|---------|----------|-------------|
+| All services from `AddTraxJobRunner()` | _(various)_ | Execution pipeline (JobRunnerTrain, CancellationRegistry, etc.) |
+| `LocalWorkerOptions` | Singleton | Worker configuration |
+| `LocalWorkerService` | Hosted Service | Background worker that polls `background_job` and executes trains |
 
-### Trains gated with TraxAuthorize
+Not registered: the ManifestManager, the JobDispatcher, the polling services and the startup service.
 
-A worker whose assembly holds `[TraxAuthorize]` trains does not start: the mediator requires an `ITrainAuthorizationService` for them, and a worker has no API to supply one. The caller was checked when the job was queued, so tell the mediator this process takes no submissions:
+A scheduler host whose `AddScheduler` already runs local workers (the default on Postgres) refuses `AddTraxWorker()`, in either order, with an `InvalidOperationException`: two sets of `LocalWorkerOptions` would silently replace one another. Configure the scheduler's pool with `AddScheduler(scheduler => scheduler.ConfigureLocalWorkers(o => ...))` instead.
 
-```csharp
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects.UsePostgres(connectionString))
-    .AddMediator(mediator => mediator
-        .ScanAssemblies(typeof(MyTrain).Assembly)
-        .AllowMissingAuthorizationService()));
-builder.Services.AddTraxWorker();
-```
+### Compared with the scheduler's local workers
 
-See [Authorization: Opting Out for Scheduler-Only Hosts](/docs/authorization#opting-out-for-scheduler-only-hosts). The [Energy Hub sample](/docs/samples/energy-hub) runs this way.
+| Aspect | Scheduler (with Postgres) | `AddTraxWorker()` |
+|--------|---------------------------|-------------------|
+| **Used in** | Full scheduler process | Standalone worker process |
+| **Scheduling** | Yes (ManifestManager, JobDispatcher) | No |
+| **Dispatching** | Yes (writes to WorkQueue, background_job) | No |
+| **Execution** | Yes (LocalWorkerService) | Yes (LocalWorkerService) |
+| **Job submitter** | Registers `PostgresJobSubmitter` | Does not register any submitter |
 
-### Custom Worker Configuration
+### Several worker processes
 
-```csharp
-builder.Services.AddTraxWorker(opts =>
-{
-    opts.WorkerCount = 4;
-    opts.PollingInterval = TimeSpan.FromSeconds(2);
-    opts.VisibilityTimeout = TimeSpan.FromMinutes(15);
-    opts.ShutdownTimeout = TimeSpan.FromMinutes(1);
-});
-```
-
-### Multiple Worker Processes
-
-You can run multiple standalone worker processes against the same database. PostgreSQL's `FOR UPDATE SKIP LOCKED` guarantees each job is claimed by exactly one worker. No duplicates, no coordination needed.
+Any number of worker processes may poll one database. Jobs are claimed with `FOR UPDATE SKIP LOCKED`, so each job is claimed by exactly one worker, with no coordination between processes.
 
 ```
 ┌── Worker Process A ──┐    ┌── Worker Process B ──┐
@@ -108,46 +94,63 @@ You can run multiple standalone worker processes against the same database. Post
                no duplicate claims)
 ```
 
-## What It Registers
+### Shared requirements
 
-`AddTraxWorker()` internally calls `AddTraxJobRunner()` and adds the worker service:
+A worker process:
 
-| Service | Lifetime | Description |
-|---------|----------|-------------|
-| All services from `AddTraxJobRunner()` | _(various)_ | Execution pipeline (JobRunnerTrain, CancellationRegistry, etc.) |
-| `LocalWorkerOptions` | Singleton | Worker configuration |
-| `LocalWorkerService` | Hosted Service | Background worker that polls `background_job` and executes trains |
+- References the train assemblies the scheduler passes to `AddMediator()`. Train types are resolved by fully-qualified name.
+- Connects to the scheduler's Postgres database. Metadata, manifests, and state are shared across all processes.
+- Registers the effects with `AddTrax()` and `UsePostgres()`.
 
-**Not registered:** ManifestManager, JobDispatcher, polling services, startup service. This process only executes; it doesn't schedule or dispatch.
+## Examples
 
-A scheduler host whose `AddScheduler` already runs local workers (the default on Postgres) refuses `AddTraxWorker()`, in either order, with an `InvalidOperationException`: two sets of `LocalWorkerOptions` would silently replace one another. Configure the scheduler's pool with `AddScheduler(scheduler => scheduler.ConfigureLocalWorkers(o => ...))` instead.
+```csharp compile
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
 
-## How It Differs from the Scheduler's Local Workers
+var builder = WebApplication.CreateBuilder(args);
 
-| Aspect | Scheduler (with Postgres) | `AddTraxWorker()` |
-|--------|---------------------------|-------------------|
-| **Used in** | Full scheduler process | Standalone worker process |
-| **Scheduling** | Yes (ManifestManager, JobDispatcher) | No |
-| **Dispatching** | Yes (writes to WorkQueue, background_job) | No |
-| **Execution** | Yes (LocalWorkerService) | Yes (LocalWorkerService) |
-| **Job submitter** | Registers `PostgresJobSubmitter` | Does not register any submitter |
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(ISyncTrain).Assembly)
+);
+builder.Services.AddTraxWorker();
 
-## Shared Requirements
-
-The standalone worker must:
-
-- **Reference the same train assemblies** passed to `AddMediator()`. Train types are resolved by fully-qualified name.
-- **Connect to the same Postgres database.** Metadata, manifests, and state are shared across all processes.
-- **Register the effect system.** `AddTrax()` with `UsePostgres()` is required.
-
-## Package
-
-```
-dotnet add package Trax.Scheduler
+var app = builder.Build();
+app.Run();
 ```
 
-## See Also
+A worker whose assemblies hold `[TraxAuthorize]` trains does not start unless the mediator is told the process takes no submissions, since a worker has no `ITrainAuthorizationService`; the caller was checked when the job was queued:
+
+```csharp compile
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(mediator => mediator
+        .ScanAssemblies(typeof(ISyncTrain).Assembly)
+        .AllowMissingAuthorizationService()));
+builder.Services.AddTraxWorker();
+```
+
+See [Authorization: Opting Out for Scheduler-Only Hosts](/docs/authorization#opting-out-for-scheduler-only-hosts). The [Energy Hub sample](/docs/samples/energy-hub) runs this way.
+
+Worker options:
+
+```csharp compile
+builder.Services.AddTraxWorker(opts =>
+{
+    opts.WorkerCount = 4;
+    opts.PollingInterval = TimeSpan.FromSeconds(2);
+    opts.VisibilityTimeout = TimeSpan.FromMinutes(15);
+    opts.ShutdownTimeout = TimeSpan.FromMinutes(1);
+});
+```
+
+## See also
 
 - [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
-- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers): customizing local workers within the scheduler process
+- [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers): customizing local workers within the scheduler process
 - [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): push-based alternative (HTTP endpoint)

@@ -11,6 +11,7 @@ namespace Trax.Scheduler.Sqs.Extensions;
 /// <summary>
 /// Extension methods for configuring SQS-based job dispatch on the scheduler.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-sqs-workers">SDK reference</seealso>
 public static class SqsSchedulerExtensions
 {
     /// <summary>

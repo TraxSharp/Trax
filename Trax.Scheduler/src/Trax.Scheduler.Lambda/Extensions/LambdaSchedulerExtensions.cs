@@ -13,6 +13,8 @@ namespace Trax.Scheduler.Lambda.Extensions;
 /// <summary>
 /// Extension methods for configuring AWS Lambda-based job dispatch on the scheduler.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-lambda-workers">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-lambda-run">SDK reference</seealso>
 public static class LambdaSchedulerExtensions
 {
     /// <summary>

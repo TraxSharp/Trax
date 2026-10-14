@@ -9,6 +9,7 @@ namespace Trax.Scheduler.Lambda.Configuration;
 /// and 504 (Gateway Timeout) with exponential backoff and jitter.
 /// Set <see cref="MaxRetries"/> to 0 to disable retries.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-lambda-workers#lambdaretryoptions">SDK reference</seealso>
 public class LambdaRetryOptions
 {
     /// <summary>

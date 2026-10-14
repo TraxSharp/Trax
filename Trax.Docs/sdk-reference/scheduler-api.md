@@ -1,6 +1,6 @@
 ---
 title: Scheduler API
-description: "Index of the Trax.Scheduler reference: startup scheduling on AddScheduler, the runtime ITraxScheduler API, management methods and scheduling helpers."
+description: "Index of the Trax.Scheduler reference and its Lambda and SQS packages: AddScheduler, ITraxScheduler, scheduling methods, workers, runners and operations."
 type: landing
 area: scheduling
 parent: SDK Reference
@@ -10,47 +10,68 @@ nav_order: 5
 
 # Scheduler API
 
-The scheduler manages recurring and dependent trains through **manifests**, persistent records that define what train to run, when, and with what input. There are two contexts for scheduling:
+The scheduler runs trains from **manifests**: stored records of which train to run, when, and with
+what input. Manifests are declared at startup on the builder `AddScheduler` passes its callback, or
+created at runtime through `ITraxScheduler`. How the scheduler works is on
+[Scheduler](/docs/scheduler).
 
-1. **Startup configuration**: `AddScheduler(scheduler => ...)` inside `AddTrax`, where you declare schedules that are seeded when the application starts.
-2. **Runtime API**: `ITraxScheduler` injected via DI, where you create/modify schedules dynamically at runtime.
+## Trax.Scheduler
 
-Both share the same concepts: external IDs for upsert semantics, `Schedule` objects for timing, and `ManifestOptions` for per-job configuration.
+### Setup
 
-## Quick Reference
+| Page | What it documents |
+|------|-------------------|
+| [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | Registers the scheduler; the builder's global options and their ranges |
+| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) | The built-in local worker pool |
+| [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Queued runs of chosen trains on a remote HTTP runner |
+| [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | Synchronous runs on a remote HTTP runner |
+| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Periodic deletion of old metadata |
+| [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | A runner process, with `UseTraxJobRunner` and `UseTraxRunEndpoint` |
+| [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | A standalone worker that polls `background_job` |
+| [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness) | The health check that fails when dispatch stops |
 
-### Setup & Configuration
+### Scheduling
 
-| Method | Description |
-|--------|-------------|
-| [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | Adds the scheduler subsystem and configures global options (polling, retries, timeouts) |
-| [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default) |
-| [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Routes specific trains to a remote HTTP endpoint |
-| [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | AWS Lambda base class for remote runners (`Trax.Runner.Lambda` package) |
-### Scheduling Methods
+| Page | What it documents |
+|------|-------------------|
+| [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) | One recurring manifest, and `ScheduleOptions` |
+| [ScheduleMany / ScheduleManyAsync](/docs/sdk-reference/scheduler-api/schedule-many) | Many manifests of one train, with pruning |
+| [Dependent scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling) | `ThenInclude`, `Include`, `IncludeMany`, `ThenIncludeMany`, `ScheduleDependentAsync`, `ScheduleManyDependentAsync` |
+| [Scheduling helpers](/docs/sdk-reference/scheduler-api/scheduling-helpers) | `Every`, `Cron`, the `Schedule` record and `ManifestOptions` |
+| [IDormantDependentContext](/docs/sdk-reference/scheduler-api/i-dormant-dependent-context) | Activating dormant dependents from a running train |
 
-| Method | Context | Description |
-|--------|---------|-------------|
-| [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) | Startup / Runtime | Schedules a single recurring train |
-| [ScheduleMany / ScheduleManyAsync](/docs/sdk-reference/scheduler-api/schedule-many) | Startup / Runtime | Batch-schedules manifests from a collection with optional pruning |
-| [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Both | Schedules trains that run after a parent completes (`ThenInclude`, `ThenIncludeMany`, `Include`, `IncludeMany`, `ScheduleDependentAsync`, `ScheduleManyDependentAsync`) |
+### Runtime
 
-### Management
+| Page | What it documents |
+|------|-------------------|
+| [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler) | The runtime scheduling API, `TriggerGroupAsync` and the dead-letter methods |
+| [Manifest management](/docs/sdk-reference/scheduler-api/manifest-management) | `DisableAsync`, `EnableAsync`, `TriggerAsync`, `ScheduleOnceAsync`, `CancelAsync`, `CancelGroupAsync` |
+| [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service) | The operations the dashboard and the GraphQL API share |
+| [IEffectSettingsService](/docs/sdk-reference/scheduler-api/i-effect-settings-service) | This process's effects and their settings |
+| [ILogLevelService](/docs/sdk-reference/scheduler-api/i-log-level-service) | This process's log levels |
+| [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs) | Requeue-all as a background job on this node |
 
-| Method | Description |
-|--------|-------------|
-| [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler) | The runtime scheduling interface: every method, plus `TriggerGroupAsync` and the dead-letter operations |
-| [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) | `DisableAsync`, `EnableAsync`, `TriggerAsync`: runtime control of scheduled jobs |
-| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic purging of old metadata for high-frequency trains |
-| [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness) | Health check that fails when the JobDispatcher stops completing cycles |
-| [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service) | The operations the dashboard and the GraphQL API share: queue a train, run one now, batch triggers and cancels, logs, recorded decisions, group and scheduler settings |
-| [IEffectSettingsService](/docs/sdk-reference/scheduler-api/i-effect-settings-service) | Lists the effects registered in this process, turns them on and off, and edits a configurable effect's settings |
-| [ILogLevelService](/docs/sdk-reference/scheduler-api/i-log-level-service) | Reads and sets the log level of each configured category at runtime, in this process |
-| [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs) | Requeues every dead letter awaiting intervention as a background job on this node, and reads the job back by id |
-| [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | Confirms entries staged by a deferred enqueue, and cancels or promotes stale ones. Defined in Trax.Effect.Data |
+## Trax.Scheduler.Sqs
 
-### Helpers
+| Page | What it documents |
+|------|-------------------|
+| [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | Queued runs of chosen trains through an SQS queue, and `SqsJobRunnerHandler` |
 
-| Page | Description |
-|------|-------------|
-| [Scheduling Helpers](/docs/sdk-reference/scheduler-api/scheduling-helpers) | `Every`, `Cron`, `Schedule` record, and `ManifestOptions`: the building blocks for defining when and how jobs run |
+## Trax.Scheduler.Lambda
+
+| Page | What it documents |
+|------|-------------------|
+| [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) | Queued runs of chosen trains on an AWS Lambda function |
+| [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) | Synchronous runs on an AWS Lambda function |
+
+## Trax.Runner.Lambda
+
+| Page | What it documents |
+|------|-------------------|
+| [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function) | The base class of a Lambda function that runs trains |
+
+## Trax.Effect.Data
+
+| Page | What it documents |
+|------|-------------------|
+| [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | Confirming and resolving staged work queue entries |

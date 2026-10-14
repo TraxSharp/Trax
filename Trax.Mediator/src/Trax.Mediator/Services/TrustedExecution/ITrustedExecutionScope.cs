@@ -51,6 +51,7 @@ namespace Trax.Mediator.Services.TrustedExecution;
 /// }
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-trusted-execution-scope">SDK reference</seealso>
 public interface ITrustedExecutionScope
 {
     /// <summary>

@@ -58,6 +58,7 @@ namespace Trax.Scheduler.Sqs.Lambda;
 /// or a repeat, because SQS redelivers the same message by design; the job's Pending metadata row
 /// is what stops it running twice.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-sqs-workers#sqsjobrunnerhandler">SDK reference</seealso>
 public class SqsJobRunnerHandler(IServiceProvider serviceProvider)
 {
     /// <summary>

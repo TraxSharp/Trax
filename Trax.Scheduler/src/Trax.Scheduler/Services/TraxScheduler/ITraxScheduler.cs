@@ -11,6 +11,11 @@ namespace Trax.Scheduler.Services.TraxScheduler;
 /// <summary>
 /// Provides a type-safe API for scheduling trains as recurring jobs.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-trax-scheduler">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/schedule">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/schedule-many">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/dependent-scheduling">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/manifest-management">SDK reference</seealso>
 public interface ITraxScheduler
 {
     /// <summary>

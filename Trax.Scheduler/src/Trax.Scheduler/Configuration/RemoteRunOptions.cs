@@ -10,6 +10,7 @@ namespace Trax.Scheduler.Configuration;
 /// Set <see cref="SigningKey"/> to sign each request for a runner that verifies signatures, or use
 /// <see cref="ConfigureHttpClient"/> to add the credentials a runner's authorization policy expects.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/use-remote-run">SDK reference</seealso>
 public class RemoteRunOptions
 {
     /// <summary>

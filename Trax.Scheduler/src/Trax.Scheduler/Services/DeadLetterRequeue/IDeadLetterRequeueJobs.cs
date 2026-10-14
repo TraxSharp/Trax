@@ -15,6 +15,7 @@ namespace Trax.Scheduler.Services.DeadLetterRequeue;
 /// node at a time, a finished job is kept for 24 hours, and at most 100 finished jobs are kept.
 /// Registered as a singleton by <c>AddScheduler</c>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs">SDK reference</seealso>
 public interface IDeadLetterRequeueJobs
 {
     /// <summary>

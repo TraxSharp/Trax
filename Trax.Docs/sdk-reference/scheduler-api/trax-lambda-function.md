@@ -1,26 +1,28 @@
 ---
 title: TraxLambdaFunction
-description: Reference for TraxLambdaFunction, the base class for AWS Lambda functions that run Trax trains from a LambdaEnvelope, with local development and testing.
+description: Reference for TraxLambdaFunction, the base class for AWS Lambda functions that run Trax trains from a LambdaEnvelope, and its RunLocalAsync server.
 type: reference
 area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 17
+package: Trax.Runner.Lambda
+namespace: Trax.Runner.Lambda
+source:
+  - Trax.Scheduler/src/Trax.Runner.Lambda/TraxLambdaFunction.cs
 ---
 
 # TraxLambdaFunction
 
-Abstract base class for AWS Lambda functions that execute Trax trains via direct SDK invocation. Handles service provider lifecycle, envelope-based dispatching, cancellation, and error handling so your Lambda function is just a DI configuration.
-
-## Package
-
-```
-dotnet add package Trax.Runner.Lambda
-```
+The abstract base class for an AWS Lambda function that runs Trax trains sent by
+[UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) and
+[UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run). It builds and keeps the service
+provider, dispatches each `LambdaEnvelope`, derives cancellation from the time the function has
+left, and serves the same routes over HTTP for local runs.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public abstract class TraxLambdaFunction
 {
     protected abstract void ConfigureServices(IServiceCollection services, IConfiguration configuration);
@@ -29,261 +31,134 @@ public abstract class TraxLambdaFunction
     protected virtual IServiceProvider BuildServiceProvider();
     protected virtual TimeSpan TerminalWriteMargin { get; }
 
-    public Task<object?> FunctionHandler(
-        LambdaEnvelope envelope,
-        ILambdaContext context
-    );
+    public Task<object?> FunctionHandler(LambdaEnvelope envelope, ILambdaContext context);
 
     public Task RunLocalAsync(string[] args);
     public Task RunLocalAsync(string[] args, CancellationToken cancellationToken);
 }
 ```
 
-## Overridable Members
+## Members
 
-| Member | Required | Description |
-|--------|----------|-------------|
-| `ConfigureServices(IServiceCollection, IConfiguration)` | Yes | Register your Trax effects, mediator, data contexts, and application services. `IConfiguration` is loaded from `appsettings.json` (if present) and environment variables. Do **not** call `AddTraxJobRunner()` because the base class does this automatically. |
-| `ConfigureRunner(TraxJobRunnerOptions, IConfiguration)` | In practice | Set the runner's posture: `runner.SigningKey` (shared with `UseLambdaWorkers` / `UseLambdaRun`), or `runner.AllowUnsignedRequests()` for a function only the scheduler's IAM role can invoke. The default sets nothing, so every invocation is refused. |
-| `ConfigureLogging(ILoggingBuilder)` | No | Customize logging. Default: console logging at `Information` level. |
-| `TerminalWriteMargin` | No | How much of `ILambdaContext.RemainingTime` is held back so a run cancelled by the function timing out can still record its outcome. Default 5 seconds. Cancellation is derived from `RemainingTime` less this margin: cancelling at `RemainingTime` itself fires at the instant Lambda freezes or kills the environment, leaving the uncancellable terminal write nowhere to happen, so the row stayed `InProgress` holding its subject until `StaleInProgressTimeout` and the reaper then recorded `Failed` rather than `Cancelled`. Widen it for a data provider with a slower write path. At most half of the time left is held back: the margin actually used is the smaller of `TerminalWriteMargin` and `RemainingTime / 2`, so a function whose timeout is at or below the margin (AWS's default is three seconds) still runs its jobs. The first time an instance has no more time left than the margin it logs a warning to raise the function's timeout. An `Execute` whose time runs out before its job starts does not start it: the run is recorded `Cancelled` (only while it is still `Pending`, written on `CancellationToken.None`) rather than left `Pending` for the stale-pending reaper to fail, which would count toward the manifest's retries. |
-| `BuildServiceProvider()` | No | Replace the entire DI graph. The default builds `IConfiguration`, registers logging, calls `ConfigureServices`, and finishes with `AddTraxJobRunner(runner => ConfigureRunner(runner, configuration))`. An override registers `AddTraxJobRunner(runner => ...)` itself. Override only when you need full control (test harnesses are the typical case). Production code should override `ConfigureServices`, not this. |
+| Member | Description |
+|--------|-------------|
+| `ConfigureServices(IServiceCollection, IConfiguration)` | Abstract. Registers the function's Trax effects, mediator, data contexts and application services. The base class calls `AddTraxJobRunner()` itself, so this does not |
+| `ConfigureRunner(TraxJobRunnerOptions, IConfiguration)` | Sets the runner's posture: `runner.SigningKey` (shared with `UseLambdaWorkers` / `UseLambdaRun`), or `runner.AllowUnsignedRequests()`. The default sets nothing, so every invocation is refused |
+| `ConfigureLogging(ILoggingBuilder)` | Configures logging. Default: console at `Information` |
+| `TerminalWriteMargin` | How much of `ILambdaContext.RemainingTime` is held back so a run cancelled by the function's timeout can still record its outcome. Default 5 seconds; at most half the time left is held back |
+| `BuildServiceProvider()` | Builds the whole service graph. The default builds `IConfiguration`, registers it and logging, calls `ConfigureLogging` and `ConfigureServices`, and finishes with `AddTraxJobRunner(runner => ConfigureRunner(runner, configuration))`. An override registers `AddTraxJobRunner` itself |
+| `FunctionHandler(LambdaEnvelope, ILambdaContext)` | The Lambda entry point. Dispatches the envelope by its `Type` and returns the handler's response |
+| `RunLocalAsync(string[])` | Serves the function as a local Kestrel server until it stops on Ctrl+C or process exit |
+| `RunLocalAsync(string[], CancellationToken)` | The same, also stopping when the token is cancelled; the task completes once the server has shut down. New in the next Trax.Runner.Lambda release |
 
-## Envelope Dispatching
+## Behavior
 
-The `FunctionHandler` entry point receives a `LambdaEnvelope` directly from the AWS SDK. No API Gateway or Function URL is involved. The envelope's `Type` field determines the operation:
+### Service provider
 
-| Type | Handler | Description |
-|------|---------|-------------|
-| `Execute` | `ITraxRequestHandler.ExecuteJobAsync` | Fire-and-forget job execution (queue path). Returns `RemoteJobResponse`. |
-| `Run` | `ITraxRequestHandler.RunTrainAsync` | Synchronous execution with output (run path). Returns `RemoteRunResponse`. |
-| _unknown_ | _(none)_ | Throws `InvalidOperationException` |
+The provider is built on the first `FunctionHandler` call, not when Lambda creates the instance,
+and reused for every later call on that instance. Each call creates its own DI scope and resolves
+`ITraxRequestHandler` from it.
 
-The `LambdaEnvelope` is a shared contract defined in `Trax.Scheduler`:
+### Configuration
 
-```csharp
-public record LambdaEnvelope(LambdaRequestType Type, string PayloadJson)
-{
-    public string? Signature { get; init; }
-}
-public enum LambdaRequestType { Execute, Run }
-```
+`IConfiguration` is built from `appsettings.json` (optional, read from `AppContext.BaseDirectory`)
+and environment variables, passed to `ConfigureServices` and `ConfigureRunner`, and registered as
+`IConfiguration`. Command-line arguments are not part of it, even under `RunLocalAsync`, where they
+reach only the Kestrel server. There is no `IHostEnvironment`; a function reads
+`DOTNET_ENVIRONMENT` (or `ASPNETCORE_ENVIRONMENT`) from the configuration.
 
-Before dispatching, the function checks its posture and, with a `SigningKey`, the envelope's `Signature` over the UTF-8 bytes of `PayloadJson`. A `Run` must also be fresh and not repeated; its nonce goes to the runner's nonce store, the Trax database by default, so concurrent instances of the function refuse a repeat too. A function with a `SigningKey` and no `UsePostgres` or `UseSqlite` calls `runner.UseInMemoryNonceStore()` in `ConfigureRunner`, or registers an `INonceStore`, or it refuses to start. An `Execute` is checked for its signature only, because Lambda retries an asynchronous invocation with the same payload; the job's `Pending` metadata row stops a second run. A refused envelope throws, so the invocation fails and Lambda's retry and dead-letter settings apply.
+### Envelope dispatching
 
-## Examples
+| `Type` | Handler | Returns |
+|--------|---------|---------|
+| `Execute` | `ITraxRequestHandler.ExecuteJobAsync` | `RemoteJobResponse` |
+| `Run` | `ITraxRequestHandler.RunTrainAsync` | `RemoteRunResponse` |
+| anything else | none | throws `InvalidOperationException` |
 
-### Minimal Runner
+`LambdaEnvelope` and `LambdaRequestType` are defined in Trax.Scheduler:
+`public record LambdaEnvelope(LambdaRequestType Type, string PayloadJson)` with an init-only
+`string? Signature`, and `public enum LambdaRequestType { Execute, Run }`.
 
-```csharp
+Before dispatching, the function checks its posture and, with a `SigningKey`, the envelope's
+`Signature` over the UTF-8 bytes of `PayloadJson`. A `Run` must also be fresh and not repeated; its
+nonce goes to the runner's nonce store, the Trax database by default, so concurrent instances
+refuse a repeat too. A function with a `SigningKey` and no `UsePostgres` or `UseSqlite` calls
+`runner.UseInMemoryNonceStore()` in `ConfigureRunner`, or registers an `INonceStore`, or it refuses
+to start. An `Execute` is checked for its signature only, because Lambda retries an asynchronous
+invocation with the same payload; the job's `Pending` metadata row stops a second run. A refused
+envelope throws, so the invocation fails and Lambda's retry and dead-letter settings apply.
+
+### Timeouts
+
+Cancellation is derived from `RemainingTime` less the margin actually used, the smaller of
+`TerminalWriteMargin` and `RemainingTime / 2`. A function whose timeout is at or below the margin
+(AWS's default is three seconds) still runs its jobs, and the first time an instance has no more
+time left than the margin it logs a warning. An `Execute` whose time runs out before its job starts
+does not start it: the run is recorded `Cancelled` (only while it is still `Pending`, written on
+`CancellationToken.None`) rather than left for the stale-pending reaper to fail.
+
+### Errors
+
+For `Execute`, exceptions are logged and returned as a `RemoteJobResponse` with `IsError`,
+`ErrorMessage` and `ExceptionType`. `ErrorMessage` is a `TrainException`'s message or fixed text,
+and no stack trace is returned. Errors inside the train are also persisted to the `Metadata` table
+by `ServiceTrain.Run`; errors before the train starts (such as a payload that does not
+deserialize) appear only in the log. The payload is read case-insensitively, and one that repeats a
+property is refused with a `JsonException` before any handler runs. The Lambda job submitter does
+not read the response.
+
+For `Run`, exceptions are logged and rethrown. `RunTrainAsync` returns a `RemoteRunResponse` that
+may carry error fields, from which the Lambda run executor rebuilds a `TrainException`.
+
+### Local server
+
+`RunLocalAsync` builds a `WebApplication` from `args`, maps `POST /trax/execute` and
+`POST /trax/run`, wraps each request body in a `LambdaEnvelope`, and runs it through the same
+handler as `FunctionHandler`. The server reads `appsettings.json`, its Kestrel endpoints included,
+from its content root: from the next Trax.Runner.Lambda release `AppContext.BaseDirectory`, and in
+released versions the current directory. A `--contentRoot` argument, or `DOTNET_CONTENTROOT` /
+`ASPNETCORE_CONTENTROOT`, sets it.
+
+| Runner posture | What the local routes accept |
+|----------------|------------------------------|
+| `SigningKey` | Requests with a valid, fresh `Trax-Signature` header, from any address. The header is checked before the body is read (`401`), and a body over `MaxRequestBodyBytes` gets `413` |
+| `AllowUnsignedRequests()` | Unsigned requests from this machine's loopback address only, whatever address the server listens on; any other caller gets `401` |
+
+The routes are mapped by an internal `ConfigureRoutes(IEndpointRouteBuilder)`, visible to the Trax
+test assemblies only.
+
+## Example
+
+```csharp compile
 using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.SystemTextJson;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Runner.Lambda;
-using Trax.Scheduler.Configuration;   // TraxJobRunnerOptions
+using Trax.Scheduler.Configuration;
 
 [assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
 
 public class Function : TraxLambdaFunction
 {
-    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
-    {
-        var connString = configuration.GetConnectionString("TraxDatabase")!;
-
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration) =>
         services.AddTrax(trax => trax
-            .AddEffects(effects => effects.UsePostgres(connString))
-            .AddMediator(typeof(MyTrain).Assembly));
-    }
+            .AddEffects(effects => effects
+                .UsePostgres(configuration.GetConnectionString("TraxDatabase")!)
+                .AddJunctionProgress())
+            .AddMediator(typeof(Function).Assembly));
 
-    // The same key as UseLambdaWorkers / UseLambdaRun on the scheduler
+    // The same key as UseLambdaWorkers and UseLambdaRun on the scheduler.
     protected override void ConfigureRunner(TraxJobRunnerOptions runner, IConfiguration configuration) =>
         runner.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
 }
 ```
 
-### With Custom Logging and Effects
+## See also
 
-```csharp
-[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
-
-public class Function : TraxLambdaFunction
-{
-    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
-    {
-        var connString = configuration.GetConnectionString("TraxDatabase")!;
-        var rabbitMq = configuration.GetConnectionString("RabbitMQ")!;
-
-        services.AddMyDataContexts(connString);
-
-        services.AddTrax(trax => trax
-            .AddEffects(effects => effects
-                .UsePostgres(connString)
-                .SaveTrainParameters()
-                .AddJunctionProgress()
-                .UseBroadcaster(b => b.UseRabbitMq(rabbitMq)))
-            .AddMediator(
-                typeof(MyClientTrains.AssemblyMarker).Assembly,
-                typeof(MyAdminTrains.AssemblyMarker).Assembly));
-    }
-
-    protected override void ConfigureLogging(ILoggingBuilder logging)
-    {
-        logging.AddConsole().SetMinimumLevel(LogLevel.Debug);
-    }
-}
-```
-
-## Local Development
-
-Use `RunLocalAsync` to run the Lambda function as a local Kestrel web server. This maps `POST /trax/execute` and `POST /trax/run` endpoints, which enforce their own posture, and which wrap incoming HTTP request bodies into `LambdaEnvelope` payloads and execute them through the same handler logic as the Lambda entry point.
-
-```csharp
-// Program.cs
-await new Function().RunLocalAsync(args);
-```
-
-`RunLocalAsync` builds a `WebApplication` from `args`, and that server reads `appsettings.json` (its
-Kestrel endpoints included) from its content root. From the next Trax.Runner.Lambda release, the
-content root is `AppContext.BaseDirectory`, next to the binary, which is where the function reads its
-own configuration too, so `dotnet run --project ...` from any directory serves on the endpoint
-`appsettings.json` names. A `--contentRoot` argument, or a `DOTNET_CONTENTROOT` /
-`ASPNETCORE_CONTENTROOT` variable, still sets it. Released versions up to then use the current
-directory instead, so a runner started from anywhere but its project directory listens on port 5000;
-passing `--contentRoot={AppContext.BaseDirectory}` works on both.
-
-`RunLocalAsync(args)` returns when the server stops, on Ctrl+C or process exit.
-`RunLocalAsync(args, cancellationToken)` also stops it when the token is cancelled, and the returned
-task completes once the server has shut down, which is how a test or a host runs it in-process.
-
-| Runner posture | What the local routes accept |
-|----------------|------------------------------|
-| `SigningKey` | Requests with a valid, fresh `Trax-Signature` header, from any address. The header is checked before the body is read (`401`), and a body over `MaxRequestBodyBytes` gets `413` |
-| `AllowUnsignedRequests()` | Unsigned requests from this machine's loopback address only, whatever address the server listens on; any other caller gets `401`. Unsigned is a posture for the Lambda invocation entry point, which only the scheduler's IAM role can reach. Configure a `SigningKey` to serve the local routes to another machine, such as a scheduler in a container |
-
-This enables a smooth development workflow:
-- **Local dev:** Scheduler uses `UseRemoteWorkers()` + `UseRemoteRun()` to hit the local Kestrel server
-- **Production:** Scheduler uses `UseLambdaWorkers()` + `UseLambdaRun()` for direct SDK invocation
-
-The local server reads its port from `appsettings.json` (via Kestrel configuration) and exposes the same endpoints that the Lambda would handle in production.
-
-Internally `RunLocalAsync` delegates the route mapping to an internal `ConfigureRoutes(IEndpointRouteBuilder)` method. Tests can host the Lambda's HTTP surface against `Microsoft.AspNetCore.TestHost` by calling `ConfigureRoutes` directly, without spinning up a real Kestrel listener.
-
-## Testing
-
-Two extension points exist specifically for tests:
-
-1. Override `BuildServiceProvider` to swap in a fake `ITraxRequestHandler` (or any other dependency) without exercising `AddTraxJobRunner` and the full effect/mediator stack.
-2. Call `ConfigureRoutes` from a `TestServer`-hosted pipeline to exercise the `/trax/execute` and `/trax/run` endpoints in-process. `ConfigureRoutes` is `internal`, made visible to the Trax test assemblies via `InternalsVisibleTo`. `TestServer` sets no remote address, so a test that exercises the routes unsigned sets `HttpContext.Connection.RemoteIpAddress` to a loopback address in a middleware first; without it the routes answer `401`.
-
-```csharp
-// Unit test: stub the request handler.
-private sealed class FakeFunction : TraxLambdaFunction
-{
-    public ITraxRequestHandler Handler { get; } = new RecordingHandler();
-
-    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration) { }
-
-    protected override IServiceProvider BuildServiceProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton(Handler);
-        services.AddSingleton(new TraxJobRunnerOptions().AllowUnsignedRequests());
-        services.AddSingleton<RunnerRequestVerifier>();
-        return services.BuildServiceProvider();
-    }
-}
-```
-
-### Testing a runner from another repository
-
-`ConfigureRoutes` is internal to Trax. A consumer that wants its real function in an end-to-end test,
-with no AWS, serves it with `RunLocalAsync` on a free port from a subclass that overrides
-`BuildServiceProvider` to supply the test configuration, then points the scheduler's
-`UseRemoteWorkers` / `UseRemoteRun` URLs at it:
-
-```csharp
-internal sealed class TestRunner(IConfiguration configuration) : Function
-{
-    protected override IServiceProvider BuildServiceProvider()
-    {
-        IServiceCollection services = new ServiceCollection();
-        services.AddSingleton(configuration);
-        services.AddLogging();
-        ConfigureServices(services, configuration);
-        services.AddTraxJobRunner(runner => ConfigureRunner(runner, configuration));
-        return services.BuildServiceProvider();
-    }
-}
-
-var url = "http://127.0.0.1:5399";   // pick a free port
-using var stop = new CancellationTokenSource();
-var runner = new TestRunner(testConfiguration)
-    .RunLocalAsync([$"--Kestrel:Endpoints:Http:Url={url}"], stop.Token);
-
-// ... the tests ...
-
-await stop.CancelAsync();
-await runner;
-```
-
-Cancelling the token stops the server; without one it runs until the test process ends. The
-overload that takes a token is new in the next Trax.Runner.Lambda release.
-
-## Configuration
-
-The base class automatically builds an `IConfiguration` from:
-
-1. `appsettings.json` (optional, loaded from `AppContext.BaseDirectory`)
-2. Environment variables
-
-This means you can use `appsettings.json` for local development and environment variables in Lambda. Both work out of the box. The configuration is passed to `ConfigureServices` and `ConfigureRunner` and registered in DI as `IConfiguration`.
-
-Command-line arguments are not part of it, even under `RunLocalAsync`: they reach only the local
-Kestrel server. Nor is there an `IHostEnvironment`. A function that behaves differently in
-Development reads `DOTNET_ENVIRONMENT` (or `ASPNETCORE_ENVIRONMENT`) from the configuration itself,
-for example `configuration["DOTNET_ENVIRONMENT"] == "Development"`; set it in the runner project's
-`Properties/launchSettings.json` for `dotnet run`.
-
-## Cold Start Optimization
-
-The service provider is built **lazily on the first invocation**, not during Lambda container creation. Subsequent invocations within the same container reuse the same provider.
-
-To minimize cold start time:
-
-- Keep `ConfigureServices` lean. Only register what the runner needs.
-- Use `SkipMigrations()`. Migrations should run from the API or CI, not the Lambda.
-- Avoid unnecessary effect providers. If the runner doesn't need broadcasting, don't register it.
-
-## How It Works
-
-1. Lambda runtime creates an instance of your `Function` class
-2. On the first `FunctionHandler` invocation, `BuildServiceProvider()` is called:
-   - Builds `IConfiguration` from `appsettings.json` + environment variables
-   - Creates a `ServiceCollection`
-   - Registers `IConfiguration` as a singleton
-   - Calls `ConfigureLogging()` (virtual, overridable)
-   - Calls `ConfigureServices()` (your code)
-   - Calls `AddTraxJobRunner(runner => ConfigureRunner(runner, configuration))` (automatic)
-   - Builds and caches the `IServiceProvider`
-   - The whole method is `protected virtual`, so test harnesses can replace it wholesale.
-3. Each invocation creates a new DI scope and resolves `ITraxRequestHandler`
-4. Cancellation is derived from `ILambdaContext.RemainingTime`
-5. The `LambdaEnvelope.Type` field determines which handler method is called
-
-## Error Handling
-
-For `Execute` requests, exceptions are logged and returned as a `RemoteJobResponse` with structured error fields (`IsError`, `ErrorMessage`, `ExceptionType`). `ErrorMessage` is the message of a `TrainException` or fixed text, and no stack trace is returned. Errors that occur within the train itself are also persisted to the `Metadata` table by `ServiceTrain.Run`. However, pre-train errors (e.g., deserialization failures) only appear in the log output. The payload is read case-insensitively, and one that repeats a property (in the same or a different case) is refused with a `JsonException`, before any handler runs. The Lambda job submitter on the scheduler side does not read the response (fire-and-forget).
-
-For `Run` requests, exceptions are logged before being rethrown. `ITraxRequestHandler.RunTrainAsync` returns a `RemoteRunResponse` that may contain structured error fields. The Lambda run executor on the scheduler side reads the response and reconstructs a `TrainException` with the full error context.
-
-## See Also
-
-- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
-- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers): scheduler-side configuration for Lambda dispatch
-- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run): scheduler-side configuration for Lambda run execution
-- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): what `AddTraxJobRunner()` registers (called automatically by the base class)
+- [Run trains on AWS Lambda](/docs/scheduler/run-trains-on-lambda), building, running locally and testing a function
+- [How remote dispatch works](/docs/scheduler/how-remote-dispatch-works)
+- [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) and [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run), the scheduler side
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner), what the base class registers

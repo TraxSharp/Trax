@@ -6,6 +6,7 @@ namespace Trax.Scheduler.Extensions;
 /// <summary>
 /// Extension methods for configuring Trax.Scheduler services.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler">SDK reference</seealso>
 public static class SchedulerExtensions
 {
     /// <summary>

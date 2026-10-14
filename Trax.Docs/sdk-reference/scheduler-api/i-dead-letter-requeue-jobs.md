@@ -6,6 +6,12 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 23
+package: Trax.Scheduler
+namespace: Trax.Scheduler.Services.DeadLetterRequeue
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/DeadLetterRequeue/IDeadLetterRequeueJobs.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/DeadLetterRequeue/DeadLetterRequeueJob.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/DeadLetterRequeue/DeadLetterRequeueJobs.cs
 ---
 
 # IDeadLetterRequeueJobs
@@ -14,7 +20,7 @@ Requeues every dead letter awaiting intervention as a background job on this nod
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Scheduler.Services.DeadLetterRequeue;
 
 public interface IDeadLetterRequeueJobs
@@ -41,6 +47,13 @@ public record DeadLetterRequeueJob(
 public enum DeadLetterRequeueJobStatus { Running, Succeeded, Failed, Canceled }
 ```
 
+## Members
+
+| Member | Description |
+|--------|-------------|
+| [`StartAsync`](#startasync) | Starts a requeue-all on this node, or returns the one already running |
+| [`Get`](#get) | The job with an id, while this node remembers it |
+
 ## StartAsync
 
 Counts the dead letters awaiting intervention, starts the fold over them in the background and returns the job at once, `Running`, with `AwaitingAtStart` set and the message `Requeueing {n} dead letter(s) awaiting intervention.` The fold is [`ITraxScheduler.RequeueAllDeadLettersAsync`](/docs/sdk-reference/scheduler-api/i-trax-scheduler), resolved from a scope of its own, so it creates at most one work queue entry per manifest and commits a page of manifests at a time. `askAfresh: true` calls its `askAfresh` overload, so every new run asks its deciders afresh rather than replaying the failed run's decisions.
@@ -55,7 +68,9 @@ One fold runs per node at a time. While one is running, `StartAsync` starts noth
 
 The job with this id, or `null` when this node does not know it: it was started on another node, this node has restarted since, or it finished more than 24 hours ago. A node keeps at most 100 finished jobs, forgetting the oldest first; a running job is never forgotten.
 
-## How a job ends
+## Behavior
+
+### How a job ends
 
 | `Status` | `Count` | `Message` |
 |---|---|---|
@@ -65,12 +80,29 @@ The job with this id, or `null` when this node does not know it: it was started 
 
 The messages are the API's, word for word, because both surfaces show the same job. `DeadLetterRequeueJobs` exposes them as `FailedMessage`, `CanceledMessage` and `OtherModeMessage(bool)`, with `Retention` (24 hours) and `MaxRetained` (100).
 
-## Jobs live in the node's memory
+### Jobs live in the node's memory
 
 Another node does not know a job, and a restart forgets it. Nothing is lost by that: a requeued dead letter no longer awaits intervention, so a fold that stopped part-way left what it finished requeued, and starting another requeues the rest. Two folds on two nodes are safe together, since the scheduler retries a page that loses the race for a manifest's queued entry. Why the state is not in a table is recorded in [Trax.Api ADR 0036](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md).
 
-## Package
+## Example
 
+```csharp compile
+using Trax.Scheduler.Services.DeadLetterRequeue;
+
+public class RequeueAllEndpoint(IDeadLetterRequeueJobs jobs)
+{
+    public async Task<Guid> Start(CancellationToken ct)
+    {
+        var job = await jobs.StartAsync(ct: ct);
+        return job.Id;
+    }
+
+    public string Progress(Guid id) =>
+        jobs.Get(id) is { } job ? $"{job.Status}: {job.Processed} of {job.AwaitingAtStart}" : "unknown";
+}
 ```
-dotnet add package Trax.Scheduler
-```
+
+## See also
+
+- [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler#dead-letters), the fold it runs
+- [Dead letters and cleanup](/docs/scheduler/dead-letters-and-cleanup)

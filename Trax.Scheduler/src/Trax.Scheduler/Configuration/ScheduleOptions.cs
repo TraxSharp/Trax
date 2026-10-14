@@ -31,6 +31,7 @@ namespace Trax.Scheduler.Configuration;
 ///             .Priority(20)));
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/schedule#scheduleoptions">SDK reference</seealso>
 public class ScheduleOptions
 {
     // Manifest-level state

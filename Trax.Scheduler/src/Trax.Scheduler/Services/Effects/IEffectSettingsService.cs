@@ -18,6 +18,7 @@ namespace Trax.Scheduler.Services.Effects;
 /// is left out of <see cref="EffectSettings.Fields"/> and masked in
 /// <see cref="EffectSettings.Configuration"/>. Writing one is allowed.</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/i-effect-settings-service">SDK reference</seealso>
 public interface IEffectSettingsService
 {
     /// <summary>

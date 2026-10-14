@@ -7,6 +7,7 @@ namespace Trax.Mediator.Configuration;
 /// Configuration captured by <see cref="TraxMediatorBuilder"/> during <c>AddMediator()</c>.
 /// Registered as a singleton in DI.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/mediator-configuration">SDK reference</seealso>
 public class MediatorConfiguration
 {
     /// <summary>

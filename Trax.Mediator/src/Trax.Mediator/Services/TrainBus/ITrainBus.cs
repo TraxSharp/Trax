@@ -33,6 +33,7 @@ namespace Trax.Mediator.Services.TrainBus;
 /// }
 /// </code>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-train-bus">SDK reference</seealso>
 public interface ITrainBus
 {
     /// <summary>
