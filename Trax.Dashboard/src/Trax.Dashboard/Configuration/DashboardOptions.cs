@@ -10,6 +10,7 @@ namespace Trax.Dashboard.Configuration;
 /// <see cref="RoutePrefix"/> with its own <c>routePrefix</c> argument and
 /// <see cref="EnvironmentName"/> with the host's environment, so both are read-only to a host.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/dashboard-api/dashboard-options">SDK reference</seealso>
 public class DashboardOptions
 {
     /// <summary>

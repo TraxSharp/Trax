@@ -10,5 +10,6 @@ namespace Trax.Dashboard.Models;
 /// <typeparam name="T">The grid's row type.</typeparam>
 /// <param name="Items">The rows of the requested page, after filtering, sorting, skip and take.</param>
 /// <param name="TotalCount">The number of rows matching the filter before paging.</param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/dashboard-api/component-model-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public record ServerDataResult<T>(IEnumerable<T> Items, int TotalCount);

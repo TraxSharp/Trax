@@ -60,6 +60,7 @@ public class PositionedEdge
 /// <see cref="DagLayoutEngine.ComputeLayout"/>; public only because <c>DagGraph.Layout</c>
 /// exposes it, and not intended for use outside this package.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/dashboard-api/component-model-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class DagLayout
 {

@@ -13,6 +13,7 @@ namespace Trax.Dashboard.Services.DashboardSettings;
 /// Every component that reads these values calls <see cref="InitializeAsync"/> first, so an
 /// implementation must make repeated calls cheap.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/dashboard-api/i-dashboard-settings-service">SDK reference</seealso>
 public interface IDashboardSettingsService
 {
     /// <summary>
