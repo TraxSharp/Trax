@@ -86,7 +86,23 @@ jobs:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            aka.ms:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
+            dot.net:443
+            api.nuget.org:443
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            crl.globalsign.com:80
+            crl.sectigo.com:80
+            s.symcb.com:80
+            ts-crl.ws.symantec.com:80
+            www.microsoft.com:80
 
       - name: Checkout the pull request branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -188,7 +204,11 @@ jobs:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
 
       # Downloaded outside the workspace, so the patch can never be picked up as
       # a file change by the commit below.

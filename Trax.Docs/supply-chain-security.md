@@ -92,9 +92,9 @@ Builds are deterministic: the same source and toolchain produce byte-for-byte id
 
 A merge to `main` builds and tests but releases nothing; a release is a manual run of the release workflow, and the release job refuses any ref but `main`. Both the release and publish jobs run behind the protected `release` deployment environment, which restricts which refs may deploy and can require a human reviewer before a version is cut or a package leaves the pipeline. The environment also scopes the OIDC claim that the trusted-publishing policy checks, a claim a feature branch or pull request cannot forge.
 
-## Runtime egress monitoring
+## Runtime egress blocking
 
-Every job runs under StepSecurity Harden-Runner in `egress-policy: audit` mode. It records each job's outbound connections, but it does not block any: code that reads a credential in a job can still send it to an arbitrary host. The controls above that keep credentials out of jobs that run dependency code are what bound that, not the egress policy.
+Every job runs under StepSecurity Harden-Runner in `egress-policy: block` mode, with its own `allowed-endpoints` list. A job reaches GitHub's Actions hosts, which the agent always allows, and the hosts on its list: the .NET installer and NuGet for a job that restores, the certificate revocation lists NuGet's signature checks read, npm for one that installs packages, Codecov for coverage, Sigstore and NuGet's push host for publishing. A connection to any other host fails, so code that reads a credential in a job cannot send it to a host of its choosing. The lists were taken from the hosts each job reached while the policy was still `audit`; a job that needs a new host fails with the blocked host named in the Harden-Runner log, and the host is added to that job's list, not to all of them. Telemetry to StepSecurity, the .NET SDK's and Codecov's error reporting are not on any list.
 
 ## Untrusted input handling
 
@@ -106,4 +106,4 @@ The conventions above are enforced, not just documented. Each folder's `Tests.Me
 
 ## Layered, not trusted
 
-The goal is not a set of components assumed to be trustworthy, since trust is what gets exploited. It is an arrangement where compromising any one component yields little, is detectable, and is recoverable. SHA pinning bounds what a compromised action becomes; job separation keeps the publish and release credentials away from dependency code, and the digest check keeps publish from shipping anything the build job did not build; egress monitoring records where data goes; keyless, short-lived credentials bound how long a stolen one lives; provenance and determinism let the result be verified from outside the pipeline.
+The goal is not a set of components assumed to be trustworthy, since trust is what gets exploited. It is an arrangement where compromising any one component yields little, is detectable, and is recoverable. SHA pinning bounds what a compromised action becomes; job separation keeps the publish and release credentials away from dependency code, and the digest check keeps publish from shipping anything the build job did not build; egress blocking limits where data can go; keyless, short-lived credentials bound how long a stolen one lives; provenance and determinism let the result be verified from outside the pipeline.
