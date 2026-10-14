@@ -109,6 +109,27 @@ public class DifferentialAuthoringTests
     }
 
     [Test]
+    public void Second_seed_for_a_state_is_refused()
+    {
+        // The corpus keeps one seed per state. A second for the same state used to replace the first without a
+        // word, so the corpus covered less than the author wrote.
+        var m = new MachineBuilder<TurnstileState, TurnstileTrigger>();
+        m.Id("x").Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
+        m.In(TurnstileState.Locked).Context().On(TurnstileTrigger.Coin).To(TurnstileState.Unlocked);
+        m.In(TurnstileState.Unlocked).Context().On(TurnstileTrigger.Push).To(TurnstileState.Locked);
+        m.Differential(d =>
+            d.Seed(TurnstileState.Unlocked, new JsonObject { ["paidWith"] = "a" })
+                .Seed(TurnstileState.Unlocked, new JsonObject { ["paidWith"] = "b" })
+        );
+
+        var act = () => m.Build();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*Unlocked*one seed per state*");
+    }
+
+    [Test]
     public void DifferentialModel_IsEmpty_is_true_only_when_every_collection_is_empty()
     {
         var empty = new DifferentialModel<TurnstileState, TurnstileTrigger>(

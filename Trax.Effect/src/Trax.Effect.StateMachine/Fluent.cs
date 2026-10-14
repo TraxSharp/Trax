@@ -459,10 +459,10 @@ public interface IDifferentialBuilder<TState, TTrigger>
     /// <summary>An empty (<c>{}</c>) input for <paramref name="trigger"/> — distinct from the no-input case.</summary>
     IDifferentialBuilder<TState, TTrigger> EmptySample(TTrigger trigger);
 
-    /// <summary>A seed context for <paramref name="state"/> (a BFS start point that reaches states the initial snapshot can't), from a typed record.</summary>
+    /// <summary>A seed context for <paramref name="state"/> (a BFS start point that reaches states the initial snapshot can't), from a typed record. One seed per state: a second for the same state is refused at Build.</summary>
     IDifferentialBuilder<TState, TTrigger> Seed<TContext>(TState state, TContext context);
 
-    /// <summary>A seed context for <paramref name="state"/>, as a raw JSON object.</summary>
+    /// <summary>A seed context for <paramref name="state"/>, as a raw JSON object. One seed per state: a second for the same state is refused at Build.</summary>
     IDifferentialBuilder<TState, TTrigger> Seed(TState state, JsonObject context);
 
     /// <summary>A dense probe context crossed with EVERY state (exercises guards/validators on unreachable-but-sendable snapshots), from a typed record.</summary>
@@ -673,6 +673,9 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     private readonly List<DeclarativeTransition<TState, TTrigger>> _declarativeTransitions = [];
     private readonly Dictionary<TTrigger, List<JsonNode>> _diffSamples = [];
     private readonly Dictionary<TState, JsonNode> _diffSeeds = [];
+
+    // States seeded more than once; Build refuses them rather than keep only one of the seeds.
+    private readonly HashSet<TState> _diffSeedDuplicates = [];
     private readonly List<JsonNode> _diffContexts = [];
     private readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> _customGuards = new(
         StringComparer.Ordinal
@@ -1021,6 +1024,13 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     ),
                 }
                 : null;
+
+        if (_diffSeedDuplicates.Count > 0)
+            throw new InvalidOperationException(
+                $"The machine '{_id}' seeds {string.Join(", ", _diffSeedDuplicates)} more than once in "
+                    + ".Differential(...), but the corpus keeps one seed per state. Keep one Seed for each state, "
+                    + "and add the other contexts with Probe(...), which crosses each with every state."
+            );
 
         if (differential is not null && !_usedDeclarative)
             throw new InvalidOperationException(
@@ -2218,7 +2228,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
 
         public IDifferentialBuilder<TState, TTrigger> Seed(TState state, JsonObject context)
         {
-            owner._diffSeeds[state] = context;
+            if (!owner._diffSeeds.TryAdd(state, context))
+                owner._diffSeedDuplicates.Add(state);
             return this;
         }
 
