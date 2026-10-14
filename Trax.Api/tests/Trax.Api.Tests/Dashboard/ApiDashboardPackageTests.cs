@@ -13,7 +13,8 @@ namespace Trax.Api.Tests.Dashboard;
 /// no Node.
 ///
 /// <para>Packing needs the app built into the assembly, which needs node and the app's npm
-/// packages, so this is skipped where either is missing. CI installs both for this folder.</para>
+/// packages, so this is skipped on a developer's machine where either is missing. CI installs both
+/// for this folder, so there it fails instead.</para>
 /// </summary>
 public partial class ApiDashboardPackageTests
 {
@@ -24,16 +25,23 @@ public partial class ApiDashboardPackageTests
     {
         var node = Run("node", Path.GetTempPath(), "--version");
         if (node.ExitCode != 0)
-            Assert.Ignore(
-                "node is not on PATH; packing Trax.Api.Dashboard builds its app with it."
-            );
+            Unavailable("node is not on PATH; packing Trax.Api.Dashboard builds its app with it.");
         if (!Directory.Exists(Path.Combine(ClientApp(), "node_modules", "vite")))
-            Assert.Ignore(
+            Unavailable(
                 "Trax.Api/src/Trax.Api.Dashboard/ClientApp has no node_modules; run `npm ci` there to pack it."
             );
 
         _root = Path.Combine(Path.GetTempPath(), $"trax-api-dashboard-pack-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_root);
+    }
+
+    // Skips on a developer's machine; fails under CI, which installs node and the app's packages
+    // for this folder, so a skip there would report green without ever packing the app.
+    private static void Unavailable(string why)
+    {
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
+            Assert.Fail($"{why} CI installs both for Trax.Api, so this test must run there.");
+        Assert.Ignore(why);
     }
 
     [TearDown]

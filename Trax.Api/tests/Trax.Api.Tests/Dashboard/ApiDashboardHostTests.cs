@@ -704,9 +704,9 @@ public partial class ApiDashboardHostTests
     public async Task The_embedded_app_is_served_with_every_file_its_page_names()
     {
         if (DashboardAssets.Embedded.IndexTemplate is null)
-            Assert.Ignore(
+            Unavailable(
                 "This build carries no app: Trax.Api/src/Trax.Api.Dashboard/ClientApp has no "
-                    + "node_modules. CI installs it for this folder."
+                    + "node_modules."
             );
 
         await using var app = await StartAsync(e => Anonymous(e), assets: DashboardAssets.Embedded);
@@ -728,6 +728,20 @@ public partial class ApiDashboardHostTests
                 .Should()
                 .BeTrue($"{file} is named by its content");
         }
+    }
+
+    /// <summary>
+    /// Skips on a developer's machine without the app's npm packages, and fails under CI, which
+    /// installs them for this folder: a skip there would report green without ever serving the app.
+    /// </summary>
+    private static void Unavailable(string why)
+    {
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
+            Assert.Fail(
+                $"{why} CI installs it (npm ci in that folder before the build), so this test "
+                    + "must run there."
+            );
+        Assert.Ignore($"{why} Run `npm ci --ignore-scripts` there and build again to run this.");
     }
 
     // ---- The host ---------------------------------------------------------------------------
