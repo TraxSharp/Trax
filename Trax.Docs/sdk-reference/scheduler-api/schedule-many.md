@@ -6,19 +6,26 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 5
+package: Trax.Scheduler
+namespace:
+  - Trax.Scheduler.Configuration
+  - Trax.Scheduler.Services.TraxScheduler
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.InferredScheduling.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.BatchScheduling.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/ManifestItem.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/TraxScheduler/ITraxScheduler.cs
 ---
 
 # ScheduleMany / ScheduleManyAsync
 
-Batch-schedules multiple instances of a train from a collection. All manifests are created or updated in a **single transaction**. Supports automatic cleanup of stale manifests via `prunePrefix`.
-
-`ScheduleMany` is used at startup configuration time; `ScheduleManyAsync` is used at runtime via `ITraxScheduler`.
+Schedules many manifests of one train from a collection, in one transaction, and can delete the manifests of an earlier batch that the collection no longer holds. `ScheduleMany` is on `SchedulerConfigurationBuilder`, for startup; `ScheduleManyAsync` is on `ITraxScheduler`, for runtime.
 
 ## Signatures
 
-### Startup: Name-Based with ManifestItem (Recommended)
+### SchedulerConfigurationBuilder, named
 
-```csharp
+```csharp fragment
 public SchedulerConfigurationBuilder ScheduleMany<TTrain>(
     string name,
     IEnumerable<ManifestItem> items,
@@ -33,11 +40,10 @@ The `name` parameter automatically derives:
 - **`prunePrefix`** = `"{name}-"`
 - **`externalId`** = `"{name}-{item.Id}"` for each item
 
-Each `ManifestItem` contains the item's ID and input. The input type is inferred from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and validated at configuration time. The output type is not constrained: scheduled trains can return any output type, and the output is discarded for background jobs.
 
-### Startup: Unnamed with ManifestItem
+### SchedulerConfigurationBuilder, unnamed
 
-```csharp
+```csharp fragment
 public SchedulerConfigurationBuilder ScheduleMany<TTrain>(
     IEnumerable<ManifestItem> items,
     Schedule schedule,
@@ -50,7 +56,7 @@ Each `ManifestItem.Id` is used as the full external ID (no name prefix applied).
 
 ### ManifestItem
 
-```csharp
+```csharp fragment
 public sealed record ManifestItem(
     string Id,
     IManifestProperties Input,
@@ -64,11 +70,9 @@ public sealed record ManifestItem(
 | `Input` | `IManifestProperties` | The train input for this item. Must match the expected input type of `TTrain`. |
 | `DependsOn` | `string?` | The external ID of the parent manifest this item depends on. Used by `IncludeMany` and `ThenIncludeMany`. See [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling). |
 
-### Startup: Explicit Type Parameters (Legacy)
+### SchedulerConfigurationBuilder, explicit type parameters
 
-The four-type-parameter forms are still available for backward compatibility:
-
-```csharp
+```csharp fragment
 // Name-based
 public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSource>(
     string name,
@@ -93,9 +97,9 @@ public SchedulerConfigurationBuilder ScheduleMany<TTrain, TInput, TOutput, TSour
     where TInput : IManifestProperties
 ```
 
-### Runtime (ITraxScheduler)
+### ITraxScheduler
 
-```csharp
+```csharp fragment
 Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource>(
     IEnumerable<TSource> sources,
     Func<TSource, (string ExternalId, TInput Input)> map,
@@ -108,15 +112,15 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
     where TInput : IManifestProperties
 ```
 
-## Type Parameters
+## Parameters
 
-### ManifestItem API (Recommended)
+### Type parameters of the ManifestItem forms
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
 | `TTrain` | `class` | The train interface type. Can implement `IServiceTrain<TInput, TOutput>` with any output type. The input type is inferred at configuration time. The output is discarded for background jobs. |
 
-### Legacy / Runtime API
+### Type parameters of the explicit and runtime forms
 
 | Type Parameter | Constraint | Description |
 |---------------|------------|-------------|
@@ -125,9 +129,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 | `TOutput` | _(none)_ | The output type of the train. Not constrained; any output type is accepted. The output is discarded when jobs complete. |
 | `TSource` | _(none)_ | The type of elements in the source collection. Can be any type and is transformed into `(ExternalId, Input)` pairs by the `map` function. |
 
-## Parameters
-
-### ManifestItem API (Recommended)
+### Parameters of the ManifestItem forms
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -136,7 +138,7 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 | `schedule` | `Schedule` | Yes | _(none)_ | The schedule definition applied to **all** manifests in the batch. Use [Every](/docs/sdk-reference/scheduler-api/scheduling-helpers) or [Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) helpers. |
 | `options` | `Action<ScheduleOptions>?` | No | `null` | Optional callback to configure all scheduling options. The name-based overload pre-sets `Group(name)` and `PrunePrefix("{name}-")` before invoking your callback. See [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions). |
 
-### Legacy API Parameters
+### Parameters of the explicit and runtime forms
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -153,122 +155,9 @@ Task<IReadOnlyList<Manifest>> ScheduleManyAsync<TTrain, TInput, TOutput, TSource
 - **Startup**: `SchedulerConfigurationBuilder`, for continued fluent chaining.
 - **Runtime**: `Task<IReadOnlyList<Manifest>>`, all created or updated manifest records.
 
-## Examples
+## Behavior
 
-### Basic Batch Scheduling with ManifestItem (Recommended)
-
-```csharp
-var tables = new[] { "customers", "orders", "products" };
-
-services.AddTrax(trax => trax
-    .AddScheduler(scheduler => scheduler
-        .ScheduleMany<ISyncTableTrain>(
-            "sync",
-            tables.Select(table => new ManifestItem(
-                table,
-                new SyncTableInput { TableName = table }
-            )),
-            Every.Minutes(5))
-    )
-);
-// Creates: sync-customers, sync-orders, sync-products
-// groupId: "sync", prunePrefix: "sync-"
-```
-
-Each `ManifestItem` contains the item's ID (used as the suffix in name-based overloads) and the train input. No `map` function needed because the data is already structured.
-
-### Unnamed Batch Scheduling
-
-```csharp
-var tables = new[] { "customers", "orders", "products" };
-
-scheduler.ScheduleMany<ISyncTableTrain>(
-    tables.Select(table => new ManifestItem(
-        $"sync-{table}",
-        new SyncTableInput { TableName = table }
-    )),
-    Every.Minutes(5));
-```
-
-### With Pruning (Automatic Stale Cleanup)
-
-The name-based overload includes pruning automatically (`prunePrefix: "{name}-"`):
-
-```csharp
-// If "partners" was in a previous deployment but removed from this list,
-// its manifest ("sync-partners") will be deleted because it starts with
-// "sync-" but wasn't included in the current batch.
-var tables = new[] { "customers", "orders" };
-
-scheduler.ScheduleMany<ISyncTableTrain>(
-    "sync",
-    tables.Select(table => new ManifestItem(
-        table,
-        new SyncTableInput { TableName = table }
-    )),
-    Every.Minutes(5));
-```
-
-### With Group Configuration
-
-```csharp
-scheduler.ScheduleMany<ISyncTableTrain>(
-    "sync",
-    tables.Select(table => new ManifestItem(
-        table,
-        new SyncTableInput { TableName = table }
-    )),
-    Every.Minutes(5),
-    options => options
-        .Priority(10)
-        .Group(group => group
-            .MaxActiveJobs(5)
-            .Priority(20)));
-```
-
-### Legacy API with Map Function
-
-The three-type-parameter form is still available and supports per-item configuration via `configureEach`:
-
-```csharp
-scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, Unit, string>(
-    tables,
-    table => ($"sync-{table}", new SyncTableInput { TableName = table }),
-    Every.Minutes(5),
-    options => options.Priority(10),
-    configureEach: (table, opts) =>
-    {
-        if (table == "orders")
-        {
-            opts.MaxRetries = 10;
-            opts.Priority = 25;
-        }
-    });
-```
-
-### Runtime Scheduling
-
-```csharp
-public class TenantSyncService(ITraxScheduler scheduler)
-{
-    public async Task SyncTenants(IEnumerable<Tenant> tenants)
-    {
-        var manifests = await scheduler.ScheduleManyAsync<ISyncTenantTrain, SyncTenantInput, Unit, Tenant>(
-            sources: tenants,
-            map: tenant => (
-                ExternalId: $"tenant-sync-{tenant.Id}",
-                Input: new SyncTenantInput { TenantId = tenant.Id, Name = tenant.Name }
-            ),
-            schedule: Every.Hours(1),
-            options => options
-                .PrunePrefix("tenant-sync-")
-                .Group("tenant-syncs"));
-    }
-}
-```
-
-## Remarks
-
+- The `ManifestItem` forms take `TInput` from `TTrain`'s `IServiceTrain<TInput, TOutput>` interface and check each item's input against it when the scheduler is built. The output is unconstrained and discarded. The forms with explicit type parameters remain for compatibility, and take a `map` function and a `configureEach` callback.
 - All manifests are created/updated in a **single database transaction**. If any manifest fails to save, the entire batch is rolled back.
 - Pruning runs in a **separate database context** after the main transaction commits. A prune failure does not roll back the upserted manifests. The failure is logged as a warning and retried on the next cycle.
 - The name-based overload prunes only manifests in its own group, so a batch named `sync` leaves a batch named `sync-users` alone. With an explicit `PrunePrefix`, `AddScheduler` fails at startup when one batch's prefix starts another's, unless the shorter one is a name-based batch in a different group. It also fails when a single `Schedule` falls inside a batch's prune: its external ID starts with the prefix and, for a name-based batch, it is in the batch's group. The prune matches by prefix and group only; it does not check which application owns a manifest. A manifest with a pending or running run is never pruned.
@@ -276,3 +165,75 @@ public class TenantSyncService(ITraxScheduler scheduler)
 - The source collection is materialized (`.ToList()`) internally to avoid multiple enumeration.
 - The group is configured via `.Group(...)` on `ScheduleOptions`. Per-group settings (MaxActiveJobs, Priority, IsEnabled) can be set from code or adjusted at runtime from the dashboard. See [Per-Group Dispatch Controls](/docs/scheduler/scheduling-options#per-group-dispatch-controls).
 - `ScheduleMany` cannot be followed by `.ThenInclude()`. Use [IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) (with `dependsOn`) instead for batch dependent scheduling.
+
+## Examples
+
+```csharp compile
+var tables = new[] { "customers", "orders", "products" };
+
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(assembly)
+    .AddScheduler(scheduler => scheduler
+        .ScheduleMany<ISyncTableTrain>(
+            "sync",
+            tables.Select(table => new ManifestItem(table, new SyncTableInput { TableName = table })),
+            Every.Minutes(5),
+            options => options
+                .Priority(10)
+                .Group(group => group.MaxActiveJobs(5).Priority(20)))));
+```
+
+This declares `sync-customers`, `sync-orders` and `sync-products` in the group `sync`.
+
+### With pruning (automatic stale cleanup)
+
+The named form prunes with the prefix `"{name}-"`. Deployed with `partners` removed from the list,
+the batch above deletes `sync-partners`, which starts with `sync-` and is in the `sync` group but is
+no longer declared.
+
+With explicit type parameters and per-item options:
+
+```csharp compile
+var tables = new[] { "customers", "orders", "products" };
+
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(assembly)
+    .AddScheduler(scheduler => scheduler
+        .ScheduleMany<ISyncTableTrain, SyncTableInput, Unit, string>(
+            tables,
+            table => ($"sync-{table}", new SyncTableInput { TableName = table }),
+            Every.Minutes(5),
+            options => options.Priority(10).PrunePrefix("sync-"),
+            configureEach: (table, opts) =>
+            {
+                if (table == "orders")
+                {
+                    opts.MaxRetries = 10;
+                    opts.Priority = 25;
+                }
+            })));
+```
+
+At runtime:
+
+```csharp compile
+public class TenantSyncService(ITraxScheduler scheduler)
+{
+    public Task<IReadOnlyList<Manifest>> SyncTenants(IEnumerable<Tenant> tenants) =>
+        scheduler.ScheduleManyAsync<ISyncTenantTrain, SyncTenantInput, Unit, Tenant>(
+            sources: tenants,
+            map: tenant => (
+                ExternalId: $"tenant-sync-{tenant.Id}",
+                Input: new SyncTenantInput { TenantId = tenant.Id, Name = tenant.Name }),
+            schedule: Every.Hours(1),
+            options => options.PrunePrefix("tenant-sync-").Group("tenant-syncs"));
+}
+```
+
+## See also
+
+- [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule), one manifest, and [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions)
+- [Dependent scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling), `IncludeMany` and `ThenIncludeMany`
+- [Orphan manifest cleanup](/docs/scheduler/orphan-manifest-cleanup)
