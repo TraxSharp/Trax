@@ -287,6 +287,8 @@ public class RequeueAllDeadLettersJobTests
 
         second.GetProperty("id").GetString().Should().Be(first.GetProperty("id").GetString());
         second.GetProperty("started").GetBoolean().Should().BeFalse();
+        // The fold runs in the background, so the scheduler is called after the start returns.
+        await _foldStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await _scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(

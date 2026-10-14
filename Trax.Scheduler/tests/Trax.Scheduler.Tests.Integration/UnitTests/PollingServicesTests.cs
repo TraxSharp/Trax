@@ -57,13 +57,35 @@ public class PollingServicesTests
         return sp;
     }
 
-    private static async Task RunBriefly(BackgroundService service)
+    // StartAsync hands ExecuteAsync to the thread pool, so its first cycle may not have run
+    // when StartAsync returns; a fixed delay is a race. Wait for the train to be called.
+    private static async Task RunUntilTrainInvoked(
+        BackgroundService service,
+        TaskCompletionSource trainHit
+    )
     {
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
-        await Task.Delay(50);
+        await trainHit.Task.WaitAsync(TimeSpan.FromSeconds(10));
         cts.Cancel();
         await service.StopAsync(CancellationToken.None);
+    }
+
+    private static TaskCompletionSource Hit() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static async Task<bool> WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+                return true;
+            // allowed-delay: poll interval while awaiting the completion signal, bounded by the
+            // timeout above. Not a fixed wait for the work to finish.
+            await Task.Delay(25);
+        }
+        return predicate();
     }
 
     #region ManifestManagerPollingService
@@ -71,7 +93,11 @@ public class PollingServicesTests
     [Test]
     public async Task ManifestManagerPollingService_RunsImmediateCycle_OnStart()
     {
+        var hit = Hit();
         var train = Substitute.For<IManifestManagerTrain>();
+        train
+            .When(t => t.Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>()))
+            .Do(_ => hit.TrySetResult());
         var sp = Provide(train);
 
         var service = new ManifestManagerPollingService(
@@ -80,7 +106,7 @@ public class PollingServicesTests
             NullLogger<ManifestManagerPollingService>.Instance
         );
 
-        await RunBriefly(service);
+        await RunUntilTrainInvoked(service, hit);
 
         await train.Received().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
     }
@@ -88,10 +114,15 @@ public class PollingServicesTests
     [Test]
     public async Task ManifestManagerPollingService_TrainThrows_LoopContinues()
     {
+        var hit = Hit();
         var train = Substitute.For<IManifestManagerTrain>();
         train
             .When(t => t.Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>()))
-            .Throw(new InvalidOperationException("fail"));
+            .Do(_ =>
+            {
+                hit.TrySetResult();
+                throw new InvalidOperationException("fail");
+            });
         var sp = Provide(train);
 
         var service = new ManifestManagerPollingService(
@@ -101,7 +132,7 @@ public class PollingServicesTests
         );
 
         // Should not throw — the polling loop catches and logs.
-        await RunBriefly(service);
+        await RunUntilTrainInvoked(service, hit);
     }
 
     #endregion
@@ -111,7 +142,11 @@ public class PollingServicesTests
     [Test]
     public async Task JobDispatcherPollingService_Enabled_RunsTrainOnEachCycle()
     {
+        var hit = Hit();
         var train = Substitute.For<IJobDispatcherTrain>();
+        train
+            .When(t => t.Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>()))
+            .Do(_ => hit.TrySetResult());
         var sp = Provide(train);
 
         var service = new JobDispatcherPollingService(
@@ -122,7 +157,7 @@ public class PollingServicesTests
             NullLogger<JobDispatcherPollingService>.Instance
         );
 
-        await RunBriefly(service);
+        await RunUntilTrainInvoked(service, hit);
 
         await train.Received().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
     }
@@ -134,16 +169,30 @@ public class PollingServicesTests
         var sp = Provide(train);
         var config = FastConfig();
         config.JobDispatcherEnabled = false;
+        var liveness = new SchedulerLivenessMonitor(TimeProvider.System);
 
         var service = new JobDispatcherPollingService(
             sp,
             config,
-            new SchedulerLivenessMonitor(TimeProvider.System),
+            liveness,
             new DispatcherWake(),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 
-        await RunBriefly(service);
+        // A disabled dispatcher still records its cycle, so waiting for that record proves the
+        // loop ran and skipped the train, rather than never having run at all.
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        await WaitUntilAsync(
+            () => liveness.LastDispatchCompletedAt is not null,
+            TimeSpan.FromSeconds(10)
+        );
+        cts.Cancel();
+        await service.StopAsync(CancellationToken.None);
+
+        liveness
+            .LastDispatchCompletedAt.Should()
+            .NotBeNull("the disabled loop still runs its cycle");
 
         await train.DidNotReceive().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
     }
@@ -155,7 +204,11 @@ public class PollingServicesTests
     [Test]
     public async Task MetadataCleanupPollingService_RunsImmediateCycle()
     {
+        var hit = Hit();
         var train = Substitute.For<IMetadataCleanupTrain>();
+        train
+            .When(t => t.Run(Arg.Any<MetadataCleanupRequest>(), Arg.Any<CancellationToken>()))
+            .Do(_ => hit.TrySetResult());
         var sp = Provide(train);
 
         var service = new MetadataCleanupPollingService(
@@ -164,7 +217,7 @@ public class PollingServicesTests
             NullLogger<MetadataCleanupPollingService>.Instance
         );
 
-        await RunBriefly(service);
+        await RunUntilTrainInvoked(service, hit);
 
         await train.Received().Run(Arg.Any<MetadataCleanupRequest>(), Arg.Any<CancellationToken>());
     }
@@ -172,10 +225,15 @@ public class PollingServicesTests
     [Test]
     public async Task MetadataCleanupPollingService_TrainThrows_LoopContinues()
     {
+        var hit = Hit();
         var train = Substitute.For<IMetadataCleanupTrain>();
         train
             .When(t => t.Run(Arg.Any<MetadataCleanupRequest>(), Arg.Any<CancellationToken>()))
-            .Throw(new Exception("oops"));
+            .Do(_ =>
+            {
+                hit.TrySetResult();
+                throw new Exception("oops");
+            });
         var sp = Provide(train);
 
         var service = new MetadataCleanupPollingService(
@@ -184,7 +242,7 @@ public class PollingServicesTests
             NullLogger<MetadataCleanupPollingService>.Instance
         );
 
-        await RunBriefly(service);
+        await RunUntilTrainInvoked(service, hit);
     }
 
     #endregion
@@ -194,7 +252,8 @@ public class PollingServicesTests
     [Test]
     public async Task DeadLetterCleanupPollingService_RunsImmediateCycle()
     {
-        var train = new FakeDeadLetterCleanupTrain();
+        var hit = Hit();
+        var train = new FakeDeadLetterCleanupTrain(() => hit.TrySetResult());
         var sp = Provide<IDeadLetterCleanupTrain>(train);
 
         var service = new DeadLetterCleanupPollingService(
@@ -203,7 +262,7 @@ public class PollingServicesTests
             NullLogger<DeadLetterCleanupPollingService>.Instance
         );
 
-        await RunBriefly(service);
+        await RunUntilTrainInvoked(service, hit);
 
         train.Runs.Should().BeGreaterThan(0);
     }
