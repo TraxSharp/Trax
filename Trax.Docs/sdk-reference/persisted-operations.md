@@ -1,6 +1,6 @@
 ---
 title: Persisted Operations
-description: "Index of the Trax.Api.GraphQL.PersistedOperations reference: registration, enforcement, the builder, the store, the service and management fields."
+description: "Index of the Trax.Api.GraphQL.PersistedOperations reference: registration, the builders, the store, the service, caching, broadcasting and the management fields."
 type: landing
 area: api
 parent: SDK Reference
@@ -10,17 +10,28 @@ nav_order: 11
 
 # Persisted Operations
 
-Reference for `Trax.Api.GraphQL.PersistedOperations`. See the [Persisted Operations concept page](/docs/persisted-operations) for what the feature does and when to enable it.
+Reference for `Trax.Api.GraphQL.PersistedOperations`. For what the feature does and how to roll it
+out, see [Persisted Operations](/docs/persisted-operations).
 
-Pages:
+## Registration
 
-- [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
-- [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement)
-- [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
-- [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service)
-- [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store)
-- [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator)
-- [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions)
-- [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations)
-- [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation)
-- [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)
+- [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations): wires storage, enforcement, caching and invalidation on a GraphQL host.
+- [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder): the options `UsePersistedOperations` takes.
+- [PersistedOperationsOptions](/docs/sdk-reference/persisted-operations/persisted-operations-options): the resolved options.
+- [AddPersistedOperationStore](/docs/sdk-reference/persisted-operations/add-persisted-operation-store): registers the store on a host with no GraphQL server.
+- [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement): kept for compatibility; where enforcement runs.
+
+## Storage and services
+
+- [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service): the management surface the GraphQL fields and the dashboard share.
+- [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store): programmatic reads and writes.
+- [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator): validates a document before it is stored.
+- [IPersistedOperationCache](/docs/sdk-reference/persisted-operations/i-persisted-operation-cache): the optional lookup cache.
+- [IPersistedOperationBroadcaster](/docs/sdk-reference/persisted-operations/i-persisted-operation-broadcaster): tells other nodes about a change.
+- [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation): the stored row and its history.
+- [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer): the response-shape hash.
+- [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions): the structured failures and their codes.
+
+## GraphQL
+
+- [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations): the `operations.persistedOperations` fields.

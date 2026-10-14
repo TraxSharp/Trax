@@ -158,13 +158,6 @@ sdk-reference/mediator-api/mediator-configuration.md
 sdk-reference/mediator-api/train-bus.md
 sdk-reference/mediator-api/train-discovery.md
 sdk-reference/mediator-api/train-execution.md
-sdk-reference/persisted-operations/i-persisted-operation-store.md
-sdk-reference/persisted-operations/i-persisted-operation-validator.md
-sdk-reference/persisted-operations/i-persisted-operations-service.md
-sdk-reference/persisted-operations/persisted-operations-builder.md
-sdk-reference/persisted-operations/shape-fingerprint-computer.md
-sdk-reference/persisted-operations/use-persisted-operations-enforcement.md
-sdk-reference/persisted-operations/use-persisted-operations.md
 sdk-reference/scheduler-api/add-metadata-cleanup.md
 sdk-reference/scheduler-api/add-scheduler.md
 sdk-reference/scheduler-api/add-trax-job-runner.md

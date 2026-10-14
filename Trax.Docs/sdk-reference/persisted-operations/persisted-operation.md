@@ -1,16 +1,23 @@
 ---
 title: PersistedOperation
-description: Reference for PersistedOperation and PersistedOperationHistory, the rows of the trax.persisted_operation tables, with their properties and schema.
+description: "Reference for PersistedOperation and PersistedOperationHistory, the rows of the trax.persisted_operation tables, with their properties and columns."
 type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 5
+nav_order: 10
+package: Trax.Effect
+namespace:
+  - Trax.Effect.Models.PersistedOperation
+  - Trax.Effect.Models.PersistedOperationHistory
+source:
+  - Trax.Effect/src/Trax.Effect/Models/PersistedOperation/PersistedOperation.cs
+  - Trax.Effect/src/Trax.Effect/Models/PersistedOperationHistory/PersistedOperationHistory.cs
 ---
 
 # PersistedOperation
 
-In-memory representation of a row in `trax.persisted_operation`. Returned by [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) reads.
+A row of `trax.persisted_operation`, returned by [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) reads. Both classes ship in `Trax.Effect`, as sets on its `DataContext`.
 
 ## Properties
 
@@ -28,12 +35,6 @@ In-memory representation of a row in `trax.persisted_operation`. Returned by [IP
 | `CreatedAt` | `DateTime` | `created_at` | UTC. |
 | `UpdatedAt` | `DateTime` | `updated_at` | UTC. |
 
-## Schema
-
-The table is created by Trax migration `035_persisted_operations.sql`, which also creates `trax.persisted_operation_history` for audit and rollback. Both tables live in the `trax` schema alongside the rest of the Trax tables (`metadata`, `manifest`, `log`, etc.), and both are sets on the Effect `DataContext` (`PersistedOperations`, `PersistedOperationHistories`). There is no separate persisted-operations `DbContext`.
-
-For history, prefer `IPersistedOperationsService.GetHistoryAsync`, the call behind the `persistedOperationHistory` management query.
-
 ## PersistedOperationHistory properties
 
 One row per change to a live row, in `trax.persisted_operation_history`.
@@ -48,3 +49,27 @@ One row per change to a live row, in `trax.persisted_operation_history`.
 | `ChangeType` | `string` | `change_type` | One of `Upsert`, `Deactivate`, `Restore`. |
 | `ChangedAt` | `DateTime` | `changed_at` | UTC. |
 | `ChangedReason` | `string?` | `changed_reason` | Required on deactivate. |
+
+## Behavior
+
+The table is created by Trax migration `035_persisted_operations.sql`, which also creates `trax.persisted_operation_history` for audit and rollback. Both tables live in the `trax` schema alongside the rest of the Trax tables (`metadata`, `manifest`, `log`, etc.), and both are sets on the Effect `DataContext` (`PersistedOperations`, `PersistedOperationHistories`). There is no separate persisted-operations `DbContext`.
+
+`IPersistedOperationsService.GetHistoryAsync` reads the history; it is the call behind the `persistedOperationHistory` management query.
+
+## Example
+
+```csharp compile
+using Trax.Effect.Models.PersistedOperation;
+
+static string Describe(PersistedOperation operation) =>
+    operation.IsActive
+        ? $"{operation.Id} ({operation.OperationName}) v{operation.Version}"
+        : $"{operation.Id} deactivated: {operation.DeprecationReason}";
+
+Console.WriteLine(Describe(new PersistedOperation { Id = "userProfile_v1", OperationName = "UserProfile" }));
+```
+
+## See also
+
+- [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store)
+- [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service)

@@ -1,56 +1,48 @@
 ---
 title: UsePersistedOperations
-description: Reference for UsePersistedOperations, which wires persisted-operation storage, caching, cross-node invalidation, the allowlist and shadow-mode logging.
+description: "Reference for UsePersistedOperations, which wires persisted-operation storage, enforcement, caching, cross-node invalidation and the management fields."
 type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 9
+nav_order: 1
+package: Trax.Api.GraphQL.PersistedOperations
+namespace: Trax.Api.GraphQL.PersistedOperations.Extensions
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Extensions/TraxGraphQLBuilderPersistedOperationsExtensions.cs
 ---
 
 # UsePersistedOperations
 
-Fluent extension on `TraxGraphQLBuilder` that wires the persisted-operation pipeline: storage, optional cache, optional cross-node invalidation, allowlist, introspection bypass, and shadow-mode logging.
+Extension on `TraxGraphQLBuilder`, declared on the static class `TraxGraphQLBuilderPersistedOperationsExtensions`, that wires the persisted-operation pipeline: storage, enforcement, the optional lookup cache, cross-node invalidation, the allowlist, the introspection bypass, shadow-mode logging and the management fields.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static TraxGraphQLBuilder UsePersistedOperations(
     this TraxGraphQLBuilder builder,
     Action<PersistedOperationsBuilder> configure
 );
 ```
 
-## Usage
+## Parameters
 
-One node:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `builder` | `TraxGraphQLBuilder` | The GraphQL builder passed to `AddTraxGraphQL` |
+| `configure` | `Action<PersistedOperationsBuilder>` | Sets the options; see [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) |
 
-```csharp
-services.AddTraxGraphQL(graphql => graphql
-    .UsePersistedOperations(opts => opts
-        .RequirePersisted(true)
-        .SingleNode()
-    )
-);
-```
+## Returns
 
-More than one node, with the optional Trax lookup cache:
+The same `TraxGraphQLBuilder`.
 
-```csharp
-services.AddTraxGraphQL(graphql => graphql
-    .UsePersistedOperations(opts => opts
-        .RequirePersisted(true)
-        .WithInMemoryCache()
-        .UseRabbitMqInvalidation(rabbitConnectionString)
-    )
-);
-```
+## Behavior
 
-One of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required; see [One node or many](/docs/persisted-operations#one-node-or-many).
+Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required; see
+[One node or many](/docs/persisted-operations#one-node-or-many). The options are checked when
+`UsePersistedOperations` runs (see [Validation](#validation)).
 
-See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) for every method.
-
-## What gets registered
+### Registered services
 
 | Service | Lifetime | Purpose |
 |---|---|---|
@@ -75,21 +67,23 @@ Because this exposes the `operations` namespace (including the persisted-operati
 
 ### Declining the namespace
 
-Persisted operations and a GraphQL-exposed scheduler console are separable. `ExposeOperationsNamespace(false)` wires storage, enforcement, the cache and cross-node invalidation without touching the schema, for a host that manages its operations out of band (a migration, a deploy step, a separate admin process):
+`ExposeOperationsNamespace(false)` wires storage, enforcement, the cache and cross-node invalidation without touching the schema:
 
-```csharp
-.UsePersistedOperations(po => po
-    .RequirePersisted(true)
-    .SingleNode()
-    .ExposeOperationsNamespace(false)
-)
+```csharp compile
+services.AddTraxGraphQL(graphql => graphql
+    .UsePersistedOperations(po => po
+        .RequirePersisted(true)
+        .SingleNode()
+        .ExposeOperationsNamespace(false)
+    )
+);
 ```
 
 With the namespace declined there is nothing to gate and nothing to acknowledge. The management mutations are not in the schema either: they are `[ExtendObjectType(typeof(OperationsMutations))]` classes, and their target type is not there to extend.
 
-## Validation
+### Validation
 
-Configuration errors throw `InvalidOperationException` at startup. Each message names the misconfigured method and suggests a fix:
+Configuration errors throw `InvalidOperationException` when `UsePersistedOperations` runs, during service registration. Each message names the misconfigured method and suggests a fix:
 
 | Misconfig | Behavior |
 |---|---|
@@ -100,3 +94,38 @@ Configuration errors throw `InvalidOperationException` at startup. Each message 
 | `WithInMemoryCache` TTL longer than `WithCacheMaxAge` | Throws: the TTL would not take effect. |
 | `WithCacheMaxAge` not positive | Throws `ArgumentOutOfRangeException` when called. |
 | `AllowOperations` contains an empty entry | Throws. |
+
+## Examples
+
+One node:
+
+```csharp compile
+services.AddTraxGraphQL(graphql => graphql
+    .AllowAnonymousOperations()
+    .UsePersistedOperations(opts => opts
+        .RequirePersisted(true)
+        .SingleNode()
+    )
+);
+```
+
+More than one node, with the optional Trax lookup cache:
+
+```csharp compile
+services.AddTraxGraphQL(graphql => graphql
+    .GateOperations(policy: "TraxAdmin")
+    .UsePersistedOperations(opts => opts
+        .RequirePersisted(true)
+        .WithInMemoryCache()
+        .UseRabbitMqInvalidation(rabbitMqConnectionString)
+    )
+);
+```
+
+## See also
+
+- [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
+- [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement), for the decision each request goes through
+- [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations)
+- [AddPersistedOperationStore](/docs/sdk-reference/persisted-operations/add-persisted-operation-store), for a host with no GraphQL server
+- [Persisted Operations](/docs/persisted-operations)

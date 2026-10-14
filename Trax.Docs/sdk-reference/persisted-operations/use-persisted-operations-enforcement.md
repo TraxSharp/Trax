@@ -1,11 +1,17 @@
 ---
 title: UsePersistedOperationsEnforcement
-description: Reference for UsePersistedOperationsEnforcement, kept only for compatibility, and where persisted-operation enforcement actually runs and in what order.
+description: "Reference for UsePersistedOperationsEnforcement, kept only for compatibility, and where persisted-operation enforcement actually runs and in what order."
 type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 10
+nav_order: 13
+package: Trax.Api.GraphQL.PersistedOperations
+namespace: Trax.Api.GraphQL.PersistedOperations.Extensions
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Extensions/TraxGraphQLBuilderPersistedOperationsExtensions.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Middleware/PersistedOperationEnforcementMiddleware.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Middleware/PersistedOperationPolicy.cs
 ---
 
 # UsePersistedOperationsEnforcement
@@ -14,20 +20,26 @@ Kept so existing hosts compile. It adds nothing to the ASP.NET pipeline: enforce
 
 ## Signature
 
-```csharp
+```csharp fragment
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static IApplicationBuilder UsePersistedOperationsEnforcement(
     this IApplicationBuilder app
 );
 ```
 
-Returns `app` unchanged. Throws `ArgumentNullException` when `app` is null.
+## Returns
 
-## Where enforcement runs
+`app`, unchanged.
+
+## Behavior
+
+Throws `ArgumentNullException` when `app` is null, and otherwise does nothing.
+
+### Where enforcement runs
 
 A request middleware placed right after HotChocolate's document parser and before validation. Every transport reaches the executor through that pipeline: a JSON POST, a GET, a multipart POST, a WebSocket `subscribe`, and a request built in-process.
 
-## Decision flow
+### Decision flow
 
 For each operation:
 
@@ -51,10 +63,19 @@ For each operation:
 
 Over a socket the same error arrives as an `error` message for that operation id. Each entry of a batched request is decided on its own.
 
-## Auth ordering
+### Auth ordering
 
 Enforcement runs inside HotChocolate's request pipeline, after the document is parsed. Authentication happens before it: Trax's HTTP request interceptor sets `HttpContext.User` when it builds the request, and the endpoint policy of a builder gated with `RequireAuthorization(...)` is evaluated in the same pipeline ahead of the document cache. An unauthenticated caller on such an endpoint is therefore refused before enforcement decides anything about its document.
 
-## SDK Reference
+## Example
 
-> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
+```csharp compile
+var app = builder.Build();
+app.UsePersistedOperationsEnforcement(); // no effect: enforcement comes with UsePersistedOperations
+```
+
+## See also
+
+- [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
+- [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
+- [Error Codes](/docs/sdk-reference/graphql-api/error-codes)

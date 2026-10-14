@@ -1,35 +1,30 @@
 ---
 title: IPersistedOperationStore
-description: Reference for IPersistedOperationStore, programmatic CRUD over the trax.persisted_operation table for CI uploaders, admin tooling and tests.
+description: "Reference for IPersistedOperationStore, programmatic reads and writes of persisted operations for CI uploaders, admin tooling and tests, and UpsertOptions."
 type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 2
+nav_order: 6
+package: Trax.Api.GraphQL.PersistedOperations
+namespace: Trax.Api.GraphQL.PersistedOperations.Storage
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/IPersistedOperationStore.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/UpsertOptions.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Storage/DbPersistedOperationStorage.cs
 ---
 
 # IPersistedOperationStore
 
-Programmatic CRUD for `trax.persisted_operation`. The HTTP request path does NOT use this interface; HotChocolate calls `IOperationDocumentStorage.TryReadAsync` instead. Use this interface from CI manifest uploaders, admin tooling, custom dashboards, and tests.
+Programmatic reads and writes of `trax.persisted_operation`. The request path does not use it: HotChocolate reads documents through `IOperationDocumentStorage.TryReadAsync`.
 
 Registered as a singleton when [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) is called. For the surface the GraphQL fields and the dashboard share, which returns refusals as payload errors instead of throwing, use [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service).
 
-A host without a GraphQL server registers it with `AddPersistedOperationStore(store => ...)`, and says how a change made through it reaches the GraphQL nodes, as `UsePersistedOperations` does. The store refuses to start with neither, or both:
+A host without a GraphQL server registers it with [AddPersistedOperationStore](/docs/sdk-reference/persisted-operations/add-persisted-operation-store). The store reads and writes through the Trax data context registered by `AddEffects(e => e.UsePostgres(...))`.
 
-| Method | Purpose |
-|---|---|
-| `UseRabbitMqInvalidation(string connectionString)` | Broadcast every change over the broker the GraphQL nodes use with their own `UseRabbitMqInvalidation`, so each empties its caches. |
-| `SingleNode()` | Declare that no other process caches these operations: this process serves them itself, or nothing serves them while it writes. Nothing checks the claim; a GraphQL node elsewhere sees the change only when its cached entry reaches its maximum age. |
+## Signature
 
-```csharp
-services.AddPersistedOperationStore(store => store.UseRabbitMqInvalidation(rabbitConnectionString));
-```
-
-The store reads and writes through the Trax data context registered by `AddEffects(e => e.UsePostgres(...))`. The older overloads that took a database connection string are obsolete: `AddPersistedOperationStore(databaseConnectionString)` is a compile error and refuses at startup, and `AddPersistedOperationStore(databaseConnectionString, rabbitConnectionString)` ignores the first string and forwards to the broker form.
-
-## Interface
-
-```csharp
+```csharp fragment
 public interface IPersistedOperationStore
 {
     Task<PersistedOperation?> GetAsync(string id, string? tenantKey, CancellationToken ct);
@@ -48,13 +43,15 @@ public interface IPersistedOperationStore
 }
 ```
 
-## UpsertOptions
+## Members
+
+`UpsertOptions` is a sealed record with init-only properties:
 
 | Property | Type | Purpose |
 |---|---|---|
 | `TenantKey` | `string?` | Tenant scope for multi-tenant deployments. Null targets the single-tenant row set. |
 | `Description` | `string?` | Operator-facing note recorded on the row. |
-| `BypassShapeDiff` | `bool` | When true, skips the shape-diff guardrail on an edit. Use only when the operator has verified the change is shape-safe. |
+| `BypassShapeDiff` | `bool` | When true, skips the shape-diff guardrail on an edit. |
 | `Version` | `int` | Operator-controlled metadata stored on the row. Not used for request routing. Defaults to `0`. |
 
 ## Behavior
@@ -70,11 +67,11 @@ public interface IPersistedOperationStore
 - All mutations append a row to `trax.persisted_operation_history`.
 - `UpsertAsync`, `DeactivateAsync` and `RestoreAsync` refuse an id starting with `trax_machine_` with `PersistedOperationInputException` (`INVALID_INPUT`): those ids are the [machine documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) the host registers itself.
 
-## Example
+## Examples
 
 Manifest uploader:
 
-```csharp
+```csharp compile
 var store = serviceProvider.GetRequiredService<IPersistedOperationStore>();
 
 foreach (var (id, document) in manifest)
@@ -85,7 +82,9 @@ foreach (var (id, document) in manifest)
 
 Soft-delete with reason:
 
-```csharp
+```csharp compile
+var store = serviceProvider.GetRequiredService<IPersistedOperationStore>();
+
 await store.DeactivateAsync(
     "userProfile_v1",
     tenantKey: null,
@@ -93,3 +92,10 @@ await store.DeactivateAsync(
     ct
 );
 ```
+
+## See also
+
+- [AddPersistedOperationStore](/docs/sdk-reference/persisted-operations/add-persisted-operation-store)
+- [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service), which returns refusals as payload errors
+- [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation)
+- [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions)
