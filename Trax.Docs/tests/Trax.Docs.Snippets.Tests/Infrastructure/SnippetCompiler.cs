@@ -42,7 +42,8 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
 /// <para>
 /// A file holding top-level statements makes the unit an executable, as <c>Program.cs</c> does;
 /// otherwise it is a library. Warnings fail the snippet as errors do, because a reader who copies
-/// it into a project built with warnings as errors gets the same failure.
+/// it into a project built with warnings as errors gets the same failure. CS1701 and CS1702 are
+/// the exception: MSBuild suppresses them in every C# project, so they are suppressed here too.
 /// </para>
 /// <para>
 /// Context files in this project join a page's compilations, and the reader never sees them.
@@ -93,6 +94,19 @@ public static class SnippetCompiler
         "Microsoft.VisualStudio.CodeCoverage",
         "testhost",
     ];
+
+    /// <summary>
+    /// The warnings every C# project built by MSBuild suppresses by default (<c>NoWarn</c> is
+    /// <c>1701;1702</c> in <c>Microsoft.CSharp.Core.targets</c>): an assembly referencing an older
+    /// version of an assembly than the one referenced here. A reader's project unifies the versions
+    /// and never sees them, so a snippet should not either.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, ReportDiagnostic> MSBuildNoWarn =
+        new Dictionary<string, ReportDiagnostic>
+        {
+            ["CS1701"] = ReportDiagnostic.Suppress,
+            ["CS1702"] = ReportDiagnostic.Suppress,
+        };
 
     private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
 
@@ -198,7 +212,8 @@ public static class SnippetCompiler
             References.Value,
             new CSharpCompilationOptions(
                 executable ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary,
-                nullableContextOptions: NullableContextOptions.Enable
+                nullableContextOptions: NullableContextOptions.Enable,
+                specificDiagnosticOptions: MSBuildNoWarn
             )
         );
 
