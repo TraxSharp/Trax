@@ -1,73 +1,33 @@
 ---
-title: API
-description: "Trax.Api and Trax.Api.GraphQL: the GraphQL layer for running and queueing trains, its two execution modes, packages, health check, auth and named schema."
+title: The GraphQL API
+description: "What Trax.Api.GraphQL is: a GraphQL layer over train execution and the shared database, its queue and run modes, its named schema, and where security fits."
 type: explanation
 area: api
 nav_order: 1
 ---
 
-# API
+# The GraphQL API
 
-> **Security.** Trax ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audit (`Trax.Api.GraphQL.Audit`) packages alongside this library. NO WARRANTY. See [API Security](/docs/api-security) before deploying to production.
+> **Security.** Trax ships authentication (`Trax.Api.Auth.*`) and audit (`Trax.Api.GraphQL.Audit`) packages alongside this library. NO WARRANTY. See [Secure a GraphQL host](/docs/api-security) before deploying to production.
 
-Trax.Api adds a programmatic interface to the scheduling and train execution system. It ships as two NuGet packages: a core library and a GraphQL transport powered by HotChocolate.
+`Trax.Api.GraphQL` puts a GraphQL endpoint in front of the trains a host registers. A train opts in
+with [`[TraxQuery]` or `[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
+and gets a typed field; an EF Core entity opts in with
+[`[TraxQueryModel]`](/docs/sdk-reference/graphql-api/query-models) and gets a paginated, filterable,
+sortable query. Subscriptions stream a train's runs to its callers. It is built on HotChocolate,
+which a consumer's train and entity code never has to name.
 
-The API is designed to run on a **separate machine** from the scheduler. The two share a database: the API writes work queue entries and manifest updates, the scheduler polls them and dispatches trains. This means the API server doesn't run polling services or background workers. It's a thin HTTP layer over the shared state.
+It ships as two packages. `Trax.Api` holds the DTOs, the train authorization enforcer and the
+health check; `Trax.Api.GraphQL` holds the schema and depends on it, so a host references only
+`Trax.Api.GraphQL`. To stand one up, [Getting Started](/docs/getting-started#6-call-it-over-graphql)
+adds it to a working server, and [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+lists what it registers and every builder option.
 
-## Two Execution Modes
+## A thin layer over shared state
 
-| Mode | How It Works | When to Use |
-|------|-------------|-------------|
-| **Queue** (delegated) | Creates a `WorkQueue` entry in the database. The scheduler picks it up on its next poll cycle and dispatches it on the scheduler machine. | Heavy trains, recurring work, anything that should run on dedicated scheduler infrastructure. |
-| **Run** (direct) | Calls `ITrainBus.RunAsync` on the API machine (default) or offloads to a remote endpoint via [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run). Either way, the call blocks until completion and returns the train output. | Lightweight on-demand trains where you need the result immediately. When using `UseRemoteRun()`, the API machine doesn't need to run the train code locally. |
-
-Trains opt into the GraphQL schema with the [`[TraxQuery]` or `[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) attributes. Only annotated trains get typed fields generated. EF Core entities can also be exposed directly as paginated, filterable, sortable queries using [`[TraxQueryModel]`](/docs/sdk-reference/graphql-api/query-models).
-
-## Quick Setup
-
-```bash
-dotnet add package Trax.Api.GraphQL
-```
-
-```csharp
-using Trax.Api.Extensions;
-using Trax.Api.GraphQL.Extensions;
-using Trax.Effect.Data.Postgres.Extensions;
-using Trax.Effect.Extensions;
-using Trax.Effect.Provider.Json.Extensions;
-using Trax.Mediator.Extensions;
-
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-        .AddJson()
-    )
-    .AddMediator(typeof(Program).Assembly)
-);
-
-builder.Services.AddTraxGraphQL(); // or: AddTraxGraphQL(g => g.AddDbContext<MyDbContext>())
-builder.Services.AddHealthChecks().AddTraxHealthCheck();
-
-var app = builder.Build();
-
-app.UseTraxGraphQL();  // maps at /trax/graphql; the Nitro IDE opens there in a browser, in Development
-app.MapHealthChecks("/trax/health");
-
-app.Run();
-```
-
-## Packages
-
-| Package | Description |
-|---------|-------------|
-| `Trax.Api` | Core library: DTOs, health check, shared service registration |
-| `Trax.Api.GraphQL` | HotChocolate schema (queries, mutations, subscriptions) |
-
-`Trax.Api.GraphQL` depends on `Trax.Api`, so you don't need to reference it directly.
-
-## Architecture
+The API is designed to run on a different machine from the scheduler. The two share a database:
+the API writes work queue entries and manifest changes, and the scheduler polls them and
+dispatches trains. The API host runs no polling services or background workers of its own.
 
 ```
 ┌─────────────────────────────┐    ┌─────────────────────────────┐
@@ -93,101 +53,74 @@ app.Run();
                └──────────────────────┘
 ```
 
-The API server doesn't need `AddScheduler()`. It needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The exception is a host that exposes the operations surface (`ExposeOperationQueries()`, `ExposeOperationMutations()`, or persisted operations with the operations namespace on): it needs `IOperationsService`, and with the mutations also `ITraxScheduler` and an `IJobSubmitter`. `AddScheduler()` registers all three, and the host refuses to start without them. The scheduler configuration (`AddScheduler`) runs on the scheduler machine only. A host that also serves the [dashboard](/docs/dashboard) is the exception: the dashboard works through the Scheduler's `IOperationsService`, and `UseTraxDashboard()` refuses to start without `AddScheduler()`.
+So an API host needs the mediator (to discover trains and run them) and a data provider, and not
+`AddScheduler()`. Two things change that. A host that exposes the `operations` namespace needs the
+services `AddScheduler()` registers (`IOperationsService`, and for the mutations `ITraxScheduler`
+and a job submitter), and refuses to start without them. A host that also serves the
+[dashboard](/docs/dashboard) needs them for the same reason. A host may also call `AddScheduler()`
+just to seed manifests at startup.
 
-However, if you want the API to also schedule manifests at startup (like the scheduler does), you can add `AddScheduler()` on the API machine as well. The polling services can be disabled with configuration if you only want startup seeding.
+## Queue or run
 
-## Health Check
+A train mutation either hands the work to the scheduler or does it now:
 
-The API includes an ASP.NET Core `IHealthCheck` that queries the database and reports:
-
-- **Queue depth** - work items waiting for dispatch
-- **In-progress** - currently executing trains
-- **Failed (last hour)** - recent failures
-- **Dead letters** - unresolved dead letter entries
-
-In-progress and failed counts are batched into a single database query (via `GroupBy`) to minimize round-trips on each health check poll.
-
-Returns `Healthy` when everything looks normal, `Degraded` when dead letters exist or recent failures exceed a threshold. The same data is available as a [GraphQL query](/docs/sdk-reference/graphql-api/queries#health) for consumers that prefer structured access over the standard health endpoint.
-
-```csharp
-builder.Services.AddHealthChecks().AddTraxHealthCheck();
-app.MapHealthChecks("/trax/health");
-```
-
-## Authentication & Middleware
-
-Trax ships its own authentication packages: [`AddTraxApiKeyAuth`](/docs/sdk-reference/api-auth/add-trax-api-key-auth), [`AddTraxJwtAuth`](/docs/sdk-reference/api-auth/add-trax-jwt-auth) and [`AddTraxOidcAuth`](/docs/sdk-reference/api-auth/add-trax-oidc-auth). Each registers an ASP.NET Core authentication scheme into the combined Trax policy, and gate the endpoint as a whole on the GraphQL builder:
-
-```csharp
-builder.Services.AddTraxApiKeyAuth<MyApiKeyResolver>();
-builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
-```
-
-Use one of them rather than plain ASP.NET Core authentication. Browsers cannot put a header on a WebSocket upgrade, so an API-key or JWT subscription client sends its credential in the `connection_init` payload, and only the Trax schemes read it there. With no Trax token scheme registered, `connection_init` is accepted as it arrives. Cookie authentication (OIDC) is the exception: the browser sends the cookie on the upgrade. See [API Security](/docs/api-security#subscription-authentication).
-
-Gate the endpoint with the builder's `RequireAuthorization()`, not with an endpoint convention on the mapped route. The builder's gate covers HTTP and the socket, and it is the gate the startup [exposure checks](/docs/authorization#required-exposure-posture) honour. `UseTraxGraphQL` still accepts a `configure` callback for other endpoint conventions, such as rate limiting or CORS:
-
-```csharp
-app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireRateLimiting("api"));
-```
-
-The callback receives an `IEndpointConventionBuilder` and supports `.RequireRateLimiting()`, `.RequireCors()`, `.AddEndpointFilter<T>()`, and any other endpoint convention.
-
-### Per-Train Authorization
-
-Endpoint-level auth answers "can this user access the API?" For finer control, decorate individual train classes with `[TraxAuthorize]`:
-
-```csharp
-[TraxAuthorize("Admin")]
-[TraxMutation]
-public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
-```
-
-When the API receives a request to run or queue this train, it checks the current user against the policy before executing. A GraphQL-exposed train (`[TraxQuery]`/`[TraxMutation]`) must declare either `[TraxAuthorize]` or `[TraxAllowAnonymous]`, or the host fails at startup; `[TraxAllowAnonymous]` runs with no per-train restriction. See the [Authorization](/docs/authorization) guide for details.
-
-### Which call secures what
-
-Each surface is gated where it is declared. For the usual shape (a queued mutation behind a role, a
-query model any signed-in caller reads, an operator-only operations namespace), these are the pieces:
-
-| Concern | Where | What to write |
+| Mode | What happens | Suits |
 |---|---|---|
-| Who can authenticate at all | `Program.cs` | `AddTraxApiKeyAuth(...)`, `AddTraxJwtAuth(...)` or `AddTraxOidcAuth(...)`, then `UseAuthentication()` and `UseAuthorization()` before `UseTraxGraphQL()` |
-| Every request must be signed in | GraphQL builder | `RequireAuthorization()` (optional; without it each surface declares its own posture) |
-| A train callable as a mutation by one role | The train class | `[TraxMutation]` (with `GraphQLOperation.Queue` for queue-only) plus `[TraxAuthorize(Roles = "Billing")]` |
-| A train callable by any signed-in caller, or by anyone | The train class | `[TraxAuthorize]`, or `[TraxAllowAnonymous]` |
-| A table any signed-in caller can read | The entity class | `[TraxQueryModel]` plus `[TraxAuthorize]`, and `AddDbContext<T>()` on the GraphQL builder |
-| Rows a caller may see | The domain context | A query filter that reads the caller. See [Owner-scoped contexts](/docs/effect/effect-providers/domain-data-contexts#owner-scoped-contexts) |
-| Callers watching a train's runs | The train class | `[TraxBroadcast]`; its `[TraxAuthorize]`/`[TraxAllowAnonymous]` decides who receives the events, on every host. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#who-receives-what) |
-| The operations namespace (executions, manifests, dead letters) | GraphQL builder | `ExposeOperationQueries()`, `ExposeOperationMutations()`, `GateOperations(roles: "Operator")`, and `AddScheduler(...)` on the same host |
-| The dashboard | `Program.cs` | Its own gate; `AllowAnonymousDashboard()` only inside `IsDevelopment()`. See [Dashboard](/docs/dashboard) |
+| Queue | A work queue entry is written. The scheduler picks it up on its next poll and runs the train on its own machine. The mutation returns at once. | Heavy work, work that should run on scheduler infrastructure, work that can wait |
+| Run | `ITrainBus.RunAsync` runs the train on the API machine, or on a remote endpoint with [`UseRemoteRun()`](/docs/sdk-reference/scheduler-api/use-remote-run). The mutation returns the train's output. | Light work whose caller needs the result now |
 
-A role named in `[TraxAuthorize(Roles = ...)]` or `GateOperations(roles: ...)` needs no registration; a
-policy name does (`AddAuthorization(o => o.AddPolicy(...))`). A refusal is a GraphQL error with code
-`TRAX_AUTHORIZATION` and the message `"Not authorized."`. [API Security](/docs/api-security#a-secured-host-end-to-end)
-puts the pieces together in one `Program.cs`.
+A train exposes one or both (`GraphQLOperation.Queue`, `GraphQLOperation.Run`). With `UseRemoteRun()`
+the API machine needs only the train's contract, not its code. On a host whose store is in memory
+nothing dispatches the work queue, so a queue is refused there.
 
-## Named GraphQL Schema
+## Security is declared per surface
 
-The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather than the default unnamed schema. This means it won't conflict with your own `AddGraphQLServer()` calls, and both can coexist in the same application at different paths.
+The endpoint is closed by default in the sense that matters: every exposed train and query model
+says whether it is gated or public, and a host where one does not is refused at startup. The
+`operations` namespace, which reads execution inputs and drives the scheduler, is off unless a host
+exposes it, and exposing it requires a gate. Authentication is pluggable (API keys, JWTs, OIDC),
+and every scheme feeds the same principal.
 
-## Sample Projects
+- [Secure a GraphQL host](/docs/api-security) puts the pieces together in one `Program.cs`.
+- [Authorization rules](/docs/authorization) lists what gates each surface.
+- [Startup refusals](/docs/security/startup-refusals) lists what stops a host.
 
-Every sample serves the API; these show it in different deployment topologies (see [Samples & Deployment](/docs/samples) for all of them):
+## A named schema
 
-- **Scheduling** - API, scheduler, local workers and dashboard in one process, with the operations surface gated to an operator role. See [Scheduling](/docs/samples/scheduling).
-- **Auth** - the API secured end to end: API keys and JWT, `[TraxAuthorize]`, `GateOperations`, the audit trail. See [Auth](/docs/samples/auth).
-- **DistributedWorkers (EnergyHub)** - API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but runs no queued job: `OverrideSubmitter` leaves them in `background_job` for separate worker processes. See [Energy Hub](/docs/samples/energy-hub).
-- **EphemeralWorkers (ContentShield)** - API with `UseRemoteWorkers()` and `UseRemoteRun()` sends queued mutations, run mutations and queries to an ephemeral Runner via signed HTTP requests. No scheduled jobs, no `background_job` table, purely on-demand, serverless-style execution. See [Content Shield](/docs/samples/content-shield).
+The Trax schema is registered on a named HotChocolate schema, `"trax"`, rather than the default
+one. A host can call `AddGraphQLServer()` for a schema of its own and serve both at different
+paths. The hardening defaults, the authorization checks and the socket origin check belong to the
+`trax` schema and do not touch the other one.
 
-All follow the [trains library pattern](/docs/samples). Trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
+## Health
+
+[AddTraxHealthCheck](/docs/sdk-reference/graphql-api/add-trax-health-check) adds an ASP.NET Core
+health check over the same database, reporting queue depth, in-progress and recently failed runs
+and dead letters. The `operations.health` query returns the same data over GraphQL.
+
+## Samples
+
+Every sample serves the API; these show it in different topologies (see
+[Samples](/docs/samples) for all of them):
+
+- [Scheduling](/docs/samples/scheduling): API, scheduler, local workers and dashboard in one
+  process, with the operations surface gated to an operator role.
+- [Auth](/docs/samples/auth): the API secured end to end, with API keys and JWTs,
+  `[TraxAuthorize]`, `GateOperations` and the audit trail.
+- [Energy Hub](/docs/samples/energy-hub): API, scheduler and dashboard in one hub process that runs
+  no queued job itself; separate worker processes do.
+- [Content Shield](/docs/samples/content-shield): `UseRemoteWorkers()` and `UseRemoteRun()` send
+  queued work, runs and queries to an ephemeral runner over signed HTTP requests.
+
+The samples keep trains in a shared library and make each executable a thin wrapper that picks
+which capabilities to enable.
+
+## See also
+
+- [Call another GraphQL server](/docs/api-graphql-client), for the other direction.
+- [Persisted operations](/docs/persisted-operations), to serve only documents the host knows.
+- [Add the dashboard to a host](/docs/dashboard), for a monitoring UI over the same data.
 
 ## SDK Reference
 
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
-
-## Next Layer
-
-When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, add [Trax.Dashboard](/docs/dashboard).
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models) | [AddTraxHealthCheck](/docs/sdk-reference/graphql-api/add-trax-health-check) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run)
