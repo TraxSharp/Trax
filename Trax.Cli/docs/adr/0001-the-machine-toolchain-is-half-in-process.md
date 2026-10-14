@@ -45,6 +45,14 @@ rather than anything memoised, so it happens once per node step rather than once
 `generate --twin-out X --corpus-out Y` spawns it twice. Without node the IR export still
 works and the twin does not.
 
+**The engine's generators ship inside the tool.** Shelling to the engine's entrypoints once
+meant a Trax checkout and its `node_modules` beside the tool. Packing Trax.Cli now bundles
+`generate-twin.mjs` and `generate-corpus.mjs`, with the engine compiled in, to plain
+JavaScript under `engine/` in the package, so an installed tool needs node and nothing else.
+They are still the engine's own generators, built from the same commit, so there is still one
+generator. `--engine-src` points the tool at a checkout's `tools/` instead, for work on the
+engine itself.
+
 **The consumer's own dependencies resolve from their assembly's directory**, since the CLI
 loads code it did not build. The `Trax.Effect.*` assemblies in the CLI's own closure are
 outside that, because they are already loaded, which is exactly what keeps type identity
@@ -76,6 +84,8 @@ its own comment.
 
 ## Changelog
 
+- **2026-10-13**: The generators are bundled into the package at pack time; `--engine-src`
+  became an override.
 - **2026-09-11**: Corrected two consequences. The node availability check runs once per node
   step, not once per command, and the default load context binds a machine to the CLI's own
   engine copy, so an older-engine machine unifies rather than vanishing as "no machines

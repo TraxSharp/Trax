@@ -56,6 +56,10 @@ describe('release job', () => {
     assert.ok(indexOf(release, 'Resolve released version') < indexOf(release, 'Pack the TypeScript engine'));
   });
 
+  it('installs the engine before the NuGet packs, which bundle it into Trax.Cli', () => {
+    assert.ok(indexOf(release, 'Pack the TypeScript engine') < indexOf(release, 'Pack every package'));
+  });
+
   it('hands publish the tarball and its digest', () => {
     assert.equal(release.outputs['npm-digests'], '${{ steps.npm-digests.outputs.digests }}');
     assert.match(step(release, 'Record npm package digest').run, /sha256sum -- \*\.tgz/);

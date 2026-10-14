@@ -104,13 +104,15 @@ judgement call.
 One command runs the whole flow, [`trax machine generate`](/docs/reference/cli#trax-machine-generate): it exports the
 IR from the compiled machine in-process, then drives the engine's own generators to emit the twin and the corpus,
 each to its own output root. It reads only the IR it exports from the compiled machine, so there is no `machine.json`
-to edit.
+to edit. The generators ship inside the tool with the engine compiled in, so this needs only `node` (>= 22):
 
 ```bash
 trax machine generate --assembly ./bin/MyApp.dll \
-  --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout \
-  --engine-src ./vendor/state-machine/src
+  --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout
 ```
+
+The twin imports [`@traxsharp/state-machine`](/docs/sdk-reference/statemachine-api/typescript-package); install
+it in the frontend at the same version as the tool.
 
 [`trax machine check`](/docs/reference/cli#trax-machine-check) regenerates to a temporary location and fails on any
 drift. Generate and check are the same code path, so a passing check means the committed artifacts match the source.

@@ -100,6 +100,29 @@ jobs:
           else
             echo "released=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Pack the TypeScript engine
+        # @traxsharp/state-machine releases at the same version as the NuGet packages. Its
+        # package.json keeps a placeholder version in git; the released one is written here,
+        # into this checkout only, and never committed. prepack builds dist/ from this tree,
+        # so the tarball is tested from the same install that builds it. It runs before the
+        # NuGet packs because packing Trax.Cli bundles the generators from this install.
+        if: steps.version.outputs.released == 'true'
+        working-directory: Trax.Api.StateMachine
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm test
+          npm version "$PKG_VERSION" --no-git-tag-version
+          mkdir -p ../npm
+          npm pack --pack-destination ../npm
+
+          # Exactly one tarball, at the released version.
+          if [ "$(cd ../npm && ls)" != "traxsharp-state-machine-$PKG_VERSION.tgz" ]; then
+            echo "::error::Expected only traxsharp-state-machine-$PKG_VERSION.tgz, packed: $(ls ../npm)"
+            exit 1
+          fi
       - name: Pack every package
         # One version for every package. A folder packs its solution, or the one project
         # packages.json names under release-pack (Trax.Samples ships only its templates).
@@ -140,28 +163,6 @@ jobs:
           path: nupkg/*.nupkg
           if-no-files-found: error
           retention-days: 1
-      - name: Pack the TypeScript engine
-        # @traxsharp/state-machine releases at the same version as the NuGet packages. Its
-        # package.json keeps a placeholder version in git; the released one is written here,
-        # into this checkout only, and never committed. prepack builds dist/ from this tree,
-        # so the tarball is tested from the same install that builds it.
-        if: steps.version.outputs.released == 'true'
-        working-directory: Trax.Api.StateMachine
-        env:
-          PKG_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          npm ci --ignore-scripts
-          npm run typecheck
-          npm test
-          npm version "$PKG_VERSION" --no-git-tag-version
-          mkdir -p ../npm
-          npm pack --pack-destination ../npm
-
-          # Exactly one tarball, at the released version.
-          if [ "$(cd ../npm && ls)" != "traxsharp-state-machine-$PKG_VERSION.tgz" ]; then
-            echo "::error::Expected only traxsharp-state-machine-$PKG_VERSION.tgz, packed: $(ls ../npm)"
-            exit 1
-          fi
       - name: Record npm package digest
         # Its own output, beside the NuGet digests, for the same reason.
         id: npm-digests

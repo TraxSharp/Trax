@@ -136,16 +136,10 @@ jobs:
         # the one browser the tests launch (Trax.Docs/adr/0049).
         if: matrix.package.playwright
         run: pwsh Trax.Samples/tests/Trax.Samples.Recovery.Browser/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
-      - name: Pack (package validation)
-        # Package validation runs on pack, not build. Packing here compares every package with
-        # its baseline release before a merge, instead of at release time, after
-        # semantic-release has already tagged the version.
-        if: matrix.package.pack
-        working-directory: ${{ matrix.package.folder }}
-        run: dotnet pack "$SOLUTION" --configuration Release --no-build --output "$RUNNER_TEMP/nupkg"
       - name: Setup Node
-        # Tests that drive Trax.Api.StateMachine's generators run them under node, and the browser
-        # tests build the page they drive with vite.
+        # Tests that drive Trax.Api.StateMachine's generators run them under node, packing Trax.Cli
+        # bundles them into it, and the browser tests build the page they drive with vite. Before the
+        # pack for that reason.
         if: matrix.package['state-machine'] || matrix.package.playwright
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
@@ -154,6 +148,13 @@ jobs:
         if: matrix.package['state-machine'] || matrix.package.playwright
         working-directory: Trax.Api.StateMachine
         run: npm ci --ignore-scripts
+      - name: Pack (package validation)
+        # Package validation runs on pack, not build. Packing here compares every package with
+        # its baseline release before a merge, instead of at release time, after
+        # semantic-release has already tagged the version.
+        if: matrix.package.pack
+        working-directory: ${{ matrix.package.folder }}
+        run: dotnet pack "$SOLUTION" --configuration Release --no-build --output "$RUNNER_TEMP/nupkg"
       - name: Install the Recovery page (locked, no install scripts)
         # The browser tests build the page with vite before they open it; it compiles the engine
         # from Trax.Api.StateMachine/src, installed above.

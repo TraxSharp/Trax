@@ -24,7 +24,7 @@ public enum TurnstileTrigger
 /// artifacts. The CLI test points <c>--assembly</c> at this test assembly and loads this machine by reflection,
 /// exercising the exact path a real consumer uses.
 /// </summary>
-public sealed class DeclarativeTurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
+public class DeclarativeTurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 {
     public sealed record UnlockedContext
     {

@@ -196,13 +196,45 @@ public class MachineGeneratorTests
     }
 
     [Test]
-    public void Generate_twin_without_engine_src_throws()
+    public void Generate_without_engine_src_runs_the_bundled_generators_and_passes_them_no_engine_src()
+    {
+        var node = new FakeNodeRunner();
+        var options = new MachineGenerateOptions(
+            Turnstile,
+            TwinOut: Dir("twin"),
+            CorpusOut: Dir("corpus"),
+            EngineSrc: null
+        );
+
+        new MachineGenerator(node, new PlacementFiles(), _tools).Generate(options);
+
+        node.Calls.Select(c => c.Script)
+            .Should()
+            .Equal(
+                Path.Combine(_tools, "generate-twin.mjs"),
+                Path.Combine(_tools, "generate-corpus.mjs")
+            );
+        node.Calls.Should().OnlyContain(c => !c.Args.Contains("--engine-src"));
+        File.Exists(Path.Combine(_root, "twin", "turnstile.machine.g.ts")).Should().BeTrue();
+        File.Exists(Path.Combine(_root, "corpus", "differential.json")).Should().BeTrue();
+    }
+
+    [Test]
+    public void Generate_twin_without_engine_src_or_a_bundled_engine_says_to_pass_engine_src()
     {
         var options = new MachineGenerateOptions(Turnstile, TwinOut: Dir("twin"), EngineSrc: null);
 
-        var generate = () => new MachineGenerator(new FakeNodeRunner()).Generate(options);
+        var generate = () =>
+            new MachineGenerator(
+                new FakeNodeRunner(),
+                new PlacementFiles(),
+                Dir("not-bundled")
+            ).Generate(options);
 
-        generate.Should().Throw<InvalidOperationException>().WithMessage("*--engine-src*");
+        generate
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*none bundled*Pass --engine-src*");
     }
 
     [Test]

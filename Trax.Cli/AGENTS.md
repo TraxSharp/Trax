@@ -65,6 +65,9 @@ dotnet test
 ```
 
 The machine unit tests drive a fake `INodeRunner` and spawn no process at all. Only the
-byte-parity integration test spawns real node, and it skips itself at runtime when node is
-not on PATH, which is what lets the suite run without node installed. `NodeRunnerTests` does
+byte-parity integration test and `MachineGenerateFromPackedToolTests` spawn real node, and they
+skip themselves at runtime when node is not on PATH, which is what lets the suite run without
+node installed. The second packs this folder's tool, which bundles the engine's generators
+into it, so it also skips until `npm ci --ignore-scripts` has run in `Trax.Api.StateMachine`.
+Packing (`dotnet pack`, and CI's pack step) needs both, and fails saying so. `NodeRunnerTests` does
 spawn a real process, using `dotnet` as a stand-in executable.

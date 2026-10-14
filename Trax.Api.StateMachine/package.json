@@ -43,6 +43,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "bundle:cli": "node tools/bundle-cli.mjs",
     "prepack": "npm run build && node -e \"require('node:fs').copyFileSync('../LICENSE', 'LICENSE')\"",
     "postpack": "node -e \"require('node:fs').rmSync('LICENSE', { force: true })\"",
     "test": "vitest run",
@@ -65,6 +66,7 @@
     "@types/node": "^24.19.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
     "jsdom": "^25.0.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

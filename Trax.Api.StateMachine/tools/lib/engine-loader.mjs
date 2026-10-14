@@ -41,3 +41,14 @@ export async function bundleModule(
     "data:text/javascript;base64," + Buffer.from(code).toString("base64")
   );
 }
+
+/**
+ * The engine's public module, `src/index.ts`, bundled from `engineSrc`. The generators load the engine through
+ * this one function, so the copy of them bundled into the trax tool can swap it for an engine compiled in
+ * (`engine-bundled.mjs`, by `tools/bundle-cli.mjs`).
+ */
+export async function loadEngine(engineSrc, importEsbuild) {
+  if (typeof engineSrc !== "string")
+    throw new Error("Missing required --engine-src (the engine's src/ directory).");
+  return bundleModule(join(engineSrc, "index.ts"), importEsbuild);
+}

@@ -19,7 +19,7 @@ This repo owns four things:
 | The `@traxsharp/state-machine/client` subpath (a host's typed `machines` operations and `machineChanged` stream, and the opt-in generic snapshot mutations) | [`src/client/`](src/client) |
 | The server-authoritative controller and its React hook, `useServerMachine` | [`src/server/`](src/server) |
 | The shared, language-neutral fixtures both engines drive (the cross-language oracle) | [`machines/`](machines) |
-| The IR-driven generators (`generateContextTypes` / `generateMachineFactory`) and the node entrypoints the `trax machine` CLI shells out to | [`src/rules/generateTypes.ts`](src/rules/generateTypes.ts), [`tools/`](tools) |
+| The IR-driven generators (`generateContextTypes` / `generateMachineFactory`) and the node entrypoints the `trax machine` CLI shells out to, which `tools/bundle-cli.mjs` bundles into the CLI's package with the engine compiled in | [`src/rules/generateTypes.ts`](src/rules/generateTypes.ts), [`tools/`](tools) |
 
 ## The contract
 

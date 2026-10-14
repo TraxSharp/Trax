@@ -39,7 +39,9 @@ internal sealed record CheckResult(IReadOnlyList<ArtifactCheck> Checks)
 
 /// <summary>
 /// Orchestrates <c>trax machine generate</c> / <c>check</c>. The IR is exported in-process (C#); the twin and
-/// corpus are produced by shelling out to the node entrypoints against the engine's <c>src</c>. Everything is
+/// corpus are produced by shelling out to node: by default to the generators bundled into this package with the
+/// engine compiled in (<see cref="BundledToolsDir"/>), or, with <c>--engine-src</c>, to the <c>tools/</c> of that
+/// engine's checkout, against its <c>src</c>. Everything is
 /// generated into a staging directory first, so a failing step leaves the target tree untouched; only when all
 /// requested artifacts are produced does <c>generate</c> place them, and <c>check</c> diffs them instead.
 /// </summary>
@@ -47,14 +49,26 @@ internal sealed partial class MachineGenerator
 {
     private readonly INodeRunner _node;
     private readonly PlacementFiles _files;
+    private readonly string _bundledToolsDir;
+
+    /// <summary>
+    /// Where the packed tool carries the bundled generators: <c>engine/</c> beside <c>trax.dll</c>. Trax.Cli.csproj
+    /// bundles them there at pack time; a build that was not packed has none.
+    /// </summary>
+    internal static string BundledToolsDir => Path.Combine(AppContext.BaseDirectory, "engine");
 
     public MachineGenerator(INodeRunner node)
         : this(node, new PlacementFiles()) { }
 
-    internal MachineGenerator(INodeRunner node, PlacementFiles files)
+    internal MachineGenerator(
+        INodeRunner node,
+        PlacementFiles files,
+        string? bundledToolsDir = null
+    )
     {
         _node = node;
         _files = files;
+        _bundledToolsDir = bundledToolsDir ?? BundledToolsDir;
     }
 
     /// <summary>Produce every requested artifact and place it at its output root. Every artifact is replaced or none is.</summary>
@@ -243,26 +257,17 @@ internal sealed partial class MachineGenerator
 
         if (o.TwinOut is not null)
         {
-            RequireEngine(o.EngineSrc, "the twin");
             var twinStage = Path.Combine(staging, "twin");
             Directory.CreateDirectory(twinStage);
-            var args = new List<string>
-            {
-                "--ir",
-                stagedIr,
-                "--engine-src",
-                o.EngineSrc!,
-                "--out-dir",
-                twinStage,
-                "--import-style",
-                o.ImportStyle,
-            };
+            var args = new List<string> { "--ir", stagedIr };
+            args.AddRange(EngineSrcArgs(o));
+            args.AddRange(["--out-dir", twinStage, "--import-style", o.ImportStyle]);
             if (o.Specifier is not null)
             {
                 args.Add("--specifier");
                 args.Add(o.Specifier);
             }
-            var twinScript = ToolScript(o, "generate-twin.mjs");
+            var twinScript = ToolScript(o, "generate-twin.mjs", "the twin");
             RunNode(twinScript, args, "the twin");
             PlannedArtifact[] twin =
             [
@@ -283,12 +288,11 @@ internal sealed partial class MachineGenerator
 
         if (o.CorpusOut is not null)
         {
-            RequireEngine(o.EngineSrc, "the corpus");
             var corpusStage = Path.Combine(staging, "differential.json");
-            var corpusScript = ToolScript(o, "generate-corpus.mjs");
+            var corpusScript = ToolScript(o, "generate-corpus.mjs", "the corpus");
             RunNode(
                 corpusScript,
-                ["--ir", stagedIr, "--engine-src", o.EngineSrc!, "--out", corpusStage],
+                ["--ir", stagedIr, .. EngineSrcArgs(o), "--out", corpusStage],
                 "the corpus"
             );
             PlannedArtifact corpus = new(
@@ -335,16 +339,30 @@ internal sealed partial class MachineGenerator
             );
     }
 
-    private static void RequireEngine(string? engineSrc, string what)
-    {
-        if (engineSrc is null)
-            throw new InvalidOperationException(
-                $"Generating {what} needs --engine-src (the TypeScript engine's src/ directory)."
-            );
-    }
+    // The bundled generators carry their engine and take no --engine-src; an engine checkout's own tools need it.
+    private static IEnumerable<string> EngineSrcArgs(MachineGenerateOptions o) =>
+        o.EngineSrc is null ? [] : ["--engine-src", o.EngineSrc];
 
-    private static string ToolScript(MachineGenerateOptions o, string script) =>
-        Path.Combine(o.ToolsDir ?? DefaultToolsDir(o.EngineSrc!), script);
+    /// <summary>
+    /// The node script that generates <paramref name="what"/>: from <c>--tools-dir</c>, else the <c>tools/</c>
+    /// beside <c>--engine-src</c>, else the copy bundled into this package.
+    /// </summary>
+    private string ToolScript(MachineGenerateOptions o, string script, string what)
+    {
+        if (o.ToolsDir is not null)
+            return Path.Combine(o.ToolsDir, script);
+        if (o.EngineSrc is not null)
+            return Path.Combine(DefaultToolsDir(o.EngineSrc), script);
+
+        var bundled = Path.Combine(_bundledToolsDir, script);
+        if (!File.Exists(bundled))
+            throw new InvalidOperationException(
+                $"Generating {what} needs the TypeScript engine, and this trax has none bundled ({bundled} is "
+                    + "missing): it was built from source, not installed from its package. Pass --engine-src "
+                    + "with the engine's src/ directory (Trax.Api.StateMachine/src, after `npm ci` there)."
+            );
+        return bundled;
+    }
 
     /// <summary>The engine's <c>tools/</c> directory, a sibling of its <c>src/</c> (<c>--engine-src</c>).</summary>
     internal static string DefaultToolsDir(string engineSrc)

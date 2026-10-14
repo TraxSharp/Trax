@@ -1,11 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { parseFlags, requireFlags } from "./lib/args.mjs";
-import { bundleModule } from "./lib/engine-loader.mjs";
+import { dirname } from "node:path";
+import { invokedDirectly, parseFlags, requireFlags } from "./lib/args.mjs";
+import { loadEngine } from "./lib/engine-loader.mjs";
 
 const USAGE =
-  "Usage: node tools/generate-corpus.mjs --ir <machine.ir.json> --engine-src <engine/src> --out <differential.json>";
+  "Usage: node tools/generate-corpus.mjs --ir <machine.ir.json> --engine-src <engine/src> --out <differential.json>\n" +
+  "The copy bundled into the trax tool carries its engine and takes no --engine-src.";
 
 /**
  * Generate a machine's differential corpus from its IR: build the IR-driven machine, enumerate its reachable
@@ -16,7 +16,7 @@ const USAGE =
 export async function generateCorpus({ irPath, engineSrc, outPath }) {
   const ir = JSON.parse(readFileSync(irPath, "utf8"));
   const { SnapshotMachine, machineFromIr, enumerate, serializeCorpus } =
-    await bundleModule(join(engineSrc, "index.ts"));
+    await loadEngine(engineSrc);
 
   const core = new SnapshotMachine(machineFromIr(ir));
   const corpus = serializeCorpus(enumerate(core, ir));
@@ -28,7 +28,7 @@ export async function generateCorpus({ irPath, engineSrc, outPath }) {
 
 async function main(argv) {
   const flags = parseFlags(argv);
-  requireFlags(flags, ["ir", "engine-src", "out"], USAGE);
+  requireFlags(flags, ["ir", "out"], USAGE);
   const { outPath } = await generateCorpus({
     irPath: flags.ir,
     engineSrc: flags["engine-src"],
@@ -38,7 +38,7 @@ async function main(argv) {
 }
 
 // Run only when invoked directly (`node tools/generate-corpus.mjs ...`), not when imported by a test.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+if (invokedDirectly(import.meta.url))
   main(process.argv.slice(2)).catch((err) => {
     console.error(err.message);
     process.exit(1);

@@ -297,7 +297,10 @@ tests), and it is the one command you run after every machine edit. See
 [the codegen pipeline](/docs/statemachine/codegen-pipeline) for how the pieces fit together.
 
 The IR is exported in-process from the compiled machine; the twin and corpus are produced by the engine's own
-generators, so twin/corpus generation needs `node` (>= 22) on `PATH` and the engine's `src` directory.
+generators, which ship inside the `trax` tool with the engine compiled in. Twin and corpus generation needs
+only `node` (>= 22) on `PATH`: no engine source and no npm install. The twin imports
+[`@traxsharp/state-machine`](/docs/sdk-reference/statemachine-api/typescript-package), which the frontend
+installs from npm at the same version as the tool.
 
 ```bash
 # Scaffold a new machine as one declarative C# file.
@@ -305,16 +308,14 @@ trax machine new checkout --output ./Machines --namespace MyApp.Machines --with-
 
 # Export the IR, twin, and corpus (each to its own output root).
 trax machine generate --assembly ./bin/MyApp.dll \
-  --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout \
-  --engine-src ./vendor/state-machine/src
+  --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout
 
 # Print its states and transitions (or --format mermaid|dot for a diagram source).
 trax machine show --assembly ./bin/MyApp.dll
 
 # Fail (exit 1) if any committed artifact is stale (the CI gate).
 trax machine check --assembly ./bin/MyApp.dll \
-  --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout \
-  --engine-src ./vendor/state-machine/src
+  --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout
 ```
 
 ### `trax machine new <name>`
@@ -361,10 +362,10 @@ before writing anything.
 | `--ir-out` | No | Directory to write `<id>.ir.json`. |
 | `--twin-out` | No | Directory to write `<id>.contexts.g.ts` and `<id>.machine.g.ts`. |
 | `--corpus-out` | No | Directory to write `differential.json`. |
-| `--engine-src` | For twin/corpus | The TypeScript engine's `src` directory. |
-| `--import-style` | No | Twin engine imports: `relative` (default, for a machine inside the engine repo) or `specifier` (one collapsed import from `--specifier`, for a consumer that installs `@traxsharp/state-machine` from npm). |
+| `--engine-src` | No | Generate the twin and corpus from this engine checkout's `src` directory, with the `tools/` beside it, instead of the engine bundled into the tool. For working on the engine itself; it needs `npm ci` in that checkout. |
+| `--import-style` | No | Twin engine imports: `specifier` (one collapsed import from `--specifier`, for a frontend that installs `@traxsharp/state-machine` from npm; the default) or `relative` (paths into the engine's `src`, for a machine inside the engine checkout; the default with `--engine-src`). |
 | `--specifier` | No | Module specifier used with `--import-style specifier` (default `@traxsharp/state-machine`). |
-| `--tools-dir` | No | The engine's `tools/` directory (default: a sibling of `--engine-src`). |
+| `--tools-dir` | No | The directory holding `generate-twin.mjs` and `generate-corpus.mjs` (default: the `tools/` beside `--engine-src`, else the ones bundled into the tool). |
 | `--node` | No | Path to the `node` executable (default: `node`). |
 
 ### `trax machine check`

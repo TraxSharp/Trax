@@ -325,7 +325,7 @@ internal static class MachineCommand
                     twinOut,
                     corpusOut,
                     engineSrc,
-                    importStyle ?? "relative",
+                    importStyle ?? DefaultImportStyle(engineSrc),
                     specifier,
                     toolsDir
                 )
@@ -369,7 +369,7 @@ internal static class MachineCommand
                     twinOut,
                     corpusOut,
                     engineSrc,
-                    importStyle ?? "relative",
+                    importStyle ?? DefaultImportStyle(engineSrc),
                     specifier,
                     toolsDir
                 )
@@ -404,6 +404,11 @@ internal static class MachineCommand
             return 1;
         }
     }
+
+    // Relative imports reach the engine's modules by path, which only works for a machine inside an engine
+    // checkout, the one case --engine-src names. Anywhere else the twin imports the installed package.
+    private static string DefaultImportStyle(string? engineSrc) =>
+        engineSrc is null ? "specifier" : "relative";
 
     private static void ValidateImportStyle(string? importStyle)
     {
@@ -455,11 +460,12 @@ internal static class MachineCommand
                 new Option<DirectoryInfo?>("--engine-src")
                 {
                     Description =
-                        "The TypeScript engine's src/ directory (required for the twin and corpus).",
+                        "Generate the twin and corpus from this engine checkout's src/ (and the tools/ beside it) instead of the engine bundled into trax.",
                 },
                 new Option<string?>("--import-style")
                 {
-                    Description = "Twin engine imports: 'relative' (default) or 'specifier'.",
+                    Description =
+                        "Twin engine imports: 'specifier' (default) or 'relative' (default with --engine-src).",
                 },
                 new Option<string?>("--specifier")
                 {
@@ -469,7 +475,7 @@ internal static class MachineCommand
                 new Option<DirectoryInfo?>("--tools-dir")
                 {
                     Description =
-                        "The engine's tools/ directory (default: sibling of --engine-src).",
+                        "The generators' directory (default: the tools/ beside --engine-src, else the ones bundled into trax).",
                 },
                 new Option<string?>("--node")
                 {

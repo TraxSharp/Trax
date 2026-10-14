@@ -33,4 +33,48 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Cli.Tests" />
   </ItemGroup>
+
+  <!-- The twin and corpus generators ship inside the package, bundled to plain JavaScript with the
+       TypeScript engine compiled in, so an installed `trax` needs only node to write them
+       (MachineGenerator.BundledToolsDir). They are bundled when the package is packed, from the
+       engine in this repository, which needs node and the engine's npm packages; a build alone
+       needs neither. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackBundledEngine</TargetsForTfmSpecificContentInPackage>
+    <TraxEngineDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', '..', 'Trax.Api.StateMachine'))</TraxEngineDir>
+  </PropertyGroup>
+
+  <Target Name="PackBundledEngine">
+    <!-- Set here, not above: IntermediateOutputPath is defined after the project body is read. -->
+    <PropertyGroup>
+      <TraxEngineBundleDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'engine'))</TraxEngineBundleDir>
+    </PropertyGroup>
+    <Exec
+      Command="node --version"
+      ContinueOnError="true"
+      IgnoreExitCode="true"
+      StandardOutputImportance="low"
+      EchoOff="true"
+    >
+      <Output TaskParameter="ExitCode" PropertyName="_TraxNodeExitCode" />
+    </Exec>
+    <Error
+      Condition="'$(_TraxNodeExitCode)' != '0'"
+      Text="Packing Trax.Cli bundles the TypeScript engine into it with node, and node is not on PATH. Install Node.js 22 or later."
+    />
+    <Error
+      Condition="!Exists('$(TraxEngineDir)node_modules/esbuild/package.json')"
+      Text="Packing Trax.Cli bundles the TypeScript engine into it, and $(TraxEngineDir) has no node_modules. Run `npm ci --ignore-scripts` there first."
+    />
+    <Exec
+      Command="node &quot;$(TraxEngineDir)tools/bundle-cli.mjs&quot; --out &quot;$(TraxEngineBundleDir.TrimEnd('/\'))&quot;"
+      StandardOutputImportance="low"
+    />
+    <ItemGroup>
+      <TfmSpecificPackageFile
+        Include="$(TraxEngineBundleDir)generate-twin.mjs;$(TraxEngineBundleDir)generate-corpus.mjs"
+        PackagePath="tools/$(TargetFramework)/any/engine/"
+      />
+    </ItemGroup>
+  </Target>
 </Project>

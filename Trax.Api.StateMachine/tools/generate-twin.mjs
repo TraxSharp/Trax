@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { parseFlags, requireFlags } from "./lib/args.mjs";
-import { bundleModule } from "./lib/engine-loader.mjs";
+import { invokedDirectly, parseFlags, requireFlags } from "./lib/args.mjs";
+import { loadEngine } from "./lib/engine-loader.mjs";
 
 const USAGE =
   "Usage: node tools/generate-twin.mjs --ir <machine.ir.json> --engine-src <engine/src> --out-dir <dir>\n" +
-  "                                    [--import-style relative|specifier] [--specifier <module>]";
+  "                                    [--import-style relative|specifier] [--specifier <module>]\n" +
+  "The copy bundled into the trax tool carries its engine and takes no --engine-src.";
 
 /**
  * Generate a machine's typed twin from its IR using the engine's own generators (bundled from `engineSrc`, so
@@ -34,9 +34,8 @@ export async function generateTwin({
   const irHash = createHash("sha256")
     .update(irRaw.replace(/\n+$/, ""), "utf8")
     .digest("hex");
-  const { generateContextTypes, generateMachineFactory } = await bundleModule(
-    join(engineSrc, "rules", "generateTypes.ts"),
-  );
+  const { generateContextTypes, generateMachineFactory } =
+    await loadEngine(engineSrc);
 
   const contexts = generateContextTypes(ir);
   const factory = generateMachineFactory(ir, { importStyle, specifier, irHash });
@@ -51,7 +50,7 @@ export async function generateTwin({
 
 async function main(argv) {
   const flags = parseFlags(argv);
-  requireFlags(flags, ["ir", "engine-src", "out-dir"], USAGE);
+  requireFlags(flags, ["ir", "out-dir"], USAGE);
   const { contextsPath, machinePath } = await generateTwin({
     irPath: flags.ir,
     engineSrc: flags["engine-src"],
@@ -65,7 +64,7 @@ async function main(argv) {
 }
 
 // Run only when invoked directly (`node tools/generate-twin.mjs ...`), not when imported by a test.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+if (invokedDirectly(import.meta.url))
   main(process.argv.slice(2)).catch((err) => {
     console.error(err.message);
     process.exit(1);
