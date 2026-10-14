@@ -1,24 +1,33 @@
 ---
-title: Scheduling Helpers
+title: Scheduling helpers
 description: Reference for the Every and Cron schedule factories, the Schedule record, the ScheduleType, MisfirePolicy and ExclusionType enums, and ManifestOptions.
 type: reference
 area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 8
+package: Trax.Scheduler
+namespace:
+  - Trax.Scheduler.Services.Scheduling
+  - Trax.Scheduler.Configuration
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Scheduling/Every.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Scheduling/Cron.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Scheduling/Schedule.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/ManifestOptions.cs
+  - Trax.Effect/src/Trax.Effect/Enums/ScheduleType.cs
+  - Trax.Effect/src/Trax.Effect/Enums/MisfirePolicy.cs
 ---
 
-# Scheduling Helpers
+# Scheduling helpers
 
-Helper classes for defining when and how scheduled jobs run: the `Every` and `Cron` factory classes for creating `Schedule` objects, the `Schedule` record itself, and `ManifestOptions` for per-job configuration.
-
----
+The types that say when and how a manifest runs: the `Every` and `Cron` factories, the `Schedule` record they build, the `ScheduleType`, `MisfirePolicy` and `ExclusionType` enums (in Trax.Effect), and `ManifestOptions` for per-item settings in a batch.
 
 ## Every
 
 Static factory class for creating **interval-based** schedules.
 
-```csharp
+```csharp fragment
 public static class Every
 ```
 
@@ -33,14 +42,15 @@ The shortest interval is one second. A zero or negative count throws `ArgumentOu
 
 ### Examples
 
-```csharp
-Every.Seconds(30)   // Every 30 seconds
-Every.Minutes(5)    // Every 5 minutes
-Every.Hours(2)      // Every 2 hours
-Every.Days(1)       // Every day
+```csharp compile
+Schedule[] schedules =
+[
+    Every.Seconds(30),
+    Every.Minutes(5),
+    Every.Hours(2),
+    Every.Days(1),
+];
 ```
-
----
 
 ## Cron
 
@@ -52,7 +62,7 @@ Each method builds its schedule through `Schedule.FromCron`, which parses the ex
 
 A new cron schedule first runs at **its first occurrence after it is scheduled**, not on the next poll: `Cron.Daily(hour: 3)` scheduled at 14:00 first runs at 03:00 the next day. Scheduling records that occurrence on the manifest's `NextScheduledRun`, and re-stating the same cron at a restart keeps it. A cron manifest written by an earlier Trax version that has never succeeded and has no stored `NextScheduledRun` is due on the next poll instead; scheduling it again, which the builder does for its own manifests at every start, records its first occurrence.
 
-```csharp
+```csharp fragment
 public static class Cron
 ```
 
@@ -71,22 +81,26 @@ When a `second` parameter is 0 (the default), the method produces a standard 5-f
 
 ### Examples
 
-```csharp
-// 5-field (minute granularity)
-Cron.Minutely()                              // Every minute
-Cron.Hourly(minute: 30)                      // Every hour at :30
-Cron.Daily(hour: 3)                          // Daily at 03:00 UTC
-Cron.Daily(hour: 14, minute: 30)             // Daily at 14:30 UTC
-Cron.Weekly(DayOfWeek.Monday, hour: 9)       // Every Monday at 09:00 UTC
-Cron.Monthly(day: 15, hour: 0)               // 15th of each month at midnight UTC
-Cron.Expression("0 */6 * * *")              // Every 6 hours (custom cron)
+```csharp compile
+Schedule[] minuteGranularity =
+[
+    Cron.Minutely(),                        // every minute
+    Cron.Hourly(minute: 30),                // every hour at :30
+    Cron.Daily(hour: 3),                    // daily at 03:00 UTC
+    Cron.Daily(hour: 14, minute: 30),       // daily at 14:30 UTC
+    Cron.Weekly(DayOfWeek.Monday, hour: 9), // Mondays at 09:00 UTC
+    Cron.Monthly(day: 15, hour: 0),         // the 15th at midnight UTC
+    Cron.Expression("0 */6 * * *"),         // every 6 hours
+];
 
-// 6-field (second granularity)
-Cron.Secondly()                              // Every second
-Cron.Minutely(second: 30)                   // Every minute at :30 seconds
-Cron.Hourly(minute: 15, second: 45)         // Every hour at 15:45
-Cron.Daily(hour: 3, minute: 0, second: 30)  // Daily at 03:00:30 UTC
-Cron.Expression("*/15 * * * * *")           // Every 15 seconds (custom 6-field)
+Schedule[] secondGranularity =
+[
+    Cron.Secondly(),                           // every second
+    Cron.Minutely(second: 30),                 // every minute at :30 seconds
+    Cron.Hourly(minute: 15, second: 45),       // every hour at 15:45
+    Cron.Daily(hour: 3, minute: 0, second: 30), // daily at 03:00:30 UTC
+    Cron.Expression("*/15 * * * * *"),         // every 15 seconds
+];
 ```
 
 ### Cron Expression Format
@@ -116,13 +130,11 @@ Trax supports both standard 5-field and 6-field (with seconds) cron formats. The
 
 > **Note:** 7-field cron (with year) is not supported. The effective resolution of seconds-granularity cron is limited by the `ManifestManagerPollingInterval` (default: 5 seconds).
 
----
-
 ## Schedule (Record)
 
 An immutable record that represents a schedule definition. Created by `Every`, `Cron`, or the static factory methods.
 
-```csharp
+```csharp fragment
 public record Schedule
 ```
 
@@ -133,6 +145,7 @@ public record Schedule
 | `Type` | `ScheduleType` | `Cron` or `Interval` |
 | `Interval` | `TimeSpan?` | The interval between executions (only for `ScheduleType.Interval`) |
 | `CronExpression` | `string?` | The cron expression, 5-field or 6-field, evaluated in UTC (only for `ScheduleType.Cron`) |
+| `Variance` | `TimeSpan?` | Random jitter added after each successful run: the next run is delayed by a random `[0, variance]`. Set with `WithVariance` |
 
 ### Factory Methods
 
@@ -141,9 +154,22 @@ public record Schedule
 | `FromInterval` | `static Schedule FromInterval(TimeSpan interval)` | Creates an interval-based schedule. Throws `ArgumentOutOfRangeException` for an interval shorter than one second. |
 | `FromCron` | `static Schedule FromCron(string expression)` | Creates a cron-based schedule. Parses the expression and throws `FormatException` when it is not a valid 5-field or 6-field cron. |
 
+### WithVariance
+
+```csharp fragment
+public Schedule WithVariance(TimeSpan variance)
+```
+
+Returns a copy with `Variance` set. Any schedule accepts it, since a `Schedule` is always `Interval` or `Cron`. A negative variance throws `InvalidOperationException` when the manifest is scheduled. A variance on the schedule takes precedence over `ScheduleOptions.Variance`.
+
+```csharp compile
+var every5Minutes = Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(2));
+var dailyAt3 = Cron.Daily(3).WithVariance(TimeSpan.FromMinutes(30));
+```
+
 ### ToCronExpression
 
-```csharp
+```csharp fragment
 public string ToCronExpression()
 ```
 
@@ -187,13 +213,11 @@ Defines the kind of exclusion window for a manifest schedule. Used inside the JS
 
 See [Exclusion Windows](/docs/scheduler/exclusions) for usage patterns and examples.
 
----
-
 ## ManifestOptions
 
 Per-item configuration passed to the `configureEach` callback of the batch scheduling methods (`ScheduleMany`, `IncludeMany`, `ThenIncludeMany`, `ScheduleManyAsync`, `ScheduleManyDependentAsync`), which receives each source item and its `ManifestOptions`. A single manifest, and settings shared by a whole batch, are configured through the [`ScheduleOptions`](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions) builder instead.
 
-```csharp
+```csharp fragment
 public class ManifestOptions
 ```
 
@@ -207,11 +231,14 @@ public class ManifestOptions
 | `ReplayDecisionsOnRetry` | `bool?` | `null` | Whether a retry of this manifest's failed run, automatic or a dead-letter requeue, replays the decisions that run recorded rather than asking its deciders afresh. `null` means not stated: a new manifest replays and an existing one keeps its value, so reading it in `configureEach` and writing it back never states it. Stated, it is written on every seed. Can also be set with `ScheduleOptions.ReplayDecisionsOnRetry(...)`. See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions). |
 | `MisfirePolicy` | `MisfirePolicy?` | `null` | Per-manifest misfire policy override. `null` uses the global `DefaultMisfirePolicy`. Only applies to Cron and Interval schedule types. See [Misfire Policies](/docs/scheduler/scheduling-options#misfire-policies). |
 | `MisfireThreshold` | `TimeSpan?` | `null` | Per-manifest misfire threshold override. `null` uses the global `DefaultMisfireThreshold` (60 seconds). |
+| `IsDormant` | `bool` | `false` | Whether the manifest is a dormant dependent: declared in the topology, never fired when its parent succeeds, and run only when the parent activates it through [IDormantDependentContext](/docs/sdk-reference/scheduler-api/i-dormant-dependent-context). Only meaningful for a dependent manifest. Also set with `ScheduleOptions.Dormant()` |
 | `Exclusions` | `List<Exclusion>` | `[]` | Exclusion windows for this manifest. When any exclusion matches the current time, the manifest is skipped. Excluded periods are "intentionally skipped", not misfires. See [Exclusion Windows](/docs/scheduler/exclusions). |
 
 ### Example
 
-```csharp
+```csharp compile
+var tables = new[] { "customers", "orders" };
+
 // Per item, through configureEach on a batch...
 await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, Unit, string>(
     tables,
@@ -225,9 +252,15 @@ await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, Unit, string>
     });
 
 // ...or for a single manifest, through the ScheduleOptions builder
-await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
+await scheduler.ScheduleAsync<ISyncTrain, SyncInput, Unit>(
     "my-job",
-    new MyInput(),
+    new SyncInput(),
     Every.Minutes(5),
     options => options.MaxRetries(5).Timeout(TimeSpan.FromMinutes(30)).Priority(20));
 ```
+
+## See also
+
+- [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) and [ScheduleOptions](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions)
+- [Scheduling options](/docs/scheduler/scheduling-options), misfires, variance and exclusions in practice
+- [Exclusion Windows](/docs/scheduler/exclusions)
