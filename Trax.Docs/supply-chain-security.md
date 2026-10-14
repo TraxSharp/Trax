@@ -70,7 +70,7 @@ The npm trusted publisher may only stage, never publish directly or move a dist-
 
 npm lets a trusted publisher be added only to a package that already exists, so the package's first version on npm is a placeholder a maintainer published by hand, which ships no code and is deprecated once the first release is live. A newly added trusted publisher expires unless it is used within two days, so it is added shortly before the first release that uses it.
 
-One long-lived secret remains, bound to one job: the Codecov upload token, held only by the coverage job. The website is published by moving the `website` branch with the workflow's own token, behind the protected `website-deploy` environment.
+Two long-lived secrets remain, each bound to one job: the Codecov upload token, held only by the coverage job, and the website deploy key, held only by the Website workflow's job behind the protected `website-deploy` environment. That workflow runs only when dispatched by hand; no release or CI job calls it. It moves the `website` branch over SSH with the deploy key, offered only to GitHub's pinned host key.
 
 ## Signed build provenance
 

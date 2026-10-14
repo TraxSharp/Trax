@@ -18,7 +18,8 @@ name: Release
 # 2FA, while the publish job waits (see the "Stage on npm and wait for approval" step).
 #
 # Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
-# build (packs from the tag, read-only) -> publish (verifies, attests, publishes) -> website.
+# build (packs from the tag, read-only) -> publish (verifies, attests, publishes). Publishing the
+# site is not part of a release: dispatch website.yml with the new tag afterwards.
 on:
   workflow_dispatch:
 
@@ -452,16 +453,3 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: dotnet nuget push "nupkg/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-  # ---------------------------------------------------------------------------
-  # Publish the site from the tag just cut, once the packages it documents are on
-  # nuget.org. Gated on its own `website-deploy` environment.
-  # ---------------------------------------------------------------------------
-  website:
-    needs: [release, publish]
-    if: needs.release.outputs.released == 'true'
-    # website.yml pushes with the repository's deploy key, so it needs no token permissions.
-    permissions: {}
-    uses: ./.github/workflows/website.yml  # zizmor: ignore[self-repository]
-    with:
-      ref: v${{ needs.release.outputs.version }}

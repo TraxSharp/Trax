@@ -65,8 +65,9 @@ release is intended; describe a breaking change in the pull request instead.
 5. The `publish` job, also gated on the `release` environment, attests the packages and pushes them
    to nuget.org with a short-lived Trusted Publishing key. See
    [Supply Chain Security](/docs/supply-chain-security).
-6. The `website` job, gated on its own `website-deploy` environment, moves the `website` branch to
-   the new tag, which publishes the site for that release.
+6. The site is not part of the release. Dispatch **Website** with the new tag (`v1.61.0`); its job,
+   gated on the `website-deploy` environment, moves the `website` branch to the tag, which publishes
+   the site for that release.
 
 The configuration lives in `.releaserc.json` at the repository root and the workflow in
 `.github/workflows/release.yml`. The plugins are `commit-analyzer` (default rules),

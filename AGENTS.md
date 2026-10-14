@@ -183,7 +183,8 @@ the full CI over every folder, then semantic-release reads every commit since th
 and cuts **one** version for **every** package, at the highest bump those commits call for:
 the NuGet packages, and the TypeScript engine, `@traxsharp/state-machine`, on npm. Both
 the versioning and the publish job wait on the protected `release` environment. After the
-packages are on nuget.org it moves the `website` branch to the new tag, which publishes the site.
+packages are on nuget.org, publish the site by dispatching **Website** with the new tag (`v1.63.1`);
+the release does not do it.
 
 The release notes list one line per commit, so a squash-merged pull request is one line. To say
 more, give the pull request description a `## Release notes` section: what a user of the packages
