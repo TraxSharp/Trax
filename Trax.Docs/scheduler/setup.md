@@ -315,11 +315,6 @@ failed job is logged at `Error`, and a job that runs out of retries at `Warning`
 - The [Scheduling sample](/docs/samples/scheduling) is a whole scheduler host, with the dashboard
   and the GraphQL operations surface.
 
-## Namespace Reference
-
-The namespace and package of each scheduler type are in
-[Scheduler namespaces](/docs/scheduler/namespaces).
-
 ## SDK Reference
 
 > [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [TriggerAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler)

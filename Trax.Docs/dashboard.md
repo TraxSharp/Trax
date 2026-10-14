@@ -15,23 +15,6 @@ Trax.Dashboard is a Blazor Server UI, mounted at `/trax`, for inspecting trains 
 manifests and dead letters, and changing scheduler and effect settings at runtime. What each page
 shows and does is in [Dashboard pages](/docs/dashboard/pages).
 
-### State machines
-
-Every persisted state machine instance, system-owned and users' drafts, is listed under **Data**,
-read-only except for cancelling a system-owned instance's run; see
-[State machines](/docs/dashboard/pages#state-machines).
-
-### Effects page
-
-Effect and junction effect providers are enabled and configured at runtime from **Settings**; see
-[Effects page](/docs/dashboard/pages#effects-page).
-
-### Metadata detail page
-
-Each execution opens on a page of its own, with its state, input, output, exception and log
-entries, and the cancel, re-queue and resume actions; see
-[Metadata detail page](/docs/dashboard/pages#metadata-detail-page).
-
 ## 1. Install the package
 
 ```bash

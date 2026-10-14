@@ -125,7 +125,7 @@ A note longer than `TraxScheduler.MaxAcknowledgeNoteLength` (1,000 characters) i
 
 A requeued run replays the decisions the manifest's failed run recorded, when that is sound, as an
 automatic retry does: it takes the tracks the failed run's deciders chose instead of asking them
-again. See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)
+again. See [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions)
 for the checks. Each requeue has an overload that takes `askAfresh`:
 
 | `askAfresh` | The requeued run |

@@ -180,4 +180,4 @@ Each link in the chain is independent. The scheduler doesn't have a concept of "
 
 ## SDK Reference
 
-> [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [IDormantDependentContext](/docs/sdk-reference/scheduler-api/dependent-scheduling#idormantdependentcontext) | [.Dormant()](/docs/sdk-reference/scheduler-api/dependent-scheduling#dormant-option)
+> [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | [IDormantDependentContext](/docs/sdk-reference/scheduler-api/i-dormant-dependent-context) | [.Dormant()](/docs/sdk-reference/scheduler-api/dependent-scheduling#dormant-option)

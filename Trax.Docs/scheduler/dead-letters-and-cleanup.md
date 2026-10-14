@@ -60,7 +60,7 @@ query {
 }
 ```
 
-The fields and arguments are listed in [Queries: deadLetters](/docs/sdk-reference/graphql-api/queries#deadletters-nested-under-operations).
+The fields and arguments are listed in [Queries: deadLetters](/docs/sdk-reference/graphql-api/queries/dead-letters).
 
 ### 2. Read why it failed
 
@@ -180,7 +180,7 @@ mutation {
 request that starts it answers at once with the job, and the requeue finishes even if the client
 goes away. A job that stops part-way leaves the dead letters it reached requeued; starting another
 requeues the rest. An acknowledgement note is at most 1,000 characters over GraphQL. The fields
-are on [Mutations](/docs/sdk-reference/graphql-api/mutations#deadletters-nested-namespace).
+are on [Mutations](/docs/sdk-reference/graphql-api/mutations/dead-letters).
 
 **From code**, through `ITraxScheduler`:
 
@@ -285,7 +285,7 @@ services.AddTrax(trax =>
 ```
 
 Both can also be changed at runtime, from the dashboard's Server Settings page or the
-[`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) mutation.
+[`updateScheduler`](/docs/sdk-reference/graphql-api/mutations/config) mutation.
 The purge reads them on every run, so turning it off takes effect from the next run without a
 restart. Both delete data, so when the code states one and a saved setting differs, the scheduler
 runs with whichever keeps more:
@@ -306,7 +306,7 @@ the one it runs with.
 `UseInMemory()` runs jobs inline and has no work queue, so it neither delays retries nor replays
 decisions as Postgres does. To test retries, dead letters and requeues as they run in production,
 start the real host against a test Postgres and wait on the `trax.metadata` and
-`trax.dead_letter` rows, as the [Scheduling sample's E2E suite](/docs/samples/scheduling#testing-it)
+`trax.dead_letter` rows, as the [Scheduling sample's E2E suite](/docs/samples/scheduling#tests)
 does.
 
 ## SDK Reference

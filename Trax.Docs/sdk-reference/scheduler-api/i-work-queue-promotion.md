@@ -15,7 +15,7 @@ source:
 
 # IWorkQueuePromotion
 
-Confirms work queue entries staged by a two-phase enqueue, and resolves the ones a crash left unconfirmed. A train with [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) has its entry committed unconfirmed, runs `OnQueue`, and is then promoted; the dispatcher never claims an unconfirmed entry.
+Confirms work queue entries staged by a two-phase enqueue, and resolves the ones a crash left unconfirmed. A train with [`DeferQueuePromotion`](/docs/mediator/queued-work#accepting-a-mutation-is-two-writes) has its entry committed unconfirmed, runs `OnQueue`, and is then promoted; the dispatcher never claims an unconfirmed entry.
 
 The interface and its implementation, `WorkQueuePromotion`, ship in Trax.Effect.Data; the scheduler's ManifestManager is one of its two callers. `AddMediator()` registers it as a singleton, and it creates a data context per call.
 

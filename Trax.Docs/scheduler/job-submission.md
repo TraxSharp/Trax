@@ -85,8 +85,8 @@ keeps its claim. Cancelling a run from the dashboard or `ITraxScheduler` reaches
 however long it has been running.
 
 **Delete**, whether the job succeeded or failed: the worker deletes the `background_job` row. The
-delete does not take the host's stopping token, so a job that finishes inside the shutdown grace
-period is still removed rather than left to be claimed again. The table is only a transient
+delete does not take the host's stopping token, so a job that finishes inside the
+[shutdown grace period](/docs/scheduler/cancellation-and-timeouts#shutdown-and-the-grace-period) is still removed rather than left to be claimed again. The table is only a transient
 queue; the run's history is in its metadata row.
 
 When the host starts shutting down in the middle of a batch, the jobs not yet started are released
@@ -176,7 +176,8 @@ Whatever consumes the queue runs the JobRunner the way the local workers do: it 
 `IJobRunnerTrain` and runs it with `new RunJobRequest(metadataId, input)`, in a host where
 `AddTraxJobRunner` has registered it.
 
-Moving a host off the removed Hangfire backend is covered in the migration guides.
+Moving a host off the removed Hangfire backend is covered in
+[Migrate from Hangfire](/docs/migration-guides/migrate-from-hangfire).
 
 ## SDK Reference
 

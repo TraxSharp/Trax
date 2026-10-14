@@ -142,7 +142,7 @@ The dispatcher does take an advisory lock, but a much narrower one: per subject 
 
 ### Subject Serialization: Advisory Lock per Subject
 
-A train can name the [subject](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) its queued work touches, and entries for one subject must not run at the same time. The claim query refuses an entry whose subject already has a dispatched run that is `Pending` or `InProgress`. That check alone has a race that `FOR UPDATE SKIP LOCKED` does not close:
+A train can name the [subject](/docs/mediator/queued-work#two-mutations-for-one-record) its queued work touches, and entries for one subject must not run at the same time. The claim query refuses an entry whose subject already has a dispatched run that is `Pending` or `InProgress`. That check alone has a race that `FOR UPDATE SKIP LOCKED` does not close:
 
 ```
 Server A                              Server B

@@ -52,7 +52,7 @@ refused start. Code that used the `input` parameter of `RunInternal` moves to on
 | The work | Where it goes |
 |---|---|
 | Needs the input as part of the run | A junction at the head of the chain, which receives the input as its argument |
-| Must happen the moment a queued mutation is accepted | [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook), which is handed a `Metadata` carrying the input |
+| Must happen the moment a queued mutation is accepted | [`OnQueue`](/docs/mediator/enqueue-hooks), which is handed a `Metadata` carrying the input |
 
 Values passed through `Activate(input, otherInputs)` need a declared source instead. Produce them
 from an earlier junction, or seed them in the chain with `AddServices<IService>(value)` (under an

@@ -18,10 +18,10 @@ The field of `OperationsMutations` that acts on persisted state machine instance
 
 ## cancelMachineInstance
 
-Cancels a system-owned [state machine instance](/docs/statemachine/invoking-trains#operators)'s
+Cancels a system-owned [state machine instance](/docs/statemachine/invoked-runs#operator-actions)'s
 live train run, and the instance then moves through its state's `OnCancelled` edge. It is the
 GraphQL counterpart of the Cancel button on the dashboard's
-[instance page](/docs/dashboard#state-machines); both call
+[instance page](/docs/dashboard/pages#state-machines); both call
 [`IOperationsService.CancelMachineInstanceAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#state-machine-instances),
 so they refuse the same instances with the same message.
 
@@ -76,4 +76,4 @@ the same text) and `state`, the state the instance entered when this call moved 
 
 - [Mutations](/docs/sdk-reference/graphql-api/mutations)
 - [operations: machine instance queries](/docs/sdk-reference/graphql-api/queries/machine-instances)
-- [Invoking trains](/docs/statemachine/invoking-trains#operators)
+- [Invoking trains](/docs/statemachine/invoked-runs#operator-actions)

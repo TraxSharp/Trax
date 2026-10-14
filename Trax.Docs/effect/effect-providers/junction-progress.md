@@ -76,7 +76,7 @@ Both providers run only around junctions that inherit from `EffectJunction<TIn, 
 
 ## Cancellation across servers
 
-The cancellation check is the between-junction half of Trax's cancellation: a cancel requested on another server reaches the run as the `CancellationRequested` flag, read before its next junction. [Cancellation tokens](/docs/cross-cutting/cancellation-tokens) explains both paths.
+The cancellation check is the between-junction half of Trax's cancellation: a cancel requested on another server reaches the run as the `CancellationRequested` flag, read before its next junction. [Stopping a run from outside](/docs/cross-cutting/cancellation-tokens#stopping-a-run-from-outside) explains both paths.
 
 ## Dashboard Integration
 

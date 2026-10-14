@@ -97,7 +97,7 @@ export does not accept the mix: once a machine makes any declarative call, `Expo
 and the message names each one. Otherwise the generated twin would treat such an edge as unconditional and keep the
 context while the server runs the delegate. Run [`trax machine generate`](/docs/reference/cli#trax-machine-generate)
 or [`trax machine check`](/docs/reference/cli#trax-machine-check) to export it. See
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/machine#delegate-vs-declarative) and
+[Delegate vs declarative](/docs/statemachine/delegates-and-declarative-rules) and
 [Exporting the IR](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir).
 
 To serve the machine to clients, add the caller rules and the `[TraxMachine]` mark described in

@@ -240,7 +240,7 @@ services.AddTrax(trax => trax.AddEffects(effects => effects
 ## Re-queued and retried runs replay their decisions
 
 Re-queueing an execution, with the dashboard's **Re-queue** button or the
-[`requeueExecution`](/docs/sdk-reference/graphql-api/mutations#requeueexecution) mutation, queues a
+[`requeueExecution`](/docs/sdk-reference/graphql-api/mutations/executions#requeueexecution) mutation, queues a
 run that replays the original's recorded decisions. Both go through
 [`IOperationsService.RequeueExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#requeueexecutionasync),
 which sets the new run's `ReplayDecisionsOf` to the original's id when the original has decisions
@@ -255,7 +255,7 @@ question and asking, without calling a decider or its shadows, and recorded with
 A manifest's automatic retry, and a requeue of its dead letter, replay the failed run's decisions
 too, at most once in a row and only when the scheduler can show the answers were given by that
 manifest's own run, about the same input. See
-[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+[Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions).
 Queueing a train through `queueTrain` or `QueueTrainAsync` never replays, and neither does a
 manifest's scheduled run that is not a retry, nor a train run directly.
 

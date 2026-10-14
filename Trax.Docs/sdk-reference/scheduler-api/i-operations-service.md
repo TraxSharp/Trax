@@ -102,7 +102,7 @@ The form a queued input is stored in, and the form a run's submitter writes for 
 
 A run applies the per-record checks a queue applies. When the train overrides `OnQueue`, the hook runs on the run's input before the run's row is saved, as it runs for an enqueue: on an instance in a scope of its own, with `TrainInput` reading the input, with the `metadata.ExternalId` the run executes under, with writes on [`IEnqueueContextAccessor.Current`](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) saved together with the run's row, and within `MaxQueueHookDuration`. A hook that throws refuses the run and nothing is written.
 
-A run is otherwise a deliberate bypass of the work queue. It skips dispatch priority, group `MaxActiveJobs`, and the subject lock. A train that overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) serializes its work per subject through the queue, so it is run now only inside a trusted scope, such as the dashboard's; any other caller gets a failed result telling it to queue the train instead. Use `QueueTrainAsync` when a run must wait its turn.
+A run is otherwise a deliberate bypass of the work queue. It skips dispatch priority, group `MaxActiveJobs`, and the subject lock. A train that overrides [`QueueSubjectKey`](/docs/mediator/queued-work#two-mutations-for-one-record) serializes its work per subject through the queue, so it is run now only inside a trusted scope, such as the dashboard's; any other caller gets a failed result telling it to queue the train instead. Use `QueueTrainAsync` when a run must wait its turn.
 
 ### When nothing can dispatch a queued run
 
@@ -121,7 +121,7 @@ Task<OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, Can
 | `askAfresh` | `bool` | When `true`, the new entry carries no replay link and the new run asks every question again; nothing else differs. The overload without it is `askAfresh: false`. |
 
 Re-queues a run: queues a fresh run of the same train with the input the run recorded. The GraphQL
-[`requeueExecution`](/docs/sdk-reference/graphql-api/mutations#requeueexecution) mutation and the
+[`requeueExecution`](/docs/sdk-reference/graphql-api/mutations/executions#requeueexecution) mutation and the
 dashboard's **Re-queue** button both call it, so the two refuse the same runs with the same
 messages and enqueue the same way. The dashboard calls it inside its `"dashboard"` trusted scope;
 the API does not.
@@ -165,7 +165,7 @@ ordinary enqueue. It asks
 [`HasDecisionsToReplay`](/docs/sdk-reference/configuration/add-decision-recording#hasdecisionstoreplay).
 It is the only caller-facing method that sets the link, always to the run being re-queued; the
 scheduler sets it on a manifest's retry and dead-letter requeue from its own checks (see
-[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)).
+[Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions)).
 Each replayed answer is still checked against the state it is asked about now and its age, so a
 question whose state changed, or whose answer is older than `ReplayAnswersFor`, is asked afresh.
 
@@ -224,7 +224,7 @@ warning in its log, if it can no longer be trusted.
 
 A run has at most one queued resume. When a manifest's retry, which resumes after the failed run's
 latest checkpoint on its own (see
-[Retries resume from a checkpoint](/docs/scheduler/dead-letters-and-cleanup#retries-resume-from-a-checkpoint)),
+[Retries resume from a checkpoint](/docs/scheduler/how-retries-work#retries-resume-from-a-checkpoint)),
 or another operator queues one between this call's checks and its insert, the database refuses the
 second, and this call returns the same refusal.
 
@@ -276,7 +276,7 @@ Manifests whose `IsEnabled` differs
 
 ### SetManifestsReplayDecisionsOnRetryAsync
 
-Manifests whose `ReplayDecisionsOnRetry` differs. Turning it off also clears the replay link of each manifest's queued entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh; the message then adds `{n} queued retry(s) no longer replay a failed run's decisions.` See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+Manifests whose `ReplayDecisionsOnRetry` differs. Turning it off also clears the replay link of each manifest's queued entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh; the message then adds `{n} queued retry(s) no longer replay a failed run's decisions.` See [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions).
 
 ### SetManifestGroupsEnabledAsync
 
@@ -355,7 +355,7 @@ the manifests one at a time in the order given, each with its own save, and sign
 
 With `askAfresh: true` a released retry that would replay a failed run's decisions asks its
 deciders afresh instead (see
-[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)). A
+[Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions)). A
 database failure part way is thrown, not reported; the manifests triggered before it stay
 triggered, and sending the same batch again is safe, since a manifest holds at most one queued
 entry.
@@ -438,7 +438,7 @@ A `LogCount(int Count, bool Capped)` for a pager. Without a text filter, the exa
 
 ### GetWorkQueueEntryDetailAsync
 
-A `WorkQueueEntryDetail`, or `null` when no entry has the id: the entry's fields, its input masked as [below](#masking-a-stored-input), and for a queued entry with a subject, what it waits on. `SubjectHeldBy` is the dispatched entry for the same subject whose run is still `Pending` or `InProgress`; when nothing holds the subject, `SubjectQueuedBehind` is the confirmed queued sibling dispatch would offer first, by the filters dispatch applies (due, its manifest group enabled) and then priority and age. The dashboard's work queue entry page and the API's [`workQueue.detail`](/docs/sdk-reference/graphql-api/queries#detail) both read it.
+A `WorkQueueEntryDetail`, or `null` when no entry has the id: the entry's fields, its input masked as [below](#masking-a-stored-input), and for a queued entry with a subject, what it waits on. `SubjectHeldBy` is the dispatched entry for the same subject whose run is still `Pending` or `InProgress`; when nothing holds the subject, `SubjectQueuedBehind` is the confirmed queued sibling dispatch would offer first, by the filters dispatch applies (due, its manifest group enabled) and then priority and age. The dashboard's work queue entry page and the API's [`workQueue.detail`](/docs/sdk-reference/graphql-api/queries/work-queue#detail) both read it.
 
 ### GetRecordedDecisionsAsync
 
@@ -557,8 +557,8 @@ value is `{"_redacted": true}`.
 ## State-machine instances
 
 The operator's read-only view of `trax.snapshot_draft`: the dashboard's
-[State Machines pages](/docs/dashboard#state-machines) and the API's
-[`machineInstances`, `machineInstance` and `machineInstanceCounts`](/docs/sdk-reference/graphql-api/queries#machineinstances)
+[State Machines pages](/docs/dashboard/pages#state-machines) and the API's
+[`machineInstances`, `machineInstance` and `machineInstanceCounts`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances)
 read through these four methods, and one instance's runs and its cancel through the two after them.
 
 ```csharp fragment
@@ -621,7 +621,7 @@ counts about 120 ms.
 
 Two more methods serve one instance's page and its one operator action, the dashboard's and the
 API's alike (`machineInstance { invokedRuns }` and
-[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance)):
+[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance)):
 
 ```csharp fragment
 public record MachineInstanceRun(

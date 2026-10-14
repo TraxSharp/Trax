@@ -72,7 +72,7 @@ Dashboard, queue mutations ───┘
 ```
 
 That gives capacity one place to be enforced. `MaxActiveJobs`, per-group limits, priority and
-[subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing)
+[subject serialization](/docs/mediator/queued-work#two-mutations-for-one-record)
 are all applied by the dispatcher, whatever wrote the entry. The ManifestManager can decide what is
 due without knowing how busy the system is, and the two run on their own intervals, so each can be
 tuned on its own.

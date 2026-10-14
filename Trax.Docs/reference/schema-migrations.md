@@ -69,7 +69,7 @@ its own, named after its `externalId`. Naming a group and setting its `MaxActive
 and `IsEnabled` are covered in
 [Per-Group Dispatch Controls](/docs/scheduler/scheduling-options#per-group-dispatch-controls).
 The namespaces of the scheduler types involved are listed in the
-[Namespace Reference](/docs/scheduler/setup#namespace-reference).
+[Namespace Reference](/docs/scheduler/namespaces).
 
 ## Scaling indexes (026)
 
@@ -238,7 +238,7 @@ A host on the previous version never writes the table, so a rolling deploy is sa
 `056_manifest_replay_decisions_on_retry.sql` (SQLite `021`) adds
 `trax.manifest.replay_decisions_on_retry`, a boolean that defaults to true. Every existing manifest
 therefore replays the failed run's decisions on its retries and dead-letter requeues, under the
-checks in [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+checks in [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions).
 Set it false with [`ReplayDecisionsOnRetry(false)`](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions)
 for a manifest whose retries should ask afresh.
 
@@ -327,7 +327,7 @@ so `029` rebuilds the `log` table with the same columns, ids and index.
 ## Failure search (066)
 
 `066_metadata_failure_search.sql` (Postgres only) adds two indexes on `trax.metadata` for the GraphQL
-[`executions`](/docs/sdk-reference/graphql-api/queries#executions) filters `failureReasonContains`
+[`executions`](/docs/sdk-reference/graphql-api/queries/executions#executions) filters `failureReasonContains`
 and `failureJunction`. `ix_metadata_failure_reason_trgm` is a GIN trigram index over
 `lower(failure_reason)`, the same kind as `063`'s log indexes, and serves a search for text inside a
 run's failure reason. `ix_metadata_failure_junction` is a partial B-tree on
@@ -405,8 +405,8 @@ never matches.
 ## State-machine instance listing (071, SQLite 033)
 
 `071_snapshot_draft_operator_listing.sql` (SQLite `033`) serves the operator's list of state-machine
-instances (the API's [`machineInstances`](/docs/sdk-reference/graphql-api/queries#machineinstances)
-and the dashboard's [State Machines page](/docs/dashboard#state-machines)), which reads newest first
+instances (the API's [`machineInstances`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances)
+and the dashboard's [State Machines page](/docs/dashboard/pages#state-machines)), which reads newest first
 by `updated_at`. It adds the nullable `trax.snapshot_draft.created_at`, which the store writes when it
 creates a row; a row created before the migration, or by a host still on the previous version, reads
 it as null, since nothing recorded when it began. It replaces the `(machine, state)` index with

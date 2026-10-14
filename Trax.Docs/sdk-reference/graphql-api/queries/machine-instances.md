@@ -21,7 +21,7 @@ Fields of `OperationsQueries` that read the instances of persisted state machine
 The instances of every [persisted state machine](/docs/statemachine) on the host, system-owned and
 users' drafts alike, newest first by when each was last written. It reads through
 `IOperationsService.GetMachineInstancesAsync` and `CountMachineInstancesAsync`, the reads the
-dashboard's [State Machines page](/docs/dashboard#state-machines) makes.
+dashboard's [State Machines page](/docs/dashboard/pages#state-machines) makes.
 
 ```graphql
 query {

@@ -61,7 +61,7 @@ query {
 | `manifestId` | `Long` | `null` | Only executions of this manifest. The dashboard uses it for a manifest's execution history |
 | `manifestGroupId` | `Long` | `null` | Only executions of any manifest in this group (resolved through `manifest.manifest_group_id`). The dashboard uses it for a group's recent executions |
 | `hideAdminTrains` | `Boolean` | `false` | When `true`, excludes the framework's internal scheduler trains (matches `AdminTrains.FullNames` against `metadata.Name`, which stores the interface FullName). The dashboard sets this from its "Hide admin trains" toggle |
-| `failureClass` | `FailureClass` | `null` | Only executions recorded with this [failure class](/docs/core/trains-and-junctions#classifying-failures): `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. Every run that did not fail records `UNCLASSIFIED`, so `failureClass: UNCLASSIFIED` on its own also matches every completed, pending, in-progress and cancelled run; combine it with `trainState: FAILED` for unclassified failures only |
+| `failureClass` | `FailureClass` | `null` | Only executions recorded with this [failure class](/docs/effect/failure-classification): `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. Every run that did not fail records `UNCLASSIFIED`, so `failureClass: UNCLASSIFIED` on its own also matches every completed, pending, in-progress and cancelled run; combine it with `trainState: FAILED` for unclassified failures only |
 | `externalId` | `String` | `null` | Only the execution with this external id, matched exactly. Served by `ix_metadata_external_id` |
 | `parentId` | `Long` | `null` | Only executions started from inside this execution's run (its children), served by the partial index `ix_metadata_parent_id`. Unlike [`executionChildren`](#executionchildren) it combines with the other filters and pages in either `order` |
 | `hostName` | `String` | `null` | Only executions run on the machine with this name (`hostName` on the summary), matched exactly. Served by `ix_metadata_host_name`. Combine it with `trainState: IN_PROGRESS` for what one host is running now |
@@ -90,7 +90,7 @@ On Postgres `failureReasonContains` is served by a trigram index on `lower(failu
 | `cancellationRequested` | `Boolean!` | Whether cancellation was requested |
 | `parentId` | `Long` | The execution that started this one from inside its run, or null |
 | `currentlyRunningJunction` | `String` | The junction the execution is running now, while it is `IN_PROGRESS`; null otherwise |
-| `failureClass` | `FailureClass!` | How the failure was classified: `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. `UNCLASSIFIED` when the run did not fail, no [failure classifier](/docs/core/trains-and-junctions#classifying-failures) is registered, or it did not recognise the failure. Later releases may add values to `FailureClass`; a client generated from an older schema should treat a value it does not know as `UNCLASSIFIED` rather than failing to read the response |
+| `failureClass` | `FailureClass!` | How the failure was classified: `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. `UNCLASSIFIED` when the run did not fail, no [failure classifier](/docs/effect/failure-classification) is registered, or it did not recognise the failure. Later releases may add values to `FailureClass`; a client generated from an older schema should treat a value it does not know as `UNCLASSIFIED` rather than failing to read the response |
 
 ## execution
 

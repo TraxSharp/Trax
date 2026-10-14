@@ -131,8 +131,8 @@ that changes the context a declared event with an input record, and let the serv
 In TypeScript, `createMachineExecutor(endpoint, { machines })` drives the typed API through the same
 `createSnapshotClient`, `createDraftSession` and `startDraft` as before, and `createMachineServer` with
 `useServerMachine` drives one instance from React, with the server applying every transition and pushing each
-change. Both are described under [The TypeScript client](/docs/sdk-reference/graphql-api/machines#the-typescript-client)
-and [Driving an instance from React](/docs/sdk-reference/graphql-api/machines#driving-an-instance-from-react).
+change. Both are described under [The TypeScript client](/docs/statemachine/call-a-machine-from-typescript)
+and [Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react).
 
 ## Opting back in
 

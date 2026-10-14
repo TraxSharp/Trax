@@ -68,7 +68,7 @@ query {
 
 ## requeueAllJob
 
-The `operations.deadLetters` namespace exposes paginated dead-letter reads (`deadLetters`, `deadLetter`) and `requeueAllJob(id: UUID!)`, which reads a job [`requeueAllDeadLetters`](/docs/sdk-reference/graphql-api/mutations#deadletters-nested-namespace) started. It returns the `DeadLetterRequeueJob`, or `null` when this node does not know the id: the job was started on another node, this node has restarted since, or it finished more than 24 hours ago. Read a job on the node that started it; the backlog itself is `deadLetters(status: AWAITING_INTERVENTION) { totalCount }` on any node.
+The `operations.deadLetters` namespace exposes paginated dead-letter reads (`deadLetters`, `deadLetter`) and `requeueAllJob(id: UUID!)`, which reads a job [`requeueAllDeadLetters`](/docs/sdk-reference/graphql-api/mutations/dead-letters) started. It returns the `DeadLetterRequeueJob`, or `null` when this node does not know the id: the job was started on another node, this node has restarted since, or it finished more than 24 hours ago. Read a job on the node that started it; the backlog itself is `deadLetters(status: AWAITING_INTERVENTION) { totalCount }` on any node.
 
 ```graphql
 query {

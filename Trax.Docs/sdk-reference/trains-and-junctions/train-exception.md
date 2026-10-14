@@ -95,6 +95,6 @@ The caller reads `Order 42 has no lines to ship.`, so the message carries no sec
 
 ## See also
 
-- [Classifying failures](/docs/core/trains-and-junctions#classifying-failures)
+- [Classifying failures](/docs/effect/failure-classification)
 - [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier)
 - [Metadata](/docs/effect/metadata), where a failure is stored

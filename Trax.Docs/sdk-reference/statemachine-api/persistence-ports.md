@@ -357,7 +357,7 @@ internal: a host neither implements nor calls them, and `AddStateMachines` and `
 - **The outcome delivery** applies the outcome of an ended run to the instance waiting on it, now, through the
   delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
   outcome is applied once however many callers deliver it. The operations service calls it after an operator's
-  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued
+  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance) cancels a still-queued
   run, so the instance moves in that request on a host that registers the machine.
 
 ## ISnapshotMachineRegistry

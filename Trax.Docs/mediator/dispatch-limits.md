@@ -90,7 +90,7 @@ A remote runner's HTTP entry points read at most `TraxJobRunnerOptions.MaxReques
 | Deferring trains | A train that defers queue promotion (`DeferQueuePromotion`) runs its hook holding no connection, and this limit does not apply to it. |
 
 The hook itself is described under
-[OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook).
+[OnQueue](/docs/mediator/enqueue-hooks).
 
 ## See also
 

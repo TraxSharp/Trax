@@ -168,7 +168,7 @@ public sealed class GetProductRequest : TypedRequest<ProductView>
 
 The record's properties are the selection set; `Path` wraps the root field in the `discover` and
 namespace levels Trax generates, and the response is unwrapped along the same path. See
-[GraphQL Client: Nested envelopes](/docs/api-graphql-client#nested-envelopes-path).
+[GraphQL Client: Nested envelopes](/docs/api/typed-requests#graphqloperation-properties).
 
 ## Tests
 

@@ -71,7 +71,7 @@ with `customGuards` / `customReducers`. A C# machine that names a custom rule or
 fails at `Build()`, rather than refusing that edge forever. A guard or reducer written as a plain C# delegate cannot
 be carried by the IR at all, so export refuses a declarative machine that still has one, naming the edge, rather
 than emit it as an unconditional edge (see
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/machine#delegate-vs-declarative)). The
+[Delegate vs declarative](/docs/statemachine/delegates-and-declarative-rules)). The
 snapshot itself carries only structure and data, never logic.
 
 Agreement on structure is not enough on its own, because a custom guard exists once per language and the two

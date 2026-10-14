@@ -405,7 +405,7 @@ ones the sample printed when the line was changed.
 `AddScheduler` checks every interval, delay and count against its range when the host builds; the
 ranges are in [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges).
 
-## Testing it
+## Tests
 
 `tests/Trax.Samples.Scheduling.E2E` starts the real host with `WebApplicationFactory` against its
 own database, `scheduling_e2e_tests` (port overridable with `TRAX_TEST_PG_PORT`), and asserts on
@@ -424,7 +424,7 @@ the Trax tables and the GraphQL endpoint:
 
 ## SDK Reference
 
-> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [IDormantDependentContext](/docs/sdk-reference/scheduler-api/dependent-scheduling#idormantdependentcontext) | [ScheduleOnce / TriggerAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard)
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [IDormantDependentContext](/docs/sdk-reference/scheduler-api/i-dormant-dependent-context) | [ScheduleOnce / TriggerAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard)
 
 Feature pages: [Scheduling](/docs/scheduler), [Dependent Trains](/docs/scheduler/dependent-trains),
 [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs),

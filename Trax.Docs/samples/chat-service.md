@@ -446,7 +446,7 @@ Three things in it are load-bearing:
   a caller may listen to is the resolver's job, checked once when the subscription is made. The
   method named by `Subscribe(With = ...)` does not become a field of its own.
 
-See [Subscriptions: your own subscription fields](/docs/sdk-reference/graphql-api/subscriptions#your-own-subscription-fields)
+See [Subscriptions: your own subscription fields](/docs/api/add-a-subscription-field)
 for the general recipe.
 
 ### The browser client

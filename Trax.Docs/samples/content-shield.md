@@ -257,7 +257,7 @@ the Moderator trains.
 
 The API and the runner both publish on `contentshield.lifecycle` (`LifecycleEvents.ExchangeName`),
 an exchange of their own, so another Trax application on the same broker does not receive their
-events. See [UseBroadcaster: RabbitMQ](/docs/sdk-reference/configuration/use-broadcaster#rabbitmq).
+events. See [UseBroadcaster: RabbitMQ](/docs/sdk-reference/configuration/use-rabbit-mq).
 
 Subscriptions need a credential even for anonymous trains. Once an API-key scheme is registered,
 every WebSocket must carry a key in its `connection_init` payload, and a socket without one is

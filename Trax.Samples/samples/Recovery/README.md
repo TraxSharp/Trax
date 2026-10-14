@@ -14,7 +14,7 @@ the map's train, and a food order whose `Ordered` state delivers it is the page'
 ![The Recovery demo: the refund crashes while it pays, and the retry replays the model's two answers](screenshot.png)
 
 It proves three Trax features working together: [train decisions](https://traxsharp.net/docs/core/decisions),
-[retries that replay decisions](https://traxsharp.net/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)
+[retries that replay decisions](https://traxsharp.net/docs/scheduler/how-retries-work#retries-replay-decisions)
 and [junction events](https://traxsharp.net/docs/effect/junction-events). The full walkthrough is on
 [traxsharp.net/docs/samples/recovery](https://traxsharp.net/docs/samples/recovery).
 

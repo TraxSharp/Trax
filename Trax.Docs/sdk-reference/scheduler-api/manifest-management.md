@@ -69,7 +69,7 @@ Task<ManifestTriggerResult> TriggerAsync(string externalId, TimeSpan delay, bool
 |-----------|------|----------|-------------|
 | `externalId` | `string` | Yes | The `ExternalId` of the manifest to trigger |
 | `delay` | `TimeSpan` | No | How far in the future to schedule the execution. When omitted, the job is queued for immediate dispatch. |
-| `askAfresh` | `bool` | No | When `true` and the trigger releases a queued entry that would [replay a failed run's decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) (a retry waiting out its backoff), the entry no longer replays them: the run asks its deciders afresh. A new entry never replays, so it changes nothing there. |
+| `askAfresh` | `bool` | No | When `true` and the trigger releases a queued entry that would [replay a failed run's decisions](/docs/scheduler/how-retries-work#retries-replay-decisions) (a retry waiting out its backoff), the entry no longer replays them: the run asks its deciders afresh. A new entry never replays, so it changes nothing there. |
 | `ct` | `CancellationToken` | No | Cancellation token |
 
 **Throws**: `InvalidOperationException` when no manifest with the specified `ExternalId` exists. The `askAfresh` overloads throw `NotSupportedException` from an `ITraxScheduler` implementation written before them.
@@ -104,7 +104,7 @@ public record ManifestTriggerResult(
 The trigger clears a queued retry's link only while the entry is still queued. With
 `AlreadyDispatched` and a `ReplayDecisionsOf`, the run was asked afresh too late and replays that
 run's decisions; the trigger also logs a warning. The
-[`triggerManifest`](/docs/sdk-reference/graphql-api/mutations#triggermanifest) mutation reports the
+[`triggerManifest`](/docs/sdk-reference/graphql-api/mutations/manifests#triggermanifest) mutation reports the
 same case in its message.
 
 ## ScheduleOnceAsync

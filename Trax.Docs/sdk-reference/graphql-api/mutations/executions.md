@@ -41,7 +41,7 @@ mutation {
 A run a step of a user's state-machine draft started is refused, whatever its state, with
 `success: false` and the message the dashboard shows too: a user's draft is read-only to operators,
 so only its user cancels the run, by leaving the state through one of the machine's own
-transitions (see [Invoking a train](/docs/statemachine/invoking-trains#operators)). A run a
+transitions (see [Invoking a train](/docs/statemachine/invoked-runs#operator-actions)). A run a
 system-owned instance started is cancelled as any other, and the instance moves through
 `OnCancelled`.
 
@@ -80,7 +80,7 @@ the execution being re-queued, and only when it has decisions to replay (it reco
 or was itself a replaying requeue, so re-queueing a re-queue replays too); any other execution is
 re-queued as an ordinary enqueue. `queueTrain` has no way to set it. A manifest's retry and a
 dead-letter requeue are linked by the scheduler from its own checks, never from a caller (see
-[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)).
+[Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions)).
 Each replayed answer is still checked: a question whose state hashes differently now, or whose
 answer is older than `ReplayAnswersFor`, is asked afresh. See
 [Re-queued and retried runs replay their decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions).

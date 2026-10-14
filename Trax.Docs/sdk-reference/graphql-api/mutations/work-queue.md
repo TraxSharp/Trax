@@ -20,7 +20,7 @@ The `operations.workQueue` namespace lets the dashboard (and other API clients) 
 
 ## queueTrain
 
-Creates a new work queue entry. The dispatcher picks it up on its next poll. An unknown `trainName`, malformed or oversized `inputJson`, or JSON that deserializes to `null` returns `OperationResponse(success: false, message: ...)` and inserts nothing. For most trains nothing is written until every check has passed. A train that sets [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) is the exception: its entry is committed unconfirmed (never dispatched) before its `OnQueue` hook runs, and removed again if the hook throws, so a refused enqueue of such a train does briefly write a row.
+Creates a new work queue entry. The dispatcher picks it up on its next poll. An unknown `trainName`, malformed or oversized `inputJson`, or JSON that deserializes to `null` returns `OperationResponse(success: false, message: ...)` and inserts nothing. For most trains nothing is written until every check has passed. A train that sets [`DeferQueuePromotion`](/docs/mediator/queued-work#accepting-a-mutation-is-two-writes) is the exception: its entry is committed unconfirmed (never dispatched) before its `OnQueue` hook runs, and removed again if the hook throws, so a refused enqueue of such a train does briefly write a row.
 
 Upgrading from a version where this mutation wrote the row itself: it now authorizes, fires `OnQueue` and stamps the subject key. See [Enqueue and Outcome Changes](/docs/migration-guides/enqueue-and-outcome-changes).
 

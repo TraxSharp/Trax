@@ -15,7 +15,7 @@ source:
 # IEnqueueContextAccessor
 
 Exposes the data context an enqueue is committing on, so a train's
-[`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook can make its side-effect
+[`OnQueue`](/docs/mediator/enqueue-hooks) hook can make its side-effect
 part of the same transaction as the work queue row. The interface ships in Trax.Effect.Data;
 `AddMediator()` registers it, as a singleton, so a train registered with any lifetime may inject it.
 
@@ -59,7 +59,7 @@ instance or its DI scope. Every instance on the same async flow sees the same va
 scope or lifetime resolved it, including a singleton train's accessor or one resolved from another
 scope. Two enqueues running at once on one scope each see their own. An enqueue started from inside
 an `OnQueue` hook joins the outer enqueue's transaction (see
-[OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook)), so a nested train that does
+[OnQueue](/docs/mediator/enqueue-hooks)), so a nested train that does
 not defer promotion sees the outer enqueue's context in its own hook, and what it tracks there
 commits or rolls back with the outer entry. Disposing each scope restores what was current before
 it. `Suppress()` follows the same rules: it hides the context from the flow that calls it and the
@@ -91,6 +91,6 @@ public class ReserveSeatTrain(IEnqueueContextAccessor accessor)
 
 ## See also
 
-- [OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook)
+- [OnQueue](/docs/mediator/enqueue-hooks)
 - [ITrainExecutionService.QueueAsync](/docs/sdk-reference/mediator-api/i-train-execution-service#queueasync), the enqueue path
 - [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)

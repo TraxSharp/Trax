@@ -320,7 +320,7 @@ delay the manifest sets for itself. For those, use configuration as above.
 ## Test a cron manifest's retries
 
 A failed run is retried when its manifest is next due
-([When a retry runs](/docs/scheduler/dead-letters-and-cleanup#when-a-retry-runs)). A run started
+([When a retry runs](/docs/scheduler/how-retries-work#when-a-retry-runs)). A run started
 with `TriggerAsync` or `triggerManifest` while the cron is not due is retried only at the cron's
 next occurrence, so triggering a nightly job in a test and waiting for its retries waits until
 tomorrow. Test the two halves separately:
@@ -385,7 +385,7 @@ await Send(socket, new { id = "1", type = "subscribe",
 
 Subscribe before you trigger the run: there is no replay, and `graphql-transport-ws` sends no
 acknowledgement of a `subscribe`. Filter events by `externalId`
-([Watching a queued run](/docs/sdk-reference/graphql-api/subscriptions#watching-a-queued-run)), give
+([Watching a queued run](/docs/api/watch-a-queued-run)), give
 every receive a timeout, and expect a refused subscription as a message of type `error` whose payload
 holds `TRAX_AUTHORIZATION`, not as a closed socket. The subscriber receives a train's events only if
 the train is `[TraxBroadcast]` and admits it, or the key satisfies the operations gate.
