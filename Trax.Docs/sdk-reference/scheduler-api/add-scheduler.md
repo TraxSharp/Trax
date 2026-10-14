@@ -6,89 +6,58 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 2
+package: Trax.Scheduler
+namespace:
+  - Trax.Scheduler.Extensions
+  - Trax.Scheduler.Configuration
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Extensions/SchedulerExtensions.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Extensions/SchedulerBuilderOrderExtensions.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.Settings.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfiguration.cs
 ---
 
 # AddScheduler
 
-Adds the Trax.Core scheduler subsystem. Registers `ITraxScheduler`, the background polling service, and all scheduler infrastructure, including the services the dashboard and the GraphQL API share: [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service), [IEffectSettingsService](/docs/sdk-reference/scheduler-api/i-effect-settings-service), [ILogLevelService](/docs/sdk-reference/scheduler-api/i-log-level-service) and [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs). Provides a `SchedulerConfigurationBuilder` lambda for configuring global options, execution backends, and startup schedules.
+Adds the scheduler, through `SchedulerExtensions`. It registers `ITraxScheduler`, the background polling service, and all scheduler infrastructure, including the services the dashboard and the GraphQL API share: [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service), [IEffectSettingsService](/docs/sdk-reference/scheduler-api/i-effect-settings-service), [ILogLevelService](/docs/sdk-reference/scheduler-api/i-log-level-service) and [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs). Its `configure` callback receives a `SchedulerConfigurationBuilder` for global options, execution backends and startup schedules.
 
 ## Signature
 
-```csharp
-// With configuration
+```csharp fragment
 public static TraxBuilderWithMediator AddScheduler(
     this TraxBuilderWithMediator builder,
     Func<SchedulerConfigurationBuilder, SchedulerConfigurationBuilder> configure
 )
 
-// Parameterless defaults
 public static TraxBuilderWithMediator AddScheduler(
     this TraxBuilderWithMediator builder
 )
 ```
 
-`AddScheduler` is called on `TraxBuilderWithMediator` (the return type of `AddMediator()`), which enforces at compile time that effects and the mediator are configured before the scheduler.
-
-The parameterless overload registers the scheduler with default settings, equivalent to `AddScheduler(scheduler => scheduler)`.
-
 ## Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `configure` | `Func<SchedulerConfigurationBuilder, SchedulerConfigurationBuilder>` | No | Lambda that receives the scheduler builder and returns it after configuring options, execution backends, and schedules. Omit for defaults. |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `configure` | `Func<SchedulerConfigurationBuilder, SchedulerConfigurationBuilder>` | Receives the scheduler builder and returns it after configuring options, execution backends and schedules. The overload without it is `AddScheduler(scheduler => scheduler)` |
 
-## Returns
+### SchedulerConfigurationBuilder
 
-`TraxBuilderWithMediator`, for continued fluent chaining (adding another `AddScheduler()` call is not typical, but the type allows further configuration).
+The methods of the builder `configure` receives.
 
-## Example
-
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(Program).Assembly)
-    .AddScheduler(scheduler => scheduler
-        .ManifestManagerPollingInterval(TimeSpan.FromSeconds(5))
-        .JobDispatcherPollingInterval(TimeSpan.FromSeconds(5))
-        .MaxActiveJobs(50)
-        .DefaultMaxRetries(5)
-        .DefaultRetryDelay(TimeSpan.FromMinutes(2))
-        .RetryBackoffMultiplier(2.0)
-        .MaxRetryDelay(TimeSpan.FromHours(1))
-        .DefaultJobTimeout(TimeSpan.FromMinutes(20))
-        .DefaultMisfirePolicy(MisfirePolicy.FireOnceNow)
-        .DefaultMisfireThreshold(TimeSpan.FromSeconds(60))
-        .RecoverStuckJobsOnStartup()
-        .DependentPriorityBoost(16)
-        .AddMetadataCleanup()
-        .Schedule<MyTrain>(
-            "my-job",
-            new MyInput(),
-            Every.Minutes(5),
-            options => options
-                .Priority(10)
-                .Group("my-group"))
-    )
-);
-```
-
-## SchedulerConfigurationBuilder Options
-
-These methods are available on the `SchedulerConfigurationBuilder` passed to the `configure` lambda:
-
-### Execution Backend
+#### Execution backend
 
 | Method | Description |
 |--------|-------------|
 | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) | Customizes the built-in PostgreSQL local workers (enabled by default with Postgres) |
 | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Routes specific trains to a remote HTTP endpoint for execution |
 | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | Routes specific trains to an Amazon SQS queue for execution (`Trax.Scheduler.Sqs`) |
+| [UseLambdaWorkers](/docs/sdk-reference/scheduler-api/use-lambda-workers) | Routes specific trains to an AWS Lambda function (`Trax.Scheduler.Lambda`) |
+| [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run) | Offloads synchronous `run` execution to an AWS Lambda function (`Trax.Scheduler.Lambda`) |
 | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | Offloads synchronous `run` execution to a remote endpoint (blocks until complete) |
 | `OverrideSubmitter(Action<IServiceCollection>)` | Registers the job submitter yourself, in place of the default. With it no `LocalWorkerService` starts, so `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())` (both in `Trax.Scheduler.Services.JobSubmitter`) gives a scheduler that writes jobs to `background_job` for [standalone workers](/docs/sdk-reference/scheduler-api/add-trax-worker) and runs none itself |
 
-### Global Options
+#### Global options
 
 | Method | Parameter | Default | Description |
 |--------|-----------|---------|-------------|
@@ -120,6 +89,42 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `PruneOrphanedManifests(bool)` | prune | `true` | Whether to [delete manifests](/docs/scheduler/orphan-manifest-cleanup) from the database that are no longer defined in the startup configuration. Disable if you create manifests dynamically at runtime via `ITraxScheduler`. Only manifests this application owns (`IHostEnvironment.ApplicationName`, else the entry assembly's name) are pruned; another application's, and ones with no owner (written by an earlier version), never are. A host that declares no manifests, or has no application name, prunes nothing, and a manifest with a pending or running run is kept until the run finishes |
 | `DependentPriorityBoost(int)` | boost | 16 | Priority boost added to dependent train work queue entries at dispatch time. Range: 0-31. Dependent trains are dispatched before non-dependent ones by default |
 
+#### Startup schedules
+
+| Method | Description |
+|--------|-------------|
+| [Schedule](/docs/sdk-reference/scheduler-api/schedule) | Schedules a single recurring train (seeded on startup) |
+| [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | Batch-schedules manifests from a collection |
+| [ScheduleOnce](/docs/scheduler/delayed-jobs#startup-configuration-builder-pattern) | Schedules a one-off that runs once after a delay from startup, then disables itself |
+| [ThenInclude / Include / ThenIncludeMany / IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Schedules dependent trains: `ThenInclude` parents from the previous call, `Include` from the last `Schedule`; `.Dormant()` makes one that runs only when its parent activates it |
+| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic metadata purging |
+
+
+#### Extension points
+
+Hidden from completion; the transport packages call them.
+
+| Member | Description |
+|--------|-------------|
+| `AddRoutedSubmitter(RoutedSubmitterRegistration)` | Adds a submitter backend with its routing, as `UseSqsWorkers` and `UseLambdaWorkers` do |
+| `SetRemoteRunRegistration(Action<IServiceCollection>)` | Replaces the default `LocalRunExecutor` registration, as `UseLambdaRun` does |
+| `ServiceCollection` | The service collection the scheduler registers into |
+
+`RoutedSubmitterRegistration` is a record of `Routing` (the `SubmitterRouting` the call built),
+`SubmitterType` (the `IJobSubmitter` type), `Register` (the call's service registrations),
+`CreateSubmitter` (an optional factory that builds the submitter per dispatch, with the call's own
+options and client) and `Description` (the endpoint named in a routing conflict).
+
+## Returns
+
+`TraxBuilderWithMediator`, for continued fluent chaining.
+
+## Behavior
+
+### Stored settings
+
+The settings the dashboard's Server Settings page and the [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) mutation edit (the enable switches, polling intervals, `MaxActiveJobs`, retry, timeout, failure-count window and dead-letter settings, the local worker count and the metadata cleanup interval and retention) are stored in `trax.scheduler_config`. A save stores only the settings it names (a scheduler host leaves out a field equal to the value it runs with; a host that does not run the scheduler stores every field it sends; the dashboard sends only the fields the operator changed), and any host can make one, the first included, including an API-only one. Every running scheduler applies the stored values over these builder values at startup and re-reads the row every few seconds, so a saved change reaches all of them without a restart; the local worker count is the exception and applies when the worker pool next starts. A setting no save has named is not stored, so each host keeps its builder value for it. A stored value takes precedence over the builder value until it is changed or the row is deleted, and the scheduler logs a warning when one replaces a different builder value; `AutoPurgeDeadLetters` and `DeadLetterRetentionPeriod` fail closed instead (see their rows). A scheduler that cannot read the row at startup runs with the builder values and applies the row at its first successful read. See [scheduler ADR 0010](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0010-a-settings-save-writes-only-what-it-names-and-every-scheduler-applies-it.md).
+
 ### Value Ranges
 
 `AddScheduler` checks every duration and count it is given when the scheduler is built, against the same ranges a runtime change through the dashboard or `updateScheduler` is held to. A value outside its range fails the build with an `InvalidOperationException` that lists every problem at once, each named by the method (or options property) that set it.
@@ -141,20 +146,9 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 
 The polling services never wait less than one second between cycles, whatever interval reaches them. At startup the scheduler also logs a warning when the retry backoff for `DefaultMaxRetries` retries adds up to `FailureCountWindow` or more: the oldest failure would leave the window before the last retry, so a manifest that always fails would retry for ever without being dead-lettered. Lengthen the window, or lower `DefaultMaxRetries`, `DefaultRetryDelay` or `MaxRetryDelay`.
 
-### Startup Schedules
+### Remarks
 
-| Method | Description |
-|--------|-------------|
-| [Schedule](/docs/sdk-reference/scheduler-api/schedule) | Schedules a single recurring train (seeded on startup) |
-| [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | Batch-schedules manifests from a collection |
-| [ScheduleOnce](/docs/scheduler/delayed-jobs#startup-configuration-builder-pattern) | Schedules a one-off that runs once after a delay from startup, then disables itself |
-| [ThenInclude / Include / ThenIncludeMany / IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Schedules dependent trains: `ThenInclude` parents from the previous call, `Include` from the last `Schedule`; `.Dormant()` makes one that runs only when its parent activates it |
-| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic metadata purging |
-
-## Remarks
-
-- The settings the dashboard's Server Settings page and the [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) mutation edit (the enable switches, polling intervals, `MaxActiveJobs`, retry, timeout, failure-count window and dead-letter settings, the local worker count and the metadata cleanup interval and retention) are stored in `trax.scheduler_config`. A save stores only the settings it names (a scheduler host leaves out a field equal to the value it runs with; a host that does not run the scheduler stores every field it sends; the dashboard sends only the fields the operator changed), and any host can make one, the first included, including an API-only one. Every running scheduler applies the stored values over these builder values at startup and re-reads the row every few seconds, so a saved change reaches all of them without a restart; the local worker count is the exception and applies when the worker pool next starts. A setting no save has named is not stored, so each host keeps its builder value for it. A stored value takes precedence over the builder value until it is changed or the row is deleted, and the scheduler logs a warning when one replaces a different builder value; `AutoPurgeDeadLetters` and `DeadLetterRetentionPeriod` fail closed instead (see their rows). A scheduler that cannot read the row at startup runs with the builder values and applies the row at its first successful read. See [scheduler ADR 0010](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0010-a-settings-save-writes-only-what-it-names-and-every-scheduler-applies-it.md).
-- `AddScheduler` requires `AddEffects()` and `AddMediator()` to be called first. This is enforced at compile time -- `AddScheduler` is only available on `TraxBuilderWithMediator`, which is the return type of `AddMediator()`.
+- `AddScheduler` extends `TraxBuilderWithMediator`, the type `AddMediator()` returns, so it compiles only after `AddEffects()` and `AddMediator()`. Called on an earlier stage, it binds to an overload in `SchedulerBuilderOrderExtensions` that is obsolete as an error and says which call comes first.
 - `AddScheduler` requires a data provider (`UsePostgres()`, `UseSqlite()` or `UseInMemory()`). If none is configured, `AddScheduler` throws `InvalidOperationException` at build time: `AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()).`
 - Internal scheduler trains (`ManifestManager`, `InMemoryManifestManager`, `JobDispatcher`, `JobRunner`, `MetadataCleanup`, `DeadLetterCleanup`) are automatically excluded from `MaxActiveJobs`.
 - With `UseInMemory()`, `JobDispatcherPollingService` and `MetadataCleanupPollingService` are not registered. The `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that dispatches jobs inline through the in-memory job submitter.
@@ -162,3 +156,43 @@ The polling services never wait less than one second between cycles, whatever in
 - Manifests declared via `Schedule`/`ScheduleMany` are not created immediately. They are seeded on application startup by the `SchedulerStartupService`.
 - Manifests declared via `Schedule`/`ThenInclude`/`Include` get a ManifestGroup based on their `groupId` parameter (defaults to externalId). Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) are configured from the dashboard.
 - At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains: Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection).
+- The dead-letter purge checks for expired dead letters every `SchedulerConfiguration.DeadLetterCleanupInterval`, one hour; the builder does not change it.
+
+## Example
+
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(assembly)
+    .AddScheduler(scheduler => scheduler
+        .ManifestManagerPollingInterval(TimeSpan.FromSeconds(5))
+        .JobDispatcherPollingInterval(TimeSpan.FromSeconds(5))
+        .MaxActiveJobs(50)
+        .DefaultMaxRetries(5)
+        .DefaultRetryDelay(TimeSpan.FromMinutes(2))
+        .RetryBackoffMultiplier(2.0)
+        .MaxRetryDelay(TimeSpan.FromHours(1))
+        .DefaultJobTimeout(TimeSpan.FromMinutes(20))
+        .DefaultMisfirePolicy(MisfirePolicy.FireOnceNow)
+        .DefaultMisfireThreshold(TimeSpan.FromSeconds(60))
+        .RecoverStuckJobsOnStartup()
+        .DependentPriorityBoost(16)
+        .AddMetadataCleanup()
+        .Schedule<ISyncTrain>(
+            "my-job",
+            new SyncInput(),
+            Every.Minutes(5),
+            options => options
+                .Priority(10)
+                .Group("my-group"))
+    )
+);
+```
+
+## See also
+
+- [Set up the scheduler](/docs/scheduler/setup)
+- [Scheduling options](/docs/scheduler/scheduling-options)
+- [Schedule / ScheduleAsync](/docs/sdk-reference/scheduler-api/schedule) and [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler)
