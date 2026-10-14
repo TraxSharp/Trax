@@ -6,15 +6,20 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 1
+package: Trax.Scheduler
+namespace: Trax.Scheduler.Services.TraxScheduler
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/TraxScheduler/ITraxScheduler.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/TraxScheduler/TraxScheduler.cs
 ---
 
 # ITraxScheduler
 
-The runtime scheduling API. Inject it to create, change, trigger and cancel manifests while the application runs, and to resolve dead letters. `AddScheduler` registers it. The startup equivalent, which seeds manifests when the host starts, is the [scheduler builder](/docs/sdk-reference/scheduler-api/add-scheduler).
+The runtime scheduling API. Inject it to create, change, trigger and cancel manifests while the application runs, and to resolve dead letters. `AddScheduler` registers the default implementation, `TraxScheduler`, as scoped. The startup equivalent, which seeds manifests when the host starts, is the [scheduler builder](/docs/sdk-reference/scheduler-api/add-scheduler).
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Scheduler.Services.TraxScheduler;
 
 public interface ITraxScheduler
@@ -81,7 +86,7 @@ Every scheduling method constrains `TTrain : IServiceTrain<TInput, TOutput>` and
 
 Queues an immediate run of every eligible manifest in a manifest group.
 
-```csharp
+```csharp fragment
 Task<int> TriggerGroupAsync(long groupId, CancellationToken ct = default)
 ```
 
@@ -134,7 +139,7 @@ compiles and refuses the option rather than ignoring it.
 
 ### Result types
 
-```csharp
+```csharp fragment
 public record DeadLetterOperationResult(bool Success, long? WorkQueueId, string Message);
 public record BatchDeadLetterResult(int Count, string Message);
 ```
@@ -147,11 +152,13 @@ public record BatchDeadLetterResult(int Count, string Message);
 | `BatchDeadLetterResult.Count` | How many dead letters were resolved |
 | `BatchDeadLetterResult.Message` | A summary that also counts the folded and skipped dead letters |
 
-These are the same operations the dashboard and the GraphQL `operations` namespace use. See [Dead Letters](/docs/scheduler/dead-letters-and-cleanup#handling-dead-letters) for the concepts.
+## Behavior
+
+The dashboard and the GraphQL `operations` namespace resolve dead letters through these same methods, by way of [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service). Scheduling at startup is done on the [scheduler builder](/docs/sdk-reference/scheduler-api/add-scheduler) instead, which seeds manifests when the host starts.
 
 ## Example
 
-```csharp
+```csharp compile
 public class GroupController(ITraxScheduler scheduler)
 {
     public async Task<string> RunGroupNow(long groupId, CancellationToken ct)
@@ -165,8 +172,8 @@ public class GroupController(ITraxScheduler scheduler)
 }
 ```
 
-## Package
+## See also
 
-```
-dotnet add package Trax.Scheduler
-```
+- [Dead Letters](/docs/scheduler/dead-letters-and-cleanup#handling-dead-letters), what a dead letter is and how it is resolved
+- [Manifest management](/docs/sdk-reference/scheduler-api/manifest-management)
+- [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs), requeue-all in the background
