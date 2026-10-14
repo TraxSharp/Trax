@@ -26,7 +26,7 @@ dotnet tool install dotnet-ef
 
 The app and the tools must agree on them. Put the migrations history table in the domain's own schema; without this it lands in `public."__EFMigrationsHistory"`, shared by every context that does the same:
 
-```csharp fragment
+```csharp compile=shop
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 
 public static class ShopDatabase
@@ -40,7 +40,7 @@ public static class ShopDatabase
 
 `dotnet ef` builds the context from it instead of starting your host, which would run Trax's migrations and the rest of `Program.cs`. The base's sealed `OnModelCreating` is no obstacle: the tools build the model through it, schema and UTC converter included, so the migrations carry `EnsureSchema("shop")` and every table in that schema.
 
-```csharp fragment
+```csharp compile=shop
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
@@ -59,7 +59,7 @@ public class ShopDbContextFactory : IDesignTimeDbContextFactory<ShopDbContext>
 
 Apply them at startup, or from a deployment step, in place of `EnsureSchemaCreatedAsync`:
 
-```csharp fragment
+```csharp compile=shop
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
