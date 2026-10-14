@@ -229,4 +229,4 @@ lists both attempts. A closed restaurant (`RESTAURANT_CLOSED`) fails the run at 
 
 ## SDK Reference
 
-> [Invoking a train](/docs/statemachine/invoking-trains) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machines](/docs/sdk-reference/graphql-api/machines)
+> [Invoking a train](/docs/statemachine/invoking-trains) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines) | [Machines](/docs/sdk-reference/graphql-api/machines)

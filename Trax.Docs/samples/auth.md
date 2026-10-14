@@ -415,11 +415,11 @@ none, the name the document gives its operation (`query Feed { ... }` is recorde
 | `DemoCredentialsEnvironmentTests` | in Production no demo scheme exists and the demo key and token authenticate nobody, `/dev/token` is gone, a copied demo key refuses startup, and configured hashed keys and an identity provider's tokens work |
 
 The Production test signs in with an identity provider's token using `TestJwksServer` from
-`Trax.Api.Auth.Jwt.Testing`; see [JWT Testing](/docs/sdk-reference/api-auth/jwt-testing).
+`Trax.Api.Auth.Jwt.Testing`; see [JWT Testing](/docs/sdk-reference/api-auth/test-jwks-server).
 
 ## SDK Reference
 
-> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context)
+> [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth) | [Injecting TraxPrincipal](/docs/security/inject-the-current-principal) | [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) | [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddAudit](/docs/sdk-reference/api-audit/add-audit) | [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink) | [TraxAuditEntry](/docs/sdk-reference/api-audit/trax-audit-entry) | [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context)
 
 See also [Authorization](/docs/authorization), [API Security](/docs/api-security) and
 [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids).

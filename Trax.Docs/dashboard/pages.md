@@ -33,7 +33,7 @@ the API show the same rows and refuse the same requests with the same messages. 
 ## Trains
 
 `/trax/trains`. Every `IServiceTrain<TIn, TOut>` the host registers, from
-[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery).
+[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/i-train-discovery-service).
 
 | Column | Value |
 |---|---|

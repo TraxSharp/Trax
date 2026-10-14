@@ -78,7 +78,7 @@ inspect work through `IOperationsService`, which only
 provider has no `IOperationsService`, `UseTraxDashboard` throws `InvalidOperationException`
 naming `AddScheduler()`, rather than mapping pages that fail on their first request.
 
-The dashboard requires the Scheduler, which in turn requires a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)).
+The dashboard requires the Scheduler, which in turn requires a data provider ([UsePostgres](/docs/sdk-reference/configuration/use-postgres) or [UseInMemory](/docs/sdk-reference/configuration/use-in-memory)).
 
 ### Mount path
 

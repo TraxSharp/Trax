@@ -122,7 +122,7 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 
 `Pay` is bound to the effect, so no client fires it with a receipt: the server runs the charge and fires `Pay` with
 the receipt the charge returned, as `input["receipt"]`. `Paid` is committed, so no save can put a draft there or take
-one out. Every builder call is listed in [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring),
+one out. Every builder call is listed in [Machine authoring](/docs/sdk-reference/statemachine-api/machine),
 the guard and reduction forms in the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and the
 records' mapping to JSON in [Context and input schemas](/docs/statemachine/context-schemas).
 
@@ -153,7 +153,7 @@ public sealed class GatewayCharge(IPaymentGateway gateway) : ICharge
 
 Return a non-empty receipt. Throwing means the charge did not happen and a retry runs it again; an
 `OperationCanceledException` means the outcome is unknown, and the effect is taken over under the same key once its
-lease passes. The details are in [Effects](/docs/sdk-reference/statemachine-api/effects).
+lease passes. The details are in [Effects](/docs/sdk-reference/statemachine-api/i-snapshot-effect).
 
 ## 3. Map the caller to a user key
 
@@ -202,9 +202,9 @@ builder.Services.AddTraxGraphQL(graphql =>
 
 `SingleNode()` suits one process; more than one node uses `UseRabbitMqInvalidation(connectionString)`, as
 [Turn on persisted operations](/docs/persisted-operations) describes. Host options (draft expiry, the per-user draft
-cap, the change feed) are under [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options).
+cap, the change feed) are under [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines#options).
 The rules for which registered machines are served, and the refusals for a marked subclass or a duplicate id, are
-under [Serving a machine](/docs/sdk-reference/statemachine-api/add-trax-state-machines#serving-a-machine).
+under [Serving a machine](/docs/sdk-reference/statemachine-api/add-state-machines#serving-a-machine).
 
 ## 5. Call it from a client
 
@@ -263,4 +263,4 @@ author the corpus's inputs with `.Differential(...)`.
 
 ## SDK Reference
 
-> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [Effects](/docs/sdk-reference/statemachine-api/effects) | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | [Machines root](/docs/sdk-reference/graphql-api/machines) | [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
+> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/machine) | [Effects](/docs/sdk-reference/statemachine-api/i-snapshot-effect) | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | [Machines root](/docs/sdk-reference/graphql-api/machines) | [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)

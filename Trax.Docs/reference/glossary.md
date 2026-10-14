@@ -38,14 +38,14 @@ The names Trax uses, in the code and in these pages. Each entry says where the t
 | **ExternalId** | A string id meant for use outside the database. On a **Manifest** it is the stable name the scheduling APIs key on: scheduling the same ExternalId again updates that manifest instead of adding one. On a **Metadata** row it is typically a GUID by which other systems refer to the run. |
 | **Lifecycle hook** | An `ITrainLifecycleHook`, registered with `AddLifecycleHook`. Trax calls its `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled` and `OnStateChanged` as a run changes state, each optional; an exception it throws is logged and never fails the train. See [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook). |
 | **Broadcaster** | `UseBroadcaster(...)`: publishes train lifecycle events to other processes through a transport such as RabbitMQ, or to browsers through SignalR. See [Broadcaster Sinks](/docs/effect/broadcaster-sinks). |
-| **Log** | A row of `trax.log`: one `ILogger` message captured by `AddDataContextLogging`. See [Debugging with the Log Table](/docs/effect/debugging-with-the-log-table). |
+| **Log** | A row of `trax.log`: one `ILogger` message captured by `AddDataContextLogging`. See [Debugging with the Log Table](/docs/effect/debug-across-processes-with-the-log-table). |
 
 ## Mediator
 
 | Term | What it means |
 |---|---|
 | **Mediator** | What `AddMediator(...)` registers: it discovers the trains in the assemblies you name, so callers can run a train without referencing its class. See [Mediator](/docs/mediator). |
-| **TrainBus** | `ITrainBus` in `Trax.Mediator.Services.TrainBus`. `RunAsync<TOut>(input)` finds the train registered for the input's type and runs it. When none is registered it throws `NoTrainForInputException`. See [TrainBus](/docs/sdk-reference/mediator-api/train-bus). |
+| **TrainBus** | `ITrainBus` in `Trax.Mediator.Services.TrainBus`. `RunAsync<TOut>(input)` finds the train registered for the input's type and runs it. When none is registered it throws `NoTrainForInputException`. See [TrainBus](/docs/sdk-reference/mediator-api/i-train-bus). |
 
 ## Scheduling
 

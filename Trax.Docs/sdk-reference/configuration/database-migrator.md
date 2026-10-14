@@ -65,5 +65,5 @@ await DatabaseMigrator.Migrate(connectionString);
 ## See also
 
 - [Run migrations outside startup](/docs/effect/run-migrations-outside-startup)
-- [Database migrations](/docs/migration-guides/database-migrations), what each migration changes
+- [Database migrations](/docs/reference/schema-migrations), what each migration changes
 - [Writing Migrations](/docs/contributing/writing-migrations)

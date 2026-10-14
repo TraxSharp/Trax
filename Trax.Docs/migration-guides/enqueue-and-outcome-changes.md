@@ -69,7 +69,7 @@ throw a plain `InvalidOperationException`, the same type as an empty subject key
 derives from `InvalidOperationException`, so existing catches still work, and carries
 `WorkQueueId` and `TrainName` for a caller that has to compensate for the hook's side-effect.
 
-See [TrainExecution](/docs/sdk-reference/mediator-api/train-execution#queueasync).
+See [TrainExecution](/docs/sdk-reference/mediator-api/i-train-execution-service#queueasync).
 
 ## Every caller-built enqueue goes through the mediator
 
@@ -169,4 +169,4 @@ query of your own that does will see null there.
 
 ## SDK Reference
 
-> [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Junctions](/docs/sdk-reference/train-methods/junctions)
+> [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Junctions](/docs/sdk-reference/train-methods/junctions)

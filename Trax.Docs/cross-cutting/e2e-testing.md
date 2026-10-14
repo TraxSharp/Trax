@@ -396,4 +396,4 @@ connection), and `ChatApiTests/LifecycleSubscriptionTests.cs` next to it uses it
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/i-train-bus) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)

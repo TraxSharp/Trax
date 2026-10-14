@@ -18,7 +18,7 @@ source:
 A state declared with `Invokes<TTrain, TInput, TOutput>` queues one run of the train each time it is entered, and
 applies the run's outcome to that entry of the state. Declaring one is covered in
 [Invoke a train from a state](/docs/statemachine/invoking-trains); the builder methods are under
-[IInvokeBuilder](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder).
+[IInvokeBuilder](/docs/sdk-reference/statemachine-api/machine#iinvokebuilder).
 
 ## Outcome triggers
 

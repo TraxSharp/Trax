@@ -84,5 +84,5 @@ services.AddTrax(trax => trax
 
 ## See also
 
-- [Debugging with the log table](/docs/effect/debugging-with-the-log-table)
+- [Debugging with the log table](/docs/effect/debug-across-processes-with-the-log-table)
 - [IDataContext](/docs/sdk-reference/configuration/i-data-context), [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level)

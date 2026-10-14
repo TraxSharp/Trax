@@ -34,7 +34,7 @@ as the other's. Qualifying the id by the scheme keeps them apart everywhere the 
 Everything that reads the claim:
 
 - `ClaimsPrincipal.TryGetPrincipalId(out var id)` and `FindFirst(TraxAuthClaimTypes.PrincipalId)`;
-- `TryGetTraxPrincipal`, the injected [`TraxPrincipal`](/docs/sdk-reference/api-auth/injecting-trax-principal) and `TraxCaller.Principal`, whose `Id` is the qualified id;
+- `TryGetTraxPrincipal`, the injected [`TraxPrincipal`](/docs/security/inject-the-current-principal) and `TraxCaller.Principal`, whose `Id` is the qualified id;
 - the audit record's [`PrincipalId`](/docs/sdk-reference/api-audit/trax-audit-entry);
 - the mediator's per-principal concurrency buckets;
 - any EF Core query filter or resolver you wrote against one of those.

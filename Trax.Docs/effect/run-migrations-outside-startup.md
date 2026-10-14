@@ -64,7 +64,7 @@ runners that skip, so the schema moves forward when the long-running host deploy
 
 ## See also
 
-- [Database migrations](/docs/migration-guides/database-migrations), what each migration changes
+- [Database migrations](/docs/reference/schema-migrations), what each migration changes
 
 ## SDK Reference
 

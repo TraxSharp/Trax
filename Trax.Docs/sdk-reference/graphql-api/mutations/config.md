@@ -94,7 +94,7 @@ Every field defaults to `null` and means "no change". To clear `maxActiveJobs` (
 | `recoverStuckJobsOnStartup` | `Boolean` | |
 | `deadLetterRetentionPeriod` | `TimeSpan` | Zero to ten years |
 | `autoPurgeDeadLetters` | `Boolean` | |
-| `localWorkerCount` | `Int` | 1 to 256. Ignored when this process runs no local worker pool (see [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers)). Applies when the worker pool next starts |
+| `localWorkerCount` | `Int` | 1 to 256. Ignored when this process runs no local worker pool (see [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers)). Applies when the worker pool next starts |
 | `clearLocalWorkerCount` | `Boolean` | Resets `localWorkerCount` to `Environment.ProcessorCount` |
 | `metadataCleanupInterval` | `TimeSpan` | 1 second to 30 days. Ignored when metadata cleanup is not configured |
 | `metadataCleanupRetention` | `TimeSpan` | 1 second to ten years. Ignored when metadata cleanup is not configured |

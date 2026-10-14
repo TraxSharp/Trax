@@ -51,8 +51,8 @@ and a term of only `%` does not match everything. A `null` term throws `Argument
 
 The match is case-insensitive when the column is lowered too, which every provider translates. On Postgres that becomes `lower(failure_reason) LIKE @pattern ESCAPE '\'`. The trigram indexes Trax
 ships (`ix_log_message_trgm` and `ix_log_category_trgm` from migration
-[063](/docs/migration-guides/database-migrations#log-text-search-063), and
-`ix_metadata_failure_reason_trgm` from [066](/docs/migration-guides/database-migrations#failure-search-066))
+[063](/docs/reference/schema-migrations#log-text-search-063), and
+`ix_metadata_failure_reason_trgm` from [066](/docs/reference/schema-migrations#failure-search-066))
 are built over the lowered column, so a search written another way, with `ILIKE` or without
 `lower`, reads the whole table. A term shorter than three characters has no trigram to look up and
 reads the table either way.

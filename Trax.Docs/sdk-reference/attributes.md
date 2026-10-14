@@ -41,4 +41,4 @@ Every attribute Trax reads ships in the Trax.Effect package, in the `Trax.Effect
 | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | Class | Exposes a train as a GraphQL query or mutation |
 | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | Class | Publishes the train's lifecycle events to GraphQL subscriptions |
 | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models) | Class | Exposes an EF entity as a paged, filterable GraphQL query |
-| [TraxMachine](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | Class | Serves a state machine through its own typed operations |
+| [TraxMachine](/docs/sdk-reference/statemachine-api/add-state-machines) | Class | Serves a state machine through its own typed operations |

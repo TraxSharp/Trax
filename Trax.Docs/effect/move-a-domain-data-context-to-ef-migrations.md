@@ -102,4 +102,4 @@ Use the migration's full id (its file name) and your EF Core version. Every late
 
 ## SDK Reference
 
-> [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [Architecture guards](/docs/reference/architecture-guards)
+> [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [Architecture guards](/docs/reference/architecture-guards)

@@ -60,4 +60,4 @@ The schema changes each release applies are listed in
 
 ## SDK Reference
 
-> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
+> [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute)

@@ -180,7 +180,7 @@ adds nothing.
 
 When the run has decisions to replay and the registered `ITrainExecutionService` does
 not implement the
-[`QueueAsync` overload that takes `QueueTrainOptions`](/docs/sdk-reference/mediator-api/train-execution),
+[`QueueAsync` overload that takes `QueueTrainOptions`](/docs/sdk-reference/mediator-api/i-train-execution-service),
 the mediator's `DecisionReplayNotSupportedException` is logged and thrown as a host
 misconfiguration rather than reported as `The enqueue was refused.`
 
@@ -492,7 +492,7 @@ public record LogCount(int Count, bool Capped);
 
 Case is folded by the database: on Postgres by its collation, on Sqlite for ASCII letters only.
 On Postgres a trigram index over the lowered message and category
-([migration 063](/docs/migration-guides/database-migrations#log-text-search-063)) finds a term of
+([migration 063](/docs/reference/schema-migrations#log-text-search-063)) finds a term of
 three characters or more. A page with a text filter, read by cursor or from the start, first
 reads the 10,000 entries nearest where it starts in order, which fills it when the term is common
 there, and finds the rest of its matches through the index and sorts them, so a term common only
@@ -513,7 +513,7 @@ An exact count of a large, unfiltered log table is a full scan, and the schedule
 
 `GetRecordedDecisionsAsync` reads the rows [`AddDecisionRecording`](/docs/sdk-reference/configuration/add-decision-recording)
 writes, one `RecordedDecisionRecord` each, a page at a time in id order from
-`ix_decision_metadata_id_id` ([migration 064](/docs/migration-guides/database-migrations#decision-page-index-064-sqlite-028)):
+`ix_decision_metadata_id_id` ([migration 064](/docs/reference/schema-migrations#decision-page-index-064-sqlite-028)):
 
 ```csharp fragment
 public record RecordedDecisionRecord(

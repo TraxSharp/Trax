@@ -265,7 +265,7 @@ chat data, which the host migrates at startup.
 ### The trains act as the caller
 
 Every train is `[TraxAuthorize(Roles = "User")]`, and a junction that needs the user injects
-[`TraxPrincipal`](/docs/sdk-reference/api-auth/injecting-trax-principal). The gate refuses an
+[`TraxPrincipal`](/docs/security/inject-the-current-principal). The gate refuses an
 anonymous request before the junction is built, so the injection cannot fail at run time. The inputs
 carry no user field, which is what makes it impossible to act for somebody else:
 
@@ -488,4 +488,4 @@ which proves the subscription is live, then assert on the next one.
 
 ## SDK Reference
 
-> [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxCaller](/docs/sdk-reference/api-auth/trax-caller) | [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+> [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxCaller](/docs/sdk-reference/api-auth/trax-caller) | [Injecting TraxPrincipal](/docs/security/inject-the-current-principal) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)

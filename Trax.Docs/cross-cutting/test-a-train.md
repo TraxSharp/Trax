@@ -123,4 +123,4 @@ sets one up.
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/i-train-bus) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)

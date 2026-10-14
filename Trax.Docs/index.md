@@ -35,7 +35,7 @@ it ended, and which junction failed with what. Trax is MIT licensed and targets 
   end.
 - [Add a domain data context](/docs/effect/effect-providers/domain-data-contexts): your own EF Core
   tables next to Trax's.
-- [Debug with the log table](/docs/effect/debugging-with-the-log-table): follow a run across
+- [Debug with the log table](/docs/effect/debug-across-processes-with-the-log-table): follow a run across
   processes through `trax.log`.
 - [Test your trains](/docs/cross-cutting/testing): unit and in-memory tests.
 - [Author a state machine](/docs/statemachine/authoring): define one and serve it.

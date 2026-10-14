@@ -361,7 +361,7 @@ Trax does none of these for you:
 - [Authorization rules](/docs/authorization)
 - [Where Trax checks authorization](/docs/security/where-authorization-is-checked)
 - [Startup refusals](/docs/security/startup-refusals)
-- [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal): reading the
+- [Injecting TraxPrincipal](/docs/security/inject-the-current-principal): reading the
   caller in a junction, including one the scheduler also runs.
 
 ## SDK Reference

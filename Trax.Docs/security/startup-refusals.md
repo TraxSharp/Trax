@@ -82,7 +82,7 @@ Roles are never checked at startup: Trax has no list of the roles that can exist
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
 | A registered train carries `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered | Host start | `One or more registered trains declare [TraxAuthorize] but no ITrainAuthorizationService is registered in the DI container. ...`, ending with the trains | `AddTraxGraphQL()` or `AddTraxApi()` registers the default; a host that serves no submissions calls [`AllowMissingAuthorizationService()`](/docs/authorization#opting-out-for-scheduler-only-hosts) |
-| A junction takes `TraxPrincipal` in its constructor and nothing registers it (every `AddTrax*Auth` call was skipped) | Host start | `<n> of <m> registered trains cannot run:`, naming the junction and `Trax.Api.Auth.TraxPrincipal` | `services.AddTraxPrincipalAccessor()`. See [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal) |
+| A junction takes `TraxPrincipal` in its constructor and nothing registers it (every `AddTrax*Auth` call was skipped) | Host start | `<n> of <m> registered trains cannot run:`, naming the junction and `Trax.Api.Auth.TraxPrincipal` | `services.AddTraxPrincipalAccessor()`. See [Injecting TraxPrincipal](/docs/security/inject-the-current-principal) |
 
 ## Credentials
 

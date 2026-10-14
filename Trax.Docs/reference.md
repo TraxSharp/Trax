@@ -27,8 +27,7 @@ Pages to look things up in. Per-type and per-method pages are in the
 - [Building Chains](/docs/core/building-chains): `Chain`, `Resolve`, `ShortCircuit`, `Extract` and `AddServices` in `Junctions()`.
 - [Decisions](/docs/core/decisions): tracks, deciders and how decisions are verified at startup.
 - [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens): how a token flows through a run.
-- [Train Registration](/docs/cross-cutting/di-registration/train-registration): the `AddTraxRoute` methods.
-- [Junction Registration](/docs/cross-cutting/di-registration/junction-registration): the `AddTraxJunction` methods.
+- [Route and Junction Registration](/docs/sdk-reference/trains-and-junctions/route-registration): the `AddTraxRoute` and `AddTraxJunction` methods.
 
 ## Effects
 

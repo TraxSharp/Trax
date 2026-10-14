@@ -409,7 +409,7 @@ apart from a real failure, on Postgres and SQLite alike. Without one, such a rac
 Over the EF snapshot store, a machine's effects do not use the claim ledger: the effect is pending on the draft's
 row. The ledger serves `IdempotentEffect` outside machines, a host whose snapshot store is its own, and claims recorded
 before the upgrade, which a send records or drops (see migration
-[`081`](/docs/migration-guides/database-migrations#state-machine-pending-effect-and-server-record-081-sqlite-041)).
+[`081`](/docs/reference/schema-migrations#state-machine-pending-effect-and-server-record-081-sqlite-041)).
 
 `IEffectClaimStore.ReleaseForReset(effectKey, receiptRecorded, ct)` is the release a reset uses: it keeps an
 in-flight claim whose lease has not passed, and deletes a completed claim only when `receiptRecorded` accepts its

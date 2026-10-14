@@ -72,5 +72,5 @@ silent until it restarts.
 
 ## Related
 
-- [AddStateMachines options](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options): `ChangeFeed` and the other options.
+- [AddStateMachines options](/docs/sdk-reference/statemachine-api/add-state-machines#options): `ChangeFeed` and the other options.
 - [Schema migrations](/docs/reference/schema-migrations#state-machine-change-notify-078): the trigger 078 added.

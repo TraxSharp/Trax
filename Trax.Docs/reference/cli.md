@@ -417,4 +417,4 @@ that never happened.
 
 ## SDK Reference
 
-> [ExportIr](/docs/sdk-reference/statemachine-api/fluent-authoring#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format)
+> [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format)

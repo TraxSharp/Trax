@@ -203,9 +203,9 @@ host. Keep one, with every option in it: a second would have replaced the first 
 
 The trains' assembly was not passed to `AddMediator`, or the train's interface does not extend
 `IServiceTrain<TIn, TOut>`. Discovery reads the host's registrations through
-[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery); a class registered
+[ITrainDiscoveryService](/docs/sdk-reference/mediator-api/i-train-discovery-service); a class registered
 only through a factory cannot be read and is not listed.
 
 ## SDK Reference
 
-> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery)
+> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/i-train-discovery-service)

@@ -127,7 +127,7 @@ public sealed class IngestMachine : Machine<Stage, IngestTrigger>
 
 `Build` refuses an invoking state that leaves one out, and an outcome that goes to the state the machine starts at or
 to its effect's target. The builder's rules are listed under
-[IInvokeBuilder](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder).
+[IInvokeBuilder](/docs/sdk-reference/statemachine-api/machine#iinvokebuilder).
 
 ## 3. Meet the host's requirements
 
@@ -199,7 +199,7 @@ builder.Services.AddTrax(trax =>
 ```
 
 [Delivery](/docs/statemachine/invoked-runs#delivery) describes both paths, and
-[AddStateMachines options](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options) the intervals.
+[AddStateMachines options](/docs/sdk-reference/statemachine-api/add-state-machines#options) the intervals.
 
 ## Reduce pointers, not data
 
@@ -215,4 +215,4 @@ instance's run. What each operator surface shows and refuses is under
 
 ## SDK Reference
 
-> [Invokes](/docs/sdk-reference/statemachine-api/fluent-authoring#istatebuilder) | [OnDone / OnFailed / OnCancelled](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder) | [SystemOwned / InvokedRunLimit](/docs/sdk-reference/statemachine-api/fluent-authoring#imachinebuilder) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [InvokeOutcomeSweepInterval](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options) | [OutcomeSample](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder)
+> [Invokes](/docs/sdk-reference/statemachine-api/machine#istatebuilder) | [OnDone / OnFailed / OnCancelled](/docs/sdk-reference/statemachine-api/machine#iinvokebuilder) | [SystemOwned / InvokedRunLimit](/docs/sdk-reference/statemachine-api/machine#imachinebuilder) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [InvokeOutcomeSweepInterval](/docs/sdk-reference/statemachine-api/add-state-machines#options) | [OutcomeSample](/docs/sdk-reference/statemachine-api/machine#idifferentialbuilder)

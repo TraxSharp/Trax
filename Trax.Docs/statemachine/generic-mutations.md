@@ -131,10 +131,10 @@ mutation Advance($i: AdvanceSnapshotInput!) {
 
 ## SDK Reference
 
-> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity)
+> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines) | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity)
 
 ## See also
 
 - [Author and serve a machine](/docs/statemachine/authoring)
-- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options)
+- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines#options)
 - [Result codes](/docs/sdk-reference/statemachine-api/result-codes)

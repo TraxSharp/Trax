@@ -42,7 +42,7 @@ is replaced by the [Trax dashboard](/docs/dashboard).
 ```
 
 Local workers need no call. To change their count, polling interval or timeouts, use
-[`ConfigureLocalWorkers`](/docs/sdk-reference/scheduler-api/use-local-workers).
+[`ConfigureLocalWorkers`](/docs/sdk-reference/scheduler-api/configure-local-workers).
 
 ## 2. Remove the package
 

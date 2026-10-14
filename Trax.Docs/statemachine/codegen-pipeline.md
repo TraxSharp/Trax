@@ -82,7 +82,7 @@ m.Differential(d => d
 - **Probes** and **outcome samples** cover snapshots a client could send but no walk reaches, and the outputs of an
   invoked train.
 
-[IDifferentialBuilder](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder) lists the
+[IDifferentialBuilder](/docs/sdk-reference/statemachine-api/machine#idifferentialbuilder) lists the
 overloads. Regenerating the corpus is deliberate, and the git diff of the golden is the review of what changed. Each
 side replays the committed file on its own, so the C# suite needs no Node and the TypeScript suite needs no .NET.
 
@@ -118,4 +118,4 @@ drift. Generate and check are the same code path, so a passing check means the c
 
 ## SDK Reference
 
-> [ExportIr](/docs/sdk-reference/statemachine-api/fluent-authoring#exporting-the-ir) | [IDifferentialBuilder](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [Migrations](/docs/sdk-reference/statemachine-api/migrations) | [trax machine](/docs/reference/cli#state-machines-trax-machine)
+> [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IDifferentialBuilder](/docs/sdk-reference/statemachine-api/machine#idifferentialbuilder) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [Migrations](/docs/sdk-reference/statemachine-api/migrations) | [trax machine](/docs/reference/cli#state-machines-trax-machine)

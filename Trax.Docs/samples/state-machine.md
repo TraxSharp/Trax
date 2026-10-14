@@ -208,7 +208,7 @@ start a marked machine that leaves one undeclared. Serving a machine requires pe
 each machine's operations are served as persisted documents that carry its version; this demo logs the ad-hoc
 queries it is sent rather than refusing them, and serves no document-management operations. `TraxCallerSnapshotPrincipal`
 maps the authenticated Trax caller to the draft's owner, so Alice and Bob each see their own draft
-for the same id. See [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines).
+for the same id. See [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines).
 
 `LoggingCharge` takes the payment from `SimulatedPaymentProvider`, an in-memory stand-in for a payment gateway, for
 the draft's user and the stored draft's total. Nothing else calls the provider: the page has no charge endpoint, only
@@ -399,4 +399,4 @@ refused, and registering a `do-not-use-in-production` key makes the host refuse 
 
 ## SDK Reference
 
-> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Fluent authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [Effects](/docs/sdk-reference/statemachine-api/effects) | [Migrations](/docs/sdk-reference/statemachine-api/migrations) | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports)
+> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines) | [Fluent authoring](/docs/sdk-reference/statemachine-api/machine) | [Effects](/docs/sdk-reference/statemachine-api/i-snapshot-effect) | [Migrations](/docs/sdk-reference/statemachine-api/migrations) | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports)

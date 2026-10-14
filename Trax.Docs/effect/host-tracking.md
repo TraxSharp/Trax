@@ -110,4 +110,4 @@ The metadata detail page shows an "Execution Host" card with the hostname, envir
 
 ## SDK Reference
 
-> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)
+> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)

@@ -120,4 +120,4 @@ The same naming applies to arguments, so `URLPath` binds `$urlPath`.
 
 ## SDK Reference
 
-> [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-assemblies)
+> [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-graphql-client-assemblies)

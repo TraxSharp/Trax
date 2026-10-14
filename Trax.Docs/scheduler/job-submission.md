@@ -56,7 +56,7 @@ JobDispatcher ──► PostgresJobSubmitter ──► trax.background_job ─�
 ```
 
 The pool's size, polling interval, batch size, visibility timeout and shutdown grace are
-`LocalWorkerOptions`, set with [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers).
+`LocalWorkerOptions`, set with [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers).
 
 ### Worker Lifecycle
 
@@ -180,4 +180,4 @@ Moving a host off the removed Hangfire backend is covered in the migration guide
 
 ## SDK Reference
 
-> [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)
+> [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler)

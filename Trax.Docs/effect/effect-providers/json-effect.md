@@ -43,4 +43,4 @@ The line is the model's `ToString()`. For a metadata row that is the row itself,
 
 ## SDK Reference
 
-> [AddJson](/docs/sdk-reference/configuration/add-json-effect)
+> [AddJson](/docs/sdk-reference/configuration/add-json)

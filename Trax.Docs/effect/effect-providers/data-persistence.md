@@ -144,4 +144,4 @@ effects.UsePostgres(connectionString)
 
 ## SDK Reference
 
-> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddDataContextLogging](/docs/sdk-reference/configuration/add-effect-data-context-logging)
+> [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddDataContextLogging](/docs/sdk-reference/configuration/add-data-context-logging)

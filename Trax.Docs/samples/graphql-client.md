@@ -186,4 +186,4 @@ checks that both servers serve their schema in Development and refuse introspect
 
 ## SDK Reference
 
-> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [AddKeyedTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client) | [Builder](/docs/sdk-reference/graphql-client/builder) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+> [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client) | [AddKeyedTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client) | [Builder](/docs/sdk-reference/graphql-client/trax-graphql-client-builder) | [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
