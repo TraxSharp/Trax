@@ -756,8 +756,9 @@ public interface IOperationsService
     /// parent → dependent.
     /// </summary>
     /// <returns>
-    /// <c>null</c> if the group does not exist or contains no manifests with cross-group
-    /// dependencies; otherwise a graph that always includes the focal group as a node.
+    /// <c>null</c> if the group does not exist; otherwise a graph that always includes the focal
+    /// group as a node. A group with no manifests, or with no cross-group dependencies, returns a
+    /// graph holding only the focal group and no edges.
     /// </returns>
     Task<ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(
         long groupId,
