@@ -14,6 +14,11 @@ name: Release
 #
 # Trusted publishing on nuget.org and on npm matches this repository, this file's name and
 # the `release` environment. Renaming the file breaks publishing until both are updated.
+# npm's can be set up only once the package exists, so the first @traxsharp/state-machine
+# release needs a manual bootstrap: see the "Publish to npm" step.
+#
+# Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
+# build (packs from the tag, read-only) -> publish (verifies, attests, publishes) -> website.
 on:
   workflow_dispatch:
 
@@ -25,13 +30,21 @@ concurrency:
 permissions: {}
 
 env:
+  # semantic-release runs on this (CI's release-tooling job tests it on the same).
   NODE_VERSION: '22'
+  # The engine is built and packed on this, as CI's state-machine and Trax.Cli jobs build it.
+  BUILD_NODE_VERSION: '24'
+  # npm publishes on this: Node 24.21.0 bundles npm 11.19.0, and npm trusted publishing needs 11.5.1 or
+  # later (Node 24.5.0 is the first 24.x to bundle 11.5.1). An exact version, so the npm that publishes
+  # is the one bundled with it and nothing is installed in the publish job.
+  PUBLISH_NODE_VERSION: '24.21.0'
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Untrusted-code zone. The pull-request CI over every folder: restore, build and
-  # test (the bulk of third-party code execution) with NO release or publish
-  # credentials.
+  # Untrusted-code zone. The pull-request CI over every folder, at the commit this
+  # run releases: restore, build, typecheck, test and a trial pack of every library
+  # package and of the TypeScript engine (the bulk of third-party code execution) with NO
+  # release or publish credentials. Nothing below runs unless all of it passed.
   # ---------------------------------------------------------------------------
   build-test:
     permissions:
@@ -42,7 +55,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Release/version zone. Holds the GitHub token (tags + release) but NOT the
-  # NuGet or npm publish credential. Produces the .nupkg and .tgz artifacts.
+  # NuGet or npm publish credential, and builds and packs nothing: the only code it
+  # runs is the release tooling at the root, installed locked and without install
+  # scripts. It tags the commit build-test validated and hands the version on.
   # ---------------------------------------------------------------------------
   release:
     needs: build-test
@@ -55,7 +70,7 @@ jobs:
     # write access could burn a version number.
     environment: release
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: write         # semantic-release: tags + GitHub release
       issues: write           # semantic-release github plugin: successComment
@@ -63,14 +78,13 @@ jobs:
     outputs:
       released: ${{ steps.version.outputs.released }}
       version: ${{ steps.version.outputs.version }}
-      digests: ${{ steps.digests.outputs.digests }}
-      npm-digests: ${{ steps.npm-digests.outputs.digests }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
           egress-policy: audit
       - name: Checkout
+        # The run's commit, the one build-test validated; semantic-release tags it.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
@@ -81,10 +95,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
-        with:
-          global-json-file: global.json
       - name: Install release tooling (locked, no install scripts)
         run: npm ci --ignore-scripts
       - name: Run semantic-release
@@ -100,20 +110,66 @@ jobs:
           else
             echo "released=false" >> "$GITHUB_OUTPUT"
           fi
+
+  # ---------------------------------------------------------------------------
+  # Untrusted-code zone. Packs every package at the version just cut, from the tag,
+  # with a read-only token and no publish credential: the npm installs, tsup, the
+  # esbuild bundle Trax.Cli ships, the dashboard's vite build and every MSBuild
+  # target, analyzer and source generator run here and nowhere that can write.
+  # Records each package's digest and uploads the packages for publish.
+  #
+  # It runs after the tag because semantic-release decides the version, and even
+  # its --dry-run needs push access to the repository (it checks it before it reads
+  # a commit). build-test already tried the same packs at this commit (the library
+  # packages and the engine), so a failure here is rare; when one is transient,
+  # "Re-run failed jobs" packs the same tag again without cutting another version.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      digests: ${{ steps.digests.outputs.digests }}
+      npm-digests: ${{ steps.npm-digests.outputs.digests }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: refs/tags/v${{ needs.release.outputs.version }}
+          persist-credentials: false
+      - name: The tag is the commit build-test validated
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::The tag points at $(git rev-parse HEAD), not this run's commit $GITHUB_SHA."
+            exit 1
+          fi
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: ${{ env.BUILD_NODE_VERSION }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
       - name: Pack the TypeScript engine
         # @traxsharp/state-machine releases at the same version as the NuGet packages. Its
         # package.json keeps a placeholder version in git; the released one is written here,
-        # into this checkout only, and never committed. prepack builds dist/ from this tree,
-        # so the tarball is tested from the same install that builds it. It runs before the
-        # NuGet packs because packing Trax.Cli bundles the generators from this install.
-        if: steps.version.outputs.released == 'true'
+        # into this checkout only, and never committed. prepack builds dist/ from this tree.
+        # build-test already typechecked and tested this commit's engine. It runs before the
+        # NuGet packs because packing Trax.Cli bundles the generators from this install, and
+        # the bundle reports this version to the twins it generates.
         working-directory: Trax.Api.StateMachine
         env:
-          PKG_VERSION: ${{ steps.version.outputs.version }}
+          PKG_VERSION: ${{ needs.release.outputs.version }}
         run: |
           npm ci --ignore-scripts
-          npm run typecheck
-          npm test
           npm version "$PKG_VERSION" --no-git-tag-version
           mkdir -p ../npm
           npm pack --pack-destination ../npm
@@ -126,17 +182,15 @@ jobs:
       - name: Install the API dashboard (locked, no install scripts)
         # Building Trax.Api.Dashboard compiles its React app with these packages and embeds it in
         # the assembly; packing refuses an assembly without it.
-        if: steps.version.outputs.released == 'true'
         working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
         run: npm ci --ignore-scripts
       - name: Pack every package
         # One version for every package. A folder packs its solution, or the one project
         # packages.json names under release-pack (Trax.Samples ships only its templates).
-        if: steps.version.outputs.released == 'true'
         env:
           # Bind the version to env and reference the shell var (it is pipeline-
           # controlled, but this is the pattern to use for any ${{ }} value).
-          PKG_VERSION: ${{ steps.version.outputs.version }}
+          PKG_VERSION: ${{ needs.release.outputs.version }}
         run: |
           jq -r '.packages[] | select(.dotnet)
                  | .folder + "/" + (.dotnet["release-pack"] // (if .dotnet.pack then .dotnet.solution else empty end))' \
@@ -159,10 +213,8 @@ jobs:
         # Handed to publish as a job output rather than inside the artifact, so publish
         # can tell whether what it downloaded is what this job built.
         id: digests
-        if: steps.version.outputs.released == 'true'
         run: echo "digests=$(cd nupkg && sha256sum -- *.nupkg | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload package artifact
-        if: steps.version.outputs.released == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: nupkg
@@ -172,10 +224,8 @@ jobs:
       - name: Record npm package digest
         # Its own output, beside the NuGet digests, for the same reason.
         id: npm-digests
-        if: steps.version.outputs.released == 'true'
         run: echo "digests=$(cd npm && sha256sum -- *.tgz | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload npm package artifact
-        if: steps.version.outputs.released == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: npm
@@ -185,11 +235,12 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Publish zone. Consumes the built artifacts and pushes them. Runs NO install /
-  # build / test code. Holds the only credentials that can publish to NuGet and npm.
+  # build / test code: it downloads the SDK and Node.js toolchains and runs only
+  # their own CLIs. Holds the only credentials that can publish to NuGet and npm.
   # Gated behind the protected `release` environment.
   # ---------------------------------------------------------------------------
   publish:
-    needs: release
+    needs: [release, build]
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -213,16 +264,16 @@ jobs:
         with:
           name: npm
           path: npm
-      - name: Verify the packages are the ones release built
+      - name: Verify the packages are the ones build built
         env:
-          DIGESTS: ${{ needs.release.outputs.digests }}
-          NPM_DIGESTS: ${{ needs.release.outputs.npm-digests }}
+          DIGESTS: ${{ needs.build.outputs.digests }}
+          NPM_DIGESTS: ${{ needs.build.outputs.npm-digests }}
         run: |
           # verify <folder> <extension> <base64 sha256sum output>
           verify() {
             echo "$3" | base64 -d > "$RUNNER_TEMP/expected-$1.sha256"
             if [ "$(cd "$1" && printf '%s\n' *."$2" | sort)" != "$(awk '{print $2}' "$RUNNER_TEMP/expected-$1.sha256" | sort)" ]; then
-              echo "::error::The downloaded packages in $1 are not the set the release job built."
+              echo "::error::The downloaded packages in $1 are not the set the build job built."
               exit 1
             fi
             (cd "$1" && sha256sum --check --strict "$RUNNER_TEMP/expected-$1.sha256")
@@ -258,18 +309,36 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ env.PUBLISH_NODE_VERSION }}
           registry-url: 'https://registry.npmjs.org'
-      - name: Install the npm CLI that can publish with OIDC
-        # npm trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10. An exact
-        # version, installed without scripts: a published npm version cannot change, and it
-        # is the one package this job installs, so there is no lockfile for it to come from.
-        run: npm install --global --ignore-scripts npm@11.19.1  # zizmor: ignore[adhoc-packages]
+      - name: The bundled npm can publish with OIDC
+        # Trusted publishing needs npm 11.5.1 or later. The npm checked here is the one bundled with
+        # PUBLISH_NODE_VERSION; nothing is installed over it.
+        run: |
+          version=$(npm --version)
+          if [ "$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)" != 11.5.1 ]; then
+            echo "::error::npm $version cannot publish with OIDC; trusted publishing needs 11.5.1 or later."
+            exit 1
+          fi
       # npm trusted publishing: npm exchanges the GitHub OIDC token for a short-lived
       # publish credential itself. No stored NPM_TOKEN. Requires a trusted publisher on
       # npmjs.com for @traxsharp/state-machine scoped to this repo + this workflow file +
       # the `release` environment. The tarball's package.json names this repository, which
       # npm checks against the provenance it signs.
+      #
+      # First publish: npm lets a trusted publisher be configured only on a package that
+      # already exists, and @traxsharp/state-machine has never been published, so the first
+      # version needs a one-off manual bootstrap. Until it is done this step fails after NuGet
+      # has published. In order:
+      #   1. Create the `traxsharp` organisation on npmjs.com. It does not exist yet, and the
+      #      scope belongs to whoever creates it.
+      #   2. Publish the version once by hand, from a maintainer's 2FA-protected login: download
+      #      this run's `npm` artifact (kept one day) and `npm publish <tarball> --access public`.
+      #      That version carries no npm provenance; the attestation above still covers it.
+      #   3. On the package's settings page, add the trusted publisher: this repository, this
+      #      workflow file, the `release` environment.
+      #   4. Re-run this job if it failed: NuGet skips what it already has, and this step skips
+      #      a version npm already has.
       - name: Publish to npm
         # Publishing a version that exists fails on npm, so a re-run first asks the registry
         # whether this one is already there, the same way --skip-duplicate does for NuGet.
