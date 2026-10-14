@@ -6,15 +6,20 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 20
+package: Trax.Scheduler
+namespace: Trax.Scheduler.Services.Operations
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Operations/IOperationsService.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Operations/OperationsService.cs
 ---
 
 # IOperationsService
 
-The operations the dashboard and the GraphQL `operations` namespace share. Each action an operator can take has one method here, and both surfaces call it, so the dashboard and the API validate, authorize and report failures the same way. Registered as scoped by `AddScheduler(...)`. An API-only host registers it itself with `services.AddScoped<IOperationsService, OperationsService>()` (see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)).
+The operations the dashboard and the GraphQL `operations` namespace share. Each action an operator can take has one method here, and both surfaces call it, so the dashboard and the API validate, authorize and report failures the same way.
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Scheduler.Services.Operations;
 
 public interface IOperationsService
@@ -49,18 +54,47 @@ public interface IOperationsService
     Task<OperationResult> UpdateManifestAsync(long id, ManifestUpdate update, CancellationToken ct);
     Task<OperationResult> UpdateManifestGroupAsync(long id, UpdateManifestGroupInput input, CancellationToken ct);
     Task<OperationResult> UpdateSchedulerConfigAsync(UpdateSchedulerConfigInput input, CancellationToken ct);
-    // plus the read operations: metrics, scheduler config, manifest group graphs
+    Task<MachineInstanceRuns?> GetMachineInstanceRunsAsync(MachineInstanceKey key, CancellationToken ct);
+    Task<MachineInstanceCancelResult> CancelMachineInstanceAsync(MachineInstanceKey key, CancellationToken ct);
+    IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstancesAsync(string? machine, CancellationToken ct);
+    Task<DashboardMetrics> GetDashboardMetricsAsync(MetricsRange range, bool hideAdminTrains, CancellationToken ct);
+    Task<ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, CancellationToken ct);
+    Task<ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(CancellationToken ct);
+    SchedulerConfigSnapshot GetSchedulerConfig();
 }
 
 public record OperationResult(bool Success, long? Id = null, int? Count = null, string? Message = null);
 ```
 
+## Members
+
+| Group | Members |
+|-------|---------|
+| [Queueing and running](#queueing-and-running) | `QueueTrainAsync`, `RunTrainAsync`, `RequeueExecutionAsync`, `ResumeExecutionAsync` |
+| [Batch actions](#batch-actions) | `CancelExecutionsAsync`, `CancelWorkQueueEntriesAsync`, `CancelWorkQueueEntryAsync`, `SetManifestsEnabledAsync`, `SetManifestsReplayDecisionsOnRetryAsync`, `SetManifestGroupsEnabledAsync`, `SetAllManifestGroupsEnabledAsync`, `CancelManifestGroupsAsync`, `TriggerManifestAsync`, `TriggerManifestsAsync`, `TriggerManifestGroupsAsync`, `UpdateManifestAsync` |
+| [Settings](#settings) | `UpdateManifestGroupAsync`, `GetSchedulerConfig`, `UpdateSchedulerConfigAsync` |
+| [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
+| [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `CancelMachineInstanceAsync` |
+
 ## Queueing and running
 
-| Method | What it does | `Id` on success |
-|--------|--------------|-----------------|
-| `QueueTrainAsync(QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt), ct)` | Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. The queued run asks its deciders afresh: of the methods here, only [`RequeueExecutionAsync`](#requeueexecutionasync) queues a run that replays an earlier one's decisions. | the work queue entry |
-| `RunTrainAsync(RunTrainInput(TrainName, InputJson), ct)` | Applies the per-record checks a queue applies (below), writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. Once the run's row is written the submit no longer takes `ct`, so a caller that goes away does not abort the submit or cancel the run; the submitter's own timeouts bound it. When the submit throws and the run is still `Pending`, no runner started it: the run is recorded `Failed` and the exception is thrown to the caller. When a runner already started it (a remote runner that answered with the train's error, a call that timed out while the run went on, or an in-process submitter that ran a failing train), the run owns its outcome: the call succeeds with the run's id and the message `Run {id} of {train} submitted; its outcome is pending on the run.`, and the run's row records how it ended. | the run's metadata row |
+| Method | Input | `Id` on success |
+|--------|-------|-----------------|
+| `QueueTrainAsync` | `QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt)` | the work queue entry |
+| `RunTrainAsync` | `RunTrainInput(TrainName, InputJson)` | the run's metadata row |
+| `RequeueExecutionAsync` | the run's metadata id | the work queue entry |
+| `ResumeExecutionAsync` | the run's metadata id and a step | the work queue entry |
+
+### QueueTrainAsync
+
+Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. The queued run asks its deciders afresh: of the methods here, only [`RequeueExecutionAsync`](#requeueexecutionasync) queues a run that replays an earlier one's decisions.
+
+### RunTrainAsync
+
+Applies the per-record checks a queue applies (below), writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. Once the run's row is written the submit no longer takes `ct`, so a caller that goes away does not abort the submit or cancel the run; the submitter's own timeouts bound it. When the submit throws and the run is still `Pending`, no runner started it: the run is recorded `Failed` and the exception is thrown to the caller. When a runner already started it (a remote runner that answered with the train's error, a call that timed out while the run went on, or an in-process submitter that ran a failing train), the run owns its outcome: the call succeeds with the run's id and the message `Run {id} of {train} submitted; its outcome is pending on the run.`, and the run's row records how it ended.
+
+### Reading the input
+
 
 Both look the train up by its interface `FullName` and hand the input to the mediator: `QueueTrainAsync` through `ITrainExecutionService.QueueAsync`, `RunTrainAsync` through `ITrainExecutionService.PrepareAsync`, which authorizes the caller and reads the input without writing anything. Either way `InputJson` is read by `TrainInputReader`: property names matched whatever their case (`customerId`, `CustomerId` and `CUSTOMERID` all fill the same property), a property given twice in any casing refused as invalid input rather than resolved to its last value, JSON reference metadata (`$id`, `$ref`, `$values`) not honoured, so the input is exactly the tree the caller wrote, the mediator's input size cap, and a blank input read as `{}`, which the input type must be buildable from.
 
@@ -76,7 +110,7 @@ On a host whose store is in memory (EF Core's InMemory provider, with no databas
 
 ### RequeueExecutionAsync
 
-```csharp
+```csharp fragment
 Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
 Task<OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, CancellationToken ct);
 ```
@@ -155,7 +189,7 @@ on from a checkpoint instead, resume it.
 
 ### ResumeExecutionAsync
 
-```csharp
+```csharp fragment
 Task<OperationResult> ResumeExecutionAsync(long metadataId, string? from, CancellationToken ct);
 ```
 
@@ -194,7 +228,7 @@ latest checkpoint on its own (see
 or another operator queues one between this call's checks and its insert, the database refuses the
 second, and this call returns the same refusal.
 
-## Failures
+### Failures
 
 Both methods return a failed `OperationResult` with a `Message` for an answer the caller can act on, and throw for a fault on the server's side.
 
@@ -218,22 +252,50 @@ A thrown failure reaches Trax.Api's error filter, which masks any type it does n
 
 The actions a list page applies to its selected rows. Each takes up to `OperationsService.MaxBatchSize` (1000) ids, ignores duplicates, writes only the rows that change, and returns `OperationResult(true, Count: N)` with the number changed, zero included. An empty list, or more ids than the limit, is a failed result and changes nothing.
 
-| Method | What changes | Change signal |
-|--------|--------------|---------------|
-| `CancelExecutionsAsync(ids, ct)` | Each run still `Pending` or `InProgress` gets `CancellationRequested`, and one running on this host is also cancelled at once through `ICancellationRegistry`. Terminal and unknown runs are skipped, and so is a run a step of a user's state-machine draft started, which an operator may not cancel: the message counts those and ends with `OperationsService.UserOwnedRunCancelRefusal`, and a single such id is refused with it. A `Pending` run is recorded `Cancelled` and never run when the job runner picks it up, whatever junction providers the host registers. An `InProgress` run observes the flag at its next junction boundary, when the host uses the junction progress provider. | `Execution`, when at least one run was flagged |
-| `CancelWorkQueueEntriesAsync(ids, ct)` | Entries still `Queued` become `Cancelled`, in one statement, so an entry the dispatcher claims meanwhile keeps its status. An entry a user's draft queued is skipped and counted, as `CancelExecutionsAsync` skips its run, and `CancelWorkQueueEntryAsync` refuses one | `WorkQueue` |
-| `SetManifestsEnabledAsync(ids, enabled, ct)` | Manifests whose `IsEnabled` differs | `Manifest` |
-| `SetManifestsReplayDecisionsOnRetryAsync(ids, replay, ct)` | Manifests whose `ReplayDecisionsOnRetry` differs. Turning it off also clears the replay link of each manifest's queued entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh; the message then adds `{n} queued retry(s) no longer replay a failed run's decisions.` See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions). | `Manifest`, when any changed; `WorkQueue`, when a link was cleared |
-| `SetManifestGroupsEnabledAsync(ids, enabled, ct)` | Groups whose `IsEnabled` differs, with `UpdatedAt` bumped | `ManifestGroup` |
-| `SetAllManifestGroupsEnabledAsync(enabled, ct)` | Every group whose `IsEnabled` differs; a separate method so that "all" is never what an empty list means | `ManifestGroup` |
+| Method | Change signal |
+|--------|---------------|
+| [`CancelExecutionsAsync(ids, ct)`](#cancelexecutionsasync) | `Execution`, when at least one run was flagged |
+| [`CancelWorkQueueEntriesAsync(ids, ct)`](#cancelworkqueueentriesasync) | `WorkQueue` |
+| [`SetManifestsEnabledAsync(ids, enabled, ct)`](#setmanifestsenabledasync) | `Manifest` |
+| [`SetManifestsReplayDecisionsOnRetryAsync(ids, replay, ct)`](#setmanifestsreplaydecisionsonretryasync) | `Manifest`, when any changed; `WorkQueue`, when a link was cleared |
+| [`SetManifestGroupsEnabledAsync(ids, enabled, ct)`](#setmanifestgroupsenabledasync) | `ManifestGroup` |
+| [`SetAllManifestGroupsEnabledAsync(enabled, ct)`](#setallmanifestgroupsenabledasync) | `ManifestGroup` |
+| [`CancelManifestGroupsAsync(groupIds, ct)`](#cancelmanifestgroupsasync) | `Execution`, when at least one run was flagged |
 
-| `CancelManifestGroupsAsync(groupIds, ct)` | Every `Pending` or `InProgress` run of every manifest in the given groups, by the rule `CancelExecutionsAsync` applies, flagged in one update. `Count` is the number of runs flagged; the message also says how many of the ids named a group. | `Execution`, when at least one run was flagged |
+### CancelExecutionsAsync
+
+Each run still `Pending` or `InProgress` gets `CancellationRequested`, and one running on this host is also cancelled at once through `ICancellationRegistry`. Terminal and unknown runs are skipped, and so is a run a step of a user's state-machine draft started, which an operator may not cancel: the message counts those and ends with `OperationsService.UserOwnedRunCancelRefusal`, and a single such id is refused with it. A `Pending` run is recorded `Cancelled` and never run when the job runner picks it up, whatever junction providers the host registers. An `InProgress` run observes the flag at its next junction boundary, when the host uses the junction progress provider.
+
+### CancelWorkQueueEntriesAsync
+
+Entries still `Queued` become `Cancelled`, in one statement, so an entry the dispatcher claims meanwhile keeps its status. An entry a user's draft queued is skipped and counted, as `CancelExecutionsAsync` skips its run, and `CancelWorkQueueEntryAsync` refuses one
+
+### SetManifestsEnabledAsync
+
+Manifests whose `IsEnabled` differs
+
+### SetManifestsReplayDecisionsOnRetryAsync
+
+Manifests whose `ReplayDecisionsOnRetry` differs. Turning it off also clears the replay link of each manifest's queued entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh; the message then adds `{n} queued retry(s) no longer replay a failed run's decisions.` See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+
+### SetManifestGroupsEnabledAsync
+
+Groups whose `IsEnabled` differs, with `UpdatedAt` bumped
+
+### SetAllManifestGroupsEnabledAsync
+
+Every group whose `IsEnabled` differs; a separate method so that "all" is never what an empty list means
+
+### CancelManifestGroupsAsync
+
+Every `Pending` or `InProgress` run of every manifest in the given groups, by the rule `CancelExecutionsAsync` applies, flagged in one update. `Count` is the number of runs flagged; the message also says how many of the ids named a group.
+
 
 `ITraxScheduler.CancelAsync` and `CancelGroupAsync` cancel a manifest's or a group's runs by the same rule as `CancelExecutionsAsync`, and signal `Execution` the same way.
 
-### Triggering one manifest
+### TriggerManifestAsync
 
-```csharp
+```csharp fragment
 Task<TriggerManifestResult> TriggerManifestAsync(string externalId, TimeSpan? delay, bool askAfresh, CancellationToken ct);
 
 public record TriggerManifestResult(bool Success, string Message, ManifestTriggerResult? Trigger)
@@ -244,9 +306,9 @@ public record TriggerManifestResult(bool Success, string Message, ManifestTrigge
 
 Triggers the manifest with this external id as [`ITraxScheduler.TriggerAsync`](/docs/sdk-reference/scheduler-api/manifest-management#triggerasync) does, and says what the trigger did. The dashboard's **Run Now** and the API's `triggerManifest` and `triggerManifestDelayed` all call it. `delay` of `null` (or zero or less) means now, and a delay that would put the run past the latest time a `DateTime` holds (such as `TimeSpan.MaxValue`) is a failed result that queues nothing; an existing entry due sooner keeps its own time. `Message` says which happened: a new run queued, the manifest's queued run brought forward, one already due released as the trigger, or one the dispatcher claimed as the trigger reached it. `Trigger` carries the detail (`WorkQueueId`, `Created`, `MovedForward`, `ScheduledAt`, `AlreadyDispatched`, `ReplayDecisionsOf`). With `askAfresh: true` a released retry asks its deciders afresh; when the dispatcher claimed it first, the trigger still succeeds and `StillReplaying` is true. An unknown external id, or a host where nothing dispatches the queue, is a failed result with `Trigger` null and nothing changed.
 
-### Updating a manifest
+### UpdateManifestAsync
 
-```csharp
+```csharp fragment
 Task<OperationResult> UpdateManifestAsync(long id, ManifestUpdate update, CancellationToken ct);
 
 public record ManifestUpdate(
@@ -259,7 +321,7 @@ Patches one manifest; a `null` field is left as it is. Every check runs before a
 
 ### Batch triggers
 
-```csharp
+```csharp fragment
 Task<BatchTriggerResult> TriggerManifestsAsync(IReadOnlyCollection<long> manifestIds, bool askAfresh, CancellationToken ct);
 Task<BatchTriggerResult> TriggerManifestGroupsAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct);
 
@@ -300,6 +362,42 @@ entry.
 
 On a relational provider each batch is one `UPDATE` with its state test in it, so a row another writer changes meanwhile keeps its new state. The InMemory provider has no set-based update, so there the rows are loaded, changed and saved, with the same result and count ([scheduler ADR 0007](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0007-the-operations-surface-runs-on-inmemory.md)).
 
+## Settings
+
+| Method | Returns |
+|--------|---------|
+| [`UpdateManifestGroupAsync(id, input, ct)`](#updatemanifestgroupasync) | `OperationResult` |
+| [`GetSchedulerConfig()`](#getschedulerconfig) | `SchedulerConfigSnapshot` |
+| [`UpdateSchedulerConfigAsync(input, ct)`](#updateschedulerconfigasync) | `OperationResult` |
+
+### UpdateManifestGroupAsync
+
+Patches one manifest group's dispatch settings (`MaxActiveJobs`, `Priority`, the enable flag). Each
+field of `UpdateManifestGroupInput` is optional, and only the fields set are written; `UpdatedAt` is
+bumped when one changed. Success is `OperationResult(true, Id: groupId, Count: N)`, with `N` the
+fields written. A group that does not exist, a `Priority` outside 0 to 31 or a `MaxActiveJobs` below
+1 is a failed result, and no field is written. The API's `updateManifestGroup` calls it; its fields
+are listed under the GraphQL [mutations](/docs/sdk-reference/graphql-api/mutations).
+
+### GetSchedulerConfig
+
+The scheduler settings this process runs with, read from its `SchedulerConfiguration` singleton
+(and `LocalWorkerOptions` and `MetadataCleanupConfiguration` when registered). On a scheduler host
+the stored settings row is loaded into it at startup and within seconds of any save.
+
+### UpdateSchedulerConfigAsync
+
+Saves the named scheduler settings to the settings row (see
+[Stored settings](/docs/sdk-reference/scheduler-api/add-scheduler#stored-settings)). Each field of
+`UpdateSchedulerConfigInput` is optional, and only the fields set are written. Success is
+`OperationResult(true, Count: N)`, with `N` the fields changed. A value outside the range the
+scheduler can run with is a failed result naming each offending field, and nothing is applied: a
+polling or cleanup interval outside 1 second to 30 days; a job timeout, stale-pending timeout or
+metadata retention under 1 second; a negative retry count, retry delay or dead-letter retention;
+any duration over ten years; a `MaxActiveJobs` below 1; a `LocalWorkerCount` outside 1 to 256; a
+failure count window outside 1 second to ten years; or a backoff multiplier below 1 or not finite.
+The dashboard's Server Settings page and the API's `updateScheduler` call it.
+
 ## Read models
 
 The numbers behind a manifest's detail cards, the manifest groups list, the logs pages, a
@@ -307,17 +405,69 @@ run's recorded decisions, a work queue entry's page and the State Machines pages
 
 | Method | Returns |
 |--------|---------|
-| `GetManifestExecutionStatsAsync(manifestId, ct)` | `ManifestExecutionStats`: run counts by state, the latest start of any run and the latest end of a completed run. Zeros and nulls for a manifest with no runs. |
-| `GetManifestGroupExecutionStatsAsync(groupIds, ct)` | One `ManifestGroupExecutionStats` per distinct id, in the order given: manifest count, run counts and the latest run. Zeros for a group with no manifests or runs; an empty list for no ids; more than 1000 ids throws `ArgumentOutOfRangeException`. |
-| `GetLogsAsync(LogQuery, ct)` | A `LogPage` in the query's `Order`, newest first by default, filtered as below. `AfterId` pages by keyset in that order (older entries newest first, newer ones oldest first) and ignores `Skip`; prefer it, since an offset's cost grows with its size. `Take` is clamped to 1 through `OperationsService.MaxPageSize` (500). `NextCursor` is the last entry's id. |
-| `CountLogsAsync(LogQuery, ct)` | The exact number of entries matching the filter, its text filters included; the order, cursor and paging fields are ignored. |
-| `CountLogsCappedAsync(LogQuery, ct)` | A `LogCount(int Count, bool Capped)` for a pager. Without a text filter, the exact count `CountLogsAsync` gives, never capped. With `MessageContains` or `CategoryContains`, counted only up to `OperationsService.LogCountCap` (10,000): more matches than that give `Count = 10000, Capped = true`, to show as "10,000+"; exactly 10,000 is exact. The same on Postgres, Sqlite and InMemory. A custom implementation that does not override it returns the exact count, uncapped. |
-| `GetWorkQueueEntryDetailAsync(id, ct)` | A `WorkQueueEntryDetail`, or `null` when no entry has the id: the entry's fields, its input masked as [below](#masking-a-stored-input), and for a queued entry with a subject, what it waits on. `SubjectHeldBy` is the dispatched entry for the same subject whose run is still `Pending` or `InProgress`; when nothing holds the subject, `SubjectQueuedBehind` is the confirmed queued sibling dispatch would offer first, by the filters dispatch applies (due, its manifest group enabled) and then priority and age. The dashboard's work queue entry page and the API's [`workQueue.detail`](/docs/sdk-reference/graphql-api/queries#detail) both read it. |
-| `GetRecordedDecisionsAsync(metadataId, afterId, take, ct)` | A `RecordedDecisionPage` of the run's rows in `trax.decision`, in the order they were recorded, with answers withheld as described [below](#recorded-decisions). `afterId` is the previous page's `NextCursor`; `take` is clamped to 1 through 500. A run with no decisions gets an empty page. |
+| [`GetManifestExecutionStatsAsync(manifestId, ct)`](#getmanifestexecutionstatsasync) | `ManifestExecutionStats` |
+| [`GetManifestGroupExecutionStatsAsync(groupIds, ct)`](#getmanifestgroupexecutionstatsasync) | `IReadOnlyList<ManifestGroupExecutionStats>` |
+| [`GetLogsAsync(LogQuery, ct)`](#getlogsasync) | `LogPage` |
+| [`CountLogsAsync(LogQuery, ct)`](#countlogsasync) | `int` |
+| [`CountLogsCappedAsync(LogQuery, ct)`](#countlogscappedasync) | `LogCount` |
+| [`GetWorkQueueEntryDetailAsync(id, ct)`](#getworkqueueentrydetailasync) | `WorkQueueEntryDetail?` |
+| [`GetRecordedDecisionsAsync(metadataId, afterId, take, ct)`](#getrecordeddecisionsasync) | `RecordedDecisionPage` |
+| [`GetDashboardMetricsAsync(range, hideAdminTrains, ct)`](#getdashboardmetricsasync) | `DashboardMetrics` |
+| [`GetManifestGroupDependencyGraphAsync(groupId, ct)`](#getmanifestgroupdependencygraphasync) | `ManifestGroupDependencyGraph?` |
+| [`GetGlobalManifestGroupGraphAsync(ct)`](#getglobalmanifestgroupgraphasync) | `ManifestGroupDependencyGraph` |
+
+### GetManifestExecutionStatsAsync
+
+`ManifestExecutionStats`: run counts by state, the latest start of any run and the latest end of a completed run. Zeros and nulls for a manifest with no runs.
+
+### GetManifestGroupExecutionStatsAsync
+
+One `ManifestGroupExecutionStats` per distinct id, in the order given: manifest count, run counts and the latest run. Zeros for a group with no manifests or runs; an empty list for no ids; more than 1000 ids throws `ArgumentOutOfRangeException`.
+
+### GetLogsAsync
+
+A `LogPage` in the query's `Order`, newest first by default, filtered as below. `AfterId` pages by keyset in that order (older entries newest first, newer ones oldest first) and ignores `Skip`; prefer it, since an offset's cost grows with its size. `Take` is clamped to 1 through `OperationsService.MaxPageSize` (500). `NextCursor` is the last entry's id.
+
+### CountLogsAsync
+
+The exact number of entries matching the filter, its text filters included; the order, cursor and paging fields are ignored.
+
+### CountLogsCappedAsync
+
+A `LogCount(int Count, bool Capped)` for a pager. Without a text filter, the exact count `CountLogsAsync` gives, never capped. With `MessageContains` or `CategoryContains`, counted only up to `OperationsService.LogCountCap` (10,000): more matches than that give `Count = 10000, Capped = true`, to show as "10,000+"; exactly 10,000 is exact. The same on Postgres, Sqlite and InMemory. A custom implementation that does not override it returns the exact count, uncapped.
+
+### GetWorkQueueEntryDetailAsync
+
+A `WorkQueueEntryDetail`, or `null` when no entry has the id: the entry's fields, its input masked as [below](#masking-a-stored-input), and for a queued entry with a subject, what it waits on. `SubjectHeldBy` is the dispatched entry for the same subject whose run is still `Pending` or `InProgress`; when nothing holds the subject, `SubjectQueuedBehind` is the confirmed queued sibling dispatch would offer first, by the filters dispatch applies (due, its manifest group enabled) and then priority and age. The dashboard's work queue entry page and the API's [`workQueue.detail`](/docs/sdk-reference/graphql-api/queries#detail) both read it.
+
+### GetRecordedDecisionsAsync
+
+A `RecordedDecisionPage` of the run's rows in `trax.decision`, in the order they were recorded, with answers withheld as described [below](#recorded-decisions). `afterId` is the previous page's `NextCursor`; `take` is clamped to 1 through 500. A run with no decisions gets an empty page.
+
+### GetDashboardMetricsAsync
+
+The numbers behind the dashboard's home page and the API's metrics query. `range` sets the
+granularity of the executions-over-time chart only; `hideAdminTrains` leaves the framework's admin
+trains (`AdminTrains.FullNames`) out of every series, as the dashboard's "Hide admin trains" toggle
+does. The fields are listed under the GraphQL [queries](/docs/sdk-reference/graphql-api/queries).
+
+### GetManifestGroupDependencyGraphAsync
+
+The cross-group dependency graph around one group: the group and the groups its manifests depend on
+or are depended on by, as nodes, and each cross-group dependency as a parent to dependent edge.
+`null` when no group has the id; a group with no cross-group dependencies gives a graph of the group
+alone.
+
+### GetGlobalManifestGroupGraphAsync
+
+The whole cross-group dependency graph: every manifest group as a node and every cross-group
+dependency as a parent to dependent edge, with nothing highlighted. Dependencies within a group are
+left out. It backs the global graph on the dashboard's manifest-groups page.
+
 
 ### LogQuery
 
-```csharp
+```csharp fragment
 public record LogQuery(
     long? MetadataId = null, LogLevel? MinimumLevel = null, string? Category = null,
     long? AfterId = null, int Skip = 0, int Take = 25)
@@ -365,7 +515,7 @@ An exact count of a large, unfiltered log table is a full scan, and the schedule
 writes, one `RecordedDecisionRecord` each, a page at a time in id order from
 `ix_decision_metadata_id_id` ([migration 064](/docs/migration-guides/database-migrations#decision-page-index-064-sqlite-028)):
 
-```csharp
+```csharp fragment
 public record RecordedDecisionRecord(
     long Id, long MetadataId, string? QuestionKey, int Occurrence, string? Kind, string? Question,
     string? Answer, string? Refused, bool IsRefused, string? Fingerprint, string? Model,
@@ -391,14 +541,27 @@ a key two types share is withheld when either is marked.
 The replay links are plain columns read with the run and the entry: `Metadata.ReplayDecisionsOf`,
 `Metadata.ReplayAbandoned` and `WorkQueue.ReplayDecisionsOf`.
 
-### State-machine instances
+### Masking a stored input
+
+A work queue entry's input and a manifest's properties keep their
+[`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields)
+members in clear, because a run starts from them. `TransportInputRedaction.Redact(discovery, json,
+inputTypeName)`, in the same namespace, is the one masking both surfaces apply to those copies:
+`GetWorkQueueEntryDetailAsync` applies it to the entry's input, and the dashboard's dead letter
+page and the API's `manifestDetail` to a manifest's properties. It reads the copy back as the input
+type of a train registered on this host and writes it with every sensitive member, and every member
+typed `object` or as a JSON node, as `{"_redacted": true}`. When no registered train takes that
+type, or the copy does not read or write as it (the type's own code throwing included), the whole
+value is `{"_redacted": true}`.
+
+## State-machine instances
 
 The operator's read-only view of `trax.snapshot_draft`: the dashboard's
 [State Machines pages](/docs/dashboard#state-machines) and the API's
 [`machineInstances`, `machineInstance` and `machineInstanceCounts`](/docs/sdk-reference/graphql-api/queries#machineinstances)
 read through these four methods, and one instance's runs and its cancel through the two after them.
 
-```csharp
+```csharp fragment
 public record MachineInstanceQuery(
     string? Machine = null, string? State = null, SnapshotOwnerKind? OwnerKind = null,
     int Skip = 0, int Take = 25);
@@ -416,11 +579,32 @@ public record MachineInstanceStateCount(string Machine, string State, SnapshotOw
 
 | Method | Returns |
 |--------|---------|
-| `GetMachineInstancesAsync(query, ct)` | A page of instances matching the query's machine, state and owner kind (each optional), newest first by `UpdatedAt`, then by row. `Take` is clamped to 1 through 500, a negative `Skip` reads from the start, and a `Skip` above `MachineInstanceCountCap` (10,000) throws `ArgumentOutOfRangeException`, as the API's `machineInstances` refuses it. |
-| `CountMachineInstancesAsync(query, ct)` | How many match, counted up to `OperationsService.MachineInstanceCountCap` (10,000): more give `Count = 10000, Capped = true`. |
-| `GetMachineInstanceAsync(key, ct)` | One instance, or `null`. The owner kind is part of every lookup, so a user's draft never answers for a system instance under the same id. A user's draft also needs `RowId`, because several users can hold a draft under one id: without it the method throws `ArgumentException`. |
-| `GetMachineInstanceStateCountsAsync(machine, ct)` | Exact counts by machine, state and owner kind, ordered by those three; `machine` narrows it to one machine. Kept for `MachineInstanceCountCacheDuration` (5 seconds) per host and per `machine`, with callers asking meanwhile sharing one read, so a count can be that old. |
-| `WatchMachineInstancesAsync(machine, ct)` | The live feed of instances: each instance once whenever any path on any host writes it, narrowed to one machine when `machine` is set, and once more with `Deleted` set when it is deleted or expires. A record with `Reload` set names no instance: writes may have been missed (the change listener started or reconnected, or the reader fell behind), so the reader reads what it shows again. A burst of writes to one instance may arrive as its latest revision only. It starts with what is written after it opens, ends when `ct` fires, when the host stops or when the reader falls too far behind, and ends at once on a host that registers no state machines. Every reader on a host shares the host's one change listener; the dashboard's instance page and the API's `onMachineInstanceChanged` read it here. A service constructed without an `IServiceProvider` throws `InvalidOperationException` on the first read. |
+| [`GetMachineInstancesAsync(query, ct)`](#getmachineinstancesasync) | see below |
+| [`CountMachineInstancesAsync(query, ct)`](#countmachineinstancesasync) | see below |
+| [`GetMachineInstanceAsync(key, ct)`](#getmachineinstanceasync) | see below |
+| [`GetMachineInstanceStateCountsAsync(machine, ct)`](#getmachineinstancestatecountsasync) | see below |
+| [`WatchMachineInstancesAsync(machine, ct)`](#watchmachineinstancesasync) | see below |
+
+### GetMachineInstancesAsync
+
+A page of instances matching the query's machine, state and owner kind (each optional), newest first by `UpdatedAt`, then by row. `Take` is clamped to 1 through 500, a negative `Skip` reads from the start, and a `Skip` above `MachineInstanceCountCap` (10,000) throws `ArgumentOutOfRangeException`, as the API's `machineInstances` refuses it.
+
+### CountMachineInstancesAsync
+
+How many match, counted up to `OperationsService.MachineInstanceCountCap` (10,000): more give `Count = 10000, Capped = true`.
+
+### GetMachineInstanceAsync
+
+One instance, or `null`. The owner kind is part of every lookup, so a user's draft never answers for a system instance under the same id. A user's draft also needs `RowId`, because several users can hold a draft under one id: without it the method throws `ArgumentException`.
+
+### GetMachineInstanceStateCountsAsync
+
+Exact counts by machine, state and owner kind, ordered by those three; `machine` narrows it to one machine. Kept for `MachineInstanceCountCacheDuration` (5 seconds) per host and per `machine`, with callers asking meanwhile sharing one read, so a count can be that old.
+
+### WatchMachineInstancesAsync
+
+The live feed of instances: each instance once whenever any path on any host writes it, narrowed to one machine when `machine` is set, and once more with `Deleted` set when it is deleted or expires. A record with `Reload` set names no instance: writes may have been missed (the change listener started or reconnected, or the reader fell behind), so the reader reads what it shows again. A burst of writes to one instance may arrive as its latest revision only. It starts with what is written after it opens, ends when `ct` fires, when the host stops or when the reader falls too far behind, and ends at once on a host that registers no state machines. Every reader on a host shares the host's one change listener; the dashboard's instance page and the API's `onMachineInstanceChanged` read it here. A service constructed without an `IServiceProvider` throws `InvalidOperationException` on the first read.
+
 
 `MachineInstanceRecord` also carries `Revision`, the instance's revision, as an init-only property: 1
 when the row was created and one more for every write since, bumped by the database; and `Deleted`, set
@@ -439,7 +623,7 @@ Two more methods serve one instance's page and its one operator action, the dash
 API's alike (`machineInstance { invokedRuns }` and
 [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance)):
 
-```csharp
+```csharp fragment
 public record MachineInstanceRun(
     long Id, string ExternalId, string TrainName, TrainState TrainState, DateTime StartTime,
     DateTime? EndTime, FailureClass FailureClass, bool CancellationRequested, bool IsLive);
@@ -461,8 +645,17 @@ public record MachineInstanceCancelResult(
 
 | Method | Returns |
 |--------|---------|
-| `GetMachineInstanceRunsAsync(key, ct)` | The runs the instance invoked, newest first, at most `OperationsService.MachineInstanceRunCap` (50), with the one its state waits on marked `IsLive`; `QueuedEntryId` is that run's work queue entry while it is still queued. `null` when no row matches. A system instance lists every run linked to it (read through `ix_metadata_invoking_instance`); a user's draft lists only the run its own invoke token names, because a run does not record which user's draft queued it. Never a run's input or output. |
-| `CancelMachineInstanceAsync(key, ct)` | Cancels a system-owned instance's live run: a still-queued entry is marked Cancelled by one conditional statement, and a dispatched run is flagged as `CancelExecutionsAsync` flags one. The dispatcher claims an entry and writes its run in one transaction, so the run either never starts or is cancelled. When this host registers the machine (`AddStateMachines`), a queued run's Cancelled outcome is applied in the call (`Moved`); otherwise a host that does applies it (`RunCancelled`). Every delivery is the one conditional update on the token, so the outcome is applied once. A dispatched run's outcome is applied when it ends (`CancelRequested`). Refused, with a typed outcome and changing nothing: `UserOwned`, `NotFound`, `NoLiveRun`, `RunEnded`. |
+| [`GetMachineInstanceRunsAsync(key, ct)`](#getmachineinstancerunsasync) | see below |
+| [`CancelMachineInstanceAsync(key, ct)`](#cancelmachineinstanceasync) | see below |
+
+### GetMachineInstanceRunsAsync
+
+The runs the instance invoked, newest first, at most `OperationsService.MachineInstanceRunCap` (50), with the one its state waits on marked `IsLive`; `QueuedEntryId` is that run's work queue entry while it is still queued. `null` when no row matches. A system instance lists every run linked to it (read through `ix_metadata_invoking_instance`); a user's draft lists only the run its own invoke token names, because a run does not record which user's draft queued it. Never a run's input or output.
+
+### CancelMachineInstanceAsync
+
+Cancels a system-owned instance's live run: a still-queued entry is marked Cancelled by one conditional statement, and a dispatched run is flagged as `CancelExecutionsAsync` flags one. The dispatcher claims an entry and writes its run in one transaction, so the run either never starts or is cancelled. When this host registers the machine (`AddStateMachines`), a queued run's Cancelled outcome is applied in the call (`Moved`); otherwise a host that does applies it (`RunCancelled`). Every delivery is the one conditional update on the token, so the outcome is applied once. A dispatched run's outcome is applied when it ends (`CancelRequested`). Refused, with a typed outcome and changing nothing: `UserOwned`, `NotFound`, `NoLiveRun`, `RunEnded`.
+
 
 The messages are public members of `OperationsService`, and both surfaces show them unchanged:
 
@@ -479,20 +672,17 @@ The messages are public members of `OperationsService`, and both surfaces show t
 A requeue of a run a machine invoked is refused with `InvokedRunRequeueRefusal(metadataId, machine)`,
 and an operator's cancel of a run a user's draft started with `UserOwnedRunCancelRefusal`.
 
-### Masking a stored input
+## Behavior
 
-A work queue entry's input and a manifest's properties keep their
-[`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields)
-members in clear, because a run starts from them. `TransportInputRedaction.Redact(discovery, json,
-inputTypeName)`, in the same namespace, is the one masking both surfaces apply to those copies:
-`GetWorkQueueEntryDetailAsync` applies it to the entry's input, and the dashboard's dead letter
-page and the API's `manifestDetail` to a manifest's properties. It reads the copy back as the input
-type of a train registered on this host and writes it with every sensitive member, and every member
-typed `object` or as a JSON node, as `{"_redacted": true}`. When no registered train takes that
-type, or the copy does not read or write as it (the type's own code throwing included), the whole
-value is `{"_redacted": true}`.
+### Registered services
 
-## Effects and log levels
+`AddScheduler(...)` registers the default implementation, `OperationsService`, as scoped. An API-only host registers it itself with `services.AddScoped<IOperationsService, OperationsService>()` (see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)).
+
+### Authorization
+
+Neither method decides authorization itself: both leave it to the mediator, `QueueTrainAsync` and `RequeueExecutionAsync` through `QueueAsync`, and `RunTrainAsync` through `PrepareAsync`. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)).
+
+### Effects and log levels
 
 The effects page and the server log levels are per-process settings rather than rows, so they
 have services of their own, registered by `AddScheduler` beside this one:
@@ -501,16 +691,29 @@ have services of their own, registered by `AddScheduler` beside this one:
 whose job state is this node's:
 [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs).
 
-## Authorization
-
-Neither method decides authorization itself: both leave it to the mediator, `QueueTrainAsync` and `RequeueExecutionAsync` through `QueueAsync`, and `RunTrainAsync` through `PrepareAsync`. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)).
-
-## Implementing it yourself
+### Implementing it yourself
 
 `RunTrainAsync` and every method added after it have a default implementation that throws `NotSupportedException`, so an implementation written before they were added still compiles. `OperationsService` needs the constructor that takes an `IServiceProvider`, which dependency injection picks, to resolve a job submitter; built with the older constructor, its `RunTrainAsync` throws `InvalidOperationException`. Its `RunTrainAsync` also needs an `ITrainExecutionService` that implements `PrepareAsync`, as the mediator's own does; one written before that method existed throws `NotSupportedException` rather than skip authorization.
 
-## Package
+## Example
 
+```csharp compile
+using Trax.Scheduler.Services.Operations;
+
+public class ReportQueue(IOperationsService operations)
+{
+    public async Task<string> QueueReport(CancellationToken ct)
+    {
+        var result = await operations.QueueTrainAsync(
+            new QueueTrainInput("MyApp.Trains.IBuildReportTrain", """{"region":"eu"}""", 0, null),
+            ct);
+        return result.Success ? $"Queued entry {result.Id}" : result.Message ?? "Refused";
+    }
+}
 ```
-dotnet add package Trax.Scheduler
-```
+
+## See also
+
+- [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler), the scheduler API it builds on
+- [Dashboard](/docs/dashboard) and the GraphQL [mutations](/docs/sdk-reference/graphql-api/mutations), its two callers
+- [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)
