@@ -371,6 +371,36 @@ public class TimerDueAtTests(StoreProvider provider)
     }
 
     [Test]
+    public async Task A_timer_leaves_an_invoking_state_whose_run_nothing_dispatched()
+    {
+        // This host registers no scheduler: the run is queued and nothing takes it. The timer is fired by the
+        // outcome reconciler, which every host with machines runs, so the instance still leaves the state, and the
+        // queued run is cancelled with it.
+        var id = await InFetching(TimeSpan.FromMinutes(5));
+        var token = await InvokeToken(id);
+
+        await RawSql.SetDueAt(_host, id, (await RawSql.Now(_host)).AddMinutes(-1));
+        (await Reconciler.FireDueTimersOnce(CancellationToken.None))
+            .Should()
+            .ContainSingle(r => r.InstanceId == id)
+            .Which.Outcome.Should()
+            .Be(TimerFireResult.Fired);
+
+        await ShouldHaveNoTimer(_host, id, "TimedOut");
+        (await _host.Rows(id)).Single().InvokeToken.Should().BeNull();
+        using var scope = _host.Scope();
+        (
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.Where(w => w.ExternalId == token)
+                .Select(w => w.Status)
+                .SingleAsync()
+        )
+            .Should()
+            .Be(WorkQueueStatus.Cancelled, $"leaving an invoking state cancels its run. See {Adr}");
+    }
+
+    [Test]
     public async Task Upsert_through_the_public_store_into_a_timed_state_sets_due_at()
     {
         var id = Guid.NewGuid();
