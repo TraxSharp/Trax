@@ -100,7 +100,10 @@ export function summarize(markdown: string): string {
         .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
         .replace(/\*\*([^*]+)\*\*/g, "$1")
         .replace(/`([^`]*)`/g, "$1")
-        .replace(/<[^>]+>/g, "")
+        .replace(/<[^>]*>/g, "")
+        // One pass can rebuild a tag from the pieces it leaves ("<scr<b>ipt>"), so drop every
+        // remaining angle bracket: the summary is plain text and never needs one.
+        .replace(/[<>]/g, "")
     );
     paragraph = [];
     if (!text) return undefined;
