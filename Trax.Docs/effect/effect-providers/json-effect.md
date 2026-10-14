@@ -4,13 +4,15 @@ description: The AddJson effect, a development tool that logs tracked model chan
 type: reference
 area: effects
 nav_order: 3
+source:
+  - Trax.Effect/src/Trax.Effect.Provider.Json
 ---
 
 # JSON Effect
 
 The JSON effect tracks model changes by comparing JSON snapshots. When a train calls `SaveChanges`, this provider serializes every tracked model to JSON and compares it to the snapshot taken when the model was first tracked. If something changed, it logs the current state.
 
-This is a development debugging tool. It doesn't persist anything. It writes to your configured `ILogger`.
+It persists nothing; it writes to the configured `ILogger`. [Data persistence](/docs/effect/effect-providers/data-persistence) is the provider that stores runs.
 
 ## Registration
 
@@ -18,7 +20,7 @@ This is a development debugging tool. It doesn't persist anything. It writes to 
 dotnet add package Trax.Effect.Provider.Json
 ```
 
-```csharp
+```csharp compile
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 
@@ -38,16 +40,6 @@ No configuration required. The provider uses the JSON serialization options from
 3. If the JSON differs (a field was updated, a state changed), the provider logs the new serialized state.
 
 The line is the model's `ToString()`. For a metadata row that is the row itself, without the graph loaded around it: `Manifest`, `Parent`, `Children` and `Logs` are left out, and the run's input is not written (`Metadata.Input` is never serialized). A manifest's `Properties`, a queued entry's `Input` and a background job's `Input` are written as `{"_omitted": true}` wherever they appear, because they are the copy a train is run from and hold its input unmasked. Members marked `[TraxSensitive]` are written as `{"_redacted": true}`.
-
-This gives you a log of what changed during train execution without needing a database. When you see a train misbehaving, the JSON effect shows you the model states at the point they were saved.
-
-## When to Use It
-
-- **Development**: See train state changes in your console output without setting up Postgres.
-- **Debugging**: When a train produces unexpected results, the JSON logs show exactly what each model looked like at `SaveChanges` time.
-- **Lightweight setups**: Pair it with `UseInMemory()` for a no-infrastructure development environment.
-
-In production, you'll typically replace this with (or supplement it by) the [Data Persistence](/docs/effect/effect-providers/data-persistence) provider.
 
 ## SDK Reference
 

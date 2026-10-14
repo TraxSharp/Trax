@@ -4,19 +4,6 @@
 #
 # Do NOT add to this list: mark the fence. Delete a page's line once its last unmarked fence is
 # marked, or when the page moves or is deleted; a stale line fails the test.
-effect.md
-effect/architecture.md
-effect/broadcaster-sinks.md
-effect/decisions.md
-effect/effect-providers.md
-effect/effect-providers/data-persistence.md
-effect/effect-providers/domain-data-contexts.md
-effect/effect-providers/json-effect.md
-effect/effect-providers/junction-logger.md
-effect/effect-providers/junction-progress.md
-effect/effect-providers/parameter-effect.md
-effect/host-tracking.md
-effect/junction-events.md
 sdk-reference/attributes.md
 sdk-reference/attributes/inject.md
 sdk-reference/attributes/trax-allow-anonymous.md

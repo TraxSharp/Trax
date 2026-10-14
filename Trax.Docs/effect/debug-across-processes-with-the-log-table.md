@@ -1,19 +1,22 @@
 ---
-title: Debugging with the Log Table
-description: "Using the trax.log table written by AddDataContextLogging to debug across processes: what a row holds, how to query and correlate it, and what it drops."
+title: Debug across processes with the log table
+description: "Use the trax.log table written by AddDataContextLogging to debug across processes: what a row holds, how to query and correlate it, and what it drops."
 type: how-to
 area: data
-nav_order: 2
+nav_order: 6
+source:
+  - Trax.Effect/src/Trax.Effect.Data/Services/DataContextLoggingProvider
+redirect_from:
+  - /docs/effect/debugging-with-the-log-table
 ---
 
-# Debugging with the Log Table
+# Debug across processes with the log table
 
 With `AddDataContextLogging()` enabled, `DataContextLoggingProvider` is registered as an
 `ILoggerProvider` and log calls are persisted to the `trax.log` table. Three things filter
 what lands there: the configured minimum level, the category blacklist, and one category
-dropped unconditionally ahead of both, `Microsoft.EntityFrameworkCore.Database.Command`. That
-last one is worth knowing before you go looking for SQL in this table, because no
-configuration brings it back. An API host and a scheduler pointed at the same database
+dropped unconditionally ahead of both, `Microsoft.EntityFrameworkCore.Database.Command`, so
+the table never holds SQL and no configuration brings it back. An API host and a scheduler pointed at the same database
 write into the same table, so one `psql` session reads both instead of two console streams
 being correlated by hand.
 
@@ -26,7 +29,7 @@ it: there is no timestamp and no train name, and a line written outside any run 
 | Column | Type | Holds |
 |---|---|---|
 | `id` | `bigint` | Identity, and the only ordering the table has |
-| `metadata_id` | `bigint` | The `trax.metadata.id` of the run that wrote the line, or `0` for a line written outside any run. `NOT NULL` with a default of `0` from migration `065` |
+| `metadata_id` | `bigint` | The `trax.metadata.id` of the run that wrote the line, or `0` for a line written outside any run. `NOT NULL`, default `0` |
 | `event_id` | `integer` | The `EventId.Id` passed to the logging call |
 | `level` | `trax.log_level` | `trace`, `debug`, `information`, `warning`, `error`, `critical`, `none` |
 | `message` | `varchar` | The formatted message, truncated to 4000 characters |
@@ -36,15 +39,12 @@ it: there is no timestamp and no train name, and a line written outside any run 
 
 Three things about that shape catch people out.
 
-**The level labels are lowercase.** `LogLevel` is mapped to the `trax.log_level` Postgres enum
-declared in migration `002_log.sql`, and the labels there are `information`, `error` and the
-rest. `level = 'Error'` matches nothing. The enum is ordered by severity, so `level >= 'error'`
+**The level labels are lowercase.** `LogLevel` is mapped to the `trax.log_level` Postgres enum,
+whose labels are `information`, `error` and the rest. `level = 'Error'` matches nothing. The enum is ordered by severity, so `level >= 'error'`
 is the range comparison you want.
 
 **There is no timestamp column.** `id` is the insert order and the only time axis the table
-has, which is why every query below orders by it. The primary key on `id` was dropped by
-migration `004_log_pkey.sql` and restored by `021_log_performance.sql`, which also added the
-`ix_log_metadata_id` index; `018_bigint_ids.sql` widened `id` and `metadata_id` from `integer`.
+has, which is why every query below orders by it. `metadata_id` is indexed (`ix_log_metadata_id`).
 
 **`metadata_id` is the run on the logging call's async flow.** `ServiceTrain.Run` records its
 row on the run's own flow, and the logger reads it when the call is made, so a line logged by a
@@ -52,8 +52,7 @@ junction, by anything the junction awaits, or by a lifecycle hook names the run.
 inside a junction names its own run, and the outer run's lines name it again once the inner run
 returns. A line logged before the run's row has an id, or on a flow that is not a run's
 (startup, a hosted service's own loop, a background writer such as the log writer itself),
-stores `0`. Rows written before this was fixed store `0` too: migration `065` turns a `NULL` into
-`0` and changes no other value.
+stores `0`. Rows written by versions that did not fill the column store `0` too.
 
 The scheduler's polling is not on that list. The manifest manager and the job dispatcher are
 service trains that record a `trax.metadata` row for every poll, so the lines their junctions
@@ -65,8 +64,11 @@ a corrupt one. Join with `left join`, not `join`, when you want those lines too.
 
 ## Querying it
 
+Connect `psql` (or any client) to the database the hosts share, with the connection string they
+use:
+
 ```bash
-docker exec -it trax_database psql -U trax -d trax
+psql "host=localhost dbname=trax user=trax"
 ```
 
 ```sql
@@ -90,7 +92,7 @@ where message ilike '%order-4417%' order by id desc limit 50;
 
 `category` is the `ILogger` category, which is the **implementation** type's FullName. That is
 the opposite convention from `metadata.name`, which stores the interface FullName (see
-[Train Discovery](/docs/mediator/train-discovery)). Filtering the log table by the interface
+[Canonical train naming](/docs/effect/architecture#canonical-train-naming)). Filtering the log table by the interface
 name finds nothing, and filtering `trax.metadata` by the class name finds nothing.
 
 ## Correlating a row with a train
@@ -145,8 +147,8 @@ it creates. `trax.log` reaches it through `metadata_id`.
 
 `DataContextLoggingProvider` buffers into a bounded channel of 4096 and writes batches of up
 to 256 as entries arrive. When the host stops it writes what is already queued, waiting up to five
-seconds; only entries still queued after that are lost. A few consequences worth knowing before you
-treat an absent row as evidence:
+seconds; only entries still queued after that are lost. So an absent row is not evidence that
+nothing was logged:
 
 - The channel is `DropOldest`, so a burst larger than the buffer silently discards the oldest
   entries.

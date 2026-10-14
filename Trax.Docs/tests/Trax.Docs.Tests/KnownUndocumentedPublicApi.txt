@@ -105,7 +105,6 @@ Trax.Effect M:TraxRedaction.WithRedaction
 Trax.Effect M:WorkQueue.MaxPriority
 Trax.Effect M:WorkQueue.MinPriority
 Trax.Effect T:AssemblyExtensions
-Trax.Effect T:BroadcasterExtensions
 Trax.Effect T:ChangeSignalCoalescer
 Trax.Effect T:ChangeSignalOptions
 Trax.Effect T:CreateBackgroundJob

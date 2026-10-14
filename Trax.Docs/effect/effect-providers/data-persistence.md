@@ -1,16 +1,21 @@
 ---
 title: Data Persistence
-description: The data persistence effect that stores a Metadata row per run, on PostgreSQL, SQLite or InMemory, with automatic migrations and DataContext logging.
+description: "The data persistence effect that stores a Metadata row per run, on PostgreSQL, SQLite or InMemory, with automatic migrations and DataContext logging."
 type: reference
 area: data
 nav_order: 1
+source:
+  - Trax.Effect/src/Trax.Effect.Data.Postgres/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.Data.Sqlite/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.Data.InMemory/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.Data/Extensions/ServiceExtensions.cs
 ---
 
 # Data Persistence
 
-The data persistence effect stores a `Metadata` record for every train execution. Each record captures the train name, state, timing, inputs/outputs, and failure details. See [Metadata](/docs/effect/metadata) for the full field breakdown.
+The data persistence effect stores a `Metadata` row for every train run: the train's canonical name, its state (`Pending`, `InProgress`, `Completed`, `Failed` or `Cancelled`), timing, input and output, and failure details. [Metadata](/docs/effect/metadata) lists every field. The `Input` and `Output` columns stay null unless the [parameter effect](/docs/effect/effect-providers/parameter-effect) is registered.
 
-Three backends are available: PostgreSQL for production, SQLite for lightweight/single-server deployments, and InMemory for testing. All three implement the same `IDataContext` interface, so your train code doesn't change between them.
+There are three backends: PostgreSQL, SQLite for a single server, and InMemory for tests. All three implement `IDataContext`, so train code does not change between them.
 
 ## PostgreSQL
 
@@ -18,7 +23,7 @@ Three backends are available: PostgreSQL for production, SQLite for lightweight/
 dotnet add package Trax.Effect.Data.Postgres
 ```
 
-```csharp
+```csharp compile
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 
@@ -33,33 +38,16 @@ On first startup, the Postgres provider runs automatic migrations to create the 
 
 The provider uses Entity Framework Core with Npgsql. Train states and dead letter statuses are mapped to PostgreSQL enum types. Input and output fields use `jsonb` columns. All timestamps are stored in UTC.
 
-### What Gets Persisted
-
-Every `ServiceTrain` execution creates a `Metadata` row:
-
-| Field | Description |
-|-------|-------------|
-| `Name` | Train class name |
-| `TrainState` | Pending -> InProgress -> Completed or Failed |
-| `StartTime` / `EndTime` | Execution duration |
-| `Input` / `Output` | Serialized JSON (requires [Parameter Effect](/docs/effect/effect-providers/parameter-effect)) |
-| `FailureJunction` | Which junction threw |
-| `FailureException` | Exception type |
-| `FailureReason` | Error message |
-| `StackTrace` | Full stack trace on failure |
-| `FailureClass` | [Failure classification](/docs/core/trains-and-junctions#classifying-failures), stored in the `failure_class` column (the `trax.failure_class` enum type on Postgres). `Unclassified` unless a classifier assigned one |
-| `ParentId` | The parent run's id. Not set by any Trax code path at present, including a train dispatched from a junction; see [nested trains](/docs/mediator#nested-trains) |
-| `ManifestId` | Links to scheduling manifest |
-
-Without the [Parameter Effect](/docs/effect/effect-providers/parameter-effect), the `Input` and `Output` columns are null. Metadata is still persisted, but without the serialized request/response data.
-
 ## SQLite
 
 ```bash
 dotnet add package Trax.Effect.Data.Sqlite
 ```
 
-```csharp
+```csharp compile
+using Trax.Effect.Data.Sqlite.Extensions;
+using Trax.Effect.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UseSqlite("Data Source=trax.db")
@@ -67,9 +55,9 @@ services.AddTrax(trax => trax
 );
 ```
 
-File-backed persistence with zero infrastructure. No database server to install or configure. On first startup, the SQLite provider creates the database file and runs migrations. WAL mode is enabled automatically for concurrent read/write performance.
+File-backed persistence with no database server. On first startup, the SQLite provider creates the database file and runs migrations. It turns on WAL mode.
 
-SQLite supports the full scheduler pipeline (ManifestManager, JobDispatcher, MetadataCleanup, DeadLetterCleanup) and all batch operations (`ExecuteUpdateAsync`, `ExecuteDeleteAsync`). The main limitation is single-server only: SQLite does not support advisory locks or `FOR UPDATE SKIP LOCKED`, so multi-server scheduling coordination is not available.
+SQLite supports the full scheduler pipeline (ManifestManager, JobDispatcher, MetadataCleanup, DeadLetterCleanup) and all batch operations (`ExecuteUpdateAsync`, `ExecuteDeleteAsync`). It is single-server only: SQLite has no advisory locks or `FOR UPDATE SKIP LOCKED`, so schedulers on several servers cannot coordinate.
 
 | | PostgreSQL | SQLite | InMemory |
 |---|---|---|---|
@@ -79,15 +67,16 @@ SQLite supports the full scheduler pipeline (ManifestManager, JobDispatcher, Met
 | Full scheduler trains | Yes | Yes | No (simplified) |
 | Batch operations | Yes | Yes | No |
 
-Use SQLite for local development, integration testing with real SQL, or single-server deployments where Postgres is overkill.
-
 ## InMemory
 
 ```bash
 dotnet add package Trax.Effect.Data.InMemory
 ```
 
-```csharp
+```csharp compile
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UseInMemory()
@@ -95,32 +84,42 @@ services.AddTrax(trax => trax
 );
 ```
 
-Uses Entity Framework Core's in-memory provider. No connection string, no migrations, no external dependencies. Data is lost when the process exits.
+Uses Entity Framework Core's in-memory provider: no connection string, no migrations. Data is lost when the process exits. `IDataContext` is registered as scoped, and every scope reads the same store, so a test can run a train and then read its row:
 
-Use this for unit tests and integration tests where you want metadata tracking without a database:
+```csharp compile
+using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
 
-```csharp
 var services = new ServiceCollection();
+services.AddLogging();
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UseInMemory()
     )
-    .AddMediator(typeof(MyTrain).Assembly)
+    .AddMediator(assembly)
 );
 
-var provider = services.BuildServiceProvider();
-var context = provider.GetRequiredService<IDataContext>();
+await using var provider = services.BuildServiceProvider();
 
-// Run a train, then query metadata
-var metadata = await context.Metadatas.FirstOrDefaultAsync();
-Assert.Equal(TrainState.Completed, metadata.TrainState);
+// Run a train, then read its row.
+await using var scope = provider.CreateAsyncScope();
+var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
+var metadata = await context.Metadatas.OrderByDescending(m => m.Id).FirstOrDefaultAsync();
 ```
 
 ## DataContext Logging
 
-Logs the SQL queries that EF Core generates. Useful when debugging persistence issues or inspecting what the data provider is doing:
+Stores the host's log lines in the `trax.log` table: every `ILogger` category at or above the minimum level (`Information` by default) that is not blacklisted, whatever wrote it. It does not record SQL: EF Core's command log (`Microsoft.EntityFrameworkCore.Database.Command`) is always skipped, because writing a row would log another one. Lines are queued in memory (4096, oldest dropped when full) and written in batches. [Debug across processes with the log table](/docs/effect/debug-across-processes-with-the-log-table) reads them.
 
-```csharp
+```csharp compile
+using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
@@ -129,16 +128,19 @@ services.AddTrax(trax => trax
 );
 ```
 
-Log levels can also be changed at runtime via the Dashboard's Server Settings page. A saved level is applied to the host's logger filters over every configuration source, and lasts until the process restarts; if the host sets a category's filter itself after the dashboard, the page reports that the saved level is not in force. The optional `blacklist` parameter filters out noisy namespaces:
+Log levels can also be changed at runtime via the Dashboard's Server Settings page. A saved level is applied to the host's logger filters over every configuration source, and lasts until the process restarts; if the host sets a category's filter itself after the dashboard, the page reports that the saved level is not in force. The optional `blacklist` names categories not to store, each an exact category name or a pattern in which `*` matches any run of characters:
 
-```csharp
-.AddDataContextLogging(
-    minimumLogLevel: LogLevel.Debug,
-    blacklist: ["Microsoft.EntityFrameworkCore.Infrastructure.*"]
-)
+```csharp compile
+using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+
+effects.UsePostgres(connectionString)
+    .AddDataContextLogging(
+        minimumLogLevel: LogLevel.Debug,
+        blacklist: ["Microsoft.EntityFrameworkCore.Infrastructure.*"]
+    );
 ```
-
-Blacklist entries support exact matches and wildcard patterns.
 
 ## SDK Reference
 

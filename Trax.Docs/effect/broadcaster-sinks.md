@@ -1,14 +1,17 @@
 ---
 title: Broadcaster Sinks
-description: The train event broadcaster's transports and sinks, data-change signals, pairing RabbitMQ with a sink, and SignalR vs GraphQL subscriptions.
+description: "How the train event broadcaster splits transports from sinks, how data-change signals travel with train events, and SignalR against GraphQL subscriptions."
 type: explanation
 area: effects
 nav_order: 3
+source:
+  - Trax.Effect/src/Trax.Effect/Extensions/BroadcasterExtensions.cs
+  - Trax.Effect/src/Trax.Effect/Services/TrainEventBroadcaster
 ---
 
 # Broadcaster Sinks
 
-The broadcaster has two extension points: **transports** carry events between processes, and **sinks** consume events to do something useful with them (forward to a UI, write to a database, etc.). Knowing which one you need keeps wiring sane on multi-process topologies.
+The broadcaster has two extension points: **transports** carry events between processes, and **sinks** consume events to do something useful with them (forward to a UI, write to a database, etc.).
 
 ## Transports
 
@@ -40,86 +43,16 @@ The broadcaster also carries coalesced data-change signals, not just train lifec
 
 ## Pairing a transport with a sink
 
-This is the canonical multi-process layout: workers and the UI host share a RabbitMQ exchange; the UI host adds SignalR so browsers see events live.
+The usual multi-process layout pairs them: workers publish over a transport, and one host receives and hands events to a sink that reaches clients. [Broadcast train events across processes](/docs/effect/broadcast-train-events-across-processes) sets it up with RabbitMQ and SignalR, and [Write a headless event sink](/docs/effect/write-a-headless-event-sink) writes a sink with no client.
 
-**Worker (Program.cs):**
+## SignalR and GraphQL subscriptions
 
-```csharp
-using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
-using Trax.Effect.Data.Postgres.Extensions;
-using Trax.Effect.Extensions;
-
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects =>
-        effects
-            .UsePostgres(connStr)
-            .UseBroadcaster(b => b.UseRabbitMq(rabbitMqUrl))));
-```
-
-The worker publishes lifecycle events; it has no UI and registers no sinks beyond the broadcaster's own publish hook.
-
-**Hub (Program.cs):**
-
-```csharp
-builder.Services.AddSignalR();
-
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects =>
-        effects
-            .UsePostgres(connStr)
-            .UseBroadcaster(b => b
-                .UseRabbitMq(rabbitMqUrl)
-                .UseSignalRHub(opts => opts.OnlyForEvents("Completed", "Failed")))));
-
-var app = builder.Build();
-app.UseAuthentication();
-app.UseAuthorization();
-app.MapTraxTrainEventHub(hub => hub.RequireAuthorization("TraxEvents"));
-```
-
-The hub subscribes to the RabbitMQ exchange and rebroadcasts every matching event to the browsers its posture admits (see [MapTraxTrainEventHub: Authorization](/docs/sdk-reference/configuration/map-trax-train-event-hub#authorization)). The same hub also handles trains it runs locally, which fire the SignalR sink directly without a transport hop.
-
-The [SignalR Broadcaster sample](/docs/samples/signalr-broadcaster) is the single-process case: a
-browser page, a cookie sign-in, a hub mapped with `RequireRoles`, and a projection that sends a
-failure reason only for a `TrainException`. The [Energy Hub sample](/docs/samples/energy-hub) is the
-multi-process case without SignalR: workers publish over RabbitMQ and the hub's GraphQL
-subscriptions receive their events.
-
-## When to use SignalR vs GraphQL subscriptions
-
-Both deliver lifecycle events to clients in real time. Use the one that matches the rest of your stack:
+Both deliver lifecycle events to clients in real time. They fit different stacks:
 
 - **SignalR** is the native push channel for Blazor Server. It lands inside the same connection Blazor already maintains, so a hub method call updates component state and the framework pushes the DOM diff with no extra protocol.
 - **GraphQL subscriptions** are the natural fit when the rest of your API is GraphQL and clients are JS SPAs already speaking that protocol.
 
 The two are not mutually exclusive. Trax registers a separate `GraphQLTrainEventHandler` when `AddTraxGraphQL()` is wired up; the SignalR sink is registered independently. They coexist by both reading from the same broadcaster pipeline.
-
-## Headless sink example
-
-A persister that shreds `Output` into a local SQLite database:
-
-```csharp
-internal sealed class GeocodeDriftPersister : ITrainEventHandler
-{
-    private readonly IGeocodeDriftRepository _repo;
-
-    public GeocodeDriftPersister(IGeocodeDriftRepository repo) => _repo = repo;
-
-    public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
-    {
-        if (message.EventType != "Completed") return;
-        if (message.TrainName != typeof(ICheckGeocodeDriftTrain).FullName) return;
-        if (string.IsNullOrEmpty(message.Output)) return;
-
-        var report = JsonSerializer.Deserialize<GeocodeDriftReport>(message.Output)!;
-        await _repo.SaveAsync(report, ct);
-    }
-}
-
-builder.Services.AddSingleton<ITrainEventHandler, GeocodeDriftPersister>();
-```
-
-This sink only reacts to remote events arriving over the transport. If the persister host also runs trains locally and needs to react there too, register the same instance as an `ITrainLifecycleHook` as well (the SignalR sink shows the pattern).
 
 ## SDK Reference
 

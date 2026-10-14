@@ -4,6 +4,8 @@ description: "AddJunctionProgress: the CancellationCheckProvider and JunctionPro
 type: reference
 area: effects
 nav_order: 6
+source:
+  - Trax.Effect/src/Trax.Effect.JunctionProvider.Progress
 ---
 
 # Junction Progress
@@ -16,7 +18,7 @@ The junction progress provider gives real-time visibility into which junction a 
 dotnet add package Trax.Effect.JunctionProvider.Progress
 ```
 
-```csharp
+```csharp compile
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
@@ -70,19 +72,11 @@ CancellationCheck runs **first**, before JunctionProgress sets the columns. This
 
 ## Requires EffectJunction
 
-Both providers only fire on junctions that inherit from `EffectJunction<TIn, TOut>`. If your junctions use the base `Junction<TIn, TOut>`, neither provider has anything to hook into.
+Both providers run only around junctions that inherit from `EffectJunction<TIn, TOut>`. See [EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction).
 
-See [Junctions: EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction) for the difference between the two.
+## Cancellation across servers
 
-## Dual-Path Cancellation Architecture
-
-Trax supports two cancellation paths that work together:
-
-**Same-server (instant):** When the cancelling code runs on the same server as the train, `ICancellationRegistry` provides direct access to the train's `CancellationTokenSource`. Cancellation is immediate and can interrupt a running junction mid-execution.
-
-**Cross-server (between-junction):** When the cancellation request comes from a different server (for example, an operator clicking "Cancel" on the dashboard while the train runs on a background worker), the request is written to the database as a `CancellationRequested` flag. The `CancellationCheckProvider` picks it up before the next junction starts.
-
-The two paths are complementary. Same-server cancellation is faster but only works within a single process. The DB flag approach is slower (it only fires between junctions) but works across any number of servers.
+The cancellation check is the between-junction half of Trax's cancellation: a cancel requested on another server reaches the run as the `CancellationRequested` flag, read before its next junction. [Cancellation tokens](/docs/cross-cutting/cancellation-tokens) explains both paths.
 
 ## Dashboard Integration
 
@@ -92,15 +86,9 @@ When a train is `InProgress`, the dashboard detail page displays the current jun
 
 Junction progress adds **3 database round-trips per junction**: the cancellation check reads the run's `CancellationRequested` flag, then one write before the junction (set `CurrentlyRunningJunction`) and one after (clear it). For a train with N junctions, that's N reads and at most 2N writes on top of the normal metadata saves; a write after one junction and the write before the next often share one.
 
-The cancellation check opens a new `DbContext` for its read, from the Npgsql connection pool. Each progress write opens one too and updates the two columns in a single statement, without loading the row.
+The cancellation check opens a new `DbContext` for its read, from the data provider's connection pool. Each progress write opens one too and updates the two columns in a single statement, without loading the row.
 
-For most trains (3-5 junctions), this is negligible. For high-frequency trains with many junctions (e.g., a 15-junction ETL running every 30 seconds), the extra writes add up. If you don't need real-time junction visibility or cross-server cancellation for a particular train, you can omit `AddJunctionProgress()` from that deployment's configuration.
-
-## When to Use It
-
-- **Production environments**: Where trains may need to be cancelled from the dashboard by operators.
-- **Multi-server deployments**: Where the server requesting cancellation may not be the server executing the train.
-- **Junction-level visibility**: When operators need to see which junction a long-running train is currently on.
+The calls are per host: a host that does not call `AddJunctionProgress()` runs none of them, and its runs show no current junction and cannot be cancelled between junctions from another server.
 
 ## SDK Reference
 

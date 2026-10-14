@@ -1,44 +1,38 @@
 ---
 title: Effect
-description: "Trax.Effect overview: ServiceTrain, recorded runs in PostgreSQL, SQLite or memory, junctions resolved from DI, pluggable effect providers and setup."
+description: "How Trax.Effect works: ServiceTrain, the record it writes for every run, junctions resolved from DI, and the effect pattern behind its providers."
 type: explanation
 area: effects
 nav_order: 1
+source:
+  - Trax.Effect/src/Trax.Effect/Services/ServiceTrain/ServiceTrain.cs
+  - Trax.Effect/src/Trax.Effect/Services/EffectRunner/EffectRunner.cs
 ---
 
 # Trax.Effect
 
 `Trax.Effect` gives every train run a record: a row with its state, start and end time, the junction that failed and the exception it threw, stored in PostgreSQL, SQLite or memory. It also resolves junctions from dependency injection and runs pluggable effect providers around each run.
 
-```bash
-dotnet add package Trax.Effect
-dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
-dotnet add package Trax.Effect.Provider.Parameter  # SaveTrainParameters, in the setup below
-dotnet add package Trax.Effect.JunctionProvider.Logging  # AddJunctionLogger
-```
+It adds to [Core](/docs/core):
 
-## What It Adds
+- **`ServiceTrain<TIn, TOut>`**, a `Train` that records its own runs.
+- **The run record**: every run produces a queryable row (state, timing, input and output when saved, errors). [Metadata](/docs/effect/metadata) lists its fields.
+- **Dependency injection**: junctions are resolved from your container.
+- **Effect providers**: pluggable providers for persistence, logging and serialization. [Choose effect providers](/docs/effect/effect-providers) lists them.
+- **Lifecycle hooks**: fire on run state transitions (started, completed, failed, cancelled) for notifications, metrics or real-time updates.
 
-Everything in [Core](/docs/core), plus:
+## Train and ServiceTrain
 
-- **`ServiceTrain<TIn, TOut>`** - extends `Train` with automatic metadata tracking
-- **Execution metadata** - every train run produces a queryable record (state, timing, input/output, errors)
-- **Dependency injection** - junctions resolved from your DI container
-- **Effect providers** - pluggable providers for persistence, logging, and serialization
-- **Lifecycle hooks** - fire on train state transitions (started, completed, failed, cancelled) for notifications, metrics, or real-time updates
-- **Independent side effects** - each provider saves in turn, and one that throws does not stop the others; metadata (state, timing, errors) is persisted regardless of outcome
+`Train<TIn, TOut>` (Core) is the pipeline engine. It chains junctions, carries the failure track and manages Memory. It does no logging, no DI and no side effects.
 
-## Train vs ServiceTrain
+`ServiceTrain<TIn, TOut>` is a `Train` with services around it. Its `Run` is sealed, and wraps every run with:
 
-**`Train<TIn, TOut>`** (Core) - The core pipeline engine. Chains junctions, propagates errors, manages Memory. No logging, no DI, no side effects.
+- a run record (start time, end time, success or failure, and the input and output when parameter saving is on)
+- the registered effect providers (database persistence, JSON logging, parameter serialization)
+- the junction effects and lifecycle hooks
+- the `IServiceProvider` the run resolves its junctions from
 
-**`ServiceTrain<TIn, TOut>`** (Effect) - A `Train` with the services around it. Wraps every run with:
-- A run record (start time, end time, success or failure, and the input and output when parameter saving is on)
-- Effect providers (database persistence, JSON logging, parameter serialization)
-- Integration with `ITrainBus` for dispatch discovery
-- `IServiceProvider` access for junction instantiation
-
-```csharp
+```csharp compile
 using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 
@@ -50,42 +44,28 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-The code inside `Junctions()` is identical. `ServiceTrain` adds the infrastructure around it.
+The code inside `Junctions()` is the same as on a `Train`. `ServiceTrain` adds what runs around it. Each call to `Run` writes its own row, so an instance runs one execution at a time, which is why a service train cannot be registered as a singleton.
 
-## The Effect Pattern
+## The effect pattern
 
-Effects are operations that happen as the train passes through its route, provided by pluggable effect providers. Junctions don't write directly to a database or logger. Instead, the train tracks models during the journey, and effect providers handle the actual work at the end:
+Effects are the work a run causes outside the train: rows written, logs emitted, parameters serialized. Junctions do not write to a database or logger directly. The train tracks models during the run, and the effect providers do the work when the run ends:
 
-- On both tracks, effect providers run `SaveChanges`, and metadata (state, timing, errors) is always persisted
-- If the train reaches the right track (success), output is recorded alongside the metadata
-- If any junction takes the left track (failure), the exception and failure details are recorded, and the same `SaveChanges` runs on every provider. Nothing rolls back: whatever the train tracked before it failed, including entities added to the train's `DataContext` and models a custom provider holds, is committed with the failure record.
+- On both tracks, every provider runs `SaveChanges`, and the run's metadata (state, timing, errors) is persisted.
+- When the train reaches the success track, its output is recorded with the metadata.
+- When a junction takes the failure track, the exception and failure details are recorded, and the same `SaveChanges` runs on every provider. Nothing rolls back: whatever the train tracked before it failed, including entities added to the train's `DataContext` and models a custom provider holds, is committed with the failure record.
 
-This gives you full audit trails on every outcome and modularity (add/remove providers without changing train code).
+Each provider saves in turn, and one that throws does not stop the others. The run's outcome is persisted whatever a provider did.
 
-## Setup
+So a provider can be added or removed without touching train code, because the train never names one. Remove a provider and the train still runs; nothing records what that provider recorded. And a failed run leaves a full record rather than nothing, because the write is part of how the run ends on both tracks, not part of the success path.
 
-```csharp
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)          // Persist metadata (returns TraxEffectBuilderWithData)
-        .SaveTrainParameters()                  // Include input/output in metadata
-        .AddJunctionLogger(serializeJunctionData: true) // Log individual junction executions
-    )
-);
-```
+The alternative, junctions writing their own side effects as they go, puts a database call or a logger in every junction, and a failure halfway leaves the run's record in whatever state the failing junction left it.
 
-The `AddEffects` callback is a `Func<TraxEffectBuilder, TraxEffectBuilder>`, so the lambda returns the builder from the last chained call. Data provider methods (`UsePostgres`, `UseInMemory`) return `TraxEffectBuilderWithData`, which unlocks data-dependent methods like `AddDataContextLogging` at compile time.
+## Setting it up
 
-Remove any line and the train still runs; it just passes through fewer junctions.
+The [Getting Started](/docs/getting-started#4-record-runs-in-postgres) tutorial adds Trax.Effect to a project and records runs in Postgres. [AddTrax and AddEffects](/docs/sdk-reference/configuration) has the registration calls, and each provider's page has its own.
 
-## When to Use Effect
-
-- Web APIs where you need to know what ran and why it failed
-- Services that need execution audit trails
-- Any application where you want observability without building custom logging
-
-When you need decoupled dispatch (callers don't know which train handles a request), add [Trax.Mediator](/docs/mediator).
+When callers should not know which train handles a request, add [Trax.Mediator](/docs/mediator).
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook)

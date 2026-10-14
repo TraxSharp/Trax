@@ -1,20 +1,23 @@
 ---
-title: Host Tracking
-description: How every Metadata row records the host a train ran on, from auto-detected Lambda, ECS, Kubernetes or server identity, with the builder API and queries.
+title: Host tracking
+description: "How every Metadata row records the host a train ran on: auto-detected Lambda, ECS, Kubernetes, Azure or server identity, the builder calls, columns and queries."
+source:
+  - Trax.Effect/src/Trax.Effect/Models/Host/TraxHostInfo.cs
+  - Trax.Effect/src/Trax.Effect/Configuration/TraxBuilder/TraxBuilder.Host.cs
 type: reference
 area: effects
 nav_order: 2
 ---
 
-# Host Tracking
+# Host tracking
 
-When trains run across distributed infrastructure (Lambda functions, ECS tasks, Kubernetes pods, multiple servers), every metadata record captures WHERE the train executed. Since all hosts share the same Postgres database, you can query exactly which machine ran any given train.
+Every metadata row records the host the run executed on: its machine name, the kind of environment, an instance id and any labels the host adds. Hosts that share one database can be told apart by these columns.
 
-## How It Works
+## Behavior
 
-At startup, `AddTrax()` auto-detects the host environment and stores it as a process-wide singleton (`TraxHostInfo.Current`). Every `Metadata` record is stamped with this identity when the train starts executing.
+At startup, `AddTrax()` detects the host environment and stores it process-wide (`TraxHostInfo.Current`). A run stamps that identity on its row when it moves to `InProgress`.
 
-For remote workers: the metadata row is initially created by the dispatcher, but when the worker picks up the job and calls `StartServiceTrain()`, the host fields are overwritten with the actual execution host's identity.
+A row the dispatcher created before a remote worker ran it is stamped again when the worker starts the run, so the row names the host that executed it.
 
 ## Auto-Detection
 
@@ -23,18 +26,22 @@ Trax probes environment variables to determine where it's running:
 | Environment | Detection | `HostEnvironment` | `HostInstanceId` |
 |---|---|---|---|
 | AWS Lambda | `AWS_LAMBDA_FUNCTION_NAME` | `"lambda"` | `AWS_LAMBDA_LOG_STREAM_NAME` |
-| AWS ECS | `ECS_CONTAINER_METADATA_URI_V4` | `"ecs"` | `HOSTNAME` (container ID) |
+| AWS ECS | `ECS_CONTAINER_METADATA_URI_V4` or `ECS_CONTAINER_METADATA_URI` | `"ecs"` | `HOSTNAME` (container ID) |
 | Kubernetes | `KUBERNETES_SERVICE_HOST` | `"kubernetes"` | `HOSTNAME` (pod name) |
 | Azure App Service | `WEBSITE_SITE_NAME` | `"azure-app-service"` | `WEBSITE_INSTANCE_ID` |
 | Default | (none of the above) | `"server"` | `{MachineName}-{PID}` |
 
-`HostName` is always `Environment.MachineName`.
+The variables are checked in the table's order, and the first one set wins. An instance id variable that is not set falls back to `{MachineName}-{PID}`. `HostName` is `Environment.MachineName`, or `unknown` when it cannot be read.
 
 ## Builder API
 
-Host tracking works with zero configuration. To override or add labels:
+Host tracking needs no configuration. These calls on the `AddTrax` builder override the detected values or add labels:
 
-```csharp
+```csharp compile
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+
 services.AddTrax(trax => trax
     .SetHostEnvironment("my-custom-env")          // Override auto-detected environment
     .SetHostInstanceId("worker-42")                // Override auto-detected instance ID
@@ -52,7 +59,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-Labels are stored as JSONB in the `host_labels` column and can be queried with PostgreSQL containment operators.
+Labels are stored as JSON in the `host_labels` column, or null when the host adds none.
 
 ## Database Columns
 
@@ -65,7 +72,7 @@ All columns are nullable and added to `trax.metadata`:
 | `host_instance_id` | `varchar` | Instance-level identifier |
 | `host_labels` | `jsonb` | User-provided key-value labels |
 
-Indexes: `host_name`, `host_environment`, and a GIN index on `host_labels` for containment queries.
+Postgres indexes `host_name` and `host_environment`, and `host_labels` with a GIN index over the rows that have labels, for containment queries.
 
 ## Querying
 
@@ -93,14 +100,13 @@ ORDER BY failures DESC;
 
 ## GraphQL
 
-Host fields are available on both queries and subscriptions:
-
-- `getExecutions` / `getExecution`: returns `hostName`, `hostEnvironment`, `hostInstanceId`
-- Lifecycle subscriptions (`onTrainStarted`, `onTrainCompleted`, etc.): include `hostName`, `hostEnvironment`
+- The [`executions`](/docs/sdk-reference/graphql-api/queries#executions), [`execution`](/docs/sdk-reference/graphql-api/queries#execution) and [`executionDetail`](/docs/sdk-reference/graphql-api/queries#executiondetail) queries under `operations` return `hostName`, `hostEnvironment` and `hostInstanceId`.
+- [`hosts`](/docs/sdk-reference/graphql-api/queries#hosts) lists the hosts that have run trains.
+- The lifecycle subscriptions (`onTrainStarted`, `onTrainCompleted` and the rest) carry `hostName` and `hostEnvironment`.
 
 ## Dashboard
 
-The metadata detail page shows an "Execution Host" card with hostname, environment, instance ID, and labels. The metadata list page includes optional (hidden by default) `Host Env` and `Host` columns that can be enabled via the column picker.
+The metadata detail page shows an "Execution Host" card with the hostname, environment, instance id and labels. The metadata list has `Host Env` and `Host` columns, hidden until picked in the column picker.
 
 ## SDK Reference
 
