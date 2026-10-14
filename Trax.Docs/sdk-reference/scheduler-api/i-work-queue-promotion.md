@@ -6,17 +6,22 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 19
+package: Trax.Effect.Data
+namespace: Trax.Effect.Data.Services.WorkQueuePromotion
+source:
+  - Trax.Effect/src/Trax.Effect.Data/Services/WorkQueuePromotion/IWorkQueuePromotion.cs
+  - Trax.Effect/src/Trax.Effect.Data/Services/WorkQueuePromotion/WorkQueuePromotion.cs
 ---
 
 # IWorkQueuePromotion
 
 Confirms work queue entries staged by a two-phase enqueue, and resolves the ones a crash left unconfirmed. A train with [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) has its entry committed unconfirmed, runs `OnQueue`, and is then promoted; the dispatcher never claims an unconfirmed entry.
 
-The interface and its implementation are defined in Trax.Effect.Data, not in the scheduler; it is listed here because the scheduler's ManifestManager calls it. `AddMediator()` registers it as a singleton; it creates a data context per call. The enqueue path and the ManifestManager call it; you rarely need to.
+The interface and its implementation, `WorkQueuePromotion`, ship in Trax.Effect.Data; the scheduler's ManifestManager is one of its two callers. `AddMediator()` registers it as a singleton, and it creates a data context per call.
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Data.Services.WorkQueuePromotion;
 
 public interface IWorkQueuePromotion
@@ -27,7 +32,7 @@ public interface IWorkQueuePromotion
 }
 ```
 
-## Methods
+## Members
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -37,7 +42,9 @@ public interface IWorkQueuePromotion
 
 All three work on every data provider, including InMemory. The stale sweep that calls the last two runs only in the ManifestManager used with a database provider; the in-memory manifest manager (used when no database provider is configured) has no sweep, which does not matter because an in-memory store does not survive the process that could strand an entry.
 
-## Retention of cancelled staged entries
+## Behavior
+
+### Retention of cancelled staged entries
 
 A staged entry the sweep cancelled never ran, so it has no metadata, and metadata cleanup never removes it. `CancelStaleAsync` deletes such entries itself, so the scheduler's existing sweep cleans them up without a separate call:
 
@@ -48,13 +55,13 @@ A staged entry the sweep cancelled never ran, so it has no metadata, and metadat
 
 Reconcile a vanished enqueue within that window: the cancelled entry, with its train name and input, is the only record of it.
 
-## Who calls it
+### Who calls it
 
-- `ITrainExecutionService.QueueAsync` calls `PromoteAsync` once a deferring train's hook returns. If the entry was cancelled in the meantime, `QueueAsync` throws `InvalidOperationException` rather than reporting success; if it was already confirmed by the sweep (with promotion opted in), `QueueAsync` succeeds.
+- `ITrainExecutionService.QueueAsync` calls `PromoteAsync` once a deferring train's hook returns. If the entry was cancelled in the meantime, `QueueAsync` throws `QueuedWorkCancelledException` (an `InvalidOperationException`) rather than reporting success; if it was already confirmed by the sweep (with promotion opted in), `QueueAsync` succeeds.
 - The ManifestManager's `ResolveStaleStagedEntriesJunction` calls `CancelStaleAsync`, or `PromoteStaleAsync` when the host called `PromoteStaleStagedEntries()`, with `StaleStagedEntryTimeout`. See [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) and [ManifestManager](/docs/scheduler/admin-trains/manifest-manager#resolvestalestagedentriesjunction).
 
-## Package
+## See also
 
-```
-dotnet add package Trax.Effect.Data
-```
+- [ITrainExecutionService.QueueAsync](/docs/sdk-reference/mediator-api/i-train-execution-service#queueasync)
+- [ManifestManager](/docs/scheduler/admin-trains/manifest-manager#resolvestalestagedentriesjunction)
+- [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor)
