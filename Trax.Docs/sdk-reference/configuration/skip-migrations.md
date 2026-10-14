@@ -1,20 +1,25 @@
 ---
 title: SkipMigrations
-description: Reference for SkipMigrations, which turns off the automatic migration inside UsePostgres, when to use it (such as Lambda) and how to run migrations separately.
+description: Reference for SkipMigrations, which turns off the schema migration UsePostgres and UseSqlite run during service registration.
 type: reference
 area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 2
+nav_order: 11
+package: Trax.Effect.Data.Postgres
+namespace: Trax.Effect.Data.Postgres.Extensions
+source:
+  - Trax.Effect/src/Trax.Effect.Data.Postgres/Extensions/ServiceExtensions.cs
 ---
 
 # SkipMigrations
 
-Disables the automatic database migration that normally runs inside [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect). When called before `UsePostgres()`, the schema migration step is skipped entirely.
+Turns off the schema migration that [UsePostgres](/docs/sdk-reference/configuration/use-postgres) and
+[UseSqlite](/docs/sdk-reference/configuration/use-sqlite) run when they are called.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static TraxEffectBuilder SkipMigrations(
     this TraxEffectBuilder builder
 )
@@ -22,50 +27,31 @@ public static TraxEffectBuilder SkipMigrations(
 
 ## Returns
 
-`TraxEffectBuilder` -- the same builder instance for chaining. Call `UsePostgres()` after this method.
+`TraxEffectBuilder`, the same builder, for chaining the data provider after it.
+
+## Behavior
+
+Sets `TraxEffectBuilder.MigrationsDisabled`. `UsePostgres` and `UseSqlite` read the flag when they are called, so
+`SkipMigrations` comes before them in the chain; called after, it has no effect on that provider. Everything else the
+provider registers is unchanged. The flag is carried over when the builder becomes `TraxEffectBuilderWithData`.
+
+With migrations skipped, the schema must already be current before the host serves work:
+`DatabaseMigrator.Migrate(connectionString)` applies it from anywhere. See
+[DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator).
 
 ## Example
 
-```csharp
+```csharp compile
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .SkipMigrations()
         .UsePostgres(connectionString)
     )
-    .AddMediator(typeof(MyTrain).Assembly)
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
 );
 ```
 
-## When to Use
+## See also
 
-Use `SkipMigrations()` in environments where database migrations are managed externally:
-
-- **AWS Lambda runners** -- cold start time is critical; migrations add 500ms--3s+ of blocking I/O on every cold start, even when no migrations are pending
-- **Serverless functions** (Google Cloud Run, Azure Functions) -- same cold start concern
-- **Read-only replicas** -- the function connects to a read replica that should never be migrated
-- **CI/CD-managed migrations** -- migrations run as a separate deployment step before application startup
-
-## Running Migrations Separately
-
-`DatabaseMigrator.Migrate()` is a public static method that can be called from any context:
-
-```csharp
-using Trax.Effect.Data.Postgres.Utils;
-
-// In a CI/CD script, setup Lambda, or API startup:
-await DatabaseMigrator.Migrate(connectionString);
-```
-
-In the default setup (without `SkipMigrations()`), this is called automatically inside `UsePostgres()`. When you call `SkipMigrations()`, you are responsible for ensuring migrations run elsewhere before the application handles requests.
-
-## Remarks
-
-- Must be called **before** `UsePostgres()` in the fluent chain. `UsePostgres()` checks the `MigrationsDisabled` flag at call time.
-- All other registrations (`NpgsqlDataSource`, `IDbContextFactory`, `IDataContext`, effects) are unaffected -- only the migration step is skipped.
-- The flag survives builder promotion to `TraxEffectBuilderWithData`, so it works correctly with method chaining.
-
-## Package
-
-```
-dotnet add package Trax.Effect.Data.Postgres
-```
+- [Run migrations outside startup](/docs/effect/run-migrations-outside-startup)
+- [UsePostgres](/docs/sdk-reference/configuration/use-postgres), [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator)
