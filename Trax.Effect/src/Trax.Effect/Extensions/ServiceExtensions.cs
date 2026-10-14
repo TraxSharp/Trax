@@ -35,6 +35,7 @@ namespace Trax.Effect.Extensions;
 ///     .AddMediator(typeof(Program).Assembly));
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/route-registration">SDK reference</seealso>
 public static class ServiceExtensions
 {
     #region Configuration

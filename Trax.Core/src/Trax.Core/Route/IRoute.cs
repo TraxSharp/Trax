@@ -6,6 +6,7 @@ namespace Trax.Core.Route;
 /// </summary>
 /// <typeparam name="TIn">The type of input the route accepts</typeparam>
 /// <typeparam name="TOut">The type of output the route produces</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/i-route">SDK reference</seealso>
 public interface IRoute<in TIn, TOut>
 {
     /// <summary>

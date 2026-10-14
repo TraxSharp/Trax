@@ -56,6 +56,7 @@ public sealed record TraxAuthorizationDeclaration(
 /// <c>Trax.Api</c>-layer concern.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/trax-authorization">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class TraxAuthorization
 {

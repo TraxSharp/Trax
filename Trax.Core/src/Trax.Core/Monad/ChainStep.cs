@@ -93,6 +93,7 @@ public readonly record struct ChainStep(ChainStepKind Kind, Type? Junction, Type
 /// (<see cref="Trax.Core.Decisions.IVetsQuestions"/>) can refuse what it cannot answer; none is
 /// asked to decide.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/declared-chain">SDK reference</seealso>
 public sealed class ChainRecorder
 {
     internal ChainRecorder() { }

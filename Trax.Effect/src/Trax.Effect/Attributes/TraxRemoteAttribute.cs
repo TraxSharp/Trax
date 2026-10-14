@@ -12,5 +12,6 @@ namespace Trax.Effect.Attributes;
 ///
 /// Builder-level routing via <c>ForTrain&lt;T&gt;()</c> takes precedence over this attribute.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/trax-remote">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxRemoteAttribute : Attribute { }

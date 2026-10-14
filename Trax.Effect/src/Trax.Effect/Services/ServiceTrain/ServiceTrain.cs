@@ -29,6 +29,7 @@ namespace Trax.Effect.Services.ServiceTrain;
 /// </summary>
 /// <typeparam name="TIn">The input type for the train</typeparam>
 /// <typeparam name="TOut">The output type for the train</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/service-train">SDK reference</seealso>
 public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<TIn, TOut>
 {
     /// <summary>

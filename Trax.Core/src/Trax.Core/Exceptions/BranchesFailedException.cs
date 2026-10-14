@@ -39,6 +39,7 @@ public sealed record FailedBranch
 /// listed in <see cref="CancelledBySibling"/> instead. A run that was cancelled fails with the cancellation,
 /// never with this.</para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/parallel">SDK reference</seealso>
 [Experimental(ExperimentalIds.Parallel)]
 public sealed class BranchesFailedException : TrainException
 {

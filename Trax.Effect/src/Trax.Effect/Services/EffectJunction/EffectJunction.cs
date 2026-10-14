@@ -20,6 +20,7 @@ namespace Trax.Effect.Services.EffectJunction;
 /// </summary>
 /// <typeparam name="TIn">The junction's input type.</typeparam>
 /// <typeparam name="TOut">The junction's output type.</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/effect-junction">SDK reference</seealso>
 public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJunction<TIn, TOut>
 {
     /// <summary>

@@ -8,6 +8,7 @@ namespace Trax.Core.Exceptions;
 /// Trax supplies the vocabulary; a consumer supplies the matching through <c>IFailureClassifier</c>,
 /// because only the consumer knows what its remote system's errors mean.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/train-exception">SDK reference</seealso>
 public enum FailureClass
 {
     /// <summary>

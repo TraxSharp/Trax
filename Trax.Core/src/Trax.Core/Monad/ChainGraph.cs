@@ -27,6 +27,7 @@ namespace Trax.Core.Monad;
 /// <param name="Output">The train's output type.</param>
 /// <param name="Nodes">The chain's steps, in the order it declares them.</param>
 /// <param name="Refusals">What the declaration did that no step can express, as <see cref="ChainRecorder.Refusals"/> lists it.</param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/chain-graph">SDK reference</seealso>
 public sealed record ChainGraph(
     string Train,
     string Input,

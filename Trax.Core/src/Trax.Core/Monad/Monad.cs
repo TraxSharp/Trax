@@ -10,6 +10,7 @@ namespace Trax.Core.Monad;
 /// </summary>
 /// <typeparam name="TInput">The type of input the owning train accepts</typeparam>
 /// <typeparam name="TReturn">The type of result the owning train produces</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/monad-task">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
 {
     /// <summary>

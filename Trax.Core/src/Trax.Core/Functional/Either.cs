@@ -27,6 +27,7 @@ public enum EitherStatus : byte
 /// <c>Either</c> is expected. Neither side may be null. <c>default(Either&lt;TLeft, TRight&gt;)</c> is on
 /// neither side (<see cref="EitherStatus.IsBottom"/>).
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/either">SDK reference</seealso>
 public readonly struct Either<TLeft, TRight> : IEquatable<Either<TLeft, TRight>>
 {
     private readonly TLeft left;

@@ -21,6 +21,7 @@ namespace Trax.Mediator.Testing;
 /// }
 /// </code>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/mediator-testing">SDK reference</seealso>
 [TestFixture]
 public abstract class TrainGuardFixture
 {

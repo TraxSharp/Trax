@@ -75,6 +75,8 @@ internal sealed record RestoredCheckpoint(
     IReadOnlyList<object> Tracks
 );
 
+/// <summary>The chain steps the train methods of the same name call.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/checkpoint">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
 {
     /// <summary>

@@ -7,6 +7,9 @@ using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
+/// <summary>The chain steps the train methods of the same name call.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/chain">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/i-chain">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
 {
     #region Internal junction execution

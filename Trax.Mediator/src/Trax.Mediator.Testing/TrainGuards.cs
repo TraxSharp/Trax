@@ -7,6 +7,7 @@ namespace Trax.Mediator.Testing;
 /// Architecture-guard checkers for trains. Reflection-based, matching the Trax base types by name so
 /// no hard dependency on the train assemblies is needed beyond the ones the consumer passes in.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/mediator-testing">SDK reference</seealso>
 public static class TrainGuards
 {
     private const string ServiceTrainBaseName = "ServiceTrain`2";

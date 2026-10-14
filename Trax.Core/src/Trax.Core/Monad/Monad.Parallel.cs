@@ -33,6 +33,8 @@ public interface IBranchScopeInitializer
 }
 
 #pragma warning disable TRAXEXP001 // The implementation of the experimental feature itself.
+/// <summary>The chain steps the train methods of the same name call.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/parallel">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
 {
     /// <summary>

@@ -5,6 +5,7 @@ namespace Trax.Core.Testing;
 /// overrides only what differs (scan roots, allowlists, expected versions). Allowlist paths are
 /// repo-relative and use forward slashes.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/core-testing">SDK reference</seealso>
 public sealed record ArchitectureGuardOptions
 {
     /// <summary>

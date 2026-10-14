@@ -15,4 +15,5 @@ namespace Trax.Core.Exceptions;
 /// When a junction in a train fails, it returns a Left(Exception) in the Either monad,
 /// which is typically a TrainException with details about the failure.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/train-exception">SDK reference</seealso>
 public class TrainException(string message) : Exception(message) { }

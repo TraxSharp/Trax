@@ -6,6 +6,7 @@ namespace Trax.Effect.Data.Testing;
 /// <c>[TraxAuthorize]</c> on anything exposed); the owner type and the accessor are the
 /// application's.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/effect-data-testing">SDK reference</seealso>
 public sealed record OwnerScopeCensusOptions
 {
     /// <summary>

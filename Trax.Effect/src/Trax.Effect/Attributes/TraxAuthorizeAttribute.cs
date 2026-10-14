@@ -35,6 +35,7 @@ namespace Trax.Effect.Attributes;
 /// what HotChocolate's own attribute does and which silently re-gates somebody else's type.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/attributes/trax-authorize">SDK reference</seealso>
 [AttributeUsage(
     AttributeTargets.Class | AttributeTargets.Interface | AttributeTargets.Method,
     AllowMultiple = true,

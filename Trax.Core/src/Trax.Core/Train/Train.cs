@@ -25,6 +25,11 @@ namespace Trax.Core.Train;
 /// </remarks>
 /// <typeparam name="TInput">The type of input the train accepts</typeparam>
 /// <typeparam name="TReturn">The type of result the train produces</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/train">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/junctions">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/run">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/run-either">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/declared-chain">SDK reference</seealso>
 public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
 {
     /// <summary>

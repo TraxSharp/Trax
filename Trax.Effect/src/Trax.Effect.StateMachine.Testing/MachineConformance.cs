@@ -27,6 +27,7 @@ namespace Trax.Effect.StateMachine.Testing;
 /// Assert.That(problems, Is.Empty, string.Join("\n", problems));
 /// </code>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/testing/effect-statemachine-testing">SDK reference</seealso>
 public static class MachineConformance
 {
     /// <summary>

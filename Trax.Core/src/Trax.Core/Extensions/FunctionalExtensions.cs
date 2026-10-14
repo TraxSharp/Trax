@@ -9,6 +9,7 @@ namespace Trax.Core.Extensions;
 /// Provides extension methods for functional programming patterns.
 /// These methods enhance the Railway-oriented programming model used throughout Trax.Core.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/trains-and-junctions/functional-extensions">SDK reference</seealso>
 public static class FunctionalExtensions
 {
     private static readonly ConcurrentDictionary<Type, bool> TupleCache = new();
