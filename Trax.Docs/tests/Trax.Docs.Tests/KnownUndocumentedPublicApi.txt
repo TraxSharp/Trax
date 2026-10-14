@@ -179,11 +179,6 @@ Trax.Effect M:SchedulerConfig.SetOverride
 Trax.Effect M:SchedulerConfig.SingletonId
 Trax.Effect M:SchedulerConfig.TryGetOverride
 Trax.Effect M:SnapshotDraft.ConcurrencyToken
-Trax.Effect M:TraxAuthorization.ForeignAttributeMessage
-Trax.Effect M:TraxAuthorization.ForeignAuthorizationAttributes
-Trax.Effect M:TraxAuthorizationDeclaration.ForeignAttributes
-Trax.Effect M:TraxAuthorizationDeclaration.HasAuthorize
-Trax.Effect M:TraxAuthorizationDeclaration.HasForeign
 Trax.Effect M:TraxBoundedJson.TruncatedPlaceholder
 Trax.Effect M:TraxBuilder.ContributedMediatorAssemblies
 Trax.Effect M:TraxChangeSignal.DroppedCounterName
@@ -209,7 +204,6 @@ Trax.Effect T:CreateManifest
 Trax.Effect T:EffectRegistry
 Trax.Effect T:IChangeSignalSink
 Trax.Effect T:LifecycleHookFactory
-Trax.Effect T:TraxAuthorizationDeclaration
 Trax.Effect T:TraxBoundedJson
 Trax.Effect T:TraxChangeSignal
 Trax.Effect T:TraxEffectBuilderExtensions

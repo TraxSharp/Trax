@@ -3,6 +3,10 @@ title: Inject
 description: Reference for the Inject attribute, which fills a public property from the container when a train is resolved through a Trax registration helper.
 type: reference
 area: trains
+package: Trax.Effect
+namespace: Trax.Effect.Attributes
+source:
+  - Trax.Effect/src/Trax.Effect/Attributes/InjectAttribute.cs
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 5
@@ -12,11 +16,11 @@ nav_order: 5
 
 Marks a public property to be filled from the container when a train is resolved through a [Trax registration helper](/docs/sdk-reference/trains-and-junctions/route-registration). `ServiceTrain` uses it for its own framework services (`EffectRunner`, `JunctionEffectRunner`, `LifecycleHookRunner`, `Logger`, `ServiceProvider`).
 
-It is framework plumbing, not the way to give a junction or a train its dependencies. Use constructor injection for those.
+A junction or a train takes its own dependencies through its constructor; `[Inject]` is filled only by the registration helpers.
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Attributes;
 
 [AttributeUsage(AttributeTargets.Property)]
@@ -26,7 +30,9 @@ public class InjectAttribute : Attribute
 }
 ```
 
-## How it is filled
+## Behavior
+
+### How it is filled
 
 The `Add*TraxRoute` and `Add*TraxJunction` factories call `IServiceProvider.InjectProperties(instance)` after resolving the implementation. For every public instance property that carries `[Inject]` and has a setter:
 
@@ -38,27 +44,7 @@ The `Add*TraxRoute` and `Add*TraxJunction` factories call `IServiceProvider.Inje
 
 Nothing else reads the attribute. A type resolved any other way (constructed with `new`, resolved by its concrete class, or a junction a train builds for itself in its chain) gets no property injection, and a junction's `[Inject]` properties stay `null`.
 
-## Example
-
-```csharp
-// Do this: constructor injection
-public class ChargePayment(IPaymentGateway gateway) : Junction<ValidatedOrder, PaymentReceipt>
-{
-    public override Task<PaymentReceipt> Run(ValidatedOrder order) =>
-        gateway.Charge(order.CustomerId, order.Total, CancellationToken);
-}
-
-// Not this: the train builds the junction itself, so the property is never set
-public class ChargePayment : Junction<ValidatedOrder, PaymentReceipt>
-{
-    [Inject] public IPaymentGateway? Gateway { get; set; }
-    // ...
-}
-```
-
-`IServiceProvider.InjectProperties` is public for Trax's own registration code and hidden from completion.
-
-## Checked at startup
+### Checked at startup
 
 The mediator's [startup chain check](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) reads the `[Inject]` properties a train declares itself (`ServiceTrain`'s own are left out). It reads them on the train the container builds, because `InjectProperties` skips a property that already holds a value: one the constructor or an initializer sets (`[Inject] public IClock Clock { get; set; } = SystemClock.Instance;`) is never filled, needs no registration, and is not checked. For a property that is null on the built train:
 
@@ -73,8 +59,33 @@ When resolving the train fails, its class is built without its properties filled
 
 A junction built with `Chain<T>()` or `ShortCircuit<T>()` that declares `[Inject]` properties is logged as a warning naming the train, the junction and the properties.
 
-## Package
+## Example
 
+A junction takes its dependencies through its constructor:
+
+```csharp compile
+using Trax.Core.Junction;
+
+public class ChargePayment(IPaymentGateway gateway) : Junction<ValidatedOrder, PaymentReceipt>
+{
+    public override Task<PaymentReceipt> Run(ValidatedOrder order) =>
+        gateway.Charge(order.CustomerId, order.Total, CancellationToken);
+}
 ```
-dotnet add package Trax.Effect
+
+The same junction with an `[Inject]` property instead: the train builds the junction itself, so the property is never set.
+
+```csharp fragment
+public class ChargePayment : Junction<ValidatedOrder, PaymentReceipt>
+{
+    [Inject] public IPaymentGateway? Gateway { get; set; }
+    // ...
+}
 ```
+
+`IServiceProvider.InjectProperties` is public for Trax's own registration code and hidden from completion; see [Route and Junction Registration](/docs/sdk-reference/trains-and-junctions/route-registration).
+
+## See also
+
+- [Route and Junction Registration](/docs/sdk-reference/trains-and-junctions/route-registration), which fills it
+- [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train), whose framework services use it

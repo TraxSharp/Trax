@@ -3,6 +3,10 @@ title: TraxRemote
 description: Reference for TraxRemote, which sends a train's queued runs to a remote worker, and the order in which the scheduler picks a train's job submitter.
 type: reference
 area: scheduling
+package: Trax.Effect
+namespace: Trax.Effect.Attributes
+source:
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxRemoteAttribute.cs
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 4
@@ -14,7 +18,7 @@ Sends a train's queued runs to a remote worker instead of the scheduler host's l
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Attributes;
 
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
@@ -24,9 +28,9 @@ public class TraxRemoteAttribute : Attribute
 }
 ```
 
-Place it on the concrete train class (or a base class). It is not read from an interface.
+## Behavior
 
-## Routing
+The attribute is read from the concrete train class or a base class, not from an interface.
 
 The scheduler picks a train's job submitter in this order:
 
@@ -40,8 +44,10 @@ The attribute routes queued work, which is what the scheduler dispatches. A dire
 
 ## Example
 
-```csharp
+```csharp compile
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
+using Trax.Effect.Services.ServiceTrain;
 
 [TraxRemote]
 public class RenderReportTrain : ServiceTrain<RenderReportInput, Unit>, IRenderReportTrain
@@ -49,6 +55,15 @@ public class RenderReportTrain : ServiceTrain<RenderReportInput, Unit>, IRenderR
     protected override Task<Either<Exception, Unit>> Junctions() =>
         Chain<RenderPdf>().Chain<UploadPdf>().Resolve();
 }
+```
+
+The scheduler host that sends it to remote workers:
+
+```csharp compile
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
 
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
@@ -57,10 +72,8 @@ services.AddTrax(trax => trax
         .UseRemoteWorkers(remote => remote.BaseUrl = "https://workers.internal/trax/execute")));
 ```
 
-See [Remote Execution](/docs/scheduler/remote-execution) for the worker side.
+## See also
 
-## Package
+- [Remote Execution](/docs/scheduler/remote-execution), the worker side
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers)
 
-```
-dotnet add package Trax.Effect
-```

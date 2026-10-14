@@ -27,11 +27,6 @@ sdk-reference/api-auth/trax-auth-claim-types.md
 sdk-reference/api-auth/trax-caller.md
 sdk-reference/api-auth/trax-principal.md
 sdk-reference/api-auth/use-cognito.md
-sdk-reference/attributes/inject.md
-sdk-reference/attributes/trax-allow-anonymous.md
-sdk-reference/attributes/trax-authorize.md
-sdk-reference/attributes/trax-remote.md
-sdk-reference/attributes/trax-sensitive.md
 sdk-reference/configuration/add-decision-recording.md
 sdk-reference/configuration/add-effect-data-context-logging.md
 sdk-reference/configuration/add-effect.md

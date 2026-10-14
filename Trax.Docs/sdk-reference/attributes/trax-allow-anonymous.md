@@ -3,6 +3,10 @@ title: TraxAllowAnonymous
 description: Reference for TraxAllowAnonymous, which declares a GraphQL-exposed train or query model deliberately public, its effect by placement and startup checks.
 type: reference
 area: security
+package: Trax.Effect
+namespace: Trax.Effect.Attributes
+source:
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxAllowAnonymousAttribute.cs
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 2
@@ -16,7 +20,7 @@ Declares a GraphQL-exposed surface intentionally public. Every `[TraxQuery]`/`[T
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Attributes;
 
 [AttributeUsage(
@@ -30,7 +34,9 @@ public sealed class TraxAllowAnonymousAttribute : Attribute
 }
 ```
 
-## Effect by placement
+## Behavior
+
+### Effect by placement
 
 | Placed on | Effect |
 |-----------|--------|
@@ -38,7 +44,7 @@ public sealed class TraxAllowAnonymousAttribute : Attribute
 | A `[TraxQueryModel]` entity | Opens the entity to unauthenticated reads. A navigation to an entity carrying `[TraxAuthorize]` still enforces that entity's gate. |
 | A resolver method | Declares that one field public. Needed when the field's parent type has no gate to inherit. Under a role-gated parent it means any authenticated caller rather than only the role. |
 
-## Startup checks
+### Startup checks
 
 | Situation | Result |
 |-----------|--------|
@@ -48,8 +54,10 @@ public sealed class TraxAllowAnonymousAttribute : Attribute
 
 ## Example
 
-```csharp
+```csharp compile
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
+using Trax.Effect.Services.ServiceTrain;
 
 [TraxQuery(Namespace = "public")]
 [TraxAllowAnonymous]
@@ -61,10 +69,8 @@ public class LookupAnnouncementTrain
 }
 ```
 
-See [Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous) and [Required Exposure Posture](/docs/authorization#required-exposure-posture).
+## See also
 
-## Package
+- [Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous) and [Required Exposure Posture](/docs/authorization#required-exposure-posture)
+- [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize)
 
-```
-dotnet add package Trax.Effect
-```
