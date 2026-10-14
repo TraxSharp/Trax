@@ -1,49 +1,54 @@
 ---
 title: AddLifecycleHook
-description: "Reference for AddLifecycleHook and ITrainLifecycleHook: reacting to train start, completion, failure and cancellation, error handling, and per-train hooks."
+description: "Reference for AddLifecycleHook, ITrainLifecycleHook and ITrainLifecycleHookFactory: when each event fires, the input and output a hook sees, and its errors."
 type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 13
+nav_order: 31
+package: Trax.Effect
+namespace:
+  - Trax.Effect.Extensions
+  - Trax.Effect.Services.TrainLifecycleHook
+  - Trax.Effect.Services.TrainLifecycleHookFactory
+source:
+  - Trax.Effect/src/Trax.Effect/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect/Services/TrainLifecycleHook/ITrainLifecycleHook.cs
+  - Trax.Effect/src/Trax.Effect/Services/TrainLifecycleHookFactory/ITrainLifecycleHookFactory.cs
+  - Trax.Effect/src/Trax.Effect/Services/TrainLifecycleHookFactory/LifecycleHookFactory.cs
 ---
 
 # AddLifecycleHook
 
-Registers a lifecycle hook that fires on train state transitions. Use lifecycle hooks to trigger side effects when trains start, complete, fail, or are cancelled, without coupling your train logic to the side effect.
+Registers a lifecycle hook: code that runs when any train starts, completes, fails or is cancelled, outside the
+train's own logic.
 
 ## Signatures
 
-Register a hook directly (recommended):
-
-```csharp
+```csharp fragment
 public static TraxEffectBuilder AddLifecycleHook<T>(
     this TraxEffectBuilder builder,
     bool toggleable = true
-) where T : class // ITrainLifecycleHook or ITrainLifecycleHookFactory
-```
+)
+    where T : class
 
-When `T` implements `ITrainLifecycleHook`, a factory is created internally and there is no need to write a factory class. When `T` implements `ITrainLifecycleHookFactory`, it is registered directly (advanced).
-
-Register with an existing factory instance:
-
-```csharp
-public static TraxEffectBuilder AddLifecycleHook<TFactory>(
+public static TraxEffectBuilder AddLifecycleHook<TLifecycleHookFactory>(
     this TraxEffectBuilder builder,
-    TFactory factory,
+    TLifecycleHookFactory factory,
     bool toggleable = true
-) where TFactory : class, ITrainLifecycleHookFactory
+)
+    where TLifecycleHookFactory : class, ITrainLifecycleHookFactory
+
+public static TraxEffectBuilder AddLifecycleHook<TILifecycleHookFactory, TLifecycleHookFactory>(
+    this TraxEffectBuilder builder,
+    TLifecycleHookFactory factory,
+    bool toggleable = true
+)
+    where TILifecycleHookFactory : class, ITrainLifecycleHookFactory
+    where TLifecycleHookFactory : class, TILifecycleHookFactory
 ```
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `builder` | `TraxEffectBuilder` | Yes | N/A | The effect configuration builder |
-| `factory` | `TFactory` | No | N/A | An existing factory instance (when not using DI to create it) |
-| `toggleable` | `bool` | No | `true` | Whether the hook can be enabled/disabled at runtime via `IEffectRegistry` |
-
-## ITrainLifecycleHook
-
-```csharp
+```csharp fragment
 public interface ITrainLifecycleHook
 {
     Task OnStarted(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
@@ -52,198 +57,128 @@ public interface ITrainLifecycleHook
     Task OnCancelled(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
     Task OnStateChanged(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
 }
-```
 
-All methods have default implementations that return `Task.CompletedTask`. Override only the events you care about.
-
-| Method | When it fires |
-|--------|---------------|
-| `OnStarted` | After the train's metadata is persisted and before the train's junctions execute |
-| `OnCompleted` | After a successful run, after output is persisted |
-| `OnFailed` | After a failed run, after failure is persisted. Includes an `OperationCanceledException` nothing asked for, such as an `HttpClient` timeout |
-| `OnCancelled` | After a requested cancellation (the run's token was cancelled or its cancel flag was set), after cancellation is persisted |
-| `OnStateChanged` | After each of the four above, on every hook, once that event has run on every hook. A hook that implements both `OnStateChanged` and a specific event sees each transition twice |
-
-A run the scheduler ends with no train running fires the same events, once, after its row is saved: `OnFailed` for a run reaped as stale, failed on startup recovery, or failed at dispatch or submit, and `OnCancelled` for a run cancelled before it started. The exception `OnFailed` receives carries the failure recorded on the row (for example `StalePendingTimeout`); `TrainInput` and `GetInput<T>()` return `default` for these.
-
-### Accessing Train Input and Output
-
-#### Availability by hook
-
-The input is set before junctions execute; the output is set only after a successful run. This determines which hooks can access each value:
-
-| Hook | `TrainInput` / `GetInput<T>()` | `TrainOutput` / `GetOutput<T>()` |
-|------|------|-------|
-| `OnStarted` | Yes | No (train hasn't run yet) |
-| `OnCompleted` | Yes | Yes |
-| `OnFailed` | Yes | No (train failed before producing output) |
-| `OnCancelled` | Yes | No (train was cancelled) |
-| `OnStateChanged` | Yes | Only after a completion |
-
-When unavailable, both return `default` (`null` for reference types, zero for value types).
-
-#### Typed access via `Metadata`
-
-`Metadata` provides generic methods to retrieve the input and output as their original types:
-
-```csharp
-T? GetInput<T>()
-T? GetOutput<T>()
-```
-
-These return `default` if the object is null or not of the requested type. Useful in global lifecycle hooks (`ITrainLifecycleHook`) where you know the train's types:
-
-```csharp
-public class SlackNotificationHook(ISlackClient slack) : ITrainLifecycleHook
-{
-    public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
-    {
-        var input = metadata.GetInput<BanPlayerInput>();
-        await slack.PostAsync($"Ban failed for player {input?.PlayerId}: {exception.Message}", ct);
-    }
-}
-```
-
-#### Typed access via `TrainInput` / `TrainOutput`
-
-Per-train lifecycle hooks have an even simpler option. `ServiceTrain<TIn, TOut>` exposes typed properties that are automatically resolved from the metadata:
-
-```csharp
-protected TIn TrainInput   // available in all hooks
-protected TOut TrainOutput  // available in OnCompleted (default in OnFailed/OnCancelled)
-```
-
-No casting, no type parameters. The types come from the train's generic arguments:
-
-```csharp
-public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
-    : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
-{
-    protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
-    {
-        logger.LogInformation("Banned player {PlayerId} for: {Reason}",
-            TrainInput?.PlayerId, TrainInput?.Reason);
-        return Task.CompletedTask;
-    }
-}
-```
-
-#### Serialized JSON output
-
-`metadata.Output` is serialized JSON in `OnCompleted` hooks, whether or not [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters) is configured. When the output was not stored, it is serialized in memory before hooks fire and is not persisted to the database.
-
-The copy follows the stored copy's rules. An output the parameter effect was told to skip (`ExcludeOutput`, `ShouldSaveOutputs`, `SaveOutputs = false`) is not serialized for the hooks, so `metadata.Output` is `null` for that train. Otherwise the copy is bounded by `MaxParameterBytes` (1 MiB unless you change it), or by 1 MiB when it is `null` or `SaveTrainParameters()` is not configured, and an output past the ceiling arrives as `{"_truncated": true, "_maxBytes": N}`. `metadata.GetOutput<T>()` still returns the object itself. The decision comes from the registered `ILifecycleHookOutputPolicy`; `SaveTrainParameters()` registers one that follows its configuration. The state machine's internal trains
-(`ISaveSnapshot`, `IAdvanceSnapshot`, `ILoadSnapshot`, `ISendSnapshot`, `IStartSnapshot`, `IDiscardSnapshot`) give no
-hook their output, whatever the policy says: `metadata.Output` and `GetOutput<T>()` are `null` while the hooks run,
-because that output is an instance's snapshot.
-
-## ITrainLifecycleHookFactory (Advanced)
-
-```csharp
 public interface ITrainLifecycleHookFactory
 {
     ITrainLifecycleHook Create();
-
-    // Called for each run with the run's scope. Defaults to Create().
     ITrainLifecycleHook Create(IServiceProvider serviceProvider) => Create();
 }
 ```
 
-Most users do not need to implement this interface. `AddLifecycleHook<THook>()` generates a factory automatically. Use a custom factory only if you need non-standard creation logic. The factory is a singleton; it creates a new hook instance per train execution.
+## Parameters
 
-The run owns the hooks its factories return: when the run ends, each one that is `IDisposable` is disposed. A factory that hands every run one shared instance must return something that is not disposable, such as a forwarder that calls the shared instance, or the first run to end disposes it for every later run.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `T` | type parameter | | An `ITrainLifecycleHook` or an `ITrainLifecycleHookFactory`. Any other type throws `InvalidOperationException`. |
+| `factory` | the factory type | | A factory instance to register |
+| `toggleable` | `bool` | `true` | Whether the effect registry, and the dashboard, may turn the hook off at runtime |
 
-Trax calls `Create(IServiceProvider)` with the service provider of the run's scope. A factory that builds hooks from services it captured itself gets the root container's, where a scoped service such as `IDataContext` is either refused (when the container validates scopes, as ASP.NET Core does in Development) or one instance shared by every run in the process. Override `Create(IServiceProvider)` and resolve from the provider it is given. A factory that implements only `Create()` keeps working, through the default.
+## Returns
 
-## Error Handling
+`TraxEffectBuilder`, for chaining.
 
-Lifecycle hook exceptions are **caught and logged, never propagated**. A failing hook will never cause a train to fail. This is intentional: side effects like posting to Grafana or sending Slack notifications should not affect train reliability.
+## Behavior
 
-## Example: Custom Slack Notification Hook
+`AddLifecycleHook<T>()` with a hook type registers the hook as transient and a `LifecycleHookFactory<T>` as its
+singleton factory, so no factory class is needed. With a factory type it registers the factory itself. The hook's
+constructor dependencies come from the scope the run executes in, so a scoped service such as `IDataContext` is the
+run's own.
 
-```csharp
-public class SlackNotificationHook(ISlackClient slack) : ITrainLifecycleHook
-{
-    public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct) =>
-        await slack.PostAsync($"Train {metadata.Name} failed: {exception.Message}", ct);
-}
-```
+### Events
 
-Registration:
+All five methods have default implementations, so a hook overrides only the ones it needs.
 
-```csharp
-builder.Services.AddTrax(trax => trax
+| Method | Fires |
+|--------|-------|
+| `OnStarted` | After the run's metadata row is saved, before its junctions run |
+| `OnCompleted` | After a successful run's outcome is saved |
+| `OnFailed` | After a failed run's outcome is saved. Includes an `OperationCanceledException` nothing asked for, such as an `HttpClient` timeout. |
+| `OnCancelled` | After a requested cancellation (the run's token was cancelled or its cancel flag was set) is saved |
+| `OnStateChanged` | After each of the four above, once that event has run on every hook. A hook that implements both sees each transition twice. |
+
+A run the scheduler ends with no train running fires the same events, once, after its row is saved: `OnFailed` for
+a run reaped as stale, failed on startup recovery, or failed at dispatch or submit, and `OnCancelled` for a run
+cancelled before it started. The exception `OnFailed` receives carries the failure recorded on the row, such as
+`StalePendingTimeout`.
+
+### Input and output
+
+| Event | `metadata.GetInput<T>()` | `metadata.GetOutput<T>()` |
+|-------|------------------------|-------------------------|
+| `OnStarted` | Yes | No |
+| `OnCompleted` | Yes | Yes |
+| `OnFailed` | Yes | No |
+| `OnCancelled` | Yes | No |
+| `OnStateChanged` | Yes | After a completion only |
+
+Each returns `default` when the value is unavailable or not of the requested type, and for a run the scheduler
+ended with no train running.
+
+In `OnCompleted`, `metadata.Output` is the output as JSON whether or not
+[SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) is configured: the stored copy, or
+one serialized in memory for the hooks and not persisted. It follows the stored copy's rules, decided by the
+registered `ILifecycleHookOutputPolicy`: `null` for an output the parameter effect skips, bounded by
+`MaxParameterBytes` (1 MiB when it is `null` or `SaveTrainParameters` is not configured), past which it is
+`{"_truncated": true, "_maxBytes": N}`. `GetOutput<T>()` returns the object itself. The state machine's internal
+trains (`ISaveSnapshot`, `IAdvanceSnapshot`, `ILoadSnapshot`, `ISendSnapshot`, `IStartSnapshot`, `IDiscardSnapshot`)
+give no hook their output: `metadata.Output` and `GetOutput<T>()` are `null`, because that output is an instance's
+snapshot.
+
+### Factories
+
+The factory is a singleton and builds a hook per run. Trax calls `Create(IServiceProvider)` with the run's scope;
+the default implementation calls `Create()`, which builds from whatever the factory captured, so a factory that
+resolves scoped services overrides `Create(IServiceProvider)` and resolves from the provider it is given.
+`LifecycleHookFactory<THook>` does: `Create(scopeProvider)` builds the hook from the run's scope with
+`ActivatorUtilities`, and `Create()` from the root container.
+
+The run owns the hooks its factories return: when it ends, each one that is `IDisposable` is disposed. A factory
+that returns one shared instance to every run returns something that is not disposable, such as a forwarder to it.
+
+### Errors
+
+A hook's exception is caught and logged. It never fails the train, and the other hooks still run.
+
+### Per-train hooks
+
+`ServiceTrain<TIn, TOut>` has `protected virtual` `OnStarted`, `OnCompleted`, `OnFailed` and `OnCancelled` with the
+same parameters, which a train overrides without registering anything. They run after the registered hooks for the
+same event, and their exceptions are caught and logged the same way. A train also reads its input and output as
+`TrainInput` and `TrainOutput`, typed by its generic arguments.
+
+### Built-in hooks
+
+| Hook | Package | Registered by |
+|------|---------|---------------|
+| `GraphQLSubscriptionHook` | `Trax.Api.GraphQL` | `AddTraxGraphQL()`. Publishes to [GraphQL subscriptions](/docs/sdk-reference/graphql-api/subscriptions). |
+| The broadcast hook (internal) | `Trax.Effect` | [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster). Publishes to the transport. |
+| `SignalRTrainEventDispatcher` | `Trax.Effect.Broadcaster.SignalR` | [`UseSignalRHub()`](/docs/sdk-reference/configuration/use-signalr-hub). Pushes to connected SignalR clients. |
+
+## Example
+
+```csharp compile
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Services.TrainLifecycleHook;
+
+services.AddTrax(trax => trax
     .AddEffects(effects => effects
+        .AddLifecycleHook<FailureLogHook>()
         .UsePostgres(connectionString)
-        .AddLifecycleHook<SlackNotificationHook>()
     )
-    .AddMediator(ServiceLifetime.Scoped, typeof(Program).Assembly)
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
 );
-```
 
-No factory class needed. Trax creates one internally and resolves your hook's constructor dependencies from DI, from the scope the train runs in. A scoped dependency such as `IDataContext` is therefore the run's own, not one shared across runs.
-
-## Built-in Hooks
-
-| Hook | Package | Description |
-|------|---------|-------------|
-| `GraphQLSubscriptionHook` | `Trax.Api.GraphQL` | Publishes lifecycle events to GraphQL [subscriptions](/docs/sdk-reference/graphql-api/subscriptions). Automatically registered by `AddTraxGraphQL()`. |
-| Broadcast hook (internal) | `Trax.Effect` | Publishes lifecycle events to a message bus for cross-process delivery. Automatically registered by [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster). |
-| `SignalRTrainEventDispatcher` | `Trax.Effect.Broadcaster.SignalR` | Pushes lifecycle events to connected SignalR clients (Blazor, JS). Automatically registered by [`UseSignalRHub()`](/docs/sdk-reference/configuration/use-signalr-hub) as both a lifecycle hook (local path) and an `ITrainEventHandler` (remote path). |
-
-## Per-Train Lifecycle Hooks
-
-In addition to global hooks registered via `AddLifecycleHook<T>()`, individual trains can override lifecycle methods directly on `ServiceTrain`. This is useful when a hook only makes sense for one specific train and you want to use the train's own injected dependencies.
-
-```csharp
-public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
-    : ServiceTrain<BanPlayerInput, Unit>, IBanPlayerTrain
+public sealed class FailureLogHook(ILogger<FailureLogHook> logger) : ITrainLifecycleHook
 {
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Chain<ApplyBanJunction>().Resolve();
-
-    protected override Task OnCompleted(Metadata metadata, CancellationToken ct)
+    public Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
     {
-        logger.LogInformation("Banned player {PlayerId} for: {Reason}",
-            TrainInput?.PlayerId, TrainInput?.Reason);
-        return Task.CompletedTask;
-    }
-
-    protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
-    {
-        logger.LogWarning("Failed to ban player {PlayerId}: {Message}",
-            TrainInput?.PlayerId, exception.Message);
+        logger.LogWarning("{Train} failed: {Message}", metadata.Name, exception.Message);
         return Task.CompletedTask;
     }
 }
 ```
 
-No registration needed, just `override` the method. The available methods match the global hook interface:
+## See also
 
-| Method | Signature |
-|--------|-----------|
-| `OnStarted` | `protected virtual Task OnStarted(Metadata metadata, CancellationToken ct)` |
-| `OnCompleted` | `protected virtual Task OnCompleted(Metadata metadata, CancellationToken ct)` |
-| `OnFailed` | `protected virtual Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)` |
-| `OnCancelled` | `protected virtual Task OnCancelled(Metadata metadata, CancellationToken ct)` |
-
-All default to no-op (`Task.CompletedTask`). Override only the ones you need.
-
-In addition to the `metadata` parameter, per-train hooks can use the `TrainInput` and `TrainOutput` properties for typed access to the train's input and output without casting. See [Accessing Train Input and Output](#accessing-train-input-and-output) above.
-
-### Global vs Per-Train Hooks
-
-| | Global (`AddLifecycleHook<T>`) | Per-Train (`override`) |
-|---|---|---|
-| Scope | Fires for every train | Fires only for the overriding train |
-| Registration | `AddLifecycleHook<T>()` in builder | No registration, just override |
-| DI access | Constructor injection on the hook class | Constructor injection on the train itself |
-| Execution order | Fires first | Fires after global hooks |
-| Error handling | Caught and logged | Caught and logged |
-| Use case | Cross-cutting concerns (metrics, audit logs) | Train-specific business logic (alerts, cleanup) |
-
-## Package
-
-```
-dotnet add package Trax.Effect
-```
+- [Write a lifecycle hook](/docs/effect/write-a-lifecycle-hook)
+- [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters), [AddEffect](/docs/sdk-reference/configuration/add-effect)

@@ -5,16 +5,23 @@ type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 23
+nav_order: 33
+package: Trax.Effect
+namespace:
+  - Trax.Effect.Services.JunctionEffectProvider
+  - Trax.Effect.Services.JunctionEffectProviderFactory
+source:
+  - Trax.Effect/src/Trax.Effect/Services/JunctionEffectProvider/IJunctionEffectProvider.cs
+  - Trax.Effect/src/Trax.Effect/Services/JunctionEffectProviderFactory/IJunctionEffectProviderFactory.cs
 ---
 
 # IJunctionEffectProvider
 
-A junction effect: code that runs before and after every [EffectJunction](/docs/sdk-reference/trains-and-junctions/effect-junction) in a service train. The junction logger and junction progress are junction effects. You write a provider and a factory that creates it, and register the factory with [AddJunctionEffect](/docs/sdk-reference/configuration/add-effect).
+A junction effect: code that runs before and after every [EffectJunction](/docs/sdk-reference/trains-and-junctions/effect-junction) in a service train. The junction logger and junction progress are junction effects. A provider is created by an `IJunctionEffectProviderFactory`, which is registered with [AddJunctionEffect](/docs/sdk-reference/configuration/add-effect).
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Services.JunctionEffectProvider;
 
 public interface IJunctionEffectProvider : IDisposable
@@ -40,13 +47,17 @@ public interface IJunctionEffectProviderFactory
 }
 ```
 
+## Parameters
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `effectJunction` | `EffectJunction<TIn, TOut>` | The junction. Its `Metadata` already exists. |
 | `serviceTrain` | `ServiceTrain<TTrainIn, TTrainOut>` | The train running it, with its own `Metadata` |
 | `cancellationToken` | `CancellationToken` | The train's token |
 
-## Lifecycle
+## Behavior
+
+### Lifecycle
 
 | Call | When |
 |------|------|
@@ -57,13 +68,24 @@ public interface IJunctionEffectProviderFactory
 
 Providers run in registration order. A plain `Junction` does not trigger them.
 
-## Failures
+### Failures
 
-An exception from either method stops the providers after it. From `BeforeJunctionExecution` before a junction that will run, and from `AfterJunctionExecution` after a junction that succeeded, it fails the train. From `BeforeJunctionExecution` before a junction that is skipped because an earlier one failed, and from `AfterJunctionExecution` after a junction that failed or was skipped, it is logged as a warning and the failure already on the railway is what the train reports. Catch inside the provider anything that should not fail a run.
+An exception from either method stops the providers after it. From `BeforeJunctionExecution` before a junction that will run, and from `AfterJunctionExecution` after a junction that succeeded, it fails the train. From `BeforeJunctionExecution` before a junction that is skipped because an earlier one failed, and from `AfterJunctionExecution` after a junction that failed or was skipped, it is logged as a warning and the failure already on the railway is what the train reports.
 
 ## Example
 
-```csharp
+```csharp compile
+using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.Services.JunctionEffectProvider;
+using Trax.Effect.Services.JunctionEffectProviderFactory;
+using Trax.Effect.Services.ServiceTrain;
+
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .AddJunctionEffect<SlowJunctionWarningFactory>()
+        .UsePostgres(connectionString))
+    .AddMediator(typeof(IShipOrderTrain).Assembly));
+
 public sealed class SlowJunctionWarning(ILogger<SlowJunctionWarning> logger) : IJunctionEffectProvider
 {
     public Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
@@ -73,8 +95,9 @@ public sealed class SlowJunctionWarning(ILogger<SlowJunctionWarning> logger) : I
     public Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectJunction<TIn, TOut> junction, ServiceTrain<TTrainIn, TTrainOut> train, CancellationToken ct)
     {
-        if (junction.Metadata is { StartTimeUtc: { } start, EndTimeUtc: { } end } && end - start > TimeSpan.FromSeconds(5))
-            logger.LogWarning("{Junction} in {Train} took {Elapsed}", junction.Metadata.Name, train.TrainName, end - start);
+        if (junction.Metadata is { StartTimeUtc: { } start, EndTimeUtc: { } end } metadata
+            && end - start > TimeSpan.FromSeconds(5))
+            logger.LogWarning("{Junction} in {Train} took {Elapsed}", metadata.Name, train.TrainName, end - start);
         return Task.CompletedTask;
     }
 
@@ -85,14 +108,9 @@ public sealed class SlowJunctionWarningFactory(ILogger<SlowJunctionWarning> logg
 {
     public IJunctionEffectProvider Create() => new SlowJunctionWarning(logger);
 }
-
-services.AddTrax(trax => trax.AddEffects(effects => effects
-    .UsePostgres(connectionString)
-    .AddJunctionEffect<SlowJunctionWarningFactory>()));
 ```
 
-## Package
+## See also
 
-```
-dotnet add package Trax.Effect
-```
+- [AddJunctionEffect](/docs/sdk-reference/configuration/add-effect), [EffectJunction](/docs/sdk-reference/trains-and-junctions/effect-junction)
+- [Effect Providers](/docs/effect/effect-providers)

@@ -1,60 +1,74 @@
 ---
 title: AddJunctionLogger
-description: Reference for AddJunctionLogger, the junction effect that writes each junction's name, duration and types to ILogger before and after it runs.
+description: Reference for AddJunctionLogger, the junction effect that writes each junction's name, timing and railway state to ILogger before and after it runs.
 type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 8
+nav_order: 22
+package: Trax.Effect.JunctionProvider.Logging
+namespace: Trax.Effect.JunctionProvider.Logging.Extensions
+source:
+  - Trax.Effect/src/Trax.Effect.JunctionProvider.Logging/Extensions/ServiceExtensions.cs
 ---
 
 # AddJunctionLogger
 
-Adds per-junction execution logging as a junction-level effect. Writes each junction's metadata (name, duration, input/output types) to `ILogger` before and after the junction runs, at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level). Nothing is written to the database.
+Adds the junction logger, a junction effect that writes each junction's metadata (name, start and end times,
+duration, input and output types, railway state) to `ILogger` before and after the junction runs. Nothing is written
+to the database.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static TBuilder AddJunctionLogger<TBuilder>(
-    this TBuilder effectBuilder,
+    this TBuilder configurationBuilder,
     bool serializeJunctionData = false
 )
     where TBuilder : TraxEffectBuilder
 ```
 
-The generic type parameter `TBuilder` is inferred by the compiler, so callers just write `.AddJunctionLogger()`. This preserves the concrete builder type through chaining (e.g., `TraxEffectBuilderWithData` stays as `TraxEffectBuilderWithData`).
-
 ## Parameters
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `serializeJunctionData` | `bool` | No | `false` | Whether to serialize each junction's output. Adds detail but increases log volume and serialization work per junction. |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `serializeJunctionData` | `bool` | `false` | Serialize each successful junction's output into its metadata's `OutputJson`, so the after-junction entry carries it. Junction input is never serialized. |
 
 ## Returns
 
-`TBuilder`, the same builder type that was passed in, for continued fluent chaining.
+`TBuilder`, the builder type it was called on.
+
+## Behavior
+
+Registers the logger's factory with `AddJunctionEffect`, as a toggleable junction effect, and sets the builder's
+`SerializeJunctionData`. Entries are written at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level)
+under the category `Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider.JunctionLoggerProvider`.
+Only `EffectJunction`s are logged.
+
+With `serializeJunctionData: true`, the output copy follows the train's lifecycle hook output policy:
+
+- none for a train whose output [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)
+  excludes;
+- at most `MaxParameterBytes` (1 MiB by default), past which it is `{"_truncated": true, "_maxBytes": N}`;
+- `{"_unserializable": true, "_error": "<exception type>"}` when it cannot be serialized. Serializing never fails
+  the train.
+
+Members marked `[TraxSensitive]` are written as `{"_redacted": true}`, and the copies a train is run from (a
+manifest's `Properties`, a queued entry's `Input`, a background job's `Input`) as `{"_omitted": true}`.
 
 ## Example
 
-```csharp
+```csharp compile
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
         .AddJunctionLogger(serializeJunctionData: true)
     )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
 );
 ```
 
-## Remarks
+## See also
 
-- This is a **junction-level effect** (runs per junction, not per train).
-- Junction metadata includes: junction name, start/end times, duration, input/output types.
-- When `serializeJunctionData` is `true`, each successful junction's output is serialized to JSON (junction input is not). Members marked `[TraxSensitive]` are written as `{"_redacted": true}`, and the copies a train is run from (a manifest's `Properties`, a queued entry's `Input`, a background job's `Input`) as `{"_omitted": true}`.
-- The output is not serialized for a train whose output `SaveTrainParameters` excludes, is bounded by `MaxParameterBytes` (1 MiB by default) past which it is written as `{"_truncated": true, "_maxBytes": N}`, and is written as `{"_unserializable": true, "_error": "<exception type>"}` when it cannot be serialized. Serializing it never fails the train. See [Junction Logger](/docs/effect/effect-providers/junction-logger#the-serializejunctiondata-option).
-- Registered as a toggleable effect.
-
-## Package
-
-```
-dotnet add package Trax.Effect.JunctionProvider.Logging
-```
+- [Junction Logger](/docs/effect/effect-providers/junction-logger)
+- [AddJunctionEffect](/docs/sdk-reference/configuration/add-effect), [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level)

@@ -5,7 +5,11 @@ type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 18
+nav_order: 32
+package: Trax.Effect
+namespace: Trax.Effect.Services.FailureClassifier
+source:
+  - Trax.Effect/src/Trax.Effect/Services/FailureClassifier/IFailureClassifier.cs
 ---
 
 # IFailureClassifier
@@ -14,7 +18,7 @@ Decides what kind of failure an exception represents, so Trax records a `Failure
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Services.FailureClassifier;
 
 public interface IFailureClassifier
@@ -23,23 +27,22 @@ public interface IFailureClassifier
 }
 ```
 
+## Parameters
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `exception` | `Exception` | The original exception the run failed with, not a wrapper, so you can type-check it and read its structured data |
 
-**Returns**: `FailureClass?`. One of `Transient`, `Conflict`, `Permanent` (or `Unclassified`), or null to leave the failure unclassified. `FailureClass` lives in `Trax.Core.Exceptions`.
+## Returns
 
-## Registration
-
-There is no builder method. Register it in the container:
-
-```csharp
-services.AddSingleton<IFailureClassifier, NetSuiteFailureClassifier>();
-```
-
-Trax resolves one `IFailureClassifier` from the train's service provider, so the last registration wins. For runs executed on a remote worker, register it in the **worker** process.
+`FailureClass?`: `Transient`, `Conflict`, `Permanent` or `Unclassified`, or null to leave the failure unclassified.
+`FailureClass` is in `Trax.Core.Exceptions`.
 
 ## Behavior
+
+There is no builder method: the classifier is registered in the container. Trax resolves one `IFailureClassifier`
+from the train's service provider, so the last registration wins, and a run executed on a remote worker uses the
+worker process's registration.
 
 | Situation | What is recorded |
 |---|---|
@@ -61,21 +64,26 @@ The recorded class is `Metadata.FailureClass`, readable in `OnFailed`, persisted
 
 ## Example
 
-```csharp
-public class NetSuiteFailureClassifier : IFailureClassifier
+```csharp compile
+using System.Net;
+using Trax.Core.Exceptions;
+using Trax.Effect.Services.FailureClassifier;
+
+services.AddSingleton<IFailureClassifier, ErpFailureClassifier>();
+
+public class ErpFailureClassifier : IFailureClassifier
 {
     public FailureClass? Classify(Exception exception) =>
-        exception is NetSuiteRestException { StatusCode: HttpStatusCode.BadRequest } ex
-        && ex.ErrorDetails.Any(d => d.Detail.Contains("Record has been changed"))
-            ? FailureClass.Conflict
-            : null;
+        exception switch
+        {
+            HttpRequestException { StatusCode: HttpStatusCode.Conflict } => FailureClass.Conflict,
+            HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests } => FailureClass.Transient,
+            HttpRequestException { StatusCode: HttpStatusCode.BadRequest } => FailureClass.Permanent,
+            _ => null,
+        };
 }
 ```
 
-See [Classifying failures](/docs/core/trains-and-junctions#classifying-failures) for the concepts.
+## See also
 
-## Package
-
-```
-dotnet add package Trax.Effect
-```
+- [Classifying failures](/docs/core/trains-and-junctions#classifying-failures)
