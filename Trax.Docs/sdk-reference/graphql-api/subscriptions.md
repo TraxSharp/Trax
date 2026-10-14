@@ -288,7 +288,10 @@ Signals are **coalesced**: a burst of writes to one domain (for example a dispat
 
 Write paths emit signals through `ITraxChangeSignal`, a singleton registered by `AddTrax()`:
 
-```csharp
+```csharp compile
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Services.ChangeSignal;
+
 public class MyService(ITraxChangeSignal changeSignal)
 {
     public async Task DoWorkAsync(IDataContext db, CancellationToken ct)
@@ -334,7 +337,7 @@ Every connection has an end, however it authenticated. At its maximum lifetime, 
 
 An API-key connection's key is resolved again every five minutes, or at the interval set with `RecheckConnectionCredentialsEvery(...)`, so a revoked key's sockets close within one interval. Each re-check is one call to your `ITraxPrincipalResolver<string>` per open API-key connection, in a scope of its own. A changed display name does not close the connection. Both settings take a positive duration of at most one day; anything else throws `ArgumentOutOfRangeException`.
 
-```csharp
+```csharp compile
 services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<AppDbContext>()
     .MaxConnectionLifetime(TimeSpan.FromMinutes(30))           // default: 1 hour
@@ -347,7 +350,7 @@ A host that replaces the socket interceptor through `ConfigureSchema` replaces t
 
 A WebSocket upgrade that carries an `Origin` header is accepted only from origins the host serves: the endpoint's own host, or an allowed origin. Anything else is answered with `403` before the handshake. An upgrade with no `Origin` header, which is what non-browser clients send, is accepted. The allowed origins default to those your CORS default policy (`AddCors(o => o.AddDefaultPolicy(...))`) names with `WithOrigins(...)` or admits with `SetIsOriginAllowed(...)`. A default policy built with `AllowAnyOrigin()` allows no origin besides the endpoint's own: a browser sends its cookies with every WebSocket upgrade, so a socket is always a credentialed request, and CORS never lets `AllowAnyOrigin()` carry credentials. Set the origins explicitly with `AllowSocketOrigins(...)` on the GraphQL builder, which replaces the CORS default:
 
-```csharp
+```csharp compile
 services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<AppDbContext>()
     .AllowSocketOrigins("https://app.example.com", "https://admin.example.com"));
@@ -417,7 +420,9 @@ This includes a subscriber that only wants `[TraxAllowAnonymous]` trains. On a h
 
 [`AddTraxJwtDispatcher`](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) routes subscription tokens by their `iss` claim across every mapped scheme, the same way it routes HTTP requests. When a dispatcher is registered, JWT connections go to `TraxJwtDispatcherSocketInterceptor` instead of the single-scheme JWT strategy. The matched scheme's handler then authenticates the token in full, events and JWKS refresh included, so an unmapped or forged issuer is rejected.
 
-```csharp
+```csharp compile
+using Trax.Api.Auth.Jwt;
+
 services.AddTraxJwtAuth("cognito", jwt => jwt.UseAuthority(cognitoAuthority, "mobile-client"));
 services.AddTraxJwtAuth("internal", jwt => jwt.UseSymmetricKey("nwyc-web", "trax", internalKey));
 services.AddTraxJwtDispatcher(d => d
@@ -429,7 +434,7 @@ services.AddTraxJwtDispatcher(d => d
 
 To replace Trax's interceptor (for example, to authenticate against a scheme Trax does not model), supply your own through `ConfigureSchema`:
 
-```csharp
+```csharp compile
 services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<AppDbContext>()
     .ConfigureSchema(b => b.AddSocketSessionInterceptor<MySocketInterceptor>()));

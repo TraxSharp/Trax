@@ -1,113 +1,47 @@
 ---
-title: Query Models
-description: Reference for TraxQueryModel, which exposes EF Core entities as GraphQL queries with paging, filtering, sorting and projection, plus binding and authorization.
+title: TraxQueryModel
+description: "Reference for TraxQueryModel, which exposes an EF Core entity as a GraphQL query field with paging, filtering, sorting and projection, and its binding and authorization rules."
 type: reference
 area: api
+package: Trax.Effect
+namespace: Trax.Effect.Attributes
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 6
+source:
+  - Trax.Effect/src/Trax.Effect/Attributes/TraxQueryModelAttribute.cs
+  - Trax.Effect/src/Trax.Effect/Attributes/FieldBindingBehavior.cs
+  - Trax.Api/src/Trax.Api.GraphQL/TypeModules/QueryModelTypeModule.cs
 ---
 
-# Query Models
+# TraxQueryModel
 
-Query models expose EF Core entities directly as GraphQL queries with automatic cursor pagination, filtering, sorting, and projection. Unlike `[TraxQuery]` which wraps a train (business logic), `[TraxQueryModel]` maps a database table to a GraphQL field with zero boilerplate.
+`[TraxQueryModel]` exposes an EF Core entity as a GraphQL query field under `discover`, with cursor
+pagination, filtering, sorting and projection. The entity is found through a `DbSet<T>` on a
+`DbContext` registered with [`AddDbContext<TDbContext>()`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods)
+on the GraphQL builder. Where `[TraxQuery]` exposes a train, `[TraxQueryModel]` exposes a table; see
+[Query models and query trains](/docs/api/query-models-and-query-trains).
 
-## Quick Start
+## Signature
 
-1. Mark your entity with `[TraxQueryModel]`:
-
-```csharp
-[TraxAuthorize] // or [TraxAllowAnonymous]: without a posture the host refuses to start (see Authorization)
-[TraxQueryModel(Description = "Player profiles")]
-public class PlayerRecord
-{
-    public long Id { get; set; }
-    public string PlayerId { get; set; } = "";
-    public string DisplayName { get; set; } = "";
-    public int Rating { get; set; }
-}
-```
-
-2. Add the entity to a `DbSet<T>` on a `DbContext`:
-
-```csharp
-public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(options)
-{
-    public DbSet<PlayerRecord> Players { get; set; } = null!;
-}
-```
-
-3. Register the DbContext and enable model discovery:
-
-```csharp
-builder.Services.AddDbContextFactory<GameDbContext>(options =>
-    options.UseNpgsql(connectionString));
-
-builder.Services.AddTraxGraphQL(graphql =>
-    graphql.AddDbContext<GameDbContext>());
-```
-
-For an application's own data, the recommended base is a
-[`DomainDataContext`](/docs/effect/effect-providers/domain-data-contexts) registered with
-`AddDomainDataContext`, and it works here unchanged: `AddDbContext<T>()` names the concrete context
-type, and the pooled factory `AddDomainDataContext` registers serves it.
-
-```csharp
-public class GameDbContext(DbContextOptions<GameDbContext> options)
-    : DomainDataContext<GameDbContext>(options), IGameDbContext
-{
-    public DbSet<PlayerRecord> Players => Set<PlayerRecord>();
-    protected override string Schema => "game";
-    protected override void ConfigureModel(ModelBuilder modelBuilder) { }
-}
-
-builder.Services.AddDomainDataContext<IGameDbContext, GameDbContext>(o => o.UseNpgsql(connectionString));
-builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<GameDbContext>());
-```
-
-The [Bookworm sample](/docs/samples/bookworm) serves its catalog this way.
-
-This generates a `playerRecords` query field under `discover`:
-
-```graphql
-query {
-  discover {
-    playerRecords(first: 10, where: { rating: { gte: 1500 } }, order: { rating: DESC }) {
-      nodes {
-        playerId
-        displayName
-        rating
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      totalCount
-    }
-  }
-}
-```
-
-## TraxQueryModel Attribute
-
-```csharp
+```csharp fragment
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxQueryModelAttribute : Attribute
 {
     public string? Name { get; init; }
     public string? Description { get; init; }
     public string? DeprecationReason { get; init; }
-    public string? Namespace { get; init; }
     public bool Paging { get; init; } = true;
     public bool Filtering { get; init; } = true;
     public bool Sorting { get; init; } = true;
     public bool Projection { get; init; } = true;
     public FieldBindingBehavior BindFields { get; init; } = FieldBindingBehavior.Implicit;
+    public string? Namespace { get; init; }
     public Type? ExposeAs { get; init; }
 }
 ```
 
-### Properties
+## Properties
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -122,27 +56,18 @@ public class TraxQueryModelAttribute : Attribute
 | `BindFields` | `FieldBindingBehavior` | `Implicit` | Controls how fields are bound on the generated GraphQL ObjectType and on its filter and sort inputs. When `Explicit`, only properties with `[Column]` are exposed; `[NotMapped]`, methods, and non-column members are excluded. |
 | `ExposeAs` | `Type?` | `null` | Restricts the GraphQL surface to the property set declared by the supplied interface. The entity must implement the interface implicitly. Filter and sort input types are constrained to the same set unless a custom override is supplied. Mutually exclusive with `BindFields = Explicit`. |
 
-## Feature Configuration
+## Behavior
 
-Each feature can be independently disabled per model. All default to `true`.
+Only `DbSet<T>` properties whose `T` carries `[TraxQueryModel]` are exposed; other `DbSet`
+properties on the same context are ignored. The context is registered in DI separately (with
+`AddDomainDataContext`, `AddDbContext`, `AddDbContextFactory` or `AddPooledDbContextFactory`), and
+each request resolves the concrete type named in `AddDbContext<TDbContext>()`.
 
-```csharp
-// Full-featured (default)
-[TraxQueryModel]
-public class Player { ... }
+With `Paging = true` the field returns a Connection (`nodes`, `edges`, `pageInfo`, `totalCount`).
+With `Paging = false` it returns a plain list (`[Entity!]!`). Each of `Paging`, `Filtering`,
+`Sorting` and `Projection` switches its HotChocolate middleware off on its own.
 
-// Pagination and filtering only, no sorting or projection
-[TraxQueryModel(Sorting = false, Projection = false)]
-public class AuditLog { ... }
-
-// Simple list query, no middleware at all
-[TraxQueryModel(Paging = false, Filtering = false, Sorting = false, Projection = false)]
-public class StatusCode { ... }
-```
-
-When `Paging = false`, the field returns a plain list (`[Entity!]!`) instead of a Connection type.
-
-## Projection and hand-written resolvers
+### Projection and hand-written resolvers
 
 Projection narrows the `SELECT` to the columns the caller's selection set names. A query for
 `{ players { nodes { displayName } } }` reads one column, not the whole row.
@@ -156,7 +81,7 @@ Trax closes the common case: for every field on a query model that is not backed
 property, it adds the entity's key to the projection. A resolver that batches on the parent's
 key needs no annotation.
 
-```csharp
+```csharp compile
 [ExtendObjectType(typeof(Player))]
 public sealed class PlayerAchievements
 {
@@ -172,7 +97,7 @@ public sealed class PlayerAchievements
 A resolver that reads something other than the key declares it, and HotChocolate merges that
 with the key Trax already requires:
 
-```csharp
+```csharp compile
 [ExtendObjectType(typeof(Player))]
 public sealed class PlayerTeam
 {
@@ -192,7 +117,7 @@ otherwise `Id`, otherwise `{TypeName}Id`. A key configured only through the flue
 `HasKey` is not visible there, so resolvers on such an entity declare what they read with
 `[Parent(requires: ...)]`.
 
-### Such a field also declares its authorization posture
+#### Such a field also declares its authorization posture
 
 A field added this way to a `[TraxAllowAnonymous]` entity inherits no gate, because there is no
 `@authorize` on the parent type to inherit, and the host refuses to start until the field says
@@ -206,11 +131,11 @@ gate and needs nothing. See
 a resolver reads an undeclared property. See
 [architecture guards](/docs/reference/architecture-guards).
 
-## Field Binding
+### Field binding
 
 By default, HotChocolate exposes all public properties on an entity as GraphQL fields. When your entity has `[NotMapped]` aliases, DataLoader methods, or infrastructure methods that should not appear in the schema, use explicit binding:
 
-```csharp
+```csharp fragment
 [TraxQueryModel(BindFields = FieldBindingBehavior.Explicit)]
 [Table("players", Schema = "game")]
 public class Player
@@ -237,11 +162,11 @@ With `BindFields = FieldBindingBehavior.Explicit`, only `Id` and `DisplayName` a
 
 FK fields added via `ObjectTypeExtension` (from custom TypeModules registered with `AddTypeModule<T>()`) still work when using explicit binding, since extensions are separate from the base type's field set.
 
-## ExposeAs
+### ExposeAs
 
 When an entity is shared across DbContexts (typical pattern: a "reference" projection of a cross-schema entity), the entity class carries every column required by every owning context, but consumers reading it through a non-owning context cannot navigate the relationships. `ExposeAs` constrains the GraphQL schema to a separately-declared interface so the schema reflects what the consumer can actually query, rather than auto-binding every public property on the entity.
 
-```csharp
+```csharp compile
 public interface IBookReference
 {
     int Id { get; }
@@ -277,7 +202,7 @@ The generated schema contains only the four interface fields. `reviews` does not
 | **Interface inheritance** | The full inherited interface graph is walked. Properties declared on parent interfaces are exposed. |
 | **Field metadata** | Description, deprecation, and other attributes are read from the **entity** property (interface declarations cannot carry attributes that influence the schema). |
 
-### Validation
+#### Validation
 
 The configuration is validated at `Build()` time. Each failure mode throws `InvalidOperationException` with a message that names both the entity and the interface.
 
@@ -289,11 +214,11 @@ The configuration is validated at `Build()` time. Each failure mode throws `Inva
 | Interface declares no properties | A GraphQL type with no fields is invalid. |
 | Interface declares a property the entity implements explicitly | `ExposeAs` cannot bind explicit-interface implementations; make it implicit. |
 
-### Mutations
+#### Mutations
 
 `ExposeAs` only applies to `[TraxQueryModel]` (the query surface). Mutations are trains, not query models, and are not affected.
 
-## Authorization
+### Authorization
 
 A `[TraxQueryModel]` entity is exposed via GraphQL, so it must declare its authorization posture explicitly: `[TraxAuthorize]` to gate it or `[TraxAllowAnonymous]` to open it. An entity with neither fails at `TraxGraphQLBuilder.Build()` (unless the endpoint is gated with `RequireAuthorization()`, which covers it). See [Authorization guide - Required Exposure Posture](/docs/authorization#required-exposure-posture).
 
@@ -303,7 +228,7 @@ Apply `[TraxAuthorize]` to a `[TraxQueryModel]` entity to gate access. The direc
 - any other field elsewhere in the schema whose return type is this entity (e.g. a navigation property on an ungated parent),
 - a `where` or `order` that filters or sorts through a navigation to this entity, on any field that takes one: another model's entry field, a type extension's `[UseFiltering]` or `[UseSorting]` resolver, or a filtered navigation.
 
-```csharp
+```csharp fragment
 [TraxQueryModel(Namespace = "library")]
 [TraxAuthorize(Roles = "Subscriber")]
 public class Article { ... }
@@ -317,7 +242,7 @@ An entity a query model reaches through a navigation, that is not itself a `[Tra
 
 See the [Authorization guide - Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (a property cannot be gated on its own, though a resolver method can; no row-level filtering).
 
-## Name Derivation
+### Name derivation
 
 When `Name` is null, the field name is derived automatically:
 
@@ -326,20 +251,20 @@ When `Name` is null, the field name is derived automatically:
 
 Override with `Name` for cases where the automatic pluralization is incorrect:
 
-```csharp
+```csharp fragment
 [TraxQueryModel(Name = "people")]
 public class Person { ... }
 ```
 
-
-### Name Collisions
+#### Name collisions
 
 Every field under `discover`, `dispatch` and their namespaces has exactly one owner. When two surfaces would put a field of the same name in the same place, the host refuses to start and names both: a query model and a `[TraxQuery]` train (`Team` and `ITeamsTrain` both make `teams`), one entity exposed by two `DbContext`s, a namespace and a model of the same name, or a type extension that adds a field Trax or another extension already adds. HotChocolate would otherwise merge the two into one field and keep whichever resolver it built last. Give one of them its own name: `Name` on `[TraxQueryModel]`, `[TraxQuery]` or `[TraxMutation]`, a different `Namespace`, or a different method name on the extension.
-## Custom Filter and Sort Types
+
+### Custom filter and sort types
 
 By default, Trax generates the filter and sort inputs from the entity's exposed field set: every public property, or the narrower set `BindFields = Explicit` or `ExposeAs` declares. When you need to hide properties, rename filter fields, or customize the generated input types, register custom overrides via the builder:
 
-```csharp
+```csharp compile
 builder.Services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<GameDbContext>()
     .AddFilterType<Player, PlayerFilterInputType>()
@@ -348,7 +273,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 
 Create the custom types by extending `FilterInputType<TEntity>` or `SortInputType<TEntity>`:
 
-```csharp
+```csharp fragment
 public class PlayerFilterInputType : FilterInputType<Player>
 {
     protected override void Configure(IFilterInputTypeDescriptor<Player> descriptor)
@@ -373,11 +298,11 @@ public class PlayerSortInputType : SortInputType<Player>
 
 When an override is registered, it replaces the default for that entity only. Entities without overrides continue to use the auto-generated types.
 
-## Case-Insensitive Filtering
+### Case-insensitive filtering
 
 The auto-generated string filters (`contains`, `eq`, `startsWith`, ...) are case-sensitive, since they map to plain `LIKE` / `=` on a deterministic collation. To add case-insensitive operators, opt in with `ConfigureFiltering`:
 
-```csharp
+```csharp compile
 builder.Services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<GameDbContext>()
     .ConfigureFiltering(filter => filter.AddCaseInsensitiveStringOperations()));
@@ -385,7 +310,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 
 This adds `icontains` (case-insensitive substring) and `ieq` (case-insensitive equality) to every string filter input, including `ExposeAs`-projected and custom filter types. The existing case-sensitive operators are unchanged; a client opts in per query by choosing the operator. See [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering) for the translation, indexing, and extension details.
 
-## Scalar Collections (PostgreSQL Arrays)
+### Scalar collections (PostgreSQL arrays)
 
 A property typed as a collection of scalars (`Badge[]`, `string[]`, `List<int>`) maps to a
 PostgreSQL array column and is filtered with array containment. This fits a small bounded
@@ -393,7 +318,10 @@ set of values that carries no data of its own, such as roles or feature flags on
 If the membership itself needs fields (`GrantedAt`, `GrantedBy`), use a junction table
 instead and expose that as its own query model.
 
-```csharp
+```csharp compile
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 public enum Badge { Founder, Veteran, Champion }
 
 [TraxQueryModel(Namespace = "players")]
@@ -412,7 +340,7 @@ public class PlayerRecord
 The DbContext maps the enum and declares the index. Both matter, for different reasons
 (see [The GIN index declaration changes the SQL](#the-gin-index-declaration-changes-the-sql)):
 
-```csharp
+```csharp fragment
 protected override void OnConfiguring(DbContextOptionsBuilder options) =>
     options.UseNpgsql(connectionString, npgsql => npgsql.MapEnum<Badge>("badge", "game"));
 
@@ -425,7 +353,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 
 The column and its index are created by a migration, like any other table.
 
-### Generated filter surface
+#### Generated filter surface
 
 The schema exposes the enum by name and the collection as a list filter:
 
@@ -446,9 +374,8 @@ input BadgeElementFilterInput {
 }
 ```
 
-A collection of a nullable scalar (`int?[]`) is the exception: HotChocolate's comparable
-filter input is constrained to non-nullable value types, so those keep the stock input,
-`neq` included.
+A collection of a nullable scalar (`int?[]`, `Badge?[]`) shares the element input of its
+underlying type, so it has no `neq` either; `eq: null` matches an element that is null.
 
 Set membership is expressed with the standard list operators, and each one reaches
 PostgreSQL as an array operator a GIN index can serve:
@@ -486,7 +413,7 @@ query PlayersHoldingBothBadges {
 }
 ```
 
-### The GIN index declaration changes the SQL
+#### The GIN index declaration changes the SQL
 
 `HasIndex(...).HasMethod("gin")` does more than describe the database. Npgsql reads it
 when it compiles a single-value membership filter and picks a different operator:
@@ -506,7 +433,7 @@ unaffected, so a collection filtered only those ways does not need the declarati
 The collection type is not what decides this. `Badge[]` and `List<Badge>` both map to the
 same array column and behave identically; only the index declaration matters.
 
-### `neq` is not available inside a collection
+#### `neq` is not available inside a collection
 
 The element filter offers `eq`, `in` and `nin` but not `neq`. Inside a collection, `neq`
 lowers to `Any(x => x != value)` over a primitive collection, which no EF Core provider
@@ -526,33 +453,54 @@ where: { tier: { neq: CHAMPION } }
 The one filter this costs is `all: { neq: X }`, which did translate. `none: { eq: X }` is
 exactly equivalent and still available.
 
-## AddDbContext
+## Examples
 
-Register one or more DbContext types whose `DbSet<T>` properties contain attributed entities:
+An entity, its context, and the registration:
 
-```csharp
+```csharp compile
+[TraxAuthorize]
+[TraxQueryModel(Description = "Player profiles")]
+public class PlayerProfile
+{
+    public long Id { get; set; }
+    public string PlayerId { get; set; } = "";
+    public string DisplayName { get; set; } = "";
+    public int Rating { get; set; }
+}
+
+public class ProfileDbContext(DbContextOptions<ProfileDbContext> options) : DbContext(options)
+{
+    public DbSet<PlayerProfile> PlayerProfiles { get; set; } = null!;
+}
+```
+
+```csharp compile
+builder.Services.AddDbContextFactory<GameDbContext>(options => options.UseNpgsql(connectionString));
+
 builder.Services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<GameDbContext>()
     .AddDbContext<InventoryDbContext>());
 ```
 
-Only `DbSet<T>` properties where `T` has `[TraxQueryModel]` are exposed. Other `DbSet` properties on the same DbContext are ignored.
+The field the first entity produces, `playerProfiles` under `discover`:
 
-The DbContext must be registered in DI separately (via `AddDomainDataContext`, `AddDbContext`, `AddDbContextFactory`, or `AddPooledDbContextFactory`). Each request resolves the concrete type you named.
+```graphql
+query {
+  discover {
+    playerProfiles(first: 10, where: { rating: { gte: 1500 } }, order: { rating: DESC }) {
+      nodes { playerId displayName rating }
+      pageInfo { hasNextPage endCursor }
+      totalCount
+    }
+  }
+}
+```
 
-## vs TraxQuery
+## See also
 
-| | `[TraxQuery]` | `[TraxQueryModel]` |
-|-|--------------|-------------------|
-| **Target** | Train class (workflow) | Entity class (data model) |
-| **Resolves via** | `ITrainBus.RunAsync` | `DbContext.Set<T>()` → IQueryable |
-| **Input** | Typed input DTO | Filter/sort/page arguments (auto-generated) |
-| **Output** | Typed output DTO | Entity properties (with projection) |
-| **Use case** | Business logic, computed results | Direct CRUD reads, admin dashboards |
-| **Schema location** | `discover { trainName(input: ...) }` | `discover { modelNames(first: ..., where: ...) }` |
-
-Both appear under the `discover` namespace in the GraphQL schema.
-
-## SDK Reference
-
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) | [Architecture guards](/docs/reference/architecture-guards)
+- [Expose an entity as a query model](/docs/api/expose-an-entity-as-a-query-model)
+- [Query models and query trains](/docs/api/query-models-and-query-trains)
+- [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+- [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering)
+- [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders)
+- [Authorization: Per-Model Authorization](/docs/authorization#per-model-authorization)
