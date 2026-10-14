@@ -112,7 +112,7 @@ var metadata = await context.Metadatas.OrderByDescending(m => m.Id).FirstOrDefau
 
 ## DataContext Logging
 
-Stores the host's log lines in the `trax.log` table: every `ILogger` category at or above the minimum level (`Information` by default) that is not blacklisted, whatever wrote it. It does not record SQL: EF Core's command log (`Microsoft.EntityFrameworkCore.Database.Command`) is always skipped, because writing a row would log another one. Lines are queued in memory (4096, oldest dropped when full) and written in batches. [Debug across processes with the log table](/docs/effect/debugging-with-the-log-table) reads them.
+Stores the host's log lines in the `trax.log` table: every `ILogger` category at or above the minimum level (`Information` by default) that is not blacklisted, whatever wrote it. It does not record SQL: EF Core's command log (`Microsoft.EntityFrameworkCore.Database.Command`) is always skipped, because writing a row would log another one. Lines are queued in memory (4096, oldest dropped when full) and written in batches. [Debug across processes with the log table](/docs/effect/debug-across-processes-with-the-log-table) reads them.
 
 ```csharp compile
 using Microsoft.Extensions.Logging;
