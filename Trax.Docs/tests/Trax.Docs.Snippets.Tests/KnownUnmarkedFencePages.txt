@@ -64,9 +64,7 @@ samples/signalr-broadcaster.md
 samples/state-machine.md
 scheduler/admin-trains/job-runner.md
 scheduler/concurrency.md
-scheduler/delayed-jobs.md
 scheduler/dependent-trains.md
-scheduler/health-and-liveness.md
 scheduler/orphan-manifest-cleanup.md
 sdk-reference/api-audit/add-audit.md
 sdk-reference/api-audit/i-trax-audit-redactor.md

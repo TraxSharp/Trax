@@ -1,24 +1,25 @@
 ---
-title: Delayed / One-Off Jobs
-description: "Running work once, later: TriggerAsync with a delay on an existing manifest, or ScheduleOnceAsync for one-off manifests that disable themselves after running."
+title: Run a job once, later
+description: "How to run work once after a delay: TriggerAsync with a delay on an existing manifest, or ScheduleOnceAsync for a one-off manifest that disables itself."
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/TraxScheduler/ITraxScheduler.cs
 type: how-to
 area: scheduling
 nav_order: 2
 ---
 
-# Delayed / One-Off Jobs
+# Run a job once, later
 
-## The Problem
-
-Some work doesn't fit a recurring schedule. You need to send a reminder email in 30 minutes, process a refund after a 24-hour cooling period, or run a one-time data migration 5 minutes from now. These are fire-once jobs with a delay. Not periodic, not dependent on another manifest, just "run this once, later."
-
-Trax supports two approaches: delayed triggers on existing manifests, and standalone one-off manifests that auto-disable after completion.
+Some work runs once, after a delay: a reminder in 30 minutes, a refund after a 24-hour cooling
+period, a data migration five minutes after a deploy. There are two ways to do it: trigger an
+existing manifest with a delay, or create a one-off manifest that disables itself after it
+succeeds. [When to use which](#when-to-use-which) compares them.
 
 ## Delayed Trigger: TriggerAsync with Delay
 
 If a manifest already exists, registered at startup or created via `ScheduleAsync`, you can trigger it with a delay. This creates a work queue entry with a future `ScheduledAt` timestamp. The JobDispatcher skips the entry until that time arrives.
 
-```csharp
+```csharp compile
 // Trigger an existing manifest 30 minutes from now
 await scheduler.TriggerAsync("send-reminder", TimeSpan.FromMinutes(30));
 ```
@@ -33,17 +34,19 @@ For work that has no pre-existing manifest, a transient job that should run once
 
 ### Runtime API (ITraxScheduler)
 
-```csharp
+```csharp compile
 // Auto-generated externalId (format: "once-{guid}")
 await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput, Unit>(
-    new SendReminderInput { UserId = userId, Message = "Your trial expires tomorrow" },
-    TimeSpan.FromHours(24));
+    new SendReminderInput { UserId = "user-42", Message = "Your trial expires tomorrow" },
+    TimeSpan.FromHours(24)
+);
 
 // Explicit externalId for tracking or idempotency
 await scheduler.ScheduleOnceAsync<IProcessRefundTrain, ProcessRefundInput, Unit>(
     "refund-order-12345",
     new ProcessRefundInput { OrderId = 12345 },
-    TimeSpan.FromHours(24));
+    TimeSpan.FromHours(24)
+);
 ```
 
 When no `externalId` is provided, one is auto-generated in the format `once-{guid}`. If you need to cancel or query the job later, pass an explicit ID.
@@ -52,14 +55,17 @@ When no `externalId` is provided, one is auto-generated in the format `once-{gui
 
 For one-off jobs that should be scheduled when the application starts, such as a post-deployment migration or a delayed initialization task, use the builder:
 
-```csharp
-services.AddTrax(trax => trax
-    .AddScheduler(scheduler => scheduler
-        .ScheduleOnce<IPostDeployTrain>(
-            "post-deploy-v2.5",
-            new PostDeployInput { Version = "2.5" },
-            TimeSpan.FromMinutes(5))
-    )
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler.ScheduleOnce<IPostDeployTrain>(
+                "post-deploy-v2.5",
+                new PostDeployInput { Version = "2.5" },
+                TimeSpan.FromMinutes(5)
+            )
+        )
 );
 ```
 
@@ -101,19 +107,17 @@ If the job fails, normal retry logic applies. Retries continue until the job suc
 | Post-deployment one-time task | `scheduler.ScheduleOnce<TTrain>(...)` at startup | Declarative, upsert-safe, runs once after a delay on app start. |
 | Immediate execution of an existing job | `TriggerAsync(externalId)` (no delay) | Use the existing zero-delay overload. |
 
-## Configuration
+## Set retries, a timeout or a group
 
 One-off jobs accept the same `ScheduleOptions` as recurring manifests:
 
-```csharp
+```csharp compile
 await scheduler.ScheduleOnceAsync<ICleanupTrain, CleanupInput, Unit>(
     "cleanup-temp-files",
     new CleanupInput { OlderThan = TimeSpan.FromDays(7) },
     TimeSpan.FromMinutes(10),
-    options => options
-        .MaxRetries(1)
-        .Timeout(TimeSpan.FromMinutes(5))
-        .Group("maintenance"));
+    options => options.MaxRetries(1).Timeout(TimeSpan.FromMinutes(5)).Group("maintenance")
+);
 ```
 
 `MaxRetries(1)` allows one retry after the first run, two attempts in all; `MaxRetries(0)` runs the job once and dead-letters it on its first failure. A one-off run that times out or is cancelled is not run again: the cancelled run consumed its one occurrence.
