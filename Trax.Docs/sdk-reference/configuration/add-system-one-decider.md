@@ -5,7 +5,15 @@ type: reference
 area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 26
+nav_order: 29
+package: Trax.Effect.Decisions.SystemOne
+namespace:
+  - Trax.Effect.Decisions.SystemOne.Extensions
+  - Trax.Effect.Decisions.SystemOne
+source:
+  - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/SystemOneOptions.cs
+  - Trax.Effect/src/Trax.Effect.Decisions.SystemOne/SystemOneDecider.cs
 ---
 
 # AddSystemOneDecider
@@ -17,9 +25,9 @@ Nimble, use [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-deci
 in its model name and limits. See
 [Typed decision models](/docs/effect/decisions#other-typed-decision-models).
 
-## Signature
+## Signatures
 
-```csharp
+```csharp fragment
 public static TBuilder AddSystemOneDecider<TBuilder>(
     this TBuilder configurationBuilder,
     Action<SystemOneOptions> configure
@@ -34,7 +42,14 @@ public static TBuilder AddSystemOneDecider<TBuilder>(
     where TBuilder : TraxEffectBuilder
 ```
 
-## SystemOneOptions
+## Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | Registers the decider as a keyed `SystemOneDecider` under this name, and nothing else |
+| `configure` | `Action<SystemOneOptions>` | Sets the options below |
+
+### SystemOneOptions
 
 | Property | Type | Default | Description |
 |---|---|---|---|
@@ -54,24 +69,24 @@ public static TBuilder AddSystemOneDecider<TBuilder>(
 
 `TBuilder`, the same builder type that was passed in.
 
-## Example
+## Behavior
 
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-        .AddDecisionRecording()
-        .AddSystemOneDecider(o =>
-        {
-            o.Endpoint = new Uri("https://api.typesafe.ai/v1/systemone");
-            o.Model = "jev-1.13.0";
-            o.ApiKey = configuration["Jev:ApiKey"];
-        })
-    )
-);
-```
+- The options are checked when this is called, so unusable settings stop the host from starting.
+- The unnamed form registers the decider as `SystemOneDecider` and as `IDecider`, and may be used
+  once across this method and `AddNimbleDecider`; a second unnamed registration fails at startup
+  instead of replacing the first.
+- The named form registers a keyed `SystemOneDecider` under `name` and nothing else, so several
+  models can sit side by side. Resolve each with `GetRequiredKeyedService<SystemOneDecider>(name)`
+  and compose them, for example into a `CascadingDecider` registered as the `IDecider`; see
+  [Putting the model in front of a larger one](/docs/effect/decisions#putting-the-model-in-front-of-a-larger-one).
+  `DecidedBy<TDecider>()` resolves by type, so it cannot name a keyed decider.
+- The decider is built on first use and owned by the container, which disposes its HTTP client
+  when the host stops. A decision in flight when the decider is disposed keeps the outcome of its
+  request.
+- A `SystemOneDecider` built with its own HTTP client does not follow redirects. One built with an
+  `HttpClient` you pass in uses that client, and a 3xx it hands back still fails the decision.
 
-## Failures
+### Failures
 
 | What the model did | Retried | Run fails with | Failure class |
 |---|---|---|---|
@@ -107,25 +122,25 @@ the train's state, and the message is stored as the run's failure reason.
 Every answer carries the `model` the response names. That is the name the request asked for,
 echoed back, not a version the server confirms, so pin the version where the model is deployed.
 
-## Remarks
+## Example
 
-- The options are checked when this is called, so unusable settings stop the host from starting.
-- The unnamed form registers the decider as `SystemOneDecider` and as `IDecider`, and may be used
-  once across this method and `AddNimbleDecider`; a second unnamed registration fails at startup
-  instead of replacing the first.
-- The named form registers a keyed `SystemOneDecider` under `name` and nothing else, so several
-  models can sit side by side. Resolve each with `GetRequiredKeyedService<SystemOneDecider>(name)`
-  and compose them, for example into a `CascadingDecider` registered as the `IDecider`; see
-  [Putting the model in front of a larger one](/docs/effect/decisions#putting-the-model-in-front-of-a-larger-one).
-  `DecidedBy<TDecider>()` resolves by type, so it cannot name a keyed decider.
-- The decider is built on first use and owned by the container, which disposes its HTTP client
-  when the host stops. A decision in flight when the decider is disposed keeps the outcome of its
-  request.
-- A `SystemOneDecider` built with its own HTTP client does not follow redirects. One built with an
-  `HttpClient` you pass in uses that client, and a 3xx it hands back still fails the decision.
-
-## Package
-
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddDecisionRecording()
+        .AddSystemOneDecider(o =>
+        {
+            o.Endpoint = new Uri("https://api.typesafe.ai/v1/systemone");
+            o.Model = "jev-1.13.0";
+            o.ApiKey = configuration["Jev:ApiKey"];
+        })
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
 ```
-dotnet add package Trax.Effect.Decisions.SystemOne
-```
+
+## See also
+
+- [Typed decision models](/docs/effect/decisions#other-typed-decision-models), [Decisions](/docs/core/decisions)
+- [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-decider), [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording)

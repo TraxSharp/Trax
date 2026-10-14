@@ -6,6 +6,14 @@ area: effects
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 27
+package: Trax.Effect.Data
+namespace:
+  - Trax.Effect.Data.Extensions
+  - Trax.Effect.Data.JunctionEvents
+source:
+  - Trax.Effect/src/Trax.Effect.Data/Extensions/ServiceExtensions.cs
+  - Trax.Effect/src/Trax.Effect.Data/JunctionEvents/JunctionRunQueries.cs
+  - Trax.Effect/src/Trax.Effect/Services/TrainEventBroadcaster/IJunctionEventHandler.cs
 ---
 
 # AddJunctionEvents
@@ -16,35 +24,44 @@ step asks and the answer the run acts on, each track it takes) and records it in
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static TraxEffectBuilderWithData AddJunctionEvents(
     this TraxEffectBuilderWithData configurationBuilder
 )
 ```
 
-Defined on `TraxEffectBuilderWithData`, so it comes after a data provider. Called before one, it
-is a compile error: `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddJunctionEvents().`
-
 ## Returns
 
 `TraxEffectBuilderWithData`, for continued chaining.
 
-## Example
+## Behavior
 
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-        .AddDecisionRecording()
-        .AddJunctionEvents()
-        .UseBroadcaster(b => b
-            .UseRabbitMq(rabbitMqUrl)
-            .UseSignalRHub(opts => opts.WithJunctionEvents()))
-    )
-);
-```
+Extends `TraxEffectBuilderWithData` only, so it comes after a data provider. Called before one, it fails to compile
+(CS0619) with `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddJunctionEvents().`
 
-## What it registers
+- Nothing it does can fail a run or change a junction's result: a failure to store, broadcast or
+  hand out a step is logged and swallowed.
+- A step is stored by a background writer, in order and in batches, through a data context of its
+  own, so the run never waits on the database. A full queue drops a step, counted and logged. A
+  junction whose end was dropped stays `InProgress` after its run has ended, so read a row's state
+  together with its run's.
+- A run's rows are deleted with its metadata row, by the foreign key's cascade.
+- Only `EffectJunction`s are steps. A junction skipped because an earlier one failed is not a step,
+  and a run that is not saved (no metadata row) publishes none.
+- A custom `ITrainEventBroadcaster` is handed every junction event too, on the run's path; it should
+  queue rather than wait, and may route steps apart from train events.
+- A run of a manifest carries its attempt: 1 plus the manifest's failed runs since its last
+  completed or cancelled one, read once when the run begins from the manifest's 1000 most recent
+  runs (a longer streak is reported as 1001) and waited on for at most a second. A failure to read it
+  leaves it out.
+- Junction events carry `FailureJunction` as null; the run's own `Failed` event names the junction.
+- With RabbitMQ, steps go to their own exchange, and after a failure there are dropped untried for a
+  backoff of one second doubling to a minute; see
+  [UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq#junction-events). With
+  SignalR, they reach clients only after
+  [`WithJunctionEvents()`](/docs/sdk-reference/configuration/use-signalr-hub#junction-events).
+
+### Registered services
 
 | Service | Lifetime | Role |
 |---|---|---|
@@ -54,7 +71,7 @@ services.AddTrax(trax => trax
 
 Calling `AddJunctionEvents()` more than once registers these once.
 
-## Event types
+### Event types
 
 Each step is a `TrainLifecycleEventMessage` whose `EventType` is one of these constants, with the
 step in `Junction` (a `JunctionEventPayload`). `TrainLifecycleEventMessage.IsJunctionEvent(eventType)`
@@ -70,10 +87,10 @@ says whether an event type is one of them.
 | `DecisionRefusedEventType` | `"DecisionRefused"` | A decider's answer the run will not act on; the routing step fails |
 | `RoutedEventType` | `"Routed"` | A routing step sends the run down a track |
 
-## JunctionEventPayload
+### JunctionEventPayload
 
-```csharp
-// Trax.Effect.Services.TrainEventBroadcaster
+```csharp fragment
+// Trax.Effect.Services.TrainEventBroadcaster, in Trax.Effect
 public sealed record JunctionEventPayload(
     int Position,
     JunctionRunKind Kind,
@@ -131,17 +148,17 @@ positions and timing of steps, a failed junction's exception type and failure cl
 failure junction and any train started on the track stay visible; see
 [Withholding an answer](/docs/effect/junction-events#withholding-an-answer).
 
-## IJunctionEventHandler
+### IJunctionEventHandler
 
-```csharp
-// Trax.Effect.Services.TrainEventBroadcaster
+```csharp fragment
+// Trax.Effect.Services.TrainEventBroadcaster, in Trax.Effect
 public interface IJunctionEventHandler
 {
     Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct);
 }
 ```
 
-Register implementations in the container. Each message has a junction event type and a non-null
+Implementations are registered in the container. Each message has a junction event type and a non-null
 `Junction`. Junction events reach only these handlers, never an `ITrainEventHandler`.
 
 - On the host that runs the train, a handler is called on the run's path, resolved from the run's
@@ -151,54 +168,52 @@ Register implementations in the container. Each message has a junction event typ
   resolved from a fresh scope per message. A step this host published is not delivered to it twice.
 - Whatever it throws is logged and does not reach the run or the other handlers.
 
-## JunctionRun and ForRun
+### JunctionRun and ForRun
 
 Each stored step is a `JunctionRun` on `IDataContext.JunctionRuns`, with the payload's fields
-except `Decider`, plus `Id` and `MetadataId`. Read one run's steps, ordered by position, with
-`ForRun`:
+except `Decider`, plus `Id` and `MetadataId`. `ForRun` reads one run's steps, ordered by position:
 
-```csharp
-// Trax.Effect.Data.JunctionEvents
+```csharp fragment
 public static IOrderedQueryable<JunctionRun> ForRun(
     this IQueryable<JunctionRun> runs,
     long metadataId
 )
 ```
 
-```csharp
-var steps = await dataContext.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync(ct);
-```
-
 The API's `operations.junctionRuns` and the dashboard's timeline read through it too.
 
-## Remarks
+## Examples
 
-- Nothing it does can fail a run or change a junction's result: a failure to store, broadcast or
-  hand out a step is logged and swallowed.
-- A step is stored by a background writer, in order and in batches, through a data context of its
-  own, so the run never waits on the database. A full queue drops a step, counted and logged. A
-  junction whose end was dropped stays `InProgress` after its run has ended, so read a row's state
-  together with its run's.
-- A run's rows are deleted with its metadata row, by the foreign key's cascade.
-- Only `EffectJunction`s are steps. A junction skipped because an earlier one failed is not a step,
-  and a run that is not saved (no metadata row) publishes none.
-- A custom `ITrainEventBroadcaster` is handed every junction event too, on the run's path; it should
-  queue rather than wait, and may route steps apart from train events.
-- A run of a manifest carries its attempt: 1 plus the manifest's failed runs since its last
-  completed or cancelled one, read once when the run begins from the manifest's 1000 most recent
-  runs (a longer streak is reported as 1001) and waited on for at most a second. A failure to read it
-  leaves it out.
-- Junction events carry `FailureJunction` as null; the run's own `Failed` event names the junction.
-- With RabbitMQ, steps go to their own exchange, and after a failure there are dropped untried for a
-  backoff of one second doubling to a minute; see
-  [UseBroadcaster: RabbitMQ](/docs/sdk-reference/configuration/use-broadcaster#rabbitmq). With
-  SignalR, they reach clients only after
-  [`WithJunctionEvents()`](/docs/sdk-reference/configuration/use-signalr-hub#junction-events).
-
-## Package
-
-```
-dotnet add package Trax.Effect.Data
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .AddDecisionRecording()
+        .AddJunctionEvents()
+        .UseBroadcaster(b => b
+            .UseRabbitMq(rabbitMqConnectionString)
+            .UseSignalRHub(opts => opts.WithJunctionEvents()))
+    )
+    .AddMediator(typeof(IShipOrderTrain).Assembly)
+);
 ```
 
-The extension is in namespace `Trax.Effect.Data.Extensions`.
+One run's steps, read back:
+
+```csharp compile
+using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.JunctionEvents;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Models.JunctionRun;
+
+public class RunTimeline(IDataContext dataContext)
+{
+    public Task<List<JunctionRun>> StepsAsync(long metadataId, CancellationToken ct) =>
+        dataContext.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync(ct);
+}
+```
+
+## See also
+
+- [Junction Events](/docs/effect/junction-events)
+- [UseSignalRHub: Junction events](/docs/sdk-reference/configuration/use-signalr-hub#junction-events), [UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq)
