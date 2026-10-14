@@ -16,7 +16,7 @@ messages, is a field you add to the same root and feed from a lifecycle hook. Th
 
 Trax's subscription root is named `LifecycleSubscriptions`, so a type extension targets that name:
 
-```csharp compile
+```csharp compile=field
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
@@ -52,7 +52,7 @@ public class ChatSubscriptions
 
 Register the extension on the GraphQL builder:
 
-```csharp compile
+```csharp compile=field
 using Trax.Api.GraphQL.Extensions;
 
 builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscriptions>());
@@ -78,7 +78,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscrip
 Send to the topic from an [`ITrainLifecycleHook`](/docs/sdk-reference/configuration/add-lifecycle-hook)
 when the train whose result the feed carries completes:
 
-```csharp compile
+```csharp compile=hook
 using System.Text.Json;
 using HotChocolate.Subscriptions;
 using Trax.Effect.Models.Metadata;
@@ -106,7 +106,7 @@ public class ChatLifecycleHookFactory(IServiceProvider services) : ITrainLifecyc
 
 Register the hook with the effects:
 
-```csharp compile
+```csharp compile=hook
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;

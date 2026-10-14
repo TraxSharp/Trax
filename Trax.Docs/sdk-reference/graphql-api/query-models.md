@@ -475,8 +475,6 @@ public class ProfileDbContext(DbContextOptions<ProfileDbContext> options) : DbCo
 ```
 
 ```csharp compile
-builder.Services.AddDbContextFactory<GameDbContext>(options => options.UseNpgsql(connectionString));
-
 builder.Services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<GameDbContext>()
     .AddDbContext<InventoryDbContext>());

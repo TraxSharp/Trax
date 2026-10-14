@@ -40,10 +40,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
 3. Register the DbContext and enable model discovery:
 
-```csharp compile=qs
-using Microsoft.EntityFrameworkCore;
-using Trax.Api.GraphQL.Extensions;
-
+```csharp fragment
 builder.Services.AddDbContextFactory<GameDbContext>(options =>
     options.UseNpgsql(connectionString));
 
@@ -74,11 +71,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options)
 }
 ```
 
-```csharp compile=domain
-using Microsoft.EntityFrameworkCore;
-using Trax.Api.GraphQL.Extensions;
-using Trax.Effect.Data.Services.DomainContext;
-
+```csharp fragment
 builder.Services.AddDomainDataContext<IGameDbContext, GameDbContext>(o => o.UseNpgsql(connectionString));
 builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<GameDbContext>());
 ```

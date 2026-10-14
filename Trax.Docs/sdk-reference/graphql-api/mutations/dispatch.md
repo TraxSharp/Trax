@@ -39,6 +39,8 @@ For example, `IBanPlayerTrain` produces `banPlayer`.
 Given a train annotated with `[TraxMutation]`:
 
 ```csharp compile
+using Trax.Effect.Models.Manifest;
+
 public record BanPlayerInput : IManifestProperties
 {
     public required string PlayerId { get; init; }

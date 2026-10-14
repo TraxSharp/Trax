@@ -205,7 +205,7 @@ builder.Services
         .AddEffects(effects => effects
             .UsePostgres(builder.Configuration.GetConnectionString("TraxDatabase")!)
         )
-        .AddMediator(ServiceLifetime.Scoped, typeof(Program).Assembly)
+        .AddMediator(typeof(Program).Assembly)
     )
     .AddTraxGraphQL();
 
