@@ -6,15 +6,19 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 18
+package: Trax.Scheduler
+namespace: Trax.Scheduler.Extensions
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Extensions/SchedulerLivenessHealthCheckExtensions.cs
 ---
 
 # AddTraxSchedulerLiveness
 
-Registers an ASP.NET Core health check that reports unhealthy when the JobDispatcher has not completed a polling cycle within a threshold. Unlike a process or port probe, this catches a scheduler that is up but dispatching nothing. A cycle still running counts from when it began, and the check reports healthy while dispatch is paused or when the host runs no JobDispatcher (InMemory); see [Health & Liveness](/docs/scheduler/health-and-liveness#how-it-works).
+Registers an ASP.NET Core health check, through `SchedulerLivenessHealthCheckExtensions`, that reports unhealthy when the JobDispatcher has not completed a polling cycle within a threshold. Unlike a process or port probe, this catches a scheduler that is up but dispatching nothing. A cycle still running counts from when it began, and the check reports healthy while dispatch is paused or when the host runs no JobDispatcher (InMemory); see [Health & Liveness](/docs/scheduler/health-and-liveness#how-it-works).
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static IHealthChecksBuilder AddTraxSchedulerLiveness(
     this IHealthChecksBuilder builder,
     string name = "scheduler-liveness",
@@ -26,29 +30,38 @@ public static IHealthChecksBuilder AddTraxSchedulerLiveness(
 
 ## Parameters
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `name` | `string` | No | `scheduler-liveness` | The health check name |
-| `threshold` | `TimeSpan?` | No | `null` | Staleness threshold. When null, uses `SchedulerConfiguration.SchedulerLivenessThreshold`, falling back to `max(JobDispatcherPollingInterval * 10, 30s)` |
-| `failureStatus` | `HealthStatus` | No | `Unhealthy` | The status reported when stale |
-| `tags` | `IEnumerable<string>?` | No | `null` | Tags for filtering health checks |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `string` | `scheduler-liveness` | The health check name |
+| `threshold` | `TimeSpan?` | `null` | Staleness threshold. When null, uses `SchedulerConfiguration.SchedulerLivenessThreshold`, falling back to `max(JobDispatcherPollingInterval * 10, 30s)` |
+| `failureStatus` | `HealthStatus` | `Unhealthy` | The status reported when stale |
+| `tags` | `IEnumerable<string>?` | `null` | Tags for filtering health checks |
 
 ## Returns
 
 `IHealthChecksBuilder`, for continued fluent chaining.
 
-## Example
+## Behavior
 
-```csharp
+- The scheduler registers the underlying `ISchedulerLivenessMonitor` automatically. The JobDispatcher's polling loop stamps it after each successful cycle, including empty no-op polls. The interface only exposes `StartedAt` and `LastDispatchCompletedAt`; recording a cycle is internal to the dispatcher.
+- Before the first cycle completes, the check measures from scheduler startup, so a cold start is healthy within the grace window but a scheduler that never dispatches still trips.
+- The check writes `lastDispatchCompletedAt`, `ageSeconds`, and `thresholdSeconds` into its result `data`.
+- The threshold can also be set on the scheduler builder with `.SchedulerLivenessThreshold(TimeSpan)`; the `threshold` argument here overrides it.
+
+## Examples
+
+```csharp compile
 builder.Services.AddHealthChecks().AddTraxSchedulerLiveness();
 
-var app = builder.Build();
-app.MapHealthChecks("/health");
+var host = builder.Build();
+host.MapHealthChecks("/health");
 ```
 
 With a custom threshold and a degraded (non-failing) status:
 
-```csharp
+```csharp compile
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+
 builder.Services
     .AddHealthChecks()
     .AddTraxSchedulerLiveness(
@@ -58,14 +71,7 @@ builder.Services
     );
 ```
 
-## Remarks
-
-- The scheduler registers the underlying `ISchedulerLivenessMonitor` automatically. The JobDispatcher's polling loop stamps it after each successful cycle, including empty no-op polls. The interface only exposes `StartedAt` and `LastDispatchCompletedAt`; recording a cycle is internal to the dispatcher.
-- Before the first cycle completes, the check measures from scheduler startup, so a cold start is healthy within the grace window but a scheduler that never dispatches still trips.
-- The check writes `lastDispatchCompletedAt`, `ageSeconds`, and `thresholdSeconds` into its result `data`.
-- The threshold can also be set on the scheduler builder with `.SchedulerLivenessThreshold(TimeSpan)`; the `threshold` argument here overrides it.
-
-## See Also
+## See also
 
 - [Scheduler Health & Liveness](/docs/scheduler/health-and-liveness)
 - [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
