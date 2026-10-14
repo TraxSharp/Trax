@@ -6,17 +6,20 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 22
+package: Trax.Scheduler
+namespace: Trax.Scheduler.Services.LogLevels
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/LogLevels/ILogLevelService.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/LogLevels/LogLevelService.cs
 ---
 
 # ILogLevelService
 
 Reads and sets, at runtime, the log level of each category the host configures under `Logging:LogLevel`. The dashboard's server settings and the GraphQL API both call it, so the two read the same levels and change them the same way. Registered as a singleton by `AddScheduler(...)`.
 
-A level set here is applied to the host's `LoggerFilterOptions` as a post-configure step, and the options are signalled to change, so the logger factory re-reads its filters at once. The level sits over every configuration source and survives a reload of the host's configuration. Nothing is persisted: it lasts until the process restarts, and it changes the logging of the process that served the call only, not of the other processes of the deployment.
-
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Scheduler.Services.LogLevels;
 
 public interface ILogLevelService
@@ -29,6 +32,13 @@ public record CategoryLogLevel(string Category, LogLevel Level, string? Configur
 public record LogLevelChange(string Category, LogLevel Level);
 public record LogLevelUpdateResult(bool Success, int Count, IReadOnlyList<string> NotApplied, string Message);
 ```
+
+## Members
+
+| Member | Description |
+|--------|-------------|
+| [`GetLogLevels()`](#getloglevels) | The level of every configured category |
+| [`SetLogLevels(levels)`](#setloglevels) | Sets categories' levels, all or none |
 
 ## GetLogLevels
 
@@ -49,8 +59,27 @@ Only a category configured under `Logging:LogLevel`, or one set here before, can
 
 On success `Count` is the number of categories set. `NotApplied` lists any whose loggers still filter at another level, which happens when the host adds its own filter rule for the category after Trax; the message names them too.
 
-## Package
+## Behavior
 
+A level set here is applied to the host's `LoggerFilterOptions` as a post-configure step, and the
+options are signalled to change, so the logger factory re-reads its filters at once. The level sits
+over every configuration source and survives a reload of the host's configuration. Nothing is
+persisted: it lasts until the process restarts, and it changes the logging of the process that
+served the call only, not of the other processes of the deployment.
+
+## Example
+
+```csharp compile
+using Trax.Scheduler.Services.LogLevels;
+
+public class VerboseTrax(ILogLevelService logLevels)
+{
+    public LogLevelUpdateResult TurnOn() =>
+        logLevels.SetLogLevels([new LogLevelChange("Trax", LogLevel.Debug)]);
+}
 ```
-dotnet add package Trax.Scheduler
-```
+
+## See also
+
+- [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service)
+- [Dashboard](/docs/dashboard)
