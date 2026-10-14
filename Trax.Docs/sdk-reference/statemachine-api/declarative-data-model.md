@@ -1,6 +1,6 @@
 ---
 title: Declarative data model
-description: "Reference for the data types behind declarative state machines: Rule, Reduction, SetStep, ValueSource, the context schema, DeclarativeModel and the engine definition."
+description: "Reference for the data types behind declarative state machines: Rule, Reduction, SetStep, ValueSource, the context schema and DeclarativeModel."
 type: reference
 area: machines
 parent: State Machine API

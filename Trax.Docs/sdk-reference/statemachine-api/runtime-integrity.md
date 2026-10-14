@@ -1,6 +1,6 @@
 ---
 title: Runtime integrity
-description: "Reference for the runtime checks that catch drift between a C# state machine and its TypeScript twin: schema-hash handshake, divergence detection and self-check."
+description: "Reference for the runtime checks that catch drift between a C# machine and its TypeScript twin: schema-hash handshake, divergence detection and self-check."
 type: reference
 area: machines
 parent: State Machine API

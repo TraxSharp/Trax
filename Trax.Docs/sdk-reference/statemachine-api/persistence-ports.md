@@ -1,6 +1,6 @@
 ---
 title: Persistence ports
-description: "Reference for the state machine persistence ports: ISnapshotPrincipal, ISnapshotStore, StoredSnapshot, ISnapshotDraftService, Actor, the claim store and the EF stores."
+description: "Reference for the state machine persistence ports: ISnapshotPrincipal, ISnapshotStore, StoredSnapshot, ISnapshotDraftService, the claim store, EF stores."
 type: reference
 area: machines
 parent: State Machine API

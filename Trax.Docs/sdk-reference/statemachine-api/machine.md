@@ -1,15 +1,13 @@
 ---
 title: Machine
-description: "Reference for Machine<TState, TTrigger> and its builders: IMachineBuilder, IStateBuilder, IInvokeBuilder, ITransitionBuilder, IDifferentialBuilder, rules and IR export."
+description: "Reference for Machine<TState, TTrigger> and its builders: IMachineBuilder, IStateBuilder, IInvokeBuilder, ITransitionBuilder, rules and IR export."
 type: reference
 area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 2
 package: Trax.Effect.StateMachine.Persistence
-namespace:
-  - Trax.Effect.StateMachine.Persistence
-  - Trax.Effect.StateMachine
+namespace: Trax.Effect.StateMachine.Persistence
 source:
   - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Machine.cs
   - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
