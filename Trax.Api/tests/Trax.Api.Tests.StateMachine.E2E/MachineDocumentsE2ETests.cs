@@ -346,8 +346,19 @@ public class MachineDocumentsE2ETests
     [Test]
     public async Task Unknown_reserved_prefix_ids_read_the_store_at_most_once_per_refresh_interval()
     {
-        // allowed-delay: lets a background read another test's made-up ids asked for finish before counting.
-        await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 2);
+        // A background read that another test's made-up ids asked for may still be due: count from once the reads
+        // have stayed put for longer than a refresh interval.
+        var settle = System.Diagnostics.Stopwatch.StartNew();
+        int settled;
+        do
+        {
+            settle
+                .Elapsed.Should()
+                .BeLessThan(E2EWait.DefaultTimeout, "the background reads settle");
+            settled = _reads.Count;
+            // measuring-interval: a read still due runs within one refresh interval of the miss that asked for it.
+            await Task.Delay(MachineDocumentRegistry.MinRefreshInterval * 1.5);
+        } while (_reads.Count != settled);
 
         // An ordinary unknown id, remembered as a miss: it must still be remembered afterwards.
         const string Plain = "plain_unknown_v1";

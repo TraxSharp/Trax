@@ -52,6 +52,7 @@ public class TraxAuditWriterTests
         {
             if (predicate())
                 return;
+            // determinism: the poll interval of a wait bounded by the deadline above.
             await Task.Delay(20);
         }
     }
@@ -373,7 +374,7 @@ public class TraxAuditWriterTests
             sink,
             new TraxAuditOptions
             {
-                BatchSize = 50,
+                BatchSize = 1,
                 FlushInterval = TimeSpan.FromSeconds(60),
                 ChannelCapacity = 100,
             }
@@ -381,12 +382,18 @@ public class TraxAuditWriterTests
         using (sp)
         {
             await writer.StartAsync(CancellationToken.None);
-            // Don't enqueue anything. Stop the writer; the empty-batch waiting
-            // path inside DrainBatchAsync should yield without error.
-            await Task.Delay(150);
-            await writer.StopAsync(CancellationToken.None);
+            // One entry written proves the loop ran; after it the channel is quiet and the loop
+            // waits on it. Stopping then must end that wait without handing the sink an empty batch.
+            channel.TryEnqueue(SampleEntry("only"));
+            await WaitUntilAsync(() => sink.Batches.Count >= 1, TimeSpan.FromSeconds(10));
+            sink.Batches.Should().ContainSingle("the loop ran and wrote the one entry");
 
-            sink.Batches.Should().BeEmpty();
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await writer.StopAsync(shutdown.Token);
+
+            writer.ExecuteTask!.IsCompletedSuccessfully.Should().BeTrue("the quiet loop ended");
+            sink.Batches.Should().ContainSingle("a quiet channel flushes nothing on stop");
+            channel.TotalDropped.Should().Be(0);
         }
     }
 
@@ -487,6 +494,7 @@ public class TraxAuditWriterTests
             Entered.TrySetResult();
             try
             {
+                // determinism: waits for the cancellation, never for a duration.
                 await Task.Delay(Timeout.InfiniteTimeSpan, ct);
             }
             finally

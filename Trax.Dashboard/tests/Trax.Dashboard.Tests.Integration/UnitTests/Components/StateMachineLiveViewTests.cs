@@ -87,8 +87,7 @@ public class StateMachineLiveViewTests
         var loads = _calls.CallsTo(nameof(IOperationsService.GetMachineInstanceAsync)).Count;
 
         page.WaitForAssertion(
-            () =>
-                _calls.CallsTo(Watch).Should().NotBeEmpty("the page follows the feed, per " + Adr),
+            () => _feed.Opened.Should().Be(1, "the page follows the feed, per " + Adr),
             WaitTimeout
         );
         _feed.Publish(Record(row, "Shipping", revision: 5));
@@ -109,7 +108,7 @@ public class StateMachineLiveViewTests
         var row = await SeedAsync("Running");
         var page = RenderDetail(row.Id);
         page.WaitForAssertion(() => page.Markup.Should().Contain("Running"), WaitTimeout);
-        page.WaitForAssertion(() => _calls.CallsTo(Watch).Should().NotBeEmpty(), WaitTimeout);
+        page.WaitForAssertion(() => _feed.Opened.Should().Be(1), WaitTimeout);
         var loads = _calls.CallsTo(nameof(IOperationsService.GetMachineInstanceAsync)).Count;
 
         _feed.Publish(Record(row, "", revision: 0) with { Reload = true });
@@ -169,13 +168,9 @@ public class StateMachineLiveViewTests
         });
         page.WaitForAssertion(
             () =>
-                _calls
-                    .CallsTo(Watch)
-                    .Should()
-                    .HaveCount(
-                        2,
-                        "the page and the subscription each follow the one feed, per " + Adr
-                    ),
+                _feed
+                    .Opened.Should()
+                    .Be(2, "the page and the subscription each follow the one feed, per " + Adr),
             WaitTimeout
         );
 
@@ -207,10 +202,10 @@ public class StateMachineLiveViewTests
 
         _ctx.DisposeComponents();
 
-        page.WaitForAssertion(
-            () => _feed.Closed.Should().Be(1, "leaving the page ends its subscription"),
-            WaitTimeout
-        );
+        // Not page.WaitForAssertion: a disposed page renders no more, so it would check only once.
+        (await _feed.ClosedAsync(1, WaitTimeout))
+            .Should()
+            .BeTrue("leaving the page ends its subscription");
     }
 
     [Test]
@@ -230,16 +225,9 @@ public class StateMachineLiveViewTests
 
         auth.SetRoles();
 
-        page.WaitForAssertion(
-            () =>
-                _feed
-                    .Closed.Should()
-                    .Be(
-                        1,
-                        "the circuit re-checks its operator and stops listening once the role is gone"
-                    ),
-            WaitTimeout
-        );
+        (await _feed.ClosedAsync(1, WaitTimeout))
+            .Should()
+            .BeTrue("the circuit re-checks its operator and stops listening once the role is gone");
         _feed.Publish(Record(row, "Shipped", revision: 3));
         page.Markup.Should().NotContain("Shipped", "nothing reaches a circuit that lost the role");
     }
@@ -321,12 +309,39 @@ public class StateMachineLiveViewTests
         private readonly List<Channel<MachineInstanceRecord>> _open = [];
         private int _opened;
         private int _closed;
+        private TaskCompletionSource _closing = NewClosing();
 
         /// <summary>Streams opened so far.</summary>
         public int Opened => Volatile.Read(ref _opened);
 
         /// <summary>Streams ended so far, by cancellation or disposal.</summary>
         public int Closed => Volatile.Read(ref _closed);
+
+        /// <summary>Whether <paramref name="count"/> streams have ended within <paramref name="timeout"/>.</summary>
+        public async Task<bool> ClosedAsync(int count, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (true)
+            {
+                var closing = Volatile.Read(ref _closing);
+                if (Closed >= count)
+                    return true;
+                var remaining = deadline - DateTime.UtcNow;
+                if (remaining <= TimeSpan.Zero)
+                    return false;
+                try
+                {
+                    await closing.Task.WaitAsync(remaining);
+                }
+                catch (TimeoutException)
+                {
+                    return Closed >= count;
+                }
+            }
+        }
+
+        private static TaskCompletionSource NewClosing() =>
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public void Publish(MachineInstanceRecord record)
         {
@@ -355,6 +370,7 @@ public class StateMachineLiveViewTests
                 lock (_open)
                     _open.Remove(channel);
                 Interlocked.Increment(ref _closed);
+                Interlocked.Exchange(ref _closing, NewClosing()).TrySetResult();
             }
         }
     }

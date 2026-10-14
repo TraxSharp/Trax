@@ -125,6 +125,15 @@ public class RequeueAllJobTests
             () => page.Find(".cs-requeue-all-progress").Should().NotBeNull(),
             WaitTimeout
         );
+        // The fold runs on Task.Run, so it calls the scheduler some time after the page shows the job.
+        page.WaitForAssertion(
+            () =>
+                _scheduler
+                    .CallsTo(nameof(ITraxScheduler.RequeueAllDeadLettersAsync))
+                    .Should()
+                    .ContainSingle(),
+            WaitTimeout
+        );
         var progress =
             (IProgress<int>)
                 _scheduler.CallsTo(nameof(ITraxScheduler.RequeueAllDeadLettersAsync)).Single()[1]!;
@@ -205,10 +214,14 @@ public class RequeueAllJobTests
                     ),
             WaitTimeout
         );
-        _scheduler
-            .CallsTo(nameof(ITraxScheduler.RequeueAllDeadLettersAsync))
-            .Should()
-            .ContainSingle();
+        page.WaitForAssertion(
+            () =>
+                _scheduler
+                    .CallsTo(nameof(ITraxScheduler.RequeueAllDeadLettersAsync))
+                    .Should()
+                    .ContainSingle(),
+            WaitTimeout
+        );
     }
 
     [Test]

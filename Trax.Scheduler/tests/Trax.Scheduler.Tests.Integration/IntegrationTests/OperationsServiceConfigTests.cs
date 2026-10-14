@@ -306,10 +306,17 @@ public class OperationsServiceConfigTests : TestSetup
                 .NullLogger<SchedulerConfigBootstrapHostedService>
                 .Instance
         );
+        // Started, it keeps refreshing until stopped, so it is stopped before the next test.
         await hosted.StartAsync(CancellationToken.None);
-
-        _cfg.MaxActiveJobs.Should().Be(77);
-        _cfg.DefaultMaxRetries.Should().Be(13);
+        try
+        {
+            _cfg.MaxActiveJobs.Should().Be(77);
+            _cfg.DefaultMaxRetries.Should().Be(13);
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
     }
 
     [Test]
@@ -327,8 +334,14 @@ public class OperationsServiceConfigTests : TestSetup
                 .Instance
         );
         await hosted.StartAsync(CancellationToken.None);
-
-        _cfg.DefaultMaxRetries.Should().Be(99);
+        try
+        {
+            _cfg.DefaultMaxRetries.Should().Be(99);
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
     }
 
     [Test]
@@ -586,28 +599,34 @@ public class OperationsServiceConfigTests : TestSetup
         var hosted = new SchedulerConfigBootstrapHostedService(Scope.ServiceProvider, logger);
 
         await hosted.StartAsync(CancellationToken.None);
-
-        _cfg.ManifestManagerPollingInterval.Should()
-            .Be(TimeSpan.FromSeconds(5), "an unusable persisted interval is not applied");
-        _cfg.MaxActiveJobs.Should().Be(10);
-        _cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
-        _cfg.JobDispatcherPollingInterval.Should()
-            .Be(TimeSpan.FromSeconds(3), "the usable values in the same row still apply");
-        _cfg.DefaultMaxRetries.Should().Be(6);
-
-        var startPoller = () =>
+        try
         {
-            using var timer = new PeriodicTimer(_cfg.ManifestManagerPollingInterval);
-        };
-        startPoller
-            .Should()
-            .NotThrow("the ManifestManager poller builds its timer from this value at boot");
+            _cfg.ManifestManagerPollingInterval.Should()
+                .Be(TimeSpan.FromSeconds(5), "an unusable persisted interval is not applied");
+            _cfg.MaxActiveJobs.Should().Be(10);
+            _cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
+            _cfg.JobDispatcherPollingInterval.Should()
+                .Be(TimeSpan.FromSeconds(3), "the usable values in the same row still apply");
+            _cfg.DefaultMaxRetries.Should().Be(6);
 
-        logger
-            .Warnings.Should()
-            .Contain(w => w.Contains("ManifestManagerPollingInterval"))
-            .And.Contain(w => w.Contains("MaxActiveJobs"))
-            .And.Contain(w => w.Contains("StalePendingTimeout"));
+            var startPoller = () =>
+            {
+                using var timer = new PeriodicTimer(_cfg.ManifestManagerPollingInterval);
+            };
+            startPoller
+                .Should()
+                .NotThrow("the ManifestManager poller builds its timer from this value at boot");
+
+            logger
+                .Warnings.Should()
+                .Contain(w => w.Contains("ManifestManagerPollingInterval"))
+                .And.Contain(w => w.Contains("MaxActiveJobs"))
+                .And.Contain(w => w.Contains("StalePendingTimeout"));
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
     }
 
     [Test]

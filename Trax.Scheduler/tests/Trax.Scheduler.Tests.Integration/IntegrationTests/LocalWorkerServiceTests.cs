@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -62,7 +63,6 @@ public class LocalWorkerServiceTests : TestSetup
         var jobId = job.Id;
 
         // Act - Start a single worker and wait for it to process the job
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -80,18 +80,9 @@ public class LocalWorkerServiceTests : TestSetup
         );
 
         // Start the worker and wait for it to process the job
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var executed = await WaitForJobAbsent(jobId, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected on cancellation
-        }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - The job should have been executed and deleted
         executed.Should().BeTrue("job should be deleted after execution");
@@ -128,7 +119,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act - Start worker
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -143,7 +133,7 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var advanced = await WaitUntilAsync(
             async ct =>
             {
@@ -155,13 +145,7 @@ public class LocalWorkerServiceTests : TestSetup
             },
             WorkerCompletionTimeout
         );
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - Metadata should be updated by the train execution
         advanced.Should().BeTrue("the train should have advanced past Pending");
@@ -191,7 +175,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -206,15 +189,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var executed = await WaitForJobAbsent(jobId, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert
         executed.Should().BeTrue("job should be deleted after successful execution");
@@ -238,7 +215,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -253,15 +229,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var executed = await WaitForJobAbsent(jobId, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - Job should be deleted even on failure (matches AutoDeleteOnSuccessFilter behavior)
         executed.Should().BeTrue("job should be deleted even after failed execution");
@@ -422,6 +392,73 @@ public class LocalWorkerServiceTests : TestSetup
         }
     }
 
+    /// <summary>
+    /// Counts the scopes the worker opens from the fixture's container. A poll opens one for its
+    /// claim, so with an empty queue the count is the number of polls.
+    /// </summary>
+    private sealed class ScopeCounter(IServiceProvider inner)
+        : IServiceProvider,
+            IServiceScopeFactory
+    {
+        private readonly Lock _gate = new();
+        private readonly List<(int Target, TaskCompletionSource Reached)> _waiters = [];
+        private int _count;
+
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IServiceScopeFactory) ? this : inner.GetService(serviceType);
+
+        public IServiceScope CreateScope()
+        {
+            lock (_gate)
+            {
+                _count++;
+                foreach (var waiter in _waiters.Where(w => w.Target <= _count).ToList())
+                {
+                    waiter.Reached.TrySetResult();
+                    _waiters.Remove(waiter);
+                }
+            }
+            return inner.CreateScope();
+        }
+
+        public Task WhenReached(int target)
+        {
+            lock (_gate)
+            {
+                if (_count >= target)
+                    return Task.CompletedTask;
+                var reached = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously
+                );
+                _waiters.Add((target, reached));
+                return reached.Task;
+            }
+        }
+    }
+
+    /// <summary>Keeps every error the worker logs.</summary>
+    private sealed class ErrorLogger : ILogger<LocalWorkerService>
+    {
+        public ConcurrentQueue<string> Errors { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel >= LogLevel.Error)
+                Errors.Enqueue(formatter(state, exception));
+        }
+    }
+
     #endregion
 
     #region No Work Available Tests
@@ -429,10 +466,12 @@ public class LocalWorkerServiceTests : TestSetup
     [Test]
     public async Task Worker_WithNoJobs_PollsAndWaits()
     {
-        // Arrange - No jobs in the queue
+        // Arrange - No jobs in the queue. Each poll opens a scope for its claim, so counting
+        // scopes counts polls; an empty poll leaves no other trace.
+        var polls = new ScopeCounter(Scope.ServiceProvider);
+        var logger = new ErrorLogger();
 
         // Act - Start worker with short polling interval
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -440,28 +479,20 @@ public class LocalWorkerServiceTests : TestSetup
         };
 
         var workerService = new LocalWorkerService(
-            Scope.ServiceProvider,
+            polls,
             options,
             new CancellationRegistry(),
-            Scope.ServiceProvider.GetRequiredService<ILogger<LocalWorkerService>>(),
+            logger,
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
-        await Task.Delay(500); // Let it poll a few times
-        cts.Cancel();
+        await workerService.StartAsync(CancellationToken.None);
+        await polls.WhenReached(3).WaitAsync(WorkerCompletionTimeout);
+        var stop = async () => await workerService.StopAsync(CancellationToken.None);
 
-        // Assert - Should complete without errors
-        var act = async () =>
-        {
-            try
-            {
-                await workerTask;
-            }
-            catch (OperationCanceledException) { }
-        };
-
-        await act.Should().NotThrowAsync();
+        // Assert - it polled the empty queue more than once, without errors, and stops cleanly
+        await stop.Should().NotThrowAsync();
+        logger.Errors.Should().BeEmpty("an empty queue is not an error");
     }
 
     #endregion
@@ -483,7 +514,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act - Start worker with a very short visibility timeout (1 second)
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -499,15 +529,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var executed = await WaitForJobAbsent(jobId, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - The stale job should have been reclaimed and executed (then deleted)
         executed.Should().BeTrue("stale job should be reclaimed and executed");
@@ -530,8 +554,18 @@ public class LocalWorkerServiceTests : TestSetup
         var jobId = job.Id;
         DataContext.Reset();
 
+        // A claimable job beside it. Once the worker has run it, at least one claim has looked
+        // at the recently claimed job and passed it by.
+        var sentinelMetadata = await CreateMetadataForTestTrain();
+        var sentinel = BackgroundJob.Create(
+            new CreateBackgroundJob { MetadataId = sentinelMetadata.Id }
+        );
+        await DataContext.Track(sentinel);
+        await DataContext.SaveChanges(CancellationToken.None);
+        var sentinelId = sentinel.Id;
+        DataContext.Reset();
+
         // Act - Start worker with default visibility timeout (30m)
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -547,17 +581,12 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
-        await Task.Delay(500);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StartAsync(CancellationToken.None);
+        var polled = await WaitForJobAbsent(sentinelId, WorkerCompletionTimeout);
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - The recently claimed job should NOT be reclaimed
+        polled.Should().BeTrue("the worker should have claimed and run the claimable job");
         DataContext.Reset();
         var remainingJob = await DataContext.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId);
         remainingJob.Should().NotBeNull("recently claimed job should not be reclaimed");
@@ -586,7 +615,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act - Start multiple workers
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 3,
@@ -601,15 +629,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - All jobs should have been processed and deleted
         drained.Should().BeTrue("all jobs should be processed and deleted");
@@ -636,7 +658,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act - Start single worker with BatchSize=1 (default)
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -652,19 +673,13 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         // Poll for queue drain instead of waiting a fixed wall-clock duration.
         // 5 jobs at 100ms polling needs ~500ms minimum, but CI scheduling can stretch
         // each job's effect-runner pass well past that. Generous upper bound prevents
         // flake without slowing the happy case.
         var drained = await WaitForJobCount(0, TimeSpan.FromSeconds(15));
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - All 5 jobs should have been processed
         drained.Should().BeTrue("all jobs should be processed with BatchSize=1");
@@ -703,6 +718,8 @@ public class LocalWorkerServiceTests : TestSetup
             DataContext.Reset();
             if (await predicate(cts.Token))
                 return true;
+            // allowed-delay: poll interval while awaiting the completion signal, bounded by the
+            // timeout above. Not a fixed wait for the work to finish.
             await Task.Delay(50, cts.Token);
         }
         return false;
@@ -738,7 +755,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act - Start single worker with BatchSize=5
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -754,15 +770,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - All 10 jobs should have been processed
         drained.Should().BeTrue("all jobs should be processed with BatchSize=5");
@@ -785,7 +795,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -801,15 +810,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - All 3 available jobs should be processed
         drained
@@ -855,7 +858,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -870,15 +872,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var executed = await WaitForJobAbsent(jobId, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - Job should be executed and deleted
         executed.Should().BeTrue("job with input should be executed and deleted");
@@ -920,7 +916,9 @@ public class LocalWorkerServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
-        await Task.Delay(50); // ensure distinct created_at
+        // determinism: spaces the created_at timestamps so the FIFO tiebreak cannot hide a
+        // priority-ordering bug. Nothing here waits for work to finish.
+        await Task.Delay(50);
 
         var metaMed = await CreateMetadataForManifest(manifest);
         var jobMed = BackgroundJob.Create(
@@ -936,6 +934,7 @@ public class LocalWorkerServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // determinism: spaces the created_at timestamps so the claim order is defined.
         await Task.Delay(50);
 
         var metaHigh = await CreateMetadataForManifest(manifest);
@@ -953,7 +952,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act - Single worker with BatchSize=3 claims all at once
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -969,15 +967,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - All jobs processed; high-priority should complete first (sequential in batch)
         drained.Should().BeTrue("all jobs should be processed");
@@ -1035,6 +1027,7 @@ public class LocalWorkerServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // determinism: spaces the created_at timestamps so the claim order is defined.
         await Task.Delay(50);
 
         var meta2 = await CreateMetadataForManifest(manifest);
@@ -1051,6 +1044,7 @@ public class LocalWorkerServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // determinism: spaces the created_at timestamps so the claim order is defined.
         await Task.Delay(50);
 
         var meta3 = await CreateMetadataForManifest(manifest);
@@ -1068,7 +1062,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -1084,15 +1077,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - FIFO within same priority: job1 completes before job2 before job3
         drained.Should().BeTrue("all jobs should be processed");
@@ -1157,6 +1144,7 @@ public class LocalWorkerServiceTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
 
+        // determinism: the high-priority job is created later, so priority alone must decide.
         await Task.Delay(100);
 
         var metaHigh = await CreateMetadataForManifest(manifest);
@@ -1174,7 +1162,6 @@ public class LocalWorkerServiceTests : TestSetup
         DataContext.Reset();
 
         // Act
-        using var cts = new CancellationTokenSource();
         var options = new LocalWorkerOptions
         {
             WorkerCount = 1,
@@ -1190,15 +1177,9 @@ public class LocalWorkerServiceTests : TestSetup
             Scope.ServiceProvider.GetRequiredService<ISqlDialect>()
         );
 
-        var workerTask = workerService.StartAsync(cts.Token);
+        await workerService.StartAsync(CancellationToken.None);
         var drained = await WaitForJobCount(0, WorkerCompletionTimeout);
-        cts.Cancel();
-
-        try
-        {
-            await workerTask;
-        }
-        catch (OperationCanceledException) { }
+        await workerService.StopAsync(CancellationToken.None);
 
         // Assert - High priority job should complete first despite being created later
         drained.Should().BeTrue("all jobs should be processed");

@@ -485,34 +485,43 @@ public class TraxCallerAttackVectorE2ETests
     [Test]
     public async Task AsyncLocalIsolation_ParallelRequest_DoesNotSeeTrust()
     {
-        // Request A holds a trusted scope open for 500ms. Request B fires
-        // mid-flight and must NOT observe IsTrusted=true. AsyncLocal flows
-        // along one logical async stack and ASP.NET Core gives each request
-        // its own execution context — but a regression that promoted the
-        // scope to a singleton or to a static would break this.
+        // Request A holds a trusted scope open until B has read. B fires once A
+        // says its scope is open and must NOT observe IsTrusted=true. AsyncLocal
+        // flows along one logical async stack and ASP.NET Core gives each request
+        // its own execution context — but a regression that promoted the scope to
+        // a singleton or to a static would break this.
         using var host = await StartAsync(Schemes.ApiKey);
 
+        var key = Guid.NewGuid().ToString("N");
+        var hold = TrustedHold.For(key);
         var holdTask = host.PostGraphQLAsync(
-            "mutation { holdTrustedFor(millis: 500) }",
+            $"mutation {{ holdTrustedUntilReleased(key: \"{key}\") }}",
             req => req.Headers.Add("X-Api-Key", AdminApiKey)
         );
 
-        // Give A a moment to enter the scope before B fires. Not a fixed
-        // sleep — poll the in-scope holdTrustedFor's completion async, and
-        // race the parallel WhoAmI against it.
-        await Task.Delay(50);
+        try
+        {
+            await Task.WhenAny(hold.Entered.Task, holdTask).WaitAsync(TimeSpan.FromSeconds(15));
+            hold.Entered.Task.IsCompleted.Should().BeTrue("request A opened its trusted scope");
 
-        using var parallelDoc = await host.PostGraphQLAsync(WhoAmIQuery);
-        AssertNoErrors(parallelDoc);
-        IsTrusted(parallelDoc)
-            .Should()
-            .BeFalse("a concurrent unrelated request must NOT see another request's trusted scope");
+            using var parallelDoc = await host.PostGraphQLAsync(WhoAmIQuery);
+            AssertNoErrors(parallelDoc);
+            IsTrusted(parallelDoc)
+                .Should()
+                .BeFalse(
+                    "a concurrent unrelated request must NOT see another request's trusted scope"
+                );
+        }
+        finally
+        {
+            hold.Released.TrySetResult();
+        }
 
         using var holdDoc = await holdTask;
         AssertNoErrors(holdDoc);
         holdDoc
             .RootElement.GetProperty("data")
-            .GetProperty("holdTrustedFor")
+            .GetProperty("holdTrustedUntilReleased")
             .GetBoolean()
             .Should()
             .BeTrue("the holding request must observe its own scope as trusted");

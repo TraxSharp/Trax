@@ -222,6 +222,10 @@ public class SnapshotChangeListenerTests
         var feed = (await Listen()).Single();
         var unwatched = await Seed();
         var marker = await Seed();
+        // Each insert sends a notice; hear them out so the marker heard below follows the forged notice.
+        (await feed.Hears(marker, HearWithin))
+            .Should()
+            .BeTrue("the insert's own notice is handed on");
         var before = _counting!.Count;
 
         await SnapshotNotices.Notify(SnapshotNotices.Channel, unwatched.ToString());
@@ -259,6 +263,10 @@ public class SnapshotChangeListenerTests
 
         var feed = (await Listen()).Single();
         var marker = await Seed();
+        // The insert sends a notice; hear it out so the marker heard below follows the junk.
+        (await feed.Hears(marker, HearWithin))
+            .Should()
+            .BeTrue("the insert's own notice is handed on");
 
         await SnapshotNotices.Notify(SnapshotNotices.Channel, "junk");
         await Touch(marker);

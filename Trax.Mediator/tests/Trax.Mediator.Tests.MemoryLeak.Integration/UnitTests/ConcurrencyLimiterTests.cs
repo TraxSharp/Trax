@@ -37,6 +37,7 @@ public class ConcurrencyLimiterTests
         var permit2 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
         // Third acquire should block
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var acquireTask = limiter.AcquireAsync(TrainA, CancellationToken.None);
         var completed = await Task.WhenAny(acquireTask, Task.Delay(200));
 
@@ -58,6 +59,7 @@ public class ConcurrencyLimiterTests
         var permit1 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
         // Second acquire blocks
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var acquireTask = limiter.AcquireAsync(TrainA, CancellationToken.None);
         var blocked = await Task.WhenAny(acquireTask, Task.Delay(100));
         blocked.Should().NotBe(acquireTask);
@@ -65,10 +67,9 @@ public class ConcurrencyLimiterTests
         // Release the first permit
         permit1.Dispose();
 
-        // Now second should complete quickly
-        var permit2 = await Task.WhenAny(acquireTask, Task.Delay(1000));
-        permit2.Should().Be(acquireTask, "acquire should complete after dispose");
-        acquireTask.Result.Dispose();
+        // Now second should complete
+        var permit2 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10));
+        permit2.Dispose();
     }
 
     [Test]
@@ -87,26 +88,25 @@ public class ConcurrencyLimiterTests
         var acquireA = limiter.AcquireAsync(TrainA, CancellationToken.None);
         var acquireB = limiter.AcquireAsync(TrainB, CancellationToken.None);
 
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var blockedA = await Task.WhenAny(acquireA, Task.Delay(100));
         blockedA.Should().NotBe(acquireA);
 
+        // negative-wait: as above, for TrainB.
         var blockedB = await Task.WhenAny(acquireB, Task.Delay(100));
         blockedB.Should().NotBe(acquireB);
 
         // Release A — only A unblocks
         permitA.Dispose();
-        var completedA = await Task.WhenAny(acquireA, Task.Delay(1000));
-        completedA.Should().Be(acquireA);
-        acquireA.Result.Dispose();
+        (await acquireA.WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
 
         // B still blocked
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var stillBlockedB = await Task.WhenAny(acquireB, Task.Delay(100));
         stillBlockedB.Should().NotBe(acquireB);
 
         permitB.Dispose();
-        var completedB = await Task.WhenAny(acquireB, Task.Delay(1000));
-        completedB.Should().Be(acquireB);
-        acquireB.Result.Dispose();
+        (await acquireB.WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
     }
 
     #endregion
@@ -122,6 +122,7 @@ public class ConcurrencyLimiterTests
         var permit2 = await limiter.AcquireAsync(TrainB, CancellationToken.None);
 
         // Global limit of 2 reached — third from any train should block
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var acquireTask = limiter.AcquireAsync(TrainA, CancellationToken.None);
         var completed = await Task.WhenAny(acquireTask, Task.Delay(200));
 
@@ -130,9 +131,8 @@ public class ConcurrencyLimiterTests
         permit1.Dispose();
 
         // Now should complete
-        var permit3 = await Task.WhenAny(acquireTask, Task.Delay(1000));
-        permit3.Should().Be(acquireTask);
-        acquireTask.Result.Dispose();
+        var permit3 = await acquireTask.WaitAsync(TimeSpan.FromSeconds(10));
+        permit3.Dispose();
         permit2.Dispose();
     }
 
@@ -146,6 +146,7 @@ public class ConcurrencyLimiterTests
         var permit2 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
 
         // Per-train has 3 slots left but global is full
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var acquireTask = limiter.AcquireAsync(TrainA, CancellationToken.None);
         var completed = await Task.WhenAny(acquireTask, Task.Delay(200));
 
@@ -245,6 +246,7 @@ public class ConcurrencyLimiterTests
         permit3.Should().NotBeNull();
 
         // Fourth should block
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var acquireTask = limiter.AcquireAsync(trainName, CancellationToken.None);
         var completed = await Task.WhenAny(acquireTask, Task.Delay(200));
         completed.Should().NotBe(acquireTask);
@@ -274,6 +276,7 @@ public class ConcurrencyLimiterTests
 
         // Verify only one slot was released (can acquire exactly once more)
         var permit2 = await limiter.AcquireAsync(TrainA, CancellationToken.None);
+        // negative-wait: a blocked acquire has no signal, only elapsed time can show it.
         var acquireTask = limiter.AcquireAsync(TrainA, CancellationToken.None);
         var completed = await Task.WhenAny(acquireTask, Task.Delay(200));
         completed.Should().NotBe(acquireTask, "double dispose should not release extra slots");

@@ -17,8 +17,8 @@ namespace Trax.Scheduler.Tests.Integration.UnitTests;
 /// <summary>
 /// Polling-service tests that synchronise on the train invocation rather than wall-clock delays.
 /// Uses a <see cref="TaskCompletionSource"/> to deterministically await the immediate cycle
-/// before cancelling the service, eliminating the timing window that <c>Task.Delay</c>-based
-/// tests would expose.
+/// before cancelling the service, eliminating the timing window that fixed-delay tests would
+/// expose.
 /// </summary>
 [TestFixture]
 public class PollingServicesDeterministicTests
@@ -57,11 +57,24 @@ public class PollingServicesDeterministicTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
 
-        var winner = await Task.WhenAny(trainHit.Task, Task.Delay(SyncTimeout));
-        winner.Should().Be(trainHit.Task, "train should have been invoked within sync timeout");
+        await trainHit.Task.WaitAsync(SyncTimeout);
 
         cts.Cancel();
         await service.StopAsync(CancellationToken.None);
+    }
+
+    private static async Task<bool> WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+                return true;
+            // allowed-delay: poll interval while awaiting the completion signal, bounded by the
+            // timeout above. Not a fixed wait for the work to finish.
+            await Task.Delay(25);
+        }
+        return predicate();
     }
 
     #region DeadLetterCleanupPollingService
@@ -120,23 +133,27 @@ public class PollingServicesDeterministicTests
         var train = Substitute.For<IJobDispatcherTrain>();
         var config = LongIntervalConfig();
         config.JobDispatcherEnabled = false;
+        var liveness = new SchedulerLivenessMonitor(TimeProvider.System);
 
         var service = new JobDispatcherPollingService(
             Provide(train),
             config,
-            new SchedulerLivenessMonitor(TimeProvider.System),
+            liveness,
             new DispatcherWake(),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 
+        // A disabled dispatcher still records its cycle, so waiting for that record proves the
+        // loop ran and skipped the train, rather than never having run at all.
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
-        // The disabled branch returns immediately — no async work, no train call.
-        // We give the service a tight bound to settle, then verify the train was never touched.
-        // Even with worst-case scheduling, a no-op disabled branch completes well under 200 ms.
-        await Task.Delay(100);
+        await WaitUntilAsync(() => liveness.LastDispatchCompletedAt is not null, SyncTimeout);
         cts.Cancel();
         await service.StopAsync(CancellationToken.None);
+
+        liveness
+            .LastDispatchCompletedAt.Should()
+            .NotBeNull("the disabled loop still runs its cycle");
 
         await train.DidNotReceive().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
     }

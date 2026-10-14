@@ -21,9 +21,22 @@ public class BroadcastViewTests : RecoveryTestFixture
             DemoKeys.Viewer
         );
 
-        await Run.StartAsync("REFUND", crashOnce: false, orderId: "A-1001");
-        var first = await Run.FollowAttemptAsync(1);
-        await viewer.SubscribeAsync(first);
+        // onJunctionEvent does not replay and says nothing when a subscription starts, so the run
+        // waits at its second question until the viewer has received one of its steps. The
+        // subscription is then live before the routing step the test reads.
+        long first;
+        using (Decider.Hold("ApproveRefund"))
+        {
+            await Run.StartAsync("REFUND", crashOnce: false, orderId: "A-1001");
+            first = await Run.FollowAttemptAsync(1);
+            await viewer.SubscribeAsync(first);
+            var live = await Trax.Samples.Shared.Testing.Polling.WaitUntilAsync(
+                () => viewer.StepsOf(first).Count > 0,
+                TimeSpan.FromSeconds(10)
+            );
+            live.Should()
+                .BeTrue("the viewer should receive a step before the run's second question");
+        }
         (await Run.WaitForEndAsync(first)).Should().Be("COMPLETED");
 
         var seen = await Trax.Samples.Shared.Testing.Polling.WaitUntilAsync(

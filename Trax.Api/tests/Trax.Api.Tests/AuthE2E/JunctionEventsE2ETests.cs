@@ -146,7 +146,7 @@ public class JunctionEventsE2ETests
     {
         await using var admin = await Subscriber.ConnectAsync(_host, AdminKey);
         await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
-        (await admin.SubscribeAsync(Subscription(run.MetadataId))).Should().BeTrue();
+        await admin.SubscribeAsync(Subscription(run.MetadataId));
         await admin.WaitUntilListeningAsync(() =>
             Probe(run.MetadataId, typeof(IHiddenMarkerTrain))
         );
@@ -216,8 +216,8 @@ public class JunctionEventsE2ETests
         await using var player = await Subscriber.ConnectAsync(_host, PlayerKey);
         await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: false);
 
-        (await admin.SubscribeAsync(Subscription(run.MetadataId))).Should().BeTrue();
-        (await player.SubscribeAsync(Subscription(run.MetadataId))).Should().BeTrue();
+        await admin.SubscribeAsync(Subscription(run.MetadataId));
+        await player.SubscribeAsync(Subscription(run.MetadataId));
         // The probes name a train the player may see, so both are known to be listening.
         await admin.WaitUntilListeningAsync(() =>
             Probe(run.MetadataId, typeof(IBroadcastMarkerTrain))
@@ -249,7 +249,7 @@ public class JunctionEventsE2ETests
     {
         await using var player = await Subscriber.ConnectAsync(_host, PlayerKey);
         await using var run = await StartRunAsync<IBroadcastMarkerTrain>(fail: true);
-        (await player.SubscribeAsync(Subscription(run.MetadataId))).Should().BeTrue();
+        await player.SubscribeAsync(Subscription(run.MetadataId));
         await player.WaitUntilListeningAsync(() =>
             Probe(run.MetadataId, typeof(IBroadcastMarkerTrain))
         );
@@ -290,9 +290,9 @@ public class JunctionEventsE2ETests
     {
         await using var guest = await Subscriber.ConnectAsync(_host, GuestKey);
 
-        (await guest.SubscribeAsync(Subscription(1)))
+        (await guest.SubscribeRefusedAsync(Subscription(1)))
             .Should()
-            .BeFalse(
+            .BeTrue(
                 "a subscriber who could receive nothing is refused when subscribing, per " + Adr
             );
     }
@@ -939,7 +939,6 @@ public class JunctionEventsE2ETests
     {
         private readonly WebSocket _socket;
         private readonly StringBuilder _received = new();
-        private Task<JsonElement>? _pending;
 
         // Real steps that arrived while waiting for the first probe: the run starts before the
         // subscription, so on a slow machine its first junction can reach the socket before a probe.
@@ -963,12 +962,12 @@ public class JunctionEventsE2ETests
         }
 
         /// <summary>
-        /// Starts the subscription. False when it is refused: an <c>error</c> frame, or a result
-        /// carrying errors and no data.
+        /// Starts the subscription. An accepted subscription answers nothing until an event, so
+        /// <see cref="WaitUntilListeningAsync"/> is what shows it was accepted: a refusal arrives
+        /// there instead of a probe and fails the read.
         /// </summary>
-        public async Task<bool> SubscribeAsync(string query)
-        {
-            await SendAsync(
+        public Task SubscribeAsync(string query) =>
+            SendAsync(
                 new
                 {
                     id = "1",
@@ -977,30 +976,27 @@ public class JunctionEventsE2ETests
                 }
             );
 
-            // A refusal answers at once; an accepted subscription answers nothing until an event.
-            var first = ReceiveAsync();
-            var settled = await Task.WhenAny(
-                first,
-                // allowed-delay: how long a refusal has to arrive; an accepted subscription is
-                // silent, so nothing faster can tell the two apart.
-                Task.Delay(TimeSpan.FromMilliseconds(500))
-            );
-            if (settled != first)
+        /// <summary>
+        /// Starts a subscription expected to be refused, and whether it was: an <c>error</c> frame,
+        /// or a result carrying errors and no data. False when nothing arrives before the read
+        /// times out, which is how an accepted subscription with no events answers.
+        /// </summary>
+        public async Task<bool> SubscribeRefusedAsync(string query)
+        {
+            await SubscribeAsync(query);
+
+            JsonElement message;
+            try
             {
-                _pending = first;
-                return true;
+                message = await ReceiveAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
             }
 
-            var message = await first;
-            if (message.GetProperty("type").GetString() == "error")
-                return false;
-
-            var payload = message.GetProperty("payload");
-            if (payload.TryGetProperty("errors", out _))
-                return false;
-
-            _pending = Task.FromResult(message);
-            return true;
+            return message.GetProperty("type").GetString() == "error"
+                || message.GetProperty("payload").TryGetProperty("errors", out _);
         }
 
         /// <summary>
@@ -1056,8 +1052,7 @@ public class JunctionEventsE2ETests
         {
             while (true)
             {
-                var message = await (_pending ?? ReceiveAsync());
-                _pending = null;
+                var message = await ReceiveAsync();
                 var type = message.GetProperty("type").GetString();
                 if (type is "ping" or "pong")
                     continue;

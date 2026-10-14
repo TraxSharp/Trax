@@ -274,7 +274,18 @@ public class RabbitMqBroadcasterTests
             NullLogger<PersistedOperationReceiverService>.Instance
         );
 
+        // A receiver left running on the same exchange: once it has seen a sentinel published after
+        // the message, the stopped receiver would have been handed that message too.
+        var liveCache = new RecordingCache();
+        var live = new PersistedOperationReceiverService(
+            options,
+            liveCache,
+            NoOpInvalidator(),
+            NullLogger<PersistedOperationReceiverService>.Instance
+        );
+
         await svc.StartAsync(CancellationToken.None);
+        await live.StartAsync(CancellationToken.None);
         await svc.StopAsync(CancellationToken.None);
 
         await using var publisher = new RabbitMqPersistedOperationBroadcaster(
@@ -282,21 +293,39 @@ public class RabbitMqBroadcasterTests
             NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
         );
         var key = $"after_stop_{Guid.NewGuid():N}";
-        await publisher.PublishAsync(
-            new PersistedOperationChangedMessage(
-                null,
-                key,
-                PersistedOperationChangeType.Upsert,
-                DateTime.UtcNow
-            ),
-            CancellationToken.None
-        );
+        var sentinel = $"sentinel_{Guid.NewGuid():N}";
+        try
+        {
+            foreach (var id in new[] { key, sentinel })
+                await publisher.PublishAsync(
+                    new PersistedOperationChangedMessage(
+                        null,
+                        id,
+                        PersistedOperationChangeType.Upsert,
+                        DateTime.UtcNow
+                    ),
+                    CancellationToken.None
+                );
 
-        // Wait briefly to make sure no message arrives.
-        await Task.Delay(500);
-        cache
-            .Invalidations.Should()
-            .NotContain(p => p.Id == key, "stopped receiver must not invalidate");
+            (
+                await WaitUntilAsync(
+                    () => liveCache.Invalidations.Any(p => p.Id == sentinel),
+                    TimeSpan.FromSeconds(10)
+                )
+            )
+                .Should()
+                .BeTrue("the running receiver sees the sentinel");
+            liveCache
+                .Invalidations.Should()
+                .Contain(p => p.Id == key, "the message was published to the exchange");
+            cache
+                .Invalidations.Should()
+                .NotContain(p => p.Id == key, "stopped receiver must not invalidate");
+        }
+        finally
+        {
+            await live.StopAsync(CancellationToken.None);
+        }
 
         await svc.DisposeAsync();
         // Idempotent stop after dispose must not throw.
@@ -445,11 +474,38 @@ public class RabbitMqBroadcasterTests
             cancellationToken: CancellationToken.None
         );
 
-        // Give it a moment to be received and rejected.
-        await Task.Delay(500);
+        // A valid message published after it on the same channel reaches the queue after it, so once
+        // the receiver has handled it the malformed one was received and rejected.
+        var sentinel = $"sentinel_{Guid.NewGuid():N}";
+        await channel.BasicPublishAsync(
+            exchange: _exchange,
+            routingKey: string.Empty,
+            mandatory: false,
+            basicProperties: new RabbitMQ.Client.BasicProperties
+            {
+                ContentType = "application/json",
+            },
+            body: System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                new PersistedOperationChangedMessage(
+                    null,
+                    sentinel,
+                    PersistedOperationChangeType.Upsert,
+                    DateTime.UtcNow
+                )
+            ),
+            cancellationToken: CancellationToken.None
+        );
+        (
+            await WaitUntilAsync(
+                () => cache.Invalidations.Any(p => p.Id == sentinel),
+                TimeSpan.FromSeconds(10)
+            )
+        )
+            .Should()
+            .BeTrue("the receiver kept consuming after the malformed message");
         // No invalidations should have been recorded for the malformed payload,
         // and no exception should have escaped the receiver.
-        cache.Invalidations.Should().BeEmpty();
+        cache.Invalidations.Should().ContainSingle().Which.Id.Should().Be(sentinel);
 
         await svc.StopAsync(CancellationToken.None);
         await svc.DisposeAsync();
@@ -491,6 +547,7 @@ public class RabbitMqBroadcasterTests
         {
             if (condition())
                 return true;
+            // determinism: the poll interval of a wait bounded by the deadline above.
             await Task.Delay(50);
         }
         return condition();

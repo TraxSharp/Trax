@@ -540,22 +540,29 @@ public class TrainAuthorizationServiceTests
     public async Task TrustedScope_DoesNotLeakAcrossIndependentAsyncFlows()
     {
         var scope = new TrustedExecutionScope();
+        var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var read = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        // The trusted flow holds its scope open until the other flow has read, so the read
+        // happens while the scope is known to be open.
         var trustedFlow = Task.Run(async () =>
         {
             using var _ = scope.BeginTrusted("flow-a");
-            await Task.Delay(50);
+            opened.SetResult();
+            await read.Task.WaitAsync(TimeSpan.FromSeconds(10));
             return scope.IsTrusted;
         });
 
         var untrustedFlow = Task.Run(async () =>
         {
-            await Task.Delay(10);
-            return scope.IsTrusted;
+            await opened.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var trusted = scope.IsTrusted;
+            read.SetResult();
+            return trusted;
         });
 
-        (await trustedFlow).Should().BeTrue();
         (await untrustedFlow).Should().BeFalse();
+        (await trustedFlow).Should().BeTrue();
     }
 
     #endregion

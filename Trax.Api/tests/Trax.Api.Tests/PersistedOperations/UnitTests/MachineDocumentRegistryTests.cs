@@ -306,7 +306,10 @@ public class MachineDocumentRegistryTests
 
         await registry.ClassifyAsync(newer, store, CancellationToken.None);
         var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < TimeSpan.FromSeconds(1))
+        while (
+            registry.IsNewer("wizard", NewHash) != true
+            && deadline.Elapsed < TimeSpan.FromSeconds(10)
+        )
         {
             (await registry.ClassifyAsync(newer, store, CancellationToken.None))
                 .Should()
@@ -318,6 +321,12 @@ public class MachineDocumentRegistryTests
             await Task.Delay(20);
         }
         registry.IsNewer("wizard", NewHash).Should().BeTrue("the background read ordered it");
+        (await registry.ClassifyAsync(newer, store, CancellationToken.None))
+            .Should()
+            .Be(
+                MachineDocumentVerdict.ServerOutdated,
+                "once read, a newer version stays retryable, per " + Adr
+            );
     }
 
     [Test]

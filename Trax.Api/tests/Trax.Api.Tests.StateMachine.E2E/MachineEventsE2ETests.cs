@@ -96,16 +96,21 @@ public class MachineEventsE2ETests
     public async Task Internal_machine_trains_are_not_broadcast_on_the_lifecycle_feed()
     {
         await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
-        await ws.SubscribeAsync("feed", "subscription { onTrainCompleted { trainName } }");
+        await ws.SubscribeAsync("feed", "subscription { onTrainCompleted { trainName output } }");
 
-        // The subscription is live once a sentinel run reaches it.
-        await RunSentinelAsync("warm-up");
-        (await ws.NextDataAsync("feed"))
-            .GetProperty("onTrainCompleted")
-            .GetProperty("trainName")
-            .GetString()
-            .Should()
-            .Contain(nameof(IPing));
+        // graphql-transport-ws sends no ack for subscribe, so the subscription is live only once a warm-up run
+        // reaches it. One published before the server registered it is never delivered, so warm up until one is.
+        using (var deadline = new CancellationTokenSource(GraphQLWs.DefaultTimeout))
+        {
+            JsonElement? warm;
+            do
+            {
+                deadline.IsCancellationRequested.Should().BeFalse("a warm-up run reaches the feed");
+                await RunSentinelAsync("warm-up");
+                warm = await ws.TryNextAsync("feed", TimeSpan.FromSeconds(1));
+            } while (warm is null);
+            CompletedPing(warm.Value).Should().BeTrue(warm.Value.GetRawText());
+        }
 
         var started = await _host.StartWizardAsync(E2EHost.AliceKey);
         await _host.AdvanceWizardAsync(
@@ -114,19 +119,35 @@ public class MachineEventsE2ETests
             started.Id,
             WizardOps.DetailsInput()
         );
-        await RunSentinelAsync("sentinel");
+        var sentinel = "sentinel-" + Guid.NewGuid().ToString("N");
+        await RunSentinelAsync(sentinel);
 
-        (await ws.NextDataAsync("feed"))
-            .GetProperty("onTrainCompleted")
-            .GetProperty("trainName")
-            .GetString()
-            .Should()
-            .Contain(
-                nameof(IPing),
-                "the machine's internal start and advance runs are left out of the lifecycle broadcast, so "
-                    + "the next event is the sentinel's, per "
-                    + Adr
-            );
+        // Warm-ups that were still on their way may come first; anything else before the sentinel leaked.
+        while (true)
+        {
+            var completed = (await ws.NextDataAsync("feed")).GetProperty("onTrainCompleted");
+            if (completed.GetProperty("output").GetRawText().Contains(sentinel))
+                break;
+            CompletedPing(completed, "warm-up")
+                .Should()
+                .BeTrue(
+                    "the machine's internal start and advance runs are left out of the lifecycle broadcast, so "
+                        + "only warm-up pings come before the sentinel, per "
+                        + Adr
+                        + ": "
+                        + completed.GetRawText()
+                );
+        }
+    }
+
+    // Whether a lifecycle event (or the message carrying it) is a completed ping, echoing `value` when given.
+    private static bool CompletedPing(JsonElement message, string? value = null)
+    {
+        var completed = message.TryGetProperty("payload", out var payload)
+            ? payload.GetProperty("data").GetProperty("onTrainCompleted")
+            : message;
+        return completed.GetProperty("trainName").GetString()?.Contains(nameof(IPing)) == true
+            && (value is null || completed.GetProperty("output").GetRawText().Contains(value));
     }
 
     private static IEnumerable<TestCaseData> InvalidInputs()

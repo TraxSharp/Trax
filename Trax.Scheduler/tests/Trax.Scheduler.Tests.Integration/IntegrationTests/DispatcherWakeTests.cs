@@ -115,8 +115,10 @@ public class DispatcherWakeTests
         await WaitUntilDispatchedAsync(queued, SetupTimeout);
 
         // The next poll is an hour after the startup cycle, far past any timeout here, so the
-        // cycle that ran the entry is one the notice began.
+        // cycle that ran the entry is one the notice began. The run can finish before that
+        // cycle reports itself, so wait for the report rather than read the count.
         SetupTimeout.Should().BeLessThan(Poll);
+        await _cycles.WhenReached(cyclesBefore + 1).WaitAsync(SetupTimeout);
         _cycles
             .Count.Should()
             .BeGreaterThan(cyclesBefore, "the notice woke the dispatcher; no poll was due");

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using HotChocolate;
 using HotChocolate.Types;
 using Trax.Api.Auth;
@@ -129,4 +130,48 @@ public sealed class TraxCallerProbeMutations
             return caller.IsTrusted;
         }
     }
+
+    /// <summary>
+    /// Opens an <see cref="ITrustedExecutionScope"/>, signals the <see cref="TrustedHold"/> named
+    /// <paramref name="key"/> that it is open, and holds it until the test releases it, then
+    /// returns the in-scope <see cref="TraxCaller.IsTrusted"/>. Lets the cross-request isolation
+    /// test fire its parallel request while the scope is known to be open.
+    /// </summary>
+    [TraxAllowAnonymous]
+    public async Task<bool> HoldTrustedUntilReleased(
+        string key,
+        [Service] ITrustedExecutionScope scope,
+        [Service] TraxCaller caller,
+        CancellationToken ct
+    )
+    {
+        var hold = TrustedHold.For(key);
+        using (scope.BeginTrusted("test.hold"))
+        {
+            hold.Entered.TrySetResult();
+            await hold.Released.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+            return caller.IsTrusted;
+        }
+    }
+}
+
+/// <summary>
+/// The handshake between a test and <see cref="TraxCallerProbeMutations.HoldTrustedUntilReleased"/>,
+/// keyed so parallel tests never share one: <see cref="Entered"/> completes once the scope is
+/// open, and the scope stays open until the test completes <see cref="Released"/>.
+/// </summary>
+public sealed class TrustedHold
+{
+    private static readonly ConcurrentDictionary<string, TrustedHold> Holds = new();
+
+    /// <summary>The hold named <paramref name="key"/>, created on first use.</summary>
+    public static TrustedHold For(string key) => Holds.GetOrAdd(key, _ => new TrustedHold());
+
+    /// <summary>Completed by the mutation once its trusted scope is open.</summary>
+    public TaskCompletionSource Entered { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Completed by the test to let the mutation close its scope and answer.</summary>
+    public TaskCompletionSource Released { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 }

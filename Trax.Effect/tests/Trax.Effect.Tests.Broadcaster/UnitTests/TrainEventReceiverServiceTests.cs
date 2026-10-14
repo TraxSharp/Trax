@@ -13,6 +13,8 @@ public class TrainEventReceiverServiceTests
     private ITrainEventHandler _handler = null!;
     private ServiceProvider _serviceProvider = null!;
 
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
+
     [SetUp]
     public void SetUp()
     {
@@ -41,6 +43,25 @@ public class TrainEventReceiverServiceTests
             _serviceProvider.GetService<ILogger<TrainEventReceiverService>>()
         );
 
+    // ExecuteAsync runs on the thread pool, so the service has started the receiver only once this completes.
+    private static Task<Func<TrainLifecycleEventMessage, CancellationToken, Task>> Started(
+        ITrainEventReceiver receiver
+    )
+    {
+        var started = new TaskCompletionSource<
+            Func<TrainLifecycleEventMessage, CancellationToken, Task>
+        >(TaskCreationOptions.RunContinuationsAsynchronously);
+        receiver
+            .StartAsync(
+                Arg.Do<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(h =>
+                    started.TrySetResult(h)
+                ),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.CompletedTask);
+        return started.Task.WaitAsync(Timeout);
+    }
+
     private static TrainLifecycleEventMessage CreateMessage(
         string eventType = "Completed",
         string? executor = "RemoteWorker"
@@ -61,20 +82,12 @@ public class TrainEventReceiverServiceTests
     [Test]
     public async Task StartAsync_StartsReceiver()
     {
+        var started = Started(_receiver);
         var service = CreateService();
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-
-        // The service calls _receiver.StartAsync which we let complete immediately
-        _receiver
-            .StartAsync(
-                Arg.Any<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.CompletedTask);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.StartAsync(cts.Token);
-        // Give the ExecuteAsync a moment to run
-        await Task.Delay(50);
+        await started;
         await service.StopAsync(cts.Token);
 
         await _receiver
@@ -88,27 +101,16 @@ public class TrainEventReceiverServiceTests
     [Test]
     public async Task DispatchesRemoteEventsToHandlers()
     {
-        Func<TrainLifecycleEventMessage, CancellationToken, Task>? capturedHandler = null;
-
-        _receiver
-            .StartAsync(
-                Arg.Do<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(h =>
-                    capturedHandler = h
-                ),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.CompletedTask);
+        var started = Started(_receiver);
 
         var service = CreateService();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.StartAsync(cts.Token);
-        await Task.Delay(50);
-
-        capturedHandler.Should().NotBeNull();
+        var capturedHandler = await started;
 
         var message = CreateMessage(executor: "RemoteWorker");
-        await capturedHandler!(message, CancellationToken.None);
+        await capturedHandler(message, CancellationToken.None);
 
         await _handler
             .Received(1)
@@ -125,29 +127,20 @@ public class TrainEventReceiverServiceTests
     [Test]
     public async Task SkipsLocalEvents()
     {
-        Func<TrainLifecycleEventMessage, CancellationToken, Task>? capturedHandler = null;
-
-        _receiver
-            .StartAsync(
-                Arg.Do<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(h =>
-                    capturedHandler = h
-                ),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.CompletedTask);
+        var started = Started(_receiver);
 
         var service = CreateService();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.StartAsync(cts.Token);
-        await Task.Delay(50);
+        var capturedHandler = await started;
 
         // Stamped with this host's instance id, as its own hook and sink stamp what they publish.
         var message = CreateMessage() with
         {
             InstanceId = _serviceProvider.GetRequiredService<BroadcastInstance>().Id,
         };
-        await capturedHandler!(message, CancellationToken.None);
+        await capturedHandler(message, CancellationToken.None);
 
         await _handler
             .DidNotReceive()
@@ -159,16 +152,7 @@ public class TrainEventReceiverServiceTests
     [Test]
     public async Task HandlerExceptionDoesNotCrashService()
     {
-        Func<TrainLifecycleEventMessage, CancellationToken, Task>? capturedHandler = null;
-
-        _receiver
-            .StartAsync(
-                Arg.Do<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(h =>
-                    capturedHandler = h
-                ),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.CompletedTask);
+        var started = Started(_receiver);
 
         _handler
             .HandleAsync(Arg.Any<TrainLifecycleEventMessage>(), Arg.Any<CancellationToken>())
@@ -178,12 +162,12 @@ public class TrainEventReceiverServiceTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.StartAsync(cts.Token);
-        await Task.Delay(50);
+        var capturedHandler = await started;
 
         var message = CreateMessage(executor: "RemoteWorker");
 
         // Should not throw despite handler failure
-        var act = () => capturedHandler!(message, CancellationToken.None);
+        var act = () => capturedHandler(message, CancellationToken.None);
         await act.Should().NotThrowAsync();
 
         await service.StopAsync(cts.Token);
@@ -201,24 +185,16 @@ public class TrainEventReceiverServiceTests
         services.AddLogging();
         using var sp = services.BuildServiceProvider();
 
-        Func<TrainLifecycleEventMessage, CancellationToken, Task>? capturedHandler = null;
-        _receiver
-            .StartAsync(
-                Arg.Do<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(h =>
-                    capturedHandler = h
-                ),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.CompletedTask);
+        var started = Started(_receiver);
 
         var service = new TrainEventReceiverService(_receiver, sp);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.StartAsync(cts.Token);
-        await Task.Delay(50);
+        var capturedHandler = await started;
 
         var message = CreateMessage(executor: "RemoteWorker");
-        await capturedHandler!(message, CancellationToken.None);
+        await capturedHandler(message, CancellationToken.None);
 
         await handler1
             .Received(1)
@@ -233,18 +209,12 @@ public class TrainEventReceiverServiceTests
     [Test]
     public async Task StopAsync_CallsReceiverStop()
     {
-        _receiver
-            .StartAsync(
-                Arg.Any<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.CompletedTask);
-
+        var started = Started(_receiver);
         var service = CreateService();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.StartAsync(cts.Token);
-        await Task.Delay(50);
+        await started;
         await service.StopAsync(cts.Token);
 
         await _receiver.Received(1).StopAsync(Arg.Any<CancellationToken>());
@@ -278,6 +248,7 @@ public class TrainEventReceiverServiceTests
         // scheduling overhead.
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (DateTime.UtcNow < deadline && callCount <= 1)
+            // allowed-delay: polls for the retry's second StartAsync call.
             await Task.Delay(100);
 
         // Should not have crashed the host — service retries
@@ -314,6 +285,7 @@ public class TrainEventReceiverServiceTests
 
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         while (DateTime.UtcNow < deadline && startCount <= 1)
+            // allowed-delay: polls for the retry's second StartAsync call.
             await Task.Delay(100);
 
         startCount.Should().BeGreaterThan(1);
@@ -326,25 +298,16 @@ public class TrainEventReceiverServiceTests
     [Test]
     public async Task EventWithNullExecutor_IsNotConsideredLocal()
     {
-        Func<TrainLifecycleEventMessage, CancellationToken, Task>? capturedHandler = null;
-
-        _receiver
-            .StartAsync(
-                Arg.Do<Func<TrainLifecycleEventMessage, CancellationToken, Task>>(h =>
-                    capturedHandler = h
-                ),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Task.CompletedTask);
+        var started = Started(_receiver);
 
         var service = CreateService();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         await service.StartAsync(cts.Token);
-        await Task.Delay(50);
+        var capturedHandler = await started;
 
         var message = CreateMessage(executor: null);
-        await capturedHandler!(message, CancellationToken.None);
+        await capturedHandler(message, CancellationToken.None);
 
         await _handler
             .Received(1)

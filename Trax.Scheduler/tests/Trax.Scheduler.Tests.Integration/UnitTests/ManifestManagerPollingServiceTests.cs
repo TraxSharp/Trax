@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Trax.Core.Functional;
@@ -59,8 +60,7 @@ public class ManifestManagerPollingServiceTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
 
-        var winner = await Task.WhenAny(trainHit.Task, Task.Delay(SyncTimeout));
-        winner.Should().Be(trainHit.Task, "train should have been invoked on the first cycle");
+        await trainHit.Task.WaitAsync(SyncTimeout);
 
         cts.Cancel();
         await service.StopAsync(CancellationToken.None);
@@ -98,8 +98,7 @@ public class ManifestManagerPollingServiceTests
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
 
-        var winner = await Task.WhenAny(trainHit.Task, Task.Delay(SyncTimeout));
-        winner.Should().Be(trainHit.Task);
+        await trainHit.Task.WaitAsync(SyncTimeout);
 
         cts.Cancel();
         var stop = async () => await service.StopAsync(CancellationToken.None);
@@ -117,20 +116,49 @@ public class ManifestManagerPollingServiceTests
             HasDatabaseProvider = false,
         };
 
+        var logger = new SkipLogger();
+
         var service = new ManifestManagerPollingService(
             Provide(train),
             config,
-            NullLogger<ManifestManagerPollingService>.Instance,
+            logger,
             sqlDialect: null
         );
 
+        // The disabled cycle says it skipped, so waiting for that line proves the loop ran and
+        // passed the train by, rather than never having run at all.
         using var cts = new CancellationTokenSource();
         await service.StartAsync(cts.Token);
-        // Disabled branch is a no-op; tight wait is sufficient to confirm nothing fires.
-        await Task.Delay(150);
+        await logger.Skipped.Task.WaitAsync(SyncTimeout);
         cts.Cancel();
         await service.StopAsync(CancellationToken.None);
 
         await train.DidNotReceive().Run(Arg.Any<Unit>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Completes <see cref="Skipped"/> when the service logs a skipped cycle.</summary>
+    private sealed class SkipLogger : ILogger<ManifestManagerPollingService>
+    {
+        public TaskCompletionSource Skipped { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (
+                formatter(state, exception) == "ManifestManager is disabled, skipping polling cycle"
+            )
+                Skipped.TrySetResult();
+        }
     }
 }

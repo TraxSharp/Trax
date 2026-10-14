@@ -30,8 +30,6 @@ public class DeadLetterRequeueJobsTests
 
     private ITraxScheduler _scheduler = null!;
     private TaskCompletionSource<BatchDeadLetterResult> _fold = null!;
-    private TaskCompletionSource _foldStarted = null!;
-    private CancellationToken _foldToken;
     private CancellationTokenSource _stopping = null!;
     private ManualTime _time = null!;
     private ServiceProvider _provider = null!;
@@ -42,7 +40,6 @@ public class DeadLetterRequeueJobsTests
         _fold = new TaskCompletionSource<BatchDeadLetterResult>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        _foldStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _scheduler = Substitute.For<ITraxScheduler>();
         _scheduler
             .RequeueAllDeadLettersAsync(Arg.Any<CancellationToken>())
@@ -104,12 +101,40 @@ public class DeadLetterRequeueJobsTests
         _stopping.Dispose();
     }
 
-    private Task<BatchDeadLetterResult> Fold(CancellationToken ct)
+    private Task<BatchDeadLetterResult> Fold(CancellationToken ct) => _fold.Task.WaitAsync(ct);
+
+    /// <summary>
+    /// Makes the scheduler report the fold it is asked for on a signal this test owns. A signal in
+    /// a field shared by the fixture could be set by a fold another test left running, after this
+    /// test's set-up, and a test waiting on it would read that fold's call instead of its own.
+    /// </summary>
+    private Task<FoldCall> NextFold()
     {
-        _foldToken = ct;
-        _foldStarted.TrySetResult();
-        return _fold.Task.WaitAsync(ct);
+        var called = new TaskCompletionSource<FoldCall>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        _scheduler
+            .RequeueAllDeadLettersAsync(
+                Arg.Any<bool>(),
+                Arg.Any<IProgress<int>?>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+            {
+                var ct = call.Arg<CancellationToken>();
+                called.TrySetResult(
+                    new FoldCall(call.Arg<bool>(), call.Arg<IProgress<int>?>(), ct)
+                );
+                return Fold(ct);
+            });
+        return called.Task;
     }
+
+    private sealed record FoldCall(
+        bool AskAfresh,
+        IProgress<int>? Progress,
+        CancellationToken Token
+    );
 
     private DeadLetterRequeueJobs Jobs =>
         (DeadLetterRequeueJobs)_provider.GetRequiredService<IDeadLetterRequeueJobs>();
@@ -133,13 +158,14 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task The_fold_runs_under_the_hosts_stopping_token_not_the_callers()
     {
+        var fold = NextFold();
         using var caller = new CancellationTokenSource();
         await Jobs.StartAsync(ct: caller.Token);
 
         await caller.CancelAsync();
-        await _foldStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var call = await fold.WaitAsync(TimeSpan.FromSeconds(10));
 
-        _foldToken.Should().Be(_stopping.Token);
+        call.Token.Should().Be(_stopping.Token);
         Jobs.Current.IsCompleted.Should().BeFalse("the fold runs on after its caller is gone");
     }
 
@@ -190,10 +216,14 @@ public class DeadLetterRequeueJobsTests
     [TestCase(true)]
     public async Task The_fold_is_asked_in_the_jobs_mode_with_a_progress_reporter(bool askAfresh)
     {
+        var fold = NextFold();
         var job = await Jobs.StartAsync(askAfresh);
-        await _foldStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var call = await fold.WaitAsync(TimeSpan.FromSeconds(10));
 
         job.AskAfresh.Should().Be(askAfresh);
+        call.AskAfresh.Should().Be(askAfresh);
+        call.Progress.Should().NotBeNull();
+        call.Token.Should().Be(_stopping.Token);
         await _scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(
@@ -206,28 +236,11 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task A_running_job_says_how_many_it_has_requeued_so_far()
     {
-        // Captured here rather than in the shared field, which a fold another test left running
-        // could still write. For the same reason the test waits on its own signal, set once the
-        // reporter is captured, rather than on _foldStarted: a fold left over from another test
-        // can complete that one first.
-        IProgress<int>? progress = null;
-        var captured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _scheduler
-            .RequeueAllDeadLettersAsync(
-                Arg.Any<bool>(),
-                Arg.Any<IProgress<int>?>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(call =>
-            {
-                progress = call.Arg<IProgress<int>?>();
-                captured.TrySetResult();
-                return Fold(call.Arg<CancellationToken>());
-            });
+        var fold = NextFold();
         var id = (await Jobs.StartAsync()).Id;
-        await captured.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var call = await fold.WaitAsync(TimeSpan.FromSeconds(10));
 
-        progress!.Report(2);
+        call.Progress!.Report(2);
 
         var running = Jobs.Get(id)!;
         running.Status.Should().Be(DeadLetterRequeueJobStatus.Running);
@@ -242,6 +255,7 @@ public class DeadLetterRequeueJobsTests
     [Test]
     public async Task Starting_while_one_runs_returns_that_one_and_starts_nothing()
     {
+        var fold = NextFold();
         var first = await Jobs.StartAsync();
         var second = await Jobs.StartAsync();
 
@@ -249,7 +263,7 @@ public class DeadLetterRequeueJobsTests
         second.Started.Should().BeFalse();
         second.Message.Should().Be(first.Message);
         // The fold runs in the background, so the scheduler is called after StartAsync returns.
-        await _foldStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await fold.WaitAsync(TimeSpan.FromSeconds(10));
         await _scheduler
             .Received(1)
             .RequeueAllDeadLettersAsync(

@@ -100,6 +100,10 @@ public class CrossProcessEventTests : ApiTestFixture
     {
         await using var socket = await SubscribeAsModeratorAsync();
 
+        // A broadcast completion reaching the socket shows the subscription is live, so the review
+        // below cannot finish before anyone listens and leave the check with nothing to miss.
+        await WaitForAsync(socket, await QueueNoticeAsync("e2e-live"));
+
         var review = await GetGraphQLClient()
             .SendAsync(
                 """

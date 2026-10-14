@@ -172,7 +172,7 @@ public class AuditRefusedRequestTests
         (await WaitForEntriesAsync(1))
             .Should()
             .BeTrue("an event that fails after the subscription was accepted is audited");
-        // allowed-delay: gives a duplicate entry the writer's flush interval to appear.
+        // negative-wait: gives a duplicate entry the writer's flush interval to appear; nothing signals its absence.
         await Task.Delay(100);
         var entry = CapturingSink.Entries.Should().ContainSingle().Which;
         entry.Success.Should().BeFalse();
@@ -199,7 +199,7 @@ public class AuditRefusedRequestTests
         body.Should().Contain("f199", "both events are delivered with their errors");
 
         (await WaitForEntriesAsync(2)).Should().BeTrue("each failing event is audited");
-        // allowed-delay: gives an entry per failing field the writer's flush interval to appear.
+        // negative-wait: gives an entry per failing field the writer's flush interval to appear.
         await Task.Delay(100);
         CapturingSink
             .Entries.Should()
@@ -221,8 +221,8 @@ public class AuditRefusedRequestTests
 
     private static async Task<bool> WaitForEntriesAsync(int count)
     {
-        // The writer drains the channel on a 10 ms flush interval; two seconds is generous.
-        var deadline = DateTime.UtcNow.AddSeconds(2);
+        // The writer drains the channel on a 10 ms flush interval; the ceiling only bounds a slow runner.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
         {
             if (CapturingSink.Entries.Count >= count)

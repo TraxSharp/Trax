@@ -16,8 +16,12 @@ namespace Trax.Samples.Recovery.E2E.Utilities;
 public sealed class CountingDecider : IDecider
 {
     private readonly ConcurrentDictionary<(string RunId, string Key), int> _asked = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> _holds = new();
 
-    public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken cancellationToken)
+    public async Task<DecisionResult> Decide(
+        DecisionRequest request,
+        CancellationToken cancellationToken
+    )
     {
         var runId = request.State switch
         {
@@ -31,9 +35,34 @@ public sealed class CountingDecider : IDecider
         foreach (var question in request.Questions)
             _asked.AddOrUpdate((runId, question.Key), 1, (_, count) => count + 1);
 
-        return Task.FromResult(DemoDecider.Answer(request));
+        foreach (var question in request.Questions)
+            if (_holds.TryGetValue(question.Key, out var hold))
+                await hold.Task.WaitAsync(cancellationToken);
+
+        return DemoDecider.Answer(request);
+    }
+
+    /// <summary>
+    /// Keeps every run that asks the question <paramref name="key"/> waiting on it until the returned
+    /// hold is disposed, so a test can act while a run is at a known point. The question is counted
+    /// when it is asked, not when the hold lets it through.
+    /// </summary>
+    public IDisposable Hold(string key)
+    {
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _holds[key] = hold;
+        return new Release(() =>
+        {
+            _holds.TryRemove(new KeyValuePair<string, TaskCompletionSource>(key, hold));
+            hold.TrySetResult();
+        });
     }
 
     /// <summary>How many times the run <paramref name="runId"/> asked the question <paramref name="key"/>.</summary>
     public int Asked(string runId, string key) => _asked.GetValueOrDefault((runId, key));
+
+    private sealed class Release(Action release) : IDisposable
+    {
+        public void Dispose() => release();
+    }
 }

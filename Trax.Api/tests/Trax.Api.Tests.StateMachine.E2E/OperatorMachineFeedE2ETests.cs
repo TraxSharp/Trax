@@ -65,17 +65,7 @@ public class OperatorMachineFeedE2ETests
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
 
         // A row written by any path reaches the feed: here one written by hand.
-        var system = Guid.NewGuid();
-        await E2ESql.ExecuteAsync(
-            Database,
-            "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
-                + "concurrency_token, updated_at, created_at, owner_kind) "
-                + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
-                + "'system')",
-            ("id", system),
-            ("machine", WizardMachine.MachineId)
-        );
-        var first = await NextForAsync(operatorWs, system);
+        var first = await WaitUntilListeningAsync(operatorWs);
         first.GetProperty("state").GetString().Should().Be("Naming", "per " + Adr);
 
         var approving = await _host.WizardInApprovingAsync(E2EHost.AliceKey);
@@ -125,6 +115,7 @@ public class OperatorMachineFeedE2ETests
         const string Secret = "Secret-Atlas-7731";
         await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
+        await WaitUntilListeningAsync(operatorWs);
         var raw = new List<string>();
         var operatorSees = Task.Run(async () =>
         {
@@ -184,13 +175,14 @@ public class OperatorMachineFeedE2ETests
         await userWs.NextChangeAsync("mine");
         await using var operatorWs = await GraphQLWs.ConnectAsync(_host, E2EHost.OperatorKey);
         await operatorWs.SubscribeAsync("feed", MachineChangedOps.SubscribeOperator());
+        await WaitUntilListeningAsync(operatorWs);
         await _host.AdvanceWizardAsync(
             E2EHost.AliceKey,
             "describe",
             started.Id,
             WizardOps.DetailsInput()
         );
-        await operatorWs.NextDataAsync("feed");
+        await NextForAsync(operatorWs, started.Id);
         (await dashboardReading.WaitAsync(GraphQLWs.DefaultTimeout))
             .Should()
             .BeTrue("the dashboard's feed heard the write too");
@@ -226,9 +218,7 @@ public class OperatorMachineFeedE2ETests
             "feed",
             $"subscription {{ onMachineInstanceChanged(machine: {WizardOps.Literal(WizardMachine.MachineId)}) {{ {MachineChangedOps.OperatorFields} reload }} }}"
         );
-        // The feed is live once a write reaches it.
-        var started = await _host.StartWizardAsync(E2EHost.AliceKey);
-        await NextForAsync(operatorWs, started.Id);
+        await WaitUntilListeningAsync(operatorWs);
 
         // The listener's session is cut: whatever is written until it listens again is never announced.
         await E2ESql.ExecuteAsync(
@@ -246,6 +236,49 @@ public class OperatorMachineFeedE2ETests
             "onMachineInstanceChanged"
         );
         while (!change.GetProperty("reload").GetBoolean());
+    }
+
+    // graphql-transport-ws sends no ack for subscribe, so the feed is live only once a write reaches it, and a write
+    // made before the server registered the subscription is never announced to it. Writes a system draft by hand
+    // until one is seen, and returns the event about it.
+    private static async Task<JsonElement> WaitUntilListeningAsync(GraphQLWs ws)
+    {
+        using var deadline = new CancellationTokenSource(GraphQLWs.DefaultTimeout);
+        while (true)
+        {
+            deadline.IsCancellationRequested.Should().BeFalse("a written draft reaches the feed");
+            var probe = Guid.NewGuid();
+            await E2ESql.ExecuteAsync(
+                Database,
+                "INSERT INTO trax.snapshot_draft (id, user_key, machine, version, state, context, "
+                    + "concurrency_token, updated_at, created_at, owner_kind) "
+                    + "VALUES (@id, NULL, @machine, 1, 'Naming', '{}'::jsonb, gen_random_uuid(), now(), now(), "
+                    + "'system')",
+                ("id", probe),
+                ("machine", WizardMachine.MachineId)
+            );
+            if (await SeenWithinAsync(ws, probe, TimeSpan.FromSeconds(1)) is { } seen)
+                return seen;
+        }
+    }
+
+    // The operator event about instance `id` if one arrives within `window`, skipping events about others.
+    private static async Task<JsonElement?> SeenWithinAsync(GraphQLWs ws, Guid id, TimeSpan window)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (clock.Elapsed < window)
+        {
+            var message = await ws.TryNextAsync("feed", window - clock.Elapsed);
+            if (message is null)
+                return null;
+            var change = message
+                .Value.GetProperty("payload")
+                .GetProperty("data")
+                .GetProperty("onMachineInstanceChanged");
+            if (change.GetProperty("id").GetString() == id.ToString())
+                return change;
+        }
+        return null;
     }
 
     // The next operator event about instance `id`, skipping events about others.
