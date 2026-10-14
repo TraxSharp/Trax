@@ -5,7 +5,7 @@ type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 5
+nav_order: 6
 package: Trax.Api.GraphQL.PersistedOperations
 namespace:
   - Trax.Api.GraphQL.PersistedOperations.Services

@@ -3,7 +3,7 @@ title: How a chain runs
 description: "What each step of a train's chain (Chain, ShortCircuit, Extract, AddServices, Resolve) does to Memory, and how it behaves once the train is on the left track."
 type: explanation
 area: trains
-nav_order: 3
+nav_order: 5
 source:
   - Trax.Core/src/Trax.Core/Monad
 ---

@@ -1,5 +1,5 @@
 ---
-title: Effect
+title: Trax.Effect
 description: "How Trax.Effect works: ServiceTrain, the record it writes for every run, junctions resolved from DI, and the effect pattern behind its providers."
 type: explanation
 area: effects

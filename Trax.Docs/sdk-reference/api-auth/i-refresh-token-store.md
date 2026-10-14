@@ -5,7 +5,7 @@ type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
-nav_order: 8
+nav_order: 10
 package: Trax.Api.Auth.Jwt.Cognito.Issuer
 namespace: Trax.Api.Auth.Jwt.Cognito.Issuer
 source:

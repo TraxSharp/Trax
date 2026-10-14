@@ -3,7 +3,7 @@ title: Startup refusals
 description: "Every security posture a Trax host refuses to start with: the cause, when the refusal is raised, how its message begins, and what answers it."
 type: reference
 area: security
-nav_order: 3
+nav_order: 4
 source:
   - Trax.Api/src/Trax.Api.GraphQL/Startup
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/ExposureAuthorizationRule.cs

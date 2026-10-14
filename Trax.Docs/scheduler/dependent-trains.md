@@ -6,7 +6,7 @@ source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/DormantDependentContext
 type: explanation
 area: scheduling
-nav_order: 5
+nav_order: 7
 ---
 
 # Dependent Trains

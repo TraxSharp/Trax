@@ -1,5 +1,5 @@
 ---
-title: ManifestManager
+title: ManifestManagerTrain
 description: The ManifestManager train that cancels timed-out runs, reaps stale ones, and queues due manifests, with its advisory-lock and state-guard concurrency model.
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager

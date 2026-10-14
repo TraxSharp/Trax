@@ -1,5 +1,5 @@
 ---
-title: JobDispatcher
+title: JobDispatcherTrain
 description: The JobDispatcher train that moves queued work queue entries to the job submitter, enforcing global and per-group MaxActiveJobs and handling dispatch failures.
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/JobDispatcher

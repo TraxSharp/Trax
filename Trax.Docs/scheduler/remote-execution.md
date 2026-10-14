@@ -3,7 +3,7 @@ title: Choosing where trains run
 description: "The models for running trains off the scheduler host (HTTP runners, SQS, direct Lambda, standalone workers), what each costs and how they fail."
 type: explanation
 area: scheduling
-nav_order: 7
+nav_order: 10
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/JobSubmitter
   - Trax.Scheduler/src/Trax.Scheduler/Services/RunExecutor

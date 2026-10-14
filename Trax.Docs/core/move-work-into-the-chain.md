@@ -3,7 +3,7 @@ title: Move work around a chain into junctions
 description: "Where work that sits before, after or beside a train's chain goes once Junctions() is the only declaration: setup, extra Memory values, failures, nested trains."
 type: how-to
 area: trains
-nav_order: 4
+nav_order: 3
 ---
 
 # Move work around a chain into junctions

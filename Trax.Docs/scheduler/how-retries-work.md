@@ -3,7 +3,7 @@ title: How retries work
 description: "How the scheduler counts a manifest's failures, delays its retries, decides when a retry runs, replays recorded decisions and resumes from checkpoints."
 type: explanation
 area: scheduling
-nav_order: 4
+nav_order: 5
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager/Utilities/RetryDecisionReplay.cs
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager/Utilities/RetryResume.cs

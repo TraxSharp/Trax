@@ -3,7 +3,7 @@ title: Either and Unit
 description: "Why Trax.Core has its own Either and Unit types, how a train's result travels as an Either, and the null assertion helpers it ships."
 type: explanation
 area: trains
-nav_order: 3
+nav_order: 4
 source:
   - Trax.Core/src/Trax.Core/Functional
   - Trax.Core/src/Trax.Core/Extensions/FunctionalExtensions.cs

@@ -12,7 +12,7 @@ source:
   - Trax.Core/src/Trax.Core/Monad/Monad.ShortCircuit.cs
 parent: Train Methods
 grand_parent: SDK Reference
-nav_order: 4
+nav_order: 3
 ---
 
 # ShortCircuit

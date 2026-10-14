@@ -3,7 +3,7 @@ title: Try a decider in shadow
 description: "Run a candidate decider beside the live one on real traffic, with its answers recorded and never acted on, before switching a train over to it."
 type: how-to
 area: trains
-nav_order: 7
+nav_order: 6
 source:
   - Trax.Core/src/Trax.Core/Decisions/Questions.cs
   - Trax.Core/src/Trax.Core/Decisions/Tracks.cs

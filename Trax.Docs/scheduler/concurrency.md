@@ -6,7 +6,7 @@ source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/JobDispatcher/Junctions/DispatchJobsJunction.cs
 type: explanation
 area: scheduling
-nav_order: 4
+nav_order: 6
 ---
 
 # Multi-Server Concurrency

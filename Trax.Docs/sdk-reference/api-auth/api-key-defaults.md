@@ -5,7 +5,7 @@ type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
-nav_order: 6
+nav_order: 8
 package: Trax.Api.Auth.ApiKey
 namespace: Trax.Api.Auth.ApiKey
 source:

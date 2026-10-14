@@ -3,7 +3,7 @@ title: How jobs reach workers
 description: "How the JobDispatcher hands a run to a job submitter, which submitter a host gets, how the built-in local workers claim and recover jobs, and custom submitters."
 type: explanation
 area: scheduling
-nav_order: 3
+nav_order: 4
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/JobSubmitter
   - Trax.Scheduler/src/Trax.Scheduler/Services/LocalWorkerService/LocalWorkerService.cs

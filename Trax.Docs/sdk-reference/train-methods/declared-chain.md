@@ -14,7 +14,7 @@ source:
   - Trax.Core/src/Trax.Core/Monad/ChainVerification.cs
 parent: Train Methods
 grand_parent: SDK Reference
-nav_order: 9
+nav_order: 8
 ---
 
 # DeclaredChain

@@ -3,7 +3,7 @@ title: Deployment topologies
 description: "The five ways to split a Trax application across processes, what each process registers, and the sample that runs each one."
 type: explanation
 area: scheduling
-nav_order: 1
+nav_order: 2
 ---
 
 # Deployment topologies

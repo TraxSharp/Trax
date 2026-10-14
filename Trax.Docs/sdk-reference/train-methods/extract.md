@@ -12,7 +12,7 @@ source:
   - Trax.Core/src/Trax.Core/Monad/Monad.Extract.cs
 parent: Train Methods
 grand_parent: SDK Reference
-nav_order: 5
+nav_order: 4
 ---
 
 # Extract

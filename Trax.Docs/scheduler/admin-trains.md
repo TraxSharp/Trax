@@ -3,7 +3,7 @@ title: Administrative Trains
 description: "The internal trains and hosted services AddScheduler registers, which provider each needs, how they meet at the work queue and why they skip MaxActiveJobs."
 type: explanation
 area: scheduling
-nav_order: 2
+nav_order: 3
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.Build.cs
   - Trax.Scheduler/src/Trax.Scheduler/Configuration/AdminTrains.cs

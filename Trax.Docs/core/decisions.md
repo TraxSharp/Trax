@@ -3,7 +3,7 @@ title: Decisions
 description: "Why a chain declares every track it can take and lets a decider, from a typed decision model to a rule table, choose one per run."
 type: explanation
 area: trains
-nav_order: 4
+nav_order: 6
 source:
   - Trax.Core/src/Trax.Core/Decisions
 ---

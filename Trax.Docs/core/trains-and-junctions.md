@@ -3,7 +3,7 @@ title: Trains and junctions
 description: "What trains and junctions are, why Junctions() is a declaration the host can check, how EffectJunction differs from Junction, and the lifecycle hooks."
 type: explanation
 area: trains
-nav_order: 2
+nav_order: 3
 source:
   - Trax.Core/src/Trax.Core/Junction/Junction.cs
   - Trax.Effect/src/Trax.Effect/Services/EffectJunction/EffectJunction.cs

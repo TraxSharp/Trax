@@ -3,7 +3,7 @@ title: How the scheduler decides when a manifest runs
 description: "How the ManifestManager decides a manifest is due: schedule types, what a restart rewrites, group controls, disabling, variance, misfires and timeouts."
 type: explanation
 area: scheduling
-nav_order: 5
+nav_order: 8
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager/Utilities/SchedulingHelpers.cs
   - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager/Junctions/DetermineJobsToQueueJunction.cs

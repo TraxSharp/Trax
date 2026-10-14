@@ -1,5 +1,5 @@
 ---
-title: JobRunner
+title: JobRunnerTrain
 description: "The JobRunner train that runs a scheduled train on a worker: loading its Metadata, claiming the start, recording success and handling duplicate deliveries."
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Trains/JobRunner
