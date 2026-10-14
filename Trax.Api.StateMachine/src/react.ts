@@ -24,6 +24,7 @@ export interface UseMachineResult<Spec extends MachineSpec> {
  * The whole React surface: owns the snapshot, persists after each step, re-renders on every change
  * (including a rejection, so `lastProblem` never goes unseen). Built over the framework-free
  * {@link MachineController} via `useSyncExternalStore`.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#driving-a-machine-the-client-owns
  */
 export function useMachine<Spec extends MachineSpec>(
   machine: TypedMachine<Spec>,

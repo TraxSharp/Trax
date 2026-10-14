@@ -1,27 +1,30 @@
 ---
 title: AddTraxJwtAuth
-description: "Reference for AddTraxJwtAuth: provider shortcuts, JWKS authority or explicit signing key, custom principal resolvers, JwtBuilder methods and multiple issuers."
+description: "Reference for AddTraxJwtAuth: JWKS authority or explicit signing key, named schemes for several issuers, JwtBuilder methods, the default resolver and demo keys."
 type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
 nav_order: 2
+package: Trax.Api.Auth.Jwt
+namespace: Trax.Api.Auth.Jwt
+source:
+  - Trax.Api/src/Trax.Api.Auth.Jwt/JwtAuthServiceCollectionExtensions.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt/JwtBuilder.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt/DefaultJwtPrincipalResolver.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt/JwtTokenInput.cs
+  - Trax.Api/src/Trax.Api.Auth.Jwt/DemoJwtKeyEnvironmentValidator.cs
 ---
 
 # AddTraxJwtAuth
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Registers the Trax JWT bearer authentication scheme, its authorization policy (`JwtDefaults.PolicyName`), the combined `TraxAuthPolicy`, the ASP.NET Core authentication services, the injectable [`TraxPrincipal`](/docs/sdk-reference/api-auth/injecting-trax-principal), `IHttpContextAccessor`, and a one-shot startup disclaimer log.
-
-A principal this scheme authenticates carries the id `TraxJwt:{sub}` on the default scheme, or `{schemeName}:{sub}` on a named one. See [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids).
-
-Token validation (signature, issuer, audience, lifetime) is delegated to `Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerHandler`. After validation, Trax runs an `ITraxPrincipalResolver<JwtTokenInput>` to project the validated token into a `TraxPrincipal`. A resolver that returns `null` fails authentication.
+Extension methods on `IServiceCollection`, declared on `JwtAuthServiceCollectionExtensions`, that register a Trax JWT bearer authentication scheme. `JwtBearerHandler` validates the token's signature, issuer, audience and lifetime; an `ITraxPrincipalResolver<JwtTokenInput>` then maps the validated token to a `TraxPrincipal`.
 
 ## Signatures
 
-```csharp
-// Shortest path: OIDC authority + audience, default claim mapping.
+```csharp fragment
 public static AuthenticationBuilder AddTraxJwtAuth(
     this IServiceCollection services,
     string authority,
@@ -33,7 +36,6 @@ public static AuthenticationBuilder AddTraxJwtAuth<TResolver>(
     string audience)
     where TResolver : class, ITraxPrincipalResolver<JwtTokenInput>;
 
-// Full control: symmetric keys, custom token validation, event handlers.
 public static AuthenticationBuilder AddTraxJwtAuth(
     this IServiceCollection services,
     Action<JwtBuilder> configure);
@@ -43,7 +45,6 @@ public static AuthenticationBuilder AddTraxJwtAuth<TResolver>(
     Action<JwtBuilder> configure)
     where TResolver : class, ITraxPrincipalResolver<JwtTokenInput>;
 
-// Named-scheme overloads: register more than one JWT issuer side by side.
 public static AuthenticationBuilder AddTraxJwtAuth(
     this IServiceCollection services,
     string schemeName,
@@ -56,266 +57,143 @@ public static AuthenticationBuilder AddTraxJwtAuth<TResolver>(
     where TResolver : class, ITraxPrincipalResolver<JwtTokenInput>;
 ```
 
-| Overload | Use when | Resolver lifetime |
+```csharp fragment
+public sealed class JwtBuilder
+{
+    public JwtBuilder UseAuthority(string authority, string audience);
+    public JwtBuilder UseSymmetricKey(string issuer, string audience, byte[] key);
+    public JwtBuilder UseSigningKey(string issuer, string audience, SecurityKey key);
+    public JwtBuilder WithClockSkew(TimeSpan skew);
+    public JwtBuilder AllowHttpMetadata();
+    public JwtBuilder CustomizeTokenValidation(Action<TokenValidationParameters> configure);
+    public JwtBuilder CustomizeBearerOptions(Action<JwtBearerOptions> configure);
+}
+
+public sealed record JwtTokenInput(ClaimsPrincipal Principal, SecurityToken SecurityToken);
+```
+
+## Parameters
+
+| Parameter | Type | Description |
 |---|---|---|
-| `AddTraxJwtAuth(authority, audience)` | OIDC-backed API, default claim mapping is fine. | Singleton `DefaultJwtPrincipalResolver`. |
-| `AddTraxJwtAuth<TResolver>(authority, audience)` | OIDC-backed API, resolver enriches from DB / cache. | Scoped, resolved from DI per request. |
-| `AddTraxJwtAuth(Action<JwtBuilder>)` | Symmetric key, custom validation, or event handlers. | Singleton `DefaultJwtPrincipalResolver`. |
-| `AddTraxJwtAuth<TResolver>(Action<JwtBuilder>)` | All of the above + custom resolver. | Scoped, resolved from DI per request. |
-| `AddTraxJwtAuth(schemeName, Action<JwtBuilder>)` | Accept tokens from more than one issuer. | Singleton `DefaultJwtPrincipalResolver` for this scheme. |
-| `AddTraxJwtAuth<TResolver>(schemeName, Action<JwtBuilder>)` | Multi-issuer setup with a custom resolver per scheme. | Scoped per request, resolved per scheme. |
+| `authority` | `string` | The OIDC issuer URL whose discovery document and JWKS the handler fetches. `AddTraxJwtAuth(authority, audience)` is `AddTraxJwtAuth(jwt => jwt.UseAuthority(authority, audience))`. |
+| `audience` | `string` | The expected `aud`. |
+| `configure` | `Action<JwtBuilder>` | Configures the scheme. Exactly one key source is required. |
+| `schemeName` | `string` | The scheme name. The overloads without it use `JwtDefaults.SchemeName` (`TraxJwt`). |
+| `TResolver` | type argument | The resolver for this scheme, registered scoped. Without it the scheme uses a singleton `DefaultJwtPrincipalResolver`. |
 
-The positional overload is sugar for `AddTraxJwtAuth(jwt => jwt.UseAuthority(authority, audience))`. Reach for the builder when you need symmetric keys, clock-skew tweaks, or `OnChallenge`/`OnAuthenticationFailed` handlers.
+## Members
 
-```csharp
-// One-liner for the common OIDC-backed API case:
-services.AddTraxJwtAuth("https://login.example.com", "my-api");
-```
+`JwtBuilder`, passed to `configure`:
 
-## Provider shortcuts
+| Member | Description |
+|---|---|
+| `UseAuthority(authority, audience)` | Fetch signing keys from the authority's JWKS. The handler caches the keys and refreshes them on an unknown key id. The authority must be HTTPS unless `AllowHttpMetadata()` is called. |
+| `UseSymmetricKey(issuer, audience, key)` | An HMAC-SHA256 key. Throws `ArgumentException` when `key` is shorter than 32 bytes. |
+| `UseSigningKey(issuer, audience, key)` | Any `SecurityKey`: `RsaSecurityKey`, `ECDsaSecurityKey`, or symmetric. |
+| `WithClockSkew(skew)` | Replaces the 5-minute default skew. Throws for a negative value. |
+| `AllowHttpMetadata()` | Permits non-HTTPS authority metadata. |
+| `CustomizeTokenValidation(configure)` | Edits `TokenValidationParameters` after Trax has set issuer, audience, key and skew. Calls chain in registration order. |
+| `CustomizeBearerOptions(configure)` | Edits `JwtBearerOptions` after Trax has wired `OnTokenValidated` to the resolver. Calls chain in registration order. Replacing `Events` wholesale removes the resolver hook. |
 
-Authority URLs for the common identity providers have non-obvious shapes. These wrappers in `Trax.Api.Auth.Jwt` hide them:
+`JwtTokenInput`, passed to the resolver:
 
-```csharp
-// Google - authority baked to https://accounts.google.com
-services.AddTraxGoogleJwtAuth(oauthClientId);
+| Member | Description |
+|---|---|
+| `Principal` | The `ClaimsPrincipal` `JwtBearerHandler` built from the validated token. |
+| `SecurityToken` | The validated token, usually a `JsonWebToken`. |
 
-// Auth0 - authority baked to https://{domain}/ (trailing slash required by Auth0)
-services.AddTraxAuth0JwtAuth("my-tenant.auth0.com", "https://api.example.com");
+## Returns
 
-// Microsoft Entra (v2.0) - authority baked to
-// https://login.microsoftonline.com/{tenantId}/v2.0
-services.AddTraxEntraJwtAuth(tenantId, "api://my-app");
+The `AuthenticationBuilder` from `services.AddAuthentication()`, for chaining further schemes.
 
-// Amazon Cognito - authority baked to
-// https://cognito-idp.{region}.amazonaws.com/{userPoolId}
-services.AddTraxCognitoJwtAuth("us-east-1", "us-east-1_AbCdEfGhI", "app-client-id");
-```
+## Behavior
 
-| Helper | Authority built | Audience semantics |
-|---|---|---|
-| `AddTraxGoogleJwtAuth(clientId)` | `https://accounts.google.com` | OAuth 2.0 client id (id-token `aud`) |
-| `AddTraxAuth0JwtAuth(domain, audience)` | `https://{domain}/` (normalized) | Auth0 API identifier, not the client id |
-| `AddTraxEntraJwtAuth(tenantId, audience)` | `https://login.microsoftonline.com/{tenantId}/v2.0` | Application (client) ID or App ID URI |
-| `AddTraxCognitoJwtAuth(region, userPoolId, audience)` | `https://cognito-idp.{region}.amazonaws.com/{userPoolId}` | Cognito app client id (id-token path) |
+The scheme validates issuer, audience, lifetime and signing key, and requires a signed token with an expiry. `UseAuthority` and an explicit key (`UseSymmetricKey`, `UseSigningKey`) are exclusive: registering neither or both throws `InvalidOperationException` from `AddTraxJwtAuth`. A null or blank `schemeName` throws `ArgumentException`.
 
-Each helper has a `<TResolver>` overload when you need claim-to-principal enrichment beyond the default. Behind the scenes they delegate to `AddTraxJwtAuth(authority, audience)`, so the combined `TraxAuthPolicy`, subscription interceptor, and everything else on this page applies.
+A principal this scheme authenticates carries the id `TraxJwt:{sub}` on the default scheme, or `{schemeName}:{sub}` on a named one. See [Qualified principal ids](/docs/migration-guides/qualified-principal-ids).
 
-The Auth0 helper normalizes the `domain` argument: strips `https://` / `http://` prefixes, strips a trailing slash, re-wraps to `https://{domain}/`. Pass `my-tenant.auth0.com`, `https://my-tenant.auth0.com`, or `my-tenant.auth0.com/` - all resolve identically.
+### Authentication results
 
-Entra's `tenantId` can be a directory GUID, a verified domain (`contoso.onmicrosoft.com`), or one of the multi-tenant sentinels (`common`, `organizations`). The sentinels come with their own signing-key validation rules; prefer a specific tenant unless you explicitly need multi-tenancy.
+| Request | Result |
+|---|---|
+| No `Authorization: Bearer` header | `AuthenticateResult.NoResult()` |
+| Signature, issuer, audience or lifetime invalid | `JwtBearerHandler` fails it. |
+| Valid, resolver returns `null` | `Fail("JWT did not map to a known Trax principal.")` |
+| Valid, resolver throws | Fails with the exception. |
+| Valid, no resolver registered for the scheme | Fails, naming the scheme. |
+| Valid, resolver returns a principal | `Success`, with the principal's claims under the scheme's name. |
 
-## OIDC authority (JWKS)
+### DefaultJwtPrincipalResolver
 
-Fetches signing keys from a provider's discovery document. Keys rotate on the provider's cadence; the handler caches and refreshes automatically.
-
-```csharp
-services.AddTraxJwtAuth(jwt => jwt.UseAuthority(
-    authority: "https://login.example.com",
-    audience:  "my-api"));
-```
-
-## Explicit signing key
-
-For services that mint their own tokens, or when key material is loaded from a secret manager:
-
-```csharp
-var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SigningKey"]!);
-
-services.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey(
-    issuer:   "https://trax.internal",
-    audience: "my-api",
-    key:      key));
-```
-
-`UseSymmetricKey` requires at least 32 bytes (HS256 minimum). For RSA or EC, use `UseSigningKey(issuer, audience, SecurityKey)` with an `RsaSecurityKey` or `ECDsaSecurityKey`.
-
-## A development signing key
-
-To try a host locally without an identity provider, register a symmetric key that lives in
-source, and mint tokens with it. Anyone who reads that key can sign a token for any user, so
-register it only in Development, inside the same `if` as any demo API keys, and register your
-real issuer everywhere else. A symmetric key whose bytes contain `do-not-use-in-production` makes
-the host refuse to start outside Development, as a marked API key does, wherever it is configured:
-`UseSymmetricKey`, a `SymmetricSecurityKey` passed to `UseSigningKey`, or an `IssuerSigningKey` or
-`IssuerSigningKeys` entry set through `CustomizeTokenValidation`, `CustomizeBearerOptions` or a JWT
-bearer scheme the host registered itself. The check reads each bearer scheme's final options at
-startup; keys an `IssuerSigningKeyResolver` returns, or an authority's JWKS serves, exist only when a
-token is validated and are not checked. Put the marker in every key that lives in source:
-
-```csharp
-using System.Security.Claims;
-using System.Text;
-using Microsoft.IdentityModel.JsonWebTokens;
-using Microsoft.IdentityModel.Tokens;
-using Trax.Api.Auth.Jwt;
-
-const string DevIssuer = "my-app-dev";
-const string DevAudience = "my-app";
-var devKey = Encoding.UTF8.GetBytes("my-app-dev-signing-key-do-not-use-in-production");
-
-if (builder.Environment.IsDevelopment())
-    builder.Services.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey(DevIssuer, DevAudience, devKey));
-else
-    builder.Services.AddTraxJwtAuth(
-        builder.Configuration["Auth:Jwt:Authority"]!,
-        builder.Configuration["Auth:Jwt:Audience"]!);
-
-// Mint a token the default resolver maps: sub -> Id, name -> DisplayName, role -> Roles.
-string MintDevToken(string sub, params string[] roles) =>
-    new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
-    {
-        Issuer = DevIssuer,
-        Audience = DevAudience,
-        Subject = new ClaimsIdentity(
-            [new Claim("sub", sub), new Claim("name", sub), .. roles.Select(r => new Claim("role", r))]),
-        Expires = DateTime.UtcNow.AddHours(1),
-        SigningCredentials = new SigningCredentials(
-            new SymmetricSecurityKey(devKey), SecurityAlgorithms.HmacSha256),
-    });
-```
-
-The [Auth sample](/docs/samples/auth) serves such tokens from a Development-only
-`GET /dev/token/{user}` endpoint. In tests, `TestTokenIssuer.Symmetric` from
-[`Trax.Api.Auth.Jwt.Testing`](/docs/sdk-reference/api-auth/jwt-testing) does the minting.
-
-## Do you actually need a custom resolver?
-
-Most apps don't. The positional overload plus the default resolver is the whole integration:
-
-```csharp
-services.AddTraxJwtAuth("https://login.example.com", "my-api");
-```
-
-`DefaultJwtPrincipalResolver` maps the standard OIDC claims:
+The resolver a scheme uses when no `TResolver` is given. It returns `null`, failing authentication, when the token has no subject.
 
 | Token claim | Lands on |
 |---|---|
-| `sub` (then `nameidentifier`) | `TraxPrincipal.Id` |
-| `name` (then `ClaimTypes.Name`, `preferred_username`, and finally the `sub` value) | `TraxPrincipal.DisplayName`. `email` is not consulted: it lands in `Claims` |
-| `role`, `roles`, `ClaimTypes.Role` | `TraxPrincipal.Roles` |
-| Everything else | `TraxPrincipal.Claims` (verbatim, with Trax-reserved claim types filtered out) |
+| `sub`, then `ClaimTypes.NameIdentifier` | `TraxPrincipal.Id` |
+| `name`, then `ClaimTypes.Name`, then `preferred_username`, then the id | `TraxPrincipal.DisplayName`. `email` is not read. |
+| `role`, `roles`, `ClaimTypes.Role` | `TraxPrincipal.Roles`, without blanks or duplicates |
+| Every other claim | `TraxPrincipal.Claims`, the first value of each type |
+| | `TraxPrincipal.PrincipalType` is `jwt`. |
 
-If your provider emits those claims (Google, Auth0, Entra, Cognito, Okta all do), you write zero code. `TraxPrincipal` injection, per-train `[TraxAuthorize]`, and role checks all work end to end.
+### Demo signing keys start only in Development
 
-Reach for a custom resolver only when one of these is true:
+Outside Development, the host refuses to start when a JWT bearer scheme validates with a symmetric key whose bytes, read as UTF-8, contain `do-not-use-in-production` (ignoring case). The check reads each bearer scheme's final options at startup, so it finds the key wherever it was set: `UseSymmetricKey`, a `SymmetricSecurityKey` passed to `UseSigningKey`, or an `IssuerSigningKey` or `IssuerSigningKeys` entry set through `CustomizeTokenValidation`, `CustomizeBearerOptions` or a bearer scheme the host registered itself. Keys an `IssuerSigningKeyResolver` returns, or an authority's JWKS serves, exist only when a token is validated and are not checked.
 
-- **Roles live in a non-standard claim.** Entra app roles, Okta group URIs, namespaced Auth0 claims.
-- **You need database enrichment.** Look up the user's tenant, permissions, feature flags - anything that isn't already in the token.
-- **You need to reject unknown subjects.** Allow-list of provisioned users, revocation cache, account suspension check.
-- **You need to transform claims.** Strip a namespace prefix, coerce numeric subjects to strings, merge multiple role sources into one.
+### Policies and default scheme
 
-## Custom resolver
+The default scheme registers `JwtDefaults.PolicyName` (`JwtPolicy`); a named scheme registers `{schemeName}-JwtPolicy`. Each policy is satisfied only by its own scheme. Every scheme joins `TraxAuthClaimTypes.TraxAuthPolicy`. No default authentication scheme is set: the Trax GraphQL endpoint authenticates each request against every registered scheme in registration order and keeps the first that succeeds, while other routes run only the schemes their policy names. A request that carries both an API key and a bearer token is authenticated by whichever scheme was registered first.
 
-When the token's `sub` needs to be matched against a user record (tenant lookup, role enrichment, revocation check):
+### Subscriptions
 
-```csharp
-public sealed class MyJwtResolver(AppDbContext db) : ITraxPrincipalResolver<JwtTokenInput>
-{
-    public async ValueTask<TraxPrincipal?> ResolveAsync(JwtTokenInput input, CancellationToken ct)
-    {
-        var sub = input.Principal.FindFirst("sub")?.Value;
-        if (sub is null) return null;
+With `Trax.Api.GraphQL` present and a scheme registered under `JwtDefaults.SchemeName`, JWT socket connections go to `TraxJwtSocketInterceptor`. The token arrives in the `connection_init` payload as `authToken` or `bearer` and is authenticated by the scheme's own `JwtBearerHandler`, as an HTTP request carrying it would be, events included. A rejected connection closes before any operation runs; an accepted one closes when its token expires. Several issuers on one socket need [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher). See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
 
-        var user = await db.Users.FindAsync([sub], ct);
-        if (user is null || user.IsRevoked) return null;
+### Registered services
 
-        return new TraxPrincipal(user.Id, user.DisplayName, user.Roles,
-            Claims: new Dictionary<string, string> { ["tenant"] = user.TenantId });
-    }
-}
-
-services.AddTraxJwtAuth<MyJwtResolver>(jwt => jwt.UseAuthority("...", "..."));
-```
-
-The resolver is resolved per request, so scoped dependencies (DbContext, HTTP client with scoped state) work as expected.
-
-## `JwtBuilder` methods
-
-| Method | Purpose |
+| Service | Lifetime |
 |---|---|
-| `UseAuthority(string authority, string audience)` | Fetch signing keys from the provider's JWKS endpoint. |
-| `UseSymmetricKey(string issuer, string audience, byte[] key)` | Explicit HS256 key. Minimum 32 bytes. |
-| `UseSigningKey(string issuer, string audience, SecurityKey key)` | Arbitrary signing key (RSA, EC, symmetric). |
-| `WithClockSkew(TimeSpan)` | Override the 5-minute default skew. `TimeSpan.Zero` for strict validation. |
-| `AllowHttpMetadata()` | Permit non-HTTPS authority metadata. Dev/test only. |
-| `CustomizeTokenValidation(Action<TokenValidationParameters>)` | Last-writer hook for `TokenValidationParameters` (custom audience lists, lifetime validators, type validation). |
-| `CustomizeBearerOptions(Action<JwtBearerOptions>)` | Raw access to `JwtBearerOptions` for event handlers (`OnChallenge`, `OnAuthenticationFailed`). Do not overwrite `Events` wholesale. |
+| Authentication services and a `JwtBearer` scheme under the scheme name | |
+| The scheme's resolver: `DefaultJwtPrincipalResolver` or `TResolver`, and on the default scheme `ITraxPrincipalResolver<JwtTokenInput>` | Singleton or scoped |
+| The scheme's policy, and the scheme in `TraxAuthPolicy` | |
+| [`TraxPrincipal` and `TraxCaller`](/docs/sdk-reference/api-auth/add-trax-principal-accessor), through `AddTraxPrincipalAccessor()` | Scoped |
+| The demo-key startup check | Hosted service, registered once |
+| The NO WARRANTY startup log | Hosted service, registered once |
 
-`UseAuthority` and `UseSigningKey` are mutually exclusive. Calling neither, or both, throws `InvalidOperationException` at startup.
+## Examples
 
-## Return Semantics
+An authority and audience, with the default resolver:
 
-| Condition | Result |
-|---|---|
-| No `Authorization: Bearer` header | `AuthenticateResult.NoResult()` (permits `[AllowAnonymous]`) |
-| Token signature, issuer, audience, or lifetime invalid | `AuthenticateResult.Fail(...)` |
-| Token valid, resolver returns `null` | `AuthenticateResult.Fail("JWT did not map to a known Trax principal.")` |
-| Token valid, resolver throws | `AuthenticateResult.Fail(exception)` |
-| Token valid, resolver returns `TraxPrincipal` | `AuthenticateResult.Success(ticket)` |
-
-## Protecting Endpoints
-
-`AddTraxJwtAuth` does not set a default authentication scheme. On the Trax GraphQL endpoint that
-needs no wiring: Trax authenticates each GraphQL HTTP request against every registered scheme in
-registration order and keeps the first that succeeds, so `[TraxAuthorize]`, `GateOperations(...)`
-and the builder's `RequireAuthorization()` see a bearer caller. Gate GraphQL with those:
-
-```csharp
-services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());                         // any Trax scheme
-services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(JwtDefaults.PolicyName));   // only JWT callers
+```csharp compile
+services.AddTraxJwtAuth("https://login.example.com", "my-api");
 ```
 
-For your own routes, name the policy, because ASP.NET Core runs only the schemes a policy names:
+An explicit signing key from configuration:
 
-```csharp
-app.MapGet("/me", ...).RequireAuthorization(JwtDefaults.PolicyName);
+```csharp compile
+var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SigningKey"]!);
 
-// Mix with other Trax schemes:
-app.MapGet("/me", ...).RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
+services.AddTraxJwtAuth(jwt => jwt
+    .UseSymmetricKey(issuer: "https://trax.internal", audience: "my-api", key: key)
+    .WithClockSkew(TimeSpan.FromSeconds(30)));
 ```
 
-Combining JWT with API-key or OIDC routes credentials through whichever scheme the presented header matches. A request that carries both an API key and a bearer token is authenticated by whichever scheme was registered first.
+Two issuers side by side, each with its own policy:
 
-## Multiple issuers
+```csharp compile
+var internalKey = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:InternalKey"]!);
 
-Pass a scheme name to register more than one JWT validator on the same host. Each call registers an independent `JwtBearer` scheme, its own per-scheme policy (`{schemeName}-JwtPolicy`), and contributes its scheme to the combined `TraxAuthPolicy`. Each scheme can use its own resolver, audience, signing key, and authority.
-
-```csharp
-// External customers signing in via Cognito.
-services.AddTraxJwtAuth<MyCognitoResolver>("cognito", jwt =>
+services.AddTraxJwtAuth("customers", jwt =>
     jwt.UseAuthority("https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ABC", "mobile-client"));
 
-// Internal service-to-service tokens minted by another backend.
-services.AddTraxJwtAuth<MyInternalResolver>("internal", jwt =>
-    jwt.UseSymmetricKey("nwyc-web", "nwyc-trax", internalSecretBytes));
+services.AddTraxJwtAuth("internal", jwt =>
+    jwt.UseSymmetricKey("billing-service", "trax-api", internalKey));
+
+app.MapGet("/customers", () => Results.Ok()).RequireAuthorization("customers-JwtPolicy");
+app.MapGet("/internal", () => Results.Ok()).RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
 ```
 
-Endpoints can then require either scheme:
+## See also
 
-```csharp
-// Only Cognito tokens.
-app.MapGet("/customers", ...).RequireAuthorization("cognito-JwtPolicy");
-
-// Either scheme.
-app.MapGet("/internal", ...).RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
-```
-
-When an endpoint can accept either, callers either name the scheme explicitly per request or wire [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher) to pick the scheme by inspecting the inbound token's `iss` claim.
-
-The default-scheme overloads (`AddTraxJwtAuth(authority, audience)`, `AddTraxJwtAuth(Action<JwtBuilder>)`) register under `JwtDefaults.SchemeName` and remain the right choice when there is only one issuer.
-
-## Subscriptions
-
-When `Trax.Api.GraphQL` is also present and one JWT scheme is registered under `JwtDefaults.SchemeName`, the subscription interceptor `AddTraxGraphQL` registers hands JWT connections to `TraxJwtSocketInterceptor`, alongside API-key auth if that is registered too. Subscriptions receive the token through the `connection_init` payload:
-
-```js
-ws.send(JSON.stringify({
-    type: "connection_init",
-    payload: { authToken: "<jwt>" }  // or "bearer"
-}));
-```
-
-The token is authenticated by the scheme's own `JwtBearerHandler`, as an HTTP request carrying it would be: signature, issuer, audience, lifetime and clock skew, Authority/JWKS schemes with the JWKS refreshed on an unknown key id, and every `JwtBearerEvents` callback you set through `CustomizeBearerOptions`, so an `OnTokenValidated` revocation check refuses the socket too. The handler's `OnTokenValidated` runs the principal resolver, and the result is attached to `HttpContext.User`. Rejected connections close before any subscription operation runs, and an accepted one is closed when its token expires. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
-
-For subscriptions across more than one issuer, register [`AddTraxJwtDispatcher`](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher): JWT connections then go to `TraxJwtDispatcherSocketInterceptor`, which routes each connection to the right scheme by the token's `iss` claim. Hosts with needs beyond that can supply a custom `ISocketSessionInterceptor` via `ConfigureSchema`. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#authentication).
+- [JWT bearer authentication](/docs/api-security#jwt-bearer-authentication)
+- [Write a JWT principal resolver](/docs/security/write-a-jwt-principal-resolver), [Sign development JWTs](/docs/security/sign-development-jwts), [Test JWT authentication](/docs/security/test-jwt-authentication)
+- [JwtProviderExtensions](/docs/sdk-reference/api-auth/jwt-provider-extensions), [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher), [UseCognito](/docs/sdk-reference/api-auth/use-cognito), [JwtDefaults](/docs/sdk-reference/api-auth/jwt-defaults)

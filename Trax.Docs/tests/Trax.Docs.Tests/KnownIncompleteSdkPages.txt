@@ -6,27 +6,6 @@
 # or `surface: typescript`). Delete a page's line once it states them, or when the page moves or is
 # deleted; a stale line fails the test.
 
-sdk-reference/api-audit/add-audit.md
-sdk-reference/api-audit/i-trax-audit-redactor.md
-sdk-reference/api-audit/i-trax-audit-sink.md
-sdk-reference/api-audit/trax-audit-entry.md
-sdk-reference/api-audit/trax-audit-options.md
-sdk-reference/api-auth/add-trax-api-key-auth.md
-sdk-reference/api-auth/add-trax-jwt-auth.md
-sdk-reference/api-auth/add-trax-jwt-dispatcher.md
-sdk-reference/api-auth/add-trax-oidc-auth.md
-sdk-reference/api-auth/api-key-authentication-options.md
-sdk-reference/api-auth/api-key-defaults.md
-sdk-reference/api-auth/cognito-issuer.md
-sdk-reference/api-auth/i-trax-principal-resolver.md
-sdk-reference/api-auth/injecting-trax-principal.md
-sdk-reference/api-auth/jwt-defaults.md
-sdk-reference/api-auth/jwt-testing.md
-sdk-reference/api-auth/oidc-defaults.md
-sdk-reference/api-auth/trax-auth-claim-types.md
-sdk-reference/api-auth/trax-caller.md
-sdk-reference/api-auth/trax-principal.md
-sdk-reference/api-auth/use-cognito.md
 sdk-reference/attributes/inject.md
 sdk-reference/attributes/trax-allow-anonymous.md
 sdk-reference/attributes/trax-authorize.md
@@ -128,19 +107,6 @@ sdk-reference/scheduler-api/use-local-workers.md
 sdk-reference/scheduler-api/use-remote-run.md
 sdk-reference/scheduler-api/use-remote-workers.md
 sdk-reference/scheduler-api/use-sqs-workers.md
-sdk-reference/statemachine-api/add-trax-state-machine-self-check.md
-sdk-reference/statemachine-api/add-trax-state-machines.md
-sdk-reference/statemachine-api/declarative-data-model.md
-sdk-reference/statemachine-api/effects.md
-sdk-reference/statemachine-api/fluent-authoring.md
-sdk-reference/statemachine-api/ir-format.md
-sdk-reference/statemachine-api/machine-instances.md
-sdk-reference/statemachine-api/migrations.md
-sdk-reference/statemachine-api/persistence-ports.md
-sdk-reference/statemachine-api/result-codes.md
-sdk-reference/statemachine-api/rules.md
-sdk-reference/statemachine-api/runtime-integrity.md
-sdk-reference/statemachine-api/typescript-package.md
 sdk-reference/testing/core-testing.md
 sdk-reference/train-methods/add-services.md
 sdk-reference/train-methods/chain-graph.md

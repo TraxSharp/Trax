@@ -21,6 +21,7 @@ namespace Trax.Api.Auth.Oidc;
 /// Returns <c>null</c> when the token has no subject claim.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-oidc-auth">SDK reference</seealso>
 public sealed class DefaultOidcPrincipalResolver : ITraxPrincipalResolver<OidcTokenInput>
 {
     private static readonly string[] SubjectClaimTypes = ["sub", ClaimTypes.NameIdentifier];

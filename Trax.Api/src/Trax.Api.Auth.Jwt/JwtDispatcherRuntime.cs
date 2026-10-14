@@ -16,6 +16,7 @@ namespace Trax.Api.Auth.Jwt;
 /// that scheme then performs full validation.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher">SDK reference</seealso>
 public sealed class JwtDispatcherRuntime
 {
     private readonly IReadOnlyDictionary<string, string> _issuerToScheme;

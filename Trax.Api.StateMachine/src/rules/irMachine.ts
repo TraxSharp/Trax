@@ -99,6 +99,9 @@ export interface IrDocument {
   };
 }
 
+/**
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#the-engine-and-the-typed-view
+ */
 export function machineFromIr(
   ir: IrDocument,
   customGuards: CustomGuards = {},

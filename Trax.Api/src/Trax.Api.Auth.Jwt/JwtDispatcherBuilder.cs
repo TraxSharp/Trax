@@ -16,6 +16,7 @@ namespace Trax.Api.Auth.Jwt;
 /// validation (signature, issuer, audience, lifetime).
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher">SDK reference</seealso>
 public sealed class JwtDispatcherBuilder
 {
     private readonly Dictionary<string, string> _issuerToScheme = new(StringComparer.Ordinal);

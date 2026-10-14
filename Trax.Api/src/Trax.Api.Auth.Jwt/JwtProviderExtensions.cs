@@ -20,6 +20,7 @@ namespace Trax.Api.Auth.Jwt;
 /// interceptor, etc.) works here too.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/jwt-provider-extensions">SDK reference</seealso>
 public static class JwtProviderExtensions
 {
     // ── Google ───────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ namespace Trax.Api.Auth;
 /// NO WARRANTY. See SECURITY-DISCLAIMER.md.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/trax-caller">SDK reference</seealso>
 public sealed class TraxCaller
 {
     private readonly IHttpContextAccessor _httpContextAccessor;

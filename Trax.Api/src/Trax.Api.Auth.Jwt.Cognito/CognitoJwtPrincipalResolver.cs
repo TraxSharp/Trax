@@ -32,6 +32,7 @@ namespace Trax.Api.Auth.Jwt.Cognito;
 /// their own database keyed by <c>sub</c>.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/use-cognito">SDK reference</seealso>
 public sealed class CognitoJwtPrincipalResolver : ITraxPrincipalResolver<JwtTokenInput>
 {
     private static readonly string[] SubjectClaimTypes = ["sub", ClaimTypes.NameIdentifier];

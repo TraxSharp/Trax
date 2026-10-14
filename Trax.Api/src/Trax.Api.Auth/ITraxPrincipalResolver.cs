@@ -20,6 +20,7 @@ namespace Trax.Api.Auth;
 /// scheme handler translates this to an authentication failure.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/i-trax-principal-resolver">SDK reference</seealso>
 public interface ITraxPrincipalResolver<in TInput>
 {
     /// <summary>

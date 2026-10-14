@@ -21,4 +21,5 @@ namespace Trax.Api.Auth.Jwt;
 /// NO WARRANTY. Trax auth is plumbing, not a security product. You are solely
 /// responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-jwt-auth">SDK reference</seealso>
 public sealed record JwtTokenInput(ClaimsPrincipal Principal, SecurityToken SecurityToken);

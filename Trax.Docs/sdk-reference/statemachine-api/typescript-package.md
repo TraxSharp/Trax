@@ -6,11 +6,21 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 14
+surface: typescript
+package: "@trax/state-machine"
+source:
+  - Trax.Api.StateMachine/src/index.ts
+  - Trax.Api.StateMachine/src/client/index.ts
+  - Trax.Api.StateMachine/src/react.ts
+  - Trax.Api.StateMachine/package.json
 ---
 
 # TypeScript package
 
-`@trax/state-machine` is the TypeScript twin of `Trax.Effect.StateMachine`. It has three entry points:
+`@trax/state-machine` is the TypeScript twin of `Trax.Effect.StateMachine`, published from `Trax.Api.StateMachine`.
+Its exports are pinned by a committed baseline (`src/exports.test.ts`).
+
+## Members
 
 | Entry point | Holds |
 | --- | --- |
@@ -18,13 +28,7 @@ nav_order: 14
 | `@trax/state-machine/client` | Everything that talks to a Trax server: the generic and typed executors, draft sessions, and the server-authoritative controller. |
 | `@trax/state-machine/react` | `useMachine` and `useServerMachine`. React is an optional peer dependency. |
 
-The package's exports are pinned by a committed baseline (`src/exports.test.ts`), so a new export is a reviewed
-change. The operations each client sends are described on the [machines root](/docs/sdk-reference/graphql-api/machines)
-page; the result codes on [Result codes](/docs/sdk-reference/statemachine-api/result-codes).
-
-## The engine and the typed view
-
-From `@trax/state-machine`:
+### The engine and the typed view
 
 | Export | What it is |
 | --- | --- |
@@ -39,9 +43,9 @@ From `@trax/state-machine`:
 | `generateContextTypes`, `generateMachineFactory` | The generators that emit a twin from an IR. `trax machine generate` and the drift check call them. |
 | `enumerate`, `serializeCorpus` | Enumerate a machine into the differential corpus the C# engine replays. |
 
-## Driving a machine the client owns
+### Driving a machine the client owns
 
-When the browser holds the snapshot (an offline form, a machine with no server), use a store over a `TypedMachine`:
+From `@trax/state-machine` (`useMachine` from `@trax/state-machine/react`), for a snapshot the browser holds:
 
 | Export | What it is |
 | --- | --- |
@@ -51,9 +55,9 @@ When the browser holds the snapshot (an offline form, a machine with no server),
 | `problemFromAdvance`, `problemFromRehydration`, `Problem` | A refusal shaped for display. |
 | `createDevLogger` | Logs transitions and refusals in development. |
 
-## Talking to a server
+### Talking to a server
 
-From `@trax/state-machine/client`:
+From `@trax/state-machine/client` (`useServerMachine` from `@trax/state-machine/react`):
 
 | Export | What it is |
 | --- | --- |
@@ -69,3 +73,10 @@ From `@trax/state-machine/client`:
 `useServerMachine(machine, { server, id?, startInput?, startRequestId?, startStorageKey?, newRequestId?, retryDelays? })`, from
 `@trax/state-machine/react`, is `ServerMachineController` as a hook. Its options, its answer and an example are under
 [Driving an instance from React](/docs/sdk-reference/graphql-api/machines#driving-an-instance-from-react).
+
+## See also
+
+- [The machines root](/docs/sdk-reference/graphql-api/machines), the operations each client sends.
+- [Result codes](/docs/sdk-reference/statemachine-api/result-codes), the codes every result carries.
+- [IR format](/docs/sdk-reference/statemachine-api/ir-format), what `machineFromIr` reads.
+- [The codegen pipeline](/docs/statemachine/codegen-pipeline), how a twin is generated.

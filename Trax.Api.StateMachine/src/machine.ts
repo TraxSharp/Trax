@@ -27,6 +27,7 @@ import type {
  * from the state (`no-transition`); an input that does not match the trigger's declared schema (`invalid-input`);
  * a guard that declines (`guard-failed`); a target whose timer reads a duration the successor context does not hold
  * within bounds (`invalid-input`); a successor context the target refuses (`invalid-context`).
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#the-engine-and-the-typed-view
  */
 export class SnapshotMachine<S extends string, T extends string> {
   private readonly stateSet: ReadonlySet<string>;

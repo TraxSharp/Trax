@@ -9,6 +9,7 @@ namespace Trax.Api.Auth.Jwt.Cognito;
 /// (audience in <c>client_id</c>). The default validator wires acceptance
 /// of either, since most apps mix both depending on the call site.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/use-cognito">SDK reference</seealso>
 public enum CognitoTokenUse
 {
     /// <summary>Accept Cognito ID tokens (audience claim: <c>aud</c>).</summary>

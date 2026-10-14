@@ -7,6 +7,7 @@ namespace Trax.Api.Auth;
 /// NO WARRANTY. Trax auth is plumbing, not a security product. You are solely
 /// responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/trax-auth-claim-types">SDK reference</seealso>
 public static class TraxAuthClaimTypes
 {
     /// <summary>

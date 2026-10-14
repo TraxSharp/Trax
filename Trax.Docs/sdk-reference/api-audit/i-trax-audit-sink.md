@@ -1,41 +1,59 @@
 ---
 title: ITraxAuditSink
-description: Reference for ITraxAuditSink, the destination you implement for audit entries, and its guarantees on batching, threading, retries and dropped batches.
+description: Reference for ITraxAuditSink, the destination you implement for audit entries, and how the writer calls it on batching, threading, retries and drops.
 type: reference
 area: security
 parent: API Audit
 grand_parent: SDK Reference
 nav_order: 3
+package: Trax.Api.GraphQL.Audit
+namespace: Trax.Api.GraphQL.Audit
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.Audit/ITraxAuditSink.cs
 ---
 
 # ITraxAuditSink
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Destination for audit entries. Hosts implement once per deployment (Postgres, Serilog, CloudWatch, S3, whatever).
+The destination for audit entries, implemented by the host (a database table, a log pipeline, object storage) and registered with `AddAudit<TSink>()`.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public interface ITraxAuditSink
 {
     Task WriteAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct);
 }
 ```
 
-## Guarantees
+## Parameters
 
-- Called from the background writer thread, never from the request thread.
-- Batch size ranges from 1 to `TraxAuditOptions.BatchSize`.
-- Exceptions are retried up to `MaxRetries` times with exponential backoff. After that the batch is dropped, logged, and counted in `trax.audit.dropped`.
-- `ct` is not cancelled when shutdown begins: the writer keeps writing accepted entries until the host's shutdown timeout, and `ct` fires then. Observe it, so a write that cannot finish gives up promptly; whatever was unwritten is counted as dropped either way.
-- Writer swallows all failures. A crashed sink must not crash GraphQL requests.
+| Parameter | Type | Description |
+|---|---|---|
+| `batch` | `IReadOnlyList<TraxAuditEntry>` | From 1 to `TraxAuditOptions.BatchSize` [entries](/docs/sdk-reference/api-audit/trax-audit-entry). |
+| `ct` | `CancellationToken` | Fires when the host's shutdown timeout runs out, not when shutdown begins. |
+
+## Returns
+
+A task that completes when the batch is stored. A faulted task counts as a failed attempt.
+
+## Behavior
+
+- Called from the background writer, never from a request thread. The writer is single-threaded: one call at a time.
+- The sink is resolved from a new scope for each attempt.
+- A failed attempt is retried up to `MaxRetries` times, waiting `RetryBackoff` doubled on each attempt, capped at `MaxRetryBackoff`, and jittered between half and all of that value. After the last retry the batch is dropped, logged, and counted in `trax.audit.dropped`.
+- On graceful shutdown the writer keeps writing accepted entries until the host's shutdown timeout, and `ct` fires then. Whatever is unwritten at that point is counted as dropped.
+- The writer catches every sink failure. A failing sink does not fail a GraphQL request.
 
 ## Example
 
-Postgres sink with `IDbContextFactory`:
+A sink that writes each batch through an `IDbContextFactory`:
 
-```csharp
+```csharp compile
+using Microsoft.EntityFrameworkCore;
+using Trax.Api.GraphQL.Audit;
+
 public sealed class PostgresAuditSink(IDbContextFactory<AppDbContext> factory) : ITraxAuditSink
 {
     public async Task WriteAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct)
@@ -46,3 +64,9 @@ public sealed class PostgresAuditSink(IDbContextFactory<AppDbContext> factory) :
     }
 }
 ```
+
+## See also
+
+- [Drops and shutdown](/docs/api-security#drops-and-shutdown)
+- [Tune the audit pipeline](/docs/security/tune-the-audit-pipeline)
+- [AddAudit](/docs/sdk-reference/api-audit/add-audit), [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options), [TraxAuditChannel](/docs/sdk-reference/api-audit/trax-audit-channel)

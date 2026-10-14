@@ -26,6 +26,7 @@ namespace Trax.Api.Auth.Oidc;
 /// API clients, use <c>Trax.Api.Auth.Jwt</c>.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-oidc-auth">SDK reference</seealso>
 public static class OidcAuthServiceCollectionExtensions
 {
     /// <summary>

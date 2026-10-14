@@ -17,6 +17,7 @@ namespace Trax.Api.Auth.Jwt.Cognito.Issuer;
 /// process restart wipes every session.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/i-refresh-token-store">SDK reference</seealso>
 public sealed class InMemoryRefreshTokenStore : IRefreshTokenStore
 {
     private readonly ConcurrentDictionary<string, Entry> _tokens = new(StringComparer.Ordinal);

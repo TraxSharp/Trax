@@ -35,6 +35,7 @@ namespace Trax.Api.Auth.Jwt;
 /// short-form overloads that default to <see cref="JwtDefaults.SchemeName"/>.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-jwt-auth">SDK reference</seealso>
 public static class JwtAuthServiceCollectionExtensions
 {
     /// <summary>

@@ -93,6 +93,9 @@ export interface FormView<
   isCommitted(json: string | null | undefined): boolean;
 }
 
+/**
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#driving-a-machine-the-client-owns
+ */
 export function createFormView<
   Spec extends MachineSpec,
   Step extends string,

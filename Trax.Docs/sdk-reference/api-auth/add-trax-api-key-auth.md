@@ -1,26 +1,29 @@
 ---
 title: AddTraxApiKeyAuth
-description: "Reference for AddTraxApiKeyAuth: static key sets and DI-scoped resolvers, ApiKeyBuilder methods, hashed key comparison, demo keys and protecting endpoints."
+description: "Reference for AddTraxApiKeyAuth: static key sets and DI-scoped resolvers, ApiKeyBuilder methods, hashed key comparison, demo keys and the policies it registers."
 type: reference
 area: security
 parent: API Auth
 grand_parent: SDK Reference
 nav_order: 1
+package: Trax.Api.Auth.ApiKey
+namespace: Trax.Api.Auth.ApiKey
+source:
+  - Trax.Api/src/Trax.Api.Auth.ApiKey/ApiKeyAuthServiceCollectionExtensions.cs
+  - Trax.Api/src/Trax.Api.Auth.ApiKey/ApiKeyBuilder.cs
+  - Trax.Api/src/Trax.Api.Auth.ApiKey/ApiKeyAuthHandler.cs
+  - Trax.Api/src/Trax.Api.Auth.ApiKey/DemoApiKeyEnvironmentValidator.cs
 ---
 
 # AddTraxApiKeyAuth
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Registers the Trax API-key authentication scheme, its authorization policy (`ApiKeyDefaults.PolicyName`), the combined `TraxAuthPolicy`, the ASP.NET Core authentication services (`AddAuthentication()`), the injectable [`TraxPrincipal`](/docs/sdk-reference/api-auth/injecting-trax-principal) (`AddTraxPrincipalAccessor()`), `IHttpContextAccessor`, and a one-shot startup disclaimer log.
-
-A principal this scheme authenticates carries the id `TraxApiKey:{id}`: the id you registered, qualified by the scheme name. See [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids).
-
-If you call it conditionally (demo keys in Development, configured keys elsewhere, nothing when nothing is configured), also call `services.AddAuthentication()` and `services.AddTraxPrincipalAccessor()` unconditionally. Without the first, `app.UseAuthentication()` throws `Unable to resolve service for type 'Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider'` on a host where no `AddTrax*Auth` ran; without the second, the mediator's startup check refuses a host whose junctions inject `TraxPrincipal`. Both calls are idempotent. The [Auth sample](/docs/samples/auth) has the full shape.
+Extension methods on `IServiceCollection`, declared on `ApiKeyAuthServiceCollectionExtensions`, that register the Trax API-key authentication scheme. One overload takes a static key set built with `ApiKeyBuilder`; the other takes a resolver from DI.
 
 ## Signatures
 
-```csharp
+```csharp fragment
 public static AuthenticationBuilder AddTraxApiKeyAuth(
     this IServiceCollection services,
     Action<ApiKeyBuilder> configure,
@@ -32,111 +35,65 @@ public static AuthenticationBuilder AddTraxApiKeyAuth<TResolver>(
     where TResolver : class, ITraxPrincipalResolver<string>;
 ```
 
-Two paths, picked by shape of the credential source:
+```csharp fragment
+public sealed class ApiKeyBuilder
+{
+    public const string DemoKeyMarker = "do-not-use-in-production";
 
-| Overload | Use when | Resolver lifetime |
+    public ApiKeyBuilder Add(string key, string id, params string[] roles);
+    public ApiKeyBuilder Add(string key, Func<TraxPrincipal> principalFactory);
+    public ApiKeyBuilder AddHashed(byte[] salt, byte[] sha256, string id, params string[] roles);
+    public ApiKeyBuilder AddHashed(byte[] salt, byte[] sha256, Func<TraxPrincipal> principalFactory);
+}
+```
+
+## Parameters
+
+| Parameter | Type | Description |
 |---|---|---|
-| `AddTraxApiKeyAuth(Action<ApiKeyBuilder>)` | Keys are a static set known at startup (config, secret manager, constants). | Singleton `HashedApiKeyResolver` built from the configured entries. |
-| `AddTraxApiKeyAuth<TResolver>()` | Keys come from a runtime source that needs scoped DI dependencies (DbContext, distributed cache, HTTP client). | Scoped, resolved from DI per request. |
+| `configure` | `Action<ApiKeyBuilder>` | Registers the static key set. At least one key is required. |
+| `TResolver` | type argument | An [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)`<string>` that receives the raw header value. Registered scoped. |
+| `configureOptions` | `Action<ApiKeyAuthenticationOptions>?` | Sets [ApiKeyAuthenticationOptions](/docs/sdk-reference/api-auth/api-key-authentication-options), such as the header name. |
 
-## Static key set (builder overload)
+## Members
 
-Keys registered through the builder are salted and SHA-256 hashed at startup and compared with `CryptographicOperations.FixedTimeEquals` on every request. Cleartext comparison is not reachable from consumer code.
+`ApiKeyBuilder`, passed to `configure`:
 
-```csharp
-if (builder.Environment.IsDevelopment())
-{
-    services.AddTraxApiKeyAuth(keys => keys
-        .Add("admin-key-do-not-use-in-production",  id: "admin",  "Admin", "Player")
-        .Add("player-key-do-not-use-in-production", id: "player", "Player")
-        .Add("reader-key-do-not-use-in-production", id: "reader"));
-}
-```
-
-The roles after `id` are optional. A key with none (`reader` above) authenticates as a caller with
-no roles: it passes a bare `[TraxAuthorize]` and an authenticated query model, and is refused
-(`TRAX_AUTHORIZATION`) by anything that names a role.
-
-A key written into source is a demo key: give it the `do-not-use-in-production` marker and
-register it only in Development, as above (see [Demo keys start only in Development](/docs/sdk-reference/api-auth/add-trax-api-key-auth#demo-keys-start-only-in-development)).
-Real keys come from a secret store, through `AddHashed` or a resolver.
-
-When the principal needs a display name distinct from its id, or custom claims, use the factory overload of `Add`:
-
-```csharp
-services.AddTraxApiKeyAuth(keys => keys
-    .Add("alice-key-do-not-use-in-production",
-        () => new TraxPrincipal("alice", "Alice Liddell", ["User"])));
-```
-
-### Pre-hashed keys
-
-For production hosts that load salt and hash bytes from a secret manager (cleartext never enters the process), use `AddHashed`:
-
-```csharp
-var admin = builder.Configuration.GetSection("ApiKeys:Admin");
-
-services.AddTraxApiKeyAuth(keys => keys.AddHashed(
-    salt:   Convert.FromBase64String(admin["Salt"]!),
-    sha256: Convert.FromBase64String(admin["Hash"]!),
-    id:     "admin",
-    "Admin"));
-```
-
-`sha256` is the SHA-256 of the salt bytes followed by the key's UTF-8 bytes: `SHA-256(salt || UTF-8(key))`. The salt must be non-empty; 16 random bytes is what `Add` uses. Produce the pair once, when you issue the key, and store both in the secret manager:
-
-```csharp
-using System.Security.Cryptography;
-using System.Text;
-
-var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));   // give this to the caller
-var salt = RandomNumberGenerator.GetBytes(16);
-var hash = SHA256.HashData([.. salt, .. Encoding.UTF8.GetBytes(key)]);
-
-Console.WriteLine($"Salt: {Convert.ToBase64String(salt)}");
-Console.WriteLine($"Hash: {Convert.ToBase64String(hash)}");
-```
-
-`AddHashed(salt, sha256, id, roles)` builds the same principal as `Add(key, id, roles)`.
-
-## DI-scoped resolver (generic overload)
-
-For keys backed by a database, cache, or HTTP service, implement `ITraxPrincipalResolver<string>`:
-
-```csharp
-public sealed class MyApiKeyResolver(ApplicationDbContext db) : ITraxPrincipalResolver<string>
-{
-    public async ValueTask<TraxPrincipal?> ResolveAsync(string apiKey, CancellationToken ct)
-    {
-        var user = await db.ApiKeys.FirstOrDefaultAsync(k => k.Hash == Hash(apiKey), ct);
-        return user is null
-            ? null
-            : new TraxPrincipal(user.Id, user.DisplayName, user.Roles);
-    }
-}
-
-services.AddTraxApiKeyAuth<MyApiKeyResolver>();
-```
-
-The resolver is resolved per request, so scoped dependencies work as expected. Hash comparisons are the consumer's responsibility on this path; use `CryptographicOperations.FixedTimeEquals` against a stored hash, never a cleartext `==`.
-
-## `ApiKeyBuilder` methods
-
-| Method | Purpose |
+| Member | Description |
 |---|---|
-| `Add(string key, string id, params string[] roles)` | Cleartext key; principal id doubles as display name, `PrincipalType` is `apikey`. Covers the common case. |
-| `Add(string key, Func<TraxPrincipal> principalFactory)` | Cleartext key with full principal control (distinct display name, custom claims). The factory builds the whole principal, so set `PrincipalType: "apikey"` yourself if anything reads it (the audit trail records it). |
-| `AddHashed(byte[] salt, byte[] sha256, string id, params string[] roles)` | Pre-hashed key; cleartext never enters the process. `PrincipalType` is `apikey`. |
-| `AddHashed(byte[] salt, byte[] sha256, Func<TraxPrincipal> principalFactory)` | Pre-hashed key with full principal control. As with the factory `Add`, you set `PrincipalType`. |
+| `Add(string key, string id, params string[] roles)` | A cleartext key. The principal's id is also its display name, and its `PrincipalType` is `apikey`. Roles are optional. |
+| `Add(string key, Func<TraxPrincipal> principalFactory)` | A cleartext key whose principal the factory builds whole: display name, claims, and `PrincipalType`, which the factory sets itself if anything reads it (the audit trail does). |
+| `AddHashed(byte[] salt, byte[] sha256, string id, params string[] roles)` | A pre-hashed key: cleartext never enters the process. Builds the same principal as `Add(key, id, roles)`. |
+| `AddHashed(byte[] salt, byte[] sha256, Func<TraxPrincipal> principalFactory)` | A pre-hashed key with a principal factory. |
+| `DemoKeyMarker` | `do-not-use-in-production`, the marker of a published demo key. |
 
-`Build()` is internal. The extension method calls it and throws `InvalidOperationException` if no keys were registered.
+`sha256` is `SHA-256(salt || UTF-8(key))`, the salt bytes followed by the key's UTF-8 bytes. `AddHashed` throws `ArgumentException` for an empty salt or a hash that is not 32 bytes. `Add` and `AddHashed` throw for a null or blank key or id.
+
+## Returns
+
+The `AuthenticationBuilder` from `services.AddAuthentication()`, for chaining further schemes.
+
+## Behavior
+
+Keys registered through the builder are salted with 16 random bytes and SHA-256 hashed when they are registered, held by a singleton [HashedApiKeyResolver](/docs/sdk-reference/api-auth/hashed-api-key-resolver), and compared with `CryptographicOperations.FixedTimeEquals` against every entry on each request. The builder overload throws `InvalidOperationException` when no key was registered. On the resolver overload, comparing keys is the resolver's job.
+
+A principal this scheme authenticates carries the id `TraxApiKey:{id}`. See [Qualified principal ids](/docs/migration-guides/qualified-principal-ids).
+
+### Authentication results
+
+| Request | Result |
+|---|---|
+| No key header | `AuthenticateResult.NoResult()`: other schemes run, and an anonymous endpoint stays open. |
+| Header present but empty or whitespace | `AuthenticateResult.NoResult()` |
+| Header present more than once | `Fail("Multiple API keys presented.")`. The resolver is not called. |
+| One header whose value contains a comma | `Fail("Ambiguous API key header.")`. The resolver is not called. |
+| Resolver returns `null` | `Fail("Invalid API key.")` |
+| Resolver throws | `Fail("API-key resolver failed.")`, the exception logged at `Warning`. |
+| Resolver returns a principal | `Success`, with the principal's claims under the `TraxApiKey` scheme. |
 
 ### Demo keys start only in Development
 
-A cleartext key containing `ApiKeyBuilder.DemoKeyMarker` (`do-not-use-in-production`, compared
-ignoring case) marks a published demo key, the kind the Trax templates and samples ship. When
-one is registered through `Add`, the host refuses to start in any environment other than
-Development, with a message naming the marker and the environment (never the key):
+A key added with `Add` whose text contains `DemoKeyMarker`, compared ignoring case, makes the host refuse to start in any environment other than Development, before any hosted service or Kestrel starts. The message names the marker and the environment, never the key:
 
 ```
 AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production', which marks a
@@ -145,58 +102,103 @@ Register real keys (keys.AddHashed(...) from a secret store, or a resolver via
 AddTraxApiKeyAuth<TResolver>()) outside Development.
 ```
 
-Keys added with `AddHashed`, and keys a resolver returns, are not inspected. The check is a
-backstop, not the gate: register demo keys inside `if (builder.Environment.IsDevelopment())` so a
-deployed host never has them at all.
+Keys added with `AddHashed`, and keys a resolver accepts, are not inspected.
 
-## Return Semantics
+### Policies and default scheme
 
-| Header state | Result |
+`AddTraxApiKeyAuth` registers the policy `ApiKeyDefaults.PolicyName`, satisfied only by a caller this scheme authenticated, and adds the scheme to the combined `TraxAuthClaimTypes.TraxAuthPolicy`. It does not set a default authentication scheme. The Trax GraphQL endpoint authenticates each request against every registered scheme in registration order and keeps the first that succeeds, so `[TraxAuthorize]`, `GateOperations(...)` and the builder's `RequireAuthorization()` see an API-key caller. On other routes ASP.NET Core runs only the schemes a policy names, and a plain `RequireAuthorization()` names none: name `ApiKeyDefaults.PolicyName` or `TraxAuthPolicy`.
+
+### Registered services
+
+| Service | Lifetime |
 |---|---|
-| Absent | `AuthenticateResult.NoResult()` (permits `[AllowAnonymous]`) |
-| Present more than once | `AuthenticateResult.Fail("Multiple API keys presented.")`. The resolver is not invoked. |
-| Present, resolver returns `null` | `AuthenticateResult.Fail(...)` |
-| Present, resolver throws | `AuthenticateResult.Fail(...)` (logged at `Warning`, not `Error`) |
-| Present, resolver returns `TraxPrincipal` | `AuthenticateResult.Success(ticket)` |
+| Authentication services (`AddAuthentication()`) and the `TraxApiKey` scheme with its handler | |
+| `ITraxPrincipalResolver<string>`: `HashedApiKeyResolver` (builder overload) or `TResolver` | Singleton or scoped |
+| `ApiKeyPolicy`, and `TraxApiKey` in `TraxAuthPolicy` | |
+| [`TraxPrincipal` and `TraxCaller`](/docs/sdk-reference/api-auth/add-trax-principal-accessor), through `AddTraxPrincipalAccessor()`, and `IHttpContextAccessor` | Scoped |
+| The demo-key startup check, when a marked key was added | Hosted service |
+| The NO WARRANTY startup log, registered once | Hosted service |
 
-## Protecting Endpoints
+A host that calls `AddTraxApiKeyAuth` conditionally also calls `services.AddAuthentication()` and `services.AddTraxPrincipalAccessor()` unconditionally: without the first, `app.UseAuthentication()` throws when no scheme was registered, and without the second the mediator refuses to start a host whose junctions inject `TraxPrincipal`. Both are idempotent.
 
-`AddTraxApiKeyAuth` does not set a default authentication scheme. That does not matter for the
-Trax GraphQL endpoint: Trax authenticates every GraphQL HTTP request against each registered
-scheme in registration order and keeps the first that succeeds, so `[TraxAuthorize]`,
-`GateOperations(...)` and the builder's `RequireAuthorization()` all see an API-key caller with
-no extra wiring. Gate GraphQL with those:
+## Examples
 
-```csharp
-// Gate every GraphQL operation (the combined Trax policy: any registered Trax scheme)
-services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
+### Static key set
 
-// Or only API-key callers
+Registered only in Development:
+
+```csharp compile
+if (builder.Environment.IsDevelopment())
+{
+    services.AddTraxApiKeyAuth(keys => keys
+        .Add("admin-key-do-not-use-in-production", id: "admin", "Admin", "Player")
+        .Add("player-key-do-not-use-in-production", id: "player", "Player")
+        .Add("reader-key-do-not-use-in-production", id: "reader"));
+}
+```
+
+### Principal factory
+
+A key whose principal has a display name of its own:
+
+```csharp compile
+services.AddTraxApiKeyAuth(keys => keys
+    .Add("alice-key-do-not-use-in-production",
+        () => new TraxPrincipal("alice", "Alice Liddell", ["User"], PrincipalType: "apikey")));
+```
+
+### Pre-hashed keys
+
+A key loaded from configuration as salt and hash:
+
+```csharp compile
+var admin = builder.Configuration.GetSection("ApiKeys:Admin");
+
+services.AddTraxApiKeyAuth(keys => keys.AddHashed(
+    salt: Convert.FromBase64String(admin["Salt"]!),
+    sha256: Convert.FromBase64String(admin["Hash"]!),
+    id: "admin",
+    "Admin"));
+```
+
+### Producing a salt and hash
+
+Once, when the key is issued:
+
+```csharp compile
+var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)); // give this to the caller
+var salt = RandomNumberGenerator.GetBytes(16);
+var hash = SHA256.HashData([.. salt, .. Encoding.UTF8.GetBytes(key)]);
+
+Console.WriteLine($"Salt: {Convert.ToBase64String(salt)}");
+Console.WriteLine($"Hash: {Convert.ToBase64String(hash)}");
+```
+
+### Resolver
+
+A resolver backed by a user store, and the policy on a route:
+
+```csharp compile
+services.AddTraxApiKeyAuth<DirectoryApiKeyResolver>();
 services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(ApiKeyDefaults.PolicyName));
+
+app.MapGet("/reports", () => Results.Ok()).RequireAuthorization(ApiKeyDefaults.PolicyName);
+
+public sealed class DirectoryApiKeyResolver(IUserDirectory users) : ITraxPrincipalResolver<string>
+{
+    public async ValueTask<TraxPrincipal?> ResolveAsync(string apiKey, CancellationToken ct)
+    {
+        var user = await users.FindByApiKeyHashAsync(SHA256.HashData(Encoding.UTF8.GetBytes(apiKey)), ct);
+        return user is null
+            ? null
+            : new TraxPrincipal(user.Id, user.DisplayName, user.Roles, PrincipalType: "apikey");
+    }
+}
 ```
 
-Prefer the builder's `RequireAuthorization()` to an endpoint convention on the GraphQL route: the
-startup checks for the `operations` namespace and `[TraxAllowAnonymous]` see the builder's gate
-and do not see a route convention (see [Authorization](/docs/authorization#combining-with-endpoint-level-auth)).
+## See also
 
-For your own minimal-API or MVC routes, ASP.NET Core invokes a handler only for the schemes a
-policy names, and a plain `[Authorize]` or `.RequireAuthorization()` names none. Name the policy:
-
-```csharp
-// Only API-key callers
-app.MapGet("/reports", ...).RequireAuthorization(ApiKeyDefaults.PolicyName);
-
-// Any Trax scheme (API key OR JWT OR ...)
-app.MapGet("/me", ...).RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
-```
-
-`TraxAuthClaimTypes.TraxAuthPolicy` is the name every Trax auth package registers into. Each `AddTrax*Auth` call adds its scheme to that policy's allowed-schemes list, so a route protected by `TraxAuthPolicy` accepts credentials from any configured Trax scheme.
-
-If you want API-key auth to act as the default for the whole app, pass the scheme name to `AddAuthentication` directly:
-
-```csharp
-services.AddAuthentication(ApiKeyDefaults.SchemeName);
-services.AddTraxApiKeyAuth(keys => keys.Add("...", id: "..."));
-```
-
-That is an application-level choice, not one Trax makes for you.
+- [API-key authentication](/docs/api-security#api-key-authentication)
+- [HashedApiKeyResolver](/docs/sdk-reference/api-auth/hashed-api-key-resolver), [ApiKeyAuthenticationOptions](/docs/sdk-reference/api-auth/api-key-authentication-options), [ApiKeyDefaults](/docs/sdk-reference/api-auth/api-key-defaults)
+- [Authorization](/docs/authorization#combining-with-endpoint-level-auth)
+- The [Auth sample](/docs/samples/auth) registers keys conditionally.

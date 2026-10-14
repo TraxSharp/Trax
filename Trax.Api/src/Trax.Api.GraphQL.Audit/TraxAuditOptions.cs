@@ -12,6 +12,7 @@ namespace Trax.Api.GraphQL.Audit;
 /// option, rather than writing nothing or failing on every request.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-audit/trax-audit-options">SDK reference</seealso>
 public sealed class TraxAuditOptions
 {
     /// <summary>

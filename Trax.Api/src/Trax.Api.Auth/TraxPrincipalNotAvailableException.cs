@@ -17,6 +17,7 @@ namespace Trax.Api.Auth;
 /// for dual-path junctions.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-principal-accessor">SDK reference</seealso>
 public sealed class TraxPrincipalNotAvailableException : InvalidOperationException
 {
     private const string DefaultMessage =

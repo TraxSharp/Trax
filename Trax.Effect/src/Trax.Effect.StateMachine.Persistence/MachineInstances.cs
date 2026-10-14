@@ -10,6 +10,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// each driven by the trains its states invoke. They are created only from code (a train, or startup); no GraphQL
 /// operation creates, reads or advances one, and no user's request reaches one, even under the same id.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine-instances">SDK reference</seealso>
 public interface IMachineInstances
 {
     /// <summary>

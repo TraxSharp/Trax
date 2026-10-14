@@ -26,6 +26,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// Recognises a unique violation on the configured provider. Without one, a concurrent create of the same draft
 /// throws instead of losing the race.
 /// </param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/persistence-ports#efsnapshotstore-and-efeffectclaimstore">SDK reference</seealso>
 public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null)
     : ISnapshotStore,
         IMachineInstanceStore,

@@ -7,6 +7,7 @@ using Trax.Effect.Utils;
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>The machine-agnostic handle a host discovers and the registry keys on.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine#members">SDK reference</seealso>
 public interface IMachine
 {
     /// <summary>The machine's stable id (from the fluent <c>Id(...)</c>).</summary>
@@ -118,6 +119,7 @@ public interface IMachine
 /// }
 /// </code>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/machine">SDK reference</seealso>
 public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     where TState : struct, Enum
     where TTrigger : struct, Enum

@@ -1,6 +1,7 @@
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>The meter and instrument names the state-machine subsystem reports through.</summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/add-state-machines#census-and-instruments">SDK reference</seealso>
 public static class StateMachineInstruments
 {
     /// <summary>The diagnostic meter name.</summary>

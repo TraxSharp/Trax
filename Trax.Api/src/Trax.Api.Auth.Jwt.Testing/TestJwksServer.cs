@@ -36,6 +36,7 @@ namespace Trax.Api.Auth.Jwt.Testing;
 /// <see cref="CreateIssuer(string)"/>) is the most-recently-added entry.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/test-jwks-server">SDK reference</seealso>
 public sealed class TestJwksServer : IAsyncDisposable
 {
     private readonly IHost _host;

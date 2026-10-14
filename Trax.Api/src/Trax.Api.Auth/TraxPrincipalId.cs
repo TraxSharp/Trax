@@ -20,6 +20,7 @@ namespace Trax.Api.Auth;
 /// securing systems that use it. See SECURITY-DISCLAIMER.md.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-auth/trax-principal">SDK reference</seealso>
 public static class TraxPrincipalId
 {
     /// <summary>Separates the scheme from the resolver's id.</summary>
