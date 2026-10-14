@@ -6,15 +6,20 @@ area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 9
+package: Trax.Scheduler
+namespace: Trax.Scheduler.Configuration
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.Cleanup.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/MetadataCleanupConfiguration.cs
 ---
 
 # AddMetadataCleanup
 
-Enables automatic purging of old metadata records for high-frequency system trains. The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always cleaned up while this is enabled. Additional consumer train types can be added via the configure callback.
+Turns on the periodic deletion of old metadata rows: always for the internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`), and for the trains the `configure` callback adds.
 
 ## Signature
 
-```csharp
+```csharp fragment
 public SchedulerConfigurationBuilder AddMetadataCleanup(
     Action<MetadataCleanupConfiguration>? configure = null
 )
@@ -24,13 +29,9 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `configure` | `Action<MetadataCleanupConfiguration>?` | No | `null` | Optional callback to customize cleanup behavior |
+| `configure` | `Action<MetadataCleanupConfiguration>?` | No | `null` | Sets the interval, the retention, the batch size and the trains to clean |
 
-## Returns
-
-`SchedulerConfigurationBuilder`, for continued fluent chaining.
-
-## MetadataCleanupConfiguration
+### MetadataCleanupConfiguration
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -38,7 +39,7 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 | `RetentionPeriod` | `TimeSpan` | 30 minutes | How old metadata must be (in a terminal state) before eligible for deletion, for every train not given a retention of its own. This is the value the persisted runtime override replaces |
 | `DeleteBatchSize` | `int?` | 1000 | Max runs selected per batch, per retention group, 1 to 10,000. `null` sweeps in batches of 10,000. A batch is one transaction, and can exceed the limit by the runs it must be deleted with: a run that replays another goes in the same batch as the run it replays. The transaction holds row locks on the batch's child runs and dead letters until it commits, so a larger batch delays a running child's status writes longer |
 
-### Methods
+#### Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
@@ -57,51 +58,43 @@ The two-argument overloads throw:
 
 A train declared once under its interface name and again under its class name with different retentions cannot be caught here, because those are unrelated strings until the train registry relates them. The host refuses to start instead.
 
-## Examples
+## Returns
 
-### Default Configuration
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
 
-```csharp
-.AddScheduler(scheduler => scheduler
-    .AddMetadataCleanup()  // Cleans all internal scheduler train metadata
-)
-```
-
-### Custom Configuration
-
-```csharp
-.AddScheduler(scheduler => scheduler
-    .AddMetadataCleanup(cleanup =>
-    {
-        cleanup.RetentionPeriod = TimeSpan.FromHours(2);
-        cleanup.CleanupInterval = TimeSpan.FromMinutes(5);
-        cleanup.AddTrainType<MyHighFrequencyTrain>();
-        cleanup.AddTrainType("MyNamespace.AnotherTrain");
-    })
-)
-```
-
-### A Retention Per Train
-
-```csharp
-.AddScheduler(scheduler => scheduler
-    .AddMetadataCleanup(cleanup =>
-    {
-        cleanup.RetentionPeriod = TimeSpan.FromMinutes(30);
-        cleanup.AddTrainType<IDeltaImportAllTrain>();                      // on the default
-        cleanup.AddTrainType<IPatchCustomerTrain>(TimeSpan.FromDays(30));  // its own
-    })
-)
-```
-
-Trains sharing a cutoff are swept together, so the batched delete runs once per distinct retention. Use this when one train's metadata is worth keeping for a different reason than the rest, for example because its input is replayable and the others are noise. Pair it with [`ShouldSaveInputs`](/docs/sdk-reference/configuration/save-train-parameters) to decide whose input is stored in the first place.
-
-## Remarks
+## Behavior
 
 - Only metadata in a **terminal state** (`Completed`, `Failed`, or `Cancelled`) older than `RetentionPeriod` is deleted. `Pending` and `InProgress` metadata is never cleaned up.
 - A run is kept, whatever its age, while a `Queued` work queue entry or any metadata row names it in `replay_decisions_of`, so a [re-queue that replays its decisions](/docs/effect/decisions#a-requeue-of-a-requeue) can still read them. When the linking run has expired too, it is deleted first and the run it links to goes in a later batch or sweep. A batch is deleted all or nothing: the runs, and the work queue entries, logs, dead letter links and children's parent links they own, are cleared in one transaction whose delete repeats the keep test. When a run was linked after the cleanup selected it, the transaction rolls back, so the run keeps everything it owns, and the batch is rechecked and deleted without it. A batch linked for replay on three successive attempts is logged and skipped for the rest of the sweep.
 - The cleanup service runs as an `IHostedService` on the configured `CleanupInterval`.
+- Trains that share a retention are swept together, so the batched delete runs once per distinct retention.
 - The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always pruned while cleanup is enabled. You don't need to add them manually, and a consumer can never accidentally leave one out.
 - A cleanup batch that hits an unexpected foreign-key reference or other error is bisected to isolate the offending row, which is logged and skipped, so one bad row can't abort the whole sweep.
 - Train type names are matched against the `name` column in the metadata table (which stores the interface FullName, the canonical train name).
 - **The persisted runtime override replaces `RetentionPeriod` only.** Editing the retention from the dashboard's Server Settings page, or through the `updateScheduler` mutation, moves the cutoff for every train on the default and leaves a retention passed to `AddTrainType` untouched. A per-train value is normally set because of what the row holds rather than as an operational preference, so shortening one is a code change. See [scheduler ADR 0003](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0003-a-runtime-retention-override-replaces-only-the-default.md).
+
+## Example
+
+```csharp compile
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(assembly)
+    .AddScheduler(scheduler => scheduler
+        .AddMetadataCleanup(cleanup =>
+        {
+            cleanup.RetentionPeriod = TimeSpan.FromMinutes(30);
+            cleanup.CleanupInterval = TimeSpan.FromMinutes(5);
+            cleanup.AddTrainType<ISyncTrain>();                          // on the default retention
+            cleanup.AddTrainType<IBuildReportTrain>(TimeSpan.FromDays(30)); // its own
+            cleanup.AddTrainType("MyNamespace.IAnotherTrain");
+        })));
+```
+
+`AddMetadataCleanup()` with no callback cleans only the internal scheduler trains, on the defaults.
+[`ShouldSaveInputs`](/docs/sdk-reference/configuration/save-train-parameters) decides whose input is
+stored in the first place.
+
+## See also
+
+- [Metadata cleanup](/docs/scheduler/admin-trains/metadata-cleanup), the admin train that does the deleting
+- [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges), the value ranges
