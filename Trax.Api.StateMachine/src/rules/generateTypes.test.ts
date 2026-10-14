@@ -278,6 +278,20 @@ describe("generateMachineFactory import styles", () => {
     );
   });
 
+  it("writes the specifier as one string literal, whatever it holds", () => {
+    // trax refuses a specifier that is not a package name; the generator must still never let one end the
+    // string and become code.
+    const hostile = 'x"; globalThis.pwned = true; import "y';
+    const out = generateMachineFactory(ir, {
+      importStyle: "specifier",
+      specifier: hostile,
+    });
+    expect(out).toContain(
+      `import { typedMachineFromIr, type IrDocument } from ${JSON.stringify(hostile)};`,
+    );
+    expect(out).not.toContain(`from "x";`);
+  });
+
   it("still strips the differential block regardless of import style", () => {
     expect(
       generateMachineFactory(ir, { importStyle: "specifier" }),

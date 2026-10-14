@@ -363,9 +363,9 @@ before writing anything.
 | `--twin-out` | No | Directory to write `<id>.contexts.g.ts` and `<id>.machine.g.ts`. |
 | `--corpus-out` | No | Directory to write `differential.json`. |
 | `--engine-src` | No | Generate the twin and corpus from this engine checkout's `src` directory, with the `tools/` beside it, instead of the engine bundled into the tool. For working on the engine itself; it needs `npm ci` in that checkout. |
-| `--import-style` | No | Twin engine imports: `specifier` (one collapsed import from `--specifier`, for a frontend that installs `@traxsharp/state-machine` from npm; the default) or `relative` (paths into the engine's `src`, for a machine inside the engine checkout; the default with `--engine-src`). |
-| `--specifier` | No | Module specifier used with `--import-style specifier` (default `@traxsharp/state-machine`). |
-| `--tools-dir` | No | The directory holding `generate-twin.mjs` and `generate-corpus.mjs` (default: the `tools/` beside `--engine-src`, else the ones bundled into the tool). |
+| `--import-style` | No | Twin engine imports: `specifier` (one collapsed import from `--specifier`, for a frontend that installs `@traxsharp/state-machine` from npm; the default) or `relative` (paths into the engine's `src`, for a machine inside the engine checkout; the default with `--engine-src`, and refused without it, since those paths resolve only inside the checkout). |
+| `--specifier` | No | Module specifier used with `--import-style specifier` (default `@traxsharp/state-machine`): an npm package name, optionally with a subpath (`@acme/engine/machines`). Anything else is refused, and so is `--specifier` with relative imports, where it would be ignored. |
+| `--tools-dir` | No | The directory holding `generate-twin.mjs` and `generate-corpus.mjs` (default: the `tools/` beside `--engine-src`, else the ones bundled into the tool). It needs `--engine-src`, which those generators read the engine from. |
 | `--node` | No | The `node` executable: an absolute path, or a name looked up on `PATH` (default: `node`). Only absolute `PATH` entries are searched, never the current directory, so a `node` file at the root of the checkout you run in is not run. A relative path such as `./node` is refused. |
 
 ### `trax machine check`

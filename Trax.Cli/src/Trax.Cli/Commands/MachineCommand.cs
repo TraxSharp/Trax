@@ -316,7 +316,6 @@ internal static class MachineCommand
     {
         try
         {
-            ValidateImportStyle(importStyle);
             var machine = MachineLoader.Load(assemblyPath, machineName);
             var result = new MachineGenerator(node).Generate(
                 new MachineGenerateOptions(
@@ -325,7 +324,7 @@ internal static class MachineCommand
                     twinOut,
                     corpusOut,
                     engineSrc,
-                    importStyle ?? DefaultImportStyle(engineSrc),
+                    importStyle,
                     specifier,
                     toolsDir
                 )
@@ -360,7 +359,6 @@ internal static class MachineCommand
     {
         try
         {
-            ValidateImportStyle(importStyle);
             var machine = MachineLoader.Load(assemblyPath, machineName);
             var result = new MachineGenerator(node).Check(
                 new MachineGenerateOptions(
@@ -369,7 +367,7 @@ internal static class MachineCommand
                     twinOut,
                     corpusOut,
                     engineSrc,
-                    importStyle ?? DefaultImportStyle(engineSrc),
+                    importStyle,
                     specifier,
                     toolsDir
                 )
@@ -403,19 +401,6 @@ internal static class MachineCommand
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
-    }
-
-    // Relative imports reach the engine's modules by path, which only works for a machine inside an engine
-    // checkout, the one case --engine-src names. Anywhere else the twin imports the installed package.
-    private static string DefaultImportStyle(string? engineSrc) =>
-        engineSrc is null ? "specifier" : "relative";
-
-    private static void ValidateImportStyle(string? importStyle)
-    {
-        if (importStyle is not null and not "relative" and not "specifier")
-            throw new InvalidOperationException(
-                $"--import-style must be 'relative' or 'specifier', got '{importStyle}'."
-            );
     }
 
     /// <summary>The options shared by <c>generate</c> and <c>check</c>. A fresh set per command, since a
@@ -465,17 +450,17 @@ internal static class MachineCommand
                 new Option<string?>("--import-style")
                 {
                     Description =
-                        "Twin engine imports: 'specifier' (default) or 'relative' (default with --engine-src).",
+                        "Twin engine imports: 'specifier' (default) or 'relative' (default with --engine-src, which it needs).",
                 },
                 new Option<string?>("--specifier")
                 {
                     Description =
-                        "Module specifier when --import-style specifier (default @traxsharp/state-machine).",
+                        "Module specifier when --import-style specifier: an npm package name, optionally with a subpath (default @traxsharp/state-machine).",
                 },
                 new Option<DirectoryInfo?>("--tools-dir")
                 {
                     Description =
-                        "The generators' directory (default: the tools/ beside --engine-src, else the ones bundled into trax).",
+                        "The generators' directory (default: the tools/ beside --engine-src, else the ones bundled into trax). Needs --engine-src.",
                 },
                 new Option<string?>("--node")
                 {

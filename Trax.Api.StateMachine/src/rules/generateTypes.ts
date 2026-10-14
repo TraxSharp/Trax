@@ -135,7 +135,8 @@ export function generateMachineFactory(
   const { differential: _differential, ...runtimeIr } = ir;
   const engineImports =
     importStyle === "specifier"
-      ? [`import { typedMachineFromIr, type IrDocument } from "${specifier}";`]
+      ? // JSON.stringify, so a specifier holding a quote stays one string literal rather than ending it.
+        [`import { typedMachineFromIr, type IrDocument } from ${JSON.stringify(specifier)};`]
       : [
           `import { typedMachineFromIr } from "../../typed";`,
           `import type { IrDocument } from "../../rules/irMachine";`,

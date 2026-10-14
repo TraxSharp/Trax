@@ -60,9 +60,7 @@ public class MachineGeneratorTests
             irOut,
             twinOut,
             corpusOut,
-            EngineSrc: twinOut is null && corpusOut is null
-                ? null
-                : Path.Combine(_root, "engine", "src"),
+            EngineSrc: Path.Combine(_root, "engine", "src"),
             importStyle,
             specifier,
             ToolsDir: _tools
@@ -244,7 +242,10 @@ public class MachineGeneratorTests
 
         var generate = () => new MachineGenerator(node).Generate(Options(twinOut: Dir("twin")));
 
-        generate.Should().Throw<InvalidOperationException>().WithMessage("*node on PATH*");
+        generate
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*node was not found on PATH*--node*");
     }
 
     [Test]

@@ -3,14 +3,16 @@ using Trax.Effect.StateMachine.Persistence;
 namespace Trax.Cli.Machines;
 
 /// <summary>What to generate, and where. Each artifact has its own output root because a real consumer splits
-/// them across trees (the IR and corpus in a shared machines dir, the twin next to the frontend).</summary>
+/// them across trees (the IR and corpus in a shared machines dir, the twin next to the frontend).
+/// <see cref="ImportStyle"/> left null is <c>relative</c> with <see cref="EngineSrc"/> and <c>specifier</c>
+/// without it.</summary>
 internal sealed record MachineGenerateOptions(
     IMachine Machine,
     string? IrOut = null,
     string? TwinOut = null,
     string? CorpusOut = null,
     string? EngineSrc = null,
-    string ImportStyle = "relative",
+    string? ImportStyle = null,
     string? Specifier = null,
     string? ToolsDir = null
 );
@@ -229,6 +231,7 @@ internal sealed partial class MachineGenerator
             throw new InvalidOperationException(
                 "Nothing to generate: pass at least one of --ir-out, --twin-out, --corpus-out."
             );
+        var importStyle = RefuseConflictingOptions(o);
 
         string id;
         try
@@ -261,7 +264,7 @@ internal sealed partial class MachineGenerator
             Directory.CreateDirectory(twinStage);
             var args = new List<string> { "--ir", stagedIr };
             args.AddRange(EngineSrcArgs(o));
-            args.AddRange(["--out-dir", twinStage, "--import-style", o.ImportStyle]);
+            args.AddRange(["--out-dir", twinStage, "--import-style", importStyle]);
             if (o.Specifier is not null)
             {
                 args.Add("--specifier");
@@ -282,7 +285,7 @@ internal sealed partial class MachineGenerator
                     Path.Combine(o.TwinOut, $"{id}.machine.g.ts")
                 ),
             ];
-            RequireProduced(twin, twinScript);
+            RequireProduced(twin, twinScript, o);
             planned.AddRange(twin);
         }
 
@@ -300,7 +303,7 @@ internal sealed partial class MachineGenerator
                 corpusStage,
                 Path.Combine(o.CorpusOut, "differential.json")
             );
-            RequireProduced([corpus], corpusScript);
+            RequireProduced([corpus], corpusScript, o);
             planned.Add(corpus);
         }
 
@@ -329,17 +332,87 @@ internal sealed partial class MachineGenerator
     }
 
     // A node step that exits 0 without writing a file the CLI expects (an engine whose generator names its
-    // output differently) is refused here, before anything is placed or compared.
-    private static void RequireProduced(IEnumerable<PlannedArtifact> artifacts, string script)
+    // output differently) is refused here, before anything is placed or compared. The message names the
+    // generators that actually ran.
+    private static void RequireProduced(
+        IEnumerable<PlannedArtifact> artifacts,
+        string script,
+        MachineGenerateOptions o
+    )
     {
         var missing = artifacts.Where(a => !File.Exists(a.StagedPath)).ToList();
-        if (missing.Count > 0)
-            throw new InvalidOperationException(
-                $"node {Path.GetFileName(script)} exited 0 but did not write "
-                    + string.Join(", ", missing.Select(a => Path.GetFileName(a.StagedPath)))
-                    + ". The engine at --engine-src may not match this version of trax; nothing was written."
-            );
+        if (missing.Count == 0)
+            return;
+        var source =
+            o.ToolsDir is not null
+                ? $"The generators in --tools-dir ({o.ToolsDir}) may not match this version of trax"
+            : o.EngineSrc is not null
+                ? $"The engine at --engine-src ({o.EngineSrc}) may not match this version of trax"
+            : $"The generators bundled into this trax ({Path.GetDirectoryName(script)}) are damaged or from "
+                + "another version; reinstall trax";
+        throw new InvalidOperationException(
+            $"node {Path.GetFileName(script)} exited 0 but did not write "
+                + string.Join(", ", missing.Select(a => Path.GetFileName(a.StagedPath)))
+                + $". {source}; nothing was written."
+        );
     }
+
+    /// <summary>
+    /// Refuses a combination of options that would fail inside node, or be silently ignored, and returns the
+    /// import style the twin is generated with.
+    /// </summary>
+    internal static string RefuseConflictingOptions(MachineGenerateOptions o)
+    {
+        if (o.ImportStyle is not null and not "relative" and not "specifier")
+            throw new InvalidOperationException(
+                $"--import-style must be 'relative' or 'specifier', got '{o.ImportStyle}'."
+            );
+        if (o.ToolsDir is not null && o.EngineSrc is null)
+            throw new InvalidOperationException(
+                "--tools-dir needs --engine-src: the generators in an engine checkout's tools/ generate from that "
+                    + "checkout's src/. Pass --engine-src as well, or drop --tools-dir to use the generators "
+                    + "bundled into trax."
+            );
+
+        var importStyle = o.ImportStyle ?? (o.EngineSrc is null ? "specifier" : "relative");
+        if (importStyle == "relative" && o.EngineSrc is null)
+            throw new InvalidOperationException(
+                "--import-style relative imports the engine by paths into its own src/ (../../typed), which "
+                    + "resolve only for a machine inside an engine checkout, so it needs --engine-src. Leave "
+                    + "--import-style out to import the installed @traxsharp/state-machine package."
+            );
+        if (o.Specifier is not null)
+        {
+            if (importStyle == "relative")
+                throw new InvalidOperationException(
+                    "--specifier applies only to --import-style specifier; with relative imports it would be "
+                        + "ignored. Pass --import-style specifier, or drop --specifier."
+                );
+            if (!IsModuleSpecifier(o.Specifier))
+                throw new InvalidOperationException(
+                    $"--specifier must be an npm package name, optionally with a subpath (e.g. "
+                        + $"'@traxsharp/state-machine' or '@acme/engine/machines'), got '{o.Specifier}'. It "
+                        + "is written into the twin's import."
+                );
+        }
+        return importStyle;
+    }
+
+    /// <summary>
+    /// An npm package name as npm accepts a new one (lowercase, URL-safe, at most 214 characters, not starting
+    /// with '.' or '_', an optional <c>@scope/</c>), optionally followed by a subpath of plain segments.
+    /// Anything else (a quote, a space, an empty scope) would break, or reach into, the generated import.
+    /// </summary>
+    internal static bool IsModuleSpecifier(string specifier)
+    {
+        var match = ModuleSpecifier().Match(specifier);
+        return match.Success && match.Groups["name"].Length <= 214;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"^(?<name>(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*)(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*\z"
+    )]
+    private static partial System.Text.RegularExpressions.Regex ModuleSpecifier();
 
     // The bundled generators carry their engine and take no --engine-src; an engine checkout's own tools need it.
     private static IEnumerable<string> EngineSrcArgs(MachineGenerateOptions o) =>
