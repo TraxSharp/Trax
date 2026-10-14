@@ -3,7 +3,7 @@ services:
     container_name: trax_database
     # The same images the CI workflows run, pinned by digest so a pull cannot change what
     # runs under the tag. Dependabot's docker-compose updates move them.
-    image: postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527
+    image: postgres:18@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
     restart: unless-stopped
     shm_size: 512m
     # The test projects run in parallel against this one server, and their pools and LISTEN
@@ -24,7 +24,7 @@ services:
 
   rabbitmq:
     container_name: trax_rabbitmq
-    image: rabbitmq:4-management@sha256:dbaf95088210b885b305e338e846d8d2ce7a2659d4b4005da8da02b885a71671
+    image: rabbitmq:4-management@sha256:8dd6e3570ddaa2ef82a6c3a8950e79c1f73893adfbdddbc374fc1f1ac8a0f5dd
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: trax
