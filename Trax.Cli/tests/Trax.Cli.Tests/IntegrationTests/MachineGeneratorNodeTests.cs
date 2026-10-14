@@ -8,8 +8,8 @@ namespace Trax.Cli.Tests.IntegrationTests;
 /// <summary>
 /// End-to-end byte-parity: the CLI, running real node against the sibling Trax.Api.StateMachine engine, must
 /// reproduce the committed turnstile artifacts exactly. This is the whole point of the tool, so it is proven
-/// against the real generators, not a fake. Skipped at runtime (never a hard failure) when node is unavailable
-/// or the sibling engine is not checked out beside this repo, per the repo's determinism rules.
+/// against the real generators, not a fake. Skipped at runtime when node is unavailable or the sibling engine is
+/// not checked out beside this repo, except under CI, where that fails the test.
 /// </summary>
 public class MachineGeneratorNodeTests
 {
@@ -22,11 +22,13 @@ public class MachineGeneratorNodeTests
     public void SetUp()
     {
         if (!new NodeRunner().IsAvailable())
-            Assert.Ignore("node is not on PATH; skipping the real-node byte-parity test.");
+            NodePrerequisite.Missing(
+                "node is not on PATH; skipping the real-node byte-parity test."
+            );
 
         var engineRoot = FindEngineRoot();
         if (engineRoot is null)
-            Assert.Ignore(
+            NodePrerequisite.Missing(
                 "Trax.Api.StateMachine is not checked out beside Trax.Cli; skipping byte-parity test."
             );
 

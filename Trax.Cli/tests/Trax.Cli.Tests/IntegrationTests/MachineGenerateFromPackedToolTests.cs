@@ -13,7 +13,7 @@ namespace Trax.Cli.Tests.IntegrationTests;
 /// then replayed through the C# engine, which must agree with it case for case.
 ///
 /// <para>Packing needs node and the engine's npm packages (esbuild bundles it), so this is skipped where either
-/// is missing. CI installs both for this folder.</para>
+/// is missing, except under CI, which installs both for this folder and fails the test instead.</para>
 /// </summary>
 public class MachineGenerateFromPackedToolTests
 {
@@ -23,13 +23,15 @@ public class MachineGenerateFromPackedToolTests
     public void SetUp()
     {
         if (!new NodeRunner().IsAvailable())
-            Assert.Ignore("node is not on PATH; the packed tool's twin and corpus need it.");
+            NodePrerequisite.Missing(
+                "node is not on PATH; the packed tool's twin and corpus need it."
+            );
         if (
             !Directory.Exists(
                 Path.Combine(RepoFolder("Trax.Api.StateMachine"), "node_modules", "esbuild")
             )
         )
-            Assert.Ignore(
+            NodePrerequisite.Missing(
                 "Trax.Api.StateMachine has no node_modules; run `npm ci` there to pack the tool."
             );
 

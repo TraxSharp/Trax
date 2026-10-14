@@ -69,5 +69,6 @@ byte-parity integration test and `MachineGenerateFromPackedToolTests` spawn real
 skip themselves at runtime when node is not on PATH, which is what lets the suite run without
 node installed. The second packs this folder's tool, which bundles the engine's generators
 into it, so it also skips until `npm ci --ignore-scripts` has run in `Trax.Api.StateMachine`.
+Under CI (`CI` set) both fail instead of skipping, since CI installs node and the engine.
 Packing (`dotnet pack`, and CI's pack step) needs both, and fails saying so. `NodeRunnerTests` does
 spawn a real process, using `dotnet` as a stand-in executable.

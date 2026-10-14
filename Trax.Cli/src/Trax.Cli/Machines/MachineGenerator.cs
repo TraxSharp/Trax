@@ -442,12 +442,10 @@ internal sealed partial class MachineGenerator
     /// <summary>The engine's <c>tools/</c> directory, a sibling of its <c>src/</c> (<c>--engine-src</c>).</summary>
     internal static string DefaultToolsDir(string engineSrc)
     {
-        var trimmed = engineSrc.TrimEnd(
-            Path.DirectorySeparatorChar,
-            Path.AltDirectorySeparatorChar
-        );
+        // Trimmed after GetFullPath, which keeps a root (/ or C:\) whole rather than emptying it.
+        var trimmed = Path.TrimEndingDirectorySeparator(Path.GetFullPath(engineSrc));
         var parent =
-            Directory.GetParent(Path.GetFullPath(trimmed))
+            Directory.GetParent(trimmed)
             ?? throw new InvalidOperationException(
                 $"--engine-src has no parent directory to find tools/ under: {engineSrc}"
             );

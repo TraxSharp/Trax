@@ -305,6 +305,70 @@ public class MachineGeneratorTests
     }
 
     [Test]
+    public void DefaultToolsDir_ignores_a_trailing_separator_of_either_kind()
+    {
+        var engine = Path.GetFullPath(Path.Combine("repo", "engine"));
+        var expected = Path.Combine(engine, "tools");
+
+        MachineGenerator
+            .DefaultToolsDir(Path.Combine(engine, "src") + Path.DirectorySeparatorChar)
+            .Should()
+            .Be(expected);
+        MachineGenerator
+            .DefaultToolsDir(Path.Combine(engine, "src") + Path.AltDirectorySeparatorChar)
+            .Should()
+            .Be(expected);
+    }
+
+    [Test]
+    public void DefaultToolsDir_of_a_filesystem_root_is_refused()
+    {
+        var root = Path.GetPathRoot(Path.GetFullPath("."))!;
+
+        var lookup = () => MachineGenerator.DefaultToolsDir(root);
+
+        lookup.Should().Throw<InvalidOperationException>().WithMessage("*no parent directory*");
+    }
+
+    [Test]
+    public void The_bundled_generators_sit_in_engine_beside_the_tool()
+    {
+        MachineGenerator
+            .BundledToolsDir.Should()
+            .Be(Path.Combine(AppContext.BaseDirectory, "engine"));
+    }
+
+    // The scripts come from --tools-dir, else the tools/ beside --engine-src, else the bundled copy.
+    [TestCase(true, true, "custom-tools")]
+    [TestCase(false, true, "engine/tools")]
+    [TestCase(false, false, "bundled")]
+    public void The_generators_run_from_the_first_place_that_names_them(
+        bool toolsDir,
+        bool engineSrc,
+        string expected
+    )
+    {
+        var node = new FakeNodeRunner();
+        var bundled = Dir("bundled");
+        var custom = Dir("custom-tools");
+        foreach (var dir in new[] { bundled, custom })
+            File.WriteAllText(Path.Combine(dir, "generate-twin.mjs"), "// placeholder");
+
+        new MachineGenerator(node, new PlacementFiles(), bundled).Generate(
+            new MachineGenerateOptions(
+                Turnstile,
+                TwinOut: Dir("twin"),
+                EngineSrc: engineSrc ? Path.Combine(_root, "engine", "src") : null,
+                ToolsDir: toolsDir ? custom : null
+            )
+        );
+
+        node.Calls.Single()
+            .Script.Should()
+            .Be(Path.Combine(_root, Path.Combine(expected.Split('/')), "generate-twin.mjs"));
+    }
+
+    [Test]
     public void DefaultToolsDir_is_a_sibling_of_engine_src()
     {
         var engineSrc = Path.Combine("repo", "engine", "src");
