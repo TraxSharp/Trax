@@ -51,6 +51,7 @@ public static class HygieneGuards
     public static GuardResult NoIgnoreAttribute(ArchitectureGuardOptions options);
     public static GuardResult NoLegacyAsserts(ArchitectureGuardOptions options);
     public static GuardResult NoFixedDelays(ArchitectureGuardOptions options);
+    public static GuardResult NoUnsynchronisedAssertAfterStart(ArchitectureGuardOptions options);
 }
 
 public static class RepoConventionGuards
@@ -161,8 +162,9 @@ Allowlist paths are repo-relative with forward slashes.
 | `NoIgnoreAttribute(options)` | `[Ignore]` in any form, and `Ignore =` or `IgnoreReason =` on a `TestCase`, `TestCaseSource` or fixture attribute |
 | `NoLegacyAsserts(options)` | NUnit's own asserts: `Assert.That`, `Assert.AreEqual` and the rest of the classic family, `ClassicAssert`, `CollectionAssert`, `StringAssert`. The convention is one assertion library. |
 | `NoFixedDelays(options)` | `Task.Delay(` and `Thread.Sleep(`, unless the line or one of the three above it carries a comment with `determinism:`, `allowed-delay:`, `measuring-interval:` or `negative-wait:` |
+| `NoUnsynchronisedAssertAfterStart(options)` | A substitute's `Received` / `DidNotReceive` after a `StartAsync` call in the same method, with nothing between them that waits for the started work (`WaitAsync`, a `WaitUntil…`, `WaitFor…`, `Eventually…` or `…Until…Async` helper, `WhenReached`, an awaited `.Task`, `.Current` or local task, `Task.WhenAll` / `Task.WhenAny`, `StopAsync`). `BackgroundService.StartAsync` hands `ExecuteAsync` to the thread pool, so such a check races the work. A start that finishes its work before returning carries a `synchronous-start:` comment on its line or one of the three above |
 
-`HygieneGuardFixture` (`Trax.Core.Testing.Fixtures`) runs all three as NUnit tests, `Tests_do_not_use_the_Ignore_attribute`, `Tests_do_not_use_legacy_asserts` and `Tests_do_not_use_fixed_delays`, with the options its virtual `Options` property returns (the defaults unless a subclass overrides it). Each test fails first if the guard inspected nothing, then on any offender.
+`HygieneGuardFixture` (`Trax.Core.Testing.Fixtures`) runs all four as NUnit tests, `Tests_do_not_use_the_Ignore_attribute`, `Tests_do_not_use_legacy_asserts`, `Tests_do_not_use_fixed_delays` and `Tests_do_not_check_a_substitute_before_the_started_work_ran`, with the options its virtual `Options` property returns (the defaults unless a subclass overrides it). Each test fails first if the guard inspected nothing, then on any offender.
 
 ### Repo-convention guards
 

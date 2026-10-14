@@ -43,20 +43,33 @@ the mechanism, not an allowlist of files.
 
 ## Exemplars
 
-**Enforced elsewhere:** `NoFixedTaskDelayTests` in the eight code repos' `Tests.Meta`
-projects, and `HygieneGuards.NoFixedDelays` shipped from `Trax.Core.Testing`.
+**Enforced elsewhere:** `NoFixedTaskDelayTests` and `NoUnsynchronisedAssertAfterStartTests` in
+the eight code repos' `Tests.Meta` projects, and `HygieneGuards.NoFixedDelays` and
+`HygieneGuards.NoUnsynchronisedAssertAfterStart` shipped from `Trax.Core.Testing`.
+
+The second guard covers the race with no delay in it. `BackgroundService.StartAsync` hands
+`ExecuteAsync` to the thread pool, and a job started with `Task.Run` returns its handle before it
+runs, so a substitute checked straight after the start races the work it is checking. After a
+`StartAsync` call, a `Received` or `DidNotReceive` in the same method must follow something that
+waits for the started work. A start that finishes its work before returning says so with a
+`synchronous-start:` comment, the same mechanism as the delay markers.
+
+Seven of the eight repos carry a `BaselineOffenders` dictionary grandfathering the delays that
+already existed, with a per-file count. The count is exact: a file with more delays than its
+baseline fails, and so does a file with fewer, until its entry is lowered or removed, so a file
+that was cleaned up cannot quietly take its delays back.
 
 Not covered:
 
-- Seven of the eight repos carry a `BaselineOffenders` dictionary grandfathering the delays
-  that already existed, with a per-file count, and fail only when a file exceeds its baseline.
-  One Trax.Mediator file is baselined at 13. Nothing fails when a file drops below its
-  baseline or disappears, so the numbers only ratchet by hand. Trax.Core has no baseline and
-  runs the strict form.
-- The guard finds `Task.Delay` and `Thread.Sleep` in test code. It cannot see a fixed sleep
-  reached through a helper, a poll whose timeout is too short to be safe, or an unasserted
+- The delay guard finds `Task.Delay` and `Thread.Sleep` in test code. It cannot see a fixed
+  sleep reached through a helper, a poll whose timeout is too short to be safe, or an unasserted
   polling result.
+- The start guard sees a `StartAsync` followed by a substitute check in one method. It cannot
+  see a start inside a helper the test calls, a check made through a helper, a state or count
+  assertion rather than a substitute check, or a subscription used before the server has
+  registered it (graphql-transport-ws sends no acknowledgement of `subscribe`).
 
 ## Changelog
 
 - **2026-09-11**: Recorded.
+- **2026-10-14**: The start guard added; baselines made exact.

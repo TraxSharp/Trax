@@ -133,4 +133,93 @@ public class HygieneGuardsTests
     }
 
     #endregion
+
+    #region NoUnsynchronisedAssertAfterStart
+
+    private static string StartedThen(string between) =>
+        "public class FooTests {\n"
+        + "    public async Task A() {\n"
+        + "        await service.StartAsync(CancellationToken.None);\n"
+        + between
+        + "        await train.Received(1).Run(Arg.Any<int>());\n"
+        + "    }\n"
+        + "}";
+
+    [Test]
+    public void NoUnsynchronisedAssertAfterStart_FlagsACheckStraightAfterTheStart()
+    {
+        using var repo = new TempRepo().Write("tests/Sample/FooTests.cs", StartedThen(""));
+
+        var result = HygieneGuards.NoUnsynchronisedAssertAfterStart(OptionsFor(repo));
+
+        result.Passed.Should().BeFalse();
+        result.Offenders.Should().ContainSingle(o => o.Contains("started at line 3"));
+    }
+
+    [Test]
+    public void NoUnsynchronisedAssertAfterStart_FlagsAStartThroughATestHelper()
+    {
+        using var repo = new TempRepo().Write(
+            "tests/Sample/FooTests.cs",
+            "public class FooTests {\n"
+                + "    public async Task A() {\n"
+                + "        var first = await StartAsync();\n"
+                + "        await scheduler.DidNotReceive().Requeue();\n"
+                + "    }\n"
+                + "    private async Task<int> StartAsync() => await jobs.StartAsync();\n"
+                + "}"
+        );
+
+        HygieneGuards
+            .NoUnsynchronisedAssertAfterStart(OptionsFor(repo))
+            .Offenders.Should()
+            .ContainSingle(o => o.Contains("FooTests.cs:4"));
+    }
+
+    [TestCase("        await trainHit.Task.WaitAsync(TimeSpan.FromSeconds(10));\n")]
+    [TestCase("        (await WaitUntilAsync(() => ran, Timeout)).Should().BeTrue();\n")]
+    [TestCase("        await service.StopAsync(CancellationToken.None);\n")]
+    [TestCase("        await cycles.WhenReached(2);\n")]
+    [TestCase("        await jobs.Current;\n")]
+    [TestCase("        var handler = await started;\n")]
+    public void NoUnsynchronisedAssertAfterStart_AllowsACheckAfterAWait(string wait)
+    {
+        using var repo = new TempRepo().Write("tests/Sample/FooTests.cs", StartedThen(wait));
+
+        HygieneGuards.NoUnsynchronisedAssertAfterStart(OptionsFor(repo)).Passed.Should().BeTrue();
+    }
+
+    [Test]
+    public void NoUnsynchronisedAssertAfterStart_AllowsAStartMarkedSynchronous()
+    {
+        using var repo = new TempRepo().Write(
+            "tests/Sample/FooTests.cs",
+            StartedThen("")
+                .Replace(
+                    "        await service.StartAsync",
+                    "        // synchronous-start: the gate checks inside the awaited StartAsync.\n"
+                        + "        await service.StartAsync"
+                )
+        );
+
+        HygieneGuards.NoUnsynchronisedAssertAfterStart(OptionsFor(repo)).Passed.Should().BeTrue();
+    }
+
+    [Test]
+    public void NoUnsynchronisedAssertAfterStart_DoesNotCarryAStartIntoTheNextMethod()
+    {
+        using var repo = new TempRepo().Write(
+            "tests/Sample/FooTests.cs",
+            "public class FooTests {\n"
+                + "    public async Task A() { await service.StartAsync(default); }\n"
+                + "    public async Task B() {\n"
+                + "        await train.Received(1).Run(Arg.Any<int>());\n"
+                + "    }\n"
+                + "}"
+        );
+
+        HygieneGuards.NoUnsynchronisedAssertAfterStart(OptionsFor(repo)).Passed.Should().BeTrue();
+    }
+
+    #endregion
 }

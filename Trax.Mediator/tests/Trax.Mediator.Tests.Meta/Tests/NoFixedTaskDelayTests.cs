@@ -31,43 +31,40 @@ public class NoFixedTaskDelayTests
         int
     >(StringComparer.Ordinal)
     {
-        ["tests/Trax.Mediator.Tests.MemoryLeak.Integration/UnitTests/ConcurrencyLimiterTests.cs"] =
-            13,
         [
             "tests/Trax.Mediator.Tests.MemoryLeak.Integration/UnitTests/TrustedExecutionScopeTests.cs"
         ] = 3,
         [
+            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/JsonEffectProviderMemoryTests.cs"
+        ] = 2,
+        [
             "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/ParameterEffectMemoryTests.cs"
         ] = 2,
         [
-            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/JsonEffectProviderMemoryTests.cs"
-        ] = 2,
-        ["tests/Trax.Mediator.Tests.MemoryLeak.Integration/Fakes/Trains/MemoryTestTrain.cs"] = 2,
-        [
-            "tests/Trax.Mediator.Tests.Postgres.Integration/IntegrationTests/DataContextLoggingProviderTests.cs"
-        ] = 1,
-        ["tests/Trax.Mediator.Tests.Postgres.Integration/IntegrationTests/BackgroundJobTests.cs"] =
-            1,
-        ["tests/Trax.Mediator.Tests.MemoryLeak.Integration/Utils/MemoryProfiler.cs"] = 1,
-        [
-            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/UnitTests/MediatorServiceExtensionsTests.cs"
-        ] = 1,
-        ["tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/RunExecutorTests.cs"] =
-            1,
-        [
-            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/MetadataDisposalTests.cs"
-        ] = 1,
-        [
-            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/DataContextLoggerMemoryTests.cs"
-        ] = 1,
-        [
-            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/CrossComponentMemoryTests.cs"
+            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/ArrayLoggerMemoryTests.cs"
         ] = 1,
         [
             "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/CoreTrainMemoryTests.cs"
         ] = 1,
         [
-            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/ArrayLoggerMemoryTests.cs"
+            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/CrossComponentMemoryTests.cs"
+        ] = 1,
+        [
+            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/DataContextLoggerMemoryTests.cs"
+        ] = 1,
+        [
+            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/MetadataDisposalTests.cs"
+        ] = 1,
+        ["tests/Trax.Mediator.Tests.MemoryLeak.Integration/IntegrationTests/RunExecutorTests.cs"] =
+            1,
+        [
+            "tests/Trax.Mediator.Tests.MemoryLeak.Integration/UnitTests/MediatorServiceExtensionsTests.cs"
+        ] = 1,
+        ["tests/Trax.Mediator.Tests.MemoryLeak.Integration/Utils/MemoryProfiler.cs"] = 1,
+        ["tests/Trax.Mediator.Tests.Postgres.Integration/IntegrationTests/BackgroundJobTests.cs"] =
+            1,
+        [
+            "tests/Trax.Mediator.Tests.Postgres.Integration/IntegrationTests/DataContextLoggingProviderTests.cs"
         ] = 1,
     };
 
@@ -121,18 +118,19 @@ public class NoFixedTaskDelayTests
         foreach (var (path, baselineCount) in BaselineOffenders)
         {
             var actual = fileOffenderCounts.TryGetValue(path, out var c) ? c : 0;
-            if (actual > baselineCount)
+            if (actual != baselineCount)
                 regressions.Add(
-                    $"{path}: baseline={baselineCount}, actual={actual} (+{actual - baselineCount})"
+                    $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
                 );
         }
 
         regressions
             .Should()
             .BeEmpty(
-                "A grandfathered file gained new fixed-delay offenders. Either refactor the new code "
-                    + "to use proper synchronisation, or update the BaselineOffenders count in "
-                    + "NoFixedTaskDelayTests (but prefer refactoring). Regressions:\n  "
+                "A grandfathered file's fixed-delay count differs from its baseline. A file that "
+                    + "gained one: synchronise the new code on its completion signal instead. A file "
+                    + "that lost some: lower its BaselineOffenders count to match, or remove the "
+                    + "entry at zero, so the cleanup cannot be undone quietly. Differences:\n  "
                     + string.Join("\n  ", regressions)
             );
     }

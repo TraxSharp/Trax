@@ -263,6 +263,13 @@
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.13, )"
         }
       },
+      "trax.core.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
+          "NUnit": "[5.0.0, )"
+        }
+      },
       "trax.effect": {
         "type": "Project",
         "dependencies": {

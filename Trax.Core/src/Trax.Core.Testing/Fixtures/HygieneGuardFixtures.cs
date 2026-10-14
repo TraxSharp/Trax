@@ -47,6 +47,13 @@ public abstract class HygieneGuardFixture
         var result = HygieneGuards.NoFixedDelays(Options);
         GuardAssert.CheckedAndClean(result);
     }
+
+    [Test]
+    public void Tests_do_not_check_a_substitute_before_the_started_work_ran()
+    {
+        var result = HygieneGuards.NoUnsynchronisedAssertAfterStart(Options);
+        GuardAssert.CheckedAndClean(result);
+    }
 }
 
 /// <summary>

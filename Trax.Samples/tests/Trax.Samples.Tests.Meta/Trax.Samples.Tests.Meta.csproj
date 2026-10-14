@@ -19,4 +19,8 @@
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../Trax.Core/src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
+  </ItemGroup>
 </Project>

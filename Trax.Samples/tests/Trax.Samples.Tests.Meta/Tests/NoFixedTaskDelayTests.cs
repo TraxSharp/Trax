@@ -32,11 +32,11 @@ public class NoFixedTaskDelayTests
     >(StringComparer.Ordinal)
     {
         ["tests/Trax.Samples.EnergyHub.E2E/Utilities/TrainStatePoller.cs"] = 2,
-        ["tests/Trax.Samples.EnergyHub.E2E/Fixtures/SharedHubSetup.cs"] = 1,
-        ["tests/Trax.Samples.ChatService.E2E/E2ETests/ChatServiceE2ETests.cs"] = 1,
-        ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/SendMessageTests.cs"] = 1,
-        ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/JoinChatRoomTests.cs"] = 1,
         ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/CreateChatRoomTests.cs"] = 1,
+        ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/JoinChatRoomTests.cs"] = 1,
+        ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/SendMessageTests.cs"] = 1,
+        ["tests/Trax.Samples.ChatService.E2E/E2ETests/ChatServiceE2ETests.cs"] = 1,
+        ["tests/Trax.Samples.EnergyHub.E2E/Fixtures/SharedHubSetup.cs"] = 1,
     };
 
     [Test]
@@ -89,18 +89,19 @@ public class NoFixedTaskDelayTests
         foreach (var (path, baselineCount) in BaselineOffenders)
         {
             var actual = fileOffenderCounts.TryGetValue(path, out var c) ? c : 0;
-            if (actual > baselineCount)
+            if (actual != baselineCount)
                 regressions.Add(
-                    $"{path}: baseline={baselineCount}, actual={actual} (+{actual - baselineCount})"
+                    $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
                 );
         }
 
         regressions
             .Should()
             .BeEmpty(
-                "A grandfathered file gained new fixed-delay offenders. Either refactor the new code "
-                    + "to use proper synchronisation, or update the BaselineOffenders count in "
-                    + "NoFixedTaskDelayTests (but prefer refactoring). Regressions:\n  "
+                "A grandfathered file's fixed-delay count differs from its baseline. A file that "
+                    + "gained one: synchronise the new code on its completion signal instead. A file "
+                    + "that lost some: lower its BaselineOffenders count to match, or remove the "
+                    + "entry at zero, so the cleanup cannot be undone quietly. Differences:\n  "
                     + string.Join("\n  ", regressions)
             );
     }

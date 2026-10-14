@@ -31,19 +31,11 @@ public class NoFixedTaskDelayTests
         int
     >(StringComparer.Ordinal)
     {
-        ["tests/Trax.Scheduler.Tests.Integration/IntegrationTests/LocalWorkerServiceTests.cs"] = 9,
-        ["tests/Trax.Scheduler.Tests.Integration/UnitTests/PollingServicesDeterministicTests.cs"] =
-            3,
-        ["tests/Trax.Scheduler.Tests.Integration/UnitTests/ManifestManagerPollingServiceTests.cs"] =
-            3,
         ["tests/Trax.Scheduler.Tests.Integration/IntegrationTests/JobDispatcherTrainTests.cs"] = 3,
-        ["tests/Trax.Scheduler.Tests.Integration/IntegrationTests/MaxActiveJobsTests.cs"] = 2,
         [
             "tests/Trax.Scheduler.Tests.Integration/IntegrationTests/ManifestGroupMaxActiveJobsTests.cs"
         ] = 2,
-        ["tests/Trax.Scheduler.Tests/UnitTests/SchedulerStartupServiceTests.cs"] = 1,
-        ["tests/Trax.Scheduler.Tests/UnitTests/HttpRetryHelperTests.cs"] = 1,
-        ["tests/Trax.Scheduler.Tests.Integration/UnitTests/PollingServicesTests.cs"] = 1,
+        ["tests/Trax.Scheduler.Tests.Integration/IntegrationTests/MaxActiveJobsTests.cs"] = 2,
         ["tests/Trax.Scheduler.Tests.Integration/IntegrationTests/ParallelDispatchTests.cs"] = 1,
     };
 
@@ -97,18 +89,19 @@ public class NoFixedTaskDelayTests
         foreach (var (path, baselineCount) in BaselineOffenders)
         {
             var actual = fileOffenderCounts.TryGetValue(path, out var c) ? c : 0;
-            if (actual > baselineCount)
+            if (actual != baselineCount)
                 regressions.Add(
-                    $"{path}: baseline={baselineCount}, actual={actual} (+{actual - baselineCount})"
+                    $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
                 );
         }
 
         regressions
             .Should()
             .BeEmpty(
-                "A grandfathered file gained new fixed-delay offenders. Either refactor the new code "
-                    + "to use proper synchronisation, or update the BaselineOffenders count in "
-                    + "NoFixedTaskDelayTests (but prefer refactoring). Regressions:\n  "
+                "A grandfathered file's fixed-delay count differs from its baseline. A file that "
+                    + "gained one: synchronise the new code on its completion signal instead. A file "
+                    + "that lost some: lower its BaselineOffenders count to match, or remove the "
+                    + "entry at zero, so the cleanup cannot be undone quietly. Differences:\n  "
                     + string.Join("\n  ", regressions)
             );
     }

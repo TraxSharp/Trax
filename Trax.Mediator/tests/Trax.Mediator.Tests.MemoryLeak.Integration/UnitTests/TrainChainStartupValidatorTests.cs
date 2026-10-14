@@ -1017,6 +1017,7 @@ public class TrainChainStartupValidatorTests
             new MediatorConfiguration()
         );
 
+        // synchronous-start: the validator checks inside the awaited StartingAsync and StartAsync.
         await validator.StartingAsync(CancellationToken.None);
         await validator.StartAsync(CancellationToken.None);
 

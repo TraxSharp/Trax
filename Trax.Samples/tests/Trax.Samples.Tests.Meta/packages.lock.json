@@ -142,6 +142,13 @@
           "Microsoft.TestPlatform.ObjectModel": "18.10.1"
         }
       },
+      "trax.core.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
+          "NUnit": "[5.0.0, )"
+        }
+      },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "CentralTransitive",
         "requested": "[5.9.0-1.26328.17, )",

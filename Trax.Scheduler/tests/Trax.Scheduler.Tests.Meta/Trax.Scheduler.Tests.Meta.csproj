@@ -27,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../../Trax.Core/src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler/Trax.Scheduler.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />

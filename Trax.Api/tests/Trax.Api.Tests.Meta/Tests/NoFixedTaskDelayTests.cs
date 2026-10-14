@@ -31,12 +31,7 @@ public class NoFixedTaskDelayTests
         int
     >(StringComparer.Ordinal)
     {
-        ["tests/Trax.Api.Tests/Audit/TraxAuditWriterTests.cs"] = 5,
-        ["tests/Trax.Api.Tests/PersistedOperations/IntegrationTests/RabbitMqBroadcasterTests.cs"] =
-            3,
-        ["tests/Trax.Api.Tests/Auth/TrainAuthorizationServiceTests.cs"] = 2,
         ["tests/Trax.Api.Tests/AuthE2E/TraxCallerProbe.cs"] = 1,
-        ["tests/Trax.Api.Tests/AuthE2E/TraxCallerAttackVectorE2ETests.cs"] = 1,
     };
 
     [Test]
@@ -89,18 +84,19 @@ public class NoFixedTaskDelayTests
         foreach (var (path, baselineCount) in BaselineOffenders)
         {
             var actual = fileOffenderCounts.TryGetValue(path, out var c) ? c : 0;
-            if (actual > baselineCount)
+            if (actual != baselineCount)
                 regressions.Add(
-                    $"{path}: baseline={baselineCount}, actual={actual} (+{actual - baselineCount})"
+                    $"{path}: baseline={baselineCount}, actual={actual} ({actual - baselineCount:+#;-#})"
                 );
         }
 
         regressions
             .Should()
             .BeEmpty(
-                "A grandfathered file gained new fixed-delay offenders. Either refactor the new code "
-                    + "to use proper synchronisation, or update the BaselineOffenders count in "
-                    + "NoFixedTaskDelayTests (but prefer refactoring). Regressions:\n  "
+                "A grandfathered file's fixed-delay count differs from its baseline. A file that "
+                    + "gained one: synchronise the new code on its completion signal instead. A file "
+                    + "that lost some: lower its BaselineOffenders count to match, or remove the "
+                    + "entry at zero, so the cleanup cannot be undone quietly. Differences:\n  "
                     + string.Join("\n  ", regressions)
             );
     }

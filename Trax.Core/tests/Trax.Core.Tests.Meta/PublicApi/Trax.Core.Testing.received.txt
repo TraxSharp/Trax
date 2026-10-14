@@ -29,6 +29,8 @@ namespace Trax.Core.Testing.Fixtures
         protected HygieneGuardFixture() { }
         protected virtual Trax.Core.Testing.ArchitectureGuardOptions Options { get; }
         [NUnit.Framework.Test]
+        public void Tests_do_not_check_a_substitute_before_the_started_work_ran() { }
+        [NUnit.Framework.Test]
         public void Tests_do_not_use_fixed_delays() { }
         [NUnit.Framework.Test]
         public void Tests_do_not_use_legacy_asserts() { }
@@ -60,6 +62,7 @@ namespace Trax.Core.Testing.Guards
         public static Trax.Core.Testing.GuardResult NoFixedDelays(Trax.Core.Testing.ArchitectureGuardOptions options) { }
         public static Trax.Core.Testing.GuardResult NoIgnoreAttribute(Trax.Core.Testing.ArchitectureGuardOptions options) { }
         public static Trax.Core.Testing.GuardResult NoLegacyAsserts(Trax.Core.Testing.ArchitectureGuardOptions options) { }
+        public static Trax.Core.Testing.GuardResult NoUnsynchronisedAssertAfterStart(Trax.Core.Testing.ArchitectureGuardOptions options) { }
     }
     public static class RepoConventionGuards
     {

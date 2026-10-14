@@ -98,6 +98,7 @@ public class QueryModelAuthorizeBuildTests
         var provider = Substitute.For<IAuthorizationPolicyProvider>();
         var validator = new QueryModelAuthorizationValidator(config, provider);
 
+        // synchronous-start: a StartupGate runs its check inside the awaited StartAsync.
         await validator.StartAsync(CancellationToken.None);
 
         await provider.DidNotReceive().GetPolicyAsync(Arg.Any<string>());
@@ -144,6 +145,7 @@ public class QueryModelAuthorizeBuildTests
 
         var validator = new QueryModelAuthorizationValidator(config, provider);
 
+        // synchronous-start: a StartupGate runs its check inside the awaited StartAsync.
         await validator.StartAsync(CancellationToken.None);
 
         await provider.Received(1).GetPolicyAsync("AdminPolicy");
