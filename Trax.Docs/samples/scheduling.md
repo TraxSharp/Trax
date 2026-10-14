@@ -405,7 +405,7 @@ ones the sample printed when the line was changed.
 `AddScheduler` checks every interval, delay and count against its range when the host builds; the
 ranges are in [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges).
 
-## Tests
+## Testing it
 
 `tests/Trax.Samples.Scheduling.E2E` starts the real host with `WebApplicationFactory` against its
 own database, `scheduling_e2e_tests` (port overridable with `TRAX_TEST_PG_PORT`), and asserts on
