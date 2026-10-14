@@ -1,6 +1,6 @@
 ---
 title: SDK Reference
-description: "Index of the Trax SDK reference by package family: trains and junctions, attributes, configuration, mediator, scheduler, GraphQL, auth, dashboard, machines and testing."
+description: "Index of the Trax SDK reference by package family: trains, attributes, configuration, mediator, scheduler, GraphQL, auth, dashboard, machines and testing."
 type: landing
 area: general
 section: SDK Reference
@@ -20,7 +20,7 @@ Every public type and method a Trax package ships, one per page. Each page names
 | [Train Methods](/docs/sdk-reference/train-methods) | The members that declare, run and read a chain: `Junctions`, `Chain`, the decision steps, `Run`, `RunEither`, `DeclaredChain` |
 | [Attributes](/docs/sdk-reference/attributes) | Every attribute Trax reads: `[TraxAuthorize]`, `[TraxAllowAnonymous]`, `[TraxSensitive]`, `[TraxRemote]`, `[Inject]` and the GraphQL exposure attributes |
 | [Configuration](/docs/sdk-reference/configuration) | `AddTrax`, `AddEffects`, data providers, effect providers, junction effects, lifecycle hooks and broadcasters |
-| [State Machine API](/docs/sdk-reference/statemachine-api) | Authoring, hosting and persisting snapshot state machines, and the TypeScript package |
+| [State Machine API](/docs/sdk-reference/statemachine-api) | Authoring, hosting and persisting snapshot state machines: `AddStateMachines`, `Machine<TState, TTrigger>`, `IMachineBuilder`, `StateMachineMutations`, and the TypeScript package |
 
 ## Mediator and Scheduler
 
