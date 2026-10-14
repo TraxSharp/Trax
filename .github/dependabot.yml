@@ -76,6 +76,8 @@ updates:
       # The release tooling.
       - "/"
       - "/Trax.Api.StateMachine"
+      # The operations dashboard that Trax.Api.Dashboard ships.
+      - "/Trax.Api/src/Trax.Api.Dashboard/ClientApp"
       - "/Trax.Core/plugins/vscode/trax-hints"
       # Each sample's frontend, and the scripts that record and photograph the samples for
       # traxsharp.net.
@@ -85,7 +87,6 @@ updates:
       - "/Trax.Samples/scripts/recordings"
       - "/Trax.Samples/scripts/screenshots"
       - "/Trax.Website"
-      - "/Trax.Website/dashboard"
     schedule: { interval: "weekly" }
     cooldown: { default-days: 7 }
     open-pull-requests-limit: 5

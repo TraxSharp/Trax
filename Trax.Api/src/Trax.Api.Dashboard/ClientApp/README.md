@@ -4,10 +4,9 @@ A React (Vite) dashboard for Trax.Api. It reads the administrative GraphQL surfa
 by `Trax.Api.GraphQL` (`operations.*`) and renders the same operational view as the Blazor
 `Trax.Dashboard`, but as a standalone single-page app.
 
-It lives in Trax.Website, as its own npm project in `dashboard/` with its own lockfile, configs
-and tests, because traxsharp.net serves a demo of it at `/dashboard` (see [The demo](#the-demo)).
-Nothing in it imports from the site, so moving it to a repository of its own is a `git mv` and
-a CI job.
+It is its own npm project, with its own lockfile, configs and tests, beside the
+`Trax.Api.Dashboard` package that ships it. Trax.Website builds a demo of it from here for
+traxsharp.net's `/dashboard` (see [The demo](#the-demo)).
 
 It covers the full operational surface: Overview (metrics + charts + health, panels chosen in
 User settings), Executions (keyset list with failure-class, external id, parent and host filters,
@@ -57,7 +56,7 @@ the browser sees a same-origin API and CORS is not involved in development.
 no API, no credential, and every answer taken from recordings of real Trax hosts. It is the same
 app; `src/demo` replaces the urql client, and a banner on every page says the data is recorded
 and changes are simulated. The build lands in `dist-demo/`, based at `/dashboard/demo/`
-(`DASHBOARD_DEMO_BASE` moves it), and the site's `scripts/build-dashboard-demo.sh` copies it into
+(`DASHBOARD_DEMO_BASE` moves it), and Trax.Website's `scripts/build-dashboard-demo.sh` copies it into
 `public/dashboard/demo`, which `/dashboard` frames.
 
 **The recordings.** `src/demo/data/dashboard-recordings.json` is what three Trax.Samples hosts
@@ -67,11 +66,11 @@ databases of its own, drives them for about three minutes, pauses their schedule
 every list once per filter, sort and scope, reads every row's page, sends every write, and keeps
 every live event with its timing. The hosts are combined as one cluster on one database would
 show them, with ids renumbered into one sequence; the script's header has the details. Re-record
-from a Trax.Samples checkout beside this repository:
+from this folder:
 
 ```bash
-cd ../Trax.Samples/scripts/recordings && npm ci
-TRAX_PG_PORT=5433 node dashboard.mjs --copy-to ../../../Trax.Website/dashboard/src/demo/data
+cd ../../../../Trax.Samples/scripts/recordings && npm ci
+TRAX_PG_PORT=5433 node dashboard.mjs --copy-to ../../../Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/demo/data
 ```
 
 then run `npm test` here.

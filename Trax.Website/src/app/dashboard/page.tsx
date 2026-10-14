@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 // The operations dashboard, served as a static build under /dashboard/demo/ (see
 // scripts/build-dashboard-demo.sh) and framed here. It answers from recordings of real sample hosts,
-// made by Trax.Samples' scripts/recordings/dashboard.mjs; dashboard/README.md says how.
+// made by Trax.Samples' scripts/recordings/dashboard.mjs; Trax.Api/src/Trax.Api.Dashboard/ClientApp/README.md says how.
 
 export const metadata: Metadata = {
   title: "Dashboard",

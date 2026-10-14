@@ -42,13 +42,13 @@ Trax.Core/              Core utilities, the chain, the guard engines (Trax.Core.
 Trax.Effect/            Effect system, data providers, state machine
 Trax.Mediator/          Mediator pattern, train bus, train authorization
 Trax.Scheduler/         Job scheduling, manifests, remote runners
-Trax.Api/               GraphQL API layer
+Trax.Api/               GraphQL API layer, and the React operations dashboard it ships
 Trax.Dashboard/         Blazor Server dashboard UI
 Trax.Cli/               The `trax` tool
 Trax.Samples/           Sample applications and the dotnet new templates
 Trax.Api.StateMachine/  @traxsharp/state-machine, the TypeScript twin of the state-machine engine
 Trax.Docs/              Documentation content, the central ADRs, the ADR guard
-Trax.Website/           Next.js site for traxsharp.net, and the React operations dashboard
+Trax.Website/           Next.js site for traxsharp.net
 .github/                CI, release, Dependabot; per-folder CI settings in .github/ci/packages.json
 ```
 

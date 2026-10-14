@@ -5,7 +5,7 @@
 //   node dashboard.mjs [--copy-to <dir>] [--dashboard <dir>]
 //
 // It reads every query, mutation and subscription document from the dashboard's source (--dashboard, default
-// ../../../Trax.Website/dashboard), so what it records is exactly what the dashboard sends.
+// ../../../Trax.Api/src/Trax.Api.Dashboard/ClientApp), so what it records is exactly what the dashboard sends.
 //
 // Three samples feed it, each on a private port and a fresh database it creates in the Postgres container
 // (TRAX_PG_CONTAINER, default trax_database, published on TRAX_PG_PORT, default 5432):
@@ -40,7 +40,7 @@
 // row (a manifest's runs, a run's log) is that host's answer.
 //
 // The raw recording lands in out/dashboard/recording.json. --copy-to writes the website's copy,
-// <dir>/dashboard-recordings.json (--copy-to ../../../Trax.Website/dashboard/src/demo/data), and --copy-only
+// <dir>/dashboard-recordings.json (--copy-to ../../../Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/demo/data), and --copy-only
 // rewrites it from out/ without starting anything. The copy differs from what the hosts sent in four ways: ids are
 // renumbered as above; the machine's name, process ids and file paths are replaced (hosts are named after the
 // sample they ran, and stack traces start at the repository); the version the footer shows is the Trax.Api version
@@ -65,7 +65,7 @@ const argValue = (flag) => {
   const at = args.indexOf(flag);
   return at >= 0 ? resolve(process.cwd(), args[at + 1]) : null;
 };
-const dashboardDir = argValue("--dashboard") ?? resolve(repo, "../Trax.Website/dashboard");
+const dashboardDir = argValue("--dashboard") ?? resolve(repo, "../Trax.Api/src/Trax.Api.Dashboard/ClientApp");
 const copyTo = argValue("--copy-to");
 
 const PG_CONTAINER = process.env.TRAX_PG_CONTAINER ?? "trax_database";

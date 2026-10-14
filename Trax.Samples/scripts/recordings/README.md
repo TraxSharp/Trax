@@ -36,19 +36,19 @@ plays every recording through the landing page's players.
 
 ## The dashboard
 
-`node dashboard.mjs` records what the operations dashboard (Trax.Website's `dashboard/`) needs to run with no API
+`node dashboard.mjs` records what the operations dashboard (`Trax.Api/src/Trax.Api.Dashboard/ClientApp`) needs to run with no API
 behind it. It differs from the scripts above in three ways. It starts the hosts itself: Scheduling, Recovery and
 PersistedOperations, each on a private port (5391 to 5393) and a database it creates fresh, so it needs only Docker's
 Postgres (`docker compose up -d database`; set `TRAX_PG_PORT` when it is not on 5432, and `TRAX_PG_CONTAINER` when
 the container is not `trax_database`). It reads the queries, mutations and subscriptions it sends from the
-dashboard's own source (`--dashboard`, default `../Trax.Website/dashboard` beside this repository), so it records
+dashboard's own source (`--dashboard`, default `../Trax.Api/src/Trax.Api.Dashboard/ClientApp` in this checkout), so it records
 exactly what the dashboard asks. And it records a snapshot rather than a sequence: about three minutes of the hosts
 running and being driven (with every live event timed), then both schedulers paused, then every list the dashboard
 shows walked to its end once per filter, sort and scope, every row's page read, and every write the dashboard offers
 sent to a real host. It takes about four minutes.
 
 ```bash
-TRAX_PG_PORT=5433 node dashboard.mjs --copy-to ../../../Trax.Website/dashboard/src/demo/data
+TRAX_PG_PORT=5433 node dashboard.mjs --copy-to ../../../Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/demo/data
 ```
 
 The website's copy combines the three hosts as one cluster on one database would show them; the script's header says

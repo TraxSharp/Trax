@@ -341,20 +341,20 @@ jobs:
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
 
-  # The operations dashboard (Trax.Website/dashboard/) is its own npm project with its own
-  # lockfile. The site's build above builds its demo; this job runs its lint, its tests (every
-  # story, and the demo's strict check that every page is answered by a recording) and both its
-  # production builds.
-  website-dashboard:
+  # The operations dashboard (Trax.Api/src/Trax.Api.Dashboard/ClientApp) is its own npm project
+  # with its own lockfile. Trax.Api.Dashboard ships its production build, and the site's build
+  # above builds its demo; this job runs its lint, its tests (every story, and the demo's strict
+  # check that every page is answered by a recording) and both its production builds.
+  api-dashboard:
     needs: changes
-    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Website')
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Api')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     defaults:
       run:
-        working-directory: Trax.Website/dashboard
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
@@ -530,7 +530,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, adr-guard, website, website-dashboard, recovery-client, state-machine, release-tooling]
+    needs: [changes, dotnet, adr-guard, website, api-dashboard, recovery-client, state-machine, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
