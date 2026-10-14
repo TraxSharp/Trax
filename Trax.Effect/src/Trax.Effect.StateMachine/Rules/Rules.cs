@@ -64,6 +64,18 @@ public sealed class FieldMatcher(RuleSource source, string field)
     public Rule GreaterThan(double value) =>
         new Rule.Compare(source, field, CompareOp.GreaterThan, value);
 
+    /// <summary>A numeric field less than a constant (<c>lt</c> in the IR).</summary>
+    public Rule LessThan(double value) =>
+        new Rule.Compare(source, field, CompareOp.LessThan, value);
+
+    /// <summary>A numeric field greater than or equal to a constant (<c>gte</c> in the IR).</summary>
+    public Rule AtLeast(double value) =>
+        new Rule.Compare(source, field, CompareOp.GreaterOrEqual, value);
+
+    /// <summary>A numeric field less than or equal to a constant (<c>lte</c> in the IR).</summary>
+    public Rule AtMost(double value) =>
+        new Rule.Compare(source, field, CompareOp.LessOrEqual, value);
+
     /// <summary>A numeric field equal to a constant.</summary>
     public Rule EqualTo(double value) => new Rule.Compare(source, field, CompareOp.EqualTo, value);
 

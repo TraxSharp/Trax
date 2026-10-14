@@ -59,6 +59,9 @@ Terminal methods on `FieldMatcher`, each returning a `Rule`:
 | `IsOneOf(params string[] values)` | a string equal to one of `values` |
 | `OfType(JsonFieldType type)` | the field is present and of that JSON type |
 | `GreaterThan(double value)` | a number greater than `value` |
+| `AtLeast(double value)` | a number greater than or equal to `value` |
+| `LessThan(double value)` | a number less than `value` |
+| `AtMost(double value)` | a number less than or equal to `value` |
 | `EqualTo(double value)` | a number equal to `value` |
 | `CountGreaterThan(int value)` | an array with more than `value` elements |
 | `CountAtLeast(int value)` | an array with at least `value` elements |
@@ -66,6 +69,10 @@ Terminal methods on `FieldMatcher`, each returning a `Rule`:
 | `LengthAtLeast(int value)` | a string whose length is at least `value` |
 | `IsTrue()` / `IsFalse()` | a boolean field equal to `true` / `false` |
 | `ArrayOf(JsonFieldType type)` | an array whose every element is of `type` |
+
+The numeric comparisons export as a `compare` rule whose `op` is `gt`, `gte`, `lt`, `lte` or `eq`
+([the IR format](/docs/sdk-reference/statemachine-api/ir-format)). There is no negation rule: write the
+opposite comparison (`AtMost(12)`, not "not greater than 12").
 
 ### Combinators
 

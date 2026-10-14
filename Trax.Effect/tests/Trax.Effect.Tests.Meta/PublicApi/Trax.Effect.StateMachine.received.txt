@@ -93,6 +93,8 @@ namespace Trax.Effect.StateMachine
         public FieldMatcher(Trax.Effect.StateMachine.RuleSource source, string field) { }
         public Trax.Effect.StateMachine.Rule Absent() { }
         public Trax.Effect.StateMachine.Rule ArrayOf(Trax.Effect.StateMachine.JsonFieldType type) { }
+        public Trax.Effect.StateMachine.Rule AtLeast(double value) { }
+        public Trax.Effect.StateMachine.Rule AtMost(double value) { }
         public Trax.Effect.StateMachine.Rule CountAtLeast(int value) { }
         public Trax.Effect.StateMachine.Rule CountGreaterThan(int value) { }
         public Trax.Effect.StateMachine.Rule EqualTo(double value) { }
@@ -102,6 +104,7 @@ namespace Trax.Effect.StateMachine
         public Trax.Effect.StateMachine.Rule IsTrue() { }
         public Trax.Effect.StateMachine.Rule LengthAtLeast(int value) { }
         public Trax.Effect.StateMachine.Rule LengthGreaterThan(int value) { }
+        public Trax.Effect.StateMachine.Rule LessThan(double value) { }
         public Trax.Effect.StateMachine.Rule NonEmpty() { }
         public Trax.Effect.StateMachine.Rule OfType(Trax.Effect.StateMachine.JsonFieldType type) { }
         public Trax.Effect.StateMachine.Rule Present() { }

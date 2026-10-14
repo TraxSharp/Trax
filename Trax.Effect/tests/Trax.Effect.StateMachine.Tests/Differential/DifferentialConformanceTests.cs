@@ -22,6 +22,11 @@ public class DifferentialConformanceTests
     public void Checkout_engine_reproduces_the_shared_differential_corpus() =>
         AssertReplays("checkout", DeclarativeCheckout.Machine);
 
+    // Its guards are lt, gte and lte, each sampled on both sides of its bound.
+    [Test]
+    public void Gauge_engine_reproduces_the_shared_differential_corpus() =>
+        AssertReplays("gauge", GaugeMachine.Machine);
+
     private static void AssertReplays<TState, TTrigger>(
         string name,
         SnapshotMachine<TState, TTrigger> machine

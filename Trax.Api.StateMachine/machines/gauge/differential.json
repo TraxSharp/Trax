@@ -1,0 +1,1357 @@
+{
+  "machine": "gauge",
+  "version": 1,
+  "generated": "GENERATED differential corpus. Do not hand-edit; regenerate with UPDATE_DIFFERENTIAL=1. TypeScript is the oracle; every runtime replays and must reproduce each outcome.",
+  "cases": [
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":12}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":2}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":3}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":12}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":2}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":3}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":12}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-input"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":2}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Reading\",\"context\":{\"reading\":3}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Idle",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 10
+        }
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Idle\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 11
+        }
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 12
+        }
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 2
+        }
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Idle\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Lower"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 12
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 13
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Lower",
+        "input": {
+          "value": 14
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Raise"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 1
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 2
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Raise",
+        "input": {
+          "value": 3
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "gauge",
+        "version": 1,
+        "state": "Reading",
+        "context": {
+          "reading": 3
+        }
+      },
+      "when": {
+        "trigger": "Settle"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"gauge\",\"version\":1,\"state\":\"Idle\",\"context\":{}}"
+      }
+    }
+  ]
+}

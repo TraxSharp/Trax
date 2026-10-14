@@ -8,6 +8,7 @@ import {
 import { differentialFile, irFile } from "./fixtures";
 import type { SnapshotMachine } from "./machine";
 import { checkoutCore } from "./machines/checkout/checkout";
+import { gaugeCore } from "./machines/gauge/gauge";
 import { ingestCore } from "./machines/ingest/ingest";
 import { turnstileCore } from "./machines/turnstile/turnstile";
 
@@ -50,4 +51,7 @@ describe("differential corpus (TypeScript oracle)", () => {
   // A machine whose state invokes a train: its outcome triggers are enumerated as events (pure half only).
   it("ingest matches its committed corpus", () =>
     assertCorpus("ingest", ingestCore));
+  // Guards that compare with lt, gte and lte, sampled on both sides of each bound.
+  it("gauge matches its committed corpus", () =>
+    assertCorpus("gauge", gaugeCore));
 });

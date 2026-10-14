@@ -97,6 +97,11 @@ public class MachineGeneratorNodeTests
     public void Generate_reproduces_the_committed_ingest_artifacts_with_outcome_triggers_byte_for_byte() =>
         AssertByteParityWithCommitted(new DeclarativeIngestMachine(), "ingest");
 
+    // Guards that compare with lt, gte and lte, whose corpus holds both runtimes to the same bounds.
+    [Test]
+    public void Generate_reproduces_the_committed_gauge_artifacts_byte_for_byte() =>
+        AssertByteParityWithCommitted(new DeclarativeGaugeMachine(), "gauge");
+
     // A timed state exports its timer as a trigger of its own kind, which the twin shows and never fires and the
     // corpus replays through AdvanceTimer. The committed reminder artifacts are written by the generation this
     // test waits for, so it first proves the generated IR carries the timer.
