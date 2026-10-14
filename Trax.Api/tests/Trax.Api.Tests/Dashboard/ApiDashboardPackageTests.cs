@@ -165,21 +165,38 @@ public partial class ApiDashboardPackageTests
         };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
+        // A pack runs MSBuild worker nodes that would otherwise outlive it, holding this process's
+        // output pipes open for their idle timeout, so reading the output would hang long after the
+        // pack had finished. The test host's MSBuild environment must not leak into the child either.
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        psi.Environment.Remove("MSBuildSDKsPath");
+        psi.Environment.Remove("MSBuildExtensionsPath");
+        psi.Environment.Remove("MSBUILD_EXE_PATH");
         try
         {
             using var process = Process.Start(psi)!;
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(TimeSpan.FromMinutes(5)))
-            {
+            // Under the blame collector's five minutes, so a hung child fails this test with what
+            // it printed instead of the collector killing the whole test host.
+            var exited = process.WaitForExit(TimeSpan.FromMinutes(4));
+            if (!exited)
                 process.Kill(entireProcessTree: true);
-                return (-1, "timed out after five minutes");
-            }
-            return (process.ExitCode, stdout.Result + stderr.Result);
+            Task.WaitAll([stdout, stderr], TimeSpan.FromSeconds(30));
+            var output = Drained(stdout) + Drained(stderr);
+            return exited
+                ? (process.ExitCode, output)
+                : (
+                    -1,
+                    $"{fileName} {string.Join(' ', args)} timed out after four minutes:\n{output}"
+                );
         }
         catch (System.ComponentModel.Win32Exception e)
         {
             return (-1, e.Message);
         }
     }
+
+    private static string Drained(Task<string> read) =>
+        read.IsCompletedSuccessfully ? read.Result : "(output still held open by a child process)";
 }

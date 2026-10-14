@@ -148,10 +148,36 @@ public class MachineGenerateFromPackedToolTests
         params string[] args
     )
     {
-        var psi = new ProcessStartInfo(fileName) { WorkingDirectory = workingDirectory };
+        var psi = new ProcessStartInfo(fileName)
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
-        var (exitCode, stdout, stderr) = ChildProcess.Run(psi);
-        return (exitCode, stdout + stderr);
+        // A pack runs MSBuild worker nodes that would otherwise outlive it, holding this process's
+        // output pipes open for their idle timeout, so reading the output would hang long after the
+        // pack had finished. The test host's MSBuild environment must not leak into the child either.
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        psi.Environment.Remove("MSBuildSDKsPath");
+        psi.Environment.Remove("MSBuildExtensionsPath");
+        psi.Environment.Remove("MSBUILD_EXE_PATH");
+        using var process = Process.Start(psi)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        // Bounded, so a hung child fails this test with what it printed instead of stalling the run.
+        var exited = process.WaitForExit(TimeSpan.FromMinutes(5));
+        if (!exited)
+            process.Kill(entireProcessTree: true);
+        Task.WaitAll([stdout, stderr], TimeSpan.FromSeconds(30));
+        var output = Drained(stdout) + Drained(stderr);
+        return exited
+            ? (process.ExitCode, output)
+            : (-1, $"{fileName} {string.Join(' ', args)} timed out after five minutes:\n{output}");
     }
+
+    private static string Drained(Task<string> read) =>
+        read.IsCompletedSuccessfully ? read.Result : "(output still held open by a child process)";
 }
