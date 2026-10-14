@@ -10,6 +10,7 @@ namespace Trax.Api.GraphQL.Client;
 /// Resolve it through <see cref="IGraphQLClientExecutor"/>. Response-shape drift is logged under
 /// the <c>ILogger&lt;GraphQLClientExecutor&gt;</c> category.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-graphql-client-executor">SDK reference</seealso>
 public class GraphQLClientExecutor : IGraphQLClientExecutor
 {
     private readonly IGraphQLClientValidator _validator;

@@ -6,6 +6,7 @@ namespace Trax.Api.GraphQL.Client;
 /// build into a schema. A schema provider caches its first load, so after this is thrown the
 /// provider keeps failing until the process restarts.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-client-exceptions">SDK reference</seealso>
 public class GraphQLSchemaIntrospectionException : Exception
 {
     /// <summary>Creates the exception with a message.</summary>

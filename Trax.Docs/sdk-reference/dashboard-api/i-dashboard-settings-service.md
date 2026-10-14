@@ -1,22 +1,26 @@
 ---
 title: IDashboardSettingsService
-description: Reference for IDashboardSettingsService, the per-browser dashboard preferences kept in localStorage, its members and how to replace it.
+description: "Reference for IDashboardSettingsService, the per-browser dashboard preferences kept in localStorage, and its members."
 type: reference
 area: dashboard
+package: Trax.Dashboard
+namespace: Trax.Dashboard.Services.DashboardSettings
 parent: Dashboard API
 grand_parent: SDK Reference
 nav_order: 4
+source:
+  - Trax.Dashboard/src/Trax.Dashboard/Services/DashboardSettings/IDashboardSettingsService.cs
 ---
 
 # IDashboardSettingsService
 
 Per-browser dashboard preferences (the polling interval, whether the scheduler's own trains are hidden, which home page panels show) and the outcome of the most recent data refresh. The dashboard's pages read it; the **User Settings** page writes it.
 
-`AddTraxDashboard` registers the default implementation as a scoped service, so in Blazor Server there is one per circuit (browser tab). It keeps every preference in the browser's `localStorage`, not on the server. Replace it to store preferences elsewhere, for example per user in your database.
+`AddTraxDashboard` registers the default implementation as a scoped service, so in Blazor Server there is one per circuit (browser tab). It keeps every preference in the browser's `localStorage`, not on the server.
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Dashboard.Services.DashboardSettings;
 
 public interface IDashboardSettingsService
@@ -57,17 +61,13 @@ public interface IDashboardSettingsService
 | `NotifyPolled()` | | Called by a page after a load completes: sets `LastPollTime` to now and clears `LastPollError` |
 | `NotifyPollFailed(string message)` | | Called when a refresh fails. The interface's default implementation discards the message. |
 
-## Replacing it
+## Behavior
 
-Register your implementation **after** `AddTraxDashboard`; it uses `AddScoped`, so the later registration wins. Register it scoped, because each circuit holds its own state.
+`AddTraxDashboard` registers the default implementation with `AddScoped`, so a registration made
+after it replaces it. [Store dashboard settings per user](/docs/dashboard/store-dashboard-settings-per-user)
+shows one.
 
-```csharp
-builder.AddTraxDashboard(o => o.RequireRoles("Admin"));
-builder.Services.AddScoped<IDashboardSettingsService, PerUserDashboardSettings>();
-```
+## See also
 
-## Package
-
-```
-dotnet add package Trax.Dashboard
-```
+- [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard)
+- [Dashboard](/docs/dashboard)

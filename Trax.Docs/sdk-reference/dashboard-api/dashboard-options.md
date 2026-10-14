@@ -1,16 +1,37 @@
 ---
 title: DashboardOptions
-description: Reference for DashboardOptions, the dashboard configuration class, including the authorization posture UseTraxDashboard requires before it starts.
+description: "Reference for DashboardOptions, the dashboard configuration class, including the authorization posture UseTraxDashboard requires before it starts."
 type: reference
 area: dashboard
+package: Trax.Dashboard
+namespace: Trax.Dashboard.Configuration
 parent: Dashboard API
 grand_parent: SDK Reference
 nav_order: 3
+source:
+  - Trax.Dashboard/src/Trax.Dashboard/Configuration/DashboardOptions.cs
 ---
 
 # DashboardOptions
 
-Configuration class for the Trax.Core Dashboard. Passed via the `configure` callback in [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard).
+The Trax Dashboard's configuration, passed to the `configure` callback of
+[AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) and registered as a
+singleton.
+
+## Signature
+
+```csharp fragment
+public class DashboardOptions
+{
+    public string RoutePrefix { get; }
+    public string Title { get; set; }
+    public string EnvironmentName { get; }
+
+    public DashboardOptions RequirePolicy(string policy);
+    public DashboardOptions RequireRoles(params string[] roles);
+    public DashboardOptions AllowAnonymousDashboard();
+}
+```
 
 ## Properties
 
@@ -20,10 +41,11 @@ Configuration class for the Trax.Core Dashboard. Passed via the `configure` call
 | `Title` | `string` | `"Trax"` | Title displayed in the dashboard header and browser tab. |
 | `EnvironmentName` | `string` | `""` | Read-only. The hosting environment name (e.g., "Development", "Production"), set from `IHostEnvironment.EnvironmentName` by `UseTraxDashboard`. |
 
-## Authorization posture
+## Members
 
 Exactly one posture is required before [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
-will start. Each method returns the options, so they chain.
+starts. Each method returns the options.
+
 
 | Method | Description |
 |--------|-------------|
@@ -31,22 +53,23 @@ will start. Each method returns the options, so they chain.
 | `RequireRoles(params string[] roles)` | Every dashboard endpoint requires one of the roles. Throws `ArgumentException` for no roles or a blank one. May be combined with `RequirePolicy`. |
 | `AllowAnonymousDashboard()` | The dashboard adds no authorization of its own; `UseTraxDashboard` logs a warning on every start. Throws `InvalidOperationException` when combined with either of the above. |
 
+## Behavior
+
+- `RoutePrefix` and `EnvironmentName` have no public setter. `UseTraxDashboard` sets both, and code can read them from the registered `DashboardOptions` singleton.
+- `RoutePrefix` is read only by the sidebar. Passing `UseTraxDashboard` a prefix other than `/trax` leaves the pages where they are and points every navigation link somewhere that does not exist.
+- `Title` is the only property the `configure` callback can set, alongside the posture.
+
 ## Example
 
-```csharp
+```csharp compile
 builder.AddTraxDashboard(options =>
 {
     options.Title = "My Application - Trains";
     options.RequireRoles("Admin");
 });
-
-app.UseTraxDashboard();
-// RoutePrefix stays at "/trax", which is where the pages are
-// EnvironmentName is set automatically from the hosting environment
 ```
 
-## Remarks
+## See also
 
-- `RoutePrefix` and `EnvironmentName` have no public setter. `UseTraxDashboard` sets both, and code can read them from the registered `DashboardOptions` singleton.
-- `RoutePrefix` is read only by the sidebar. Passing `UseTraxDashboard` a prefix other than `/trax` leaves the pages where they are and points every navigation link somewhere that does not exist.
-- `Title` is the only property the `configure` callback can set, alongside the posture.
+- [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard)
+- [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)

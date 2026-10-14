@@ -15,6 +15,8 @@ namespace Trax.Api.GraphQL.Client.Trax;
 ///         .UseStartupValidation(typeof(Program).Assembly);
 /// </code>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/use-assembly-schema">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/use-startup-validation">SDK reference</seealso>
 public static class TraxBuilderExtensions
 {
     /// <summary>

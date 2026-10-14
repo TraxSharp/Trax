@@ -9,6 +9,7 @@ namespace Trax.Api.GraphQL.Mutations;
 /// share validation and the enqueue path; the train's own authorization applies here, while the
 /// dashboard enqueues as the admin surface its host gates (see docs/0017).
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/work-queue">SDK reference</seealso>
 public class WorkQueueMutations
 {
     /// <summary>

@@ -14,6 +14,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// caller is pointed at the <c>afterId</c> keyset cursor instead
 /// (<c>docs/adr/0017-an-operations-page-is-at-most-500-rows.md</c>).
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/paged-result">SDK reference</seealso>
 internal static class OperationsPageBounds
 {
     /// <summary>The largest page a paged operations read returns.</summary>

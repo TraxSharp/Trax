@@ -9,5 +9,6 @@ namespace Trax.Effect.Attributes;
 /// Place this attribute on the concrete train class. Trains without this attribute
 /// will not emit subscription events, even if lifecycle hooks are registered.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/trax-broadcast-attribute">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxBroadcastAttribute : Attribute { }

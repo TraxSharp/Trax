@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// <see cref="IOperationsService"/> so the dashboard's KPI cards / charts and the
 /// GraphQL API see identical numbers.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/metrics">SDK reference</seealso>
 public class MetricsQueries
 {
     /// <summary>

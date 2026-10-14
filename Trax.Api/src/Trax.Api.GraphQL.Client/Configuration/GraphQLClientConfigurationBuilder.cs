@@ -13,6 +13,7 @@ namespace Trax.Api.GraphQL.Client;
 /// exposes it for options without a dedicated method. The configuration is built from it when the
 /// kernel is first resolved, so changes made after that are not seen.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-client-configuration">SDK reference</seealso>
 public class GraphQLClientConfigurationBuilder
 {
     private readonly Uri _baseAddress;

@@ -5,6 +5,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 /// Registered as a singleton in DI; consumed by the request middleware,
 /// storage layer, and broadcaster wiring.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/persisted-operations-options">SDK reference</seealso>
 public sealed class PersistedOperationsOptions
 {
     // Built only by PersistedOperationsBuilder; every property is set there.

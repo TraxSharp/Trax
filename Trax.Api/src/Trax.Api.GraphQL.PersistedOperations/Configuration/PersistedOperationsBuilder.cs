@@ -7,6 +7,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 /// the convention used by other Trax builders (see
 /// <c>TraxMediatorBuilder</c>, <c>TraxGraphQLBuilder</c>).
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/persisted-operations-builder">SDK reference</seealso>
 public sealed partial class PersistedOperationsBuilder
 {
     // Created by UsePersistedOperations and handed to its callback.

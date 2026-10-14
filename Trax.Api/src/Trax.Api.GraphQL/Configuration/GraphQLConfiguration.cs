@@ -11,6 +11,7 @@ namespace Trax.Api.GraphQL.Configuration;
 /// Holds the resolved configuration for the Trax GraphQL schema,
 /// including discovered query model registrations.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/add-trax-graphql">SDK reference</seealso>
 public class GraphQLConfiguration
 {
     /// <summary>

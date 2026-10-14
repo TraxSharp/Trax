@@ -17,6 +17,7 @@ namespace Trax.Effect.Models.PersistedOperation;
 /// composite primary key.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/persisted-operation">SDK reference</seealso>
 public class PersistedOperation
 {
     /// <summary>

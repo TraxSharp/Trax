@@ -16,6 +16,7 @@ namespace Trax.Api.GraphQL.Filtering;
 /// module and exposing it through a method on
 /// <see cref="Configuration.TraxFilterBuilder.TraxFilterBuilder"/>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/configure-filtering">SDK reference</seealso>
 public interface ITraxFilterModule
 {
     /// <summary>

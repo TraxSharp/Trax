@@ -6,6 +6,7 @@ namespace Trax.Api.Extensions;
 /// <summary>
 /// Adds the Trax health check to ASP.NET Core health checks.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/add-trax-health-check">SDK reference</seealso>
 public static class HealthCheckExtensions
 {
     /// <summary>

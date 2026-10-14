@@ -9,6 +9,9 @@ namespace Trax.Api.GraphQL.Client;
 /// schema and runs them. Start with <c>AddTraxGraphQLClient</c>, then resolve
 /// <see cref="IGraphQLClientExecutor"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/add-trax-graphql-client">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/add-keyed-trax-graphql-client">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/validate-graphql-client-assemblies">SDK reference</seealso>
 public static class ServiceExtensions
 {
     /// <summary>

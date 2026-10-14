@@ -13,6 +13,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// by the dashboard's DAG visualisation. <c>graph</c> goes through the same service the
 /// dashboard uses, so both see identical nodes and edges.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/manifest-groups">SDK reference</seealso>
 public class ManifestGroupQueries
 {
     /// <summary>

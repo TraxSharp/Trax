@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 /// a structured error to the user; <see cref="PersistedOperationNotBroadcastException"/>
 /// is the one whose change was saved.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/persisted-operation-exceptions">SDK reference</seealso>
 public abstract class PersistedOperationException : InvalidOperationException
 {
     /// <summary>

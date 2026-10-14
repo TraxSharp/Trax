@@ -10,6 +10,7 @@ namespace Trax.Api.GraphQL.Client;
 /// <see cref="System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(Type)"/>
 /// used by <see cref="GraphQLClientValidatorExtensions.ValidateAssembliesAsync(IGraphQLClientValidator, IEnumerable{System.Reflection.Assembly}, CancellationToken)"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-resource-request">SDK reference</seealso>
 public abstract class GraphQLResourceRequest<TResponse> : IGraphQLClientRequest<TResponse>
 {
     /// <summary>

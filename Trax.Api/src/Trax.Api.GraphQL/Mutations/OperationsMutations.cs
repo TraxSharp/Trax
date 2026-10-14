@@ -14,6 +14,9 @@ namespace Trax.Api.GraphQL.Mutations;
 /// Scheduler management mutations: trigger, disable, enable, and cancel manifests and groups.
 /// Also exposes the nested <c>deadLetters</c> namespace.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/manifests">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/executions">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/effects">SDK reference</seealso>
 public partial class OperationsMutations
 {
     /// <summary>

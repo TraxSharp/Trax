@@ -1,31 +1,31 @@
 ---
 title: AddTraxHealthCheck
-description: Reference for AddTraxHealthCheck, an ASP.NET Core health check reporting queued work, running executions, recent failures and dead letters.
+description: "Reference for AddTraxHealthCheck, an ASP.NET Core health check reporting queued work, running executions, recent failures and dead letters."
 type: reference
 area: api
+package: Trax.Api
+namespace: Trax.Api.Extensions
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 10
+source:
+  - Trax.Api/src/Trax.Api/Extensions/HealthCheckExtensions.cs
 ---
 
 # AddTraxHealthCheck
 
-Adds an ASP.NET Core health check that reports on the Trax store: queued work, running executions, failures in the last hour, and dead letters awaiting intervention. It reports the same numbers as the GraphQL [`health`](/docs/sdk-reference/graphql-api/queries#health) query, through one shared service.
+Adds an ASP.NET Core health check that reports on the Trax store: queued work, running executions, failures in the last hour, and dead letters awaiting intervention. It reports the same numbers as the GraphQL [`health`](/docs/sdk-reference/graphql-api/queries/operations#health) query, through one shared service. It ships in Trax.Api, which Trax.Api.GraphQL depends on.
 
 ## Signature
 
-```csharp
-namespace Trax.Api.Extensions;
-
-public static class HealthCheckExtensions
-{
-    public static IHealthChecksBuilder AddTraxHealthCheck(
-        this IHealthChecksBuilder builder,
-        string name = "trax",
-        params string[] tags
-    );
-}
+```csharp fragment
+public static IHealthChecksBuilder AddTraxHealthCheck(
+    this IHealthChecksBuilder builder,
+    string name = "trax",
+    params string[] tags)
 ```
+
+## Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -33,9 +33,11 @@ public static class HealthCheckExtensions
 | `name` | `string` | `"trax"` | The health check's registration name |
 | `tags` | `string[]` | none | Tags for filtering in `MapHealthChecks` |
 
-**Returns**: the `IHealthChecksBuilder`, for chaining.
+## Returns
 
-## What it reports
+The `IHealthChecksBuilder`, for chaining.
+
+## Behavior
 
 | Status | When |
 |--------|------|
@@ -55,15 +57,18 @@ Each result carries the counts as data:
 
 The counts are read from the store on every call; nothing is cached.
 
-## Requirements
+### Requirements
 
-The check resolves `ITraxHealthService`, which `AddTraxApi` registers, and `AddTraxGraphQL` calls `AddTraxApi`. On a host with neither, the check fails when it runs because the service cannot be resolved. A data provider (`UsePostgres`, `UseSqlite` or `UseInMemory`) must be configured.
+The check resolves `ITraxHealthService`, which `AddTraxApi` (on `ApiServiceExtensions`, `Trax.Api.Extensions`) registers; `AddTraxGraphQL` calls `AddTraxApi`. On a host with neither, the check fails when it runs because the service cannot be resolved. A data provider (`UsePostgres`, `UseSqlite` or `UseInMemory`) must be configured.
 
 `ITraxHealthService` (`Trax.Api.Services.HealthCheck`, one method: `Task<HealthStatus> GetHealthAsync(CancellationToken ct = default)`) is hidden from completion. To change how health is computed for both the check and the GraphQL query, register your own implementation after `AddTraxGraphQL`.
 
 ## Example
 
-```csharp
+```csharp compile
+using Trax.Api.Extensions;
+using Trax.Scheduler.Extensions;
+
 builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
     .AddMediator(typeof(Program).Assembly)
@@ -76,12 +81,7 @@ var app = builder.Build();
 app.MapHealthChecks("/trax/health");
 ```
 
-For the scheduler's own liveness, which fails when the dispatcher stops completing cycles, see [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness).
+## See also
 
-## Package
-
-```
-dotnet add package Trax.Api
-```
-
-`Trax.Api.GraphQL` depends on it, so a GraphQL host already has it.
+- [operations: system queries](/docs/sdk-reference/graphql-api/queries/operations#health)
+- [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness), the scheduler's own liveness check

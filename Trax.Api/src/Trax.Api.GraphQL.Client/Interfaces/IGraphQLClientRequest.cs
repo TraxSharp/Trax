@@ -9,6 +9,7 @@ namespace Trax.Api.GraphQL.Client;
 /// <see cref="IGraphQLClientExecutor.Run{TReturn}"/>.
 /// </summary>
 /// <typeparam name="TResponse">The type the response data is deserialized into.</typeparam>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-graphql-client-request">SDK reference</seealso>
 public interface IGraphQLClientRequest<out TResponse> : IGenericGraphQLClientRequest
 {
     /// <summary>

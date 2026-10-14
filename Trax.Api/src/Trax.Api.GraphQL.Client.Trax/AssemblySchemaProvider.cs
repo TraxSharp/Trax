@@ -15,6 +15,7 @@ namespace Trax.Api.GraphQL.Client.Trax;
 /// the schema configuration. For air-gapped or non-.NET callers, use <see cref="FileSchemaProvider"/>
 /// or <see cref="IntrospectingSchemaProvider"/> instead.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-schema-provider">SDK reference</seealso>
 public sealed class AssemblySchemaProvider : ISchemaProvider
 {
     private readonly Action<IRequestExecutorBuilder> _configure;

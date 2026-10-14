@@ -1,11 +1,15 @@
 ---
 title: ShapeFingerprintComputer
-description: Reference for ShapeFingerprintComputer, the response-shape hash that lets the store refuse persisted-operation edits that would break shipped clients.
+description: "Reference for ShapeFingerprintComputer, the response-shape hash the store compares to refuse persisted-operation edits that change a response's shape."
 type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 8
+nav_order: 11
+package: Trax.Api.GraphQL.PersistedOperations
+namespace: Trax.Api.GraphQL.PersistedOperations.ShapeDiff
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/ShapeDiff/ShapeFingerprintComputer.cs
 ---
 
 # ShapeFingerprintComputer
@@ -16,18 +20,26 @@ The storage layer calls this on every `UpsertAsync` and stores the result in `sh
 
 ## Signature
 
-```csharp
+```csharp fragment
 public static string Compute(string document, string? operationName = null);
 ```
+
+## Parameters
 
 | Parameter | Notes |
 |---|---|
 | `document` | Full GraphQL document text. Required. |
 | `operationName` | Disambiguates when the document contains multiple operations. When null and the document has exactly one operation, that one is used. |
 
+## Returns
+
+The sha-256 hash of the canonical shape, as lowercase hex.
+
+## Behavior
+
 Throws `InvalidOperationException` when the document has no executable operation, when multiple operations are present without a name, or when the named operation is missing.
 
-## Algorithm
+### Algorithm
 
 1. Parse the document via `Utf8GraphQLParser`.
 2. Locate the executable operation.
@@ -37,7 +49,7 @@ Throws `InvalidOperationException` when the document has no executable operation
 6. Recurse into nested selections, indented by depth.
 7. Hash the canonical string with sha-256.
 
-## What is "same shape"
+### What is "same shape"
 
 | Same fingerprint | Why |
 |---|---|
@@ -50,7 +62,7 @@ Throws `InvalidOperationException` when the document has no executable operation
 | Default variable value changes | Same. |
 | Pure-resolver-path swaps with identical projection | Same response keys. |
 
-## What is "different shape"
+### What is "different shape"
 
 | Different fingerprint | Why |
 |---|---|
@@ -61,8 +73,23 @@ Throws `InvalidOperationException` when the document has no executable operation
 | Adding `@include` or `@skip` to a field | Field becomes conditional. |
 | Mutation vs query, subscription vs query | Operation type is part of the canonical form. |
 
-## Conservatism
+### False positives
 
-The fingerprint errs on the side of false positives. `BypassShapeDiff` (the upload mutation's `bypassShapeDiff`, the dashboard editor's bypass checkbox) is the escape hatch for cases where the operator has verified a flagged change is shape-safe. False negatives (silently approving a real shape change) would be the dangerous direction; the algorithm is biased away from them.
+The fingerprint is conservative: a change it flags may still be shape-safe for a given client, and
+`BypassShapeDiff` (the upload mutation's `bypassShapeDiff`, the dashboard editor's bypass checkbox)
+stores it anyway. It does not pass a change that alters the response keys. The cases are pinned by
+`ShapeFingerprintComputerTests` in `Trax.Api.Tests.PersistedOperations.UnitTests`.
 
-A binding test fixture lives in `Trax.Api.Tests.PersistedOperations.UnitTests.ShapeFingerprintComputerTests` with ~50 input pairs labeled "same shape" or "different shape", covering fragments, unions, interfaces, directives, aliases, variables, deep nesting, whitespace, and field-order canonicalization. New canonicalization rules MUST add new pairs there.
+## Example
+
+```csharp compile
+var before = ShapeFingerprintComputer.Compute("query U { user(id: 1) { id name } }");
+var after = ShapeFingerprintComputer.Compute("query U { user(id: 2) { name id } }");
+
+Console.WriteLine(before == after); // True: argument values and field order do not change the shape
+```
+
+## See also
+
+- [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store)
+- [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions#shapediffviolationexception)

@@ -5,6 +5,7 @@ namespace Trax.Api.GraphQL.Client;
 /// the request's <c>TResponse</c> POCO. Validation runs once per unique request type
 /// (cached) and only when the request uses the default <see cref="IGraphQLClientRequest{T}.Extract"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/response-strictness">SDK reference</seealso>
 public enum ResponseStrictness
 {
     /// <summary>

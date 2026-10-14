@@ -11,6 +11,7 @@ namespace Trax.Api.GraphQL.Client;
 /// only the types that carry no mark. Running a request does not read it: the executor you
 /// resolve decides which server it goes to.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-client-attribute">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class GraphQLClientAttribute : Attribute
 {

@@ -1,6 +1,6 @@
 ---
 title: GraphQL API
-description: "Index of the Trax GraphQL API reference: the HotChocolate endpoint's queries, mutations and subscriptions, the Nitro IDE, and the package that ships them."
+description: "Index of the Trax GraphQL API reference: registration, the query, mutation and subscription types, the machines root, attributes and error codes."
 type: landing
 area: api
 parent: SDK Reference
@@ -10,9 +10,15 @@ nav_order: 10
 
 # GraphQL API
 
-Trax exposes a GraphQL endpoint powered by [HotChocolate](https://chillicream.com/docs/hotchocolate). It provides queries for inspecting trains, manifests, manifest groups, and executions, mutations for queuing/running trains and managing the scheduler, and real-time subscriptions for train lifecycle events via WebSocket.
+The Trax GraphQL endpoint, served by [HotChocolate](https://chillicream.com/docs/hotchocolate) as a
+named schema. [API](/docs/api) explains the layer; these pages describe it.
 
-```csharp
+```csharp compile
+using Trax.Api.GraphQL.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddTrax(trax => trax
@@ -20,33 +26,32 @@ builder.Services.AddTrax(trax => trax
     .AddMediator(typeof(Program).Assembly)
 );
 
-builder.Services.AddTraxGraphQL();  // Requires AddTrax() first; throws InvalidOperationException otherwise
+builder.Services.AddTraxGraphQL();
 
 var app = builder.Build();
 
-app.UseTraxGraphQL(); // default: /trax/graphql (named schema, won't conflict with your own)
+app.UseTraxGraphQL(); // default: /trax/graphql
 
 app.Run();
 ```
 
-In Development, navigate to the endpoint URL in a browser to open Nitro, HotChocolate's built-in GraphQL IDE, for schema exploration, autocompletion and query execution. The IDE follows the same per-request decision as introspection and the schema download: allowed in Development, a 404 elsewhere, unless `AllowIntrospection(predicate)` on the builder says otherwise.
+## Trax.Api.GraphQL
 
-## Pages
+- [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql): registration, the builder methods, endpoint mapping.
+- [Queries](/docs/sdk-reference/graphql-api/queries): the `discover` and `operations` query namespaces, one page per namespace.
+- [Mutations](/docs/sdk-reference/graphql-api/mutations): the `dispatch` and `operations` mutation namespaces, one page per namespace.
+- [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions): lifecycle, junction, machine instance and data change events; WebSocket and authentication.
+- [Machines root](/docs/sdk-reference/graphql-api/machines): each exposed state machine as its own typed operations.
+- [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering): opt-in filter operators.
+- [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders): batched lookups across `DbContext`s.
+- [Error codes](/docs/sdk-reference/graphql-api/error-codes): every code in `extensions.code`.
 
-| Page | Description |
-|------|-------------|
-| [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | Registration and endpoint mapping |
-| [TraxQuery & TraxMutation Attributes](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | Opt trains into the typed GraphQL schema with `[TraxQuery]` or `[TraxMutation]` |
-| [Queries](/docs/sdk-reference/graphql-api/queries) | `health`, `trains`, `manifests`, `manifest`, `manifestGroups`, `executions`, `execution` |
-| [Mutations](/docs/sdk-reference/graphql-api/mutations) | Grouped into `dispatch` (auto-generated train mutations) and `operations` (scheduler control mutations) |
-| [Machines root](/docs/sdk-reference/graphql-api/machines) | `machines { <machine> { start <event> discard get } }`: each state machine the host exposes, as its own typed operations |
-| [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | Real-time WebSocket events for train lifecycle transitions (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`) |
-| [TraxBroadcast Attribute](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | Opt trains into subscription events with `[TraxBroadcast]` |
-| [AddTraxHealthCheck](/docs/sdk-reference/graphql-api/add-trax-health-check) | ASP.NET Core health check over queue depth, running executions, recent failures and dead letters |
-| [Error Codes](/docs/sdk-reference/graphql-api/error-codes) | Every `TRAX_*` and `PERSISTED_OPERATION_*` code the endpoint returns, and what raises it |
+## Trax.Effect
 
-## Package
+- [TraxQuery and TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute): expose a train as a query or mutation.
+- [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute): stream a train's lifecycle events.
+- [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models): expose an EF Core entity as a query.
 
-```
-dotnet add package Trax.Api.GraphQL
-```
+## Trax.Api
+
+- [AddTraxHealthCheck](/docs/sdk-reference/graphql-api/add-trax-health-check): the ASP.NET Core health check.

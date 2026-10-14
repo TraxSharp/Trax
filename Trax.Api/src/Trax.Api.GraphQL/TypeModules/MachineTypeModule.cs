@@ -24,6 +24,7 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// event's own rule is checked below, where every surface meets. See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/machines">SDK reference</seealso>
 internal sealed class MachineTypeModule(
     IEnumerable<IMachine> machines,
     StateMachineOptions? options = null

@@ -20,6 +20,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 /// schema-validation errors. Callers are expected to let these propagate;
 /// the storage layer ensures no DB write or broadcast occurs on failure.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/i-persisted-operation-validator">SDK reference</seealso>
 public interface IPersistedOperationValidator
 {
     /// <summary>

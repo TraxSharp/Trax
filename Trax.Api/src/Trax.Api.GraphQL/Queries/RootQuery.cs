@@ -8,4 +8,5 @@ namespace Trax.Api.GraphQL.Queries;
 ///     annotated with <c>[TraxQuery]</c> or query-model registrations are present.</item>
 /// </list>
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries">SDK reference</seealso>
 public class RootQuery { }

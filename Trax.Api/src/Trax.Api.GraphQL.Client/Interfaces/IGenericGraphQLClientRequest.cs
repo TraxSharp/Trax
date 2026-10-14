@@ -5,6 +5,7 @@ namespace Trax.Api.GraphQL.Client;
 /// and validate requests without knowing their response type; implement
 /// <see cref="IGraphQLClientRequest{TResponse}"/> rather than this.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-graphql-client-request">SDK reference</seealso>
 public interface IGenericGraphQLClientRequest
 {
     /// <summary>

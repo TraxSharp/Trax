@@ -24,6 +24,8 @@ namespace Trax.Dashboard.Extensions;
 /// Registration and mounting for the Trax Dashboard: <c>builder.AddTraxDashboard()</c> after
 /// <c>AddTrax(...)</c>, then <c>app.UseTraxDashboard()</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/dashboard-api/add-trax-dashboard">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/dashboard-api/use-trax-dashboard">SDK reference</seealso>
 public static class DashboardServiceExtensions
 {
     /// <summary>

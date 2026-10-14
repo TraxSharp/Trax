@@ -11,6 +11,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// Reads only; logs are written by the framework. The page and the filtered count come from
 /// <see cref="IOperationsService"/>, which the dashboard reads too, so both apply one filter.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/logs">SDK reference</seealso>
 public class LogQueries
 {
     /// <summary>

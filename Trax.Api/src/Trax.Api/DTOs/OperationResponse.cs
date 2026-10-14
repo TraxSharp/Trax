@@ -9,6 +9,7 @@ namespace Trax.Api.DTOs;
 /// <param name="Success">Whether the operation did what was asked.</param>
 /// <param name="Count">How many items the operation affected, for operations that act on a set; <c>null</c> otherwise.</param>
 /// <param name="Message">A human-readable description of the outcome.</param>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/mutations/operation-response">SDK reference</seealso>
 public record OperationResponse(bool Success, int? Count = null, string? Message = null)
 {
     /// <summary>

@@ -7,6 +7,8 @@ namespace Trax.Api.GraphQL.Client;
 /// Validates every request type in a set of assemblies against the client's schema, so a query the
 /// server no longer accepts fails at startup or in a test rather than on first use.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-graphql-client-validator">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/validate-graphql-client-assemblies">SDK reference</seealso>
 public static class GraphQLClientValidatorExtensions
 {
     /// <summary>

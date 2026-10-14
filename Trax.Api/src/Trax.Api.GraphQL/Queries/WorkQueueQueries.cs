@@ -11,6 +11,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// Queries for the work queue: pending, dispatched, and cancelled entries with optional
 /// status / train name filtering and keyset pagination.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/queries/work-queue">SDK reference</seealso>
 public class WorkQueueQueries
 {
     /// <summary>

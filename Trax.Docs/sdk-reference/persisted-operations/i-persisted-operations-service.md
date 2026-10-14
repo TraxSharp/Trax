@@ -1,22 +1,29 @@
 ---
 title: IPersistedOperationsService
-description: Reference for IPersistedOperationsService, the management surface shared by the GraphQL fields and the dashboard, returning refusals as payload errors.
+description: "Reference for IPersistedOperationsService, the management surface shared by the GraphQL fields and the dashboard, returning refusals as payload errors."
 type: reference
 area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
-nav_order: 1
+nav_order: 5
+package: Trax.Api.GraphQL.PersistedOperations
+namespace:
+  - Trax.Api.GraphQL.PersistedOperations.Services
+  - Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/IPersistedOperationsService.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/PersistedOperationsService.cs
 ---
 
 # IPersistedOperationsService
 
-The persisted-operation management surface. The `operations.persistedOperations` GraphQL fields call it, and the dashboard calls it, so an upload, deactivation or restore is accepted or refused the same way, with the same codes, from either. Use it from admin tooling that should behave exactly as the API does.
+The persisted-operation management surface. The `operations.persistedOperations` GraphQL fields call it, and the dashboard calls it, so an upload, deactivation or restore is accepted or refused the same way, with the same codes, from either.
 
-Registered as a singleton by [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) and by `AddPersistedOperationStore`.
+Registered as a singleton by [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) and by [AddPersistedOperationStore](/docs/sdk-reference/persisted-operations/add-persisted-operation-store).
 
-## Interface
+## Signature
 
-```csharp
+```csharp fragment
 public interface IPersistedOperationsService
 {
     Task<PersistedOperationsPage> ListAsync(PersistedOperationFilter? filter, int skip, int take, CancellationToken ct);
@@ -27,6 +34,23 @@ public interface IPersistedOperationsService
     Task<RestorePersistedOperationPayload> RestoreAsync(RestorePersistedOperationInput input, CancellationToken ct);
 }
 ```
+
+## Members
+
+The inputs, payloads and DTOs are sealed records in `Trax.Api.GraphQL.PersistedOperations.GraphQL.Models`, the same types the [management fields](/docs/sdk-reference/persisted-operations/management-mutations) take and return.
+
+| Type | Fields |
+|------|--------|
+| `UploadPersistedOperationInput` | `Id`, `Document`, `Description`, `BypassShapeDiff` (default `false`), `Version` (default `0`), `TenantKey` |
+| `DeactivatePersistedOperationInput` | `Id`, `Reason`, `TenantKey` |
+| `RestorePersistedOperationInput` | `Id`, `TenantKey` |
+| `UploadPersistedOperationPayload`, `DeactivatePersistedOperationPayload`, `RestorePersistedOperationPayload` | `Operation` (`PersistedOperationDto?`), `Errors` (`IReadOnlyList<PersistedOperationError>`), `Success` (true when `Operation` is set and `Errors` is empty) |
+| `PersistedOperationFilter` | `IsActive`, `TenantKey`, `IdStartsWith`, all optional |
+| `PersistedOperationsPage` | `Items` (`IReadOnlyList<PersistedOperationDto>`), `TotalCount` |
+| `PersistedOperationDto` | The columns of [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation) |
+| `PersistedOperationHistoryDto` | The columns of `PersistedOperationHistory` |
+| `PersistedOperationError` | `Code`, `Message`, `Locations`, `Path`, `OldFingerprint`, `NewFingerprint`; see the [error payload](/docs/sdk-reference/persisted-operations/management-mutations#error-payload). `PersistedOperationError.NotFound(id)` builds the `NOT_FOUND` error |
+| `PersistedOperationErrorLocation` | `Line`, `Column`, 1-based |
 
 ## Behavior
 
@@ -40,7 +64,7 @@ public interface IPersistedOperationsService
 
 ## Example
 
-```csharp
+```csharp compile
 var service = serviceProvider.GetRequiredService<IPersistedOperationsService>();
 
 var result = await service.DeactivateAsync(
@@ -51,3 +75,8 @@ var result = await service.DeactivateAsync(
 if (!result.Success)
     throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => $"{e.Code}: {e.Message}")));
 ```
+
+## See also
+
+- [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations)
+- [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store)

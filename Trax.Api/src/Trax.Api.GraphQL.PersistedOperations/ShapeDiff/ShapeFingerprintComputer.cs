@@ -22,6 +22,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.ShapeDiff;
 ///   <item>SHA-256 hex of the canonical string.</item>
 /// </list>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/shape-fingerprint-computer">SDK reference</seealso>
 public static class ShapeFingerprintComputer
 {
     /// <summary>

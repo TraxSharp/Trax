@@ -19,6 +19,7 @@ namespace Trax.Api.GraphQL.Client;
 /// Integration packages contribute additional methods via extension methods on this type
 /// (e.g. <c>UseAssemblySchema</c>, <c>UseStartupValidation</c> in <c>Trax.Api.GraphQL.Client.Trax</c>).
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/trax-graphql-client-builder">SDK reference</seealso>
 public sealed partial class TraxGraphQLClientBuilder
 {
     internal TraxGraphQLClientBuilder(

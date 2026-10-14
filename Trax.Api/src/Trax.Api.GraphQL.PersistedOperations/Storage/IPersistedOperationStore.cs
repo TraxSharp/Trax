@@ -12,6 +12,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 /// (implemented internally by the package) instead. Use this interface for
 /// administrative changes only.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/i-persisted-operation-store">SDK reference</seealso>
 public interface IPersistedOperationStore
 {
     /// <summary>

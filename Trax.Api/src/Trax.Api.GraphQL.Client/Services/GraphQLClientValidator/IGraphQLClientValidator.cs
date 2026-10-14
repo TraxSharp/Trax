@@ -7,6 +7,7 @@ namespace Trax.Api.GraphQL.Client;
 /// by <c>AddTraxGraphQLClient</c>; <see cref="GraphQLClientValidatorExtensions"/> uses it to
 /// validate whole assemblies.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-graphql-client-validator">SDK reference</seealso>
 public interface IGraphQLClientValidator
 {
     /// <summary>

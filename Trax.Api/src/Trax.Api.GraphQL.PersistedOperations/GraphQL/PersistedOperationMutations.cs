@@ -16,6 +16,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 /// The overloads taking <see cref="IPersistedOperationStore"/> are kept for callers built against
 /// them and are not part of the schema. New code calls <see cref="IPersistedOperationsService"/>.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/management-mutations">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class PersistedOperationMutations
 {

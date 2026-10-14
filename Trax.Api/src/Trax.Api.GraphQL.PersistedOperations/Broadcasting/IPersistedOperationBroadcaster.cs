@@ -6,6 +6,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 /// is a no-op; the RabbitMQ implementation is wired only when the consumer
 /// calls <c>UseRabbitMqInvalidation()</c>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/i-persisted-operation-broadcaster">SDK reference</seealso>
 public interface IPersistedOperationBroadcaster
 {
     /// <summary>

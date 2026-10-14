@@ -6,6 +6,7 @@ namespace Trax.Api.GraphQL.Client;
 /// or vice versa. The intent is to catch silent drift between hand-written queries and their
 /// response types on the very first response, not the hundredth bug report.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-client-exceptions">SDK reference</seealso>
 public class GraphQLResponseShapeException : Exception
 {
     /// <summary>The response type the JSON was checked against.</summary>

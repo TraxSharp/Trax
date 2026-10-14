@@ -1,18 +1,24 @@
 ---
 title: Management mutations and queries
-description: Reference for the operations.persistedOperations GraphQL fields that upload, deactivate, restore, list and show history of persisted operations.
+description: "Reference for the operations.persistedOperations GraphQL fields that upload, deactivate, restore, list and show history of persisted operations."
 type: reference
 area: api
+surface: graphql
+package: Trax.Api.GraphQL.PersistedOperations
 parent: Persisted Operations
 grand_parent: SDK Reference
 nav_order: 4
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationMutations.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationQueries.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/MachineDocumentQueries.cs
 ---
 
 # Management mutations and queries
 
-[UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) registers six fields on the schema for browsing and editing persisted operations, all under the `operations.persistedOperations` namespace. This matches the layout for every other Trax management feature (`operations.manifestGroups`, `operations.deadLetters`, etc.). Every field calls [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service), the same service the Trax dashboard's persisted-operations pages call, so both accept and refuse the same things.
+[UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) registers six fields on the schema for browsing and editing persisted operations, all under the `operations.persistedOperations` namespace, resolved by `PersistedOperationMutations` and `PersistedOperationQueries`. Every field calls [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service), the same service the Trax dashboard's persisted-operations pages call, so both accept and refuse the same things.
 
-These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), because persisting them by id would be a chicken-and-egg. They are protected by the operations namespace's authorization posture: `GateOperations(...)`, the builder's `RequireAuthorization()`, or an explicit `AllowAnonymousOperations()`. A host that exposes the namespace with none of the three refuses to start.
+These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), since a client cannot send them by an id it has not uploaded yet. They are protected by the operations namespace's authorization posture: `GateOperations(...)`, the builder's `RequireAuthorization()`, or an explicit `AllowAnonymousOperations()`. A host that exposes the namespace with none of the three refuses to start.
 
 ## Mutations
 
@@ -22,7 +28,7 @@ Insert or update an operation. Runs schema validation, requires exactly one oper
 
 | Input field | Type | Required | Notes |
 |---|---|---|---|
-| `id` | `String!` | yes | Build-time-stable identifier. Opaque string - no parse rule. The `<name>_v<N>` convention is recommended for readability. |
+| `id` | `String!` | yes | Build-time-stable identifier. Opaque string, no parse rule; the samples use `<name>_v<N>`. |
 | `document` | `String!` | yes | The GraphQL document the id resolves to. |
 | `description` | `String` | no | Operator-facing note recorded on the row. |
 | `bypassShapeDiff` | `Boolean` | no | When true, allows an edit that changes the response shape. Default false. |
@@ -104,7 +110,7 @@ All mutations return errors via the payload `errors[]` array; mutations never th
 
 See [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) for the underlying exception types and how the codes map, and [Error Codes](/docs/sdk-reference/graphql-api/error-codes) for every code the endpoint returns.
 
-## Example: upload
+## Example
 
 ```graphql
 mutation Upload($input: UploadPersistedOperationInput!) {
@@ -134,3 +140,10 @@ mutation Upload($input: UploadPersistedOperationInput!) {
   }
 }
 ```
+
+## See also
+
+- [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
+- [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service)
+- [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions)
+- [Mutations](/docs/sdk-reference/graphql-api/mutations)

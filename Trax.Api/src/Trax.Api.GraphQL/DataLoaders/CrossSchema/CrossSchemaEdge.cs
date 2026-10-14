@@ -16,6 +16,7 @@ namespace Trax.Api.GraphQL.DataLoaders.CrossSchema;
 /// is camelCase, and a loader is registered. Adding an edge means adding a manifest entry, a resolver,
 /// and a loader registration, all of which the guards cross-check.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/cross-schema-data-loaders">SDK reference</seealso>
 public sealed record CrossSchemaEdge(
     Type Source,
     string Fk,

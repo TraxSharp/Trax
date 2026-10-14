@@ -9,6 +9,7 @@ namespace Trax.Api.GraphQL.Client.Typed;
 /// Variables are built reflectively from properties annotated with
 /// <see cref="GraphQLArgumentAttribute"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/typed-request">SDK reference</seealso>
 public abstract class TypedRequest<TResponse> : IGraphQLClientRequest<TResponse>
 {
     private static readonly ConcurrentDictionary<
