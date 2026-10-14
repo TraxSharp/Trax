@@ -212,6 +212,64 @@ public class MachineRendererTests
             );
     }
 
+    // Dealing invokes a train: its outcomes are the only way out of Dealing and the only way into Guessing and
+    // Lost, so a renderer that read transitions alone would call both unreachable.
+    private const string Cards = """
+        {
+          "id": "cards", "version": 1, "initialState": "Idle",
+          "states": ["Idle", "Dealing", "Guessing", "Lost"],
+          "transitions": [ { "from": "Idle", "trigger": "Deal", "to": "Dealing" } ],
+          "outcomes": {
+            "Dealing.done": { "state": "Dealing", "outcome": "done", "train": "Cards.Deal",
+              "edges": [ { "to": "Guessing",
+                           "guard": { "rule": "compare", "source": "input", "field": "rank", "op": "gt", "value": 0 } },
+                         { "to": "Lost" } ] },
+            "Dealing.failed": { "state": "Dealing", "outcome": "failed", "train": "Cards.Deal",
+              "edges": [ { "to": "Lost" } ] },
+            "Dealing.cancelled": { "state": "Dealing", "outcome": "cancelled", "train": "Cards.Deal",
+              "edges": [] }
+          }
+        }
+        """;
+
+    [Test]
+    public void Outcome_targets_are_reachable()
+    {
+        var text = MachineRenderer.Render(Cards, MachineFormat.Text);
+
+        text.Should().NotContain("unreachable");
+        text.Should()
+            .Be(
+                """
+                cards  v1   initial: Idle
+
+                Idle ◀ initial
+                  ── Deal ────────────▶ Dealing
+
+                Dealing
+                  ── Dealing.done ────▶ Guessing   guard: compare
+                  ── Dealing.done ────▶ Lost
+                  ── Dealing.failed ──▶ Lost
+
+                Guessing
+                  (no transitions)
+
+                Lost
+                  (no transitions)
+
+                """.ReplaceLineEndings("\n")
+            );
+    }
+
+    [TestCase("mermaid", "Dealing --> Guessing : Dealing.done")]
+    [TestCase("dot", "\"Dealing\" -> \"Guessing\" [label=\"Dealing.done")]
+    public void Diagrams_draw_outcome_edges(string name, string edge)
+    {
+        var format = name == "dot" ? MachineFormat.Dot : MachineFormat.Mermaid;
+
+        MachineRenderer.Render(Cards, format).Should().Contain(edge);
+    }
+
     [Test]
     public void Show_prints_the_machine_from_an_assembly()
     {

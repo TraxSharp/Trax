@@ -17,7 +17,7 @@ internal enum MachineFormat
 /// from IR text without an assembly. The text form lists each state's outgoing edges rather than laying out a
 /// 2-D graph, which stays readable and diffs cleanly however many states there are. A state's timer is drawn as an
 /// edge of its own, under its trigger (<c>Review.after</c>) and marked with how long the state is held, since only
-/// the server fires it.
+/// the server fires it. An invoked train's outcome is drawn the same way, under its trigger (<c>Dealing.done</c>).
 /// </summary>
 internal static class MachineRenderer
 {
@@ -270,6 +270,27 @@ internal static class MachineRenderer
                             ),
                     })
             );
+
+            // A state that invokes a train is left by the train's outcome (Dealing.done, .failed, .cancelled), whose
+            // edges are tried in order. They are edges like any other: a state reached only through one is reachable.
+            foreach (var (trigger, node) in root["outcomes"] as JsonObject ?? [])
+            {
+                if (node is not JsonObject outcome)
+                    continue;
+                var from = Required(outcome, "state");
+                transitions.AddRange(
+                    (outcome["edges"] as JsonArray ?? [])
+                        .OfType<JsonObject>()
+                        .Select(e => new Transition(
+                            from,
+                            trigger,
+                            Required(e, "to"),
+                            (e["guard"] as JsonObject)?["rule"]?.ToString(),
+                            (e["reduce"] as JsonObject)?["reduce"]?.ToString(),
+                            null
+                        ))
+                );
+            }
 
             return new Ir(
                 Required(root, "id"),

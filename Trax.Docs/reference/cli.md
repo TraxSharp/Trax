@@ -403,7 +403,9 @@ Review
 ```
 
 A guard shows its `Because(...)` text, or its rule when it has none; a reducer shows its kind; an edge that
-runs an exactly-once effect shows the effect type and that it is send-only. A state no edge from the initial
+runs an exactly-once effect shows the effect type and that it is send-only. A state that invokes a train lists
+the train's outcome edges under their triggers (`Dealing.done`, `Dealing.failed`, `Dealing.cancelled`), in the
+order they are tried, and they count toward reachability like any other edge. A state no edge from the initial
 state reaches is marked `unreachable from the initial state`, and a state with no outgoing edge prints
 `(no transitions)`. Colour is used only when output goes to a terminal and `NO_COLOR` is unset. A control
 character in a name or guard message (an escape sequence, a carriage return) is printed as `?`, in every
