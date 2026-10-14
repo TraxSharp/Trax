@@ -37,6 +37,45 @@ The Postgres and Sqlite data providers create these tables in the `trax` schema 
 
 The Postgres provider records its applied migrations in `trax.migrations`.
 
+## Entity members
+
+Members of the entities above that the column lists on other pages do not cover.
+
+| Member | Description |
+|---|---|
+| `BackgroundJob.FetchedAt` | When a worker claimed the job; null while it is available. A value older than the visibility timeout makes it claimable again |
+| `DeadLetter.RetryMetadata` | The run created for a retry of the dead letter, once one is linked |
+| `DeadLetter.MarkRetried(retryMetadataId)` | Sets the status to `Retried`, the resolution time, and the retry run's id |
+| `DeadLetter.LinkRetryMetadata(retryMetadataId)` | Links the retry run's id after a requeued entry is dispatched |
+| `EffectClaim.LeaseExpiresAt` | When an in-flight claim's lease ends; a claim with no receipt past it can be reclaimed |
+| `Exclusion.IsExcluded(utcNow)` | Whether a UTC time falls inside the exclusion window |
+| `Manifest.DependsOnManifest` | The parent manifest of a dependent manifest |
+| `Manifest.FailureWindowSeconds` | How far back, in seconds, a failed run counts toward `MaxRetries`; null uses the scheduler's window. Zero and negative values are refused |
+| `Manifest.PropertyType` | The type `PropertyTypeName` names, among loaded types implementing `IManifestProperties`; `Unit` when there is none. Not mapped |
+| `Manifest.NameType` | The train type `Name` names, among loaded types. Not mapped |
+| `Manifest.ResolvePropertyType(registeredInputTypes)` | The type `PropertyTypeName` names, chosen only from the given input types |
+| `Manifest.GetPropertiesUntyped()` | `Properties` deserialized as `PropertyType` |
+| `Manifest.SetProperties(properties)` | Serializes the input into `Properties` and records its type's full name in `PropertyTypeName` |
+| `Manifest.SetExclusions(exclusions)` | Stores the exclusion windows as JSON |
+| `SchedulerConfig.SingletonId` | `1`, the id of the table's one row |
+| `SchedulerConfig.TryGetOverride<T>(name, out value)` | Reads a setting a save named from `Overrides`; false when it names none |
+| `SchedulerConfig.SetOverride<T>(name, value)` | Records a setting as named by a save |
+| `SchedulerConfig.RemoveOverride(name)` | Drops a setting from `Overrides`, so each host's code value applies again |
+| `SchedulerConfig.OverriddenSettings` | The setting names `Overrides` holds |
+| `SnapshotDraft.ConcurrencyToken` | A new `Guid` on every write, mapped as the row's concurrency token |
+| `WorkQueue.MinPriority`, `WorkQueue.MaxPriority` | `0` and `31`, the range a work queue entry's priority is clamped to |
+
+### Infrastructure types
+
+| Type | Description |
+|---|---|
+| `CreateManifest` | The values `Manifest.Create` takes, `FailureWindowSeconds` (at least 1 when set) among them |
+| `CreateDeadLetter` | The values `DeadLetter.Create` takes; `RetryCount` is stored as `RetryCountAtDeadLetter` |
+| `CreateBackgroundJob` | The values `BackgroundJob.Create` takes |
+| `CreateJunctionMetadata` | The per-junction values `JunctionMetadata.Create` combines with the run's metadata |
+| `CreateLog` | One `ILogger` call, as `Log.Create` takes it for `AddDataContextLogging` |
+| `UtcValueConverter` | In `Trax.Effect.Data`: marks every `DateTime` read from the database as UTC, applied to every `DateTime` property by each provider |
+
 ## Relationships
 
 ```

@@ -90,7 +90,9 @@ public sealed class TraxLendingCaller(TraxCaller caller) : ILendingCaller
 
 ## 4. Register a scoped factory, and the interface from it
 
-```csharp fragment
+```csharp compile=lending
+using Microsoft.EntityFrameworkCore;
+
 services.AddScoped<ILendingCaller, TraxLendingCaller>();
 services.AddDbContextFactory<LendingDbContext>(o => o.UseNpgsql(connectionString), ServiceLifetime.Scoped);
 services.AddScoped<ILendingDbContext>(sp =>

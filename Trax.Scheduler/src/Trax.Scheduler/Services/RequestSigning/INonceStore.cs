@@ -10,6 +10,7 @@ namespace Trax.Scheduler.Services.RequestSigning;
 /// or <see cref="InMemoryNonceStore"/> after <c>UseInMemoryNonceStore()</c>. A host registers its own
 /// implementation as a singleton to share nonces some other way.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
 public interface INonceStore
 {
     /// <summary>

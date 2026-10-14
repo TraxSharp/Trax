@@ -18,7 +18,7 @@ If the context's rows belong to users and every query must be narrowed to the ca
 
 Application code depends on an `I{Name}DbContext` interface deriving `IDomainDataContext`, never on the concrete type. Put it in its own file, `I{Name}DbContext.cs`, in the same directory as the context: the `CompanionInterfaces` guard (`Trax.Effect.Data.Testing`) looks for that file next to the context and fails when the interface is declared inside the context's file.
 
-```csharp compile=catalog
+```csharp compile=catalog,enum,datasource
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DomainContext;
 
@@ -33,7 +33,7 @@ public interface ICatalogDbContext : IDomainDataContext
 
 Declare its one schema and configure its entities in `ConfigureModel`. The base seals `OnModelCreating`: it applies the default schema (on PostgreSQL; SQLite and the in-memory provider have none), runs your `ConfigureModel`, and applies a UTC datetime converter.
 
-```csharp compile=catalog
+```csharp compile=catalog,enum,datasource
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DomainContext;
 
@@ -51,7 +51,7 @@ public class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 
 ## 3. Register it and create its tables
 
-```csharp fragment
+```csharp compile=catalog
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DomainContext;
 
@@ -70,7 +70,7 @@ To serve the context's `[TraxQueryModel]` entities over GraphQL, name the concre
 
 A C# enum stored as a PostgreSQL enum type is mapped in the `UseNpgsql` options callback, which is where EF Core's model learns about it:
 
-```csharp fragment
+```csharp compile=enum
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DomainContext;
 
@@ -80,7 +80,7 @@ services.AddDomainDataContext<ICatalogDbContext, CatalogDbContext>(o =>
 
 Passing a connection string, as above, is enough: EF Core builds the data source and carries the mapping into it. If you build your own `NpgsqlDataSource`, map the enum on the `NpgsqlDataSourceBuilder` as well, because EF Core cannot change a data source it did not build. The builder mapping handles the ADO.NET layer and the callback mapping handles the model; leaving out the callback one fails at runtime with `column "x" is of type book_format but expression is of type integer`.
 
-```csharp fragment
+```csharp compile=datasource
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Trax.Effect.Data.Services.DomainContext;

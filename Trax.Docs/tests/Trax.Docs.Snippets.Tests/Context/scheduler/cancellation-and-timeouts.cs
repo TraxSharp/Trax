@@ -8,4 +8,3 @@ global using Trax.Effect.Services.ServiceTrain;
 global using Trax.Mediator.Extensions;
 global using Trax.Scheduler.Extensions;
 global using Trax.Scheduler.Services.Scheduling;
-

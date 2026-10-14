@@ -10,6 +10,7 @@ namespace Trax.Effect.Data.Services.EnqueueContext;
 /// outer enqueue's context and transaction (Trax.Mediator docs/adr/0003); where there is none to
 /// join it sees its own for as long as it runs and hands the outer one back when it finishes.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-enqueue-context-accessor#infrastructure-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class EnqueueContextAccessor : IEnqueueContextAccessor
 {

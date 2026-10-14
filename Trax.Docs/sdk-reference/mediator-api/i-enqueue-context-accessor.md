@@ -73,6 +73,12 @@ before.
   own connection and transaction and gets no atomicity from this; `DeferQueuePromotion` is the
   setting for that case.
 
+### Infrastructure types
+
+| Type | Description |
+|------|-------------|
+| `EnqueueContextAccessor` | The implementation `AddMediator()` registers, in `Trax.Effect.Data.Services.EnqueueContext`. The context flows with the async call, not with the instance or its scope |
+
 ## Example
 
 The entity is a placeholder for any entity in Trax's model.

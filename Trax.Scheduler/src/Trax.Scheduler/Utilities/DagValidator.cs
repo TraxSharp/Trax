@@ -5,6 +5,7 @@ namespace Trax.Scheduler.Utilities;
 /// <summary>
 /// Result of a topological sort operation on a directed graph.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler#infrastructure-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class TopologicalSortResult<TKey>
     where TKey : notnull
@@ -28,6 +29,7 @@ public class TopologicalSortResult<TKey>
 /// <summary>
 /// Generic DAG validation and topological sort using Kahn's algorithm.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-scheduler#infrastructure-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class DagValidator
 {

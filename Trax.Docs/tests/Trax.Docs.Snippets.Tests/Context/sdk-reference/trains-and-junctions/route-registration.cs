@@ -25,5 +25,6 @@ public interface IFormatAddress : IJunction<Address, string>;
 
 public class FormatAddress : Junction<Address, string>, IFormatAddress
 {
-    public override Task<string> Run(Address input) => Task.FromResult($"{input.Line1}, {input.City}");
+    public override Task<string> Run(Address input) =>
+        Task.FromResult($"{input.Line1}, {input.City}");
 }

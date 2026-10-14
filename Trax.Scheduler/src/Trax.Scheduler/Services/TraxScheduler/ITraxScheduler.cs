@@ -82,7 +82,9 @@ public interface ITraxScheduler
     /// <remarks>
     /// All manifests are created/updated in a single transaction. If any manifest
     /// fails to save, the entire batch is rolled back. Pruning (if enabled via
-    /// <see cref="ScheduleOptions.PrunePrefix"/>) is also included in the same transaction.
+    /// <see cref="ScheduleOptions.PrunePrefix"/>) runs after that transaction commits, on a
+    /// context of its own. A prune that fails is logged as a warning and does not fail the call;
+    /// the saved manifests stay, and the stale ones are pruned on a later call.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the train is not registered in the TrainRegistry.

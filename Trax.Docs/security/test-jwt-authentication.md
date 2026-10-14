@@ -42,7 +42,7 @@ A token the host must refuse is minted the same way, with one thing wrong.
 
 Signed with a key the server does not publish:
 
-```csharp fragment
+```csharp compile
 using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt.Testing;

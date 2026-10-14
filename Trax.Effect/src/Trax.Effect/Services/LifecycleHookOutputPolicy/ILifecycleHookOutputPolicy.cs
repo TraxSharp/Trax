@@ -12,6 +12,7 @@ namespace Trax.Effect.Services.LifecycleHookOutputPolicy;
 /// parameter. <c>SaveTrainParameters</c> replaces the default with one that follows its own
 /// configuration.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/save-train-parameters#serialization-members">SDK reference</seealso>
 public interface ILifecycleHookOutputPolicy
 {
     /// <summary>

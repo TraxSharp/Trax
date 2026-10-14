@@ -50,6 +50,22 @@ public class SnippetCompilerTests
     }
 
     [Test]
+    public void AssemblyVersionUnificationWarnings_AreSuppressedAsMSBuildDoes()
+    {
+        // Npgsql.EntityFrameworkCore.PostgreSQL references an older
+        // Microsoft.EntityFrameworkCore.Relational than the one referenced here, which raises
+        // CS1702 unless it is suppressed, as MSBuild's default NoWarn does in every C# project.
+        var unit = Only(
+            "```csharp compile\nusing Microsoft.EntityFrameworkCore;\n\n"
+                + "var options = new DbContextOptionsBuilder()\n"
+                + "    .UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(30))\n"
+                + "    .Options;\nConsole.WriteLine(options.Extensions.Count());\n```\n"
+        );
+
+        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+    }
+
+    [Test]
     public void FencesInOneGroup_CompileTogether()
     {
         var unit = Only(

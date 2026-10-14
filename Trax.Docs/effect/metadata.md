@@ -29,6 +29,7 @@ Every run of a `ServiceTrain` produces a metadata row (`trax.metadata`): when it
 | `StackTrace` | `string?` | Stack trace if failed |
 | `FailureClass` | `FailureClass` | `Unclassified` / `Transient` / `Conflict` / `Permanent`, from the registered [failure classifier](/docs/effect/failure-classification). `Unclassified` when the run did not fail or nothing classified it |
 | `ParentId` | `long?` | The parent run's metadata id. Nothing in Trax sets it at present, so it is null for every run, including a train dispatched from a junction; see [Nested Trains](#nested-trains) |
+| `IsChild` | `bool` | True when `ParentId` has a value. Computed, not stored |
 | `ManifestId` | `long?` | Links to manifest for scheduled trains |
 | `ReplayDecisionsOf` | `long?` | The run whose recorded [decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions) this run replays, following that run's own link back for questions it never reached. Set by a re-queue, and by a manifest's retry or dead-letter requeue when the scheduler's checks allow it ([Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions)); null for a run that asks its deciders afresh. Not a foreign key: a run whose chain names a run that no longer exists, belongs to another train, or ran without recording its decisions fails before its first junction, `Permanent`, rather than asking afresh, unless it is a manifest's run, which asks afresh and is marked `ReplayAbandoned` |
 | `DecisionsRecorded` | `bool` | True when the run started on a host that records decisions (`AddDecisionRecording`), set on its first write, so a replay can tell a run that reached no questions from one whose decisions were never recorded |
@@ -48,6 +49,13 @@ Every run of a `ServiceTrain` produces a metadata row (`trax.metadata`): when it
 | `HostLabels` | `string?` | User-provided labels as JSON (region, service, team) |
 
 The `TrainState` tracks the lifecycle: `Pending` -> `InProgress` -> `Completed`, `Failed`, or `Cancelled`. If a train fails, the metadata record captures the exception, stack trace, and which junction it happened at.
+
+### Infrastructure members
+
+| Member | Description |
+|--------|-------------|
+| `SetInputObject(value)`, `SetOutputObject(value)` | Hold the run's deserialized input and output in memory. Not stored; methods rather than properties, so log serializers skip them |
+| `AssemblyExtensions.GetAssemblyProject(assembly)` | The assembly's simple name. `Executor` is the entry assembly's |
 
 ### Failure Fields
 

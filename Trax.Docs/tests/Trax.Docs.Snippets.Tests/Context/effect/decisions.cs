@@ -1,8 +1,8 @@
 // What the compiled examples on effect/decisions.md take as given.
+global using static DecisionsPage;
 global using Trax.Effect.Data.Extensions;
 global using Trax.Effect.Data.Postgres.Extensions;
 global using Trax.Effect.Extensions;
-global using static DecisionsPage;
 using Trax.Core.Decisions;
 
 public static class DecisionsPage

@@ -138,6 +138,29 @@ A runner process:
 - Connects to the scheduler's database. Metadata, manifests, and state are shared across all processes.
 - Registers the effects with `AddTrax()` and a data provider such as `UsePostgres()`.
 
+### Infrastructure types
+
+Public because the runner and scheduler packages ship separately and share them; hidden from IntelliSense where marked.
+
+| Type or member | Description |
+|----------------|-------------|
+| `RunnerRequestSignature` | Signs a runner request and checks a signature. The value is `v1,t=<unix seconds>,n=<nonce>,s=<base64 HMAC-SHA256>` in the `Trax-Signature` header, a Lambda envelope's `Signature`, or an SQS message attribute |
+| `RunnerRequestSignature.MinimumKeyLength` | `32`: the shortest signing key accepted, in bytes |
+| `RunnerRequestSignature.EnsureKey(key, paramName)` | Throws when the key is missing or shorter than `MinimumKeyLength` |
+| `RunnerRequestPurpose` | What a signed request is for, part of the signed text: `Execute` (a queued job) or `Run` (a synchronous run) |
+| `RunnerRequestVerifier` | The singleton that checks the posture at startup and each request's signature |
+| `RunnerRequestVerifier.RequiresSignature` | True when a `SigningKey` is configured |
+| `RunnerRequestVerifier.CheckHeader(signature, requireFresh)` | The checks that need no body: present, well formed and, with `requireFresh`, within `MaxClockSkew`. `Accepted` when no signing key is configured |
+| `RunnerRequestVerifier.ReadVerifiedBodyAsync(request, purpose)` | Reads an HTTP request's body and verifies it: the body, or the status (`401`, `413`) to answer with |
+| `RunnerRequestVerifier.EnsurePosture(entryPoint)` | Throws `InvalidOperationException` for an entry point with neither a signing key nor `AllowUnsignedRequests` |
+| `RunnerRequestVerifier.ReportRefusal(entryPoint, reason)` | Logs a refused request, as a warning at most once a minute and at Debug otherwise |
+| `RunnerRequestVerdict` | A verification's outcome: `Accepted`, `Missing`, `Invalid`, `Stale` or `Replayed` |
+| `INonceStore.TryRecordAsync(nonce, expiresAt, now, cancellationToken)` | Records a nonce unless an unexpired record of it exists; true when this call recorded it |
+| `ExecuteJobResult` | `ITraxRequestHandler.ExecuteJobAsync`'s result: the `MetadataId` of the run |
+| `RemoteRunJson` | The fixed JSON options of the remote-run wire, independent of the host's |
+| `RemoteRunOutput` | Reads a remote run's output into the declared output type on the calling side |
+| `RemoteRunResponse.ToTrainException()` | The `RemoteRunException` the calling side records for an error response, carrying the worker's structured failure fields and `PublicMessage` |
+
 ## Examples
 
 ```csharp compile

@@ -8,6 +8,7 @@ namespace Trax.Effect.Utils;
 /// Serializes a train's input or output under a byte ceiling, the way every copy of a parameter
 /// that Trax keeps or hands on is bounded.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/configuration/save-train-parameters#serialization-members">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class TraxBoundedJson
 {

@@ -23,6 +23,7 @@ namespace Trax.Scheduler.Services.RunExecutor;
 /// IntelliSense because it is plumbing between the Trax packages, not something to call.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/scheduler-api/add-trax-job-runner#infrastructure-types">SDK reference</seealso>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class RemoteRunOutput
 {

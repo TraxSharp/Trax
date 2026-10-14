@@ -38,7 +38,7 @@ start outside Development, wherever the key was configured
 Sign tokens with the claims `DefaultJwtPrincipalResolver` reads: `sub` becomes the id, `name` the
 display name, each `role` a role:
 
-```csharp fragment
+```csharp compile
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.JsonWebTokens;

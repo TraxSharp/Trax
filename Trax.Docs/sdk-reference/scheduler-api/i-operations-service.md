@@ -509,6 +509,21 @@ entries in id order until it fills a page, so a rare term reads the whole table.
 
 An exact count of a large, unfiltered log table is a full scan, and the scheduler has no provider-neutral way to estimate one, so a pager that only needs an approximate size should estimate it itself.
 
+### LogRecord
+
+One entry of a `LogPage`'s `Items`.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `long` | The entry's id, the keyset `AfterId` pages by |
+| `MetadataId` | `long` | The run that wrote it |
+| `EventId` | `int` | The `ILogger` event id |
+| `Level` | `LogLevel` | The entry's level |
+| `Category` | `string` | The logger category |
+| `Message` | `string` | The formatted message |
+| `Exception` | `string?` | The exception, when one was logged |
+| `StackTrace` | `string?` | Its stack trace |
+
 ### Recorded decisions
 
 `GetRecordedDecisionsAsync` reads the rows [`AddDecisionRecording`](/docs/sdk-reference/configuration/add-decision-recording)

@@ -138,7 +138,7 @@ A host that forwards user-editable attributes into `AdditionalClaims` therefore 
 
 ## Examples
 
-```csharp fragment
+```csharp compile
 using var rsa = RSA.Create(2048);
 var key = new RsaSecurityKey(rsa) { KeyId = "local-pool-key-1" };
 var issuer = new CognitoTokenIssuer("http://localhost:8080/local_us-east-1_xxx", key);

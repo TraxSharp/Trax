@@ -61,9 +61,14 @@ namespace GraphQLClientSamples
     /// <summary>Stands in for the server's own schema configuration helper.</summary>
     public static class PlayerSchema
     {
-        public static void Configure(HotChocolate.Execution.Configuration.IRequestExecutorBuilder graphql) =>
+        public static void Configure(
+            HotChocolate.Execution.Configuration.IRequestExecutorBuilder graphql
+        ) =>
             graphql.AddQueryType(d =>
-                d.Name("Query").Field("ping").Type<HotChocolate.Types.StringType>().Resolve(_ => new ValueTask<object?>("pong"))
+                d.Name("Query")
+                    .Field("ping")
+                    .Type<HotChocolate.Types.StringType>()
+                    .Resolve(_ => new ValueTask<object?>("pong"))
             );
     }
 }

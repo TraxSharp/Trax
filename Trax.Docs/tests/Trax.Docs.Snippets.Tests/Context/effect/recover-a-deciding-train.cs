@@ -1,6 +1,6 @@
 // What the compiled examples on effect/recover-a-deciding-train.md take as given.
-global using Trax.Effect.Data.Services.DataContext;
 global using static RecoverPage;
+global using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
