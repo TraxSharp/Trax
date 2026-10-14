@@ -162,15 +162,6 @@ sdk-reference/persisted-operations/persisted-operations-builder.md
 sdk-reference/persisted-operations/shape-fingerprint-computer.md
 sdk-reference/persisted-operations/use-persisted-operations-enforcement.md
 sdk-reference/persisted-operations/use-persisted-operations.md
-sdk-reference/scheduler-api/add-metadata-cleanup.md
-sdk-reference/scheduler-api/add-scheduler.md
-sdk-reference/scheduler-api/dependent-scheduling.md
-sdk-reference/scheduler-api/i-operations-service.md
-sdk-reference/scheduler-api/i-trax-scheduler.md
-sdk-reference/scheduler-api/manifest-management.md
-sdk-reference/scheduler-api/schedule-many.md
-sdk-reference/scheduler-api/schedule.md
-sdk-reference/scheduler-api/scheduling-helpers.md
 sdk-reference/statemachine-api/add-trax-state-machine-self-check.md
 sdk-reference/statemachine-api/add-trax-state-machines.md
 sdk-reference/statemachine-api/effects.md

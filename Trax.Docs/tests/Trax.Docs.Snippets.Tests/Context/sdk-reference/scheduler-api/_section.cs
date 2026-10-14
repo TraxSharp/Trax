@@ -38,3 +38,52 @@ public interface IReviewContentTrain : IServiceTrain<ContentInput, Unit>;
 public interface ISendViolationNoticeTrain : IServiceTrain<ContentInput, Unit>;
 
 public interface IBatchProcessTrain : IServiceTrain<ContentInput, Unit>;
+
+public record ExtractInput : IManifestProperties
+{
+    public int Index { get; init; }
+}
+
+public record TransformInput : IManifestProperties
+{
+    public int Index { get; init; }
+}
+
+public record LoadInput : IManifestProperties
+{
+    public int Partition { get; init; }
+}
+
+public interface IExtractTrain : IServiceTrain<ExtractInput, Unit>;
+
+public interface ITransformTrain : IServiceTrain<TransformInput, Unit>;
+
+public interface IValidateTrain : IServiceTrain<TransformInput, Unit>;
+
+public interface ILoadTrain : IServiceTrain<LoadInput, Unit>;
+
+public record SyncTableInput : IManifestProperties
+{
+    public string TableName { get; init; } = "";
+}
+
+public interface ISyncTableTrain : IServiceTrain<SyncTableInput, Unit>;
+
+public record Tenant(string Id, string Name);
+
+public record SyncTenantInput : IManifestProperties
+{
+    public string TenantId { get; init; } = "";
+    public string Name { get; init; } = "";
+}
+
+public interface ISyncTenantTrain : IServiceTrain<SyncTenantInput, Unit>;
+
+public record SendReminderInput : IManifestProperties
+{
+    public string UserId { get; init; } = "";
+}
+
+public interface ISendReminderTrain : IServiceTrain<SendReminderInput, Unit>;
+
+public record ScheduleOnceRequest(string ExternalId, string UserId, int DelayMinutes);
