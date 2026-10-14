@@ -1,6 +1,8 @@
 ---
 title: JobRunner
 description: "The JobRunner train that runs a scheduled train on a worker: loading its Metadata, claiming the start, recording success and handling duplicate deliveries."
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Trains/JobRunner
 type: reference
 area: scheduling
 nav_order: 5
@@ -18,7 +20,7 @@ LoadMetadataJunction → RunScheduledTrainJunction
 
 ## Input
 
-```csharp
+```csharp fragment
 public record RunJobRequest(long MetadataId, object? Input = null);
 ```
 

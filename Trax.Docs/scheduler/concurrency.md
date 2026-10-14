@@ -1,6 +1,9 @@
 ---
 title: Multi-Server Concurrency
 description: "How the scheduler stays safe across servers sharing one Postgres database: advisory locks, row-level locking, per-subject serialization and a unique index."
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/ManifestManagerPollingService/ManifestManagerPollingService.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Trains/JobDispatcher/Junctions/DispatchJobsJunction.cs
 type: explanation
 area: scheduling
 nav_order: 4
@@ -10,7 +13,7 @@ nav_order: 4
 
 Trax.Core's scheduler is safe to run across multiple server instances sharing the same PostgreSQL database. Each polling service uses a different concurrency strategy matched to its semantics: an advisory lock for leader election, row-level locking for parallel dispatch, a per-subject advisory lock for work that names the same subject, and idempotent operations where none of these is needed.
 
-This page documents the concurrency model, the guarantees it provides, and the implications for multi-server deployments.
+This page owns the concurrency model: the guarantees it provides and what they mean for a multi-server deployment.
 
 ## Overview
 
@@ -60,17 +63,6 @@ PostgreSQL advisory locks are application-level locks managed by the database bu
 - **Transaction-scoped** (`pg_try_advisory_xact_lock`): automatically released when the transaction commits or rolls back. This is what Trax.Core uses. No risk of leaked locks.
 
 The lock key is `hashtext('trax_manifest_manager')`, which produces a stable 32-bit integer from the string. It uses the single-key form of the advisory lock functions. Another application's single-key advisory lock on the same database would conflict only if its key hashed to the same integer, which is unlikely with a descriptive string. The dispatcher's [subject lock](#subject-serialization-advisory-lock-per-subject) uses the two-key form, which Postgres keeps in a separate space, so it can never contend with the leader lock.
-
-Each lock name is hashed on its own. Trax.Effect 1.57.2 and earlier put the name inside SQL quotes,
-so Postgres hashed the text of EF's parameter placeholder and every leader lock, whatever its name,
-was the same key. The ManifestManager is the only caller, so nothing contended, but the key changed
-in 1.57.3: an old instance and a new one take different keys, and both run the ManifestManager at
-once for as long as both are up.
-
-**Upgrading from Trax.Effect 1.57.2 or earlier: stop every scheduler host before you start one on the
-new version.** A rolling deploy is not safe across this change. The one-queued-entry-per-manifest
-index still refuses a duplicate queue row, but two leaders each run a full cycle (reaping, dead
-letters, queue entries) against the same manifests. Later upgrades can roll as usual.
 
 ### Transaction Scope
 
@@ -188,7 +180,7 @@ Each entry is dispatched within its own DI scope, following the same pattern as 
 
 1. **Clean change tracker**: each entry gets a fresh `IDataContext` with no stale tracked entities from previous iterations.
 2. **Transaction isolation**: if one entry fails, its transaction is rolled back without affecting others.
-3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the job submitter. This makes the Metadata record visible to the job submitter when it begins execution, necessary because the `InMemoryJobSubmitter` executes trains synchronously within `EnqueueAsync`. If the enqueue fails after commit, the dispatcher fails that Metadata with a write that matches it only while it is still `Pending`. If a runner already started it (a remote runner that ran the job and answered with an error, or is still running it when the HTTP call times out), the write matches nothing, the entry stays `Dispatched` and the train is not run again. Otherwise, while the entry has dispatch attempts left (`MaxDispatchAttempts`, default 5), the failed run is recorded with `FailureException = "DispatchRequeued"` (not counted toward the manifest's retries) and the WorkQueue entry is reset to `Queued`, held back by a backoff (5 seconds, doubling, up to 5 minutes), so a later cycle dispatches it again with a new Metadata. Once the attempts are used up, the entry stays `Dispatched` and that last failure counts once. See [Dispatch failures](/docs/scheduler/admin-trains/job-dispatcher#dispatch-failures).
+3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the job submitter, so the Metadata record is visible to the job submitter when it begins execution; the `InMemoryJobSubmitter` runs trains synchronously within `EnqueueAsync`. What happens when the enqueue fails after that commit is in [Dispatch failures](/docs/scheduler/admin-trains/job-dispatcher#dispatch-failures).
 
 ### Capacity Limit Approximation
 
@@ -218,10 +210,14 @@ No configuration changes are needed for multi-server deployments. The concurrenc
 
 With multiple servers, consider the polling interval for the ManifestManager. Since only one server runs the ManifestManager per cycle (advisory lock), having many servers poll frequently means many lock acquisition attempts that return `false`. This is cheap (a single SQL call that returns immediately), but if you want to reduce noise in logs, you can increase the interval:
 
-```csharp
-.AddScheduler(scheduler => scheduler
-    .ManifestManagerPollingInterval(TimeSpan.FromSeconds(10))
-)
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler.ManifestManagerPollingInterval(TimeSpan.FromSeconds(10))
+        )
+);
 ```
 
 The JobDispatcher polling interval doesn't need adjustment, multiple servers processing the work queue concurrently is the desired behavior.

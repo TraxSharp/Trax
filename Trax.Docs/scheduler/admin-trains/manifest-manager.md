@@ -1,6 +1,8 @@
 ---
 title: ManifestManager
 description: The ManifestManager train that cancels timed-out runs, reaps stale ones, and queues due manifests, with its advisory-lock and state-guard concurrency model.
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager
 type: reference
 area: scheduling
 nav_order: 3
@@ -22,7 +24,7 @@ The timeout and stale-run junctions come first and work on runs directly, not on
 
 ### CancelTimedOutJobsJunction
 
-Finds every InProgress run past its timeout and requests cooperative cancellation. A run's timeout is resolved from the run at the root of its `ParentId` chain: that run's manifest `TimeoutSeconds`, or `DefaultJobTimeout` when it sets none, which applies only when a scheduler dispatched the root (a manifest, a work queue entry or a `background_job` row). A nested train shares its root's timeout; a train run directly on the train bus, or whose chain cannot be resolved within 16 levels, is not timed out. Runs of disabled manifests are included; the scheduler's own trains, trains in `ExcludedTrainTypeNames`, and trains nested in either are not. See [Timeout Enforcement](/docs/scheduler/scheduling-options#timeout-enforcement). Sets `CancellationRequested = true` in the database (picked up by `CancellationCheckProvider` at the next junction boundary) and attempts same-server instant cancellation via the `CancellationRegistry`.
+Finds every InProgress run past its timeout and requests cooperative cancellation. A run's timeout is resolved from the run at the root of its `ParentId` chain: that run's manifest `TimeoutSeconds`, or `DefaultJobTimeout` when it sets none, which applies only when a scheduler dispatched the root (a manifest, a work queue entry or a `background_job` row). A nested train shares its root's timeout; a train run directly on the train bus, or whose chain cannot be resolved within 16 levels, is not timed out. Runs of disabled manifests are included; the scheduler's own trains, trains in `ExcludedTrainTypeNames`, and trains nested in either are not. See [Cancellation and timeouts](/docs/scheduler/cancellation-and-timeouts). Sets `CancellationRequested = true` in the database (picked up by `CancellationCheckProvider` at the next junction boundary) and attempts same-server instant cancellation via the `CancellationRegistry`.
 
 ### ReapStalePendingMetadataJunction
 
@@ -63,7 +65,7 @@ Scans loaded manifests for any whose failure count exceeds `MaxRetries`. `MaxRet
 
 A manifest is only reaped if it doesn't already have an unresolved dead letter. This prevents duplicate dead letters from accumulating when the same manifest fails across multiple polling cycles.
 
-`FailedCount` only counts failures that started within the manifest's own failure window (`manifest.failure_window_seconds`, set with `FailureWindow`) or, when it has none, [`FailureCountWindow`](/docs/scheduler/scheduling-options#configuration-options) (default: 24 hours), **and after** the most recent dead letter resolution. When a dead letter is resolved (retried or acknowledged), the failure counter effectively resets, only new failures contribute toward the next `MaxRetries` threshold. This prevents retried manifests from being immediately re-dead-lettered due to historical failures that were already addressed. The window does the same for failures that were never dead-lettered: a failure a month ago neither lengthens a retry's delay nor counts toward a dead letter. A success does not reset the count inside the window, but it does end the backoff: only a run whose latest finished run failed is delayed (see [CreateWorkQueueEntriesJunction](#createworkqueueentriesjunction)).
+`FailedCount` only counts failures that started within the manifest's own failure window (`manifest.failure_window_seconds`, set with `FailureWindow`) or, when it has none, [`FailureCountWindow`](/docs/scheduler/how-retries-work#counting-failures) (default: 24 hours), **and after** the most recent dead letter resolution. When a dead letter is resolved (retried or acknowledged), the failure counter effectively resets, only new failures contribute toward the next `MaxRetries` threshold. This prevents retried manifests from being immediately re-dead-lettered due to historical failures that were already addressed. The window does the same for failures that were never dead-lettered: a failure a month ago neither lengthens a retry's delay nor counts toward a dead letter. A success does not reset the count inside the window, but it does end the backoff: only a run whose latest finished run failed is delayed (see [CreateWorkQueueEntriesJunction](#createworkqueueentriesjunction)).
 
 The junction returns the list of newly created dead letters so `DetermineJobsToQueueJunction` can skip those manifests without re-querying the database.
 
@@ -94,8 +96,8 @@ For each manifest identified as due, creates a `WorkQueue` entry with:
 - `ManifestId` linking back to the source manifest
 - `Priority` set from the manifest's own `Priority`, as a manual trigger or a dead-letter requeue is (the dispatcher orders by the group's priority first)
 - `Status = Queued`
-- `ScheduledAt` delayed by the retry backoff when the manifest's latest finished run failed (see [Retry Delay & Backoff](/docs/scheduler/dead-letters-and-cleanup#retry-delay--backoff)); after a success or a cancel the entry is due at once
-- `ReplayDecisionsOf` naming the failed run, for a retry whose failed run's decisions can be replayed (see [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)). Every due retry is looked up in one pass, on a short-lived context of its own outside the leader transaction; a lookup that fails is logged and the retry asks afresh.
+- `ScheduledAt` delayed by the retry backoff when the manifest's latest finished run failed (see [Retry delay and backoff](/docs/scheduler/how-retries-work#retry-delay-and-backoff)); after a success or a cancel the entry is due at once
+- `ReplayDecisionsOf` naming the failed run, for a retry whose failed run's decisions can be replayed (see [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions)). Every due retry is looked up in one pass, on a short-lived context of its own outside the leader transaction; a lookup that fails is logged and the retry asks afresh.
 
 For dependent manifests, `DependentPriorityBoost` is added on top of the manifest priority.
 
@@ -109,60 +111,14 @@ Without group-fair batching, if a large group has thousands of simultaneously-el
 
 Set `MaxWorkQueueEntriesPerCycle` to `null` to disable the limit (unlimited, all due manifests are enqueued per cycle, no fairness needed).
 
-## Concurrency Model: Two-Layer Defense
+## Concurrency
 
-The ManifestManager uses a layered approach to prevent duplicate work queue entries. Each layer addresses a different failure mode.
-
-### Outer Layer: Advisory Lock (Single-Leader Election)
-
-The `ManifestManagerPollingService` acquires a PostgreSQL transaction-scoped advisory lock before invoking the train:
-
-```sql
-SELECT pg_try_advisory_xact_lock(hashtext('trax_manifest_manager'))
-```
-
-This is a **non-blocking try-lock**: if another server already holds it, the current server skips the cycle entirely and waits for the next polling tick. No server ever blocks waiting for the lock.
-
-The lock is `xact`-scoped (transaction-scoped), meaning it auto-releases when the wrapping transaction commits or rolls back. The entire ManifestManagerTrain runs within this transaction, so all database changes (dead letters, WorkQueue entries) are committed atomically. If the train fails partway through, everything rolls back. No partial state.
-
-This is the primary concurrency control. It guarantees that in a multi-server deployment, only one server evaluates manifests at a time, eliminating the TOCTOU race between `LoadManifestsJunction` (which reads `HasQueuedWork = false`) and `CreateWorkQueueEntriesJunction` (which inserts the entry).
-
-### Inner Layer: Logical State Guards
-
-Even within a single-server cycle, `DetermineJobsToQueueJunction` applies per-manifest guards via `ShouldSkipManifest` before evaluating schedules:
-
-| Guard | Flag | Prevents |
-|-------|------|----------|
-| Dead-lettered this cycle | `newlyDeadLetteredManifestIds` | Queueing a manifest that was just moved to the dead letter queue |
-| Existing dead letter | `HasAwaitingDeadLetter` | Queueing a manifest that requires manual intervention |
-| Already queued | `HasQueuedWork` | Duplicate WorkQueue entries for the same manifest |
-| Already executing | `HasActiveExecution` | Overlapping runs of the same manifest |
-
-These guards are computed from the database-projected flags in `ManifestDispatchView`. They are **not a replacement** for the advisory lock, without the lock, two servers could simultaneously see `HasQueuedWork = false` for the same manifest and both create entries. The guards protect against logical errors within a single evaluation cycle (e.g., a manifest that appears "due" but is already being handled).
-
-### Backstop: Unique Partial Index
-
-As a final safety net, a unique partial index on the `work_queue` table prevents duplicate `Queued` entries for the same manifest at the database level:
-
-```sql
-CREATE UNIQUE INDEX ix_work_queue_unique_queued_manifest
-    ON trax.work_queue (manifest_id)
-    WHERE status = 'queued' AND manifest_id IS NOT NULL;
-```
-
-If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The per-entry `try/catch` in `CreateWorkQueueEntriesJunction` catches the error and logs it. No crash, no corruption. Manual WorkQueue entries (`manifest_id IS NULL`) are excluded from this index.
-
-### Non-Postgres Providers
-
-The advisory lock is only acquired when the `IDataContext` is backed by Entity Framework Core (`DbContext`). When using the InMemory provider for tests, the lock is skipped and the train runs directly, safe because InMemory implies a single-process setup.
-
-See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-service concurrency model.
-
-## What Changed
-
-Previously, this train had an `EnqueueJobsJunction` as its final junction. That junction would directly create Metadata records and enqueue to the job submitter (Hangfire). `MaxActiveJobs` was enforced there, meaning the ManifestManager was both the scheduler and the dispatcher.
-
-Now those responsibilities are split. The ManifestManager writes intent to the work queue. The [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) reads from it and handles the actual dispatch. This means `TriggerAsync`, dashboard re-runs, and scheduled manifests all converge on the same dispatch path.
+The whole train runs inside one transaction that first takes a PostgreSQL advisory lock, so in a
+multi-server deployment one server runs the ManifestManager per cycle and the others skip it. The
+per-manifest guards above protect a single cycle, and a unique partial index on `work_queue`
+refuses a second queued entry for a manifest if anything gets past both. InMemory takes no lock.
+[Multi-Server Concurrency](/docs/scheduler/concurrency#manifestmanager-advisory-lock) explains each
+layer.
 
 ## SDK Reference
 

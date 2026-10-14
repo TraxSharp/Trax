@@ -1,80 +1,126 @@
 ---
 title: Administrative Trains
-description: The internal trains and polling services the scheduler registers to run the job lifecycle, the work queue, and why they are excluded from MaxActiveJobs.
+description: "The internal trains and hosted services AddScheduler registers, which provider each needs, how they meet at the work queue and why they skip MaxActiveJobs."
 type: explanation
 area: scheduling
 nav_order: 2
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/SchedulerConfigurationBuilder/SchedulerConfigurationBuilder.Build.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Configuration/AdminTrains.cs
 ---
 
 # Administrative Trains
 
-The scheduler runs four internal trains to manage the job lifecycle. They're registered automatically when you call `AddScheduler`, you never instantiate them yourself. They're excluded from `MaxActiveJobs` counts and filtered out of dashboard statistics by default.
+The scheduler runs its own work as trains, the same way it runs yours, so every cycle has a
+metadata row and shows up in the dashboard when it fails. `AddScheduler()` registers these trains
+and the hosted services that run them; you never register or start them yourself, and you pass
+only your own assemblies to `AddMediator()`.
+
+| Train | What it does |
+|---|---|
+| [ManifestManager](/docs/scheduler/admin-trains/manifest-manager) | Cancels timed-out runs, fails stale ones, dead-letters manifests out of retries, and writes due manifests to the work queue |
+| [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) | Reads the work queue, applies the capacity limits, creates each run's metadata and hands it to a job submitter |
+| [JobRunner](/docs/scheduler/admin-trains/job-runner) | Runs your train on a worker and records its success on the manifest |
+| [MetadataCleanup](/docs/scheduler/admin-trains/metadata-cleanup) | Deletes old metadata rows, once `AddMetadataCleanup()` turns it on |
+| `DeadLetterCleanupTrain` | Deletes resolved dead letters past their retention; see [Dead letter auto-purge](/docs/scheduler/dead-letters-and-cleanup#dead-letter-auto-purge) |
+
+`AdminTrains.Types` lists them, interfaces and classes, including the InMemory variant of the
+ManifestManager. Their runs do not count toward `MaxActiveJobs`, they are never timed out, and the
+dashboard leaves them out of its statistics by default.
+
+## The hosted services
+
+Which services run depends on the data provider. Postgres and SQLite count as a database provider;
+InMemory does not.
+
+| Service | Registered | What it does |
+|---|---|---|
+| `SchedulerConfigBootstrapHostedService` | always | Applies the scheduler settings saved from the dashboard or `updateScheduler` over the values in code, then rereads them every 5 seconds so a save on any host reaches this one |
+| `SchedulerStartupService` | always | Runs once, before the polling services. With a database provider it first fails every `InProgress` run that started before this host did (`RecoverStuckJobsOnStartup`, on by default), then seeds the manifests the builder declared, prunes [orphaned manifests](/docs/scheduler/orphan-manifest-cleanup) and deletes manifest groups with no manifests left. InMemory only seeds |
+| `ManifestManagerPollingService` | always | Runs the ManifestManager every `ManifestManagerPollingInterval` (5 seconds by default). On InMemory it runs `InMemoryManifestManagerTrain`, which dispatches due manifests inline instead of writing to the work queue |
+| `JobDispatcherPollingService` | database provider | Runs the JobDispatcher every `JobDispatcherPollingInterval` (2 seconds by default), and sooner when woken |
+| `QueuedWorkListenerService` | database provider | Wakes the dispatcher when work is queued, so a queued run does not wait for the next poll |
+| `LocalWorkerService` | database provider, with the default submitter | The worker pool that runs jobs from `trax.background_job`; see [How jobs reach workers](/docs/scheduler/job-submission) |
+| `MetadataCleanupPollingService` | database provider, with `AddMetadataCleanup()` | Runs the MetadataCleanup train every `CleanupInterval`, and once at startup |
+| `DeadLetterCleanupPollingService` | database provider | Runs the dead-letter purge every `DeadLetterCleanupInterval` (1 hour by default). Always registered, because `AutoPurgeDeadLetters` can be turned on at runtime |
+
+The intervals and switches are options of [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler).
+
+Startup seeding is strict: a manifest that cannot be seeded stops the host, because broken
+manifest configuration should not start quietly. A seed that fails on what the provider's SQL
+dialect calls transient (a lost or refused connection, a timeout, a deadlock or serialization
+failure, SQLite's busy and locked codes) is tried up to five times in all, the delay doubling from
+2 seconds. Any other failure, a constraint violation included, fails at once. Pruning is the
+exception: it is housekeeping, so a failed prune is logged and the host starts anyway.
+
+The stuck-job recovery has no way to know which process owns a run, so "started before this host"
+is the whole test. On a single host that is exactly the runs a crash left behind. Where several
+hosts or remote workers share the database, it also fails a run still executing elsewhere, which
+is why it can be turned off with `RecoverStuckJobsOnStartup(false)`.
+
+## The work queue
+
+Every run the scheduler starts goes through the `work_queue` table. The ManifestManager does not
+hand a due manifest to a worker; it writes a work queue entry. `TriggerAsync`, a dead-letter
+requeue, a dashboard re-run and a GraphQL `queue` mutation write entries too. The JobDispatcher is
+the only thing that reads them.
 
 ```
-AdminTrains.Types:
-  - ManifestManagerTrain
-  - JobDispatcherTrain
-  - JobRunnerTrain
-  - MetadataCleanupTrain
+ManifestManager (schedules) ──┐
+TriggerAsync, requeues ───────┼──► work_queue ──► JobDispatcher ──► job submitter ──► JobRunner
+Dashboard, queue mutations ───┘
 ```
 
-## The Polling Services
+That gives capacity one place to be enforced. `MaxActiveJobs`, per-group limits, priority and
+[subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing)
+are all applied by the dispatcher, whatever wrote the entry. The ManifestManager can decide what is
+due without knowing how busy the system is, and the two run on their own intervals, so each can be
+tuned on its own.
 
-The scheduler registers hosted services based on the configured data provider:
+An entry records the train to run (its interface's full name), the serialized input and its type,
+its status (`Queued`, then `Dispatched`), the manifest it came from if any, and, once dispatched,
+the metadata row of its run.
 
-1. **SchedulerStartupService** (`IHostedService`, always registered), runs once on startup, seeds manifests configured via `.Schedule()`, `.ScheduleMany()`, `.ThenInclude()`, `.ThenIncludeMany()`, `.Include()`, or `.IncludeMany()`. With PostgreSQL, also recovers stuck jobs and cleans up orphaned manifest groups. Seeding failures prevent the host from starting, if your manifest configuration is broken, you want to know immediately. A seed that fails on what the provider's SQL dialect classifies as transient (`ISqlDialect.IsTransient`: a lost or refused connection, a timeout, a deadlock or serialization failure, or SQLite's busy and locked codes) is tried up to five times in all, with a delay doubling from 2 seconds between attempts; any other failure, a constraint violation included, fails at once, and InMemory retries nothing.
+On Postgres a trigger on `work_queue` sends a notification in the transaction that queues an
+entry, so every dispatcher, on any host, wakes when that transaction commits and hears nothing if
+it rolls back. A run queued on an API host starts within moments even when the scheduler polls
+every 30 seconds. On SQLite the wake comes from a save in the same process. The poll stays the
+fallback, and the only clock for an entry whose `ScheduledAt` comes due, a dispatch retried after a
+backoff, or a manifest that is enabled again. A connection pooler in transaction mode, such as
+PgBouncer, does not carry `LISTEN`, so behind one the dispatcher polls. The listener holds one
+unpooled connection, shown in `pg_stat_activity` as `trax_queued_work_listener`; when it is lost
+the listener logs a warning and tries again after 1 second, doubling to 30.
 
-2. **ManifestManagerPollingService** (`BackgroundService`, always registered), polls on `ManifestManagerPollingInterval` (default: 5 seconds). With PostgreSQL, runs `ManifestManagerTrain` which evaluates manifests and writes to the work queue. With InMemory, runs `InMemoryManifestManagerTrain` which evaluates manifests and dispatches jobs directly via `InMemoryJobSubmitter`, jobs execute inline during the polling cycle.
+## InMemory
 
-3. **JobDispatcherPollingService** (`BackgroundService`, PostgreSQL or SQLite only), polls on `JobDispatcherPollingInterval` (default: 2 seconds). Each cycle runs the JobDispatcher train, which reads from the work queue, enforces capacity, and dispatches to the job submitter. Not registered with InMemory, where the `InMemoryManifestManagerTrain` dispatches manifests directly and nothing reads the work queue: a run queued through GraphQL (`mode: QUEUE`) stays queued.
+With InMemory there is no work queue reader. `InMemoryManifestManagerTrain` runs only
+`LoadManifestsJunction`, `ReapFailedJobsJunction`, `DetermineJobsToQueueJunction` and
+`InMemoryDispatchJobsJunction`, which runs each due manifest through the in-memory job submitter
+inline. It has no timeout cancellation, no stale `Pending` or `InProgress` recovery and no stale
+staged-entry sweep, and a run queued through GraphQL (`mode: QUEUE`) stays queued. It resolves a
+manifest's stored input type only among the registered trains' inputs, as the dispatcher does; a
+manifest whose input resolves to nothing is logged and leaves no `Pending` row.
 
-4. **QueuedWorkListenerService** (`BackgroundService`, PostgreSQL or SQLite only), ends the JobDispatcher's wait early when the data provider reports queued work through `IQueuedWorkListener`. On PostgreSQL it holds one unpooled connection that `LISTEN`s on `trax_queued_work`, reported in `pg_stat_activity` as `trax_queued_work_listener`; when the connection is lost it logs a warning and listens again after a backoff of 1 second doubling to 30, and the dispatcher polls meanwhile. Wakes coalesce, and a cycle a wake starts begins no sooner than 100 ms after the previous cycle began.
+## Several hosts
 
-With PostgreSQL, the ManifestManager and JobDispatcher run independently on their own timers. They communicate through the work queue table. ManifestManager writes entries, JobDispatcher reads them. On PostgreSQL the JobDispatcher also wakes when those entries commit (see below); elsewhere it may not see them until its next tick, but no work is lost. Independent intervals allow you to tune each service separately (e.g., fast manifest evaluation with slower dispatch, or vice versa).
+Each service has its own way of staying safe when several hosts share the database: the
+ManifestManager takes an advisory lock so one host runs it per cycle, the JobDispatcher claims
+entries with `FOR UPDATE SKIP LOCKED`, and the cleanups are idempotent. [Multi-Server
+Concurrency](/docs/scheduler/concurrency) explains each.
 
-In multi-server deployments, each service uses a different concurrency strategy: the ManifestManager uses a PostgreSQL advisory lock for single-leader election, the JobDispatcher uses `FOR UPDATE SKIP LOCKED` for parallel per-entry dispatch, and the cleanup service is naturally idempotent. See [Multi-Server Concurrency](/docs/scheduler/concurrency) for details.
+## Excluding your own trains from MaxActiveJobs
 
-> **InMemory note:** The `InMemoryManifestManagerTrain` runs only `LoadManifestsJunction`, `ReapFailedJobsJunction`, `DetermineJobsToQueueJunction` and `InMemoryDispatchJobsJunction`. It omits four junctions of the standard train, `CancelTimedOutJobsJunction`, `ReapStalePendingMetadataJunction`, `ReapStaleInProgressMetadataJunction` and `ResolveStaleStagedEntriesJunction`, and replaces `CreateWorkQueueEntriesJunction` with `InMemoryDispatchJobsJunction` (which dispatches jobs inline). It resolves a manifest's stored input type only among the registered trains' input types, as the work-queue dispatcher does, before writing the run's metadata; a manifest whose input resolves to nothing is logged and leaves no `Pending` row. This means timeout cancellation, stale Pending and InProgress recovery, and the stale staged-entry sweep are not available with InMemory.
+A high-frequency internal train of your own can be left out of the count the same way the
+administrative trains are:
 
-## The Work Queue
-
-All job execution flows through the `work_queue` table. This is the key design decision: nothing goes directly to the job submitter anymore. The ManifestManager doesn't enqueue jobs. `TriggerAsync` doesn't enqueue jobs. Dashboard re-runs don't enqueue jobs. They all write a `WorkQueue` entry with status `Queued`, and the JobDispatcher picks them up.
-
-This gives you a single enforcement point for `MaxActiveJobs`. Before the work queue existed, capacity limits had to be checked in every code path that could trigger a job. Now there's one gateway, and it's the JobDispatcher.
-
-```
-┌──────────────────────┐
-│  ManifestManager     │──┐
-│  (scheduled jobs)    │  │
-└──────────────────────┘  │
-                          │    ┌─────────────┐    ┌───────────────┐    ┌──────────────┐
-┌──────────────────────┐  ├──► │  WORK_QUEUE │──► │ JobDispatcher │──► │ LocalWorkers │
-│  TriggerAsync        │──┤    └─────────────┘    └───────────────┘    └──────────────┘
-│  (manual trigger)    │  │
-└──────────────────────┘  │
-                          │
-┌──────────────────────┐  │
-│  Dashboard           │──┘
-│  (re-runs)           │
-└──────────────────────┘
-```
-
-A `WorkQueue` entry tracks:
-- **TrainName**: which train to run (fully qualified type name)
-- **Input / InputTypeName**: serialized input and its type, for deserialization at dispatch time
-- **Status**: `Queued` → `Dispatched`
-- **ManifestId**: optional link back to the originating manifest
-- **MetadataId**: set by the JobDispatcher when it creates the execution record
-
-## Excluding Trains from MaxActiveJobs
-
-Administrative trains are excluded from the active job count by default. If you have your own high-frequency internal trains that shouldn't count against the limit, exclude them in the builder:
-
-```csharp
-.AddScheduler(scheduler => scheduler
-    .MaxActiveJobs(100)
-    .ExcludeFromMaxActiveJobs<IMyInternalTrain>()
-)
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler.MaxActiveJobs(100).ExcludeFromMaxActiveJobs<ISyncTrain>()
+        )
+);
 ```
 
 ## SDK Reference

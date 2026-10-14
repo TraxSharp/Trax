@@ -1,6 +1,8 @@
 ---
 title: Exclusion Windows
 description: Exclusion windows that skip a manifest on days of the week, dates, date ranges or daily time windows, how they combine and interact with misfire policies.
+source:
+  - Trax.Effect/src/Trax.Effect/Models/Manifest/Exclusion.cs
 type: reference
 area: scheduling
 nav_order: 2
@@ -8,7 +10,7 @@ nav_order: 2
 
 # Exclusion Windows
 
-Exclusion windows let you skip execution during specific periods, weekends, holidays, maintenance windows, or daily time ranges. When any exclusion matches the current time, the manifest is skipped. Excluded periods are treated as **intentionally skipped**, not as misfires.
+Exclusion windows skip execution during specific periods: weekends, holidays, maintenance windows or daily time ranges. They are set per manifest with `ScheduleOptions.Exclude(...)` and the `Exclude` factories. When any exclusion matches the current time, the manifest is skipped. Excluded periods are treated as **intentionally skipped**, not as misfires.
 
 ## Exclusion Types
 
@@ -16,8 +18,8 @@ Exclusion windows let you skip execution during specific periods, weekends, holi
 
 Skip specific days of the week:
 
-```csharp
-scheduler.Schedule<IReportTrain>(
+```csharp compile
+await scheduler.ScheduleAsync<IReportTrain, ReportInput, Unit>(
     "daily-report",
     new ReportInput(),
     Cron.Daily(hour: 3),
@@ -28,14 +30,14 @@ scheduler.Schedule<IReportTrain>(
 
 Skip specific dates (e.g., holidays):
 
-```csharp
+```csharp compile
 var holidays = new[]
 {
     new DateOnly(2026, 12, 25),  // Christmas
     new DateOnly(2027, 1, 1),    // New Year's Day
 };
 
-scheduler.Schedule<IReportTrain>(
+await scheduler.ScheduleAsync<IReportTrain, ReportInput, Unit>(
     "daily-report",
     new ReportInput(),
     Cron.Daily(hour: 3),
@@ -46,8 +48,8 @@ scheduler.Schedule<IReportTrain>(
 
 Skip a contiguous date range (start and end inclusive):
 
-```csharp
-scheduler.Schedule<IReportTrain>(
+```csharp compile
+await scheduler.ScheduleAsync<IReportTrain, ReportInput, Unit>(
     "daily-report",
     new ReportInput(),
     Cron.Daily(hour: 3),
@@ -60,8 +62,8 @@ scheduler.Schedule<IReportTrain>(
 
 Skip a daily time window. Supports midnight crossover (e.g., 23:00-02:00):
 
-```csharp
-scheduler.Schedule<ISyncTrain>(
+```csharp compile
+await scheduler.ScheduleAsync<ISyncTrain, SyncInput, Unit>(
     "sync-hourly",
     new SyncInput(),
     Cron.Hourly(),
@@ -74,8 +76,8 @@ scheduler.Schedule<ISyncTrain>(
 
 Multiple exclusions can be combined. If **any** exclusion matches, the manifest is skipped:
 
-```csharp
-scheduler.Schedule<IReportTrain>(
+```csharp compile
+await scheduler.ScheduleAsync<IReportTrain, ReportInput, Unit>(
     "weekday-report",
     new ReportInput(),
     Cron.Daily(hour: 8),

@@ -1,6 +1,8 @@
 ---
 title: MetadataCleanup
 description: "The MetadataCleanup train that deletes old Metadata rows for internal and chosen trains: how it runs, deletion order, safety boundary and per-train retention."
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Trains/MetadataCleanup
 type: reference
 area: scheduling
 nav_order: 6
@@ -8,7 +10,7 @@ nav_order: 6
 
 # MetadataCleanupTrain
 
-The MetadataCleanup train deletes old metadata rows for the internal scheduler trains. Every train execution persists a metadata row, so high-frequency internal trains like JobDispatcher (every 2 seconds by default) and ManifestManager (every 5 seconds) would otherwise generate hundreds of thousands of rows per day. Once cleanup is enabled, the internal scheduler trains are pruned unconditionally, see [Configuration](#configuration).
+The MetadataCleanup train deletes old metadata rows for the internal scheduler trains. Every train execution persists a metadata row, so high-frequency internal trains like JobDispatcher (every 2 seconds by default) and ManifestManager (every 5 seconds) would otherwise generate hundreds of thousands of rows per day. Once cleanup is enabled, the internal scheduler trains are pruned unconditionally; see [Configuration](#configuration). Cancelled runs are terminal like completed and failed ones, so they are swept too.
 
 ## Chain
 
@@ -69,7 +71,15 @@ Runs linked by [decision replay](/docs/effect/decisions#re-queued-and-retried-ru
 - A run is kept while a queued work queue entry, or a run that is kept, names it, because something still replays it.
 - A run that replays another is never deleted while the run it replays is kept. Both expired, they are deleted in the same batch and transaction, so a batch can hold more runs than `DeleteBatchSize`. A replay whose source stays is kept with it.
 
-So no run is ever kept while a replay of it has been deleted, and a retry's check that [nothing else replays the failed run](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) reads the same history on every host.
+Runs linked by a checkpoint resume (`resume_from`) are kept together the same way, since a run's
+checkpoints are deleted with it: a run is kept while a queued entry or a kept run resumes it, and a
+resumed run and the run it resumed are deleted together once both have expired. A work queue entry
+that is no longer queued (cancelled, or dispatched as a run of its own) and names a deleted run has
+its `resume_from` cleared, so no row names a run that is gone. A manifest's prune clears the link on
+a run or entry outside the manifest, such as an operator's resume, that names one of the manifest's
+runs; a queued one then runs from the top.
+
+So no run is ever kept while a replay of it has been deleted, and a retry's check that [nothing else replays the failed run](/docs/scheduler/how-retries-work#retries-replay-decisions) reads the same history on every host.
 
 See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-service concurrency model.
 
@@ -77,44 +87,43 @@ See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-s
 
 Enable cleanup with `.AddMetadataCleanup()`:
 
-```csharp
-.AddScheduler(scheduler => scheduler
-    .AddMetadataCleanup()
-)
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler.AddMetadataCleanup()
+        )
+);
 ```
 
 With no arguments, this cleans up metadata older than 30 minutes, checking every minute. The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always cleaned up while cleanup is enabled, you can't forget one, and the retention window still keeps the last 30 minutes for diagnostics. Use the configure action to add your own noisy trains on top.
 
-### Custom Configuration
+### Your own trains, and a retention per train
 
-```csharp
-.AddMetadataCleanup(cleanup =>
-{
-    cleanup.RetentionPeriod = TimeSpan.FromHours(2);
-    cleanup.CleanupInterval = TimeSpan.FromMinutes(5);
-    cleanup.AddTrainType<IMyNoisyTrain>();
-    cleanup.AddTrainType("LegacyTrainName");
-})
+`AddTrainType<T>()` adds a train of your own to the sweep, matched by `typeof(T).FullName`
+against the metadata's `Name` column (the interface's full name); a string overload takes a raw
+name. Given a `TimeSpan`, the train keeps its own retention:
+
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler.AddMetadataCleanup(cleanup =>
+            {
+                cleanup.RetentionPeriod = TimeSpan.FromMinutes(30); // everything else
+                cleanup.AddTrainType<ISyncTrain>(); // on the default
+                cleanup.AddTrainType<IReportTrain>(TimeSpan.FromDays(30));
+            })
+        )
+);
 ```
 
-`AddTrainType<T>()` uses `typeof(T).FullName` to match the `Name` column in the metadata table (which stores the interface FullName). You can also pass a raw string for trains that aren't easily referenced by type.
-
-### A retention per train
-
-One period rarely fits every train. A delta-import train that runs every ten seconds wants pruning in minutes; a mutation train whose input is a customer record may need keeping for a month so a rerun can replay it. Pass a `TimeSpan` to `AddTrainType` for the second kind:
-
-```csharp
-.AddMetadataCleanup(cleanup =>
-{
-    cleanup.RetentionPeriod = TimeSpan.FromMinutes(30);           // everything else
-    cleanup.AddTrainType<IDeltaImportAllTrain>();                 // on the default
-    cleanup.AddTrainType<IPatchCustomerTrain>(TimeSpan.FromDays(30));
-})
-```
-
-Trains sharing a cutoff are swept together, so the cleanup runs its batched delete once per distinct retention rather than once in total. `DeleteBatchSize` is the limit per group, which means a cycle can delete up to that many rows for each retention in use. In practice that is one or two groups.
-
-The work queue rows owned by a metadata row follow it, so they inherit whatever cutoff that train has.
+Trains sharing a cutoff are swept together, so the cleanup runs its batched delete once per
+distinct retention, and `DeleteBatchSize` is the limit per group. The work queue rows a metadata
+row owns follow it, so they inherit its train's cutoff. The options and their defaults are on
+[AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup).
 
 > **The runtime override applies to the default only.** The retention is also editable without a restart, through the dashboard's Server Settings page and the `updateScheduler` mutation. That edit replaces `RetentionPeriod`, so it moves every train that is on the default and leaves a retention passed to `AddTrainType` exactly where it was. A per-train value is usually there because of what the row holds rather than as an operational preference, and an edit to a field labelled "Retention Period" should not quietly shorten it. Shortening one is a code change.
 
@@ -132,15 +141,6 @@ A train declared twice with different retentions is refused, in one of two place
 Declaring the same train twice with the *same* retention is fine, and is not counted twice.
 
 If the startup check is somehow bypassed, the sweep keeps the longer of the two retentions and logs a warning. It does not throw: a cleanup loop that fails every cycle stops pruning altogether, which is worse than the misconfiguration.
-
-### Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `CleanupInterval` | 1 minute | How often the cleanup service runs |
-| `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility, for every train not given one of its own. This is the value the runtime override replaces |
-| `DeleteBatchSize` | 1000 | Max runs selected per batch, per retention group, 1 to 10,000; `null` sweeps in batches of 10,000. A batch can exceed it by the replay relatives it must delete together |
-| `TrainTypeWhitelist` | (internal trains always included) | Additional consumer train names whose metadata can be deleted. The internal scheduler trains are pruned unconditionally on top of this list |
 
 ## SDK Reference
 

@@ -233,7 +233,6 @@ Trax.Scheduler M:RunnerRequestVerifier.EnsurePosture
 Trax.Scheduler M:RunnerRequestVerifier.ReadVerifiedBodyAsync
 Trax.Scheduler M:RunnerRequestVerifier.ReportRefusal
 Trax.Scheduler M:RunnerRequestVerifier.RequiresSignature
-Trax.Scheduler M:SchedulerConfiguration.DeadLetterCleanupInterval
 Trax.Scheduler M:SchedulerConfigurationBuilder.AddRoutedSubmitter
 Trax.Scheduler M:SchedulerConfigurationBuilder.SetRemoteRunRegistration
 Trax.Scheduler M:TopologicalSortResult.CycleMembers
@@ -245,7 +244,6 @@ Trax.Scheduler T:EffectSettingsService
 Trax.Scheduler T:ExecuteJobResult
 Trax.Scheduler T:IJobDispatcherTrain
 Trax.Scheduler T:IManifestManagerTrain
-Trax.Scheduler T:JobRunnerExtensions
 Trax.Scheduler T:LogRecord
 Trax.Scheduler T:RemoteRunJson
 Trax.Scheduler T:RemoteRunOutput

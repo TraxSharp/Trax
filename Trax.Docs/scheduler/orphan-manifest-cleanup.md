@@ -1,6 +1,9 @@
 ---
 title: Orphan Manifest Cleanup
 description: How the scheduler deletes manifests at startup whose schedule was removed from code, which manifests a host owns, and how to disable or scope the cleanup.
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/SchedulerStartupService/SchedulerStartupService.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/ManifestPruning/ManifestPruner.cs
 type: explanation
 area: scheduling
 nav_order: 6
@@ -38,7 +41,7 @@ What the prune leaves alone:
 | The host's application name cannot be found | Nothing is pruned, and a warning says why. |
 | The host declares no manifests | Nothing is pruned, and the log says why. An API or worker host that calls `AddScheduler` only to reach `ITraxScheduler` or the operations service has no basis for calling another host's manifests orphaned. |
 | An orphan has a `Pending` or `InProgress` run | The manifest and the run are kept. The next start prunes the manifest once the run has finished. A prune never deletes an unfinished run. |
-| A run of the orphan started a nested train | The nested run is kept, with its `ParentId` cleared, as [metadata cleanup](/docs/scheduler/dead-letters-and-cleanup#metadata-cleanup) does. |
+| A run of the orphan started a nested train | The nested run is kept, with its `ParentId` cleared, as [metadata cleanup](/docs/scheduler/admin-trains/metadata-cleanup) does. |
 | Another manifest depends on the orphan | Its `DependsOnManifestId` is set to `null`. |
 
 Orphan pruning deletes manifests in batches (500 per batch) to keep SQL `IN(...)` clauses small and avoid command timeouts on large prune operations. Each batch runs in one transaction: it clears the references above, then deletes WorkQueues, DeadLetters, Metadata, and finally the manifests. A batch that fails rolls back, is logged, and the prune moves on to the next one. A failure of the prune as a whole is logged too, and the host starts anyway: pruning is housekeeping.
@@ -59,15 +62,19 @@ Orphan manifest cleanup is **enabled by default**. No additional configuration i
 
 If you create manifests dynamically at runtime via `ITraxScheduler` (outside of the startup configuration), disable orphan pruning to prevent those manifests from being deleted on restart:
 
-```csharp
-services.AddTrax(trax => trax
-    .AddScheduler(scheduler => scheduler
-        .PruneOrphanedManifests(false)  // Disable orphan cleanup
-        .Schedule<IMyTrain>(
-            "my-job",
-            new MyInput(),
-            Every.Minutes(5))
-    )
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler
+                .PruneOrphanedManifests(false) // Disable orphan cleanup
+                .Schedule<IHelloWorldTrain>(
+                    "hello-world",
+                    new HelloWorldInput { Name = "Scheduler" },
+                    Every.Minutes(5)
+                )
+        )
 );
 ```
 
@@ -75,7 +82,7 @@ services.AddTrax(trax => trax
 
 ### Removing a Single Schedule
 
-```csharp
+```csharp fragment
 // Before: two schedules defined
 scheduler
     .Schedule<IHelloWorldTrain>(
@@ -101,10 +108,9 @@ scheduler
 
 ### Removing All Schedules
 
-```csharp
+```csharp fragment
 // Before: schedules defined
-scheduler
-    .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5));
+scheduler.Schedule<IHelloWorldTrain>("hello-world", new HelloWorldInput(), Every.Minutes(5));
 
 // After: all schedules removed
 services.AddTrax(trax => trax

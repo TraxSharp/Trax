@@ -1,6 +1,9 @@
 ---
 title: Dependent Trains
-description: "Dependent manifests that run when a parent succeeds: ThenInclude, Include and IncludeMany, the runtime API, cycle detection and dormant dependents."
+description: "How dependent manifests run when a parent succeeds: Include and ThenInclude, when a dependent is queued, cycle detection and dormant dependents."
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Trains/ManifestManager/Junctions/DetermineJobsToQueueJunction.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/DormantDependentContext
 type: explanation
 area: scheduling
 nav_order: 5
@@ -32,108 +35,51 @@ That's it. No event bus, no callbacks. The existing polling loop picks up the ch
 
 The same guards that apply to scheduled manifests apply here too: if the dependent has an active execution, a queued work entry, or a dead letter awaiting intervention, it won't be queued again.
 
-## Startup Configuration: ThenInclude
+## Declaring dependents
 
-Chain a dependent train after a `Schedule` call:
+A dependent is declared next to its parent, and has no schedule of its own:
 
-```csharp
-services.AddTrax(trax => trax
-    .AddScheduler(scheduler => scheduler
-        .Schedule<IExtractTrain>(
-            "extract-data",
-            new ExtractInput { Source = "api" },
-            Every.Hours(1),
-            options => options.Group("etl"))
-        .ThenInclude<ITransformTrain>(
-            "transform-data",
-            new TransformInput { Format = "parquet" },
-            options => options.Group("etl"))
-    )
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler
+                .Schedule<IExtractTrain>(
+                    "extract",
+                    new ExtractInput { Source = "api" },
+                    Every.Hours(1),
+                    options => options.Group("etl")
+                )
+                // Both depend on extract, not on each other
+                .Include<ITransformTrain>(
+                    "transform",
+                    new TransformInput { Format = "parquet" },
+                    options => options.Group("etl")
+                )
+                .Include<IValidateTrain>(
+                    "validate",
+                    new ValidateInput(),
+                    options => options.Group("etl")
+                )
+                // Depends on validate, the manifest before it
+                .ThenInclude<ILoadTrain>("load", new LoadInput(), options => options.Group("etl"))
+        )
 );
 ```
 
-`ThenInclude` captures the previous call's external ID as the parent. No schedule parameter, dependent manifests don't have one.
+The builder keeps two pointers. The **root** is set by `Schedule`, and `Include` always parents
+from it, so `Include` fans out: `extract` feeds `transform` and `validate` independently, and a
+failed `transform` does not hold up `validate`. The **cursor** moves with every `Include` or
+`ThenInclude`, and `ThenInclude` parents from it, so `ThenInclude` chains: A, then B, then C, and
+if A fails nothing downstream fires.
 
-Chaining works: `.Schedule(...).ThenInclude(...).ThenInclude(...)` creates A &rarr; B &rarr; C. Each `ThenInclude` depends on the one before it. If `extract` fails, neither downstream train fires.
-
-## Fan-Out: Include
-
-Sometimes one job needs to trigger multiple independent downstream jobs. An extract might feed both a transform pipeline and a validation junction. `ThenInclude` can't express this, it always chains from the previous manifest, producing a linear pipeline.
-
-`Include` solves this. It always branches from the **root** `Schedule`, not the cursor:
-
-```csharp
-scheduler
-    .Schedule<IExtractTrain>(
-        "extract", new ExtractInput(), Every.Hours(1),
-        options => options.Group("etl"))
-    // Both depend on Extract, not on each other
-    .Include<ITransformTrain>(
-        "transform", new TransformInput(),
-        options => options.Group("etl"))
-    .Include<IValidateTrain>(
-        "validate", new ValidateInput(),
-        options => options.Group("etl"));
-```
-
-This creates: `extract` &rarr; `transform`, `extract` &rarr; `validate`. When extract succeeds, both transform and validate are queued independently. If transform fails, validate is unaffected.
-
-### Mixing Include and ThenInclude
-
-`Include` and `ThenInclude` compose naturally. The builder tracks two pointers: the **root** (set by `Schedule`) and the **cursor** (moved by every `ThenInclude` or `Include`). `Include` always parents from the root. `ThenInclude` always parents from the cursor.
-
-## Bulk Dependencies: IncludeMany
-
-For batch jobs where each item in one batch depends on a corresponding item in another, use `IncludeMany` with `ManifestItem` after `ScheduleMany`. Each `ManifestItem` specifies its parent via the `DependsOn` property:
-
-```csharp
-scheduler
-    .ScheduleMany<IExtractTrain>(
-        "extract",
-        Enumerable.Range(0, 100).Select(i => new ManifestItem(
-            $"{i}",
-            new ExtractInput { Partition = i }
-        )),
-        Every.Minutes(30))
-    .IncludeMany<ILoadTrain>(
-        "load",
-        Enumerable.Range(0, 100).Select(i => new ManifestItem(
-            $"{i}",
-            new LoadInput { Partition = i },
-            DependsOn: $"extract-{i}"
-        )));
-// Creates: extract-0..extract-99 (groupId: "extract", prunePrefix: "extract-")
-//          load-0..load-99 (groupId: "load", prunePrefix: "load-")
-```
-
-The `DependsOn` property on each `ManifestItem` specifies the parent's external ID. In this example, `load-0` depends on `extract-0`, `load-1` on `extract-1`, and so on. When `extract-42` succeeds, only `load-42` gets queued, the rest are unaffected.
-
-The mapping is flexible. You aren't limited to 1:1, multiple dependents can point to the same parent. The name-based overloads automatically set `groupId` and `prunePrefix` from the `name` parameter. For deeper chaining (a third batch level), use `ThenIncludeMany`.
-
-## Bulk Fan-Out: IncludeMany
-
-When a single root manifest should trigger an entire batch of dependents, use `IncludeMany` without `DependsOn`, items automatically depend on the root `Schedule`:
-
-```csharp
-scheduler
-    .Schedule<IExtractTrain>(
-        "extract-all",
-        new ExtractInput { Mode = "full" },
-        Every.Hours(1),
-        options => options.Group("extract"))
-    .IncludeMany<ILoadTrain>(
-        "load",
-        Enumerable.Range(0, 10).Select(i => new ManifestItem(
-            $"{i}",
-            new LoadInput { Partition = i }
-        )));
-```
-
-All 10 `load-*` manifests depend on `extract-all`. No `DependsOn` needed. `IncludeMany` automatically parents every item from the root `Schedule`. The name `"load"` derives `groupId: "load"` and `prunePrefix: "load-"`.
-
-## Runtime API
-
-For jobs created at runtime rather than startup, use `ITraxScheduler.ScheduleDependentAsync` (single) or `ScheduleManyDependentAsync` (batch). Both use upsert semantics, same as their non-dependent counterparts. `ScheduleManyDependentAsync` runs in a single transaction.
+Batches work the same way. `IncludeMany` after `ScheduleMany` gives each item a parent through its
+`ManifestItem.DependsOn` (so `load-42` can depend on `extract-42` alone), or parents every item from
+the root `Schedule` when `DependsOn` is left out. `ThenIncludeMany` chains a third level. At
+runtime, `ITraxScheduler.ScheduleDependentAsync` and `ScheduleManyDependentAsync` do the same with
+upsert semantics, the batch in one transaction. Every form, with examples, is on
+[Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling).
 
 ## Cycle Detection
 
@@ -160,56 +106,15 @@ Standard dependents auto-fire whenever their parent succeeds. But sometimes the 
 - **Conditional pipelines**: A parent inspects results and selectively triggers downstream work
 - **Fan-out with runtime input**: The number of children is known at registration, but the input varies per execution
 
-### Registration
+### Declaring and activating them
 
-Add `.Dormant()` to the options when declaring a dependent:
-
-```csharp
-scheduler
-    .ScheduleMany<IDeltaImportTrain>(
-        "delta",
-        allTables.Select(table => new ManifestItem(
-            $"{table}",
-            DeltaImportRequest.Create(table)
-        )),
-        Every.Seconds(10),
-        options: o => o.Group(group => group.MaxActiveJobs(4)))
-    .IncludeMany<ICacheBronzeTrain>(
-        "delta-bronze",
-        allJobs.Select(item => new ManifestItem(
-            $"{item.Table}-{item.Batch}",
-            ExtractRequest.Default(item.Table, item.Batch),
-            DependsOn: $"delta-{item.Table}"
-        )),
-        options: o => o.Dormant().Group(group => group.MaxActiveJobs(4)));
-```
-
-The `delta-bronze-*` manifests appear in the topology with `ScheduleType.DormantDependent`. The ManifestManager never auto-queues them, neither on a timer nor when their parent succeeds.
-
-### Runtime Activation
-
-Inject `IDormantDependentContext` into any junction within the parent train:
-
-```csharp
-public class QueueDeltaBronzeTasks(IDormantDependentContext dormants)
-    : Junction<(NetSuiteTable Table, Dictionary<int, List<int>> Buckets), Unit>
-{
-    public override async Task<Unit> Run(
-        (NetSuiteTable Table, Dictionary<int, List<int>> Buckets) input)
-    {
-        var activations = input.Buckets
-            .Where(b => b.Value.Count > 0)
-            .Select(b => (
-                ExternalId: $"delta-bronze-{input.Table}-{b.Key}",
-                Input: ExtractRequest.Create(input.Table, b.Key, b.Value)));
-
-        await dormants.ActivateManyAsync<ICacheBronzeTrain, ExtractRequest, Unit>(activations);
-        return Unit.Default;
-    }
-}
-```
-
-Each call creates a `WorkQueue` entry with the runtime-supplied input. The `DependentPriorityBoost` is applied automatically, and group capacity limits still apply at dispatch time.
+A dormant dependent is declared like any other, with `.Dormant()` in its options, so the topology
+stays in one place. The manifests get `ScheduleType.DormantDependent`, and the ManifestManager never
+queues them, on a timer or when the parent succeeds. A junction in the parent train injects
+`IDormantDependentContext` and calls `ActivateAsync` or `ActivateManyAsync` with the external ids
+to fire and the input for each. Each activation writes a work queue entry with that input; the
+`DependentPriorityBoost` is applied, and group capacity limits still apply at dispatch. Both are
+shown on [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling).
 
 ### Scoping Rules
 
