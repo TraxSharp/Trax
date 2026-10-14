@@ -199,8 +199,6 @@ sdk-reference/statemachine-api/migrations.md
 sdk-reference/statemachine-api/persistence-ports.md
 sdk-reference/statemachine-api/rules.md
 sdk-reference/statemachine-api/runtime-integrity.md
-sdk-reference/testing.md
-sdk-reference/testing/core-testing.md
 statemachine/authoring.md
 statemachine/declarative-authoring.md
 statemachine/invoking-trains.md

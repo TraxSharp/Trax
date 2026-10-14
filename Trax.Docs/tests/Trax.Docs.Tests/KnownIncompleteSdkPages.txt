@@ -136,4 +136,3 @@ sdk-reference/statemachine-api/result-codes.md
 sdk-reference/statemachine-api/rules.md
 sdk-reference/statemachine-api/runtime-integrity.md
 sdk-reference/statemachine-api/typescript-package.md
-sdk-reference/testing/core-testing.md
