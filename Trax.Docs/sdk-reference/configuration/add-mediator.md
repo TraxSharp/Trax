@@ -1,6 +1,6 @@
 ---
 title: AddMediator
-description: "Reference for AddMediator: the builder and shorthand overloads, TraxMediatorBuilder, assembly scanning, train lifetimes, the startup chain check and what it registers."
+description: "Reference for AddMediator: its overloads, TraxMediatorBuilder, assembly scanning, train lifetimes, the startup chain check and what it registers."
 type: reference
 area: mediator
 parent: Configuration

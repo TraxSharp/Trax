@@ -1,6 +1,6 @@
 ---
 title: AddDataContextLogging
-description: Reference for AddDataContextLogging, which stores the host's ILogger messages in the trax.log table, with its level and category filters and the logger behind it.
+description: Reference for AddDataContextLogging, which stores the host's ILogger messages in the trax.log table, with its level and category filters.
 type: reference
 area: data
 parent: Configuration

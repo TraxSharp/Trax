@@ -1,6 +1,6 @@
 ---
 title: SaveTrainParameters
-description: Reference for SaveTrainParameters, which stores train inputs and outputs as JSON on Metadata, and the ParameterEffectConfiguration that bounds, excludes and masks them.
+description: Reference for SaveTrainParameters, which stores train inputs and outputs as JSON on Metadata, and the ParameterEffectConfiguration that bounds and masks them.
 type: reference
 area: effects
 parent: Configuration

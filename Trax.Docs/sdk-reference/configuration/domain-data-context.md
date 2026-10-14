@@ -122,7 +122,7 @@ shows the switch to migrations.
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DomainContext;
 
-services.AddDomainDataContext<ICatalogDbContext, CatalogDbContext>(o => o.UseNpgsql(connectionString));
+services.AddDomainDataContext<ICatalogDbContext, CatalogDbContext>(o => o.UseInMemoryDatabase("catalog"));
 
 public class Book
 {

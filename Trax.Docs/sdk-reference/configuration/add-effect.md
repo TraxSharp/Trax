@@ -1,6 +1,6 @@
 ---
 title: AddEffect / AddJunctionEffect
-description: Reference for AddEffect and AddJunctionEffect, which register train-level and junction-level effect provider factories, toggleable or not, and configurable ones.
+description: Reference for AddEffect and AddJunctionEffect, which register train-level and junction-level effect provider factories, including configurable ones.
 type: reference
 area: effects
 parent: Configuration
