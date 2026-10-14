@@ -151,6 +151,13 @@ Leave the mediator's own `ITrainExecutionService` in place, and give the invoked
 `DeferQueuePromotion`: the run is queued in the transaction that enters the state, and each of those commits on its
 own.
 
+A scheduler dispatches the run. Entering the state only queues the run in `trax.work_queue`, through the mediator,
+which enqueues and does nothing more. Only `Trax.Scheduler`'s job dispatcher (registered by `AddScheduler()` on a host
+with a database provider) takes queued work and runs it, so there must be
+a scheduler on this host or another host sharing the database. The host does not check for one at startup, since
+the scheduler may live on a dedicated host; without one, the run stays queued and the instance waits in the
+invoking state.
+
 ## Who a run belongs to
 
 Decide whether the machine is user-owned (the default) or declares `SystemOwned()`, because that decides how its runs

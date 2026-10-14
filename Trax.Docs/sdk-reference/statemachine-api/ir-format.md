@@ -132,6 +132,24 @@ A rule is a tagged object keyed by `rule` (`present`, `absent`, `ofType`, `nonEm
 `clear`, `reset`, `set`, `custom`).
 See the [data model](/docs/sdk-reference/statemachine-api/declarative-data-model) for each shape.
 
+A rule on a field carries `source` (`"context"` or `"input"`) and `field` (the camelCase key). `compare`, `count`
+and `length` add `op` and a numeric `value`; `op` is `gt`, `gte`, `lt`, `lte` or `eq`. `compare` reads the number
+itself, `count` an array's length and `length` a string's:
+
+```json
+{ "rule": "compare", "source": "input", "field": "rank", "op": "lt", "value": 13 }
+{ "rule": "count", "source": "context", "field": "items", "op": "gte", "value": 1 }
+```
+
+A `set` reduction is a list of steps, each writing one context field. A step's `value` is either an input field
+(`{ "input": <field> }`, from `.FromInput(...)`) or a constant (`{ "const": <JSON value> }`, from `.ToValue(...)`):
+
+```json
+{ "reduce": "set", "steps": [
+  { "field": "paidWith", "value": { "input": "coin" } },
+  { "field": "status", "value": { "const": "paid" } } ] }
+```
+
 ## Outcomes
 
 A state that [invokes a train](/docs/statemachine/invoking-trains) adds three triggers of their own

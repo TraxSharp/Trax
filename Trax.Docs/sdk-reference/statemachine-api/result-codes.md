@@ -47,7 +47,7 @@ client treats a code it does not recognise as a refusal, so a code added later d
 | `too-large` | save, advance, start | the snapshot, the trigger input, the start input, or the advanced or started snapshot exceeds `SnapshotLimits.MaxSnapshotBytes` (64 KiB); nothing was written. The trigger input is measured before it is validated or the draft is read, on every advance path, and the start input before it is read |
 | `discard-not-allowed` | discard | the server put the instance in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), or it is in a state that invokes a train, or an effect is pending on it. It is the record of what the server did, so its owner may not discard it; nothing was deleted. A row from before the record existed is judged by its state: a committed state, an effect's target, an invoking state, an invoked train's outcome target or a gated event's target. A retry answers the same, unless the owner's own event has moved the instance on since |
 | `request-id-reused` | advance, send, start | the request id was last used for a different trigger, so this is not a retry of it; send a new id. A send is refused before its effect runs |
-| `effect-bound` | advance | the trigger runs the machine's irreversible effect from this state, so only a send fires it; nothing was written |
+| `effect-bound` | advance (server) | the trigger runs the machine's irreversible effect from this state, so only a send fires it; nothing was written. The server's advance refuses it (the draft service and `IMachineInstances.Advance`); the engine's `Advance` does not, and fires the edge |
 | `state-reserved` | save | the snapshot is in a committed state or an effect's target and the stored draft is not; only a send puts a draft there, and nothing was written |
 | `draft-committed` | save | the stored draft is in a committed state or an effect's target and the save would change it; only a reset to the initial state that the machine declares from that state is accepted, and a save identical to the stored draft succeeds without a write |
 | `draft-unreadable` | save | the stored draft fails rehydration, so only a reset to the initial state may overwrite it |
@@ -72,7 +72,8 @@ refusals are checked in this order, and the first that applies is the answer: an
 (`no-transition`), an outcome trigger (`outcome-bound`), a timer trigger (`timer-bound`), no edge from the current
 state (`no-transition`), `invalid-input`, `guard-failed`, a duration the target state's timer cannot read from the
 successor context (`invalid-input`), `invalid-context` ([ADR 0048](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)).
-`DraftRefusalCodes` declares the codes for refusals caused by the caller or the request: `Forbidden`
+`effect-bound` is not among them: the engine fires an effect-bound edge like any other, and only the server refuses
+it. `DraftRefusalCodes` declares the codes for refusals caused by the caller or the request: `Forbidden`
 (`forbidden`), `RequestIdReused` (`request-id-reused`), `EffectBound` (`effect-bound`), `EffectInProgress` (`effect-in-progress`), `SaveNotAllowed` (`save-not-allowed`), `DiscardNotAllowed`
 (`discard-not-allowed`), `ClientOutdated`
 (`client-outdated`), `ServerOutdated` (`server-outdated`), `TooManyDrafts` (`too-many-drafts`, a start or a save

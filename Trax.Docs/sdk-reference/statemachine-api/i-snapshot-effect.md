@@ -97,9 +97,11 @@ advanced while the effect ran makes the send report `conflict`, and the claim ke
 the content the effect ran on (`SnapshotFingerprint.Of(service.Serialize(snapshot))`). A later send replays it only
 onto a draft whose content has that fingerprint, and is refused as `draft-changed` otherwise.
 
-The transition itself is fired only by the send. An advance of its trigger is refused as `effect-bound`, and the
-generic save, which serves only machines with no server-side behaviour, refuses every save of a machine with an
-effect as `save-not-allowed`; see
+On the server the transition is fired only by the send. The server refuses an advance of its trigger as
+`effect-bound` (the draft service and `IMachineInstances.Advance` both check it); the bare engine does not:
+`SnapshotMachine.Advance` fires the edge like any other, so code that drives the engine directly is not held to
+the send. The generic save, which serves only machines with no server-side behaviour, refuses every save of a
+machine with an effect as `save-not-allowed`; see
 [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write).
 
 The receipt `Run` returns is handed to the transition's reducer as `input["receipt"]`, which is how the send
