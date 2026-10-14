@@ -1,14 +1,17 @@
 ---
 title: Junction Logger
-description: The AddJunctionLogger effect that records JunctionMetadata before and after each junction, the serializeJunctionData option and its EffectJunction requirement.
+description: "The AddJunctionLogger effect that records JunctionMetadata before and after each junction, the serializeJunctionData option and its EffectJunction requirement."
 type: reference
 area: effects
 nav_order: 5
+source:
+  - Trax.Effect/src/Trax.Effect.JunctionProvider.Logging
+  - Trax.Effect/src/Trax.Effect/Models/JunctionMetadata/JunctionMetadata.cs
 ---
 
 # Junction Logger
 
-The junction logger fires before and after each junction in a train, logging structured `JunctionMetadata` entries. This gives you per-junction observability: which junction is running, how long it took, what its Railway state was, and optionally what it returned.
+The junction logger runs before and after each junction of a train and logs a structured `JunctionMetadata` entry for it: which junction ran, how long it took, its railway state, and optionally what it returned.
 
 ## Registration
 
@@ -16,7 +19,7 @@ The junction logger fires before and after each junction in a train, logging str
 dotnet add package Trax.Effect.JunctionProvider.Logging
 ```
 
-```csharp
+```csharp compile
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Logging.Extensions;
 
@@ -65,45 +68,13 @@ After the junction completes:
 
 The completed `JunctionMetadata` is logged at the configured log level under the log category `Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider.JunctionLoggerProvider`, which is the name to use in a logging filter. The provider type itself is internal.
 
-## Identifying the run from inside a junction
-
-`TrainMetadataId` is the primary key of the run's `trax.metadata` row, so a junction can read its own run back without a scan. Prefer it to `TrainExternalId` for that: `metadata.external_id` has no unique index, so a dispatch retry leaves several rows sharing one external id (the earlier ones `Failed`), and the column is unindexed, so looking a run up by it scans the largest table Trax writes.
-
-The value is the same on every execution path, because each one runs under the metadata row it was dispatched with: a direct run through `ITrainExecutionService.RunAsync`, a queued run picked up by a local worker, and a remote or Lambda run. It is `0` when no data provider is registered, since nothing persisted the run and there is no row to point at.
-
-The usual reason to want it is a liveness check before an irreversible side effect. The reaper and startup recovery can mark a slow run `Failed` without telling it, and a run that keeps going after that can have its work overtaken by the next run for the same subject. Re-reading the row immediately before the side effect lets the junction refuse to act:
-
-```csharp
-public class PatchCustomerJunction(IDataContext db) : EffectJunction<PatchCustomer, Unit>
-{
-    public override async Task<Unit> Run(PatchCustomer input)
-    {
-        var state = await db.Metadatas
-            .Where(m => m.Id == Metadata!.TrainMetadataId)
-            .Select(m => m.TrainState)
-            .FirstOrDefaultAsync();
-
-        if (state != TrainState.InProgress)
-            throw new TrainException("This run was already failed; refusing to send.");
-
-        return await SendAsync(input);
-    }
-}
-```
-
-> **Read `Metadata` inside `Run`, and register the junction scoped or transient.** `EffectJunction.Metadata` is assigned once per execution. A junction registered with `AddSingletonTraxJunction` and reached through `IChain` is one object shared by every concurrent run, so whichever run assigned it last is the one the others read. For logging that is merely confusing. For a check like the one above it is wrong in the worst direction: the junction reads a live run's id, concludes the run is still going, and sends.
-
 ## Requires EffectJunction
 
-The junction logger only fires on junctions that inherit from `EffectJunction<TIn, TOut>`. If your junctions use the base `Junction<TIn, TOut>`, the logger has nothing to hook into and won't produce any output.
+The junction logger runs only around junctions that inherit from `EffectJunction<TIn, TOut>`; a plain `Junction<TIn, TOut>` produces no entry. See [EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction).
 
-See [Junctions: EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction) for the difference between the two.
+## Identifying the run from inside a junction
 
-## When to Use It
-
-- **Debugging slow trains**: The timing data shows which junction is the bottleneck.
-- **Tracing failures**: The Railway state tells you exactly where and why a train switched to the left track.
-- **Development**: Pair with `serializeJunctionData: true` to see junction-by-junction data flow through the chain.
+`TrainMetadataId` is the primary key of the run's row. [Check the run is still live before a side effect](/docs/effect/check-the-run-is-still-live) uses it from inside a junction.
 
 ## SDK Reference
 
