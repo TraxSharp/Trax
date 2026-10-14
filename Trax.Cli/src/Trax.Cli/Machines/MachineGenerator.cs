@@ -311,7 +311,9 @@ internal sealed partial class MachineGenerator
     {
         if (!_node.IsAvailable())
             throw new InvalidOperationException(
-                $"Generating {what} needs node on PATH. Install Node.js (>= 22), or generate --ir-out only."
+                $"Generating {what} needs Node.js 22 or later, and node was not found on PATH (or --node is not "
+                    + "an executable). Install it, pass --node with the absolute path of node, or generate "
+                    + "--ir-out only."
             );
         if (!File.Exists(script))
             throw new InvalidOperationException(

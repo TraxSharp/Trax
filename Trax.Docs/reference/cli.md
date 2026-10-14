@@ -366,7 +366,7 @@ before writing anything.
 | `--import-style` | No | Twin engine imports: `specifier` (one collapsed import from `--specifier`, for a frontend that installs `@traxsharp/state-machine` from npm; the default) or `relative` (paths into the engine's `src`, for a machine inside the engine checkout; the default with `--engine-src`). |
 | `--specifier` | No | Module specifier used with `--import-style specifier` (default `@traxsharp/state-machine`). |
 | `--tools-dir` | No | The directory holding `generate-twin.mjs` and `generate-corpus.mjs` (default: the `tools/` beside `--engine-src`, else the ones bundled into the tool). |
-| `--node` | No | Path to the `node` executable (default: `node`). |
+| `--node` | No | The `node` executable: an absolute path, or a name looked up on `PATH` (default: `node`). Only absolute `PATH` entries are searched, never the current directory, so a `node` file at the root of the checkout you run in is not run. A relative path such as `./node` is refused. |
 
 ### `trax machine check`
 
