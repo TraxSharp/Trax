@@ -465,7 +465,7 @@ internal static class MachineCommand
                 new Option<string?>("--node")
                 {
                     Description =
-                        "The node executable: an absolute path, or a name looked up on PATH (default: node). Never resolved from the current directory; a relative path is refused.",
+                        "The node executable: an absolute path, or a name looked up on PATH (default: node). Never resolved from the current directory; a relative path is refused, and on Windows so is a .cmd or .bat shim.",
                 }
             );
     }

@@ -173,6 +173,139 @@ public class ExecutableLookupTests
         ExecutableLookup.Candidates("node", ".EXE", windows: false).Should().Equal("node");
     }
 
+    // A batch file runs through cmd.exe, which parses its arguments a second time (BatBadBut), so on Windows
+    // only a .exe or .com is ever run. The file system is a set of paths, so these hold on every OS.
+
+    [Test]
+    public void On_Windows_the_node_exe_on_PATH_is_chosen_over_a_shim_in_an_earlier_entry()
+    {
+        ExecutableLookup
+            .Resolve(
+                "node",
+                @"C:\nvm;C:\nodejs",
+                ".COM;.EXE;.BAT;.CMD",
+                windows: true,
+                Files(@"C:\nvm\node.cmd", @"C:\nodejs\node.exe")
+            )
+            .Should()
+            .Be(@"C:\nodejs\node.EXE");
+    }
+
+    [Test]
+    public void On_Windows_a_shim_is_skipped_even_when_PATHEXT_lists_it_first()
+    {
+        ExecutableLookup
+            .Resolve(
+                "node",
+                @"C:\nodejs",
+                ".CMD;.BAT;.EXE",
+                windows: true,
+                Files(@"C:\nodejs\node.cmd", @"C:\nodejs\node.exe")
+            )
+            .Should()
+            .Be(@"C:\nodejs\node.EXE");
+    }
+
+    [TestCase("node.cmd")]
+    [TestCase("node.BAT")]
+    public void On_Windows_a_shim_that_is_all_PATH_holds_is_refused_by_name(string shim)
+    {
+        var resolve = () =>
+            ExecutableLookup.Resolve(
+                "node",
+                @"C:\nvm",
+                null,
+                windows: true,
+                Files($@"C:\nvm\{shim}")
+            );
+
+        resolve
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                $@"*C:\nvm\{shim}, a batch file*real executable (.exe or .com)*--node*node.exe*"
+            );
+    }
+
+    [TestCase(@"C:\nvm\node.cmd")]
+    [TestCase(@"C:\nvm\node.bat")]
+    [TestCase("node.cmd")]
+    [TestCase("NODE.CMD")]
+    public void On_Windows_a_node_option_naming_a_batch_file_is_refused(string node)
+    {
+        var resolve = () =>
+            ExecutableLookup.Resolve(node, @"C:\nvm", null, windows: true, Files(node));
+
+        resolve
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("--node names a batch file*runs through cmd.exe*");
+    }
+
+    [TestCase(@"C:\nodejs\node")]
+    [TestCase(@"C:\nodejs\node.ps1")]
+    public void On_Windows_an_absolute_node_option_must_be_an_executable_image(string node)
+    {
+        var resolve = () => ExecutableLookup.Resolve(node, "", null, windows: true, Files(node));
+
+        resolve
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("--node must name node.exe on Windows*");
+    }
+
+    [TestCase(@"C:\nodejs\node.exe")]
+    [TestCase(@"C:\nodejs\NODE.EXE")]
+    [TestCase(@"\\server\share\node.com")]
+    public void On_Windows_an_absolute_executable_is_used_as_given(string node)
+    {
+        ExecutableLookup.Resolve(node, "", null, windows: true, Files(node)).Should().Be(node);
+    }
+
+    [Test]
+    public void On_Windows_a_script_PATHEXT_finds_is_passed_over()
+    {
+        ExecutableLookup
+            .Resolve(
+                "node",
+                @"C:\scripts",
+                ".PS1;.EXE",
+                windows: true,
+                Files(@"C:\scripts\node.PS1")
+            )
+            .Should()
+            .BeNull();
+    }
+
+    [Test]
+    public void Off_Windows_a_file_named_like_a_shim_is_an_ordinary_executable()
+    {
+        IgnoreOnWindows();
+        Script(Path.Combine(_root, "node.cmd"), "exit 0");
+
+        ExecutableLookup
+            .Resolve("node.cmd", _root, null, windows: false)
+            .Should()
+            .Be(Path.Combine(_root, "node.cmd"));
+    }
+
+    [TestCase("node.exe", true)]
+    [TestCase("NODE.COM", true)]
+    [TestCase(@"C:\a.b\node.exe", true)]
+    [TestCase("node.cmd", false)]
+    [TestCase(@"C:\node.exe\node", false)]
+    [TestCase("node", false)]
+    public void On_Windows_only_an_exe_or_com_is_a_real_executable(string path, bool real)
+    {
+        ExecutableLookup.IsRealExecutable(path).Should().Be(real);
+    }
+
+    private static Func<string, bool> Files(params string[] paths)
+    {
+        var set = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+        return set.Contains;
+    }
+
     private static void IgnoreOnWindows()
     {
         if (OperatingSystem.IsWindows())
