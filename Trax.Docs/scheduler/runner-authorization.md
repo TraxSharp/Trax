@@ -1,6 +1,6 @@
 ---
 title: Runner authorization posture
-description: "The postures a Trax runner accepts work under (signing key, authorization policy, unsigned), what each transport checks, how refusals look and where nonces are kept."
+description: "The postures a Trax runner accepts work under (signing key, policy, unsigned), what each transport checks, how refusals look and where nonces are kept."
 type: reference
 area: scheduling
 nav_order: 22

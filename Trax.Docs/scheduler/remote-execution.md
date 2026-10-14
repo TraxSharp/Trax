@@ -1,6 +1,6 @@
 ---
 title: Choosing where trains run
-description: "The models for running scheduled and synchronous trains off the scheduler host (HTTP runners, SQS, direct Lambda, standalone workers), what each costs and how they fail."
+description: "The models for running trains off the scheduler host (HTTP runners, SQS, direct Lambda, standalone workers), what each costs and how they fail."
 type: explanation
 area: scheduling
 nav_order: 7

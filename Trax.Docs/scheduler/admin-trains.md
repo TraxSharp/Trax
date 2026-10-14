@@ -1,6 +1,6 @@
 ---
 title: Administrative Trains
-description: "The internal trains and hosted services AddScheduler registers, which data provider each needs, how they meet at the work queue, and why they skip MaxActiveJobs."
+description: "The internal trains and hosted services AddScheduler registers, which provider each needs, how they meet at the work queue and why they skip MaxActiveJobs."
 type: explanation
 area: scheduling
 nav_order: 2
