@@ -22,18 +22,25 @@ namespace Trax.Api.Dashboard.Serving;
 /// deep link, such as a train's page named <c>Trax.Samples.Orders.IShipOrderTrain</c>), answered
 /// with the entry page.</item>
 /// <item>The entry page is revalidated on every load (<c>no-cache</c>, with an ETag), so a new
-/// build is picked up at once; files under <c>assets/</c> are named by their content and cached
-/// for good.</item>
+/// build is picked up at once, and is never stored by a shared cache (<c>private</c>). Files
+/// under <c>assets/</c> are named by their content and cached for good, by the browser alone
+/// unless the shell is anonymous (<see cref="AssetCacheControl"/>).</item>
 /// <item>Every response carries the security headers in <see cref="SetSecurityHeaders"/>.</item>
 /// </list>
 /// </remarks>
-internal sealed partial class DashboardEndpoint(DashboardAssets assets, Func<string> graphQLPath)
+internal sealed partial class DashboardEndpoint(
+    DashboardAssets assets,
+    Func<string> graphQLPath,
+    bool anonymousShell
+)
 {
     /// <summary>The route value the catch-all segment of the dashboard's route binds to.</summary>
     internal const string PathRouteValue = "dashboardPath";
 
-    private const string ImmutableCache = "public, max-age=31536000, immutable";
+    private const string PrivateImmutableCache = "private, max-age=31536000, immutable";
+    private const string PublicImmutableCache = "public, max-age=31536000, immutable";
     private const string Revalidate = "no-cache";
+    private const string PrivateRevalidate = "private, no-cache";
 
     private static readonly JsonSerializerOptions ConfigJson = new(JsonSerializerDefaults.Web);
 
@@ -77,7 +84,9 @@ internal sealed partial class DashboardEndpoint(DashboardAssets assets, Func<str
                 asset.Content,
                 asset.ContentType,
                 asset.ETag,
-                DashboardAssets.IsContentHashed(asset.Path) ? ImmutableCache : Revalidate
+                DashboardAssets.IsContentHashed(asset.Path)
+                    ? AssetCacheControl(context, anonymousShell)
+                    : PrivateRevalidate
             );
             return;
         }
@@ -91,6 +100,17 @@ internal sealed partial class DashboardEndpoint(DashboardAssets assets, Func<str
 
         await WriteIndexAsync(context, basePath);
     }
+
+    /// <summary>
+    /// How long a content-hashed file may be kept, and by whom. Under a policy or roles posture,
+    /// or when anything in the host signed the caller in, only the caller's browser keeps it: a
+    /// shared cache would hand a gated file to anyone. An anonymous shell nobody signed in to may
+    /// be kept by shared caches too.
+    /// </summary>
+    internal static string AssetCacheControl(HttpContext context, bool anonymousShell) =>
+        anonymousShell && context.User.Identity?.IsAuthenticated != true
+            ? PublicImmutableCache
+            : PrivateImmutableCache;
 
     /// <summary>
     /// Whether a path the build does not have names a file rather than a route of the app: it is
@@ -144,7 +164,7 @@ internal sealed partial class DashboardEndpoint(DashboardAssets assets, Func<str
             html,
             "text/html; charset=utf-8",
             DashboardAssets.ETagOf(html),
-            Revalidate
+            PrivateRevalidate
         );
     }
 

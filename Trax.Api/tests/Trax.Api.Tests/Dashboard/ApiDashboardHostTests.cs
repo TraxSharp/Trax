@@ -97,6 +97,9 @@ public partial class ApiDashboardHostTests
                 "the base must precede every relative URL it resolves"
             );
         response.Headers.CacheControl!.NoCache.Should().BeTrue("a new build must be seen at once");
+        response
+            .Headers.CacheControl.Private.Should()
+            .BeTrue("the page is served only to whoever passed the posture");
     }
 
     [Test]
@@ -169,6 +172,47 @@ public partial class ApiDashboardHostTests
         (await response.Content.ReadAsStringAsync()).Should().Be("console.log('app');");
         response.Headers.CacheControl!.ToString().Should().Contain("immutable");
         response.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromDays(365));
+        response
+            .Headers.CacheControl.Public.Should()
+            .BeTrue("an anonymous shell nobody signed in to may be kept by shared caches");
+    }
+
+    [Test]
+    public async Task Under_a_posture_a_hashed_asset_is_cached_by_the_browser_alone()
+    {
+        await using var app = await StartAsync(
+            e => e.UseTraxApiDashboard(o => o.RequireRoles("Admin")),
+            auth: AuthSetup.SchemeOnly
+        );
+
+        var asset = await GetAsync(
+            app,
+            "/trax/dashboard/assets/index-3f2a9c.js",
+            user: "ada;Admin"
+        );
+        var page = await GetAsync(app, "/trax/dashboard/", user: "ada;Admin");
+
+        asset.StatusCode.Should().Be(HttpStatusCode.OK);
+        asset
+            .Headers.CacheControl!.Private.Should()
+            .BeTrue($"{Adr}: a shared cache would hand a gated file to anyone");
+        asset.Headers.CacheControl.Public.Should().BeFalse();
+        asset.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromDays(365));
+        page.Headers.CacheControl!.Private.Should().BeTrue();
+        page.Headers.CacheControl.NoCache.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Under_an_anonymous_shell_a_signed_in_caller_gets_private_assets()
+    {
+        await using var app = await StartAsync(e => Anonymous(e), auth: AuthSetup.FallbackPolicy);
+
+        var asset = await GetAsync(app, "/trax/dashboard/assets/index-3f2a9c.js", user: "ops");
+
+        asset.StatusCode.Should().Be(HttpStatusCode.OK);
+        asset
+            .Headers.CacheControl!.Private.Should()
+            .BeTrue("the fallback policy gated it, so no shared cache may keep it");
     }
 
     [Test]

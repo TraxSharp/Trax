@@ -111,7 +111,8 @@ public static class ApiDashboardEndpointExtensions
 
         var endpoint = new DashboardEndpoint(
             assets,
-            () => options.GraphQLPath ?? graphQL.MappedRoutePrefix ?? DefaultGraphQLPath
+            () => options.GraphQLPath ?? graphQL.MappedRoutePrefix ?? DefaultGraphQLPath,
+            options.AnonymousShellAllowed
         );
         var builder = endpoints
             .MapMethods(

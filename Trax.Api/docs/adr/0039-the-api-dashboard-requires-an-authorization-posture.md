@@ -45,6 +45,9 @@ gated.
 policy that is not registered, a policy naming a scheme that is not registered, no scheme to
 challenge with, or a default forbid scheme that is not registered.
 
+**A gated file is never kept by a shared cache.** The page is `private, no-cache`; content-hashed
+files are `private` unless the shell is anonymous and nobody signed in.
+
 **The posture needs a scheme a browser carries.** Loading a page sends cookies, never an
 `X-Api-Key` or `Authorization` header, so a host whose only scheme is an API key or a bearer token
 cannot gate the shell with it: such a host uses a cookie or OpenID Connect sign-in for the shell,
@@ -56,8 +59,8 @@ GraphQL with the key or token the operator enters, as it always has.
 - `ApiDashboardHostTests` pins the refusal without a posture, the contradiction between the
   opt-in and a policy, the startup failures for an unregistered policy and for a posture with no
   scheme to challenge with, the posture on the page, a deep link and an asset (401, 403, 200), the
-  warning and the fallback policy staying in force under `AllowAnonymousShell()`, and that the
-  returned builder adds to the posture.
+  warning and the fallback policy staying in force under `AllowAnonymousShell()`, that the
+  returned builder adds to the posture, and that gated files are cached `private`.
 - [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) is the rule this
   produces.
 
@@ -67,3 +70,4 @@ loaded, and everything it does afterwards is a GraphQL request, authorized there
 ## Changelog
 
 - **2026-10-13**: Recorded.
+- **2026-10-13**: Gated files are cached `private`.

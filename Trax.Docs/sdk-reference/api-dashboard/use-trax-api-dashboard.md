@@ -105,8 +105,8 @@ pages.
 | Request | Answer |
 |---------|--------|
 | `{path}` | A redirect to `{path}/`, keeping the query string. |
-| `{path}/` and any route of the app, such as `{path}/executions/42` or `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` | The app's page, with `Cache-Control: no-cache` and an ETag. |
-| `{path}/assets/<name>-<hash>.js` and the app's other files | The file, with its content type. Files under `assets/` are named by their content and sent with `Cache-Control: public, max-age=31536000, immutable`; the others are revalidated. |
+| `{path}/` and any route of the app, such as `{path}/executions/42` or `{path}/trains/Trax.Samples.Orders.IShipOrderTrain` | The app's page, with `Cache-Control: private, no-cache` and an ETag. No shared cache may keep it. |
+| `{path}/assets/<name>-<hash>.js` and the app's other files | The file, with its content type. Files under `assets/` are named by their content and cached for a year as `immutable`: `private` under `RequirePolicy` or `RequireRoles`, or whenever the caller was signed in, so a shared cache never hands a gated file to someone else; `public` only for an anonymous shell nobody signed in to. The other files are revalidated. |
 | Any other path under `{path}/assets/`, or one whose last segment ends in a lower-case file extension (`.js`, `.png`, `.json`) | `404`. A missing script is never answered with the page. The dots in a .NET name, such as a train's, are not an extension. |
 
 `GET` and `HEAD` are served, and a matching `If-None-Match` is answered with `304`.
