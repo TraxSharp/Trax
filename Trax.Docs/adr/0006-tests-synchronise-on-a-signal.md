@@ -71,5 +71,5 @@ Not covered:
 
 ## Changelog
 
-- **2026-09-11**: Recorded.
 - **2026-10-14**: The start guard added; baselines made exact.
+- **2026-09-11**: Recorded.
