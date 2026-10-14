@@ -7,7 +7,8 @@
 // the dev server proxies to the API host.
 //
 // principal is an opaque fingerprint of who loaded the page ("anonymous" when nobody signed in to
-// the shell); the stored GraphQL credential is bound to it (lib/auth.ts).
+// the shell, "unidentified" when someone did but the host could not tell who); the stored GraphQL
+// credential is bound to it (lib/auth.ts).
 //
 // Both values must be paths on this origin. Anything else is ignored rather than followed, so a
 // page can never be pointed at another host's API with this browser's credential.
