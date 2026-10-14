@@ -103,14 +103,49 @@ own origin passes the GraphQL endpoint's origin check. Anything else served from
 can read that `localStorage`, so serve the dashboard from a host that does not serve untrusted
 pages.
 
+**Each dashboard keeps its own credential.** The app stores it under a `localStorage` key named
+after the page's base path and its GraphQL path, `trax-dashboard-credential:` followed by both, so
+two `UseTraxApiDashboard` mappings on one origin never send one's credential to the other's
+endpoint. A credential an earlier version stored under the single shared key
+`trax-dashboard-api-key` is deleted when the app loads, not moved, because nothing records which
+endpoint it was for.
+
 **The stored credential belongs to whoever signed in to the shell.** The page's runtime config
 carries an opaque fingerprint of the principal that loaded it: a SHA-256 of the authentication type
-and the caller's identifier (the name identifier claim, else `sub`, else the name), or `anonymous`
-when nobody signed in. The app stores the credential with the fingerprint it was entered under, and
-forgets it when a page loads with a different one. So in a shared browser the next person to pass
-the posture is asked for their own key rather than reusing the last one's, and signing out of the
-shell's sign-in drops the key at the next load. Under `AllowAnonymousShell()` with nothing signed
-in, every load is `anonymous` and the key stays until the operator disconnects.
+and the claim that identifies the caller (the name identifier claim, else `sub`, else the
+identity's name claim), qualified by that claim's type and issuer, or `anonymous` when nobody
+signed in. No other claim is hashed, so claims that change on every sign-in (`iat`, `exp`,
+`auth_time`, `jti`, session ids) do not change it. A caller who is signed in but carries none of
+those claims is `unidentified`, and the app keeps the credential they enter in memory for that
+page only, never in `localStorage`, so they enter it again on the next load. The app stores the
+credential with the fingerprint it was entered under, and forgets it when a page loads with a
+different one. So in a shared browser the next person to pass the posture is asked for their own
+key rather than reusing the last one's. Under `AllowAnonymousShell()` with nothing signed in, every
+load is `anonymous` and the key stays until the operator chooses **Change credential**.
+
+**Signing out of the shell does not remove the stored key.** The app forgets a credential only when
+it runs, and after a sign-out the posture refuses the next request for the dashboard, so no app code
+runs. The key stays in `localStorage`, readable by any page on the same origin, until a page loads
+under someone else's fingerprint, or the operator chooses **Change credential** first, which removes
+it. A tab left open keeps working too: the key, not the shell's sign-in, authorizes its GraphQL
+requests. Clear it on the host's own sign-out path. The broad way is a `Clear-Site-Data: "storage"`
+header on the sign-out response, which removes all of the origin's storage, not only the dashboard's
+(browsers honor it only over HTTPS):
+
+```csharp compile
+using Microsoft.AspNetCore.Authentication;
+
+app.MapPost("/signout", async context =>
+{
+    await context.SignOutAsync();
+    context.Response.Headers["Clear-Site-Data"] = "\"storage\"";
+    context.Response.Redirect("/");
+});
+```
+
+A sign-out page that runs script can instead remove only the dashboard's keys, the ones that start
+with `trax-dashboard-credential:`. The dashboard never sends `Clear-Site-Data` itself, refusals
+included, because it would wipe storage the rest of the origin owns.
 
 ## What it serves
 
