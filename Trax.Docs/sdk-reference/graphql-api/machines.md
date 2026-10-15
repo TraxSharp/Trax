@@ -86,7 +86,9 @@ accepts the new spelling with [`ShareEnumWithMachines<TEnum>()`](/docs/sdk-refer
 An enum declared in a Trax assembly, such as `TrainState`, is never shared, since Trax's own fields
 (`TrainLifecycleEvent.trainState`, the `operations` filters) carry it: a machine that holds one refuses the start,
 naming the enum, whether or not the host called `ShareEnumWithMachines` for it, and the call itself throws. Give the
-machine its own enum. The samples (`Trax.Samples.*`) count as consumer code. A GraphQL enum type the host binds
+machine its own enum. Trax tells its own assemblies by name: one named `Trax` or `Trax.*` counts as Trax's, so a
+consumer assembly named `Trax.Billing` has its enums refused the same way. The samples (`Trax.Samples.*`) and test
+projects (a `Tests` segment) count as consumer code. A GraphQL enum type the host binds
 to such an enum itself refuses the start too. So does a member whose stored name is not a GraphQL name, is `true`,
 `false` or `null`, or starts with `__`. Only `System` and the namespaces under it are treated as the framework's; a
 record in `Systematic.Orders` is walked like any other. An enum held inside a class deriving from a list, a dictionary or a tuple

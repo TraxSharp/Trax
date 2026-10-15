@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Reflection.Emit;
 using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
@@ -182,6 +184,40 @@ public class MachineEnumsTests
         Trax.Api.GraphQL.TypeModules.MachineEnums.IsTrax(typeof(SharedPriority))
             .Should()
             .BeFalse("a test project's enum is consumer code, per " + Adr);
+    }
+
+    [Test]
+    public void An_enum_in_an_assembly_named_like_trax_is_refused_in_words_that_say_why()
+    {
+        var name = new AssemblyName("Trax.Billing");
+        var module = AssemblyBuilder
+            .DefineDynamicAssembly(name, AssemblyBuilderAccess.Run)
+            .DefineDynamicModule(name.Name!);
+        var plan = module.DefineEnum("Billing.Plan", TypeAttributes.Public, typeof(int));
+        plan.DefineLiteral("Free", 0);
+        var billing = plan.CreateType();
+        var builder = new Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder(
+            new ServiceCollection()
+        );
+
+        var share = () =>
+            builder
+                .GetType()
+                .GetMethod("ShareEnumWithMachines")!
+                .MakeGenericMethod(billing)
+                .Invoke(builder, null);
+
+        share
+            .Should()
+            .Throw<TargetInvocationException>()
+            .WithInnerException<InvalidOperationException>()
+            .Which.Message.Should()
+            .Contain("Billing.Plan")
+            .And.Contain(
+                "declared in Trax.Billing, and an assembly named Trax or Trax.* counts as Trax's own",
+                "Trax tells its own enums by the assembly's name, so the refusal says so, per "
+                    + Adr
+            );
     }
 
     [Test]

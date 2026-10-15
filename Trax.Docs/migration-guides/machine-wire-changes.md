@@ -53,7 +53,8 @@ any other field that carries the same enum would change its spelling with it, a 
 extension's: the host refuses to start, naming the enum and the field. Give one side its own enum, or
 call `ShareEnumWithMachines<TEnum>()` on `AddTraxGraphQL` and update that field's clients to the new spelling. A
 machine that holds one of Trax's own enums, such as `TrainState`, is refused whatever the host calls, and
-`ShareEnumWithMachines<TrainState>()` throws: give the machine its own enum. A member whose stored name is `true`, `false`,
+`ShareEnumWithMachines<TrainState>()` throws: give the machine its own enum. An enum counts as Trax's when its
+assembly is named `Trax` or `Trax.*`, a consumer's `Trax.Billing` included. A member whose stored name is `true`, `false`,
 `null` or starts with `__`, and a GraphQL enum type the host binds to such an enum itself, are refused at startup too.
 Before, a client that sent `HIGH_PRIORITY` with a `clientResult` was refused as client
 divergence, since the server stored `HighPriority`.

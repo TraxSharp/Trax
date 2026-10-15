@@ -123,18 +123,24 @@ internal static partial class MachineEnums
             .ToList();
     }
 
-    /// <summary>Why a machine cannot share <paramref name="type"/>, a Trax enum, and what to do instead.</summary>
+    /// <summary>
+    /// Why a machine cannot share <paramref name="type"/>, a Trax enum, and what to do instead. It names the assembly,
+    /// since Trax tells its own by the assembly's name: a consumer assembly named <c>Trax.Billing</c> counts too.
+    /// </summary>
     public static string TraxEnumRemedy(Type type) =>
-        "A machine spells its enums as the server stores them, GraphQL has one type per enum, and Trax's own fields "
+        $"It is declared in {type.Assembly.GetName().Name}, and an assembly named Trax or Trax.* counts as Trax's "
+        + "own, other than Trax.Samples.* and a test project (a Tests segment). "
+        + "A machine spells its enums as the server stores them, GraphQL has one type per enum, and Trax's own fields "
         + $"carry {type.Name} in upper snake case for the dashboard and every client, so Trax never shares its enums "
-        + "with machines. Give the machine its own enum and map it to and from "
+        + "with machines. Give the machine its own enum, in an assembly not named that way, and map it to and from "
         + type.Name
         + " where the machine needs it.";
 
     /// <summary>
     /// Whether <paramref name="type"/> is declared in one of Trax's own assemblies: one named <c>Trax</c> or
     /// <c>Trax.*</c>, other than the samples (<c>Trax.Samples.*</c>) and the test projects (a <c>Tests</c> segment),
-    /// which are consumer code.
+    /// which are consumer code. The name is all there is to read, since Trax's assemblies are not strong-named, so a
+    /// consumer assembly named <c>Trax.Billing</c> counts as Trax's own too, and its enums are never shared.
     /// </summary>
     public static bool IsTrax(Type type)
     {
