@@ -1,7 +1,13 @@
+using Trax.Core.Testing;
+using Trax.Core.Testing.Guards;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
 /// A skip is a runtime decision with a reason in the output, not an attribute that hides.
+/// The check is the shipped <see cref="HygieneGuards.NoIgnoreAttribute"/>, which also sees an
+/// <c>Ignore</c> combined with other attributes, a qualified or suffixed name, and a per-case
+/// <c>Ignore =</c> or <c>IgnoreReason =</c>.
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0005-a-skipped-test-is-a-runtime-decision.md</c>.</para>
 /// </summary>
@@ -9,74 +15,52 @@ namespace Trax.Samples.Tests.Meta.Tests;
 [TestFixture]
 public class NoIgnoreAttributeTests
 {
-    private static readonly Regex IgnoreAttribute = new(
-        @"\[\s*Ignore(\s*\(|\s*\])",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>
-    /// Files where [Ignore] is explicitly accepted. Each entry must justify why.
-    /// </summary>
-    private static readonly HashSet<string> KnownExceptions = new(StringComparer.Ordinal) { };
-
     [Test]
-    public void TestSources_DoNotUse_IgnoreAttribute()
+    public void TestSources_DoNotUse_IgnoreAttribute() => AssertClean(RepoRoot.Path);
+
+    [TestCase("[Test, Ignore(\"later\")] public void T() { }")]
+    [TestCase("[TestCase(1, Ignore = \"later\")] public void T(int i) { }")]
+    [TestCase("[NUnit.Framework.IgnoreAttribute(\"later\")] public void T() { }")]
+    public void Guard_fails_on_a_skip_attribute(string member)
     {
-        var offenders = new List<string>();
+        using var repo = new SyntheticRepo().Write(
+            "tests/Sample/SampleTests.cs",
+            $"public class SampleTests {{ {member} }}"
+        );
 
-        foreach (var file in SourceFiles.CSharp("tests"))
-        {
-            if (file.EndsWith("NoIgnoreAttributeTests.cs", StringComparison.Ordinal))
-                continue;
+        var act = () => AssertClean(repo.Root);
 
-            var rel = RepoRoot.Relative(file).Replace('\\', '/');
-            if (KnownExceptions.Contains(rel))
-                continue;
-
-            var content = File.ReadAllText(file);
-            var stripped = SourceText.StripCommentsAndStrings(content);
-            var hits = SourceText.MatchingLines(stripped, IgnoreAttribute);
-            foreach (var (line, _) in hits)
-                offenders.Add($"{rel}:{line}");
-        }
-
-        offenders
-            .Should()
-            .BeEmpty(
-                "[Ignore] silently hides failing tests. Trax.Docs/contributing/test-conventions.md > Skipping requires either "
-                    + "fixing the underlying code, fixing the test premise, or using Assert.Ignore(\"reason\") "
-                    + "at runtime with an explicit reachability check. If a file legitimately needs to be "
-                    + "opt-in via [Ignore] (e.g. placeholder tests gated on an upstream feature), add it to "
-                    + "KnownExceptions with a justification. Offenders:\n  "
-                    + string.Join("\n  ", offenders)
-            );
+        act.Should().Throw<AssertionException>().WithMessage("*SampleTests.cs:1*");
     }
 
     [Test]
-    public void KnownExceptions_AreNotStale()
+    public void Guard_fails_when_it_finds_no_test_source()
     {
-        var stale = new List<string>();
+        using var repo = new SyntheticRepo();
 
-        foreach (var rel in KnownExceptions)
-        {
-            var absolute = RepoRoot.Combine(rel.Replace('/', Path.DirectorySeparatorChar));
-            if (!File.Exists(absolute))
-            {
-                stale.Add($"{rel} (file no longer exists)");
-                continue;
-            }
+        var act = () => AssertClean(repo.Root);
 
-            var stripped = SourceText.StripCommentsAndStrings(File.ReadAllText(absolute));
-            if (!IgnoreAttribute.IsMatch(stripped))
-                stale.Add($"{rel} (no [Ignore] left — exception no longer needed)");
-        }
+        act.Should().Throw<AssertionException>().WithMessage("*inspected no*");
+    }
 
-        stale
-            .Should()
+    private static void AssertClean(string root)
+    {
+        var result = HygieneGuards.NoIgnoreAttribute(
+            new ArchitectureGuardOptions { RepoRootOverride = root }
+        );
+
+        result
+            .Inspected.Should()
+            .BeGreaterThan(
+                0,
+                "the guard inspected no test sources under tests/, so it checked nothing"
+            );
+        result
+            .Offenders.Should()
             .BeEmpty(
-                "A KnownExceptions entry is stale: the file is gone or no longer uses [Ignore]. "
-                    + "Remove the entry so the allowlist reflects reality:\n  "
-                    + string.Join("\n  ", stale)
+                "Trax.Docs/adr/0005-a-skipped-test-is-a-runtime-decision.md: a skip is "
+                    + "Assert.Ignore(\"reason\") at runtime, never an attribute. "
+                    + result.FailureMessage
             );
     }
 }
