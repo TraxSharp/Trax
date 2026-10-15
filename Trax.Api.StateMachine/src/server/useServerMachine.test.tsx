@@ -84,10 +84,10 @@ describe('useServerMachine', () => {
 
     await settle(() => screen.getByText('coin').click());
     expect(text('state')).toBe('Unlocked');
-    await settle(() => server.events[0].resolve({ kind: 'problem', code: 'guard-failed', message: 'no' }));
+    await settle(() => server.events[0].resolve({ kind: 'problem', code: 'GUARD_FAILED', message: 'no' }));
 
     expect(text('state')).toBe('Locked');
-    expect(screen.getByRole('alert').textContent).toBe('guard-failed');
+    expect(screen.getByRole('alert').textContent).toBe('GUARD_FAILED');
   });
 
   it('gone stops the hook, disables events and does not reload', async () => {
@@ -95,7 +95,7 @@ describe('useServerMachine', () => {
 
     await settle(() => server.stream('i-1').push({ type: 'gone' }));
     expect(text('status')).toBe('stopped');
-    expect(text('error')).toBe('gone');
+    expect(text('error')).toBe('GONE');
 
     await settle(() => screen.getByText('coin').click());
     expect(server.events).toHaveLength(0);
@@ -109,10 +109,10 @@ describe('useServerMachine', () => {
       const { server, view } = await renderReady();
       await settle(() => screen.getByText('coin').click());
       await settle(() =>
-        server.events[0].resolve({ kind: 'problem', code: 'client-outdated', message: 'reload' }),
+        server.events[0].resolve({ kind: 'problem', code: 'CLIENT_OUTDATED', message: 'reload' }),
       );
       expect(text('status')).toBe('stopped');
-      expect(text('error')).toBe('client-outdated');
+      expect(text('error')).toBe('CLIENT_OUTDATED');
       await settle(() => screen.getByText('push').click());
       expect(server.log.filter((op) => op !== 'unsubscribe')).toEqual(['subscribe', 'get', 'event']);
       view.unmount();
@@ -122,7 +122,7 @@ describe('useServerMachine', () => {
       const { server } = await renderReady();
       await settle(() => server.stream('i-1').push({ type: 'client-outdated' }));
       expect(text('status')).toBe('stopped');
-      expect(text('error')).toBe('client-outdated');
+      expect(text('error')).toBe('CLIENT_OUTDATED');
       await settle(() => screen.getByText('coin').click());
       expect(server.log.filter((op) => op !== 'unsubscribe')).toEqual(['subscribe', 'get']);
     }
@@ -205,7 +205,7 @@ describe('useServerMachine', () => {
     await settle();
     await settle(() => server.starts[0].fail());
     expect(text('status')).toBe('loading');
-    expect(screen.getByRole('alert').textContent).toBe('transport-error');
+    expect(screen.getByRole('alert').textContent).toBe('TRANSPORT_ERROR');
 
     await settle(() => screen.getByText('retry').click());
     expect(server.starts).toHaveLength(2);
@@ -257,7 +257,7 @@ describe('useServerMachine', () => {
     const server = new FakeMachineServer();
     const first = render(<Gate server={server} startInput={{}} newRequestId={() => 'minted-1'} />);
     await settle();
-    await settle(() => server.starts[0].resolve({ kind: 'problem', code: 'too-many-drafts', message: 'cap' }));
+    await settle(() => server.starts[0].resolve({ kind: 'problem', code: 'TOO_MANY_DRAFTS', message: 'cap' }));
     first.unmount();
 
     render(<Gate server={server} startInput={{}} newRequestId={() => 'minted-2'} />);

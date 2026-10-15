@@ -46,13 +46,13 @@ public sealed class SnapshotMachine<TState, TTrigger>
     /// rejection. Never throws.
     /// </summary>
     /// <remarks>
-    /// Refusals, first match wins: an unknown state or trigger (<c>no-transition</c>); an invoked train's
-    /// outcome trigger, which only the outcome path applies (<c>outcome-bound</c>); a state's timer trigger, which
-    /// only the server fires through <see cref="AdvanceTimer"/> (<c>timer-bound</c>); no edge from the current
-    /// state (<c>no-transition</c>); an input that does not match the trigger's declared schema
-    /// (<c>invalid-input</c>), checked before any guard reads it; a guard that declines (<c>guard-failed</c>);
+    /// Refusals, first match wins: an unknown state or trigger (<c>NO_TRANSITION</c>); an invoked train's
+    /// outcome trigger, which only the outcome path applies (<c>OUTCOME_BOUND</c>); a state's timer trigger, which
+    /// only the server fires through <see cref="AdvanceTimer"/> (<c>TIMER_BOUND</c>); no edge from the current
+    /// state (<c>NO_TRANSITION</c>); an input that does not match the trigger's declared schema
+    /// (<c>INVALID_INPUT</c>), checked before any guard reads it; a guard that declines (<c>GUARD_FAILED</c>);
     /// a target state whose timer reads a duration the successor context does not hold within its bounds
-    /// (<c>invalid-input</c>); and a successor context the target state refuses (<c>invalid-context</c>).
+    /// (<c>INVALID_INPUT</c>); and a successor context the target state refuses (<c>INVALID_CONTEXT</c>).
     /// </remarks>
     public AdvanceResult Advance(Snapshot snapshot, string trigger, JsonNode? input = null)
     {
@@ -60,25 +60,25 @@ public sealed class SnapshotMachine<TState, TTrigger>
         // they degrade to a handled rejection rather than a throw.
         if (!TryParseState(snapshot.State, out var fromState))
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"Unknown state '{snapshot.State}'."
             );
         // An outcome records what an invoked run produced. Taken from a caller, its input would be whatever the
         // caller sent and no run would have produced it.
         if (IsOutcomeTrigger(trigger))
             return new AdvanceResult.Rejected(
-                RejectionReasons.OutcomeBound,
+                RefusalCode.OutcomeBound,
                 "This step is completed by the outcome of its work, not by an action."
             );
         // A timer is the server acting when a state has been held long enough; no caller fires it.
         if (IsTimerTrigger(trigger))
             return new AdvanceResult.Rejected(
-                RejectionReasons.TimerBound,
+                RefusalCode.TimerBound,
                 "This step moves on by itself when its time is up, not by an action."
             );
         if (!TriggerNames.TryGetValue(trigger, out var triggerValue))
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"Unknown trigger '{trigger}'."
             );
 
@@ -89,14 +89,14 @@ public sealed class SnapshotMachine<TState, TTrigger>
             .ToList();
         if (matches.Count == 0)
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"No transition from '{snapshot.State}' on '{trigger}'."
             );
 
         // The input is checked against the trigger's declared schema before any guard reads it, so a guard and a
         // reducer only ever see an input of the declared shape.
         if (InputProblem(triggerValue, input) is { } inputProblem)
-            return new AdvanceResult.Rejected(RejectionReasons.InvalidInput, inputProblem);
+            return new AdvanceResult.Rejected(RefusalCode.InvalidInput, inputProblem);
 
         try
         {
@@ -110,7 +110,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 var message =
                     matches.Select(m => m.GuardMessage).FirstOrDefault(m => m is not null)
                     ?? $"A transition from '{snapshot.State}' on '{trigger}' exists but its guard rejected the input.";
-                return new AdvanceResult.Rejected(RejectionReasons.GuardFailed, message);
+                return new AdvanceResult.Rejected(RefusalCode.GuardFailed, message);
             }
 
             var toState = chosen.To;
@@ -125,7 +125,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
             // validator is the author's code and its exception text can carry anything, so the detail is fixed
             // and the exception rides along for the server's log only.
             return new AdvanceResult.Rejected(
-                RejectionReasons.InternalError,
+                RefusalCode.InternalError,
                 "The transition failed with an unexpected error."
             )
             {
@@ -140,15 +140,15 @@ public sealed class SnapshotMachine<TState, TTrigger>
     /// separate entry point for timers; <see cref="Advance"/> refuses them. Never throws.
     /// </summary>
     /// <returns>
-    /// The successor, or a rejection: <c>no-transition</c> when <paramref name="trigger"/> is not the timer of the
-    /// state the snapshot is in; <c>invalid-input</c> when the target's own timer reads a duration the context does not
-    /// hold within its bounds; <c>invalid-context</c> when the target refuses the context.
+    /// The successor, or a rejection: <c>NO_TRANSITION</c> when <paramref name="trigger"/> is not the timer of the
+    /// state the snapshot is in; <c>INVALID_INPUT</c> when the target's own timer reads a duration the context does not
+    /// hold within its bounds; <c>INVALID_CONTEXT</c> when the target refuses the context.
     /// </returns>
     internal AdvanceResult AdvanceTimer(Snapshot snapshot, string trigger)
     {
         if (!TryParseState(snapshot.State, out var fromState))
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"Unknown state '{snapshot.State}'."
             );
         if (
@@ -157,7 +157,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
             || !_def.Timers.TryGetValue(fromState, out var timer)
         )
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"No timer fires from '{snapshot.State}' on '{trigger}'."
             );
 
@@ -168,7 +168,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
         catch (Exception ex)
         {
             return new AdvanceResult.Rejected(
-                RejectionReasons.InternalError,
+                RefusalCode.InternalError,
                 "The transition failed with an unexpected error."
             )
             {
@@ -215,11 +215,11 @@ public sealed class SnapshotMachine<TState, TTrigger>
     {
         var (timer, timerProblem) = _def.EnteringTimer(toState, newContext);
         if (timerProblem is not null)
-            return new AdvanceResult.Rejected(RejectionReasons.InvalidInput, timerProblem);
+            return new AdvanceResult.Rejected(RefusalCode.InvalidInput, timerProblem);
 
         var contextError = _def.ValidateContext(toState, newContext);
         if (contextError is not null)
-            return new AdvanceResult.Rejected(RejectionReasons.InvalidContext, contextError);
+            return new AdvanceResult.Rejected(RefusalCode.InvalidContext, contextError);
 
         return new AdvanceResult.Transitioned(
             new Snapshot
@@ -241,9 +241,9 @@ public sealed class SnapshotMachine<TState, TTrigger>
     /// the target's validator. Never throws.
     /// </summary>
     /// <returns>
-    /// The successor, or a rejection: <c>no-transition</c> when the snapshot is not in a state that invokes a
-    /// train, or no <c>OnDone</c> edge accepts the output; <c>invalid-context</c> when the reduction produced a
-    /// context the target refuses; <c>internal-error</c> when a custom handler threw.
+    /// The successor, or a rejection: <c>NO_TRANSITION</c> when the snapshot is not in a state that invokes a
+    /// train, or no <c>OnDone</c> edge accepts the output; <c>INVALID_CONTEXT</c> when the reduction produced a
+    /// context the target refuses; <c>INTERNAL_ERROR</c> when a custom handler threw.
     /// </returns>
     internal AdvanceResult ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome) =>
         ApplyOutcomeCore(
@@ -261,10 +261,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
     internal AdvanceResult AdvanceOutcome(Snapshot snapshot, string trigger, JsonNode? input) =>
         OutcomeTriggers.TryParse(trigger, out var state, out var kind)
             ? ApplyOutcomeCore(snapshot, kind, input, state)
-            : new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
-                $"Unknown trigger '{trigger}'."
-            );
+            : new AdvanceResult.Rejected(RefusalCode.NoTransition, $"Unknown trigger '{trigger}'.");
 
     /// <summary>Whether <paramref name="trigger"/> names one of this machine's outcome triggers.</summary>
     internal bool IsOutcomeTrigger(string trigger) =>
@@ -281,18 +278,18 @@ public sealed class SnapshotMachine<TState, TTrigger>
     {
         if (!TryParseState(snapshot.State, out var fromState))
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"Unknown state '{snapshot.State}'."
             );
         var trigger = OutcomeTriggers.Name(fromState, kind);
         if (triggerState is not null && triggerState != snapshot.State)
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"No transition from '{snapshot.State}' on '{triggerState}.{OutcomeTriggers.Suffix(kind)}'."
             );
         if (!_def.Invokes.TryGetValue(fromState, out var invoke))
             return new AdvanceResult.Rejected(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"No transition from '{snapshot.State}' on '{trigger}': the state invokes no train."
             );
 
@@ -301,7 +298,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
         var outputSchema =
             kind == InvokeOutcomeKind.Done ? invoke.OutputSchema : ContextSchema.Empty;
         if (SchemaValidator.ValidateInput(outputSchema, input) is { } outputProblem)
-            return new AdvanceResult.Rejected(RejectionReasons.InvalidInput, outputProblem);
+            return new AdvanceResult.Rejected(RefusalCode.InvalidInput, outputProblem);
 
         try
         {
@@ -313,7 +310,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
             // sending something else, so it is a no-transition rather than a guard-failed.
             if (chosen is null)
                 return new AdvanceResult.Rejected(
-                    RejectionReasons.NoTransition,
+                    RefusalCode.NoTransition,
                     $"No OnDone edge from '{snapshot.State}' accepts the train's output."
                 );
 
@@ -324,7 +321,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
         catch (Exception ex)
         {
             return new AdvanceResult.Rejected(
-                RejectionReasons.InternalError,
+                RefusalCode.InternalError,
                 "The transition failed with an unexpected error."
             )
             {
@@ -351,7 +348,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
         {
             // A migration is the author's code too: the message is fixed and the exception kept for the log.
             return new RehydrationResult.Error(
-                RehydrationErrorCodes.Malformed,
+                RefusalCode.Malformed,
                 "The snapshot could not be read."
             )
             {
@@ -369,15 +366,12 @@ public sealed class SnapshotMachine<TState, TTrigger>
         }
         catch (JsonException)
         {
-            return new RehydrationResult.Error(
-                RehydrationErrorCodes.Malformed,
-                "Input is not valid JSON."
-            );
+            return new RehydrationResult.Error(RefusalCode.Malformed, "Input is not valid JSON.");
         }
 
         if (node is not JsonObject obj)
             return new RehydrationResult.Error(
-                RehydrationErrorCodes.Malformed,
+                RefusalCode.Malformed,
                 "Snapshot must be a JSON object."
             );
 
@@ -392,13 +386,13 @@ public sealed class SnapshotMachine<TState, TTrigger>
             || obj["context"] is not JsonObject context
         )
             return new RehydrationResult.Error(
-                RehydrationErrorCodes.Malformed,
+                RefusalCode.Malformed,
                 "Snapshot is missing required fields (machine, version, state, context)."
             );
 
         if (machine != _def.Id)
             return new RehydrationResult.Error(
-                RehydrationErrorCodes.UnknownMachine,
+                RefusalCode.UnknownMachine,
                 $"Snapshot machine '{machine}' does not match '{_def.Id}'."
             );
 
@@ -410,7 +404,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
 
         if (effectiveVersion > _def.Version)
             return new RehydrationResult.Error(
-                RehydrationErrorCodes.VersionMismatch,
+                RefusalCode.VersionMismatch,
                 $"Snapshot version {effectiveVersion} is newer than definition version {_def.Version}."
             );
 
@@ -418,7 +412,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
         {
             if (!_def.Migrations.TryGetValue(effectiveVersion, out var migrate))
                 return new RehydrationResult.Error(
-                    RehydrationErrorCodes.VersionMismatch,
+                    RefusalCode.VersionMismatch,
                     $"No migration from version {effectiveVersion} to {_def.Version}."
                 );
 
@@ -430,7 +424,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
 
         if (!TryParseState(effectiveState, out var state))
             return new RehydrationResult.Error(
-                RehydrationErrorCodes.UnknownState,
+                RefusalCode.UnknownState,
                 $"Unknown state '{effectiveState}'."
             );
 
@@ -438,11 +432,11 @@ public sealed class SnapshotMachine<TState, TTrigger>
         // character) is refused here, before anything persists it: accepting it would store a row that every
         // later read fails to serialize.
         if (StorableJson.Problem(effectiveContext) is { } unstorable)
-            return new RehydrationResult.Error(RehydrationErrorCodes.Malformed, unstorable);
+            return new RehydrationResult.Error(RefusalCode.Malformed, unstorable);
 
         var contextError = _def.ValidateContext(state, effectiveContext);
         if (contextError is not null)
-            return new RehydrationResult.Error(RehydrationErrorCodes.InvalidContext, contextError);
+            return new RehydrationResult.Error(RefusalCode.InvalidContext, contextError);
 
         return new RehydrationResult.Ok(
             new Snapshot

@@ -131,7 +131,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
 
     /// <summary>
     /// Reads the draft as its owner, as the page does when it comes back. A draft the caller does not have is
-    /// answered with the problem <c>not-found</c>.
+    /// answered with the problem <c>NOT_FOUND</c>.
     /// </summary>
     public async Task<Result> LoadAsync()
     {
@@ -142,7 +142,7 @@ public sealed partial class TopicMapDraft(GraphQLClient graphQL, string apiKey, 
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         var read = response.GetData("machines", Field, "get");
         return read.ValueKind == JsonValueKind.Null
-            ? new Result(null, "not-found", null)
+            ? new Result(null, "NOT_FOUND", null)
             : Parse(read);
     }
 

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { irFile } from "../../fixtures";
-import { RejectionReasons } from "../../results";
+import { RefusalCode } from "../../results";
 import { SnapshotMachine } from "../../machine";
 import { generateContextTypes } from "../../rules/generateTypes";
 import { machineFromIr, type IrDocument } from "../../rules/irMachine";
@@ -21,7 +21,7 @@ describe("ingest outcomes: one engine contract", () => {
     const output = { fingerprint: "sha256:def", unsure: true };
     expect(ingestCore.advance(fetching, "Fetching.done", output)).toMatchObject({
       outcome: "rejected",
-      reason: RejectionReasons.OutcomeBound,
+      reason: RefusalCode.OutcomeBound,
     });
     expect(ingestCore.applyOutcome(fetching, "Fetching.done", output)).toEqual({
       outcome: "transitioned",
@@ -37,7 +37,7 @@ describe("ingest outcomes: one engine contract", () => {
   it("refuses an output that does not match the train's output schema, without throwing", () => {
     expect(
       ingestCore.applyOutcome(fetching, "Fetching.done", { fingerprint: 5, unsure: "yes" }),
-    ).toMatchObject({ outcome: "rejected", reason: RejectionReasons.InvalidInput });
+    ).toMatchObject({ outcome: "rejected", reason: RefusalCode.InvalidInput });
   });
 });
 
@@ -76,7 +76,7 @@ describe("ingest outcomes in the twin", () => {
   it("is a no-transition when the state was already left", () => {
     const left = ingest.snapshotAt("Idle", { source: "s3://bucket/a" });
     const r = ingest.applyOutcome(left, "Fetching.failed");
-    expect(r).toMatchObject({ outcome: "rejected", reason: "no-transition" });
+    expect(r).toMatchObject({ outcome: "rejected", reason: "NO_TRANSITION" });
   });
 
   it("is a no-transition, not guard-failed, when no OnDone edge accepts the output", () => {
@@ -95,7 +95,7 @@ describe("ingest outcomes in the twin", () => {
       fingerprint: "sha256:abc",
       unsure: false,
     });
-    expect(r).toMatchObject({ outcome: "rejected", reason: "no-transition" });
+    expect(r).toMatchObject({ outcome: "rejected", reason: "NO_TRANSITION" });
   });
 
   it("never offers an outcome as an action", () => {

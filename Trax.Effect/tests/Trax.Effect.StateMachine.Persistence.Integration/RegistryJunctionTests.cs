@@ -146,7 +146,7 @@ public class RegistryJunctionTests
             )
         )
             .Problem!.Code.Should()
-            .Be("schema-mismatch");
+            .Be(RefusalCode.SchemaMismatch);
         (
             await new AdvanceSnapshotJunction(NewRegistry(), User).Run(
                 new AdvanceSnapshotInput
@@ -157,7 +157,7 @@ public class RegistryJunctionTests
                     SchemaHash = Stale,
                 }
             )
-        ).Problem!.Code.Should().Be("schema-mismatch");
+        ).Problem!.Code.Should().Be(RefusalCode.SchemaMismatch);
         (
             await new LoadSnapshotJunction(NewRegistry(), User).Run(
                 new LoadSnapshotInput
@@ -167,7 +167,7 @@ public class RegistryJunctionTests
                     SchemaHash = Stale,
                 }
             )
-        ).Problem!.Code.Should().Be("schema-mismatch");
+        ).Problem!.Code.Should().Be(RefusalCode.SchemaMismatch);
 
         // The matching hash passes the guard, so the save then succeeds; and omitting it skips the check.
         (
@@ -195,7 +195,7 @@ public class RegistryJunctionTests
         ).Problem.Should().BeNull();
 
         // A raw-delegate machine has a null server hash, so the guard SKIPS even a stale client hash (it falls
-        // through to the normal flow) rather than throwing — advance reaches "not-found", NOT schema-mismatch.
+        // through to the normal flow) rather than throwing — advance reaches RefusalCode.NotFound, NOT schema-mismatch.
         (
             await new AdvanceSnapshotJunction(NewRegistry(), User).Run(
                 new AdvanceSnapshotInput
@@ -209,7 +209,7 @@ public class RegistryJunctionTests
             )
         )
             .Problem!.Code.Should()
-            .Be("not-found");
+            .Be(RefusalCode.NotFound);
     }
 
     [Test]
@@ -248,7 +248,7 @@ public class RegistryJunctionTests
         await Save(idBad);
         (await Advance(idBad, DeclarativeTurnstileLocked))
             .Problem!.Code.Should()
-            .Be("client-divergence");
+            .Be(RefusalCode.ClientDivergence);
 
         // No client result: no check (older clients that don't send it are unaffected).
         var idNone = Guid.NewGuid();
@@ -268,7 +268,7 @@ public class RegistryJunctionTests
             }
         );
 
-        output.Problem!.Code.Should().Be("unknown-machine");
+        output.Problem!.Code.Should().Be(RefusalCode.UnknownMachine);
     }
 
     [Test]
@@ -278,7 +278,7 @@ public class RegistryJunctionTests
             new SendSnapshotInput { Machine = "turnstile", Id = Guid.NewGuid() }
         );
 
-        output.Problem!.Code.Should().Be("no-effect");
+        output.Problem!.Code.Should().Be(RefusalCode.NoEffect);
     }
 
     [Test]
@@ -295,7 +295,7 @@ public class RegistryJunctionTests
             }
         );
 
-        output.Problem!.Code.Should().Be("unauthenticated");
+        output.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
     }
 
     private const string DraftOrder =
@@ -316,7 +316,7 @@ public class RegistryJunctionTests
             }
         );
 
-        output.Problem!.Code.Should().Be("invalid-context");
+        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -334,7 +334,7 @@ public class RegistryJunctionTests
                     Trigger = "Coin",
                 }
             )
-        ).Problem!.Code.Should().Be("unknown-machine");
+        ).Problem!.Code.Should().Be(RefusalCode.UnknownMachine);
         (
             await advance(
                 new()
@@ -345,7 +345,7 @@ public class RegistryJunctionTests
                     Input = "{\"coin\":\"quarter\"}",
                 }
             )
-        ).Problem!.Code.Should().Be("not-found");
+        ).Problem!.Code.Should().Be(RefusalCode.NotFound);
 
         var id = Guid.NewGuid();
         await new SaveSnapshotJunction(NewRegistry(), User).Run(
@@ -366,7 +366,7 @@ public class RegistryJunctionTests
                     Input = "{bad json",
                 }
             )
-        ).Problem!.Code.Should().Be("malformed");
+        ).Problem!.Code.Should().Be(RefusalCode.Malformed);
         (
             await advance(
                 new()
@@ -376,7 +376,7 @@ public class RegistryJunctionTests
                     Trigger = "Push",
                 }
             )
-        ).Problem!.Code.Should().Be("no-transition");
+        ).Problem!.Code.Should().Be(RefusalCode.NoTransition);
     }
 
     [Test]
@@ -388,14 +388,14 @@ public class RegistryJunctionTests
             )
         )
             .Problem!.Code.Should()
-            .Be("unknown-machine");
+            .Be(RefusalCode.UnknownMachine);
         (
             await new LoadSnapshotJunction(NewRegistry(), User).Run(
                 new LoadSnapshotInput { Machine = "turnstile", Id = Guid.NewGuid() }
             )
         )
             .Problem!.Code.Should()
-            .Be("not-found");
+            .Be(RefusalCode.NotFound);
     }
 
     [Test]
@@ -407,14 +407,14 @@ public class RegistryJunctionTests
             )
         )
             .Problem!.Code.Should()
-            .Be("unknown-machine");
+            .Be(RefusalCode.UnknownMachine);
         (
             await new SendSnapshotJunction(NewRegistry(), User).Run(
                 new SendSnapshotInput { Machine = "order", Id = Guid.NewGuid() }
             )
         )
             .Problem!.Code.Should()
-            .Be("not-found");
+            .Be(RefusalCode.NotFound);
 
         var draftId = Guid.NewGuid();
         await TestDb.Seed("u", draftId, DraftOrder);
@@ -424,7 +424,7 @@ public class RegistryJunctionTests
             )
         )
             .Problem!.Code.Should()
-            .Be("no-transition");
+            .Be(RefusalCode.NoTransition);
 
         var reviewId = Guid.NewGuid();
         await TestDb.Seed("u", reviewId, OrderMachine.ReviewSnapshot(1));
@@ -434,6 +434,6 @@ public class RegistryJunctionTests
             )
         )
             .Problem!.Code.Should()
-            .Be("delivery-failed");
+            .Be(RefusalCode.DeliveryFailed);
     }
 }

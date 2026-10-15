@@ -7,7 +7,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// <c>discard</c> declares a rule as <c>get</c> does, owner-only being its floor, and is refused as
-/// <c>discard-not-allowed</c> from every state only the server puts an instance in: a committed state, an effect's
+/// <c>DISCARD_NOT_ALLOWED</c> from every state only the server puts an instance in: a committed state, an effect's
 /// target, a state that invokes a train, a state an invoked train's outcome reaches, and the target of an event gated
 /// by a role or a policy. An instance in any of them is the record of something the server did, so its owner cannot
 /// erase it.
@@ -104,7 +104,7 @@ public class DiscardRuleTests(StoreProvider provider)
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
             .Be(
-                DraftRefusalCodes.DiscardNotAllowed,
+                RefusalCode.DiscardNotAllowed,
                 $"an instance the server moved is the record of what it did. See {Adr}"
             );
         (await _host.Rows(id)).Should().ContainSingle("the instance stays");
@@ -163,7 +163,7 @@ public class DiscardRuleTests(StoreProvider provider)
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
             .Be(
-                DraftRefusalCodes.DiscardNotAllowed,
+                RefusalCode.DiscardNotAllowed,
                 $"an operator's approval is the record of a decision only the server's gate let through. See {Adr}"
             );
         (await _host.Rows(approved)).Should().ContainSingle("the approved instance stays");
@@ -189,10 +189,7 @@ public class DiscardRuleTests(StoreProvider provider)
             .Should()
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
-            .Be(
-                DraftRefusalCodes.Forbidden,
-                $"the owner without the role may not discard. See {Adr}"
-            );
+            .Be(RefusalCode.Forbidden, $"the owner without the role may not discard. See {Adr}");
         (await _host.Rows(id)).Should().ContainSingle();
 
         (await Discard(OperatorDiscardMachine.Id, DeskRoles.Client(owner, DeskRoles.Operator), id))
@@ -217,7 +214,7 @@ public class DiscardRuleTests(StoreProvider provider)
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
             .Be(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"once a machine declares rules, an operation without one admits nobody. See {Adr}"
             );
         (await _host.Rows(id)).Should().ContainSingle();

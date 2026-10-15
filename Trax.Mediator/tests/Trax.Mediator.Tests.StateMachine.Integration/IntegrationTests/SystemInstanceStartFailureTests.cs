@@ -1,6 +1,7 @@
 using System.Reflection;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
@@ -60,7 +61,7 @@ public class SystemInstanceStartFailureTests(StoreProvider provider)
             .Contain(
                 $"The system instance {id} of '{PartitionMachine.MachineId}' could not be started"
             )
-            .And.Contain("invoke-forbidden");
+            .And.Contain(RefusalCode.InvokeForbidden.ToWire());
         (await _host.Row(id, PartitionMachine.MachineId))
             .Should()
             .BeNull("the row and its run are one write, and it was refused");

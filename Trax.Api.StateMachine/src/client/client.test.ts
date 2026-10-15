@@ -180,7 +180,7 @@ describe('createDraftSession', () => {
     // first step when there is no draft must see ok with a null snapshot, not a failure.
     const { execute } = recorder({
       snapshot: null,
-      problem: { code: 'not-found', message: 'No draft to resume.' },
+      problem: { code: 'NOT_FOUND', message: 'No draft to resume.' },
     });
     await expect(session(execute).load()).resolves.toEqual({ ok: true, snapshot: null });
   });
@@ -188,21 +188,21 @@ describe('createDraftSession', () => {
   it('surfaces a typed problem, preferring the server message over the fallback', async () => {
     const { execute } = recorder({
       snapshot: null,
-      problem: { code: 'draft-committed', message: 'Already completed.' },
+      problem: { code: 'DRAFT_COMMITTED', message: 'Already completed.' },
     });
     await expect(session(execute).save('{}')).resolves.toEqual({
       ok: false,
-      code: 'draft-committed',
+      code: 'DRAFT_COMMITTED',
       message: 'Already completed.',
     });
   });
 
   it('falls back to the configured copy when the server refuses without a message', async () => {
-    const { execute } = recorder({ snapshot: null, problem: { code: 'guard-failed', message: '' } });
+    const { execute } = recorder({ snapshot: null, problem: { code: 'GUARD_FAILED', message: '' } });
     const result = await session(execute, { sendRefused: 'The letter could not be sent.' }).send('r');
     expect(result).toEqual({
       ok: false,
-      code: 'guard-failed',
+      code: 'GUARD_FAILED',
       message: 'The letter could not be sent.',
     });
   });
@@ -241,10 +241,10 @@ describe('startDraft', () => {
   });
 
   it('surfaces a refusal as a typed result, and never throws', async () => {
-    const refused = recorder({ snapshot: null, problem: { code: 'too-many-drafts', message: 'Too many.' } });
+    const refused = recorder({ snapshot: null, problem: { code: 'TOO_MANY_DRAFTS', message: 'Too many.' } });
     await expect(
       startDraft({ client: createSnapshotClient(refused.execute), machine: 'checkout', requestId: 'r' }),
-    ).resolves.toEqual({ ok: false, code: 'too-many-drafts', message: 'Too many.' });
+    ).resolves.toEqual({ ok: false, code: 'TOO_MANY_DRAFTS', message: 'Too many.' });
 
     const offline: SnapshotExecutor = async () => {
       throw new Error('offline');

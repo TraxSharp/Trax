@@ -42,7 +42,7 @@ internal sealed record MachineChange(
     public bool Reload { get; init; }
 
     /// <summary>The terminal answer that carries only a problem, <paramref name="code"/> and <paramref name="message"/>.</summary>
-    public static MachineChange Refused(long? rowId, string code, string message) =>
+    public static MachineChange Refused(long? rowId, RefusalCode code, string message) =>
         new(rowId, null, null, null, false, new SnapshotProblem { Code = code, Message = message });
 }
 
@@ -55,7 +55,7 @@ internal sealed record MachineChange(
 /// <para><b>Verified once, then routed by row.</b> At subscribe the user key is read from the socket's
 /// <see cref="ISnapshotPrincipal"/>, never an argument, and the machine's watch rule is checked against it
 /// (<see cref="ISnapshotWatchAccess"/>). A missing id, another user's, a system instance's and one the rule refuses
-/// all get one answer, <see cref="DraftRefusalCodes.NotFound"/>. The stream then follows the row's <c>row_id</c>, the
+/// all get one answer, <see cref="RefusalCode.NotFound"/>. The stream then follows the row's <c>row_id</c>, the
 /// incarnation it verified: nothing about the caller is read again, and a row re-created under the same id never
 /// reaches it.</para>
 /// <para><b>Order.</b> The watch registers before the row is read, and the first event is the row as that read
@@ -63,11 +63,11 @@ internal sealed record MachineChange(
 /// as its latest revision only, which loses nothing.</para>
 /// <para><b>The end.</b> A delete or an expiry ends the stream with <c>gone</c>, from the database and never from
 /// the notice. A row written by a newer version of the machine than this node runs ends it with
-/// <see cref="DraftRefusalCodes.ClientOutdated"/>; a row this node cannot read otherwise ends it with the
+/// <see cref="RefusalCode.ClientOutdated"/>; a row this node cannot read otherwise ends it with the
 /// rehydration code. Ending one stream ends no other.</para>
 /// <para><b>Limits.</b> A principal holds at most <see cref="MachineWatchLimits.PerInstance"/> streams on one
 /// instance and <see cref="MachineWatchLimits.PerPrincipal"/> in all; past either the answer is
-/// <see cref="DraftRefusalCodes.TooManySubscriptions"/>, and a stream that ends frees its place. Each stream also
+/// <see cref="RefusalCode.TooManySubscriptions"/>, and a stream that ends frees its place. Each stream also
 /// holds one of its socket's operations, and ends with the socket's credential.</para>
 /// </remarks>
 internal static class MachineChangedSubscription
@@ -189,14 +189,14 @@ internal static class MachineChangedSubscription
                 .ConfigureAwait(false);
         }
         if (rowId is not { } row || machine is not IMachineInternals internals)
-            return Once(MachineChange.Refused(null, DraftRefusalCodes.NotFound, NotFoundMessage));
+            return Once(MachineChange.Refused(null, RefusalCode.NotFound, NotFoundMessage));
 
         var lease = services.GetRequiredService<MachineWatchLimits>().TryAcquire(userKey, row);
         if (lease is null)
             return Once(
                 MachineChange.Refused(
                     null,
-                    DraftRefusalCodes.TooManySubscriptions,
+                    RefusalCode.TooManySubscriptions,
                     $"You may hold {MachineWatchLimits.PerInstance} subscriptions to one instance and "
                         + $"{MachineWatchLimits.PerPrincipal} in all. Complete one to open another."
                 )
@@ -239,7 +239,7 @@ internal static class MachineChangedSubscription
                         ? Outdated(change)
                         : MachineChange.Refused(
                             change.RowId,
-                            change.UnreadableReason ?? RehydrationErrorCodes.Malformed,
+                            change.UnreadableReason ?? RefusalCode.Malformed,
                             "The stored instance cannot be read by this version of the machine."
                         ),
                     true
@@ -278,7 +278,7 @@ internal static class MachineChangedSubscription
                 },
                 false
             ),
-            RehydrationResult.Error { Code: RehydrationErrorCodes.VersionMismatch }
+            RehydrationResult.Error { Code: RefusalCode.VersionMismatch }
                 when change.Version > internals.Version => (Outdated(change), true),
             RehydrationResult.Error error => (
                 MachineChange.Refused(
@@ -291,7 +291,7 @@ internal static class MachineChangedSubscription
             _ => (
                 MachineChange.Refused(
                     change.RowId,
-                    RehydrationErrorCodes.Malformed,
+                    RefusalCode.Malformed,
                     "The stored instance cannot be read by this version of the machine."
                 ),
                 true
@@ -300,7 +300,7 @@ internal static class MachineChangedSubscription
     }
 
     private static MachineChange Outdated(SnapshotRowChange change) =>
-        MachineChange.Refused(change.RowId, DraftRefusalCodes.ClientOutdated, OutdatedMessage);
+        MachineChange.Refused(change.RowId, RefusalCode.ClientOutdated, OutdatedMessage);
 
     // Whether a newer version of the machine than this node's wrote the row: a higher definition version, or the same
     // version under another IR hash that the stored documents order after this node's. The stored documents answer a

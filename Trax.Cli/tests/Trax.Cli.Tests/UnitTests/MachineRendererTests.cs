@@ -29,7 +29,7 @@ public class MachineRendererTests
               "guard": { "rule": "present", "source": "input", "field": "note" },
               "reduce": { "reduce": "clear" } },
             { "from": "Review", "trigger": "Place", "to": "Placed",
-              "effect": { "type": "Shop.Payments.IChargeCard", "keyPrefix": "checkout:charge" } },
+              "effect": { "keyPrefix": "checkout:charge" } },
             { "from": "Archived", "trigger": "Restore", "to": "Cart" }
           ]
         }
@@ -50,7 +50,7 @@ public class MachineRendererTests
 
                 Review
                   ── Edit ─────▶ Cart     guard: present   reduce: clear
-                  ── Place ────▶ Placed   ⚡ effect IChargeCard (send only)
+                  ── Place ────▶ Placed   ⚡ effect checkout:charge (send only)
 
                 Placed ■ committed
                   (no transitions)
@@ -88,7 +88,7 @@ public class MachineRendererTests
         var text = MachineRenderer.Render(Checkout, MachineFormat.Text, ascii: true);
 
         text.Should().Contain("Cart <- initial").And.Contain("-- Place ----> Placed");
-        text.Should().Contain("! effect IChargeCard").And.Contain("Placed [x] committed");
+        text.Should().Contain("! effect checkout:charge").And.Contain("Placed [x] committed");
         text.Where(c => c > 127).Should().BeEmpty();
     }
 
@@ -114,7 +114,7 @@ public class MachineRendererTests
                     [*] --> Cart
                     Cart --> Review : Review / guard#58; Your cart is empty
                     Review --> Cart : Edit / guard#58; present / reduce#58; clear
-                    Review --> Placed : Place / effect IChargeCard (send only)
+                    Review --> Placed : Place / effect checkout#58;charge (send only)
                     Archived --> Cart : Restore
                     classDef committed font-weight:bold,stroke-width:3px
                     class Placed committed

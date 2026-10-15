@@ -290,7 +290,7 @@ public class SchemaFormatTests
                 .BeOfType<AdvanceResult.Rejected>(c.Name)
                 .Which.Reason.Should()
                 .Be(
-                    RejectionReasons.InvalidInput,
+                    RefusalCode.InvalidInput,
                     $"{c.Name} is not a value its CLR type holds ({Adr})"
                 );
     }
@@ -315,7 +315,7 @@ public class SchemaFormatTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.InvalidInput,
+                RefusalCode.InvalidInput,
                 "WithInput names the record, so the delegate's trigger is validated against it"
             );
         var unknown = StrictInputMachine.ValidInput();
@@ -325,6 +325,6 @@ public class SchemaFormatTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.InvalidInput);
+            .Be(RefusalCode.InvalidInput);
     }
 }

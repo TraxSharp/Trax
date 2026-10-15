@@ -333,7 +333,7 @@ public class TimerSweepIsolationTests(StoreProvider provider)
                 "the send meets the instance the timer left, where the effect has no edge"
             )
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]

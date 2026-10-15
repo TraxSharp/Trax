@@ -129,6 +129,25 @@ public class IrExporterTests
         field["type"]!.GetValue<string>().Should().Be("string");
     }
 
+    // The IR reaches every browser, so an effect edge says only that it is effect-bound and which claim keys it
+    // writes; the server's effect type stays on the server.
+    [Test]
+    public void Effect_edge_names_no_server_type()
+    {
+        var text = IrExporter.Export(RichExportMachine.Built);
+        var ir = (JsonObject)JsonNode.Parse(text)!;
+
+        var cst = ir["transitions"]!
+            .AsArray()
+            .Select(t => (JsonObject)t!)
+            .Single(t => t["trigger"]!.GetValue<string>() == "Cst");
+        var effect = (JsonObject)cst["effect"]!;
+
+        effect.Select(p => p.Key).Should().Equal("keyPrefix");
+        effect["keyPrefix"]!.GetValue<string>().Should().Be("rich:Cst");
+        text.Should().NotContain("ThingEffect");
+    }
+
     [Test]
     public void Export_of_a_rich_machine_covers_every_rule_and_reducer_kind()
     {

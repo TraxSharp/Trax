@@ -45,11 +45,11 @@ committed `ir.json`, and the twin hashes that same file with its trailing newlin
 
 The client sends its `schemaHash` on each snapshot mutation (`saveSnapshot`, `advanceSnapshot`, `loadSnapshot`,
 `sendSnapshot`). When it differs from the server's registered machine, the request is refused with a
-[`schema-mismatch`](/docs/sdk-reference/statemachine-api/result-codes) problem, so a stale client reloads
+[`SCHEMA_MISMATCH`](/docs/sdk-reference/statemachine-api/result-codes) problem, so a stale client reloads
 instead of writing under an outdated contract. A client that sends no hash is not checked. That optional
 handshake belongs to the generic mutations only. A machine served through its own typed operations takes no
 `schemaHash`: its [persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) carry the IR
-hash in their ids, and a node answers another version's id `client-outdated` or `server-outdated`, so the check
+hash in their ids, and a node answers another version's id `CLIENT_OUTDATED` or `SERVER_OUTDATED`, so the check
 cannot be skipped by leaving a field out.
 
 `ISnapshotMachineRegistry.SchemaHash(machine)` returns `null` for a machine with no exportable IR, and the check
@@ -70,7 +70,7 @@ server C#:   (pre-state, trigger, input) -> serverResult   <- authoritative
 ```
 
 If the two canonical wires differ, the advance is refused with a
-[`client-divergence`](/docs/sdk-reference/statemachine-api/result-codes) problem and the client reloads. The
+[`CLIENT_DIVERGENCE`](/docs/sdk-reference/statemachine-api/result-codes) problem and the client reloads. The
 refusal is real: the stored draft is exactly as it was before the request, so the reload shows the pre-state
 and a retry fires the trigger once. A client that sends no `clientResult` is not checked.
 
@@ -92,8 +92,8 @@ should refuse to start on a drifted engine calls `SnapshotSelfCheck.Run(machines
 A machine ships its corpus by overriding `Corpus` (for example from an embedded resource); a machine that ships none
 is skipped, not failed.
 
-Both refusals surface on the mutation's `problem` field: `schema-mismatch` (save, advance, load, send) and
-`client-divergence` (advance; nothing was written). See [Result codes](/docs/sdk-reference/statemachine-api/result-codes).
+Both refusals surface on the mutation's `problem` field: `SCHEMA_MISMATCH` (save, advance, load, send) and
+`CLIENT_DIVERGENCE` (advance; nothing was written). See [Result codes](/docs/sdk-reference/statemachine-api/result-codes).
 
 ## Examples
 

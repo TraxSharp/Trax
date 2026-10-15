@@ -7,7 +7,7 @@ using Trax.Effect.StateMachine.Persistence.Mutations;
 namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
-/// A request id is recorded on the row, so one holding a control character is refused as <c>invalid-request-id</c>
+/// A request id is recorded on the row, so one holding a control character is refused as <c>INVALID_REQUEST_ID</c>
 /// on every path, before anything is read, written or run: Postgres cannot store a NUL in text at all, and no other
 /// control character belongs in an id. Without the check a send ran its effect and then failed to record it.
 /// </summary>
@@ -85,8 +85,8 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
             .Should()
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(DraftRefusalCodes.InvalidRequestId, Because(name));
+            .Be(RefusalCode.InvalidRequestId, Because(name));
+        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
         (await _host.UserRows(user, ExpiringMachine.Id))
             .Should()
             .BeEmpty("a refused start creates nothing");
@@ -125,8 +125,8 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be(DraftRefusalCodes.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(DraftRefusalCodes.InvalidRequestId, Because(name));
+            .Be(RefusalCode.InvalidRequestId, Because(name));
+        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
         var row = (await RawSql.Timer(_host, id))!;
         row.State.Should().Be("Idle", "a refused advance moves nothing");
         row.Revision.Should().Be(before, "a refused advance writes nothing");
@@ -167,8 +167,8 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
                 .Should()
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
-                .Be(DraftRefusalCodes.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(DraftRefusalCodes.InvalidRequestId, Because(name));
+                .Be(RefusalCode.InvalidRequestId, Because(name));
+        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
         _charge.Calls.Should().Be(0, "a refused send delivers nothing");
         var row = (await RawSql.Timer(_host, id))!;
         row.State.Should().Be(nameof(RenewalState.Draft), "a refused send moves nothing");
@@ -206,8 +206,8 @@ public class RequestIdControlCharacterTests(StoreProvider provider)
             .Should()
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.InvalidRequestId, Because(name));
-        generic.Problem!.Code.Should().Be(DraftRefusalCodes.InvalidRequestId, Because(name));
+            .Be(RefusalCode.InvalidRequestId, Because(name));
+        generic.Problem!.Code.Should().Be(RefusalCode.InvalidRequestId, Because(name));
         (await _host.Rows(id)).Should().ContainSingle("a refused discard deletes nothing");
     }
 

@@ -10,6 +10,7 @@
  * otherwise need a try/catch at every call site. Every method here returns a {@link DraftResult}
  * instead: nothing throws, and an unreachable server is just another `ok: false` with a code.
  */
+import { ClientProblemCode, RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
 import type { AdvanceOptions, SnapshotClient, SnapshotOutput } from './transport';
 
@@ -20,10 +21,10 @@ import type { AdvanceOptions, SnapshotClient, SnapshotOutput } from './transport
  */
 export type DraftResult =
   | { ok: true; snapshot: string | null; revision?: number | null }
-  | { ok: false; code: string; message: string };
+  | { ok: false; code: ProblemCode; message: string };
 
 /** The code reported when the request never reached the server (offline, DNS, a 500, an auth error). */
-export const TRANSPORT_ERROR = 'transport-error';
+export const TRANSPORT_ERROR = ClientProblemCode.TransportError;
 
 /**
  * User-facing fallbacks, used only when the server refuses WITHOUT a message or the transport fails.
@@ -97,7 +98,7 @@ export interface DraftSession {
 /** Total: the new draft's server-minted id and its first snapshot, or why not. */
 export type StartResult =
   | { ok: true; id: string; snapshot: string; created: boolean; revision?: number | null }
-  | { ok: false; code: string; message: string };
+  | { ok: false; code: ProblemCode; message: string };
 
 export interface StartDraftOptions {
   client: SnapshotClient;
@@ -126,7 +127,7 @@ const settleOutput = async (
   call: () => Promise<SnapshotOutput>,
   refused: string,
   unavailable: string,
-): Promise<{ ok: true; output: SnapshotOutput } | { ok: false; code: string; message: string }> => {
+): Promise<{ ok: true; output: SnapshotOutput } | { ok: false; code: ProblemCode; message: string }> => {
   let output: SnapshotOutput;
   try {
     output = await call();
@@ -204,7 +205,7 @@ export function createDraftSession(options: DraftSessionOptions): DraftSession {
         messages.advanceUnavailable,
       ),
 
-    // The server answers a draft that does not exist yet with a `not-found` problem; to a caller
+    // The server answers a draft that does not exist yet with a `NOT_FOUND` problem; to a caller
     // that is no draft, as this method's contract says, not a failure.
     load: async () => {
       const loaded = await settle(
@@ -212,7 +213,7 @@ export function createDraftSession(options: DraftSessionOptions): DraftSession {
         messages.loadUnavailable,
         messages.loadUnavailable,
       );
-      return !loaded.ok && loaded.code === 'not-found' ? { ok: true, snapshot: null } : loaded;
+      return !loaded.ok && loaded.code === RefusalCode.NotFound ? { ok: true, snapshot: null } : loaded;
     },
 
     send: (requestId) =>

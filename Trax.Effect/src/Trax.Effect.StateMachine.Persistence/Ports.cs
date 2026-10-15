@@ -356,7 +356,7 @@ public interface ISnapshotPrincipal
 /// The single irreversible side effect bound to a consequential transition (send a letter, charge a
 /// card, provision a resource). It returns a receipt (a downstream id) recorded in the snapshot. Run
 /// through <see cref="IdempotentEffect"/> so it fires exactly once per intent. The receipt must be non-empty:
-/// a null or empty one is treated as a failed delivery, and the send reports <c>delivery-failed</c>.
+/// a null or empty one is treated as a failed delivery, and the send reports <c>DELIVERY_FAILED</c>.
 /// </summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/i-snapshot-effect">SDK reference</seealso>
 public interface ISnapshotEffect

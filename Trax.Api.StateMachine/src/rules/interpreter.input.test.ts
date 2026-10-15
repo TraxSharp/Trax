@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { RejectionReasons } from '../results';
+import { RefusalCode } from '../results';
 import { idle, rangeCore, validRange } from './testing/rangeMachine';
 
 // Trigger input is validated against the schema the trigger declares, in both engines, before any guard runs:
-// a bad input is refused as `invalid-input` and never throws. Tested through the public engine (`advance`), the
+// a bad input is refused as `INVALID_INPUT` and never throws. Tested through the public engine (`advance`), the
 // TypeScript mirror of the C# trigger-input validation tests.
 
-const refused = { outcome: 'rejected', reason: RejectionReasons.InvalidInput };
+const refused = { outcome: 'rejected', reason: RefusalCode.InvalidInput };
 const advanceSet = (input: unknown) => rangeCore.advance(idle, 'Set', input);
 
 describe('the range machine the validation tests use', () => {

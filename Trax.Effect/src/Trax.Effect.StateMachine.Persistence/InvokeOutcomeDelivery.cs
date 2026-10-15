@@ -194,7 +194,7 @@ internal sealed class InvokeOutcomeDelivery(
                         invokeToken,
                         row.Machine,
                         row.Id,
-                        error.Code
+                        error.Code.ToWire()
                     );
                     return new InvokeDelivery.NotHere(row.Machine);
                 default:
@@ -479,7 +479,7 @@ internal sealed class InvokeOutcomeDelivery(
                                 row.Machine,
                                 row.Id,
                                 planned.State,
-                                refused.Code
+                                refused.Code.ToWire()
                             );
                         problem = InvokeOutcomeReasons.NextRunRefused;
                         break;
@@ -551,8 +551,7 @@ internal sealed class InvokeOutcomeDelivery(
                 return next;
             case AdvanceResult.Rejected rejected:
                 problem =
-                    outcome is InvokeOutcome.Done
-                    && rejected.Reason == RejectionReasons.NoTransition
+                    outcome is InvokeOutcome.Done && rejected.Reason == RefusalCode.NoTransition
                         ? InvokeOutcomeReasons.OutputUnaccepted
                         : InvokeOutcomeReasons.OutcomeRejected;
                 if (
@@ -567,7 +566,7 @@ internal sealed class InvokeOutcomeDelivery(
                         row.Machine,
                         row.Id,
                         current.State,
-                        rejected.Reason
+                        rejected.Reason.ToWire()
                     );
                 return null;
             default:

@@ -1,3 +1,4 @@
+import type { ProblemCode } from '../results';
 /**
  * The client half of "one set of operations, any machine".
  *
@@ -13,8 +14,8 @@
 
 /** A typed refusal returned as DATA (HTTP 200, no GraphQL `errors`), never a thrown transport failure. */
 export interface SnapshotProblem {
-  /** A contract code: `guard-failed`, `invalid-context`, `schema-mismatch`, `draft-committed`, … */
-  code: string;
+  /** A contract code: `GUARD_FAILED`, `INVALID_CONTEXT`, `SCHEMA_MISMATCH`, `DRAFT_COMMITTED`, … */
+  code: ProblemCode;
   message: string;
 }
 
@@ -100,7 +101,7 @@ export interface AdvanceOptions {
   /**
    * The snapshot the LOCAL twin computed for this same advance, as canonical JSON. When present the
    * server compares it against its own authoritative result and refuses a divergence with
-   * `client-divergence`, rather than storing a snapshot the two engines don't agree on.
+   * `CLIENT_DIVERGENCE`, rather than storing a snapshot the two engines don't agree on.
    */
   clientResult?: string;
 }
@@ -112,7 +113,7 @@ const EMPTY: SnapshotOutput = { snapshot: null, problem: null };
  * is the layer that pins one (machine, id) pair.
  *
  * `schemaHash` is threaded through every call because the server's version-skew handshake is per-request:
- * a client whose machine has drifted from the deployed one is refused with `schema-mismatch` (telling it
+ * a client whose machine has drifted from the deployed one is refused with `SCHEMA_MISMATCH` (telling it
  * to reload) instead of writing under an outdated contract. Omitting it opts out of the check.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */

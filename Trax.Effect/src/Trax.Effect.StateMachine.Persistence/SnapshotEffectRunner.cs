@@ -12,11 +12,11 @@ public interface ISnapshotEffectRunner
     /// wherever the draft is now, and one recorded for a different trigger is <see cref="AdvanceOutcome.Rejected"/>.
     /// Otherwise a draft already in the target state replays as <see cref="AdvanceOutcome.Advanced"/> without running
     /// anything, and a draft in any state other than the effect's from-state is <see cref="AdvanceOutcome.Rejected"/>
-    /// before the effect runs; an effect already pending on the draft is rejected as <c>effect-in-progress</c> until its
+    /// before the effect runs; an effect already pending on the draft is rejected as <c>EFFECT_IN_PROGRESS</c> until its
     /// lease passes, when this send takes it over and runs it again under the same key. Over the Trax store the effect
     /// is pending on the draft's row while it runs, nothing else writes the draft, and its receipt, the move and the end
     /// of the mark are one write. Over a store a host substituted, the claim ledger keeps the effect, and a claim whose
-    /// effect already ran on other content is rejected as <c>draft-changed</c>.
+    /// effect already ran on other content is rejected as <c>DRAFT_CHANGED</c>.
     /// </summary>
     /// <param name="userKey">The authenticated owner of the draft; a null, empty or whitespace key is refused.</param>
     /// <param name="id">The draft id.</param>
@@ -43,7 +43,7 @@ internal interface IActorEffectRunner
 {
     /// <summary>
     /// <see cref="ISnapshotEffectRunner.Run"/> on behalf of <paramref name="actor"/>: a client the effect-bound
-    /// event's rule does not admit, or any actor that is not a client, is refused as <c>forbidden</c> before the
+    /// event's rule does not admit, or any actor that is not a client, is refused as <c>FORBIDDEN</c> before the
     /// draft is read or the effect claimed.
     /// </summary>
     Task<AdvanceOutcome> Run(
@@ -132,7 +132,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
     /// <inheritdoc/>
     /// <remarks>
     /// Acts as a client holding no role: on a machine whose effect-bound event requires one, the send is refused as
-    /// <c>forbidden</c>. Send through <see cref="ISnapshotDraftService.Send"/> with the caller's actor instead.
+    /// <c>FORBIDDEN</c>. Send through <see cref="ISnapshotDraftService.Send"/> with the caller's actor instead.
     /// </remarks>
     public Task<AdvanceOutcome> Run(
         string userKey,
@@ -164,7 +164,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
         // A request id is recorded on the row, so one that could not be is refused before anything is claimed.
         if (!RequestIdRing.IsUsable(requestId))
             return new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.InvalidRequestId,
+                RefusalCode.InvalidRequestId,
                 $"A request id is 1 to {RequestIdRing.MaxRequestIdLength} characters and not blank."
             );
         var waitUntil = DateTimeOffset.UtcNow + InProgressWait;
@@ -180,10 +180,10 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                     return await AtTarget(actor, id, cancellationToken) ?? outcome;
                 // The draft moved between the load and the claim (a timer fired): the effect did not run, and the
                 // send is answered from the draft as it is now.
-                case AdvanceOutcome.Rejected { Reason: DraftMoved }
-                    when DateTimeOffset.UtcNow < waitUntil:
+                case AdvanceOutcome.Rejected moved
+                    when ReferenceEquals(moved, Moved) && DateTimeOffset.UtcNow < waitUntil:
                     continue;
-                case AdvanceOutcome.Rejected { Reason: DraftMoved }:
+                case AdvanceOutcome.Rejected moved when ReferenceEquals(moved, Moved):
                     return new AdvanceOutcome.Conflict();
                 case AdvanceOutcome.Rejected { Reason: EffectInProgress }
                     when DateTimeOffset.UtcNow < waitUntil:
@@ -196,12 +196,14 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
         }
     }
 
-    private const string EffectInProgress = "effect-in-progress";
+    private const RefusalCode EffectInProgress = RefusalCode.EffectInProgress;
 
-    // Internal to the runner, never answered: the draft moved after the load, before the effect ran.
-    private const string DraftMoved = "draft-moved";
-
-    private static readonly AdvanceOutcome.Rejected Moved = new(DraftMoved, "The draft moved.");
+    // Internal to the runner, never answered: the draft moved after the load, before the effect ran. It is told
+    // apart by reference, so its code is only a placeholder.
+    private static readonly AdvanceOutcome.Rejected Moved = new(
+        RefusalCode.Conflict,
+        "The draft moved."
+    );
 
     private sealed class DraftMovedException : Exception;
 
@@ -328,7 +330,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                 // request can't trigger a real delivery.
                 if (loaded.Snapshot.State != _fromState)
                     return new AdvanceOutcome.Rejected(
-                        "no-transition",
+                        RefusalCode.NoTransition,
                         $"Only a {_fromState} draft can run this effect."
                     );
 
@@ -388,7 +390,10 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                 );
 
             default:
-                return new AdvanceOutcome.LoadError("unknown", "Unknown load result.");
+                return new AdvanceOutcome.LoadError(
+                    RefusalCode.InternalError,
+                    "Unknown load result."
+                );
         }
     }
 
@@ -553,7 +558,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                 // request can't trigger a real delivery.
                 if (loaded.Snapshot.State != _fromState)
                     return new AdvanceOutcome.Rejected(
-                        "no-transition",
+                        RefusalCode.NoTransition,
                         $"Only a {_fromState} draft can run this effect."
                     );
 
@@ -605,7 +610,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                             && !string.Equals(ranOn, fingerprint, StringComparison.Ordinal)
                         )
                             return new AdvanceOutcome.Rejected(
-                                "draft-changed",
+                                RefusalCode.DraftChanged,
                                 "This draft's action already ran, on content that has changed since. Restore the "
                                     + "content it ran on to record its result."
                             );
@@ -618,7 +623,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                         );
                     default:
                         return new AdvanceOutcome.Rejected(
-                            RejectionReasons.InternalError,
+                            RefusalCode.InternalError,
                             "Unknown effect outcome."
                         );
                 }
@@ -641,7 +646,10 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger>
                 );
 
             default:
-                return new AdvanceOutcome.LoadError("unknown", "Unknown load result.");
+                return new AdvanceOutcome.LoadError(
+                    RefusalCode.InternalError,
+                    "Unknown load result."
+                );
         }
     }
 }

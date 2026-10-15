@@ -59,7 +59,7 @@ The full constraint set (formats, enum names, dictionary keys) is listed under
 | A context (`Context<T>()`) | one level deep |
 | A trigger input (`WithInput<T>()`) and an invoked train's output | as strictly as the CLR type: a nested record and the elements of a list of records carry their own field shapes |
 
-Both engines refuse a trigger input that does not match its schema as `invalid-input`, before any guard reads it. A
+Both engines refuse a trigger input that does not match its schema as `INVALID_INPUT`, before any guard reads it. A
 trigger declared without `WithInput` takes no input. See
 [Trigger input](/docs/sdk-reference/statemachine-api/machine#trigger-input).
 

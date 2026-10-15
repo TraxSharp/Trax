@@ -34,8 +34,8 @@ A trigger enum member cannot contain a dot, so these never collide with a declar
 [`outcomes`](/docs/sdk-reference/statemachine-api/ir-format#outcomes), and the TypeScript twin applies them as events
 with the same guards and reductions as the server. The input mapping of `Invokes` runs on the server only: the IR
 does not carry it, and the twin never starts a train. The server never takes an outcome trigger from a caller:
-`Advance` refuses one as `outcome-bound`, and a completion that arrives after the machine left the state is a
-`no-transition`.
+`Advance` refuses one as `OUTCOME_BOUND`, and a completion that arrives after the machine left the state is a
+`NO_TRANSITION`.
 
 ## Reserved states
 
@@ -44,7 +44,7 @@ committed states and effect targets.
 
 | Rule | Detail |
 | --- | --- |
-| Autosave | cannot move a draft into or out of an invoking state, or into an outcome target. The generic save refuses every save of a machine that invokes a train as `save-not-allowed`. |
+| Autosave | cannot move a draft into or out of an invoking state, or into an outcome target. The generic save refuses every save of a machine that invokes a train as `SAVE_NOT_ALLOWED`. |
 | Ordinary transition into an outcome target | refused by `Build`. A self-loop on the target, and an edge into a target that itself invokes a train, are allowed. |
 | Outcome into the `RunsOnce` effect's target, or into the start state | refused by `Build`. |
 | The `RunsOnce` count | an invoked train does not count against the machine's one effect. |
@@ -91,7 +91,7 @@ queued exactly once, runs at least once, and its outcome is applied exactly once
 
 An outcome is applied to the one row whose invoke token is the run's external id, by a single conditional update
 (`UPDATE ... WHERE invoke_token = @token`) that also replaces or clears the token. Every other delivery of the same
-run, from any host, matches nothing and is a `no-transition` that writes nothing; so is a run whose state was left or
+run, from any host, matches nothing and is a `NO_TRANSITION` that writes nothing; so is a run whose state was left or
 entered again under a new token.
 
 | Path | Runs on | Covers |
@@ -146,9 +146,9 @@ entry while an instance still holds its token.
 | --- | --- | --- |
 | Instances created by | the user's `start` | `IMachineInstances.Start` only |
 | Moved by | the user's events and the runs' outcomes | the runs' outcomes and `IMachineInstances.Advance` |
-| Train authorized | against the user entering the state, at entry; refused as `invoke-forbidden` | in the trusted execution scope, as a scheduled manifest run |
+| Train authorized | against the user entering the state, at entry; refused as `INVOKE_FORBIDDEN` | in the trusted execution scope, as a scheduled manifest run |
 | Outcome into another invoking state | refused at startup | allowed |
-| Live invoked runs per user | 10 across every machine, or the machine's `InvokedRunLimit(n)`; past it `invoke-limit-reached` | not capped here; the dispatcher's `MaxActiveJobs` bounds them |
+| Live invoked runs per user | 10 across every machine, or the machine's `InvokedRunLimit(n)`; past it `INVOKE_LIMIT_REACHED` | not capped here; the dispatcher's `MaxActiveJobs` bounds them |
 
 A run is live from the entry that queued it until it ends. Leaving its state cancels a queued run at once; a
 dispatched run counts until it stops at its next junction. A machine's `InvokedRunLimit(n)` is compared with the same

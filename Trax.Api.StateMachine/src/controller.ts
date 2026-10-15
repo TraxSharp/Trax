@@ -1,5 +1,5 @@
 import { problemFromAdvance, type Problem } from './problem';
-import { RejectionReasons } from './results';
+import { RefusalCode } from './results';
 import type { InputArgs, MachineSpec, StateOf, TriggerOf, TypedMachine, TypedSnapshot } from './typed';
 
 export interface MachineObserver<Spec extends MachineSpec> {
@@ -76,7 +76,7 @@ export class MachineController<Spec extends MachineSpec> {
     }
 
     const problem = problemFromAdvance(result)!;
-    if (result.reason === RejectionReasons.InternalError)
+    if (result.reason === RefusalCode.InternalError)
       this.options.observer?.onInternalError?.(trigger, result.detail ?? '', this.view.snapshot);
     else this.options.observer?.onRejected?.(trigger, problem, this.view.snapshot);
 

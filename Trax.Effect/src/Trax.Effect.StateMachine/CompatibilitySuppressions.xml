@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Effect.StateMachine.RehydrationErrorCodes</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Trax.Effect.StateMachine.RejectionReasons</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.StateMachine.AdvanceResult.Rejected.#ctor(System.String,System.String)</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.StateMachine.AdvanceResult.Rejected.Deconstruct(System.String@,System.String@)</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.StateMachine.AdvanceResult.Rejected.get_Reason</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.StateMachine.RehydrationResult.Error.#ctor(System.String,System.String)</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.StateMachine.RehydrationResult.Error.Deconstruct(System.String@,System.String@)</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.StateMachine.RehydrationResult.Error.get_Code</Target>
+    <Left>lib/net10.0/Trax.Effect.StateMachine.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.StateMachine.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

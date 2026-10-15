@@ -439,7 +439,7 @@ public class InvokesDeclarationTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]
@@ -456,7 +456,7 @@ public class InvokesDeclarationTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]
@@ -470,7 +470,7 @@ public class InvokesDeclarationTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]
@@ -485,7 +485,7 @@ public class InvokesDeclarationTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.InvalidContext);
+            .Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -502,7 +502,7 @@ public class InvokesDeclarationTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.OutcomeBound,
+                RefusalCode.OutcomeBound,
                 "an outcome is applied only by the outcome path, and Advance names why it refuses one "
                     + "(Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)"
             );

@@ -217,7 +217,7 @@ public class TopicMapBrowserTests
             .GetProperty("code")
             .GetString()
             .Should()
-            .Be("forbidden", $"Build requires Operator, checked on the server ({Adr})");
+            .Be("FORBIDDEN", $"Build requires Operator, checked on the server ({Adr})");
         (await DraftRows.RevisionAsync(Guid.Parse(id)))
             .Should()
             .Be(revision, "a refused event writes nothing");
@@ -494,7 +494,7 @@ public class TopicMapBrowserTests
         await page.Page.GotoAsync(RecoveryPage.PageOrigin + "/");
         await RecoveryPage.ShowTheTopicMapAsync(page.Page);
 
-        await Expect(page.Page.GetByText("client-outdated"))
+        await Expect(page.Page.GetByText("CLIENT_OUTDATED"))
             .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
         var afterRefusal = page.GraphQLRequests.Count;
         await Expect(page.Page.GetByRole(AriaRole.Button, new() { Name = "Next" }))

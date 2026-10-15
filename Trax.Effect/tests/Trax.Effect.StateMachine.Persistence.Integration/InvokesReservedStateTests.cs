@@ -76,7 +76,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
                 .Be(
-                    DraftRefusalCodes.SaveNotAllowed,
+                    RefusalCode.SaveNotAllowed,
                     $"a save never creates a draft in an invoking state ({Adr}): {NoSave}"
                 );
 
@@ -86,7 +86,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
                 .Be(
-                    DraftRefusalCodes.SaveNotAllowed,
+                    RefusalCode.SaveNotAllowed,
                     "a save never moves a draft into an invoking state"
                 );
         }
@@ -111,7 +111,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
                 .Be(
-                    DraftRefusalCodes.SaveNotAllowed,
+                    RefusalCode.SaveNotAllowed,
                     $"leaving by a save would strand the run; only a declared transition leaves ({Adr}): {NoSave}"
                 );
 
@@ -131,7 +131,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
                     "the context the run was started from cannot be rewritten under it"
                 )
                 .Which.Code.Should()
-                .Be(DraftRefusalCodes.SaveNotAllowed);
+                .Be(RefusalCode.SaveNotAllowed);
 
             (await service.Autosave(User, id, BuildMachine.Json("Building", Source)))
                 .Should()
@@ -168,7 +168,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
                     .BeOfType<AutosaveResult.Rejected>()
                     .Which.Code.Should()
                     .Be(
-                        DraftRefusalCodes.SaveNotAllowed,
+                        RefusalCode.SaveNotAllowed,
                         $"only the run's outcome enters {state}, with what the run produced ({Adr}): {NoSave}"
                     );
                 (await service.Autosave(User, Guid.NewGuid(), BuildMachine.Json(state, context)))
@@ -204,7 +204,7 @@ public class InvokesReservedStateTests(StoreProvider provider)
                     .BeOfType<AdvanceOutcome.Rejected>()
                     .Which.Reason.Should()
                     .Be(
-                        "outcome-bound",
+                        RefusalCode.OutcomeBound,
                         $"an outcome is applied only from its run, never by an advance. See {Adr}"
                     );
         }

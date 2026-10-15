@@ -542,21 +542,19 @@ internal sealed class SnapshotWatchHub(
     // Why this host cannot read the row as its machine, as a rehydration error code, or null when it can: a machine
     // it registers, a state that machine has, and a context that is a JSON object. A machine whose states cannot be
     // listed is trusted for the state.
-    private string? Unreadable(string machine, string state, string context)
+    private RefusalCode? Unreadable(string machine, string state, string context)
     {
         if (!_states.Value.TryGetValue(machine, out var states))
-            return RehydrationErrorCodes.UnknownMachine;
+            return RefusalCode.UnknownMachine;
         if (states is not null && !states.Contains(state))
-            return RehydrationErrorCodes.UnknownState;
+            return RefusalCode.UnknownState;
         try
         {
-            return JsonNode.Parse(context) is JsonObject
-                ? null
-                : RehydrationErrorCodes.InvalidContext;
+            return JsonNode.Parse(context) is JsonObject ? null : RefusalCode.InvalidContext;
         }
         catch (JsonException)
         {
-            return RehydrationErrorCodes.InvalidContext;
+            return RefusalCode.InvalidContext;
         }
     }
 
@@ -715,7 +713,7 @@ internal sealed record SnapshotRowChange(
     /// For <see cref="SnapshotRowChangeKind.Unreadable"/>: why this host cannot read the row, a rehydration error code
     /// (unknown machine, unknown state, a context that is not a JSON object).
     /// </summary>
-    public string? UnreadableReason { get; init; }
+    public RefusalCode? UnreadableReason { get; init; }
 
     internal static readonly SnapshotRowChange ReloadAll = new(
         SnapshotRowChangeKind.Reload,

@@ -28,8 +28,8 @@ namespace Trax.Effect.StateMachine.Persistence
         }
         public sealed class LoadError : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.LoadError>
         {
-            public LoadError(string Code, string Message) { }
-            public string Code { get; init; }
+            public LoadError(Trax.Effect.StateMachine.RefusalCode Code, string Message) { }
+            public Trax.Effect.StateMachine.RefusalCode Code { get; init; }
             public string Message { get; init; }
         }
         public sealed class NotFound : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.NotFound>
@@ -38,9 +38,9 @@ namespace Trax.Effect.StateMachine.Persistence
         }
         public sealed class Rejected : Trax.Effect.StateMachine.Persistence.AdvanceOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.AdvanceOutcome.Rejected>
         {
-            public Rejected(string Reason, string? Detail) { }
+            public Rejected(Trax.Effect.StateMachine.RefusalCode Reason, string? Detail) { }
             public string? Detail { get; init; }
-            public string Reason { get; init; }
+            public Trax.Effect.StateMachine.RefusalCode Reason { get; init; }
         }
     }
     public sealed class AppliedRequest : System.IEquatable<Trax.Effect.StateMachine.Persistence.AppliedRequest>
@@ -58,8 +58,8 @@ namespace Trax.Effect.StateMachine.Persistence
         }
         public sealed class Rejected : Trax.Effect.StateMachine.Persistence.AutosaveResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult.Rejected>
         {
-            public Rejected(string Code, string Message) { }
-            public string Code { get; init; }
+            public Rejected(Trax.Effect.StateMachine.RefusalCode Code, string Message) { }
+            public Trax.Effect.StateMachine.RefusalCode Code { get; init; }
             public string Message { get; init; }
         }
         public sealed class Saved : Trax.Effect.StateMachine.Persistence.AutosaveResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult.Saved>
@@ -97,28 +97,10 @@ namespace Trax.Effect.StateMachine.Persistence
         }
         public sealed class Rejected : Trax.Effect.StateMachine.Persistence.DiscardOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.DiscardOutcome.Rejected>
         {
-            public Rejected(string Code, string Message) { }
-            public string Code { get; init; }
+            public Rejected(Trax.Effect.StateMachine.RefusalCode Code, string Message) { }
+            public Trax.Effect.StateMachine.RefusalCode Code { get; init; }
             public string Message { get; init; }
         }
-    }
-    public static class DraftRefusalCodes
-    {
-        public const string ClientOutdated = "client-outdated";
-        public const string DiscardNotAllowed = "discard-not-allowed";
-        public const string EffectBound = "effect-bound";
-        public const string EffectInProgress = "effect-in-progress";
-        public const string Forbidden = "forbidden";
-        public const string InvalidRequestId = "invalid-request-id";
-        public const string NoStart = "no-start";
-        public const string NotFound = "not-found";
-        public const string RequestIdReused = "request-id-reused";
-        public const string SaveNotAllowed = "save-not-allowed";
-        public const string ServerOutdated = "server-outdated";
-        public const string SystemOwned = "system-owned";
-        public const string TooManyDrafts = "too-many-drafts";
-        public const string TooManySubscriptions = "too-many-subscriptions";
-        public const string Unauthenticated = "unauthenticated";
     }
     public sealed class EfEffectClaimStore : Trax.Effect.StateMachine.Persistence.IEffectClaimStore
     {
@@ -266,8 +248,8 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public sealed class Invalid : Trax.Effect.StateMachine.Persistence.LoadResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult.Invalid>
         {
-            public Invalid(string Code, string Message) { }
-            public string Code { get; init; }
+            public Invalid(Trax.Effect.StateMachine.RefusalCode Code, string Message) { }
+            public Trax.Effect.StateMachine.RefusalCode Code { get; init; }
             public string Message { get; init; }
         }
         public sealed class Loaded : Trax.Effect.StateMachine.Persistence.LoadResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult.Loaded>
@@ -367,7 +349,7 @@ namespace Trax.Effect.StateMachine.Persistence
     public sealed class SnapshotProblem : System.IEquatable<Trax.Effect.StateMachine.Persistence.SnapshotProblem>
     {
         public SnapshotProblem() { }
-        public required string Code { get; init; }
+        public required Trax.Effect.StateMachine.RefusalCode Code { get; init; }
         public required string Message { get; init; }
     }
     public static class SnapshotSelfCheck
@@ -378,8 +360,8 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public sealed class Rejected : Trax.Effect.StateMachine.Persistence.StartOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.StartOutcome.Rejected>
         {
-            public Rejected(string Code, string Message) { }
-            public string Code { get; init; }
+            public Rejected(Trax.Effect.StateMachine.RefusalCode Code, string Message) { }
+            public Trax.Effect.StateMachine.RefusalCode Code { get; init; }
             public string Message { get; init; }
         }
         public sealed class Started : Trax.Effect.StateMachine.Persistence.StartOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.StartOutcome.Started>

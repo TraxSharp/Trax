@@ -120,15 +120,15 @@ describe('createMachineExecutor', () => {
 
   it('answers a refusal as the problem, and refuses a save without asking the server', async () => {
     const { queries, fetch } = server(
-      answer('next', { id: 'draft-1', revision: null, state: null, context: null, problem: { code: 'guard-failed', message: 'Add an item.' } }),
+      answer('next', { id: 'draft-1', revision: null, state: null, context: null, problem: { code: 'GUARD_FAILED', message: 'Add an item.' } }),
     );
     const client = createSnapshotClient(executor(fetch));
 
     expect((await client.advance('checkout', 'draft-1', 'Next')).problem).toEqual({
-      code: 'guard-failed',
+      code: 'GUARD_FAILED',
       message: 'Add an item.',
     });
-    expect((await client.save('checkout', 'draft-1', '{}')).problem?.code).toBe('save-not-allowed');
+    expect((await client.save('checkout', 'draft-1', '{}')).problem?.code).toBe('SAVE_NOT_ALLOWED');
     expect(queries).toHaveLength(1);
   });
 
@@ -208,8 +208,8 @@ describe('createMachineExecutor with persisted documents', () => {
 
   it('answers client-outdated and server-outdated as problems, which a session reports with their codes', async () => {
     const { fetch } = recording(
-      { errors: [{ message: 'Reload.', extensions: { code: 'client-outdated' } }] },
-      { errors: [{ message: 'Retry.', extensions: { code: 'server-outdated' } }] },
+      { errors: [{ message: 'Reload.', extensions: { code: 'CLIENT_OUTDATED' } }] },
+      { errors: [{ message: 'Retry.', extensions: { code: 'SERVER_OUTDATED' } }] },
     );
     const session = createDraftSession({
       client: createSnapshotClient(persisted(fetch)),
@@ -217,8 +217,8 @@ describe('createMachineExecutor with persisted documents', () => {
       id: 'draft-1',
     });
 
-    expect(await session.load()).toEqual({ ok: false, code: 'client-outdated', message: 'Reload.' });
-    expect(await session.load()).toEqual({ ok: false, code: 'server-outdated', message: 'Retry.' });
+    expect(await session.load()).toEqual({ ok: false, code: 'CLIENT_OUTDATED', message: 'Reload.' });
+    expect(await session.load()).toEqual({ ok: false, code: 'SERVER_OUTDATED', message: 'Retry.' });
   });
 
   it('answers an operation it has no document for as client-outdated, without asking the server', async () => {
@@ -226,7 +226,7 @@ describe('createMachineExecutor with persisted documents', () => {
 
     const discarded = await createSnapshotClient(persisted(fetch)).discard('checkout', 'draft-1', 'req-3');
 
-    expect(discarded.problem?.code).toBe('client-outdated');
+    expect(discarded.problem?.code).toBe('CLIENT_OUTDATED');
     expect(sent).toHaveLength(0);
   });
 

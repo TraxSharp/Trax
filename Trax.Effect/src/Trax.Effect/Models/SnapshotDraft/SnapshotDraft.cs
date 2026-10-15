@@ -57,7 +57,7 @@ public class SnapshotDraft
     /// <summary>
     /// The machine definition version the snapshot was written under, copied from the snapshot on every write.
     /// On load an older version is migrated forward through the machine's migrations; a newer one, or one with a
-    /// gap in the chain, is refused as <c>version-mismatch</c>.
+    /// gap in the chain, is refused as <c>VERSION_MISMATCH</c>.
     /// </summary>
     [Column("version")]
     public int Version { get; set; }

@@ -284,7 +284,7 @@ public class TimersModelTests(ClusterStore store)
                         await Forged(
                             draft,
                             () => Advance(test._api, draft, TimerTrigger),
-                            RejectionReasons.TimerBound
+                            RefusalCode.TimerBound
                         );
                     break;
                 case Kind.AutosaveTimedState:
@@ -476,7 +476,7 @@ public class TimersModelTests(ClusterStore store)
             }
         }
 
-        private async Task Forged(Draft draft, Func<Task<AdvanceOutcome>> forge, string reason)
+        private async Task Forged(Draft draft, Func<Task<AdvanceOutcome>> forge, RefusalCode reason)
         {
             var revision = draft.Revision;
             (await forge())

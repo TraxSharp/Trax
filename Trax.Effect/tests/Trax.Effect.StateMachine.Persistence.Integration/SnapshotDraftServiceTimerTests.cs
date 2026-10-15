@@ -9,7 +9,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 /// <summary>
 /// A timer trigger is fired only by the server when it is due. No advance fires it, whoever asks: a client on the
 /// typed path, the generic mutation, a host train forwarding a client, or trusted host code through
-/// <see cref="IMachineInstances"/>. Each is refused as <c>timer-bound</c> and nothing is written.
+/// <see cref="IMachineInstances"/>. Each is refused as <c>TIMER_BOUND</c> and nothing is written.
 /// </summary>
 [TestFixture(StoreProvider.Postgres)]
 [TestFixture(StoreProvider.Sqlite)]
@@ -57,7 +57,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
                 .Should()
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
-                .Be(RejectionReasons.TimerBound, Because);
+                .Be(RefusalCode.TimerBound, Because);
 
             var generic = await new AdvanceSnapshotJunction(
                 scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>(),
@@ -70,7 +70,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
                     Trigger = ReminderMachine.ReviewTimer,
                 }
             );
-            generic.Problem!.Code.Should().Be(RejectionReasons.TimerBound, Because);
+            generic.Problem!.Code.Should().Be(RefusalCode.TimerBound, Because);
 
             // The typed path, and a host train forwarding its caller, both act as that client.
             (
@@ -83,7 +83,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
                 .Should()
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
-                .Be(RejectionReasons.TimerBound, Because);
+                .Be(RefusalCode.TimerBound, Because);
         }
 
         var after = (await _host.Rows(id)).Single();
@@ -116,7 +116,7 @@ public class SnapshotDraftServiceTimerTests(StoreProvider provider)
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
                 .Be(
-                    RejectionReasons.TimerBound,
+                    RefusalCode.TimerBound,
                     $"trusted host code cannot fire a timer either. See {Adr}"
                 );
 

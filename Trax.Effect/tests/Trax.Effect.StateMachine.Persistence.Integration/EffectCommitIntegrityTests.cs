@@ -143,7 +143,7 @@ public class EffectCommitIntegrityTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be(DraftRefusalCodes.EffectInProgress, Adr);
+            .Be(RefusalCode.EffectInProgress, Adr);
         (await send).Should().BeOfType<AdvanceOutcome.Advanced>();
         var resend = await Runner(charge).Run(User, id, "req-2");
 
@@ -191,7 +191,7 @@ public class EffectCommitIntegrityTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("effect-in-progress", Adr);
+            .Be(RefusalCode.EffectInProgress, Adr);
         charge.Calls.Should().Be(1, Adr);
     }
 
@@ -229,7 +229,7 @@ public class EffectCommitIntegrityTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        send.Problem!.Code.Should().Be("delivery-failed");
+        send.Problem!.Code.Should().Be(RefusalCode.DeliveryFailed);
     }
 
     [Test]

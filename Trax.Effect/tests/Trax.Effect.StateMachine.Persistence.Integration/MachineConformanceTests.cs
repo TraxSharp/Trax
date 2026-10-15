@@ -15,7 +15,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 public class MachineConformanceTests
 {
     private const string PassCorpus = """
-        {"cases":[{"given":{"machine":"conformance-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Coin","input":{"coin":"quarter"}},"expect":{"outcome":"transitioned","wire":"{\"machine\":\"conformance-pass\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"}},{"given":{"machine":"conformance-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Push"},"expect":{"outcome":"rejected","reason":"no-transition"}}]}
+        {"cases":[{"given":{"machine":"conformance-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Coin","input":{"coin":"quarter"}},"expect":{"outcome":"transitioned","wire":"{\"machine\":\"conformance-pass\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"}},{"given":{"machine":"conformance-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Push"},"expect":{"outcome":"rejected","reason":"NO_TRANSITION"}}]}
         """;
 
     private const string DriftCorpus = """

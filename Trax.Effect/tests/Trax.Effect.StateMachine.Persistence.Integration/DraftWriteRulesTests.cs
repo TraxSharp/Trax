@@ -95,7 +95,7 @@ public sealed class LedgerMachine : Machine<LedgerState, LedgerTrigger>
 /// <summary>
 /// Which writes the draft operations accept. A state that an effect-bound transition lands in, or that is
 /// committed, is reached only by the effect runner: the advance path refuses an effect-bound trigger. The soft
-/// save does not serve a machine with an effect at all (<c>save-not-allowed</c>), and on a machine it serves it
+/// save does not serve a machine with an effect at all (<c>SAVE_NOT_ALLOWED</c>), and on a machine it serves it
 /// refuses to create or move a draft into a committed state, to rewrite one there, or to overwrite a stored draft it
 /// cannot read.
 ///
@@ -155,7 +155,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("effect-bound", Adr);
+            .Be(RefusalCode.EffectBound, Adr);
         (await StoredState(id)).Should().Be("Review");
     }
 
@@ -183,7 +183,7 @@ public class DraftWriteRulesTests
             }
         );
 
-        output.Problem!.Code.Should().Be("effect-bound", Adr);
+        output.Problem!.Code.Should().Be(RefusalCode.EffectBound, Adr);
         (await StoredState(id)).Should().Be("Review");
     }
 
@@ -213,7 +213,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be("state-reserved", Adr);
+            .Be(RefusalCode.StateReserved, Adr);
         (await Ledgers().Load("u", id)).Should().BeOfType<LoadResult.NotFound>();
     }
 
@@ -229,7 +229,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be("state-reserved", Adr);
+            .Be(RefusalCode.StateReserved, Adr);
         (await Ledgers().Load("u", id))
             .Should()
             .BeOfType<LoadResult.Loaded>()
@@ -246,12 +246,12 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.SaveNotAllowed, NoSave);
+            .Be(RefusalCode.SaveNotAllowed, NoSave);
         (await Orders().Autosave("u", id, OrderMachine.ReviewSnapshot(1, 2)))
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.SaveNotAllowed, NoSave);
+            .Be(RefusalCode.SaveNotAllowed, NoSave);
         (await StoredState(id)).Should().Be("Review");
     }
 
@@ -273,7 +273,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.SaveNotAllowed, NoSave);
+            .Be(RefusalCode.SaveNotAllowed, NoSave);
         (await service.Load("u", id)).Should().BeOfType<LoadResult.NotFound>();
     }
 
@@ -293,7 +293,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be("draft-committed", Adr);
+            .Be(RefusalCode.DraftCommitted, Adr);
         (await StoredLedger(id))!["entries"]!.AsArray().Count.Should().Be(1);
     }
 
@@ -325,7 +325,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.SaveNotAllowed, NoSave);
+            .Be(RefusalCode.SaveNotAllowed, NoSave);
         var stored = (LoadResult.Loaded)await service.Load("u", id);
         stored.Snapshot.Context["receipt"]!.GetValue<string>().Should().Be("r-1");
     }
@@ -348,7 +348,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.SaveNotAllowed, NoSave);
+            .Be(RefusalCode.SaveNotAllowed, NoSave);
         ((LoadResult.Loaded)await service.Load("u", id))
             .Snapshot.State.Should()
             .Be(nameof(ShipState.Shipped));
@@ -376,7 +376,7 @@ public class DraftWriteRulesTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be("draft-unreadable", Adr);
+            .Be(RefusalCode.DraftUnreadable, Adr);
         (await Ledgers().Load("u", id)).Should().BeOfType<LoadResult.Invalid>();
     }
 
@@ -448,7 +448,7 @@ public class DraftWriteRulesTests
         output
             .Problem!.Code.Should()
             .Be(
-                DraftRefusalCodes.SaveNotAllowed,
+                RefusalCode.SaveNotAllowed,
                 $"a gated machine's states are reached through its declared events only. See {MachinesAreTheApi}"
             );
         (await TestDb.NewStore().Get(user, id)).Should().BeNull("a refused save writes nothing");

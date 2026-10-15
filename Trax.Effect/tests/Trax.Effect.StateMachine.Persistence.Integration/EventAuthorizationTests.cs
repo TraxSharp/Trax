@@ -11,7 +11,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// Every event's rule is checked below the resolver, where every surface meets: a client actor that does not meet
-/// it is refused as <c>forbidden</c> before anything is validated, written or launched, on the draft service, on the
+/// it is refused as <c>FORBIDDEN</c> before anything is validated, written or launched, on the draft service, on the
 /// effect-bound send and from a host train forwarding a caller's event. Host code on a user's draft is a client too;
 /// only host code driving a system-owned instance through <see cref="IMachineInstances"/> is not held to the rules.
 /// </summary>
@@ -23,7 +23,7 @@ public class EventAuthorizationTests(StoreProvider provider)
     private const string Adr =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
-    private const string Unauthenticated = "unauthenticated";
+    private const RefusalCode Unauthenticated = RefusalCode.Unauthenticated;
 
     private InstanceHost _host = null!;
     private AuthorizingLauncher _launcher = null!;
@@ -71,7 +71,7 @@ public class EventAuthorizationTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"the event's rule is checked before the invoked train's authorization. See {Adr}"
             );
         var after = (await _host.Rows(id)).Single();
@@ -170,9 +170,9 @@ public class EventAuthorizationTests(StoreProvider provider)
         var owner = NewUser();
         var actor = DeskRoles.Client(caller.Authenticated ? owner : " ", caller.Roles);
         var allowed = Satisfies(caller, rule);
-        string[] refusedAs = caller.Authenticated
-            ? [DraftRefusalCodes.Forbidden]
-            : [DraftRefusalCodes.Forbidden, Unauthenticated];
+        RefusalCode[] refusedAs = caller.Authenticated
+            ? [RefusalCode.Forbidden]
+            : [RefusalCode.Forbidden, Unauthenticated];
         var id = Guid.NewGuid();
 
         if (surface == Surface.Send)
@@ -223,7 +223,7 @@ public class EventAuthorizationTests(StoreProvider provider)
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
                 .BeOneOf(
-                    allowed ? [RejectionReasons.InvalidInput] : refusedAs,
+                    allowed ? [RefusalCode.InvalidInput] : refusedAs,
                     $"the rule is checked before the input. See {Adr}"
                 );
 
@@ -290,7 +290,7 @@ public class EventAuthorizationTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"there is no trusted path to a user's instance: host code there is a client. See {Adr}"
             );
         (await StateOf(id)).Should().Be(nameof(DeskState.Open));
@@ -320,7 +320,7 @@ public class EventAuthorizationTests(StoreProvider provider)
 
                     var row = (await _host.Rows(id)).Single();
                     var writes = row.ConcurrencyToken == before ? 0 : 1;
-                    (outcome is AdvanceOutcome.Rejected { Reason: DraftRefusalCodes.Forbidden })
+                    (outcome is AdvanceOutcome.Rejected { Reason: RefusalCode.Forbidden })
                         .Should()
                         .Be(!allowed, $"forbidden exactly when the rule is unmet. See {Adr}");
                     writes.Should().Be(allowed ? 1 : 0, "a forbidden event writes nothing");
@@ -361,7 +361,7 @@ public class EventAuthorizationTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"the rule is checked before a request id is replayed. See {Adr}"
             );
     }
@@ -398,7 +398,7 @@ public class EventAuthorizationTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"a role once held is not remembered on the draft. See {Adr}"
             );
         (await StateOf(id)).Should().Be(nameof(DeskState.Done));
@@ -433,7 +433,7 @@ public class EventAuthorizationTests(StoreProvider provider)
             .Should()
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.Forbidden, $"start declares its rule like an event. See {Adr}");
+            .Be(RefusalCode.Forbidden, $"start declares its rule like an event. See {Adr}");
         (await _host.UserRows(owner, RuledDeskMachine.Id))
             .Should()
             .BeEmpty("a forbidden start writes nothing");

@@ -96,18 +96,18 @@ function explain(machine: MachineView, last: LastAction, user: string): Step[] {
 
   if (last.kind === "advance") {
     const move = machine.moves.find((m) => m.trigger === last.trigger && m.from === last.from);
-    check(`Loaded ${user}'s stored draft. It is in ${from}.`, ["not-found", "unauthenticated", "unknown-machine"]);
+    check(`Loaded ${user}'s stored draft. It is in ${from}.`, ["NOT_FOUND", "UNAUTHENTICATED", "UNKNOWN_MACHINE"]);
     check(
       `Is there a ${last.trigger} move out of ${from}?`,
-      ["no-transition", "effect-bound"],
+      ["NO_TRANSITION", "EFFECT_BOUND"],
       move ? `Yes: ${move.from} → ${move.to}.` : undefined,
-      code === "effect-bound"
+      code === "EFFECT_BOUND"
         ? `Yes, but it runs the ${move?.effect} effect, so it is its own field, pay, which runs the effect on the server.`
         : `No. There is no ${last.trigger} arrow leaving ${from}, so the trigger means nothing here.`,
     );
-    if (move?.guard) check(`Guard: ${move.guard}.`, ["guard-failed"], "Passed.");
+    if (move?.guard) check(`Guard: ${move.guard}.`, ["GUARD_FAILED"], "Passed.");
     else steps.push({ status: stopped ? "skip" : "ok", text: "This move has no guard." });
-    if (move) check(`${move.to} rule: ${stateRule(move.to)}.`, ["invalid-context"], "Holds.");
+    if (move) check(`${move.to} rule: ${stateRule(move.to)}.`, ["INVALID_CONTEXT"], "Holds.");
     store(`Stored the draft in ${move?.to ?? "its new state"}, for ${user} only.`);
   } else if (last.kind === "start") {
     const state = last.result.snapshot?.state;
@@ -116,9 +116,9 @@ function explain(machine: MachineView, last: LastAction, user: string): Step[] {
       text: "The page sent only the machine's name and a request id.",
       detail: "No snapshot and no id: the server builds the first snapshot from the machine's declared start.",
     });
-    check(`May ${user} start a ${machine.name}?`, ["forbidden", "unauthenticated", "no-start"], "Yes: any signed-in user may.");
-    check("Is this a new request?", ["request-id-reused", "invalid-request-id"], "A retry would return the instance it created.");
-    check(`Does ${user} hold fewer drafts than the server allows?`, ["too-many-drafts"], "Yes.");
+    check(`May ${user} start a ${machine.name}?`, ["FORBIDDEN", "UNAUTHENTICATED", "NO_START"], "Yes: any signed-in user may.");
+    check("Is this a new request?", ["REQUEST_ID_REUSED", "INVALID_REQUEST_ID"], "A retry would return the instance it created.");
+    check(`Does ${user} hold fewer drafts than the server allows?`, ["TOO_MANY_DRAFTS"], "Yes.");
     store(`Minted an id and stored the instance in ${state ?? "its first state"}, for ${user} only.`);
   } else {
     const effectMove = machine.moves.find((m) => m.effect);
@@ -127,7 +127,7 @@ function explain(machine: MachineView, last: LastAction, user: string): Step[] {
       text: "The page sent only the draft's id.",
       detail: `No amount, no card, no call to a payment API: the ${effectMove?.effect} is the machine's to run.`,
     });
-    check(`Loaded ${user}'s stored draft. It is in ${from}.`, ["not-found", "unauthenticated"]);
+    check(`Loaded ${user}'s stored draft. It is in ${from}.`, ["NOT_FOUND", "UNAUTHENTICATED"]);
     if (last.replayed) {
       steps.push({
         status: "ok",
@@ -139,16 +139,16 @@ function explain(machine: MachineView, last: LastAction, user: string): Step[] {
     } else {
       check(
         `Is the draft where the ${effectMove?.effect} runs from (${effectMove?.from})?`,
-        ["no-transition", "no-effect"],
+        ["NO_TRANSITION", "NO_EFFECT"],
         "Yes.",
         `No. The ${effectMove?.effect} only runs on the ${effectMove?.trigger} move out of ${effectMove?.from}, so nothing ran.`,
       );
       check(
         `Ran the ${effectMove?.effect}, exactly once.`,
-        ["delivery-failed", "effect-in-progress", "draft-changed", "request-id-reused"],
+        ["DELIVERY_FAILED", "EFFECT_IN_PROGRESS", "DRAFT_CHANGED", "REQUEST_ID_REUSED"],
         receiptOf(last) ? `Receipt ${receiptOf(last)}.` : undefined,
       );
-      check(`${effectMove?.to} rule: ${stateRule(effectMove?.to)}.`, ["invalid-context"], "Holds.");
+      check(`${effectMove?.to} rule: ${stateRule(effectMove?.to)}.`, ["INVALID_CONTEXT"], "Holds.");
       store(`Moved ${effectMove?.from} → ${effectMove?.to} and stored it, for ${user} only.`);
     }
   }

@@ -353,7 +353,7 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
                 is { } invoke
             && TraxRedaction.ReachesSensitiveMember(invoke.OutputType)
         )
-            return new AdvanceResult.Rejected(RejectionReasons.InternalError)
+            return new AdvanceResult.Rejected(RefusalCode.InternalError)
             {
                 Exception = new InvalidOperationException(
                     InvokeRefusals.SensitiveOutput(
@@ -464,14 +464,14 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
                     Timer = timer,
                 }
                 : throw new ArgumentException(
-                    $"The initial snapshot of '{definition.Id}' is not valid ({RejectionReasons.InvalidInput}): "
+                    $"The initial snapshot of '{definition.Id}' is not valid ({RefusalCode.InvalidInput.ToWire()}): "
                         + engine
                             .TimerFor(ok.Snapshot.State, ok.Snapshot.Context, restart: true)
                             .Problem,
                     nameof(context)
                 ),
             RehydrationResult.Error error => throw new ArgumentException(
-                $"The initial snapshot of '{definition.Id}' is not valid ({error.Code}): {error.Message}",
+                $"The initial snapshot of '{definition.Id}' is not valid ({error.Code.ToWire()}): {error.Message}",
                 nameof(context),
                 error.Exception
             ),

@@ -35,7 +35,7 @@ A **snapshot** is the only thing that crosses the wire or lands in a row:
 Two engines (this one and the C# one) implement the same behavior. They are kept identical by a shared
 **differential corpus** under `machines/<machine>/`: one runtime enumerates every reachable case into a
 committed golden and every other runtime replays it and must produce the same outcome. Only the result
-*codes* (`no-transition`, `guard-failed`, `invalid-context`, `malformed`, ...) are contract; human-readable
+*codes* (`NO_TRANSITION`, `GUARD_FAILED`, `INVALID_CONTEXT`, `MALFORMED`, ...) are contract; human-readable
 detail text is free to differ. Byte-exact wire is guaranteed by a full RFC 8785 (JCS) canonical serializer in
 each runtime, pinned by a shared conformance-vector suite.
 
@@ -127,12 +127,12 @@ await session.send(requestId);                     // the exactly-once effect
 - **`createDraftSession({ client, machine, id })`** — one machine's one draft, with `machine` and
   `schemaHash` read off the `TypedMachine` so they cannot disagree with the machine actually running.
   Every method is **total**: a refusal arrives as a typed `problem` and an unreachable server as
-  `transport-error`, so no call site needs a try/catch. Fallback copy is overridable via `messages`.
+  `TRANSPORT_ERROR`, so no call site needs a try/catch. Fallback copy is overridable via `messages`.
 
 The `schemaHash` threaded through every call is the version-skew handshake: a client whose machine has
-drifted from the deployed one is refused with `schema-mismatch` and reloads, rather than writing under an
+drifted from the deployed one is refused with `SCHEMA_MISMATCH` and reloads, rather than writing under an
 outdated contract. `advance` also accepts `clientResult` — the snapshot the local twin computed for that
-same advance — so the server can refuse a `client-divergence` instead of storing a result the two engines
+same advance — so the server can refuse a `CLIENT_DIVERGENCE` instead of storing a result the two engines
 disagree on.
 
 ### A machine the server owns
@@ -161,7 +161,7 @@ map.send('ChooseFields', { fields: ['Hydrology'] });
 The server applies every transition and returns what it stored. The twin only predicts: the page shows the
 prediction until the answer (or a push) replaces it, and sends it as `clientResult`. Snapshots are ordered by
 revision, events are sent one at a time per instance, each under its own requestId, and `gone` or
-`client-outdated` stop the hook for good. `ServerMachineController` is the same thing without React.
+`CLIENT_OUTDATED` stop the hook for good. `ServerMachineController` is the same thing without React.
 
 ## Status
 

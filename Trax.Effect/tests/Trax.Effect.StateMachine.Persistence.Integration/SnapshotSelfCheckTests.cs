@@ -15,7 +15,7 @@ public class SnapshotSelfCheckTests
     // A corpus the declarative turnstile reproduces exactly: a transition (Locked + Coin(quarter) -> Unlocked)
     // and a rejection (Locked + Push has no transition), so replay exercises both engine outcomes.
     private const string PassCorpus = """
-        {"cases":[{"given":{"machine":"self-check-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Coin","input":{"coin":"quarter"}},"expect":{"outcome":"transitioned","wire":"{\"machine\":\"self-check-pass\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"}},{"given":{"machine":"self-check-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Push"},"expect":{"outcome":"rejected","reason":"no-transition"}}]}
+        {"cases":[{"given":{"machine":"self-check-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Coin","input":{"coin":"quarter"}},"expect":{"outcome":"transitioned","wire":"{\"machine\":\"self-check-pass\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"}},{"given":{"machine":"self-check-pass","version":1,"state":"Locked","context":{}},"when":{"trigger":"Push"},"expect":{"outcome":"rejected","reason":"NO_TRANSITION"}}]}
         """;
 
     // Same case, but the golden expects the wrong wire — the engine's real result diverges from it.

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
@@ -71,7 +72,7 @@ public class SystemInstanceAdvanceTests(StoreProvider provider)
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("outcome-bound", $"only the run's outcome applies it. See {Adr}");
+            .Be(RefusalCode.OutcomeBound, $"only the run's outcome applies it. See {Adr}");
 
         var after = await _host.Row(started.Id, PartitionMachine.MachineId);
         after!.State.Should().Be("Running");
@@ -91,7 +92,7 @@ public class SystemInstanceAdvanceTests(StoreProvider provider)
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("no-transition");
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]

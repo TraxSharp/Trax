@@ -47,7 +47,7 @@ the data for that step, and only that step, so its shape is discriminated by `st
 3. **No unhandled exceptions.** Every operation is total. `Advance` returns a transitioned or rejected
    result. `Rehydrate` returns an ok or error result. An unpermitted trigger, a failed guard, or malformed
    stored JSON all become typed values, never a throw. That includes JSON that parses but cannot be kept:
-   `Rehydrate` refuses a number outside the range of a double (`1e400`) and a NUL character as `malformed`,
+   `Rehydrate` refuses a number outside the range of a double (`1e400`) and a NUL character as `MALFORMED`,
    so an accepted snapshot always has a canonical wire and always fits a `jsonb` column.
 
 A state or trigger token is matched by its exact declared name. `"1"`, `" Unlocked"` and `"Locked, Unlocked"`
@@ -95,7 +95,7 @@ Two write paths have different trust levels. Autosave is the soft path: the clie
 server validates it and stores it. Advance is the authoritative path: the client sends only a trigger, and the
 server re-drives the transition from the stored snapshot, never trusting a client-computed state. The soft path
 serves only machines with no server-side behaviour: a machine with an event or a start gated by a role or a policy,
-a timer, an invoked train or an effect refuses every save as `save-not-allowed`, and moves only through its declared
+a timer, an invoked train or an effect refuses every save as `SAVE_NOT_ALLOWED`, and moves only through its declared
 events.
 
 Autosave stores the context the client wrote, so any value an effect will act on has to be held to its true value

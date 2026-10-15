@@ -30,17 +30,17 @@ Moving a client off the generic `stateMachine` mutations, which are no longer se
 | --- | --- | --- | --- |
 | `machines` | both | none | The namespace of every exposed machine. It and each machine's field group operations, so the [operation cap](/docs/sdk-reference/graphql-api/add-trax-graphql) counts the operations under them, not them. |
 | `machines.<machine>` | both | none | One field per exposed machine, named from its kebab-case id in camelCase (`topic-map` is `topicMap`). |
-| `start` | mutation | `input: <StartInput>!`, `requestId: String!` | Creates an instance for the caller from the machine's declared start. The server mints the id. `input` is the record `Start<TStartInput>` declares, never the context type, and is left out when that record has no field. A retry with the same `requestId` and input answers with the same instance; the same `requestId` with another input is `request-id-reused`. |
+| `start` | mutation | `input: <StartInput>!`, `requestId: String!` | Creates an instance for the caller from the machine's declared start. The server mints the id. `input` is the record `Start<TStartInput>` declares, never the context type, and is left out when that record has no field. A retry with the same `requestId` and input answers with the same instance; the same `requestId` with another input is `REQUEST_ID_REUSED`. |
 | `<event>` | mutation | `id: UUID!`, `input: <Input>!`, `requestId: String!`, `clientResult: String` | Sends one client event, named from its trigger in camelCase (`CancelBuild` is `cancelBuild`). `input` is the record the event's `WithInput<T>()` declares, and is absent for an event declared without one: never a JSON scalar. |
 | `<effect event>` | mutation | `id: UUID!`, `requestId: String!` | An event bound to the machine's `RunsOnce` effect. The server runs the effect, once per instance however many retries arrive with one `requestId`, and records its result; the client sends no input, and no `clientResult`, since it cannot predict the effect's receipt. |
-| `discard` | mutation | `id: UUID!`, `requestId: String!` | Deletes the caller's instance, held to the machine's `Discard(...)` rule. A missing id, and another user's, answers `discarded: true`. A row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in an invoking state, and one with an effect pending on it are refused as `discard-not-allowed` and kept. Answers `MachineDiscardResult { id discarded problem }`. |
+| `discard` | mutation | `id: UUID!`, `requestId: String!` | Deletes the caller's instance, held to the machine's `Discard(...)` rule. A missing id, and another user's, answers `discarded: true`. A row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in an invoking state, and one with an effect pending on it are refused as `DISCARD_NOT_ALLOWED` and kept. Answers `MachineDiscardResult { id discarded problem }`. |
 | `get` | query | `id: UUID!` | The caller's instance, or null. Another user's id, and one the machine's `Get` rule refuses the caller, read exactly as an unknown id. |
 
 An outcome of an invoked train and a timer have no field: only the server fires them.
 
 Every operation field carries `@authorize`, so an anonymous caller is refused before any resolver runs. Each event's
 own rule (`Requires`, `RequiresPolicy`, `AnyAuthenticated`) is checked below the field, where every surface meets,
-and a caller it refuses is answered with the problem `forbidden`, not an error.
+and a caller it refuses is answered with the problem `FORBIDDEN`, not an error.
 
 ### Answers
 
@@ -57,9 +57,9 @@ Every operation but `discard` answers with the machine's `<Machine>MachineResult
 | `problem` | `SnapshotProblem` | `{ code message }` when the operation was refused, else null. When it is set, nothing was written. |
 
 A refusal is data. The codes are those of the [result codes](/docs/sdk-reference/statemachine-api/result-codes):
-`invalid-input`, `guard-failed` (its message is the guard's `Because` text), `no-transition`, `forbidden`,
-`request-id-reused`, `invalid-request-id`, `client-divergence`, `too-large`, `not-found` and the rest. A failure the
-server did not expect, such as the database going away, is `internal-error` with a fixed message and a reference
+`INVALID_INPUT`, `GUARD_FAILED` (its message is the guard's `Because` text), `NO_TRANSITION`, `FORBIDDEN`,
+`REQUEST_ID_REUSED`, `INVALID_REQUEST_ID`, `CLIENT_DIVERGENCE`, `TOO_LARGE`, `NOT_FOUND` and the rest. A failure the
+server did not expect, such as the database going away, is `INTERNAL_ERROR` with a fixed message and a reference
 the server logs the failure under; the answer carries no exception text, SQL or host.
 
 ## Behavior
@@ -108,13 +108,13 @@ context reaches its owner only through `get` and `machineChanged`. Their runs ar
 - **Reads share the request's data context.** `get` reads through the machine's draft service in the request's
   scope, one read of a request at a time, so two aliased `get`s are safe.
 - **`requestId` is required** on `start`, `discard` and every event: 1 to 200 characters, not blank, with no control
-  character (C0, DEL or C1) and no unpaired surrogate, or the answer is `invalid-request-id` and nothing runs. Two copies of one request racing each other answer with one result.
-- **Input is bounded.** An input or a `clientResult` larger than 64 KiB is `too-large` before it is parsed.
+  character (C0, DEL or C1) and no unpaired surrogate, or the answer is `INVALID_REQUEST_ID` and nothing runs. Two copies of one request racing each other answer with one result.
+- **Input is bounded.** An input or a `clientResult` larger than 64 KiB is `TOO_LARGE` before it is parsed.
 - **Sensitive input is masked.** A field the input record marks `[TraxSensitive]`, or one whose type reaches a
   marked member, travels to the train in `AdvanceSnapshotInput.SensitiveInput` (`StartSnapshotInput.SensitiveInput`
   for a start), which every recorded copy of the run's input writes as `{"_redacted": true}`.
 - **`clientResult`** is the canonical snapshot the client's twin predicts for the event. A different result is
-  refused as `client-divergence`, nothing is written, and the `trax.machine.client_divergence` meter counts it; the
+  refused as `CLIENT_DIVERGENCE`, nothing is written, and the `trax.machine.client_divergence` meter counts it; the
   server logs only its length and SHA-256 hash. It is compared canonically, with a null member equal to an absent
   one, so a prediction rebuilt from a typed answer matches. A retried request is compared with the result recorded
   for it.
@@ -128,7 +128,7 @@ on.
 
 - **Verified once, routed by row.** The user key is the socket's principal (the host's `ISnapshotPrincipal`), never
   an argument, and the machine's `Watch` rule is checked once, at subscribe. A missing id, another user's, a system
-  instance's and one the rule refuses all get the same answer: one event with the problem `not-found`, then the end.
+  instance's and one the rule refuses all get the same answer: one event with the problem `NOT_FOUND`, then the end.
   The stream then follows the row's `row_id`, so a row deleted and created again under the same id never reaches it.
 - **Order.** The watch registers before the instance is read, and the first event is the instance as it is then.
   Each later event is a newer revision, whole, migrated and validated as `get` reads it; a burst may arrive as its
@@ -137,10 +137,10 @@ on.
   does not set it today. An event's `dueAt` is always the row's: null means the state has no timer, or the server
   cleared it while the instance stayed in it.
 - **The end.** A delete or an expiry ends the stream with `gone: true`. A row written by a newer version of the
-  machine than the node runs ends it with `client-outdated` (reload); one the node cannot read otherwise ends it with
+  machine than the node runs ends it with `CLIENT_OUTDATED` (reload); one the node cannot read otherwise ends it with
   the rehydration code. Ending one stream ends no other. A stream also ends with its socket's credential.
 - **Caps.** One principal holds at most 10 streams on one instance and 2,000 in all on a node; past either the
-  answer is `too-many-subscriptions`, and a stream that ends frees its place. Each stream holds one of its socket's
+  answer is `TOO_MANY_SUBSCRIPTIONS`, and a stream that ends frees its place. Each stream holds one of its socket's
   100 operations.
 - **Cost.** A node holds one listening session however many streams it serves, and reads a written row once per
   burst of notices, only when something on the node watches it
@@ -173,18 +173,18 @@ transport like any other.
   machine's documents is numbered (the row's `version`) one past every set stored before it.
 - **A lookup verifies** the stored body against its id. A body that does not hash to its id is refused, logged and
   counted on `trax.persisted_operations.machine_document_mismatches`.
-- **Each node runs only its own documents.** An id of an older set answers `client-outdated` (the client reloads);
-  an id of a newer set, registered by a node running a newer version, answers `server-outdated` (retry: another node
+- **Each node runs only its own documents.** An id of an older set answers `CLIENT_OUTDATED` (the client reloads);
+  an id of a newer set, registered by a node running a newer version, answers `SERVER_OUTDATED` (retry: another node
   may run it). Both are GraphQL errors whose `extensions.code` is the code, and neither runs anything. Neither is a
-  server error: `client-outdated` is HTTP 400 and `server-outdated` 409, so a load balancer counting 5xx answers does
+  server error: `CLIENT_OUTDATED` is HTTP 400 and `SERVER_OUTDATED` 409, so a load balancer counting 5xx answers does
   not count them, and a client reads the code, not the status. An id of a machine this node does not serve is
-  answered from the store: `server-outdated` while the store holds it active (a node may serve it), `client-outdated`
-  once it was collected. An id that is not shaped like a generated one answers `client-outdated` without a read. An
+  answered from the store: `SERVER_OUTDATED` while the store holds it active (a node may serve it), `CLIENT_OUTDATED`
+  once it was collected. An id that is not shaped like a generated one answers `CLIENT_OUTDATED` without a read. An
   id this node has not seen is answered at once from its last read of the store, never by waiting for one: until a
-  read that began after the id was first asked for has finished, it answers `server-outdated`, and once such a read
-  does not hold it, `client-outdated`. The store is read again in the background, at most once a second however many
+  read that began after the id was first asked for has finished, it answers `SERVER_OUTDATED`, and once such a read
+  does not hold it, `CLIENT_OUTDATED`. The store is read again in the background, at most once a second however many
   such ids arrive, and the ids waiting for a read are bounded (4096), the oldest forgotten first: a flood of more
-  made-up ids than that within a second keeps a real stale client on `server-outdated` until the flood stops. A document id's machine is
+  made-up ids than that within a second keeps a real stale client on `SERVER_OUTDATED` until the flood stops. A document id's machine is
   the segment between the `trax_machine_` prefix and the next underscore; a machine id never contains one.
 - **Older documents are collected** once a node's own set has been stored for
   [`KeepOlderMachineDocumentsFor`](/docs/sdk-reference/persisted-operations/persisted-operations-builder) (seven

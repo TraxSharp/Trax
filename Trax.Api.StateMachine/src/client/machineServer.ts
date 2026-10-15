@@ -7,6 +7,7 @@
  * graphql-ws socket the page owns. The package does not depend on graphql-ws: any socket with its `subscribe` shape
  * will do, and {@link persistedMessageReplacer} is the `jsonMessageReplacer` that lets it send a persisted id.
  */
+import { RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
 import type {
   EventResponse,
@@ -73,8 +74,8 @@ export function persistedMessageReplacer(key: string, value: unknown): unknown {
 }
 
 const MACHINE_CHANGED = 'machineChanged';
-const CLIENT_OUTDATED = 'client-outdated';
-const NOT_FOUND = 'not-found';
+const CLIENT_OUTDATED = RefusalCode.ClientOutdated;
+const NOT_FOUND = RefusalCode.NotFound;
 
 interface MachineChange {
   rowId?: number | string | null;
@@ -84,10 +85,10 @@ interface MachineChange {
   dueAt?: string | null;
   gone?: boolean | null;
   reload?: boolean | null;
-  problem?: { code: string; message: string } | null;
+  problem?: { code: ProblemCode; message: string } | null;
 }
 
-const problemOf = (problem: { code: string; message: string }): ServerProblem => ({
+const problemOf = (problem: { code: ProblemCode; message: string }): ServerProblem => ({
   kind: 'problem',
   code: problem.code,
   message: problem.message,
@@ -114,12 +115,12 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
 
 /**
  * Builds the {@link MachineServer} for one exposed machine. A refusal resolves as a problem; a GraphQL error other
- * than `client-outdated` or `server-outdated`, or a failed request, rejects, which the controller reports as a
+ * than `CLIENT_OUTDATED` or `SERVER_OUTDATED`, or a failed request, rejects, which the controller reports as a
  * transport failure.
  *
  * The stream maps each `machineChanged` event onto the controller's messages: a snapshot (with its incarnation as
  * `rowId`), `gone` for a deleted or expired instance and for one the server will not let the caller watch (the answer
- * it gives a missing id), `client-outdated`, and `reconnected` when the server asks for a reload. A stream that ends
+ * it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload. A stream that ends
  * any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
  * event is the instance as it is then, so nothing written meanwhile is lost and nothing is read again.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server

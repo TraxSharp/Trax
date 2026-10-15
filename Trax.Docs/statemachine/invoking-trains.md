@@ -166,7 +166,7 @@ Decide whether the machine is user-owned (the default) or declares `SystemOwned(
 are authorized.
 
 - **User-owned.** The train is authorized against the user entering the state, at entry, through the host's train
-  authorization; a user the train refuses cannot enter the state (`invoke-forbidden`). When the train's
+  authorization; a user the train refuses cannot enter the state (`INVOKE_FORBIDDEN`). When the train's
   `[TraxAuthorize]` names roles or a policy, every event that enters the state (and the start, when the initial state
   invokes) must require at least as much, or the host refuses to start. An outcome may not enter another invoking
   state, and neither may a timer, since no
@@ -178,14 +178,14 @@ are authorized.
   `[TraxAuthorize]`. Only a system-owned machine chains runs through outcomes.
 
 One user holds at most 10 live invoked runs across every machine; a machine sets its own limit with
-`InvokedRunLimit(n)`. Past it, entering the state is refused as `invoke-limit-reached`. System owners are not capped
+`InvokedRunLimit(n)`. Past it, entering the state is refused as `INVOKE_LIMIT_REACHED`. System owners are not capped
 here: the dispatcher's `MaxActiveJobs` bounds them.
 
 ## Retry by entering the state again
 
 The scheduler never retries or dead-letters an invoked run, and an operator cannot requeue one. Declare an edge from
 the failure state back into the invoking state (`FetchFailed -Retry-> Fetching` above): entering it queues a new
-run, and the old run's late completion is then a `no-transition`.
+run, and the old run's late completion is then a `NO_TRANSITION`.
 
 ## How an outcome comes back
 

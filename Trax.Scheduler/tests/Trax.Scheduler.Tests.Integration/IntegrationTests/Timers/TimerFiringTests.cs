@@ -484,7 +484,7 @@ public class TimerFiringTests(ClusterStore store)
                 $"the client's event meets the server's snapshot, in which Approve has no edge. See {Adr}"
             )
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
         (await Reminder(id)).State.Should().Be(nameof(ReminderState.Expired));
         (await _db.Revision(row)).Should().Be(before + 1);
     }

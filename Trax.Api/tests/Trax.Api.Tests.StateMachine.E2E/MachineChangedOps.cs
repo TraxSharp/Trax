@@ -11,7 +11,7 @@ namespace Trax.Api.StateMachine.E2E;
 /// </code>
 /// <para>
 /// Each <c>machineChanged</c> event is the instance's whole snapshot with its revision; the stream ends after an event
-/// with <c>gone</c> set (the instance was deleted or expired) or a <c>problem</c> (<c>client-outdated</c> and the
+/// with <c>gone</c> set (the instance was deleted or expired) or a <c>problem</c> (<c>CLIENT_OUTDATED</c> and the
 /// like). <c>reload</c> is set on an event after which the client must read the instance again, which a skipped
 /// revision never causes. The user key is the socket's principal, never an argument. The operator feed carries an
 /// instance's state, revision and whether it waits on a run, never its context or its owner's key.

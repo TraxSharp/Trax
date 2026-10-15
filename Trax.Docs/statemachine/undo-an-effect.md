@@ -23,8 +23,8 @@ Nothing irreversible has happened yet.
 
 ## While the effect runs
 
-The draft takes no other write until the send settles: an event or a reset is refused as `effect-in-progress`, a
-discard as `discard-not-allowed`. Show the user that it is processing, and retry the send with the same request id
+The draft takes no other write until the send settles: an event or a reset is refused as `EFFECT_IN_PROGRESS`, a
+discard as `DISCARD_NOT_ALLOWED`. Show the user that it is processing, and retry the send with the same request id
 to read its result.
 
 ## After the effect ran

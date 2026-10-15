@@ -66,7 +66,7 @@ describe('advance / can', () => {
 
   it('surfaces a declined trigger with its contract reason instead of moving', () => {
     const result = view.advance('basket', empty, 'Next');
-    expect(result).toMatchObject({ ok: false, reason: 'guard-failed' });
+    expect(result).toMatchObject({ ok: false, reason: 'GUARD_FAILED' });
   });
 
   it('can() agrees with advance() without performing the transition', () => {

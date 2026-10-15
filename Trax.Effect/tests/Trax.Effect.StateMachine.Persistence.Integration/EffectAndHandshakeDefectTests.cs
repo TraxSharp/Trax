@@ -105,7 +105,7 @@ public class EffectAndHandshakeDefectTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        send.Problem!.Code.Should().Be("delivery-failed");
+        send.Problem!.Code.Should().Be(RefusalCode.DeliveryFailed);
         (
             await new LoadSnapshotJunction(registry, user).Run(
                 new LoadSnapshotInput { Machine = "order", Id = id }

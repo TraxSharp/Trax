@@ -46,7 +46,7 @@ describe('differential enumerate: contexts cross-product', () => {
           c.when.trigger === 'Go',
       )?.expect;
     expect(outcomeAt(true)).toEqual({ outcome: 'transitioned', wire: expect.any(String) });
-    expect(outcomeAt(false)).toEqual({ outcome: 'rejected', reason: 'guard-failed' });
+    expect(outcomeAt(false)).toEqual({ outcome: 'rejected', reason: 'GUARD_FAILED' });
   });
 });
 

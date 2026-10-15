@@ -6,15 +6,15 @@ public static class SnapshotLimits
     /// <summary>
     /// The largest client-provided snapshot the autosave path will accept, checked BEFORE any parse or
     /// DB work (a DoS guard). Generous for a form-style flow; a hostile megabyte payload is rejected
-    /// as <c>too-large</c>.
+    /// as <c>TOO_LARGE</c>.
     /// </summary>
     public const int MaxSnapshotBytes = 64 * 1024;
 
     /// <summary>
     /// Whether a trigger's input is past <see cref="MaxSnapshotBytes"/> as JSON, checked on every path that fires
-    /// a trigger before the input is validated or the draft is loaded, so an oversized input is <c>too-large</c>
+    /// a trigger before the input is validated or the draft is loaded, so an oversized input is <c>TOO_LARGE</c>
     /// and costs no database work. An input that cannot be written as JSON is left to validation, which refuses
-    /// it as <c>invalid-input</c>.
+    /// it as <c>INVALID_INPUT</c>.
     /// </summary>
     internal static bool InputTooLarge(System.Text.Json.Nodes.JsonNode? input)
     {
@@ -40,11 +40,8 @@ public static class SnapshotLimits
 /// <summary>A typed problem returned as DATA from a mutation (never a thrown error across the API boundary).</summary>
 public sealed record SnapshotProblem
 {
-    /// <summary>
-    /// A stable kebab-case code a client can branch on, such as <c>unknown-machine</c>, <c>malformed</c>,
-    /// <c>too-large</c>, <c>conflict</c> or <c>no-transition</c>.
-    /// </summary>
-    public required string Code { get; init; }
+    /// <summary>The code a client branches on, such as <see cref="RefusalCode.UnknownMachine"/> or <see cref="RefusalCode.NoTransition"/>.</summary>
+    public required RefusalCode Code { get; init; }
 
     /// <summary>A human-readable explanation for logs or display. Its wording is not a contract; branch on <see cref="Code"/>.</summary>
     public required string Message { get; init; }

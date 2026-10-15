@@ -27,8 +27,8 @@
 export type { Snapshot, MachineDefinition, TransitionDefinition, MigrationResult, MachineTimer } from './types';
 export type { Guard, Reduce, ContextValidator, InputValidator } from './types';
 export {
-  RejectionReasons,
-  RehydrationErrorCodes,
+  RefusalCode,
+  ClientProblemCode,
   type AdvanceResult,
   type RehydrationResult,
 } from './results';

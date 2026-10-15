@@ -134,7 +134,7 @@ A draft now records the trigger and from-state of its last request id, and repla
 for the same trigger
 ([how a request id is matched](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched)).
 A draft written before the migration has no recorded trigger, so a retry of its last request is
-refused once as `request-id-reused` rather than replayed. A custom `ISnapshotStore` should
+refused once as `REQUEST_ID_REUSED` rather than replayed. A custom `ISnapshotStore` should
 override `UpdateWithRequest` to store the whole request; without it, every retry against that
 store is refused the same way.
 
@@ -600,6 +600,6 @@ The columns are added without defaults and nothing is backfilled. A row with no 
 as before: kept when its state is a committed state, an effect's target, an invoked train's outcome target or a gated
 event's target. An effect claim the earlier version recorded in `trax.effect_claim` is still honoured: a completed one
 whose row is still in the effect's state is recorded by that row's next send, which then removes it, and one in
-flight within its lease keeps the row's events refused as `effect-in-progress`. A host on the previous version writes
+flight within its lease keeps the row's events refused as `EFFECT_IN_PROGRESS`. A host on the previous version writes
 without the columns, so during a rolling deploy it neither honours a mark a new host set nor sets one: finish the
 deploy before an instance's effect is sent, or drain sends first.

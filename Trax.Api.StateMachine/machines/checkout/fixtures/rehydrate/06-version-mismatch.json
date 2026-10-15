@@ -1,5 +1,5 @@
 {
   "name": "A snapshot newer than the definition is version-mismatch",
   "json": { "machine": "checkout", "version": 2, "state": "Cart", "context": { "currency": "USD", "items": [], "receipt": null, "total": 0 } },
-  "expect": { "result": "error", "code": "version-mismatch" }
+  "expect": { "result": "error", "code": "VERSION_MISMATCH" }
 }

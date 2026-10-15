@@ -7,7 +7,7 @@ namespace Trax.Effect.StateMachine.Tests.UnitTests;
 
 /// <summary>
 /// The engine checks a trigger's input against the schema its <c>WithInput</c> record declares before any guard
-/// runs, as strictly as the CLR type, and refuses a mismatch as <c>invalid-input</c> without throwing.
+/// runs, as strictly as the CLR type, and refuses a mismatch as <c>INVALID_INPUT</c> without throwing.
 /// </summary>
 [Property("adr", Adr)]
 public class TriggerInputValidationTests
@@ -24,7 +24,7 @@ public class TriggerInputValidationTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.InvalidInput,
+                RefusalCode.InvalidInput,
                 $"an input that does not match its trigger's schema is refused before any guard ({Adr})"
             );
 

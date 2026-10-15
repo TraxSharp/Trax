@@ -49,7 +49,7 @@ public class AdvanceTests
         );
 
         var rejected = result.Should().BeOfType<AdvanceResult.Rejected>().Which;
-        rejected.Reason.Should().Be(RejectionReasons.GuardFailed);
+        rejected.Reason.Should().Be(RefusalCode.GuardFailed);
         rejected.Detail.Should().Be("Only a quarter or a dollar is accepted.");
     }
 
@@ -79,7 +79,7 @@ public class AdvanceTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]
@@ -92,7 +92,7 @@ public class AdvanceTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [TestCase("Zap")]
@@ -104,7 +104,7 @@ public class AdvanceTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]
@@ -123,7 +123,7 @@ public class AdvanceTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.InvalidContext);
+            .Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -145,7 +145,7 @@ public class AdvanceTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.InternalError);
+            .Be(RefusalCode.InternalError);
     }
 
     [Test]
@@ -188,7 +188,7 @@ public class AdvanceTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.GuardFailed);
+            .Be(RefusalCode.GuardFailed);
     }
 
     [Test]
@@ -212,6 +212,6 @@ public class AdvanceTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.InternalError);
+            .Be(RefusalCode.InternalError);
     }
 }

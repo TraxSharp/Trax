@@ -3,6 +3,7 @@ using HotChocolate.Execution;
 using HotChocolate.Types;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Effect.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -226,6 +227,24 @@ public class MachinesRootSchemaTests
             .BeEquivalentTo(
                 ["title"],
                 "a client cannot start an instance with the receipt or the artifact"
+            );
+    }
+
+    // A refusal's code is one closed set, so a client can switch on every value: the schema types it as the
+    // RefusalCode enum, whose values are the codes' wire spelling.
+    [Test]
+    public void A_problem_code_is_the_RefusalCode_enum()
+    {
+        var problem = (ObjectType)_executor.Schema.Types["SnapshotProblem"];
+        problem.Fields["code"].Type.Print().Should().Be("RefusalCode!");
+
+        var codes = (EnumType)_executor.Schema.Types["RefusalCode"];
+        codes
+            .Values.Select(v => v.Name)
+            .Should()
+            .Equal(
+                RefusalCodes.All.Select(c => c.ToWire()),
+                "the enum lists every code in its wire spelling"
             );
     }
 

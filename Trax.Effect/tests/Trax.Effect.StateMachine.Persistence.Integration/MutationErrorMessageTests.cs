@@ -71,7 +71,7 @@ public class MutationErrorMessageTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        send.Problem!.Code.Should().Be("delivery-failed");
+        send.Problem!.Code.Should().Be(RefusalCode.DeliveryFailed);
         send.Problem.Message.Should().NotContain(Secret);
         var entry = logger.Entries.Should().ContainSingle().Which;
         entry.Exception!.Message.Should().Be(Secret);
@@ -143,7 +143,7 @@ public class MutationErrorMessageTests
             }
         );
 
-        advance.Problem!.Code.Should().Be("internal-error");
+        advance.Problem!.Code.Should().Be(RefusalCode.InternalError);
         advance.Problem.Message.Should().NotContain(Secret);
         var entry = logger.Entries.Should().ContainSingle().Which;
         entry.Exception!.Message.Should().Be(Secret);

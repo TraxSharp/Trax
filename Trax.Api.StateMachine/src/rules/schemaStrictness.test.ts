@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RejectionReasons } from '../results';
+import { RefusalCode } from '../results';
 import { validateInput, validateSchema, type ContextSchema, type FieldSchema } from './interpreter';
 import { idle, rangeCore, validRange } from './testing/rangeMachine';
 
@@ -93,7 +93,7 @@ describe('an integer field is as strict as its CLR type', () => {
   it('refuses an out-of-range input as invalid-input through the engine', () => {
     expect(rangeCore.advance(idle, 'Set', { ...validRange(), from: 1e10 })).toMatchObject({
       outcome: 'rejected',
-      reason: RejectionReasons.InvalidInput,
+      reason: RefusalCode.InvalidInput,
     });
   });
 });

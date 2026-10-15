@@ -26,6 +26,6 @@ public sealed record PartitionActionOutput
     /// <summary>The state the instance moved to; null when it did not move.</summary>
     public string? State { get; init; }
 
-    /// <summary>Why the instance did not move (<c>no-transition</c>, <c>not-found</c>, ...); null when it did.</summary>
+    /// <summary>Why the instance did not move (<c>NO_TRANSITION</c>, <c>NOT_FOUND</c>, ...); null when it did.</summary>
     public string? Problem { get; init; }
 }

@@ -37,7 +37,7 @@ The context is canonicalized per RFC 8785 (JCS).
 
 ## Values that have no canonical wire
 
-`Rehydrate` refuses these as `malformed`, and the persistence layer checks an advance's result the same way before
+`Rehydrate` refuses these as `MALFORMED`, and the persistence layer checks an advance's result the same way before
 it writes:
 
 | Value | Why |

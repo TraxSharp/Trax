@@ -89,7 +89,7 @@ public class OrderMachineTests : RecoveryTestFixture
             .Be(answers[0].Revision, "one request sent twice is answered once");
         again
             .Problem.Should()
-            .Be("no-transition", "an order already placed cannot be placed again");
+            .Be("NO_TRANSITION", "an order already placed cannot be placed again");
         await _order.WaitForStateAsync(nameof(OrderState.Delivered));
         (await RunsAsync()).Should().ContainSingle("one order queues one run");
     }
@@ -148,7 +148,7 @@ public class OrderMachineTests : RecoveryTestFixture
         (await _order.LoadAsync()).State.Should().Be(nameof(OrderState.Cleared));
         (await _order.PlaceOrderAsync())
             .Problem.Should()
-            .Be("no-transition", "a cleared cart cannot be ordered");
+            .Be("NO_TRANSITION", "a cleared cart cannot be ordered");
     }
 
     [Test]
@@ -156,8 +156,8 @@ public class OrderMachineTests : RecoveryTestFixture
     {
         await _order.StartAsync();
 
-        (await _order.PlaceOrderAsync()).Problem.Should().Be("guard-failed");
-        (await _order.AddItemAsync("Sushi")).Problem.Should().Be("guard-failed");
+        (await _order.PlaceOrderAsync()).Problem.Should().Be("GUARD_FAILED");
+        (await _order.AddItemAsync("Sushi")).Problem.Should().Be("GUARD_FAILED");
         (await _order.LoadAsync()).State.Should().Be(nameof(OrderState.Cart));
     }
 

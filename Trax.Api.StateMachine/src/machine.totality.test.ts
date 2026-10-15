@@ -31,6 +31,6 @@ describe("engine totality: a throwing guard", () => {
     const result = machine.advance(snapshot, "Trap");
     expect(result.outcome).toBe("rejected");
     if (result.outcome === "rejected")
-      expect(result.reason).toBe("internal-error");
+      expect(result.reason).toBe("INTERNAL_ERROR");
   });
 });

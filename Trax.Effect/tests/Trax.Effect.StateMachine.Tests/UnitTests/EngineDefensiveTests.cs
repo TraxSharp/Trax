@@ -70,6 +70,6 @@ public class EngineDefensiveTests
             .Should()
             .BeOfType<RehydrationResult.Error>()
             .Which.Code.Should()
-            .Be(RehydrationErrorCodes.Malformed);
+            .Be(RefusalCode.Malformed);
     }
 }

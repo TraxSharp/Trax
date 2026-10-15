@@ -85,7 +85,7 @@ public class SnapshotMutationDefectTests
                     "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}",
             }
         );
-        advance.Problem!.Code.Should().Be("client-divergence");
+        advance.Problem!.Code.Should().Be(RefusalCode.ClientDivergence);
 
         // "the advance is refused" (runtime-integrity docs): the stored draft must still be Locked.
         (await Load("turnstile", id))

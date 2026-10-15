@@ -47,8 +47,8 @@ public interface IMachineInstances
     /// <paramref name="key"/>, as the system: the code path through which a system instance moves other than by its
     /// trains' outcomes, such as a <c>Retry</c> out of a failure state. It is checked exactly as a user's advance is:
     /// the transition's guard and the target state's context rule, the 64 KiB cap, and the reserved triggers, so an
-    /// invoked train's outcome trigger is refused as <c>outcome-bound</c> and an effect-bound one as
-    /// <c>effect-bound</c>. Entering or leaving an invoking state queues or cancels the run in the same transaction,
+    /// invoked train's outcome trigger is refused as <c>OUTCOME_BOUND</c> and an effect-bound one as
+    /// <c>EFFECT_BOUND</c>. Entering or leaving an invoking state queues or cancels the run in the same transaction,
     /// as an advance does; the run is authorized in the trusted scope, as every run of a system-owned machine is.
     /// </summary>
     /// <remarks>
@@ -441,7 +441,7 @@ internal sealed class MachineInstances(
                 return new MachineInstance(id, name, initial.State, Created: true);
             case InvokeWrite.Refused refused:
                 throw new InvalidOperationException(
-                    $"The system instance {id} of '{name}' could not be started ({refused.Code}): {refused.Message}",
+                    $"The system instance {id} of '{name}' could not be started ({refused.Code.ToWire()}): {refused.Message}",
                     refused.Exception
                 );
         }
@@ -473,7 +473,7 @@ internal sealed class MachineInstances(
         // and the engine checks the rest against the trigger's declared schema.
         if (SnapshotLimits.InputTooLarge(input))
             return new AdvanceOutcome.Rejected(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -494,7 +494,7 @@ internal sealed class MachineInstances(
                 };
             default:
                 return new AdvanceOutcome.LoadError(
-                    RehydrationErrorCodes.Malformed,
+                    RefusalCode.Malformed,
                     "Unknown rehydration result."
                 );
         }
@@ -503,12 +503,12 @@ internal sealed class MachineInstances(
         // effect records what it produced.
         if (internals.IsEffectBound(current.State, trigger))
             return new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.EffectBound,
+                RefusalCode.EffectBound,
                 "This action runs an irreversible effect, which only its send fires."
             );
         if (internals.IsOutcomeTrigger(trigger))
             return new AdvanceOutcome.Rejected(
-                RejectionReasons.OutcomeBound,
+                RefusalCode.OutcomeBound,
                 "This step is completed by the outcome of its work, not by an action."
             );
 
@@ -524,14 +524,14 @@ internal sealed class MachineInstances(
                 next = transitioned.Snapshot;
                 break;
             default:
-                return new AdvanceOutcome.Rejected(RejectionReasons.InternalError, null);
+                return new AdvanceOutcome.Rejected(RefusalCode.InternalError, null);
         }
 
         if (StorableJson.Problem(next.Context) is { } unstorable)
-            return new AdvanceOutcome.Rejected(RehydrationErrorCodes.Malformed, unstorable);
+            return new AdvanceOutcome.Rejected(RefusalCode.Malformed, unstorable);
         if (Encoding.UTF8.GetByteCount(internals.Serialize(next)) > SnapshotLimits.MaxSnapshotBytes)
             return new AdvanceOutcome.Rejected(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 

@@ -135,7 +135,7 @@ Each transition carries its structure plus its guard and reducer as data:
 | `guard` | rule | the edge has a declarative guard (`When(Rule)`); absent when the edge has no guard |
 | `guardMessage` | string | `Because(...)` was set |
 | `reduce` | reduction | the edge has a declarative reducer (`Reduce(Reduction)`); absent when the edge has no reducer, which means the context is kept |
-| `effect` | object | the edge binds `RunsOnce<T>`; `{ "type": <TEffect full name>, "keyPrefix": <string> }` |
+| `effect` | object | the edge binds `RunsOnce<T>`; `{ "keyPrefix": <string> }`. The effect's type is not exported: the IR reaches every client |
 
 A rule is a tagged object keyed by `rule` (`present`, `absent`, `ofType`, `nonEmpty`, `oneOf`, `compare`,
 `count`, `length`, `boolEquals`, `arrayOf`, `all`, `any`, `custom`); a reduction is keyed by `reduce` (`keep`,
@@ -174,10 +174,10 @@ so they never collide with `triggers`, which lists only the machine's own. Each 
 | `edges` | object[] | `{ "to", "guard"?, "reduce"? }` in declaration order, which is the order they are tried in; `failed` and `cancelled` have exactly one, without a guard |
 | `output` | schema | on `done` only: the schema of the train's output, the success outcome's input |
 
-`failed` and `cancelled` carry no input. A runtime refuses an outcome trigger on `advance` (`outcome-bound`) and
+`failed` and `cancelled` carry no input. A runtime refuses an outcome trigger on `advance` (`OUTCOME_BOUND`) and
 applies it through its outcome entry point (`applyOutcome` in the twin), through its own edges: an output that
-does not match `output` is `invalid-input`, the first edge whose guard holds is taken, and when none does the
-result is `no-transition`, not `guard-failed`. The run's input
+does not match `output` is `INVALID_INPUT`, the first edge whose guard holds is taken, and when none does the
+result is `NO_TRANSITION`, not `GUARD_FAILED`. The run's input
 mapping is not exported, and neither is the train's name: the twin never starts a train, and the IR it ships to a
 browser does not name the server's train interfaces. `differential.samples` may hold sample outputs under
 `<State>.done`. A machine that invokes nothing has no `outcomes` key, so its IR is unchanged.
@@ -223,7 +223,7 @@ is never in `triggers` or `inputs`, which name what a client sends. Each entry o
 ]
 ```
 
-A runtime refuses a timer trigger on `advance` (`timer-bound`) and applies it through its timer entry point
+A runtime refuses a timer trigger on `advance` (`TIMER_BOUND`) and applies it through its timer entry point
 (`applyTimer` in the twin). The twin shows the due time and never fires it. A machine with no timer has no `timers`
 key, so its IR is unchanged.
 

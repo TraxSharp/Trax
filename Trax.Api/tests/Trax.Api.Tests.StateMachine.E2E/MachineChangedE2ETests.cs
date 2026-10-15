@@ -19,6 +19,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -515,7 +516,7 @@ public class MachineChangedE2ETests
             codes
                 .Should()
                 .Contain(
-                    DraftRefusalCodes.ClientOutdated,
+                    RefusalCode.ClientOutdated.ToWire(),
                     "an older version's subscription tells the client to reload, per " + Adr
                 );
         }
@@ -548,7 +549,7 @@ public class MachineChangedE2ETests
             events[^1]
                 .ProblemCode.Should()
                 .Be(
-                    DraftRefusalCodes.ClientOutdated,
+                    RefusalCode.ClientOutdated.ToWire(),
                     "the row now holds a version this node cannot serve, per " + Adr
                 );
         }
@@ -737,7 +738,7 @@ public class MachineChangedE2ETests
                         "AUTH_NOT_AUTHENTICATED",
                         "AUTH_NOT_AUTHORIZED",
                         "TRAX_AUTHORIZATION",
-                        DraftRefusalCodes.Forbidden,
+                        RefusalCode.Forbidden.ToWire(),
                     ],
                     "an anonymous socket is refused for who it is, per " + Adr
                 );

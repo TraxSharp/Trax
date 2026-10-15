@@ -49,7 +49,7 @@ public class OrderAutosaveTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be("draft-committed");
+            .Be(RefusalCode.DraftCommitted);
 
         (await Service().Load("u", id))
             .Should()

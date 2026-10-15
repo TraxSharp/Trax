@@ -85,3 +85,46 @@ describe("machine built from an IR with per-state invariants", () => {
     expect(machine.rehydrate(wire({ body: 5 })).result).not.toBe("ok");
   });
 });
+
+describe("machine built from an IR with an effect edge", () => {
+  const ir = JSON.parse(
+    fs.readFileSync(irFile("checkout"), "utf8"),
+  ) as IrDocument;
+
+  it("names no server type on the edge", () => {
+    const pay = ir.transitions.find((t) => t.trigger === "Pay");
+    expect(pay?.effect).toEqual({ keyPrefix: "checkout:charge" });
+  });
+
+  it("treats an effect without a type as effect-bound", () => {
+    // Without a declared record, an effect-bound trigger takes the receipt the effect runner hands it, and any
+    // other trigger takes nothing. The edge carries only keyPrefix, so that alone must mark it.
+    const withoutRecord: IrDocument = { ...ir, inputs: {} };
+    const unbound: IrDocument = {
+      ...withoutRecord,
+      transitions: withoutRecord.transitions.map(({ effect: _, ...t }) => t),
+    };
+    const review: Snapshot = {
+      machine: "checkout",
+      version: 1,
+      state: "Review",
+      context: { currency: "USD", items: ["book"], receipt: null, total: 5 },
+    };
+    const receipt = { receipt: "rcpt_1" };
+
+    expect(
+      new SnapshotMachine(machineFromIr(withoutRecord)).canFire(
+        review,
+        "Pay",
+        receipt,
+      ),
+    ).toBe(true);
+    expect(
+      new SnapshotMachine(machineFromIr(unbound)).canFire(
+        review,
+        "Pay",
+        receipt,
+      ),
+    ).toBe(false);
+  });
+});

@@ -60,7 +60,7 @@ public static class CorpusReplay
                     machine.Serialize(t.Snapshot),
                     (string?)null
                 ),
-                AdvanceResult.Rejected r => ("rejected", (string?)null, r.Reason),
+                AdvanceResult.Rejected r => ("rejected", (string?)null, r.Reason.ToWire()),
                 _ => ("internal-error", null, null),
             };
 

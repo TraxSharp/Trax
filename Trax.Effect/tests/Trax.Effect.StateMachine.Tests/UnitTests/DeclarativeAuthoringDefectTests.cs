@@ -142,11 +142,11 @@ public class DeclarativeAuthoringDefectTests
     }
 
     [TestCase(true, "B", null)]
-    [TestCase(false, "A", RejectionReasons.GuardFailed)]
+    [TestCase(false, "A", RefusalCode.GuardFailed)]
     public void A_custom_guard_bound_on_the_builder_decides_the_transition(
         bool verdict,
         string expectedState,
-        string? expectedRejection
+        RefusalCode? expectedRejection
     )
     {
         var builder = new MachineBuilder<S, T>();
@@ -187,7 +187,7 @@ public class DeclarativeAuthoringDefectTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.InvalidContext);
+            .Be(RefusalCode.InvalidContext);
         engine
             .Rehydrate(
                 "{\"machine\":\"custom\",\"version\":1,\"state\":\"B\",\"context\":{\"flag\":1}}"

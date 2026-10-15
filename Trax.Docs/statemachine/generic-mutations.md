@@ -34,15 +34,15 @@ every event, its start and its reads, under the same startup check as a machine 
 | Check | Refusal |
 | --- | --- |
 | Each mutation's train carries `[TraxAuthorize]`, and the opt-in's policy gates its field | `TRAX_AUTHORIZATION` GraphQL error ("Not authorized."), before the mutation runs |
-| `ISnapshotPrincipal.CurrentUserKey` is null | `unauthenticated` problem |
-| The machine's own rule for the event, start or read | `forbidden` problem |
+| `ISnapshotPrincipal.CurrentUserKey` is null | `UNAUTHENTICATED` problem |
+| The machine's own rule for the event, start or read | `FORBIDDEN` problem |
 
 ## Mutations
 
 | Mutation | Train | Does |
 | --- | --- | --- |
 | `startSnapshot` | `IStartSnapshot` | Creates an instance from the machine's declared `start`. The server mints the id and builds the first snapshot. |
-| `saveSnapshot` | `ISaveSnapshot` | Soft path: validates a whole client snapshot and stores it. Refused as `save-not-allowed` for a machine with server-side behaviour (a gated event or start, a timer, an invoked train, an effect). |
+| `saveSnapshot` | `ISaveSnapshot` | Soft path: validates a whole client snapshot and stores it. Refused as `SAVE_NOT_ALLOWED` for a machine with server-side behaviour (a gated event or start, a timer, an invoked train, an effect). |
 | `advanceSnapshot` | `IAdvanceSnapshot` | Authoritative path: fires a trigger on the stored draft, server-side. |
 | `loadSnapshot` | `ILoadSnapshot` | Reads the caller's stored draft, held to the machine's `get` rule. A missing draft, and one the rule does not let the caller read, answer the same problem. |
 | `sendSnapshot` | `ISendSnapshot` | Runs the machine's one irreversible effect exactly once and advances with its receipt. |
@@ -68,8 +68,8 @@ lifecycle hooks, so the broadcaster and SignalR never carry an instance's snapsh
 | Field | Meaning |
 | --- | --- |
 | `sensitiveInput` | Fields of the input recorded masked, as a JSON object merged into `input` before it is applied. Every copy of the run's input Trax keeps writes them as `{"_redacted": true}`. A field must not be in both. |
-| `schemaHash` | The client's machine schema hash. A mismatch is refused as `schema-mismatch` before anything runs. Absent: no check. See [runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity). |
-| `clientResult` | The snapshot the client's twin computed for the advance. A different server result is refused as `client-divergence` and nothing is written. Absent: no check. |
+| `schemaHash` | The client's machine schema hash. A mismatch is refused as `SCHEMA_MISMATCH` before anything runs. Absent: no check. See [runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity). |
+| `clientResult` | The snapshot the client's twin computed for the advance. A different server result is refused as `CLIENT_DIVERGENCE` and nothing is written. Absent: no check. |
 
 ## Outputs
 
@@ -87,25 +87,25 @@ nothing was written. `revision` orders the writes of one `rowId`, which names on
 
 | Mutation | `requestId` |
 | --- | --- |
-| `startSnapshot` | required. The same id and input return the instance the first request created; the same id with another input is `request-id-reused`. |
-| `advanceSnapshot` | optional. The same id with the same trigger replays the result instead of firing again; with another trigger, `request-id-reused`. |
-| `sendSnapshot` | optional; `send:{id}` when absent. Shares one id space with `advanceSnapshot`, so an id an advance used is `request-id-reused`, before the effect runs. |
+| `startSnapshot` | required. The same id and input return the instance the first request created; the same id with another input is `REQUEST_ID_REUSED`. |
+| `advanceSnapshot` | optional. The same id with the same trigger replays the result instead of firing again; with another trigger, `REQUEST_ID_REUSED`. |
+| `sendSnapshot` | optional; `send:{id}` when absent. Shares one id space with `advanceSnapshot`, so an id an advance used is `REQUEST_ID_REUSED`, before the effect runs. |
 | `discardSnapshot` | required. |
 
-A blank id, one holding a control character, or one longer than 200 characters is `invalid-request-id`. The full
+A blank id, one holding a control character, or one longer than 200 characters is `INVALID_REQUEST_ID`. The full
 matching rule is under
 [persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched).
 
 ## Limits
 
 A snapshot, a trigger or start input, a `clientResult`, or an advanced snapshot larger than 64 KiB
-(`SnapshotLimits.MaxSnapshotBytes`) is `too-large`, and nothing is written.
+(`SnapshotLimits.MaxSnapshotBytes`) is `TOO_LARGE`, and nothing is written.
 
 ## sendSnapshot
 
 `sendSnapshot` takes no trigger. It fires the one transition the machine binds its effect to, and only from that
-transition's source state; from any other state it is `no-transition`. The receipt the effect returns reaches the
-transition's reducer as `input["receipt"]`. An effect that throws is `delivery-failed`, and the draft is not
+transition's source state; from any other state it is `NO_TRANSITION`. The receipt the effect returns reaches the
+transition's reducer as `input["receipt"]`. An effect that throws is `DELIVERY_FAILED`, and the draft is not
 advanced, so the send can be retried.
 
 ## Example

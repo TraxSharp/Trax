@@ -37,11 +37,11 @@ Open http://localhost:5173.
 ## What to try
 
 - **A simple machine (turnstile)**: fire **Coin** with a quarter, then **Push**. Fire **Push** while Locked and the
-  server answers `no-transition`: there is no Push arrow out of Locked. A penny is refused by the Coin move's guard
-  (`guard-failed`). The walkthrough shows each check and where the server stopped.
+  server answers `NO_TRANSITION`: there is no Push arrow out of Locked. A penny is refused by the Coin move's guard
+  (`GUARD_FAILED`). The walkthrough shows each check and where the server stopped.
 - **A machine with an effect (checkout)**: add two items, fire **Next**, then **Pay**. Each `AddItem` sends only the
   item's name; the server computes the total. The walkthrough shows the page sent only the draft's id to pay, and the
   payment provider lists one charge for the server's total. Press **Pay** again: the same receipt comes back and the
   provider still lists one charge.
-- **Next on an empty cart**: refused by the move's guard (`guard-failed`); nothing is stored.
+- **Next on an empty cart**: refused by the move's guard (`GUARD_FAILED`); nothing is stored.
 - **Switch user** (Alice / Bob): each user has their own draft of each machine, and their own charges.

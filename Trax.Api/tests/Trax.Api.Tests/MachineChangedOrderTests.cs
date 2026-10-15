@@ -1,12 +1,13 @@
 using AwesomeAssertions;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.Tests;
 
 /// <summary>
-/// A <c>machineChanged</c> stream ends <c>client-outdated</c> only when the row was written by a version the node
+/// A <c>machineChanged</c> stream ends <c>CLIENT_OUTDATED</c> only when the row was written by a version the node
 /// knows to be newer. Without an order of the machine's versions, a different IR hash says nothing about which is
 /// newer, so the stream is kept rather than ended on an older node's write.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
@@ -67,7 +68,7 @@ public class MachineChangedOrderTests
         );
 
         presented!.Value.Ends.Should().BeTrue();
-        presented.Value.Event.Problem!.Code.Should().Be(DraftRefusalCodes.ClientOutdated);
+        presented.Value.Event.Problem!.Code.Should().Be(RefusalCode.ClientOutdated);
     }
 
     private sealed class FixedOrder(bool? newer) : IMachineIrOrder

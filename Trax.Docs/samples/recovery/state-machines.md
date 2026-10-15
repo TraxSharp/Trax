@@ -124,7 +124,7 @@ with the number of papers and pairs and the co-citation track.
 `.AnyAuthenticated()`, and only a draft's owner reads it. At startup the host compares every event that
 enters an invoking state with the train's `[TraxAuthorize]`, and refuses to start when one would let a
 caller run a train they could not run directly. The rule is checked on the server for every event, so a
-viewer's `Build` is refused as `forbidden` before anything is written.
+viewer's `Build` is refused as `FORBIDDEN` before anything is written.
 
 **Old maps are swept.** A rebuild writes a new map and moves `mapId` to it, which leaves the old one
 behind, and a demo run's map is pointed at by nothing once its run ends. `TopicMapSweeper` deletes the
@@ -134,7 +134,7 @@ client sent. The build does not delete the map it replaces: another draft of the
 it. A build writes its pairs a moment before its outcome points the draft at them, so a map is deleted only
 once two sweeps an interval apart both found it unreferenced. **Start a new map** leaves no draft behind. A draft
 in `Building`, or one a build's outcome put in `Built`, `BuildFailed` or `BuildCancelled`, is the record of that
-build, so the server refuses to discard it (`discard-not-allowed`). From those states, and from `Expired`, the page
+build, so the server refuses to discard it (`DISCARD_NOT_ALLOWED`). From those states, and from `Expired`, the page
 sends `StartOver` (any signed-in user), which resets the same draft to the first step with nothing chosen: from
 `Building` it cancels the run, and leaving `Built` cancels the review timer. Before a build, the page discards the
 draft and starts a new one. If the server refuses either, the page shows why and stays on the draft rather than
@@ -188,7 +188,7 @@ server owns the draft; the twin only predicts:
   start's request id is kept too until the start answers, so a reload in the middle retries it and gets the same
   draft rather than a second one. A draft the server no longer holds (discarded elsewhere, or expired) ends the
   stream with `gone`, and the page forgets it and starts a new one.
-- After a deploy that changes the machine, the host answers the page's documents `client-outdated`: the page hides
+- After a deploy that changes the machine, the host answers the page's documents `CLIENT_OUTDATED`: the page hides
   the wizard, shows the code and sends nothing more until it is reloaded.
 
 **A client cannot write a build's result.** The host serves no save, so no client writes a topic map whatever state it
@@ -219,7 +219,7 @@ Cart --PlaceOrder--> Ordered --done-----------------> Delivered
 ```
 
 Two things the recording shows are worth knowing. Place order pressed twice under one request id is answered once:
-the second answer replays the first, and a press under a new request id is `no-transition` from `Ordered`, so one
+the second answer replays the first, and a press under a new request id is `NO_TRANSITION` from `Ordered`, so one
 order makes one run and one charge. And the scheduler never retries a run a machine invoked, so a step that fails
 fails the run, which is the order's `Cancelled`. The restaurant's tablet that does not answer
 (`dispatch { orderTrouble(input: { trouble: TABLET_TIMES_OUT }) }`, armed for the next order) is therefore tried

@@ -321,7 +321,7 @@ public class TwinSequenceParityTests
                 var (outcome, reason) = result switch
                 {
                     AdvanceResult.Transitioned => ("transitioned", (string?)null),
-                    AdvanceResult.Rejected r => ("rejected", r.Reason),
+                    AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
                     _ => ("unknown", null),
                 };
                 var wire = subject.Serialize(current);

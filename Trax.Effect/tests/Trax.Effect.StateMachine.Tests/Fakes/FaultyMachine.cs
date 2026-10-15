@@ -18,9 +18,9 @@ public enum FaultyTrigger
 
 /// <summary>
 /// A machine whose handlers misbehave, to prove the engine failure modes that must stay total: a reducer
-/// that THROWS degrades to <c>internal-error</c> (the totality backstop), a reducer that produces a
-/// context the target state rejects degrades to <c>invalid-context</c> (a reducer bug, not user error),
-/// and a GUARD that throws also degrades to <c>internal-error</c> (guards are evaluated inside the
+/// that THROWS degrades to <c>INTERNAL_ERROR</c> (the totality backstop), a reducer that produces a
+/// context the target state rejects degrades to <c>INVALID_CONTEXT</c> (a reducer bug, not user error),
+/// and a GUARD that throws also degrades to <c>INTERNAL_ERROR</c> (guards are evaluated inside the
 /// backstop too — PD4). None ever surfaces an exception.
 /// </summary>
 public static class FaultyMachine

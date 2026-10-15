@@ -32,7 +32,7 @@ describe('MachineController', () => {
 
     expect(moved).toBe(false);
     expect(c.state).toBe('Locked');
-    expect(c.lastProblem?.code).toBe('no-transition');
+    expect(c.lastProblem?.code).toBe('NO_TRANSITION');
     expect(listener).toHaveBeenCalledOnce(); // a declined action is never dropped
     expect(persist).not.toHaveBeenCalled();
     // a new view object is emitted so useSyncExternalStore re-renders

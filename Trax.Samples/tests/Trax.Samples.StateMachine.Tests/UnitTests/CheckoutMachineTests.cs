@@ -71,7 +71,7 @@ public class CheckoutMachineTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.SaveNotAllowed);
+            .Be(RefusalCode.SaveNotAllowed);
     }
 
     [Test]
@@ -155,12 +155,12 @@ public class CheckoutMachineTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.GuardFailed);
+            .Be(RefusalCode.GuardFailed);
         (await service.Advance(User, Id, "Next"))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.GuardFailed);
+            .Be(RefusalCode.GuardFailed);
     }
 
     [Test]

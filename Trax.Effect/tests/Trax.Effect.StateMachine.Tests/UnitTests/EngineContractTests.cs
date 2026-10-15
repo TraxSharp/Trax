@@ -62,7 +62,7 @@ public class EngineContractTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.TimerBound,
+                RefusalCode.TimerBound,
                 $"a timer is fired only by the server, never by an advance ({Adr})"
             );
 
@@ -134,7 +134,7 @@ public class EngineContractTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.InvalidInput,
+                RefusalCode.InvalidInput,
                 $"an output that does not match the train's output schema is refused like a bad input ({Adr})"
             );
     }

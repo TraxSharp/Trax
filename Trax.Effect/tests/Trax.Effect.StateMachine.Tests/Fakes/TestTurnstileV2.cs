@@ -6,7 +6,7 @@ namespace Trax.Effect.StateMachine.Tests.Fakes;
 /// <summary>
 /// A version-2 turnstile used to exercise forward migration on rehydrate: a stored v1 snapshot is
 /// upgraded to v2 (adds a <c>migrated</c> marker to Unlocked, keeps <c>paidWith</c>). Also provides a
-/// v3-with-a-gap definition to prove a missing migration is a typed <c>version-mismatch</c>, never a
+/// v3-with-a-gap definition to prove a missing migration is a typed <c>VERSION_MISMATCH</c>, never a
 /// silent misread.
 /// </summary>
 public static class TestTurnstileV2

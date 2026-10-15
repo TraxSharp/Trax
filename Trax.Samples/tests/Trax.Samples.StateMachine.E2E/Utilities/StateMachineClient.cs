@@ -122,7 +122,7 @@ public partial class StateMachineClient(GraphQLClient graphQL)
         return MutateAsync(caller, machine, JsonNamingPolicy.CamelCase.ConvertName(trigger), args);
     }
 
-    /// <summary>The caller's instance, or the problem <c>not-found</c> when the caller has none under the id.</summary>
+    /// <summary>The caller's instance, or the problem <c>NOT_FOUND</c> when the caller has none under the id.</summary>
     public async Task<SnapshotResult> LoadAsync(Caller caller, string machine, Guid id)
     {
         if (!Known.TryGetValue(machine, out var known))
@@ -136,7 +136,7 @@ public partial class StateMachineClient(GraphQLClient graphQL)
         response.HasErrors.Should().BeFalse($"get as {caller} should not error: {response.Raw}");
         var read = response.GetData("machines", known.Field, "get");
         return read.ValueKind == JsonValueKind.Null
-            ? new SnapshotResult(null, "not-found", response.Raw)
+            ? new SnapshotResult(null, "NOT_FOUND", response.Raw)
             : Result(machine, read, response.Raw);
     }
 

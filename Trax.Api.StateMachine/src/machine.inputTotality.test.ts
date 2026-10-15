@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { checkoutCore } from './machines/checkout/checkout';
 import { turnstileCore } from './machines/turnstile/turnstile';
-import { RejectionReasons } from './results';
+import { RefusalCode } from './results';
 import { idle, rangeCore } from './rules/testing/rangeMachine';
 import type { SnapshotMachine } from './machine';
 import type { Snapshot } from './types';
 
 // Totality over trigger input: every input below is bad for every trigger it is sent to, so the engine must
-// answer `invalid-input` for each and never throw.
+// answer `INVALID_INPUT` for each and never throw.
 
 function nested(depth: number): unknown {
   let node: unknown = 1;
@@ -64,7 +64,7 @@ describe('engine totality: bad trigger input', () => {
 
     expect(verdicts).toEqual(
       triggers.flatMap(([name]) =>
-        badInputs.map(([label]) => `${name} with ${label}: ${RejectionReasons.InvalidInput}`),
+        badInputs.map(([label]) => `${name} with ${label}: ${RefusalCode.InvalidInput}`),
       ),
     );
   });

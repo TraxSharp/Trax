@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -424,7 +425,10 @@ public class MachineDocumentsE2ETests
                     .Should()
                     .ContainSingle()
                     .Which.Should()
-                    .BeOneOf(DraftRefusalCodes.ServerOutdated, DraftRefusalCodes.ClientOutdated);
+                    .BeOneOf(
+                        RefusalCode.ServerOutdated.ToWire(),
+                        RefusalCode.ClientOutdated.ToWire()
+                    );
                 status
                     .Should()
                     .BeInRange(

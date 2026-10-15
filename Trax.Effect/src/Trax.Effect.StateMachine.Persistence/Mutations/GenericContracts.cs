@@ -26,7 +26,7 @@ public record SaveSnapshotInput
 
     /// <summary>
     /// Optional: the client's machine schema hash (<see cref="IMachine.SchemaHash"/>, embedded in the twin).
-    /// When present and it differs from the server's, the request is refused with a <c>schema-mismatch</c>
+    /// When present and it differs from the server's, the request is refused with a <c>SCHEMA_MISMATCH</c>
     /// problem so a stale client reloads instead of writing under an outdated contract. Absent = no check.
     /// </summary>
     public string? SchemaHash { get; init; }
@@ -41,7 +41,7 @@ public record SaveSnapshotOutput
     /// <summary>The snapshot as stored, in the machine's canonical wire JSON; null when <see cref="Problem"/> is set.</summary>
     public string? Snapshot { get; init; }
 
-    /// <summary>Why the save was refused (for example <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>, <c>too-large</c>, <c>draft-committed</c>, <c>conflict</c> or a rehydration error code); null on success. Nothing was written when it is set.</summary>
+    /// <summary>Why the save was refused (for example <c>UNAUTHENTICATED</c>, <c>UNKNOWN_MACHINE</c>, <c>SCHEMA_MISMATCH</c>, <c>TOO_LARGE</c>, <c>DRAFT_COMMITTED</c>, <c>CONFLICT</c> or a rehydration error code); null on success. Nothing was written when it is set.</summary>
     public SnapshotProblem? Problem { get; init; }
 
     /// <summary>
@@ -69,7 +69,7 @@ public record SaveSnapshotOutput
 /// </summary>
 public record AdvanceSnapshotInput
 {
-    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>unknown-machine</c>.</summary>
+    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>UNKNOWN_MACHINE</c>.</summary>
     public required string Machine { get; init; }
 
     /// <summary>The draft id, scoped to the authenticated user: two users' drafts never collide on it.</summary>
@@ -80,7 +80,7 @@ public record AdvanceSnapshotInput
 
     /// <summary>
     /// Optional trigger input as JSON, at most <see cref="SnapshotLimits.MaxSnapshotBytes"/> bytes (UTF-8);
-    /// a larger one is refused as <c>too-large</c> before it is parsed.
+    /// a larger one is refused as <c>TOO_LARGE</c> before it is parsed.
     /// </summary>
     public string? Input { get; init; }
 
@@ -96,24 +96,24 @@ public record AdvanceSnapshotInput
 
     /// <summary>
     /// Optional idempotency key so a retry replays instead of re-firing. A retry must repeat the trigger:
-    /// the same key sent with a different trigger is refused as <c>request-id-reused</c>. Advance and send
+    /// the same key sent with a different trigger is refused as <c>REQUEST_ID_REUSED</c>. Advance and send
     /// share one key space. A blank key, or one holding a control character, is refused as
-    /// <c>invalid-request-id</c>.
+    /// <c>INVALID_REQUEST_ID</c>.
     /// </summary>
     public string? RequestId { get; init; }
 
     /// <summary>
     /// Optional: the client's machine schema hash (<see cref="IMachine.SchemaHash"/>). A mismatch with the
-    /// server's is refused with a <c>schema-mismatch</c> problem before the advance runs. Absent = no check.
+    /// server's is refused with a <c>SCHEMA_MISMATCH</c> problem before the advance runs. Absent = no check.
     /// </summary>
     public string? SchemaHash { get; init; }
 
     /// <summary>
     /// Optional: the snapshot the client's twin computed for this advance, as canonical JSON. When present the
     /// server compares it against its own authoritative result before persisting anything; a divergence is
-    /// refused with a <c>client-divergence</c> problem and the stored draft is left unchanged, catching a
+    /// refused with a <c>CLIENT_DIVERGENCE</c> problem and the stored draft is left unchanged, catching a
     /// client/server engine mismatch on real input. Absent = no check. At most
-    /// <see cref="SnapshotLimits.MaxSnapshotBytes"/> bytes (UTF-8): a larger one is refused as <c>too-large</c> before
+    /// <see cref="SnapshotLimits.MaxSnapshotBytes"/> bytes (UTF-8): a larger one is refused as <c>TOO_LARGE</c> before
     /// it is compared. It is recorded masked, and a divergence logs only its length and SHA-256 hash.
     /// </summary>
     [Trax.Effect.Attributes.TraxSensitive]
@@ -129,7 +129,7 @@ public record AdvanceSnapshotOutput
     /// <summary>The draft after the advance (or the current draft, when the request replayed), in canonical wire JSON; null when <see cref="Problem"/> is set.</summary>
     public string? Snapshot { get; init; }
 
-    /// <summary>Why the advance was refused (for example <c>not-found</c>, <c>conflict</c>, <c>request-id-reused</c>, <c>client-divergence</c>, <c>schema-mismatch</c> or a machine rejection reason); null on success. The stored draft is unchanged when it is set.</summary>
+    /// <summary>Why the advance was refused (for example <c>NOT_FOUND</c>, <c>CONFLICT</c>, <c>REQUEST_ID_REUSED</c>, <c>CLIENT_DIVERGENCE</c>, <c>SCHEMA_MISMATCH</c> or a machine rejection reason); null on success. The stored draft is unchanged when it is set.</summary>
     public SnapshotProblem? Problem { get; init; }
 
     /// <summary>
@@ -164,7 +164,7 @@ public record AdvanceSnapshotOutput
 /// </summary>
 public record LoadSnapshotInput
 {
-    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>unknown-machine</c>.</summary>
+    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>UNKNOWN_MACHINE</c>.</summary>
     public required string Machine { get; init; }
 
     /// <summary>The draft id, scoped to the authenticated user: two users' drafts never collide on it.</summary>
@@ -172,7 +172,7 @@ public record LoadSnapshotInput
 
     /// <summary>
     /// Optional: the client's machine schema hash (<see cref="IMachine.SchemaHash"/>). A mismatch is refused
-    /// with a <c>schema-mismatch</c> problem so a stale client reloads rather than rehydrating a draft shaped
+    /// with a <c>SCHEMA_MISMATCH</c> problem so a stale client reloads rather than rehydrating a draft shaped
     /// by a newer contract. Absent = no check.
     /// </summary>
     public string? SchemaHash { get; init; }
@@ -215,7 +215,7 @@ public record LoadSnapshotOutput
 /// </summary>
 public record SendSnapshotInput
 {
-    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>unknown-machine</c>.</summary>
+    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>UNKNOWN_MACHINE</c>.</summary>
     public required string Machine { get; init; }
 
     /// <summary>The draft id, scoped to the authenticated user: two users' drafts never collide on it.</summary>
@@ -224,14 +224,14 @@ public record SendSnapshotInput
     /// <summary>
     /// Idempotency key. A stable value per intended send; if absent, <c>send:{Id}</c> is used. It shares
     /// one key space with <see cref="AdvanceSnapshotInput.RequestId"/>, so a key an advance already used is
-    /// refused as <c>request-id-reused</c>, before the effect runs. A blank key, or one holding a control
-    /// character, is refused as <c>invalid-request-id</c>, also before the effect runs.
+    /// refused as <c>REQUEST_ID_REUSED</c>, before the effect runs. A blank key, or one holding a control
+    /// character, is refused as <c>INVALID_REQUEST_ID</c>, also before the effect runs.
     /// </summary>
     public string? RequestId { get; init; }
 
     /// <summary>
     /// Optional: the client's machine schema hash (<see cref="IMachine.SchemaHash"/>). A mismatch is refused
-    /// with a <c>schema-mismatch</c> problem so a stale client cannot trigger the irreversible send under an
+    /// with a <c>SCHEMA_MISMATCH</c> problem so a stale client cannot trigger the irreversible send under an
     /// outdated contract. Absent = no check.
     /// </summary>
     public string? SchemaHash { get; init; }
@@ -244,14 +244,14 @@ public record SendSnapshotInput
 /// </summary>
 public record StartSnapshotInput
 {
-    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>unknown-machine</c>.</summary>
+    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>UNKNOWN_MACHINE</c>.</summary>
     public required string Machine { get; init; }
 
     /// <summary>
     /// The start input as a JSON object, validated against the start's declared record (never the context type).
     /// Omit it when the start's record has no required field. At most <see cref="SnapshotLimits.MaxSnapshotBytes"/>
-    /// bytes (UTF-8); a larger one is refused as <c>too-large</c> before it is parsed, and one that is not a JSON
-    /// object as <c>malformed</c>.
+    /// bytes (UTF-8); a larger one is refused as <c>TOO_LARGE</c> before it is parsed, and one that is not a JSON
+    /// object as <c>MALFORMED</c>.
     /// </summary>
     public string? Input { get; init; }
 
@@ -264,13 +264,13 @@ public record StartSnapshotInput
 
     /// <summary>
     /// The idempotency key of this start, required: a retry with the same key and input returns the instance the
-    /// first request created, and the same key with a different input is refused as <c>request-id-reused</c>.
+    /// first request created, and the same key with a different input is refused as <c>REQUEST_ID_REUSED</c>.
     /// </summary>
     public required string RequestId { get; init; }
 
     /// <summary>
     /// Optional: the client's machine schema hash (<see cref="IMachine.SchemaHash"/>). A mismatch is refused with a
-    /// <c>schema-mismatch</c> problem before anything is written. Absent = no check.
+    /// <c>SCHEMA_MISMATCH</c> problem before anything is written. Absent = no check.
     /// </summary>
     public string? SchemaHash { get; init; }
 }
@@ -294,9 +294,9 @@ public record StartSnapshotOutput
     public string? Snapshot { get; init; }
 
     /// <summary>
-    /// Why the start was refused (for example <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>,
-    /// <c>no-start</c>, <c>forbidden</c>, <c>invalid-request-id</c>, <c>request-id-reused</c>,
-    /// <c>too-many-drafts</c> or <c>invalid-input</c>); null on success. Nothing was written when it is set.
+    /// Why the start was refused (for example <c>UNAUTHENTICATED</c>, <c>UNKNOWN_MACHINE</c>, <c>SCHEMA_MISMATCH</c>,
+    /// <c>NO_START</c>, <c>FORBIDDEN</c>, <c>INVALID_REQUEST_ID</c>, <c>REQUEST_ID_REUSED</c>,
+    /// <c>TOO_MANY_DRAFTS</c> or <c>INVALID_INPUT</c>); null on success. Nothing was written when it is set.
     /// </summary>
     public SnapshotProblem? Problem { get; init; }
 
@@ -316,7 +316,7 @@ public record StartSnapshotOutput
 /// </summary>
 public record DiscardSnapshotInput
 {
-    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>unknown-machine</c>.</summary>
+    /// <summary>The registered machine's name (e.g. "checkout"); an unknown name is refused as <c>UNKNOWN_MACHINE</c>.</summary>
     public required string Machine { get; init; }
 
     /// <summary>The instance id, scoped to the authenticated user: another user's id answers as a missing one.</summary>
@@ -339,8 +339,8 @@ public record DiscardSnapshotOutput
     public bool Discarded { get; init; }
 
     /// <summary>
-    /// Why the discard was refused (for example <c>unauthenticated</c>, <c>unknown-machine</c>,
-    /// <c>invalid-request-id</c> or <c>system-owned</c>); null on success. The instance is unchanged when it is set.
+    /// Why the discard was refused (for example <c>UNAUTHENTICATED</c>, <c>UNKNOWN_MACHINE</c>,
+    /// <c>INVALID_REQUEST_ID</c> or <c>SYSTEM_OWNED</c>); null on success. The instance is unchanged when it is set.
     /// </summary>
     public SnapshotProblem? Problem { get; init; }
 }
@@ -354,7 +354,7 @@ public record SendSnapshotOutput
     /// <summary>The draft after the effect ran and the machine advanced (or the replayed result of an earlier send), in canonical wire JSON; null when <see cref="Problem"/> is set.</summary>
     public string? Snapshot { get; init; }
 
-    /// <summary>Why the send was refused or failed (for example <c>no-effect</c>, <c>not-found</c>, <c>request-id-reused</c>, or <c>delivery-failed</c> when the effect threw and the draft was not advanced, so the send can be retried); null on success.</summary>
+    /// <summary>Why the send was refused or failed (for example <c>NO_EFFECT</c>, <c>NOT_FOUND</c>, <c>REQUEST_ID_REUSED</c>, or <c>DELIVERY_FAILED</c> when the effect threw and the draft was not advanced, so the send can be retried); null on success.</summary>
     public SnapshotProblem? Problem { get; init; }
 
     /// <summary>

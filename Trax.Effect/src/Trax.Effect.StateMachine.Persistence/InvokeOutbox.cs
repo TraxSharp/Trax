@@ -42,7 +42,7 @@ internal abstract record InvokeWrite
     public sealed record Conflict : InvokeWrite;
 
     /// <summary>The write was refused; nothing was written.</summary>
-    public sealed record Refused(string Code, string Message, Exception? Exception = null)
+    public sealed record Refused(RefusalCode Code, string Message, Exception? Exception = null)
         : InvokeWrite;
 
     private InvokeWrite() { }
@@ -77,7 +77,7 @@ internal abstract record CreateWrite
     public sealed record Conflict : CreateWrite;
 
     /// <summary>The create was refused; nothing was written.</summary>
-    public sealed record Refused(string Code, string Message, Exception? Exception = null)
+    public sealed record Refused(RefusalCode Code, string Message, Exception? Exception = null)
         : CreateWrite;
 
     private CreateWrite() { }
@@ -102,16 +102,16 @@ internal abstract record CreateWrite
 internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServiceProvider services)
 {
     /// <summary>The code an entry past the owner's live-run cap is refused with.</summary>
-    public const string LimitReached = "invoke-limit-reached";
+    public const RefusalCode LimitReached = RefusalCode.InvokeLimitReached;
 
     /// <summary>The code an entry is refused with when the entering user may not run the state's train.</summary>
-    public const string Forbidden = "invoke-forbidden";
+    public const RefusalCode Forbidden = RefusalCode.InvokeForbidden;
 
     /// <summary>
     /// The code an outcome is refused with when it enters an invoking state of a user-owned instance: only a
     /// system-owned instance chains runs through outcomes.
     /// </summary>
-    public const string ChainRefused = "invoke-chain-user-owned";
+    public const RefusalCode ChainRefused = RefusalCode.InvokeChainUserOwned;
 
     /// <summary>
     /// Writes <paramref name="next"/> over <paramref name="owner"/>'s row, guarded by <paramref name="expectedToken"/>,
@@ -459,7 +459,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             );
             if (held >= limit.Max)
                 return new CreateWrite.Refused(
-                    DraftRefusalCodes.TooManyDrafts,
+                    RefusalCode.TooManyDrafts,
                     $"You already have {held} drafts, the most allowed. Finish or discard one, then try again."
                 );
         }
@@ -524,7 +524,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         catch (Exception ex)
         {
             return new InvokeWrite.Refused(
-                RejectionReasons.InternalError,
+                RefusalCode.InternalError,
                 "The step's work could not be started.",
                 ex
             );
@@ -532,7 +532,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
 
         if (input is null)
             return new InvokeWrite.Refused(
-                RejectionReasons.InternalError,
+                RefusalCode.InternalError,
                 "The step's work could not be started.",
                 new InvalidOperationException(
                     $"The input mapping of {entering.TrainType.Name} in '{snapshot.Machine}' state "

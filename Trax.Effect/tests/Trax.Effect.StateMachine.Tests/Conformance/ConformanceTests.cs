@@ -11,7 +11,7 @@ namespace Trax.Effect.StateMachine.Tests.Conformance;
 /// suites stay green over one set of files, the two engines cannot disagree — that is the cross-language
 /// guarantee (PD1), proven by data rather than by generating one engine from the other. The advance fixtures
 /// replay through the declarative turnstile, whose <c>Coin</c> declares its input, as the twin's IR does: the
-/// fixtures with a bad input expect <c>invalid-input</c>, which only a declared input schema can give.
+/// fixtures with a bad input expect <c>INVALID_INPUT</c>, which only a declared input schema can give.
 /// </summary>
 public class ConformanceTests
 {
@@ -84,7 +84,8 @@ public class ConformanceTests
             result
                 .Should()
                 .BeOfType<AdvanceResult.Rejected>()
-                .Which.Reason.Should()
+                .Which.Reason.ToWire()
+                .Should()
                 .Be(expect["reason"]!.GetValue<string>());
         }
     }
@@ -111,7 +112,8 @@ public class ConformanceTests
             result
                 .Should()
                 .BeOfType<RehydrationResult.Error>()
-                .Which.Code.Should()
+                .Which.Code.ToWire()
+                .Should()
                 .Be(expect["code"]!.GetValue<string>());
         }
     }

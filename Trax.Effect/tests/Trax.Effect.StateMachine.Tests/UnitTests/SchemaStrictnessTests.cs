@@ -174,7 +174,7 @@ public class SchemaStrictnessTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.InvalidInput,
+                RefusalCode.InvalidInput,
                 $"1e10 is an integer, but not an int: it is refused before any guard ({Adr})"
             );
     }

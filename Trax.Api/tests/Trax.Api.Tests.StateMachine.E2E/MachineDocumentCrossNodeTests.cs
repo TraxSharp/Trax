@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -15,8 +16,8 @@ namespace Trax.Api.StateMachine.E2E;
 /// <summary>
 /// The machine documents across nodes and deploys: nodes starting together register each document once; the same
 /// schema yields the same text in every process; a document's id changes with its text even when the IR does not;
-/// and in a rolling deploy each node serves only its own hashes, answering an older one <c>client-outdated</c> and a
-/// newer one a retryable <c>server-outdated</c>, never deactivating an older IR's documents at startup and collecting
+/// and in a rolling deploy each node serves only its own hashes, answering an older one <c>CLIENT_OUTDATED</c> and a
+/// newer one a retryable <c>SERVER_OUTDATED</c>, never deactivating an older IR's documents at startup and collecting
 /// them only after a grace period. Each test runs its own nodes over a fresh database, with
 /// <see cref="ShelfMachine"/> built as one version on one node and another on the next.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
@@ -217,7 +218,7 @@ public class MachineDocumentCrossNodeTests
             .Codes(old)
             .Should()
             .Contain(
-                DraftRefusalCodes.ClientOutdated,
+                RefusalCode.ClientOutdated.ToWire(),
                 "the old version's id tells the client to reload, per " + Adr
             );
         MachineDocumentOps
@@ -243,7 +244,7 @@ public class MachineDocumentCrossNodeTests
             .Codes(answer)
             .Should()
             .Contain(
-                DraftRefusalCodes.ClientOutdated,
+                RefusalCode.ClientOutdated.ToWire(),
                 "an older version's id, still stored and active, is not this node's to run, per "
                     + Adr
             );
@@ -265,11 +266,14 @@ public class MachineDocumentCrossNodeTests
             .Codes(onOld)
             .Should()
             .Contain(
-                DraftRefusalCodes.ServerOutdated,
+                RefusalCode.ServerOutdated.ToWire(),
                 "a node that does not yet run the newer version says so, and the client retries, per "
                     + Adr
             )
-            .And.NotContain(DraftRefusalCodes.ClientOutdated, "the client is not the one behind");
+            .And.NotContain(
+                RefusalCode.ClientOutdated.ToWire(),
+                "the client is not the one behind"
+            );
         MachineDocumentOps
             .Succeeded(onNew, ShelfMachine.MachineId, "get")
             .Should()
@@ -301,7 +305,7 @@ public class MachineDocumentCrossNodeTests
         answers
             .Should()
             .OnlyContain(
-                a => a == "ok" || a == DraftRefusalCodes.ServerOutdated,
+                a => a == "ok" || a == RefusalCode.ServerOutdated.ToWire(),
                 "a newer id is either served or answered server-outdated, never client-outdated, per "
                     + Adr
             );
@@ -427,13 +431,13 @@ public class MachineDocumentCrossNodeTests
                 .Codes(answer)
                 .Should()
                 .Contain(
-                    DraftRefusalCodes.ServerOutdated,
+                    RefusalCode.ServerOutdated.ToWire(),
                     "a node that does not serve the machine yet tells the client to retry, which may reach a "
                         + "node that does, per "
                         + Adr
                 )
                 .And.NotContain(
-                    DraftRefusalCodes.ClientOutdated,
+                    RefusalCode.ClientOutdated.ToWire(),
                     "the client is not the one behind"
                 );
     }
@@ -472,7 +476,7 @@ public class MachineDocumentCrossNodeTests
                 .Codes(during)
                 .Should()
                 .Contain(
-                    DraftRefusalCodes.ServerOutdated,
+                    RefusalCode.ServerOutdated.ToWire(),
                     "while an older node may still serve the machine the client retries, per " + Adr
                 );
 
@@ -489,7 +493,7 @@ public class MachineDocumentCrossNodeTests
             .Codes(after)
             .Should()
             .Contain(
-                DraftRefusalCodes.ClientOutdated,
+                RefusalCode.ClientOutdated.ToWire(),
                 "once the store holds no active id for the machine, retrying can never reach a node that serves "
                     + "it, so the client reloads, per "
                     + Adr
@@ -525,7 +529,7 @@ public class MachineDocumentCrossNodeTests
                 .Codes(during)
                 .Should()
                 .Contain(
-                    DraftRefusalCodes.ServerOutdated,
+                    RefusalCode.ServerOutdated.ToWire(),
                     "while an older node may still serve the machine the client retries, per " + Adr
                 );
 
@@ -542,7 +546,7 @@ public class MachineDocumentCrossNodeTests
             .Codes(after)
             .Should()
             .Contain(
-                DraftRefusalCodes.ClientOutdated,
+                RefusalCode.ClientOutdated.ToWire(),
                 "once no node serves the machine and its documents are collected, the client reloads, per "
                     + Adr
             );
@@ -680,14 +684,14 @@ public class MachineDocumentCrossNodeTests
                 "a timer changes the IR, so every document of the machine gets a new id, per " + Adr
             );
         using var old = await b.PostPersistedAsync(Pick(v1, "get"), new { id }, E2EHost.AliceKey);
-        MachineDocumentOps.Codes(old).Should().Contain(DraftRefusalCodes.ClientOutdated);
+        MachineDocumentOps.Codes(old).Should().Contain(RefusalCode.ClientOutdated.ToWire());
 
         using (await b.SendShelfEventAsync(E2EHost.AliceKey, "file", id)) { }
         var events = await ws.ReadUntilEndAsync("shelf");
         events[^1]
             .ProblemCode.Should()
             .Be(
-                DraftRefusalCodes.ClientOutdated,
+                RefusalCode.ClientOutdated.ToWire(),
                 "a row the newer version wrote ends the older node's stream the same way"
             );
     }

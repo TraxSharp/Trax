@@ -169,7 +169,7 @@ public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPr
 }
 ```
 
-A request with no user key is refused as `unauthenticated`. Authentication itself is the host's: see
+A request with no user key is refused as `UNAUTHENTICATED`. Authentication itself is the host's: see
 [Secure a GraphQL host](/docs/api-security).
 
 ## 4. Register the machine in the host
@@ -223,8 +223,8 @@ mutation ($id: UUID!, $input: ItemsInput!, $requestId: String!) {
 }
 ```
 
-Every refusal is a typed `problem` in the data, never a thrown error: `guard-failed` carries the `Because` text,
-`forbidden` a caller the event's rule refuses, `request-id-reused` a retry that changed its request. Fields, answers
+Every refusal is a typed `problem` in the data, never a thrown error: `GUARD_FAILED` carries the `Because` text,
+`FORBIDDEN` a caller the event's rule refuses, `REQUEST_ID_REUSED` a retry that changed its request. Fields, answers
 and limits are in the [machines root](/docs/sdk-reference/graphql-api/machines), and every code in
 [Result codes](/docs/sdk-reference/statemachine-api/result-codes).
 

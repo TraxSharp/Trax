@@ -158,24 +158,24 @@ describe('createMachineServer operations', () => {
   });
 
   it('answers a refusal as a problem, never a rejection', async () => {
-    const { fetch } = http(answer('push', { id: 'i-1', problem: { code: 'forbidden', message: 'Operator only.' } }));
+    const { fetch } = http(answer('push', { id: 'i-1', problem: { code: 'FORBIDDEN', message: 'Operator only.' } }));
     const { server } = serverOver(fetch);
 
     expect(await server.event({ id: 'i-1', trigger: 'Push', requestId: 'rq-1' })).toEqual({
       kind: 'problem',
-      code: 'forbidden',
+      code: 'FORBIDDEN',
       message: 'Operator only.',
     });
   });
 
   it('answers a document of another version as a problem, and rejects any other GraphQL error', async () => {
     const { fetch } = http(
-      { errors: [{ message: 'Reload.', extensions: { code: 'client-outdated' } }] },
+      { errors: [{ message: 'Reload.', extensions: { code: 'CLIENT_OUTDATED' } }] },
       { errors: [{ message: 'Not authorized.' }] },
     );
     const { server } = serverOver(fetch);
 
-    expect(await server.get('i-1')).toEqual({ kind: 'problem', code: 'client-outdated', message: 'Reload.' });
+    expect(await server.get('i-1')).toEqual({ kind: 'problem', code: 'CLIENT_OUTDATED', message: 'Reload.' });
     await expect(server.get('i-1')).rejects.toThrow('Not authorized.');
   });
 
@@ -183,7 +183,7 @@ describe('createMachineServer operations', () => {
     const { sent, fetch } = http(answer('get', null));
     const { server } = serverOver(fetch);
 
-    expect(await server.get('i-9')).toMatchObject({ kind: 'problem', code: 'not-found' });
+    expect(await server.get('i-9')).toMatchObject({ kind: 'problem', code: 'NOT_FOUND' });
     expect(sent).toEqual([{ id: `trax_machine_turnstile_get_${hash}`, variables: { id: 'i-9' } }]);
   });
 
@@ -249,11 +249,11 @@ describe('createMachineServer change stream', () => {
     expect(gone.messages).toEqual([{ type: 'gone' }]);
 
     const missing = follow();
-    missing.socket.push({ problem: { code: 'not-found', message: 'No instance.' } });
+    missing.socket.push({ problem: { code: 'NOT_FOUND', message: 'No instance.' } });
     expect(missing.messages).toEqual([{ type: 'gone' }]);
 
     const outdated = follow();
-    outdated.socket.push({ problem: { code: 'client-outdated', message: 'Reload.' } });
+    outdated.socket.push({ problem: { code: 'CLIENT_OUTDATED', message: 'Reload.' } });
     expect(outdated.messages).toEqual([{ type: 'client-outdated' }]);
 
     const reload = follow();
@@ -302,7 +302,7 @@ describe('createMachineServer change stream', () => {
     vi.useFakeTimers();
     const { socket, messages } = follow([100]);
 
-    socket.push({ problem: { code: 'too-many-subscriptions', message: 'Complete one.' } });
+    socket.push({ problem: { code: 'TOO_MANY_SUBSCRIPTIONS', message: 'Complete one.' } });
     vi.advanceTimersByTime(100);
 
     expect(messages).toEqual([]);

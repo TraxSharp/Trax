@@ -1,4 +1,5 @@
 using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Machines;
 
@@ -21,10 +22,10 @@ public class AdvancePartition(IMachineInstances instances)
         ) switch
         {
             AdvanceOutcome.Advanced advanced => new() { State = advanced.Snapshot.State },
-            AdvanceOutcome.Rejected rejected => new() { Problem = rejected.Reason },
-            AdvanceOutcome.NotFound => new() { Problem = "not-found" },
-            AdvanceOutcome.Conflict => new() { Problem = "conflict" },
-            AdvanceOutcome.LoadError error => new() { Problem = error.Code },
-            _ => new() { Problem = "internal-error" },
+            AdvanceOutcome.Rejected rejected => new() { Problem = rejected.Reason.ToWire() },
+            AdvanceOutcome.NotFound => new() { Problem = RefusalCode.NotFound.ToWire() },
+            AdvanceOutcome.Conflict => new() { Problem = RefusalCode.Conflict.ToWire() },
+            AdvanceOutcome.LoadError error => new() { Problem = error.Code.ToWire() },
+            _ => new() { Problem = RefusalCode.InternalError.ToWire() },
         };
 }

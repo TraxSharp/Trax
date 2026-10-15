@@ -8,7 +8,7 @@ internal static class SnapshotOwner
 {
     /// <summary>
     /// The owner the request's drafts are scoped to, or null when the principal names none. The draft mutations
-    /// refuse a null result as <c>unauthenticated</c>.
+    /// refuse a null result as <c>UNAUTHENTICATED</c>.
     /// </summary>
     public static string? Key(ISnapshotPrincipal principal) =>
         principal.CurrentUserKey is { } key && !string.IsNullOrWhiteSpace(key) ? key : null;

@@ -72,7 +72,8 @@ public class CheckoutConformanceTests
             result
                 .Should()
                 .BeOfType<AdvanceResult.Rejected>()
-                .Which.Reason.Should()
+                .Which.Reason.ToWire()
+                .Should()
                 .Be(expect["reason"]!.GetValue<string>());
         }
     }
@@ -99,7 +100,8 @@ public class CheckoutConformanceTests
             result
                 .Should()
                 .BeOfType<RehydrationResult.Error>()
-                .Which.Code.Should()
+                .Which.Code.ToWire()
+                .Should()
                 .Be(expect["code"]!.GetValue<string>());
         }
     }

@@ -58,7 +58,7 @@ public class StrictInputParityTests
             var (outcome, reason) = result switch
             {
                 AdvanceResult.Transitioned => ("transitioned", (string?)null),
-                AdvanceResult.Rejected r => ("rejected", r.Reason),
+                AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
                 _ => ("unknown", null),
             };
             var answer = twin[i][0];
@@ -69,7 +69,7 @@ public class StrictInputParityTests
             var want = expected[i] ? "transitioned" : "rejected";
             if (outcome != want)
                 diffs.Add($"{names[i]}: C# {outcome} {reason}, the CLR type says {want}");
-            if (!expected[i] && reason != RejectionReasons.InvalidInput)
+            if (!expected[i] && reason != RefusalCode.InvalidInput.ToWire())
                 diffs.Add($"{names[i]}: refused as {reason}, not invalid-input");
         }
 

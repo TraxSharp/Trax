@@ -12,7 +12,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// An effect is pending on its instance's row: sending an effect-bound event marks the row, every other write to it
-/// is refused as <c>effect-in-progress</c> or waits while the mark is there, and the effect's receipt, the move to its
+/// is refused as <c>EFFECT_IN_PROGRESS</c> or waits while the mark is there, and the effect's receipt, the move to its
 /// target and the end of the mark are one write. Past its lease the mark is taken over, by the next send or by the
 /// reconciler, and the effect run again under the same key. Pins docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md
 /// as well: nothing but the effect runner writes a draft between its effect and its record.
@@ -68,7 +68,7 @@ public class EffectPendingTests(StoreProvider provider)
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>(because)
             .Which.Reason.Should()
-            .Be("effect-in-progress", $"{because} ({Adr}; {OnlyTheRunner})");
+            .Be(RefusalCode.EffectInProgress, $"{because} ({Adr}; {OnlyTheRunner})");
 
     [Test]
     public async Task An_event_out_of_the_effects_state_while_it_is_pending_is_refused_effect_in_progress()
@@ -172,7 +172,7 @@ public class EffectPendingTests(StoreProvider provider)
             .Should()
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.DiscardNotAllowed, $"an effect is pending on the row ({Adr})");
+            .Be(RefusalCode.DiscardNotAllowed, $"an effect is pending on the row ({Adr})");
         rowsWhilePending.Should().Be(1, "the sweep passes over a row with a pending effect");
         (await send).Should().BeOfType<AdvanceOutcome.Advanced>();
         (await Row(id)).State.Should().Be(nameof(PendingPayState.Paid));

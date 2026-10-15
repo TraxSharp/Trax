@@ -35,7 +35,7 @@ public class RefusalPrecedenceTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.NoTransition,
+                RefusalCode.NoTransition,
                 $"a trigger with no edge from this state is refused before its input is read ({Adr})"
             );
     }
@@ -55,7 +55,7 @@ public class RefusalPrecedenceTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.InvalidInput,
+                RefusalCode.InvalidInput,
                 $"the input is checked against its schema before any guard reads it ({Adr})"
             );
     }

@@ -81,7 +81,7 @@ public class TurnstileTests : StateMachineTestFixture
             input: """{"coin":"penny"}"""
         );
 
-        penny.ProblemCode.Should().Be("guard-failed");
+        penny.ProblemCode.Should().Be("GUARD_FAILED");
         penny.Wire.Should().BeNull();
         (await Machines.LoadAsync(Alice, Turnstile, id)).State.Should().Be("Locked");
     }
@@ -94,7 +94,7 @@ public class TurnstileTests : StateMachineTestFixture
 
         (await Machines.AdvanceAsync(Alice, Turnstile, id, "Push"))
             .ProblemCode.Should()
-            .Be("no-transition");
+            .Be("NO_TRANSITION");
         (await Machines.LoadAsync(Alice, Turnstile, id)).State.Should().Be("Locked");
     }
 
@@ -108,7 +108,7 @@ public class TurnstileTests : StateMachineTestFixture
         (await Machines.SaveAsync(Alice, Turnstile, id, TurnstileWire("Unlocked")))
             .ProblemCode.Should()
             .Be(StateMachineClient.NotServed);
-        (await Machines.LoadAsync(Alice, Turnstile, id)).ProblemCode.Should().Be("not-found");
+        (await Machines.LoadAsync(Alice, Turnstile, id)).ProblemCode.Should().Be("NOT_FOUND");
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class TurnstileTests : StateMachineTestFixture
         await SeedAsync(Alice, id, TurnstileWire("Locked"));
         await Machines.AdvanceAsync(Alice, Turnstile, id, "Coin", input: """{"coin":"dollar"}""");
 
-        (await Machines.LoadAsync(Bob, Turnstile, id)).ProblemCode.Should().Be("not-found");
+        (await Machines.LoadAsync(Bob, Turnstile, id)).ProblemCode.Should().Be("NOT_FOUND");
 
         // Bob's draft under the same id is his own, and leaves Alice's alone.
         await SeedAsync(Bob, id, TurnstileWire("Locked"));

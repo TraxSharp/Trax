@@ -24,7 +24,7 @@ public interface IInvokeBuilder<TState, TTrigger> : IStateBuilder<TState, TTrigg
     /// When the run succeeds, go to <paramref name="target"/>. Declare several to route on the output: they are
     /// tried in declaration order and the first whose <paramref name="when"/> holds is taken, so an unguarded
     /// edge after the guarded ones is the fallback. To the engine, an output no edge accepts moves nothing (a typed
-    /// <c>no-transition</c>); on the server the run has finished, so such an output is applied as the state's
+    /// <c>NO_TRANSITION</c>); on the server the run has finished, so such an output is applied as the state's
     /// <see cref="OnFailed"/>, with the reason <c>invoke-output-unaccepted</c>.
     /// </summary>
     /// <param name="target">The state the machine enters.</param>

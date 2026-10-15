@@ -80,5 +80,5 @@ internal static class CallerRules
 
     /// <summary>The refusal of a caller a rule does not admit.</summary>
     public static AdvanceOutcome.Rejected Forbidden() =>
-        new(DraftRefusalCodes.Forbidden, "You may not do this.");
+        new(RefusalCode.Forbidden, "You may not do this.");
 }

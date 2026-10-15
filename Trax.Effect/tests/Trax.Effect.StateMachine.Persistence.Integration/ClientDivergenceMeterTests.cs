@@ -8,7 +8,7 @@ using Trax.Effect.StateMachine.Persistence.Mutations;
 namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
-/// An advance whose client result differs from the server's is refused as <c>client-divergence</c>, writes nothing,
+/// An advance whose client result differs from the server's is refused as <c>CLIENT_DIVERGENCE</c>, writes nothing,
 /// and is counted on the state-machine meter, so a twin drifting from its server shows up before users report it.
 /// </summary>
 [Property("adr", Adr)]
@@ -79,7 +79,7 @@ public class ClientDivergenceMeterTests
             }
         );
 
-        output.Problem!.Code.Should().Be("client-divergence");
+        output.Problem!.Code.Should().Be(RefusalCode.ClientDivergence);
         (await TestDb.NewStore().Get(user, id))!
             .Json.Should()
             .Contain("\"Locked\"", "a divergent advance persists nothing");

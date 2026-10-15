@@ -11,7 +11,7 @@ describe('dev logger', () => {
     const logger = createDevLogger<TurnstileSpec>('turnstile', { console: c });
 
     logger.onTransition?.('Locked', 'Coin', 'Unlocked', snap);
-    logger.onRejected?.('Push', { kind: 'rejected', code: 'no-transition', message: 'nope' }, snap);
+    logger.onRejected?.('Push', { kind: 'rejected', code: 'NO_TRANSITION', message: 'nope' }, snap);
 
     expect(c.log).toHaveBeenCalledWith('[state-machine:turnstile] Locked --Coin--> Unlocked');
     expect(c.warn).toHaveBeenCalledOnce();

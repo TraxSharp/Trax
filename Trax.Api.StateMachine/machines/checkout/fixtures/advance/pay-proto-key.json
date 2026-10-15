@@ -2,5 +2,5 @@
   "name": "Review + Pay with a __proto__ key is refused as invalid input, never read through",
   "given": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } },
   "when": { "trigger": "Pay", "input": { "__proto__": { "receipt": "r-1" } } },
-  "expect": { "outcome": "rejected", "reason": "invalid-input" }
+  "expect": { "outcome": "rejected", "reason": "INVALID_INPUT" }
 }

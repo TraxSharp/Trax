@@ -70,8 +70,8 @@ implements it.
 | `MigrateFrom(int fromVersion, Func<string, JsonObject, MigrationResult> migrate)` | Forward-migrate a stored snapshot from `fromVersion` to this definition's version. The migrator gets the stored state name and context and returns a `MigrationResult`. |
 | `Differential(Action<IDifferentialBuilder> configure)` | Authors the cross-language differential fuzzing inputs (test-only): per-trigger input samples, per-state seed contexts, and dense probe contexts. Exported into the IR's `differential` block so the differential harness enumerates off the one C# source, with no hand-written machine.json. Only valid on a declaratively-authored machine. See [IDifferentialBuilder](#idifferentialbuilder). |
 | `In(TState state)` | Opens a state to declare its context rule and outgoing transitions. Returns an `IStateBuilder`. |
-| `SystemOwned()` | The machine's instances belong to the system: only [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances) creates one, and no user's draft operation reaches the machine (they answer `unknown-machine`). A train it invokes is authorized in the trusted execution scope, so the host refuses one that declares `[TraxAuthorize]`. Without it a machine is user-owned and `Start` refuses it. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
-| `InvokedRunLimit(int limit)` | The most live invoked runs one user may already hold, counted across every machine, for entering one of this machine's invoking states to be allowed; past it the entry is refused with `invoke-limit-reached`. Defaults to 10; at least 1. System owners are not capped. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
+| `SystemOwned()` | The machine's instances belong to the system: only [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances) creates one, and no user's draft operation reaches the machine (they answer `UNKNOWN_MACHINE`). A train it invokes is authorized in the trusted execution scope, so the host refuses one that declares `[TraxAuthorize]`. Without it a machine is user-owned and `Start` refuses it. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
+| `InvokedRunLimit(int limit)` | The most live invoked runs one user may already hold, counted across every machine, for entering one of this machine's invoking states to be allowed; past it the entry is refused with `INVOKE_LIMIT_REACHED`. Defaults to 10; at least 1. System owners are not capped. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
 | `CustomGuard(string name, Func<JsonObject, JsonNode?, bool> guard)` | Binds the C# handler for `Rule.Custom(name)`, wherever the machine uses it (a `When` or a `Requires`, nested or not). The TypeScript twin's `customGuards` is the other half. |
 | `CustomReducer(string name, Func<JsonObject, JsonNode?, JsonObject> reducer)` | Binds the C# handler for `Reduction.Custom(name)`: it gets the context and the trigger input and returns the destination context. The twin's `customReducers` is the other half. |
 
@@ -105,7 +105,7 @@ Says where an invoked train's outcome goes. It is also the state's
 
 | Method | Description |
 |--------|-------------|
-| `OnDone(TState target, Rule? when = null, Reduction? reduce = null)` | Where a successful run goes. Declare one or more; they are tried in declaration order and the first whose `when` holds for the output is taken (null: every output). `when` reads the output as the outcome's input (`Input((MyOutput o) => o.Field)`); `reduce` builds the target's context from it (null keeps the context). An output no edge accepts is a `no-transition` to the engine; on the server the finished run is applied as `OnFailed` with the reason `invoke-output-unaccepted`. |
+| `OnDone(TState target, Rule? when = null, Reduction? reduce = null)` | Where a successful run goes. Declare one or more; they are tried in declaration order and the first whose `when` holds for the output is taken (null: every output). `when` reads the output as the outcome's input (`Input((MyOutput o) => o.Field)`); `reduce` builds the target's context from it (null keeps the context). An output no edge accepts is a `NO_TRANSITION` to the engine; on the server the finished run is applied as `OnFailed` with the reason `invoke-output-unaccepted`. |
 | `OnFailed(TState target, Reduction? reduce = null)` | Where a failed run goes, a reaped run included. Exactly once. The outcome carries no input. |
 | `OnCancelled(TState target, Reduction? reduce = null)` | Where a cancelled run goes. Required, exactly once. The outcome carries no input. |
 
@@ -123,11 +123,11 @@ against the one `RunsOnce` effect.
 |--------|-------------|
 | `When(Func<JsonObject, JsonNode?, bool> guard)` | Admits the transition only when the guard passes. The first matching edge wins. |
 | `When(Rule guard)` | The declarative, exportable guard: admits the edge only when the `Rule` holds. Build rules with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
-| `WithInput<TInput>()` | Declares this trigger's input as a record. Both engines check every input sent with the trigger against the record's schema before any guard reads it, as strictly as the CLR type, and refuse a mismatch as `invalid-input` (see [Trigger input](#trigger-input)). The IR carries the schema. |
+| `WithInput<TInput>()` | Declares this trigger's input as a record. Both engines check every input sent with the trigger against the record's schema before any guard reads it, as strictly as the CLR type, and refuse a mismatch as `INVALID_INPUT` (see [Trigger input](#trigger-input)). The IR carries the schema. |
 | `Because(string message)` | The detail surfaced when the guard rejects the trigger. |
 | `Reduce(Func<JsonObject, JsonNode?, JsonObject> reducer)` | Computes the next context. Return a fresh JSON object; never mutate the input. |
 | `Reduce(Reduction reduce)` | The declarative, exportable reducer: `Set(...).FromInput(...)`, `Clear()`, `Reset()`, `Keep()`. See the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
-| `RunsOnce<TEffect>(string? keyPrefix = null)` | Binds an `ISnapshotEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. Omit `keyPrefix` and it defaults to `{machineId}:{trigger}`. On the server only the send fires this transition: an advance of its trigger through the draft service or `IMachineInstances.Advance` is refused as `effect-bound`. The engine's own `SnapshotMachine.Advance` and the TypeScript twin's `advance` do not refuse it and fire the edge like any other. A machine binds at most one. |
+| `RunsOnce<TEffect>(string? keyPrefix = null)` | Binds an `ISnapshotEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. Omit `keyPrefix` and it defaults to `{machineId}:{trigger}`. On the server only the send fires this transition: an advance of its trigger through the draft service or `IMachineInstances.Advance` is refused as `EFFECT_BOUND`. The engine's own `SnapshotMachine.Advance` and the TypeScript twin's `advance` do not refuse it and fire the edge like any other. A machine binds at most one. |
 | `To(TState state)` | The destination state. Also closes the transition, so you can chain another `On(...)`. |
 
 ## IDifferentialBuilder
@@ -166,9 +166,9 @@ train's outcome, the effect or an event gated by `Requires` or `RequiresPolicy` 
 | `IMachineBuilder.Start<TStartInput>(Action<IStartBuilder<TStartInput>> configure)` | Declares the machine's `start`: the record a client starts an instance with, never the context type. `IStartBuilder` takes a declarative `Reduce(Reduction)` from the start input to the initial context, and the same four rules as an event (`Requires`, `RequiresPolicy`, `AnyAuthenticated`, `Anonymous`). |
 | `IMachineBuilder.Get(Action<IReadRuleBuilder> rule)` | Declares who may read an instance through `get`. |
 | `IMachineBuilder.Watch(Action<IReadRuleBuilder> rule)` | Declares who may watch an instance through `machineChanged`. `IReadRuleBuilder` offers `OwnerOnly()`, `Requires(...)`, `RequiresPolicy(...)`, `AnyAuthenticated()` and `Anonymous()`. |
-| `IMachineBuilder.Discard(Action<IReadRuleBuilder> rule)` | Declares who may delete an instance through `discard`, owner-only being the floor as for `get`. Whatever the rule, a row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in a state that invokes a train, and one with an effect pending on it is not discarded: the answer is `discard-not-allowed`. |
+| `IMachineBuilder.Discard(Action<IReadRuleBuilder> rule)` | Declares who may delete an instance through `discard`, owner-only being the floor as for `get`. Whatever the rule, a row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in a state that invokes a train, and one with an effect pending on it is not discarded: the answer is `DISCARD_NOT_ALLOWED`. |
 | `IStateBuilder.After(TimeSpan delay)` | Declares the state's timer: once the state has been held for `delay`, the server leaves it. Returns an `ITimerBuilder`, whose `GoTo(TState target)` names where it goes and returns the state builder. The timer starts on every entry (a self-transition included) and is cancelled on leaving; its trigger is `<State>.after`. |
-| `IStateBuilder.After<TContext>(Expression<Func<TContext, TimeSpan?>> duration, TimeSpan min, TimeSpan max)` | The same, with the duration read from a context field and bounded by `min` and `max`. The field holds an ISO-8601 duration (`"PT5M"`: days, hours, minutes and seconds, in ASCII digits) and is read once, when the state is entered; entering with a field that is missing, not such a duration, or outside the bounds is refused as `invalid-input`, never an error. The typed GraphQL surface writes and reads a `TimeSpan` as this duration. |
+| `IStateBuilder.After<TContext>(Expression<Func<TContext, TimeSpan?>> duration, TimeSpan min, TimeSpan max)` | The same, with the duration read from a context field and bounded by `min` and `max`. The field holds an ISO-8601 duration (`"PT5M"`: days, hours, minutes and seconds, in ASCII digits) and is read once, when the state is entered; entering with a field that is missing, not such a duration, or outside the bounds is refused as `INVALID_INPUT`, never an error. The typed GraphQL surface writes and reads a `TimeSpan` as this duration. |
 
 An event has one rule, whichever state it is sent from: `Build` refuses a machine whose edges of one event declare
 different rules (or one declares a rule and another none), and one where a gated event (one that names a role or a
@@ -212,7 +212,7 @@ The TypeScript twin validates against the same exported schema and gives the sam
   records, or a record on one edge and none on another. An invoked train's output type needs a schema too,
   since its output is checked against it before an `OnDone` guard reads it.
 - **Never an exception.** A duplicate key, a number outside the range of a double (`1e400`), a string with a
-  lone surrogate, or a deeply nested object is refused as `invalid-input`.
+  lone surrogate, or a deeply nested object is refused as `INVALID_INPUT`.
 
 ## Exporting the IR
 
@@ -243,8 +243,8 @@ The [machines root](/docs/sdk-reference/graphql-api/machines) types each exposed
 operations from the three.
 
 The engine (`SnapshotMachine`) fires a timer trigger through an entry point of its own, which only the server's reconciler calls, kept
-apart from `Advance`, which refuses one as `timer-bound`. It fires only the timer of the state the snapshot is in (any other
-is `no-transition`) and carries the context to the timer's target. The IR exports timers in a `timers` block of their
+apart from `Advance`, which refuses one as `TIMER_BOUND`. It fires only the timer of the state the snapshot is in (any other
+is `NO_TRANSITION`) and carries the context to the timer's target. The IR exports timers in a `timers` block of their
 own (state, trigger, target, `after` or `field` with `min` and `max` as ISO-8601 durations, and the union of the rules
 of everything that enters the state), never in `inputs` or `triggers`; a machine without timers exports no block.
 

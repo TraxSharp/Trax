@@ -65,7 +65,7 @@ public class ForwardMigrationTests : StateMachineTestFixture
         (await Machines.SaveAsync(Alice, Checkout, id, v1))
             .ProblemCode.Should()
             .Be(StateMachineClient.NotServed);
-        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("not-found");
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("NOT_FOUND");
     }
 
     [Test]
@@ -82,7 +82,7 @@ public class ForwardMigrationTests : StateMachineTestFixture
 
         await SeedAsync(Alice, id, noTotal);
 
-        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("invalid-context");
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("INVALID_CONTEXT");
     }
 
     [Test]
@@ -103,7 +103,7 @@ public class ForwardMigrationTests : StateMachineTestFixture
 
         await SeedAsync(Alice, id, v3);
 
-        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("version-mismatch");
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("VERSION_MISMATCH");
     }
 
     /// <summary>

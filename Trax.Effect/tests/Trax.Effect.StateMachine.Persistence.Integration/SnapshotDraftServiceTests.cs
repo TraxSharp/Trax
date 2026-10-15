@@ -37,7 +37,7 @@ public class SnapshotDraftServiceTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be(RehydrationErrorCodes.InvalidContext);
+            .Be(RefusalCode.InvalidContext);
         (await Service().Load("u", id)).Should().BeOfType<LoadResult.NotFound>();
     }
 
@@ -54,7 +54,7 @@ public class SnapshotDraftServiceTests
             .Should()
             .BeOfType<AutosaveResult.Rejected>()
             .Which.Code.Should()
-            .Be("too-large");
+            .Be(RefusalCode.TooLarge);
         (await Service().Load("u", id)).Should().BeOfType<LoadResult.NotFound>();
     }
 
@@ -83,7 +83,7 @@ public class SnapshotDraftServiceTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]

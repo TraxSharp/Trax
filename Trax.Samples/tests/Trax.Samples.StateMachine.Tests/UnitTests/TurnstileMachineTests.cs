@@ -1,3 +1,4 @@
+using Trax.Effect.StateMachine;
 using Trax.Samples.StateMachine.Tests.Fakes;
 
 namespace Trax.Samples.StateMachine.Tests.UnitTests;
@@ -52,7 +53,7 @@ public class TurnstileMachineTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("guard-failed");
+            .Be(RefusalCode.GuardFailed);
 
         (await service.Load(User, Id))
             .Should()

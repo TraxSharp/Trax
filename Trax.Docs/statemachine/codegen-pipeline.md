@@ -93,7 +93,7 @@ side replays the committed file on its own, so the C# suite needs no Node and th
 
 When a machine bumps its `version`, a per-source-version migration upgrades an older stored snapshot on rehydrate
 (see [Migrations](/docs/sdk-reference/statemachine-api/migrations)); a missing step in the chain is a typed
-`version-mismatch`, never a silent misread. Correctness against real stored shapes is pinned by the migration
+`VERSION_MISMATCH`, never a silent misread. Correctness against real stored shapes is pinned by the migration
 golden, `machines/<machine>/migration.json`: a committed set of stored older-version snapshots and the exact
 canonical wire each must become. Both engines replay it, so a migration that drops, renames, or reorders a surviving
 field fails, and the two runtimes cannot migrate the same draft differently.

@@ -46,7 +46,7 @@ public sealed class MachineDefinition<TState, TTrigger>
     /// Forward migrations keyed by the version they migrate <b>from</b>: entry <c>N</c> turns a
     /// version-<c>N</c> snapshot into a version-<c>N+1</c> one. On rehydrating an older snapshot the
     /// engine applies these in sequence up to <see cref="Version"/>. A gap in the chain (or a snapshot
-    /// newer than the definition) is a <c>version-mismatch</c>. Empty = no migration; an old snapshot is
+    /// newer than the definition) is a <c>VERSION_MISMATCH</c>. Empty = no migration; an old snapshot is
     /// rejected rather than silently misread.
     /// </summary>
     public IReadOnlyDictionary<
@@ -64,7 +64,7 @@ public sealed class MachineDefinition<TState, TTrigger>
 
     /// <summary>
     /// The schema each trigger's input is checked against before any guard reads it; a mismatch is
-    /// <c>invalid-input</c>. <see cref="ContextSchema.Empty"/> accepts only no input or <c>{}</c>. A trigger with
+    /// <c>INVALID_INPUT</c>. <see cref="ContextSchema.Empty"/> accepts only no input or <c>{}</c>. A trigger with
     /// no entry is not checked, which is only the case on a machine whose guards and reducers are raw delegates
     /// reading the input themselves. Built by <see cref="MachineBuilder{TState,TTrigger}.Build"/>.
     /// </summary>
@@ -74,7 +74,7 @@ public sealed class MachineDefinition<TState, TTrigger>
     /// <summary>
     /// The states with a timer, keyed by state. Empty for a machine with none. Only
     /// <see cref="SnapshotMachine{TState,TTrigger}.AdvanceTimer"/> fires one; <see cref="SnapshotMachine{TState,TTrigger}.Advance"/>
-    /// refuses a timer trigger as <c>timer-bound</c>.
+    /// refuses a timer trigger as <c>TIMER_BOUND</c>.
     /// </summary>
     internal IReadOnlyDictionary<TState, TimerDefinition<TState>> Timers { get; init; } =
         new Dictionary<TState, TimerDefinition<TState>>();

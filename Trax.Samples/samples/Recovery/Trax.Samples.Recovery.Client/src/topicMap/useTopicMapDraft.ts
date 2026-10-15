@@ -136,7 +136,7 @@ export function useTopicMapDraft(): TopicMapDraft {
 
   // A draft the server no longer holds (deleted elsewhere, or expired) is forgotten, and a new one started.
   useEffect(() => {
-    if (draft.error?.code !== "gone" || restarting.current) return;
+    if (draft.error?.code !== "GONE" || restarting.current) return;
     restarting.current = true;
     restart();
   }, [draft.error, restart]);
@@ -163,11 +163,11 @@ export function useTopicMapDraft(): TopicMapDraft {
       try {
         answer = old ? await server.discard(old, crypto.randomUUID()) : { kind: "discarded" };
       } catch (error) {
-        answer = { kind: "problem", code: "transport-error", message: error instanceof Error ? error.message : String(error) };
+        answer = { kind: "problem", code: "TRANSPORT_ERROR", message: error instanceof Error ? error.message : String(error) };
       }
       setDiscarding(false);
       // Discarded, or already gone: a new draft. Anything else: the old one stays, so no new one is started.
-      if (answer.kind === "discarded" || answer.code === "not-found") {
+      if (answer.kind === "discarded" || answer.code === "NOT_FOUND") {
         restart();
         return;
       }
@@ -178,7 +178,7 @@ export function useTopicMapDraft(): TopicMapDraft {
 
   // A page built for another version of the machine gets the same answer to every request it could send, so it
   // drops the draft it shows, which hides every step, and sends nothing more.
-  const outdated = draft.error?.code === "client-outdated";
+  const outdated = draft.error?.code === "CLIENT_OUTDATED";
   const shown = draft.error ?? draft.problem;
 
   return {

@@ -58,7 +58,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
     private sealed record Path(
         Guid Id,
         SnapshotOwnerKind Kind,
-        Func<JsonNode?, Task<string?>> Fire
+        Func<JsonNode?, Task<RefusalCode?>> Fire
     );
 
     // Creates the instance the path fires on, and returns how to fire Coin through it: null when the trigger was
@@ -98,7 +98,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
         }
     }
 
-    private async Task<string?> ViaService(Guid id, JsonNode? input, string? requestId = null)
+    private async Task<RefusalCode?> ViaService(Guid id, JsonNode? input, string? requestId = null)
     {
         using var scope = _host.Scope();
         return Code(
@@ -106,7 +106,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
         );
     }
 
-    private async Task<string?> ViaJunction(Guid id, JsonNode? input)
+    private async Task<RefusalCode?> ViaJunction(Guid id, JsonNode? input)
     {
         using var scope = _host.Scope();
         var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
@@ -122,7 +122,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
         return output.Problem?.Code;
     }
 
-    private async Task<string?> ViaInstances(MachineKey key, JsonNode? input)
+    private async Task<RefusalCode?> ViaInstances(MachineKey key, JsonNode? input)
     {
         using var scope = _host.Scope();
         return Code(
@@ -132,15 +132,15 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
         );
     }
 
-    private static string? Code(AdvanceOutcome outcome) =>
+    private static RefusalCode? Code(AdvanceOutcome outcome) =>
         outcome switch
         {
             AdvanceOutcome.Advanced => null,
             AdvanceOutcome.Rejected rejected => rejected.Reason,
             AdvanceOutcome.LoadError error => error.Code,
-            AdvanceOutcome.NotFound => "not-found",
-            AdvanceOutcome.Conflict => "conflict",
-            _ => "unknown",
+            AdvanceOutcome.NotFound => RefusalCode.NotFound,
+            AdvanceOutcome.Conflict => RefusalCode.Conflict,
+            _ => RefusalCode.InternalError,
         };
 
     [TestCase("service")]
@@ -156,7 +156,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
         refused
             .Should()
             .Be(
-                RejectionReasons.InvalidInput,
+                RefusalCode.InvalidInput,
                 $"a field the input type does not declare is refused on every path, trusted or not. See {Adr}"
             );
         var after = (await _host.Rows(arranged.Id)).Single();
@@ -180,7 +180,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
         refused
             .Should()
             .Be(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"an input past the cap is refused before it is parsed or validated, on every path. See {Adr}"
             );
         var after = (await _host.Rows(arranged.Id)).Single();
@@ -195,10 +195,7 @@ public class TriggerInputValidationPathTests(StoreProvider provider)
 
         (await ViaService(arranged.Id, UnknownField, requestId: "r1"))
             .Should()
-            .Be(
-                RejectionReasons.InvalidInput,
-                $"the input carries a field CoinInput lacks. See {Adr}"
-            );
+            .Be(RefusalCode.InvalidInput, $"the input carries a field CoinInput lacks. See {Adr}");
         var refused = (await _host.Rows(arranged.Id)).Single();
         refused.LastRequestId.Should().BeNull("a refused request records nothing to replay");
         refused.State.Should().Be("Locked");

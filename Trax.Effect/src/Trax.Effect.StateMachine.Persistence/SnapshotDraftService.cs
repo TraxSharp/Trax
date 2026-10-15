@@ -47,9 +47,9 @@ public abstract record LoadResult
     public sealed record NotFound : LoadResult;
 
     /// <summary>A stored row exists but failed rehydration; the row is left untouched.</summary>
-    /// <param name="Code">A rehydration error code, one of <see cref="RehydrationErrorCodes"/>.</param>
+    /// <param name="Code">A rehydration error code, one of <see cref="RefusalCode"/>.</param>
     /// <param name="Message">A human-readable explanation of what failed validation.</param>
-    public sealed record Invalid(string Code, string Message) : LoadResult
+    public sealed record Invalid(RefusalCode Code, string Message) : LoadResult
     {
         /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
         internal Exception? Exception { get; init; }
@@ -86,15 +86,15 @@ public abstract record AutosaveResult
 
     /// <summary>The snapshot was refused and nothing was written.</summary>
     /// <param name="Code">
-    /// <c>too-large</c> (over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>draft-committed</c> (the stored
+    /// <c>TOO_LARGE</c> (over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>DRAFT_COMMITTED</c> (the stored
     /// draft is in a committed state or an effect's target and the save would change it in any way other than a
-    /// reset to the initial state that the machine declares from that state), <c>state-reserved</c> (the save would create a draft in, or move one into, a committed state or
-    /// the target of an effect-bound transition, which only the effect runner reaches), <c>draft-unreadable</c>
+    /// reset to the initial state that the machine declares from that state), <c>STATE_RESERVED</c> (the save would create a draft in, or move one into, a committed state or
+    /// the target of an effect-bound transition, which only the effect runner reaches), <c>DRAFT_UNREADABLE</c>
     /// (the stored draft fails rehydration, so only a reset to the initial state may overwrite it), or a
-    /// <see cref="RehydrationErrorCodes"/> value when the payload failed validation.
+    /// <see cref="RefusalCode"/> value when the payload failed validation.
     /// </param>
     /// <param name="Message">A human-readable explanation of the refusal.</param>
-    public sealed record Rejected(string Code, string Message) : AutosaveResult
+    public sealed record Rejected(RefusalCode Code, string Message) : AutosaveResult
     {
         /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
         internal Exception? Exception { get; init; }
@@ -146,18 +146,18 @@ public abstract record AdvanceOutcome
 
     /// <summary>The advance was refused and the stored draft is unchanged.</summary>
     /// <param name="Reason">
-    /// A machine rejection reason (see <see cref="RejectionReasons"/>), or one of the service's own:
-    /// <c>effect-bound</c> (the trigger runs the machine's irreversible effect from this state, so only
-    /// <see cref="ISnapshotEffectRunner.Run"/> may fire it), <c>request-id-reused</c>, <c>too-large</c>,
-    /// <c>draft-changed</c> (from <see cref="ISnapshotEffectRunner.Run"/> only: the effect already ran on content
+    /// A machine rejection reason (see <see cref="RefusalCode"/>), or one of the service's own:
+    /// <c>EFFECT_BOUND</c> (the trigger runs the machine's irreversible effect from this state, so only
+    /// <see cref="ISnapshotEffectRunner.Run"/> may fire it), <c>REQUEST_ID_REUSED</c>, <c>TOO_LARGE</c>,
+    /// <c>DRAFT_CHANGED</c> (from <see cref="ISnapshotEffectRunner.Run"/> only: the effect already ran on content
     /// the draft no longer holds, so its receipt is not recorded and the effect does not run again),
-    /// <c>client-divergence</c>, or <see cref="RehydrationErrorCodes.Malformed"/> when the resulting context
+    /// <c>CLIENT_DIVERGENCE</c>, or <see cref="RefusalCode.Malformed"/> when the resulting context
     /// could not be stored.
     /// </param>
     /// <param name="Detail">Extra context for the reason, such as the failing guard; null when there is none.</param>
-    public sealed record Rejected(string Reason, string? Detail) : AdvanceOutcome
+    public sealed record Rejected(RefusalCode Reason, string? Detail) : AdvanceOutcome
     {
-        /// <summary>The exception behind an <c>internal-error</c>, kept for the server's log and never in <see cref="Detail"/>.</summary>
+        /// <summary>The exception behind an <c>INTERNAL_ERROR</c>, kept for the server's log and never in <see cref="Detail"/>.</summary>
         internal Exception? Exception { get; init; }
     }
 
@@ -165,9 +165,9 @@ public abstract record AdvanceOutcome
     public sealed record NotFound : AdvanceOutcome;
 
     /// <summary>The stored draft failed rehydration, so it could not be advanced; it is left untouched.</summary>
-    /// <param name="Code">A rehydration error code, one of <see cref="RehydrationErrorCodes"/>.</param>
+    /// <param name="Code">A rehydration error code, one of <see cref="RefusalCode"/>.</param>
     /// <param name="Message">A human-readable explanation of what failed validation.</param>
-    public sealed record LoadError(string Code, string Message) : AdvanceOutcome
+    public sealed record LoadError(RefusalCode Code, string Message) : AdvanceOutcome
     {
         /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
         internal Exception? Exception { get; init; }
@@ -198,9 +198,9 @@ public abstract record StartOutcome
     }
 
     /// <summary>The start was refused and nothing was written.</summary>
-    /// <param name="Code">Why, for example one of <see cref="DraftRefusalCodes"/>.</param>
+    /// <param name="Code">Why, for example one of <see cref="RefusalCode"/>.</param>
     /// <param name="Message">A human-readable explanation of the refusal.</param>
-    public sealed record Rejected(string Code, string Message) : StartOutcome;
+    public sealed record Rejected(RefusalCode Code, string Message) : StartOutcome;
 
     private StartOutcome() { }
 }
@@ -212,9 +212,9 @@ public abstract record DiscardOutcome
     public sealed record Discarded : DiscardOutcome;
 
     /// <summary>The discard was refused and the instance is unchanged.</summary>
-    /// <param name="Code">Why, for example one of <see cref="DraftRefusalCodes"/>.</param>
+    /// <param name="Code">Why, for example one of <see cref="RefusalCode"/>.</param>
     /// <param name="Message">A human-readable explanation of the refusal.</param>
-    public sealed record Rejected(string Code, string Message) : DiscardOutcome;
+    public sealed record Rejected(RefusalCode Code, string Message) : DiscardOutcome;
 
     private DiscardOutcome() { }
 }
@@ -258,10 +258,10 @@ public interface ISnapshotDraftService
     /// The soft path: validates a client-provided snapshot and persists it as-is. Invalid or oversized
     /// data is never stored. The soft path never creates a committed state: a save that would create a draft
     /// in, or move one into, a committed state or an effect-bound transition's target is rejected as
-    /// <c>state-reserved</c>. Nor does it rewrite a draft already in one: any change to such a draft is rejected as
-    /// <c>draft-committed</c> except a reset to the initial state that the machine itself declares from that
+    /// <c>STATE_RESERVED</c>. Nor does it rewrite a draft already in one: any change to such a draft is rejected as
+    /// <c>DRAFT_COMMITTED</c> except a reset to the initial state that the machine itself declares from that
     /// state, and a save identical to the stored draft is answered as saved without writing. A stored draft that
-    /// fails rehydration may only be reset to the initial state (anything else is <c>draft-unreadable</c>), a new
+    /// fails rehydration may only be reset to the initial state (anything else is <c>DRAFT_UNREADABLE</c>), a new
     /// draft is only ever created, never written over one created meanwhile, and a concurrent write yields
     /// <c>Conflict</c>. A machine with no committed states and no effect is last writer wins. Saving a snapshot in
     /// the initial state releases the draft's settled effect claims: one still in flight within its lease, or a
@@ -282,7 +282,7 @@ public interface ISnapshotDraftService
     /// The authoritative path: reads the stored snapshot, fires <paramref name="trigger"/> on it, and
     /// persists the result under an optimistic-concurrency check, never trusting a client-computed state.
     /// A lost race comes back as <c>Conflict</c>, not an exception. A trigger bound to the machine's
-    /// irreversible effect from the stored state is refused as <c>effect-bound</c>: only the effect runner
+    /// irreversible effect from the stored state is refused as <c>EFFECT_BOUND</c>: only the effect runner
     /// (the send path) fires it, after the effect has run.
     /// </summary>
     /// <param name="userKey">The owner of the draft.</param>
@@ -293,7 +293,7 @@ public interface ISnapshotDraftService
     /// An optional idempotency key. A repeat of the request the draft last recorded (same id and trigger)
     /// returns the current snapshot without firing again, unless the draft has since moved back to the
     /// state that request fired from, in which case it fires as a new request. The same id with a
-    /// different trigger is refused as <c>request-id-reused</c>. Null never replays.
+    /// different trigger is refused as <c>REQUEST_ID_REUSED</c>. Null never replays.
     /// </param>
     /// <param name="cancellationToken">Cancels the store calls.</param>
     Task<AdvanceOutcome> Advance(
@@ -309,7 +309,7 @@ public interface ISnapshotDraftService
     /// <see cref="Advance(string, Guid, string, JsonNode?, string?, CancellationToken)"/> that first
     /// compares the result with <paramref name="clientResult"/>, the canonical snapshot the client's twin
     /// computed, and persists nothing when they differ: the advance is refused as
-    /// <c>client-divergence</c> and the stored draft is unchanged. A null <paramref name="clientResult"/>
+    /// <c>CLIENT_DIVERGENCE</c> and the stored draft is unchanged. A null <paramref name="clientResult"/>
     /// is a plain advance. A service that does not override this cannot check before it writes, so it
     /// refuses any client result rather than persisting an advance it would then report as refused.
     /// </summary>
@@ -339,9 +339,9 @@ public interface ISnapshotDraftService
     /// <see cref="Advance(string, Guid, string, JsonNode?, string?, CancellationToken)"/> on behalf of
     /// <paramref name="actor"/>: a <see cref="Actor.Client"/> acts on its own drafts and must meet the event's
     /// declared rule, checked per event against the roles and policies it holds now. One that does not is refused
-    /// as <c>forbidden</c> before a request id is replayed, the input is validated or anything is written, after
-    /// only an unknown trigger (<c>no-transition</c>) and an effect- or outcome-bound one. A client with no user
-    /// key is refused as <c>forbidden</c>. Host code acting on a user's draft is a client too, holding the roles
+    /// as <c>FORBIDDEN</c> before a request id is replayed, the input is validated or anything is written, after
+    /// only an unknown trigger (<c>NO_TRANSITION</c>) and an effect- or outcome-bound one. A client with no user
+    /// key is refused as <c>FORBIDDEN</c>. Host code acting on a user's draft is a client too, holding the roles
     /// it is given; host code drives a system-owned instance through <see cref="IMachineInstances"/>. On a machine that declares no rule at all, an authenticated client may fire
     /// every event, as before rules; once a machine declares any rule, an event without one is refused.
     /// A service that does not override this refuses every actor.
@@ -356,7 +356,7 @@ public interface ISnapshotDraftService
     ) =>
         Task.FromResult<AdvanceOutcome>(
             new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"{GetType().Name} does not check event rules."
             )
         );
@@ -378,7 +378,7 @@ public interface ISnapshotDraftService
     ) =>
         Task.FromResult<AdvanceOutcome>(
             new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"{GetType().Name} does not check event rules."
             )
         );
@@ -387,8 +387,8 @@ public interface ISnapshotDraftService
     /// Runs the machine's effect for the draft on behalf of <paramref name="actor"/>, as
     /// <see cref="ISnapshotEffectRunner.Run"/> does, after checking a <see cref="Actor.Client"/> against the
     /// effect-bound event's declared rule, though a send names no trigger: a caller the rule does not admit is
-    /// refused as <c>forbidden</c> before the draft is read or the effect claimed. A machine with no effect answers
-    /// <c>no-effect</c>. A service that does not override this refuses every actor.
+    /// refused as <c>FORBIDDEN</c> before the draft is read or the effect claimed. A machine with no effect answers
+    /// <c>NO_EFFECT</c>. A service that does not override this refuses every actor.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The service was built by <see cref="IMachine.CreateService"/> rather than taken from
@@ -402,7 +402,7 @@ public interface ISnapshotDraftService
     ) =>
         Task.FromResult<AdvanceOutcome>(
             new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 $"{GetType().Name} does not check event rules."
             )
         );
@@ -413,8 +413,8 @@ public interface ISnapshotDraftService
     /// the initial context, and the server mints the id; the row is inserted at revision 1, with the run its initial
     /// state invokes, if any, in the same transaction. A retry with the same <paramref name="requestId"/> and input
     /// returns the same instance with <c>Created</c> false; the same request id with a different input is refused as
-    /// <c>request-id-reused</c>. Refusals write nothing and come back as <see cref="StartOutcome.Rejected"/> (see
-    /// <see cref="DraftRefusalCodes"/>). A service that does not implement it throws
+    /// <c>REQUEST_ID_REUSED</c>. Refusals write nothing and come back as <see cref="StartOutcome.Rejected"/> (see
+    /// <see cref="RefusalCode"/>). A service that does not implement it throws
     /// <see cref="NotSupportedException"/>.
     /// </summary>
     /// <param name="actor">Who starts it: a <see cref="Actor.Client"/> naming a user; anything else is refused.</param>
@@ -436,7 +436,7 @@ public interface ISnapshotDraftService
     /// its settled effect claims with it. Idempotent: a draft already gone, or another user's id, answers
     /// <see cref="DiscardOutcome.Discarded"/>, exactly as a missing one does. A system-owned instance is refused. An
     /// instance in a state only the server puts it in, or one an effect is running on or still recording its result
-    /// to, is refused as <c>discard-not-allowed</c> and kept; so is one that moved into such a state while the
+    /// to, is refused as <c>DISCARD_NOT_ALLOWED</c> and kept; so is one that moved into such a state while the
     /// discard ran, because the delete is conditional on the row as it was checked. A service that does not implement
     /// it throws <see cref="NotSupportedException"/>.
     /// </summary>
@@ -589,7 +589,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     /// <summary>
     /// Why <paramref name="actor"/> may not fire <paramref name="trigger"/>, or <c>null</c> when it may. Only a client
     /// is checked against a rule; any other actor reaches no user's draft. An unknown trigger is left to the engine,
-    /// which answers <c>no-transition</c>.
+    /// which answers <c>NO_TRANSITION</c>.
     /// </summary>
     internal async Task<AdvanceOutcome.Rejected?> Refusal(
         Actor actor,
@@ -612,7 +612,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private static AutosaveResult.Rejected SaveRefused() =>
         new(
-            DraftRefusalCodes.SaveNotAllowed,
+            RefusalCode.SaveNotAllowed,
             "This machine moves only through its declared events. The generic save serves only machines with no "
                 + "server-side behaviour."
         );
@@ -653,7 +653,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private static AdvanceOutcome.Rejected EffectInProgress() =>
         new(
-            DraftRefusalCodes.EffectInProgress,
+            RefusalCode.EffectInProgress,
             "An action on this instance is still running. Try again once it has finished."
         );
 
@@ -977,13 +977,13 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     private static AutosaveResult.Rejected Reserved() =>
         new(
-            "state-reserved",
+            RefusalCode.StateReserved,
             "This step is completed by its action, not by saving the draft. Send it instead."
         );
 
     private static AutosaveResult.Rejected Invoking() =>
         new(
-            "draft-invoking",
+            RefusalCode.DraftInvoking,
             "This step is running. It moves on when its work finishes, or through one of its actions."
         );
 
@@ -1000,17 +1000,17 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     {
         if (SystemOwned)
             return new StartOutcome.Rejected(
-                DraftRefusalCodes.SystemOwned,
+                RefusalCode.SystemOwned,
                 "Only the server creates this kind of instance."
             );
         if (Owner(actor) is not { } client)
             return new StartOutcome.Rejected(
-                DraftRefusalCodes.Unauthenticated,
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (StartDeclaration is not { } start)
             return new StartOutcome.Rejected(
-                DraftRefusalCodes.NoStart,
+                RefusalCode.NoStart,
                 $"The machine '{_machineId}' declares no start."
             );
         // A start with no rule admits nobody, as an undeclared event does.
@@ -1018,24 +1018,21 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             Rules.Start is not { } rule
             || !await CallerRules.Admits(client, rule, cancellationToken)
         )
-            return new StartOutcome.Rejected(
-                DraftRefusalCodes.Forbidden,
-                "You may not start this."
-            );
+            return new StartOutcome.Rejected(RefusalCode.Forbidden, "You may not start this.");
         if (!RequestIdRing.IsUsable(requestId))
             return new StartOutcome.Rejected(
-                DraftRefusalCodes.InvalidRequestId,
+                RefusalCode.InvalidRequestId,
                 $"A start needs a request id of 1 to {RequestIdRing.MaxRequestIdLength} characters that is not blank and holds no control character."
             );
 
         // The input is bounded before it is read, then checked against the start's own record, never the context.
         if (SnapshotLimits.InputTooLarge(input))
             return new StartOutcome.Rejected(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
         if (SchemaValidator.ValidateInput(start.InputSchema, input) is { } invalid)
-            return new StartOutcome.Rejected(RejectionReasons.InvalidInput, invalid);
+            return new StartOutcome.Rejected(RefusalCode.InvalidInput, invalid);
 
         // The declared reduction applied to the initial context, validated exactly as a stored snapshot is read back,
         // so nothing is stored that a later read refuses.
@@ -1049,16 +1046,16 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
             return new StartOutcome.Rejected(
-                RejectionReasons.InvalidContext,
+                RefusalCode.InvalidContext,
                 "The start could not build its initial context."
             );
         }
         if (StorableJson.Problem(initial.Context) is { } unstorable)
-            return new StartOutcome.Rejected(RehydrationErrorCodes.Malformed, unstorable);
+            return new StartOutcome.Rejected(RefusalCode.Malformed, unstorable);
         var wire = machine.Serialize(initial);
         if (Encoding.UTF8.GetByteCount(wire) > SnapshotLimits.MaxSnapshotBytes)
             return new StartOutcome.Rejected(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The started snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
         switch (machine.Rehydrate(wire))
@@ -1067,10 +1064,10 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 initial = ok.Snapshot;
                 break;
             case RehydrationResult.Error error:
-                return new StartOutcome.Rejected(RejectionReasons.InvalidContext, error.Message);
+                return new StartOutcome.Rejected(RefusalCode.InvalidContext, error.Message);
             default:
                 return new StartOutcome.Rejected(
-                    RehydrationErrorCodes.Malformed,
+                    RefusalCode.Malformed,
                     "Unknown rehydration result."
                 );
         }
@@ -1083,7 +1080,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 initial = initial with { Timer = timer, ServerRecord = false };
                 break;
             case (_, var problem):
-                return new StartOutcome.Rejected(RejectionReasons.InvalidInput, problem!);
+                return new StartOutcome.Rejected(RefusalCode.InvalidInput, problem!);
         }
 
         if (Creates is not { } creates)
@@ -1149,19 +1146,19 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                         DueAt = existing.Stored.DueAt,
                     }
                     : new StartOutcome.Rejected(
-                        RehydrationErrorCodes.Malformed,
+                        RefusalCode.Malformed,
                         "The instance this request started can't be read."
                     );
             case CreateWrite.Reused:
                 return new StartOutcome.Rejected(
-                    DraftRefusalCodes.RequestIdReused,
+                    RefusalCode.RequestIdReused,
                     "This request id already started an instance with a different input. Send a new id."
                 );
             case CreateWrite.Refused refused:
                 return new StartOutcome.Rejected(refused.Code, refused.Message);
             default:
                 return new StartOutcome.Rejected(
-                    "conflict",
+                    RefusalCode.Conflict,
                     "The instance changed elsewhere; retry the start."
                 );
         }
@@ -1177,17 +1174,17 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     {
         if (SystemOwned)
             return new DiscardOutcome.Rejected(
-                DraftRefusalCodes.SystemOwned,
+                RefusalCode.SystemOwned,
                 "Only the server ends this kind of instance."
             );
         if (Owner(actor) is not { } client)
             return new DiscardOutcome.Rejected(
-                DraftRefusalCodes.Unauthenticated,
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (!RequestIdRing.IsUsable(requestId))
             return new DiscardOutcome.Rejected(
-                DraftRefusalCodes.InvalidRequestId,
+                RefusalCode.InvalidRequestId,
                 $"A discard needs a request id of 1 to {RequestIdRing.MaxRequestIdLength} characters that is not blank and holds no control character."
             );
 
@@ -1199,7 +1196,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 : Rules.Any
         )
             return new DiscardOutcome.Rejected(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden,
                 "You are not allowed to discard this instance."
             );
 
@@ -1215,13 +1212,13 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 return new DiscardOutcome.Discarded();
             if (stored.Effect is not null)
                 return new DiscardOutcome.Rejected(
-                    DraftRefusalCodes.DiscardNotAllowed,
+                    RefusalCode.DiscardNotAllowed,
                     "An effect on this instance is running, so the instance is becoming the record of what the "
                         + "server did, and cannot be discarded."
                 );
             if (StoredState(stored.Json) is { } state && KeptRecord(stored, state))
                 return new DiscardOutcome.Rejected(
-                    DraftRefusalCodes.DiscardNotAllowed,
+                    RefusalCode.DiscardNotAllowed,
                     $"An instance in {state} is the record of what the server did, and cannot be discarded."
                 );
             switch (await DeleteAsRead(client.UserKey, id, stored))
@@ -1230,7 +1227,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     return new DiscardOutcome.Discarded();
                 case DeleteResult.EffectLive:
                     return new DiscardOutcome.Rejected(
-                        DraftRefusalCodes.DiscardNotAllowed,
+                        RefusalCode.DiscardNotAllowed,
                         "An effect on this instance is running or recording its result, so the instance is "
                             + "becoming the record of what the server did, and cannot be discarded."
                     );
@@ -1239,7 +1236,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         return await store.Get(client.UserKey, _machineId, id, cancellationToken) is null
             ? new DiscardOutcome.Discarded()
             : new DiscardOutcome.Rejected(
-                "conflict",
+                RefusalCode.Conflict,
                 "The draft changed while it was being discarded; retry."
             );
     }
@@ -1340,10 +1337,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             {
                 Exception = error.Exception,
             },
-            _ => new LoadResult.Invalid(
-                RehydrationErrorCodes.Malformed,
-                "Unknown rehydration result."
-            ),
+            _ => new LoadResult.Invalid(RefusalCode.Malformed, "Unknown rehydration result."),
         };
     }
 
@@ -1365,7 +1359,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // Bound the payload before any parsing or DB work (DoS guard).
         if (Encoding.UTF8.GetByteCount(snapshotJson) > SnapshotLimits.MaxSnapshotBytes)
             return new AutosaveResult.Rejected(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"Snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -1380,7 +1374,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     ({ } savedTimer, _)
                 )
                     return new AutosaveResult.Rejected(
-                        RejectionReasons.InvalidInput,
+                        RefusalCode.InvalidInput,
                         machine
                             .TimerFor(saved.Snapshot.State, saved.Snapshot.Context, restart: false)
                             .Problem!
@@ -1465,7 +1459,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 {
                     if (ok.Snapshot.State != _initialState)
                         return new AutosaveResult.Rejected(
-                            "draft-unreadable",
+                            RefusalCode.DraftUnreadable,
                             "The saved draft can't be read, so it can only be started over."
                         );
                 }
@@ -1478,7 +1472,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                         || !MachineResets(current.Snapshot.State)
                     )
                         return new AutosaveResult.Rejected(
-                            "draft-committed",
+                            RefusalCode.DraftCommitted,
                             "This draft was already completed and can't be overwritten by an edit."
                         );
                 }
@@ -1504,7 +1498,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 };
             default:
                 return new AutosaveResult.Rejected(
-                    RehydrationErrorCodes.Malformed,
+                    RefusalCode.Malformed,
                     "Unknown rehydration result."
                 );
         }
@@ -1515,7 +1509,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     /// with an optimistic-concurrency check — never trusting a client-computed state. Pass a stable
     /// <paramref name="requestId"/> to make retries idempotent: a repeat of the same request (the same id
     /// and trigger) returns the current snapshot instead of firing the trigger again, and an id reused for
-    /// a different trigger is refused as <c>request-id-reused</c>. A result that could not be stored, or is
+    /// a different trigger is refused as <c>REQUEST_ID_REUSED</c>. A result that could not be stored, or is
     /// larger than <see cref="SnapshotLimits.MaxSnapshotBytes"/>, is refused before anything is written.
     /// </summary>
     public Task<AdvanceOutcome> Advance(
@@ -1601,7 +1595,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             return CallerRules.Forbidden();
         if (effects is not { Count: > 0 })
             return new AdvanceOutcome.Rejected(
-                "no-effect",
+                RefusalCode.NoEffect,
                 $"Machine '{_machineId}' has no irreversible effect to send."
             );
         var runner =
@@ -1767,7 +1761,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // they are, and it is refused before the draft, the caller or the request is read.
         if (machine.IsTimerTrigger(trigger))
             return new AdvanceOutcome.Rejected(
-                RejectionReasons.TimerBound,
+                RefusalCode.TimerBound,
                 "This step moves on by itself when its time is up, not by an action."
             );
 
@@ -1776,7 +1770,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // refuse it.
         if (requestId is not null && !RequestIdRing.IsUsable(requestId))
             return new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.InvalidRequestId,
+                RefusalCode.InvalidRequestId,
                 $"A request id is 1 to {RequestIdRing.MaxRequestIdLength} characters, not blank, with no control character."
             );
 
@@ -1784,7 +1778,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // generic junction.
         if (SnapshotLimits.InputTooLarge(input))
             return new AdvanceOutcome.Rejected(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -1816,7 +1810,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 };
             default:
                 return new AdvanceOutcome.LoadError(
-                    RehydrationErrorCodes.Malformed,
+                    RefusalCode.Malformed,
                     "Unknown rehydration result."
                 );
         }
@@ -1825,7 +1819,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // caller put in the input and the effect would never have run, so only the effect runner fires it.
         if (!effectRan && _effectEdges.Contains((current.State, trigger)))
             return new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.EffectBound,
+                RefusalCode.EffectBound,
                 "This action runs an irreversible effect. Send it instead of advancing."
             );
 
@@ -1833,7 +1827,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // the caller sent and no run would have produced it, so only the run's outcome applies it.
         if (machine.IsOutcomeTrigger(trigger))
             return new AdvanceOutcome.Rejected(
-                RejectionReasons.OutcomeBound,
+                RefusalCode.OutcomeBound,
                 "This step is completed by the outcome of its work, not by an action."
             );
 
@@ -1855,7 +1849,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 return Replayed(retry.Recorded, current, stored, clientResult);
             case RetryKind.Reused:
                 return new AdvanceOutcome.Rejected(
-                    DraftRefusalCodes.RequestIdReused,
+                    RefusalCode.RequestIdReused,
                     "This request id was already used for a different action. Send a new id."
                 );
         }
@@ -1880,16 +1874,16 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 next = transitioned.Snapshot;
                 break;
             default:
-                return new AdvanceOutcome.Rejected(RejectionReasons.InternalError, null);
+                return new AdvanceOutcome.Rejected(RefusalCode.InternalError, null);
         }
 
         if (StorableJson.Problem(next.Context) is { } unstorable)
-            return new AdvanceOutcome.Rejected(RehydrationErrorCodes.Malformed, unstorable);
+            return new AdvanceOutcome.Rejected(RefusalCode.Malformed, unstorable);
 
         var wire = machine.Serialize(next);
         if (Encoding.UTF8.GetByteCount(wire) > SnapshotLimits.MaxSnapshotBytes)
             return new AdvanceOutcome.Rejected(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -2051,7 +2045,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     /// <summary>
     /// What the draft already answers <paramref name="requestId"/> with, for an advance on <paramref name="trigger"/>
     /// with no client input: the recorded result when the draft recorded that request (a retry replays it), a
-    /// <c>request-id-reused</c> refusal when it recorded the id for a different request, or null when the request is
+    /// <c>REQUEST_ID_REUSED</c> refusal when it recorded the id for a different request, or null when the request is
     /// new. The effect runner asks before it runs an irreversible effect, so a retried send never runs it again and a
     /// refused id never pays for a delivery it cannot record.
     /// </summary>
@@ -2071,7 +2065,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         {
             RetryKind.Replay => Replayed(retry.Recorded, current, stored, clientResult: null),
             RetryKind.Reused => new AdvanceOutcome.Rejected(
-                DraftRefusalCodes.RequestIdReused,
+                RefusalCode.RequestIdReused,
                 "This request id was already used for a different action. Send a new id."
             ),
             _ => null,
@@ -2266,7 +2260,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             new KeyValuePair<string, object?>("machine", _machineId)
         );
         return new AdvanceOutcome.Rejected(
-            "client-divergence",
+            RefusalCode.ClientDivergence,
             "The client and server disagree on this transition; reload to continue."
         );
     }

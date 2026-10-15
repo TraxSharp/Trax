@@ -29,12 +29,12 @@ public class DifferentialCorpusReplayTests
             {
               "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
               "when": { "trigger": "Push" },
-              "expect": { "outcome": "rejected", "reason": "no-transition" }
+              "expect": { "outcome": "rejected", "reason": "NO_TRANSITION" }
             },
             {
               "given": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
               "when": { "trigger": "Coin", "input": { "coin": "penny" } },
-              "expect": { "outcome": "rejected", "reason": "guard-failed" }
+              "expect": { "outcome": "rejected", "reason": "GUARD_FAILED" }
             }
           ]
         }
@@ -120,7 +120,12 @@ public class DifferentialCorpusReplayTests
     public void Replay_flags_a_case_whose_recorded_reason_disagrees()
     {
         var diffs = DifferentialCorpus.Replay(TestTurnstile.Machine, WrongReasonCorpus);
-        diffs.Should().ContainSingle().Which.Should().Contain("Push").And.Contain("no-transition");
+        diffs
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("Push")
+            .And.Contain(RefusalCode.NoTransition.ToWire());
     }
 
     // A reminder corpus with a timer case: Review fires its timer into Expired; Idle has no timer.
@@ -137,7 +142,7 @@ public class DifferentialCorpusReplayTests
             {
               "given": { "machine": "reminder", "version": 1, "state": "Idle", "context": {} },
               "when": { "trigger": "Review.after" },
-              "expect": { "outcome": "rejected", "reason": "no-transition" }
+              "expect": { "outcome": "rejected", "reason": "NO_TRANSITION" }
             }
           ]
         }

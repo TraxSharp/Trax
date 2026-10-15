@@ -298,7 +298,7 @@ public interface IMachineBuilder<TState, TTrigger>
     /// <summary>
     /// The most live invoked runs one user may hold for entering one of this machine's invoking states to be allowed:
     /// the user's runs are counted across every machine, and entering when they already hold that many is refused
-    /// with <c>invoke-limit-reached</c>, and nothing is written. A run is live from the entry that queued it until it
+    /// with <c>INVOKE_LIMIT_REACHED</c>, and nothing is written. A run is live from the entry that queued it until it
     /// ends; a dispatched run whose state was left runs on to its next junction, and counts until then. Defaults to
     /// 10. The most one user can hold is the largest limit among the host's machines. System-owned instances are
     /// not capped here; the dispatcher's <c>MaxActiveJobs</c> bounds them.
@@ -374,7 +374,7 @@ public interface IMachineBuilder<TState, TTrigger>
     /// owner-only, narrowed further by <c>Requires</c> or <c>RequiresPolicy</c>. A machine a client can reach must
     /// declare it. Whatever the rule, an instance in a committed state, an effect's target, a state that invokes a
     /// train, a state an invoked train's outcome reaches or the target of an event gated by a role or a policy is not
-    /// discarded, nor is one an effect is running on (<c>discard-not-allowed</c>).
+    /// discarded, nor is one an effect is running on (<c>DISCARD_NOT_ALLOWED</c>).
     /// </summary>
     /// <param name="rule">Declares the discard's rule.</param>
     IMachineBuilder<TState, TTrigger> Discard(Action<IReadRuleBuilder> rule) =>
@@ -541,7 +541,7 @@ public interface IStateBuilder<TState, TTrigger>
     /// Leave this state once it has been held for <paramref name="delay"/>: the timer starts on every entry (a
     /// self-transition included) and is cancelled on leaving. Finish it with
     /// <see cref="ITimerBuilder{TState,TTrigger}.GoTo"/>. Only the server fires it, when it is due: a client never sends
-    /// the timer trigger (<c>&lt;State&gt;.after</c>), and an advance refuses it as <c>timer-bound</c>. A state has at
+    /// the timer trigger (<c>&lt;State&gt;.after</c>), and an advance refuses it as <c>TIMER_BOUND</c>. A state has at
     /// most one timer. <see cref="MachineBuilder{TState,TTrigger}.Build"/> refuses a duration that is not positive or
     /// is above <see cref="MachineTimers.MaxDuration"/>, a timer back into its own state, timers that form a cycle no
     /// event breaks, and a timer into an effect's target or an invoked train's outcome target.
@@ -555,7 +555,7 @@ public interface IStateBuilder<TState, TTrigger>
     /// <paramref name="min"/> and <paramref name="max"/>. Finish it with
     /// <see cref="ITimerBuilder{TState,TTrigger}.GoTo"/>. The field holds an ISO-8601 duration (<c>"PT5M"</c>) and is
     /// read once, when the state is entered: entering with a field that is missing, not such a duration, or outside the
-    /// bounds is refused as <c>invalid-input</c>. Otherwise as <see cref="After(TimeSpan)"/>.
+    /// bounds is refused as <c>INVALID_INPUT</c>. Otherwise as <see cref="After(TimeSpan)"/>.
     /// <see cref="MachineBuilder{TState,TTrigger}.Build"/> refuses bounds that are not positive, a minimum above the
     /// maximum, a maximum above <see cref="MachineTimers.MaxDuration"/>, a field the state's declared context does not
     /// have or does not type as a <see cref="TimeSpan"/>, and a field marked <c>[TraxSensitive]</c> (a deadline is
@@ -588,7 +588,7 @@ public interface ITransitionBuilder<TState, TTrigger>
     /// Declare this trigger's input as the record <typeparamref name="TInput"/>. Both engines check every input
     /// sent with the trigger against the record's schema before any guard reads it, as strictly as the CLR type:
     /// a missing or wrongly typed field, a fraction in an integral field, a field the record does not declare, or
-    /// anything other than an object is refused as <c>invalid-input</c>. The record's <c>[JsonPropertyName]</c>
+    /// anything other than an object is refused as <c>INVALID_INPUT</c>. The record's <c>[JsonPropertyName]</c>
     /// names are honoured and its <c>[JsonIgnore]</c> members are not part of the input. On a declarative machine
     /// a trigger without <c>WithInput</c> takes no input: only none or <c>{}</c> is accepted.
     /// </summary>
@@ -622,7 +622,7 @@ public interface ITransitionBuilder<TState, TTrigger>
     /// Only an authenticated caller in at least one of <paramref name="roles"/> may fire this event, compared
     /// ordinally. Chained calls each add a set the caller must also meet. The draft service checks it against every
     /// client actor before the request id, the input or the guard, and refuses one that fails it as
-    /// <c>forbidden</c>. An event has one rule: every edge of it declares the same one, and an event that requires a
+    /// <c>FORBIDDEN</c>. An event has one rule: every edge of it declares the same one, and an event that requires a
     /// role may not enter the start state.
     /// </summary>
     ITransitionBuilder<TState, TTrigger> Requires(params string[] roles) =>

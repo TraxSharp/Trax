@@ -84,24 +84,24 @@ public class StartTests(StoreProvider provider)
                 ["copies"] = 1,
                 ["artifact"] = "context only",
             },
-            RejectionReasons.InvalidInput
+            RefusalCode.InvalidInput
         ).SetArgDisplayNames("a context field the start input does not declare");
         yield return new TestCaseData(
             new JsonObject { ["title"] = "t", ["copies"] = "2" },
-            RejectionReasons.InvalidInput
+            RefusalCode.InvalidInput
         ).SetArgDisplayNames("a number sent as a string");
         yield return new TestCaseData(
             new JsonObject { ["title"] = "t" },
-            RejectionReasons.InvalidInput
+            RefusalCode.InvalidInput
         ).SetArgDisplayNames("a missing field");
         yield return new TestCaseData(
             new JsonObject { ["title"] = new string('x', 70 * 1024), ["copies"] = 1 },
-            RejectionReasons.TooLarge
+            RefusalCode.TooLarge
         ).SetArgDisplayNames("70 KiB");
     }
 
     [TestCaseSource(nameof(InvalidStartInputs))]
-    public async Task Start_validates_its_StartInput_record(JsonObject input, string code)
+    public async Task Start_validates_its_StartInput_record(JsonObject input, RefusalCode code)
     {
         var user = NewUser();
 
@@ -194,7 +194,7 @@ public class StartTests(StoreProvider provider)
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
             .Be(
-                DraftRefusalCodes.RequestIdReused,
+                RefusalCode.RequestIdReused,
                 $"one request id names one start, told apart by its input's fingerprint. See {Adr}"
             );
         (await _host.UserRows(user, StartableMachine.Id)).Should().ContainSingle();
@@ -284,7 +284,7 @@ public class StartTests(StoreProvider provider)
             .Should()
             .BeOfType<StartOutcome.Rejected>()
             .Which.Code.Should()
-            .Be("invoke-limit-reached");
+            .Be(RefusalCode.InvokeLimitReached);
         (await _host.UserRows(user, InvokingStartMachine.Id)).Should().ContainSingle();
         _launcher.Launches.Should().ContainSingle();
     }

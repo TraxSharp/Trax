@@ -49,9 +49,9 @@ describe('FakeMachineServer', () => {
   it('refuses to settle a call twice', () => {
     const server = new FakeMachineServer();
     void server.get('i-1').catch(() => {});
-    server.gets[0].resolve({ kind: 'problem', code: 'gone', message: 'gone' });
+    server.gets[0].resolve({ kind: 'problem', code: 'GONE', message: 'GONE' });
 
-    expect(() => server.gets[0].resolve({ kind: 'problem', code: 'gone', message: 'gone' })).toThrow(
+    expect(() => server.gets[0].resolve({ kind: 'problem', code: 'GONE', message: 'GONE' })).toThrow(
       'already resolved',
     );
     expect(() => server.gets[0].fail()).toThrow('already resolved');

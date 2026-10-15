@@ -29,7 +29,7 @@ export interface IrTransition {
   guard?: Rule;
   guardMessage?: string;
   reduce?: Reduction;
-  effect?: { type: string | null; keyPrefix: string };
+  effect?: { keyPrefix: string };
 }
 
 /** One edge an invoked train's outcome can take; `guard` reads the train's output as the input. */

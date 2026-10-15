@@ -1,5 +1,5 @@
 {
   "name": "A snapshot whose state is not in the machine is unknown-state",
   "json": { "machine": "turnstile", "version": 1, "state": "Nowhere", "context": {} },
-  "expect": { "result": "error", "code": "unknown-state" }
+  "expect": { "result": "error", "code": "UNKNOWN_STATE" }
 }

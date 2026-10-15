@@ -4,17 +4,18 @@ using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Middleware;
 
 /// <summary>
 /// Answers a request naming a machine document this node does not serve, before anything is looked up: an older
-/// version's id, or one no version generated, with <c>client-outdated</c> (the client reloads), and a newer version's
-/// with <c>server-outdated</c> (the client retries, and may reach a node that runs it). A node runs only its own
+/// version's id, or one no version generated, with <c>CLIENT_OUTDATED</c> (the client reloads), and a newer version's
+/// with <c>SERVER_OUTDATED</c> (the client retries, and may reach a node that runs it). A node runs only its own
 /// machine documents, so a client built against one version never runs another version's machine.
 /// <para>
-/// Neither answer is a 5xx: <c>client-outdated</c> is 400 and <c>server-outdated</c> 409. Anyone can send a
+/// Neither answer is a 5xx: <c>CLIENT_OUTDATED</c> is 400 and <c>SERVER_OUTDATED</c> 409. Anyone can send a
 /// well-formed id under the reserved prefix, so an answer a load balancer counts as a server failure would let any
 /// caller have healthy nodes ejected; the client reads the code, not the status, to decide to retry.
 /// </para>
@@ -35,7 +36,7 @@ internal static class MachineDocumentMiddleware
         "This client runs a newer version of the machine than this server does yet. Retry: another server may run it.";
 
     /// <summary>
-    /// The HTTP status of a <c>server-outdated</c> answer: 409 Conflict, never a 5xx that outlier detection would count
+    /// The HTTP status of a <c>SERVER_OUTDATED</c> answer: 409 Conflict, never a 5xx that outlier detection would count
     /// against a healthy node.
     /// </summary>
     internal const int ServerOutdatedStatus = 409;
@@ -84,24 +85,22 @@ internal static class MachineDocumentMiddleware
                 return;
             case MachineDocumentVerdict.ServerOutdated:
                 context.Result = Refusal(
-                    DraftRefusalCodes.ServerOutdated,
+                    RefusalCode.ServerOutdated,
                     ServerOutdatedMessage,
                     ServerOutdatedStatus
                 );
                 return;
             default:
-                context.Result = Refusal(
-                    DraftRefusalCodes.ClientOutdated,
-                    ClientOutdatedMessage,
-                    400
-                );
+                context.Result = Refusal(RefusalCode.ClientOutdated, ClientOutdatedMessage, 400);
                 return;
         }
     }
 
-    private static OperationResult Refusal(string code, string message, int status) =>
+    private static OperationResult Refusal(RefusalCode code, string message, int status) =>
         new(
-            ImmutableList.Create(ErrorBuilder.New().SetMessage(message).SetCode(code).Build()),
+            ImmutableList.Create(
+                ErrorBuilder.New().SetMessage(message).SetCode(code.ToWire()).Build()
+            ),
             null
         )
         {

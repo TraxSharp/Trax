@@ -49,9 +49,9 @@ function Wizard({ id }: { id?: string }) {
   runs persisted documents refuses one beside an id, so pass `persistedMessageReplacer` as the client's
   `jsonMessageReplacer` and it leaves the empty `query` out. The package does not depend on graphql-ws; any socket
   with its `subscribe(payload, sink)` shape (`PersistedSubscriptionSocket`) does.
-- **Maps the stream:** a snapshot with its `rowId` and `revision`; `gone: true`, and the `not-found` a missing id is
-  answered with, as gone; `client-outdated` as client-outdated; `reload: true` as a read. A stream that ends any
-  other way (its host stopped, the socket gave up, `too-many-subscriptions`) is subscribed again after
+- **Maps the stream:** a snapshot with its `rowId` and `revision`; `gone: true`, and the `NOT_FOUND` a missing id is
+  answered with, as gone; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A stream that ends any
+  other way (its host stopped, the socket gave up, `TOO_MANY_SUBSCRIPTIONS`) is subscribed again after
   `resubscribeDelays` (1, 2, then every 5 seconds); the new stream's first event is the instance as it is then, so
   nothing is read again.
 - **Adds `discard(id, requestId)`**, for a page that throws an instance away.
@@ -69,24 +69,24 @@ function Wizard({ id }: { id?: string }) {
   same machine on one page its own key. Without `sessionStorage` nothing is kept.
 - **Predicts, then confirms.** `send(trigger, input)` queues the event behind any earlier one of the instance, sends
   it under its own requestId with the twin's prediction as `clientResult`, and shows the prediction until the answer
-  or a push replaces it. A refusal or a transport failure rolls it back and sets `problem`; `client-divergence`
-  also reads the instance again. `server-outdated` is retried under the same requestId after each of `retryDelays`.
+  or a push replaces it. A refusal or a transport failure rolls it back and sets `problem`; `CLIENT_DIVERGENCE`
+  also reads the instance again. `SERVER_OUTDATED` is retried under the same requestId after each of `retryDelays`.
 - **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included; it
-  reads the instance again only after `reload`, an incarnation change or a `client-divergence`.
-- **Stops for good** on `gone` or `client-outdated`: `status` is `stopped`, `error.code` says which, and nothing more
+  reads the instance again only after `reload`, an incarnation change or a `CLIENT_DIVERGENCE`.
+- **Stops for good** on `gone` or `CLIENT_OUTDATED`: `status` is `stopped`, `error.code` says which, and nothing more
   is sent. `dueAt` is shown, never fired: the server runs a state's timer and pushes the move. It is taken from
   every answer and push the hook accepts, and null always clears it: the state has no timer, or the server gave up
   on it and cleared it. An answer that does not carry the field, or cannot know it (`dueAtKnown: false`, a replay
   whose recorded revision the row has moved past, which `createMachineServer` delivers with no `dueAt`), keeps the
   due time held while the state stays the same; in a timed state it otherwise reads the instance once.
 - **Retries on request.** A transport failure is not retried by itself: `retry()` resends the failed start, or the
-  last event that failed (in transport, or `server-outdated` past every retry), under its first request id, so the
+  last event that failed (in transport, or `SERVER_OUTDATED` past every retry), under its first request id, so the
   server replays its result rather than applying it twice. A later event the server confirms supersedes the failed
-  one: resending it then would apply it after the later one, so `retry()` answers `nothing-to-retry`. A refused
+  one: resending it then would apply it after the later one, so `retry()` answers `NOTHING_TO_RETRY`. A refused
   start is not resent. `send` again would be a new request.
 - **Mints request ids** with `newRequestId`, `crypto.randomUUID` by default, which never makes one the server
   refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
-  and no unpaired surrogate; anything else is answered `invalid-request-id`.
+  and no unpaired surrogate; anything else is answered `INVALID_REQUEST_ID`.
 
 It returns `status`, `id`, `snapshot`, `state`, `context`, `revision`, `dueAt`, `pending`, `problem`, `error`, `send`,
 `retry`, `can` and `available`. The Recovery sample's topic map is built on it

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
@@ -56,7 +57,10 @@ public class InvokesAuthorizationTests(StoreProvider provider)
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("invoke-limit-reached", $"a user holds at most 10 live runs by default. See {Adr}");
+            .Be(
+                RefusalCode.InvokeLimitReached,
+                $"a user holds at most 10 live runs by default. See {Adr}"
+            );
         (await _host.Row(eleventh, GoodMachine.MachineId))!.State.Should().Be("Idle");
         (await _host.Runs(eleventh)).Should().BeEmpty();
 
@@ -81,7 +85,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(
-                "invoke-limit-reached",
+                RefusalCode.InvokeLimitReached,
                 "the run in the other machine counts toward this machine's limit of 2, so N machines "
                     + $"do not give N limits. See {Adr}"
             );
@@ -128,7 +132,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
                 $"a run flagged for cancel is live until it ends, and counts. See {Adr}"
             )
             .Which.Reason.Should()
-            .Be("invoke-limit-reached");
+            .Be(RefusalCode.InvokeLimitReached);
         laps.Should().Be(2, "the machine's limit is 2");
 
         // Once the flagged runs end, their slots are free again.
@@ -168,7 +172,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
             .OfType<AdvanceOutcome.Rejected>()
             .Should()
             .HaveCount(4)
-            .And.OnlyContain(r => r.Reason == "invoke-limit-reached");
+            .And.OnlyContain(r => r.Reason == RefusalCode.InvokeLimitReached);
     }
 
     [Test]
@@ -214,7 +218,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("invoke-forbidden");
+            .Be(RefusalCode.InvokeForbidden);
         (await _host.Row(id, GoodMachine.MachineId))!.State.Should().Be("Idle");
         (await _host.Runs(id)).Should().BeEmpty();
     }

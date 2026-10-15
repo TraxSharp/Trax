@@ -68,7 +68,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
         (await draft.DiscardAsync())
             .Should()
             .BeTrue();
-        (await draft.LoadAsync()).Problem.Should().Be("not-found");
+        (await draft.LoadAsync()).Problem.Should().Be("NOT_FOUND");
     }
 
     [Test]
@@ -100,7 +100,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
         (await _draft.DiscardAsync())
             .Should()
             .BeTrue();
-        (await _draft.LoadAsync()).Problem.Should().Be("not-found");
+        (await _draft.LoadAsync()).Problem.Should().Be("NOT_FOUND");
     }
 
     [TestCase(TopicMapState.Building)]
@@ -283,7 +283,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
                 .Be(
-                    Trax.Effect.StateMachine.RejectionReasons.TimerBound,
+                    Trax.Effect.StateMachine.RefusalCode.TimerBound,
                     "only the server fires a timer, when it is due (Trax.Docs/adr/0048)"
                 );
 

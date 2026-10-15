@@ -49,4 +49,18 @@ describe("canonical wire conformance (RFC 8785 / ECMAScript)", () => {
       envelope(`{"s":"${bs}u0001${bs}t${bs}n${bs}u001f"}`),
     );
   });
+
+  it("orders integer-like keys by UTF-16 code unit, as RFC 8785 and the C# wire do", () => {
+    expect(wire({ b: 1, "10": "x", "2": "y" })).toBe(
+      envelope('{"10":"x","2":"y","b":1}'),
+    );
+    expect(wire({ o: { "9": 1, "10": 2, a: 3 } })).toBe(
+      envelope('{"o":{"10":2,"9":1,"a":3}}'),
+    );
+  });
+
+  it("keeps a context key named __proto__", () => {
+    const context = JSON.parse('{"__proto__":{"x":1},"a":2}');
+    expect(wire(context)).toBe(envelope('{"__proto__":{"x":1},"a":2}'));
+  });
 });

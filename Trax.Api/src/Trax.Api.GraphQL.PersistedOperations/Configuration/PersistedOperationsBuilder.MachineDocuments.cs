@@ -12,7 +12,7 @@ public sealed partial class PersistedOperationsBuilder
     /// change to the machine gives them new ids. During a rolling deploy a node still running the older version serves
     /// the older documents, so a node never deactivates them when it starts: it deactivates them once its own
     /// documents have been stored for this long. Before and after, an older id sent to a newer node is answered
-    /// <c>client-outdated</c>, and a newer id sent to an older node <c>server-outdated</c>.
+    /// <c>CLIENT_OUTDATED</c>, and a newer id sent to an older node <c>SERVER_OUTDATED</c>.
     /// </para>
     /// <para>
     /// See <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.

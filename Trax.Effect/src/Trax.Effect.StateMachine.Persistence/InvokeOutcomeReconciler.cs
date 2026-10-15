@@ -553,7 +553,7 @@ internal sealed class InvokeOutcomeReconciler(
                 }
                 break;
             case AdvanceResult.Rejected rejected:
-                failure = $"{rejected.Reason}: {rejected.Detail}";
+                failure = $"{rejected.Reason.ToWire()}: {rejected.Detail}";
                 break;
             default:
                 failure = "Unknown result.";

@@ -15,7 +15,7 @@ namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
 /// A client may send the result its twin predicted as <c>clientResult</c>. A mismatch is refused as
-/// <c>client-divergence</c>, writes nothing and is counted on the twin-drift meter; a replayed request is compared with
+/// <c>CLIENT_DIVERGENCE</c>, writes nothing and is counted on the twin-drift meter; a replayed request is compared with
 /// the result recorded for it, never with the row as it is now; and the value is capped and logged only as a hash and
 /// a length.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
@@ -33,7 +33,7 @@ public class MachineClientResultE2ETests
 
     private const string Database = "trax_sm_machine_client_result";
 
-    private const string ClientDivergence = "client-divergence";
+    private const string ClientDivergence = "CLIENT_DIVERGENCE";
 
     private IHost _host = null!;
     private readonly CapturingLoggerProvider _logs = new();
@@ -190,7 +190,10 @@ public class MachineClientResultE2ETests
         );
         oversized
             .ProblemCode.Should()
-            .Be(RejectionReasons.TooLarge, "an oversized clientResult is refused before comparing");
+            .Be(
+                RefusalCode.TooLarge.ToWire(),
+                "an oversized clientResult is refused before comparing"
+            );
         meter.Count.Should().Be(0, "it never reached the comparison");
     }
 

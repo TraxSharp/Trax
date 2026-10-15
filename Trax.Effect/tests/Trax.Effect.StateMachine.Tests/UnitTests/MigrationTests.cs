@@ -28,7 +28,7 @@ public class MigrationTests
             .Should()
             .BeOfType<RehydrationResult.Error>()
             .Which.Code.Should()
-            .Be(RehydrationErrorCodes.VersionMismatch);
+            .Be(RefusalCode.VersionMismatch);
     }
 
     [Test]
@@ -41,6 +41,6 @@ public class MigrationTests
             .Should()
             .BeOfType<RehydrationResult.Error>()
             .Which.Code.Should()
-            .Be(RehydrationErrorCodes.VersionMismatch);
+            .Be(RefusalCode.VersionMismatch);
     }
 }

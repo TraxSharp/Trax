@@ -82,7 +82,7 @@ public class GenericRulesTests
             .BeNull($"the owner without the role the get rule names reads nothing. See {Adr}");
         refused
             .Problem!.Code.Should()
-            .Be("not-found", $"a refused read answers as an unknown id does. See {Adr}");
+            .Be(RefusalCode.NotFound, $"a refused read answers as an unknown id does. See {Adr}");
         read.Problem.Should().BeNull();
         read.Snapshot.Should().NotBeNull();
     }
@@ -113,13 +113,13 @@ public class GenericRulesTests
 
         generic
             .Problem!.Code.Should()
-            .Be(DraftRefusalCodes.InvalidRequestId, $"a blank id names no request. See {Adr}");
+            .Be(RefusalCode.InvalidRequestId, $"a blank id names no request. See {Adr}");
         foreach (var outcome in new[] { host, client })
             outcome
                 .Should()
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
-                .Be(DraftRefusalCodes.InvalidRequestId, $"a blank id names no request. See {Adr}");
+                .Be(RefusalCode.InvalidRequestId, $"a blank id names no request. See {Adr}");
         (await TestDb.NewStore().Get(owner, ViewerReadMachine.Id, id))!
             .Json.Should()
             .Contain(nameof(TurnstileState.Locked), "nothing moved");
@@ -153,7 +153,7 @@ public class GenericRulesTests
         );
 
         send.Problem!.Code.Should()
-            .Be(DraftRefusalCodes.InvalidRequestId, $"a blank id names no request. See {Adr}");
+            .Be(RefusalCode.InvalidRequestId, $"a blank id names no request. See {Adr}");
         effect.Calls.Should().Be(0, "a refused send delivers nothing");
     }
 

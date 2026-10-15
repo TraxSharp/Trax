@@ -2,5 +2,5 @@
   "name": "Review + Pay with a number where the string receipt is declared is refused as invalid input",
   "given": { "machine": "checkout", "version": 1, "state": "Review", "context": { "currency": "USD", "items": ["latte"], "receipt": null, "total": 5 } },
   "when": { "trigger": "Pay", "input": { "receipt": 42 } },
-  "expect": { "outcome": "rejected", "reason": "invalid-input" }
+  "expect": { "outcome": "rejected", "reason": "INVALID_INPUT" }
 }

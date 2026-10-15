@@ -44,7 +44,7 @@ internal static class StateMachineMeter
         StateMachineInstruments.MeterName
     );
 
-    /// <summary>One per advance refused as <c>client-divergence</c>, tagged with the machine.</summary>
+    /// <summary>One per advance refused as <c>CLIENT_DIVERGENCE</c>, tagged with the machine.</summary>
     public static readonly System.Diagnostics.Metrics.Counter<long> ClientDivergence =
         Meter.CreateCounter<long>(
             StateMachineInstruments.ClientDivergence,

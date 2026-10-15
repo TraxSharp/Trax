@@ -4,13 +4,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
 /// Every event's rule is checked below the resolver, on every surface, before anything is written or claimed: a
-/// caller without the event's role is answered <c>forbidden</c> and the row is untouched, the effect-bound event
+/// caller without the event's role is answered <c>FORBIDDEN</c> and the row is untouched, the effect-bound event
 /// checks its rule before claiming its effect, and the generic opt-in's advance checks the same rule. Reads follow
 /// the owner: another user's id, even for an operator, is answered exactly as an unknown id.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
@@ -77,7 +78,7 @@ public class MachineRulesE2ETests
         refused
             .ProblemCode.Should()
             .Be(
-                DraftRefusalCodes.DiscardNotAllowed,
+                RefusalCode.DiscardNotAllowed.ToWire(),
                 "an instance the server moved is the record of what it did, per " + Adr
             );
         (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))
@@ -114,7 +115,7 @@ public class MachineRulesE2ETests
                 .Result(doc, "discard")
                 .ProblemCode.Should()
                 .Be(
-                    DraftRefusalCodes.DiscardNotAllowed,
+                    RefusalCode.DiscardNotAllowed.ToWire(),
                     "a timer moved on what the server decided, which stays its record, per " + Adr
                 );
 
@@ -151,7 +152,7 @@ public class MachineRulesE2ETests
         refused
             .ProblemCode.Should()
             .Be(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden.ToWire(),
                 "approve requires the Approver role, which Carol lacks, per " + Adr
             );
         (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))
@@ -174,7 +175,7 @@ public class MachineRulesE2ETests
 
         refused
             .ProblemCode.Should()
-            .Be(DraftRefusalCodes.Forbidden, "pay requires the Payer role, per " + Adr);
+            .Be(RefusalCode.Forbidden.ToWire(), "pay requires the Payer role, per " + Adr);
         _charge
             .Calls.Should()
             .Be(callsBefore, "the rule is checked before the effect is claimed, so it never runs");
@@ -222,7 +223,7 @@ public class MachineRulesE2ETests
             .GetString()
             .Should()
             .Be(
-                DraftRefusalCodes.Forbidden,
+                RefusalCode.Forbidden.ToWire(),
                 "the rule runs below the resolver, so the generic advance checks it too, per " + Adr
             );
         (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))
@@ -281,7 +282,7 @@ public class MachineRulesE2ETests
             .GetString()
             .Should()
             .Be(
-                DraftRefusalCodes.NotFound,
+                RefusalCode.NotFound.ToWire(),
                 "an operator's event on a user's draft is answered as an unknown id, per " + Adr
             );
         (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, alices.Id))

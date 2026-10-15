@@ -100,13 +100,13 @@ public class SnapshotOwnerKeyTests
             }
         );
 
-        save.Problem!.Code.Should().Be("unauthenticated");
+        save.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
         save.Snapshot.Should().BeNull();
-        advance.Problem!.Code.Should().Be("unauthenticated");
+        advance.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
         advance.Snapshot.Should().BeNull();
-        load.Problem!.Code.Should().Be("unauthenticated");
+        load.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
         load.Snapshot.Should().BeNull("the draft stored under the blank key is not handed out");
-        send.Problem!.Code.Should().Be("unauthenticated");
+        send.Problem!.Code.Should().Be(RefusalCode.Unauthenticated);
         send.Snapshot.Should().BeNull();
 
         (await Rows(newId)).Should().BeEmpty("the save wrote no draft");

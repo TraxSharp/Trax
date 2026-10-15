@@ -51,7 +51,7 @@ describe('turnstile totality', () => {
     for (const version of ['1.5', '1e400']) {
       const result = turnstileCore.rehydrate(`{"machine":"turnstile","version":${version},"state":"Locked","context":{}}`);
       expect(result.result).toBe('error');
-      if (result.result === 'error') expect(result.code).toBe('malformed');
+      if (result.result === 'error') expect(result.code).toBe('MALFORMED');
     }
   });
 });

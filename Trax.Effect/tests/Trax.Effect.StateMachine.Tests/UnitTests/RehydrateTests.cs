@@ -11,7 +11,7 @@ public class RehydrateTests
     private static string? Ok(string json) =>
         Machine.Rehydrate(json) is RehydrationResult.Ok ok ? ok.Snapshot.State : null;
 
-    private static string? ErrorCode(string json) =>
+    private static RefusalCode? ErrorCode(string json) =>
         Machine.Rehydrate(json) is RehydrationResult.Error err ? err.Code : null;
 
     [Test]
@@ -32,34 +32,34 @@ public class RehydrateTests
             .Be("Unlocked");
     }
 
-    [TestCase("not json at all", RehydrationErrorCodes.Malformed)]
-    [TestCase("[1,2,3]", RehydrationErrorCodes.Malformed)]
-    [TestCase("42", RehydrationErrorCodes.Malformed)]
+    [TestCase("not json at all", RefusalCode.Malformed)]
+    [TestCase("[1,2,3]", RefusalCode.Malformed)]
+    [TestCase("42", RefusalCode.Malformed)]
     [TestCase(
         "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\"}",
-        RehydrationErrorCodes.Malformed
+        RefusalCode.Malformed
     )]
     [TestCase(
         "{\"machine\":\"other\",\"version\":1,\"state\":\"Locked\",\"context\":{}}",
-        RehydrationErrorCodes.UnknownMachine
+        RefusalCode.UnknownMachine
     )]
     [TestCase(
         "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Nowhere\",\"context\":{}}",
-        RehydrationErrorCodes.UnknownState
+        RefusalCode.UnknownState
     )]
     [TestCase(
         "{\"machine\":\"turnstile\",\"version\":2,\"state\":\"Locked\",\"context\":{}}",
-        RehydrationErrorCodes.VersionMismatch
+        RefusalCode.VersionMismatch
     )]
     [TestCase(
         "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{\"paidWith\":\"quarter\"}}",
-        RehydrationErrorCodes.InvalidContext
+        RefusalCode.InvalidContext
     )]
     [TestCase(
         "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{}}",
-        RehydrationErrorCodes.InvalidContext
+        RefusalCode.InvalidContext
     )]
-    public void Rehydrate_maps_bad_input_to_the_right_error_code(string json, string expected)
+    public void Rehydrate_maps_bad_input_to_the_right_error_code(string json, RefusalCode expected)
     {
         ErrorCode(json).Should().Be(expected);
     }
@@ -87,6 +87,6 @@ public class RehydrateTests
         var json =
             $"{{\"machine\":\"turnstile\",\"version\":{version},\"state\":\"Locked\",\"context\":{{}}}}";
 
-        ErrorCode(json).Should().Be(RehydrationErrorCodes.Malformed);
+        ErrorCode(json).Should().Be(RefusalCode.Malformed);
     }
 }

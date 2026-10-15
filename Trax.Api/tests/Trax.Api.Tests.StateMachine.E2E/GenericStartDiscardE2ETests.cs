@@ -148,7 +148,7 @@ public class GenericStartDiscardE2ETests
         discarded.GetProperty("discarded").GetBoolean().Should().BeTrue();
 
         var loaded = await Load(E2EHost.AliceKey, id);
-        loaded.GetProperty("problem").GetProperty("code").GetString().Should().Be("not-found");
+        loaded.GetProperty("problem").GetProperty("code").GetString().Should().Be("NOT_FOUND");
 
         (await Discard(E2EHost.AliceKey, id, "discard-2"))
             .GetProperty("discarded")
@@ -190,7 +190,7 @@ public class GenericStartDiscardE2ETests
             "id problem { code }"
         );
 
-        started.GetProperty("problem").GetProperty("code").GetString().Should().Be("malformed");
+        started.GetProperty("problem").GetProperty("code").GetString().Should().Be("MALFORMED");
         started.GetProperty("id").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
@@ -210,7 +210,7 @@ public class GenericStartDiscardE2ETests
             .GetProperty("code")
             .GetString()
             .Should()
-            .Be("invalid-request-id", "a start is retried by its request id, per " + Adr);
+            .Be("INVALID_REQUEST_ID", "a start is retried by its request id, per " + Adr);
     }
 
     private Task<JsonElement> Start(string key, string machine, string requestId) =>

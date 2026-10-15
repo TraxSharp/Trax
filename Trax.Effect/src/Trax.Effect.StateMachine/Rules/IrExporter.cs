@@ -356,12 +356,10 @@ public static class IrExporter
                 && e.Trigger.ToString() == trigger
                 && e.To.ToString() == to
             );
+            // The IR reaches every browser: the edge says it is effect-bound and which claim keys it writes, and
+            // the effect's type stays on the server.
             if (effect is not null)
-                obj["effect"] = new JsonObject
-                {
-                    ["type"] = effect.EffectType.FullName,
-                    ["keyPrefix"] = effect.KeyPrefix,
-                };
+                obj["effect"] = new JsonObject { ["keyPrefix"] = effect.KeyPrefix };
 
             rows.Add((from, trigger, to, obj));
         }

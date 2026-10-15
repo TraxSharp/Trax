@@ -50,7 +50,7 @@ public sealed class StateMachineOptions
 
     /// <summary>
     /// The most drafts one user may hold, counted across every machine. A <c>start</c>, or a save that creates a new
-    /// draft, past it is refused with <c>too-many-drafts</c> and writes nothing; a retried start returns the instance
+    /// draft, past it is refused with <c>TOO_MANY_DRAFTS</c> and writes nothing; a retried start returns the instance
     /// it created, a save over a draft the user holds is not a new one, a draft idle past <see cref="DraftTtl"/> no
     /// longer counts, and system-owned instances never count. The count and the insert are one transaction, under a
     /// lock on the user, so concurrent starts cannot pass it together. Defaults to

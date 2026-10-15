@@ -152,7 +152,7 @@ export function createTransport(endpoint: string, getApiKey: () => string, user:
           : outcome(operation, typed.effect, `${machine}/${String(args.id ?? result.id)}`, result),
         detail: answer,
       });
-      return missing ? { snapshot: null, problem: { code: "not-found", message: "No draft with that id." } } : result;
+      return missing ? { snapshot: null, problem: { code: "NOT_FOUND", message: "No draft with that id." } } : result;
     } catch (e) {
       record({
         channel: "http",

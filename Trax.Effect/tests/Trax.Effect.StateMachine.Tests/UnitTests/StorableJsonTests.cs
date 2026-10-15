@@ -54,6 +54,6 @@ public class StorableJsonTests
             .Should()
             .BeOfType<RehydrationResult.Error>()
             .Which.Code.Should()
-            .Be(RehydrationErrorCodes.Malformed);
+            .Be(RefusalCode.Malformed);
     }
 }

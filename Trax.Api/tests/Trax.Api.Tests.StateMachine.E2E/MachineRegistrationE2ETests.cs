@@ -9,7 +9,7 @@ namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
 /// Every machine is looked up by its id, so a host whose registered machines give one id to two types refuses to
-/// start, naming both, rather than answer every machine request <c>internal-error</c>. A subclass has its base's id,
+/// start, naming both, rather than answer every machine request <c>INTERNAL_ERROR</c>. A subclass has its base's id,
 /// so serving a machine by deriving a marked class from it means registering only the subclass. The same type
 /// registered twice is one machine: the host starts and serves it once, and every other machine answers as before.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>

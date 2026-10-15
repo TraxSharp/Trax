@@ -85,7 +85,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
         // An ingested partition has nothing to retry.
         (await ActAsync(IndexFixture.OpenAlex, "2025-01", "RETRY"))
             .Should()
-            .Be(((string?)null, "no-transition"));
+            .Be(((string?)null, "NO_TRANSITION"));
     }
 
     [Test]

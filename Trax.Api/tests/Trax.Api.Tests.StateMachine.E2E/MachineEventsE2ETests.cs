@@ -185,7 +185,7 @@ public class MachineEventsE2ETests
                 .Result(doc, "describe")
                 .ProblemCode.Should()
                 .BeOneOf(
-                    [RejectionReasons.InvalidInput, RejectionReasons.TooLarge],
+                    [RefusalCode.InvalidInput.ToWire(), RefusalCode.TooLarge.ToWire()],
                     "input is validated against the event's record before the edge runs, per " + Adr
                 );
         (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, started.Id))
@@ -208,7 +208,7 @@ public class MachineEventsE2ETests
         );
 
         var refused = WizardOps.Result(doc, "describe");
-        refused.ProblemCode.Should().Be(RejectionReasons.GuardFailed);
+        refused.ProblemCode.Should().Be(RefusalCode.GuardFailed.ToWire());
         refused
             .ProblemMessage.Should()
             .Be(

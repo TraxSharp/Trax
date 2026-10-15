@@ -8,7 +8,7 @@ namespace Trax.Effect.StateMachine.Tests.UnitTests;
 
 /// <summary>
 /// Generated inputs for a trigger with a declared input record: a valid <see cref="RangeMachine.RangeInput"/>,
-/// then at most one mutation that breaks it. The verdict is <c>invalid-input</c> exactly when a mutation was
+/// then at most one mutation that breaks it. The verdict is <c>INVALID_INPUT</c> exactly when a mutation was
 /// applied. Every generated input is sent through the TypeScript twin, built from the machine's exported IR, as
 /// well, and gets the same verdict there.
 /// </summary>
@@ -158,14 +158,14 @@ public class TriggerInputPropertyTests
                                 )
                                 .Which.Reason.Should()
                                 .Be(
-                                    RejectionReasons.InvalidInput,
+                                    RefusalCode.InvalidInput,
                                     $"{mutation} breaks the input's schema, and nothing else does ({Adr})"
                                 );
 
                         var (outcome, reason) = result switch
                         {
                             AdvanceResult.Transitioned => ("transitioned", (string?)null),
-                            AdvanceResult.Rejected r => ("rejected", r.Reason),
+                            AdvanceResult.Rejected r => ("rejected", r.Reason.ToWire()),
                             _ => ("unknown", null),
                         };
                         var answer = twin[i][0];

@@ -63,7 +63,7 @@ public class RegistryCorruptDataTests
             }
         );
 
-        output.Problem!.Code.Should().Be("invalid-context");
+        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -76,7 +76,7 @@ public class RegistryCorruptDataTests
             new LoadSnapshotInput { Machine = "turnstile", Id = id }
         );
 
-        output.Problem!.Code.Should().Be("invalid-context");
+        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
     }
 
     [Test]
@@ -107,7 +107,7 @@ public class RegistryCorruptDataTests
             new SendSnapshotInput { Machine = "order", Id = id }
         );
 
-        output.Problem!.Code.Should().Be("invalid-context");
+        output.Problem!.Code.Should().Be(RefusalCode.InvalidContext);
         output.Snapshot.Should().BeNull();
         effect.Calls.Should().Be(0, "a draft that cannot be loaded is never sent");
     }

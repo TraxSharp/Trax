@@ -37,7 +37,7 @@ internal sealed record MachineAnswer(
     public bool DueAtKnown { get; init; } = true;
 
     /// <summary>A refusal of the operation on <paramref name="id"/>.</summary>
-    public static MachineAnswer Refused(Guid? id, string code, string message) =>
+    public static MachineAnswer Refused(Guid? id, RefusalCode code, string message) =>
         new(id, null, null, null, new SnapshotProblem { Code = code, Message = message });
 
     /// <summary>A refusal of the operation on <paramref name="id"/>.</summary>
@@ -206,7 +206,7 @@ internal static class MachineResolvers
         )
             return MachineAnswer.Refused(
                 id,
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The client result exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -358,7 +358,7 @@ internal static class MachineResolvers
                 null,
                 new SnapshotProblem
                 {
-                    Code = DraftRefusalCodes.Forbidden,
+                    Code = RefusalCode.Forbidden,
                     Message = "You may not do this.",
                 }
             );
@@ -377,7 +377,7 @@ internal static class MachineResolvers
         MachineAnswer.Refused(id, failure ?? Unexpected(null));
 
     private static SnapshotProblem Unexpected(string? reference) =>
-        new() { Code = RejectionReasons.InternalError, Message = FailedMessage(reference) };
+        new() { Code = RefusalCode.InternalError, Message = FailedMessage(reference) };
 
     private static MachineAnswer Failed(
         IResolverContext ctx,
@@ -387,7 +387,7 @@ internal static class MachineResolvers
     ) =>
         MachineAnswer.Refused(
             id,
-            RejectionReasons.InternalError,
+            RefusalCode.InternalError,
             FailedMessage(Reference(ctx, ex, machine, id))
         );
 
@@ -416,7 +416,7 @@ internal static class MachineResolvers
             ? null
             : new SnapshotProblem
             {
-                Code = DraftRefusalCodes.InvalidRequestId,
+                Code = RefusalCode.InvalidRequestId,
                 Message =
                     $"A request id is 1 to {RequestIdRing.MaxRequestIdLength} characters, not blank, with no control character.",
             };
@@ -427,7 +427,7 @@ internal static class MachineResolvers
         > SnapshotLimits.MaxSnapshotBytes
             ? new SnapshotProblem
             {
-                Code = RejectionReasons.TooLarge,
+                Code = RefusalCode.TooLarge,
                 Message = $"The input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit.",
             }
             : null;

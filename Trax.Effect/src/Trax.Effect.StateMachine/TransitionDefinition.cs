@@ -26,14 +26,14 @@ public sealed class TransitionDefinition<TState, TTrigger>
 
     /// <summary>
     /// Optional predicate over (current context, trigger input). When it returns false the
-    /// transition is declined with <see cref="RejectionReasons.GuardFailed"/>. Guards for the same
+    /// transition is declined with <see cref="RefusalCode.GuardFailed"/>. Guards for the same
     /// (state, trigger) must be mutually exclusive — at most one may pass.
     /// </summary>
     public Func<JsonObject, JsonNode?, bool>? Guard { get; init; }
 
     /// <summary>
     /// Optional human-readable explanation surfaced as the rejection detail when this transition's
-    /// guard declines — so a <c>guard-failed</c> can say "recipients must be non-empty" instead of a
+    /// guard declines — so a <c>GUARD_FAILED</c> can say "recipients must be non-empty" instead of a
     /// generic message. Useful both for debugging and as the GraphQL rejection detail. This text is
     /// NOT part of the cross-language contract (only the reason code is).
     /// </summary>

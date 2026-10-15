@@ -97,7 +97,7 @@ public class ServerRecordTests(StoreProvider provider)
             .Should()
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
-            .Be(DraftRefusalCodes.DiscardNotAllowed, $"an operator put it there ({Adr})");
+            .Be(RefusalCode.DiscardNotAllowed, $"an operator put it there ({Adr})");
         (await _host.Rows(id))
             .Should()
             .ContainSingle("the sweep keeps the record of what the server did");

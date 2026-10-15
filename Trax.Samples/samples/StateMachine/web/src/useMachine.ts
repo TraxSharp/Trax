@@ -104,7 +104,7 @@ export function useMachine(transport: TraxTransport, machine: string, user: stri
         setProblem(null);
         return;
       }
-      if (loaded.problem?.code !== "not-found") return setProblem(loaded.problem);
+      if (loaded.problem?.code !== "NOT_FOUND") return setProblem(loaded.problem);
     } catch (e) {
       return setProblem({ code: "transport", message: e instanceof Error ? e.message : String(e) });
     } finally {

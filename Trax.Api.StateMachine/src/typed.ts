@@ -1,3 +1,4 @@
+import type { RefusalCode } from './results';
 import { SnapshotMachine } from './machine';
 import { machineFromIr, type IrDocument } from './rules/irMachine';
 import type { AdvanceResult, RehydrationResult } from './results';
@@ -30,11 +31,11 @@ export type InputArgs<Spec extends MachineSpec, T extends TriggerOf<Spec>> = Spe
 
 export type TypedAdvanceResult<Spec extends MachineSpec> =
   | { outcome: 'transitioned'; snapshot: TypedSnapshot<Spec> }
-  | { outcome: 'rejected'; reason: string; detail?: string };
+  | { outcome: 'rejected'; reason: RefusalCode; detail?: string };
 
 export type TypedRehydrationResult<Spec extends MachineSpec> =
   | { result: 'ok'; snapshot: TypedSnapshot<Spec> }
-  | { result: 'error'; code: string; message: string };
+  | { result: 'error'; code: RefusalCode; message: string };
 
 /**
  * A thin, types-only wrapper over the raw engine. Adds no behavior, only compile-time safety.

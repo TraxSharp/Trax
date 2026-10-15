@@ -234,7 +234,7 @@ public class StateMachineGraphQLE2ETests
         );
 
         NoErrors(doc);
-        ProblemCode(Output(doc, "saveSnapshot")).Should().Be("unknown-machine");
+        ProblemCode(Output(doc, "saveSnapshot")).Should().Be("UNKNOWN_MACHINE");
     }
 
     [Test]
@@ -262,7 +262,7 @@ public class StateMachineGraphQLE2ETests
         );
 
         NoErrors(doc);
-        ProblemCode(Output(doc, "sendSnapshot")).Should().Be("no-effect");
+        ProblemCode(Output(doc, "sendSnapshot")).Should().Be("NO_EFFECT");
     }
 
     // ── response helpers ─────────────────────────────────────────────────

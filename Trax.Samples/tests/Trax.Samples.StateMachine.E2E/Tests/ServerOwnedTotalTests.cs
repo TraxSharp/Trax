@@ -27,8 +27,8 @@ public class ServerOwnedTotalTests : StateMachineTestFixture
         );
 
         saved.ProblemCode.Should().Be(StateMachineClient.NotServed);
-        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("not-found");
-        (await Machines.SendAsync(Alice, Checkout, id)).ProblemCode.Should().Be("not-found");
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("NOT_FOUND");
+        (await Machines.SendAsync(Alice, Checkout, id)).ProblemCode.Should().Be("NOT_FOUND");
         Charges.For(book).Should().BeEmpty();
     }
 

@@ -48,7 +48,7 @@ public class FluentCheckoutTests
             .Where(c =>
                 JsonNode.Parse(File.ReadAllText((string)c.Arguments[0]!))!["expect"]!
                     ["reason"]
-                    ?.GetValue<string>() != RejectionReasons.InvalidInput
+                    ?.GetValue<string>() != RefusalCode.InvalidInput.ToWire()
             );
 
     [TestCaseSource(nameof(DelegateAdvanceFixtures))]
@@ -76,7 +76,8 @@ public class FluentCheckoutTests
             result
                 .Should()
                 .BeOfType<AdvanceResult.Rejected>()
-                .Which.Reason.Should()
+                .Which.Reason.ToWire()
+                .Should()
                 .Be(expect["reason"]!.GetValue<string>());
     }
 
@@ -105,7 +106,8 @@ public class FluentCheckoutTests
             result
                 .Should()
                 .BeOfType<RehydrationResult.Error>()
-                .Which.Code.Should()
+                .Which.Code.ToWire()
+                .Should()
                 .Be(expect["code"]!.GetValue<string>());
     }
 

@@ -69,21 +69,21 @@ export interface MachineDefinition<S extends string, T extends string> {
   /**
    * The outcome triggers of states that invoke a train (`Fetching.done`, `Fetching.failed`,
    * `Fetching.cancelled`). Their edges are in `transitions`, tried in declaration order; when none accepts
-   * a train's output the result is `no-transition`, as on the server, and they are never offered by
-   * `availableTriggers`. Only `applyOutcome` applies one (`advance` refuses it as `outcome-bound`); the twin
+   * a train's output the result is `NO_TRANSITION`, as on the server, and they are never offered by
+   * `availableTriggers`. Only `applyOutcome` applies one (`advance` refuses it as `OUTCOME_BOUND`); the twin
    * applies an outcome it is told about and never starts a train.
    */
   outcomeTriggers?: readonly string[];
   /**
    * The timers of timed states, keyed by the timed state. Only the server fires one, through `applyTimer` here as
-   * there: `advance` refuses a timer trigger as `timer-bound`, `canFire` is false for it and `availableTriggers`
+   * there: `advance` refuses a timer trigger as `TIMER_BOUND`, `canFire` is false for it and `availableTriggers`
    * never offers it. A transition into a state whose timer reads its duration from the context refuses a duration
-   * the context does not hold within bounds as `invalid-input`, as the server does.
+   * the context does not hold within bounds as `INVALID_INPUT`, as the server does.
    */
   timers?: Readonly<Partial<Record<S, MachineTimer>>>;
   /**
    * Per-trigger input validators (outcome triggers included), run after an edge is found and before any guard
-   * reads the input; a failure is `invalid-input`. A trigger with none is not checked. `machineFromIr` gives
+   * reads the input; a failure is `INVALID_INPUT`. A trigger with none is not checked. `machineFromIr` gives
    * every trigger one, from the IR's input schemas, as the server does.
    */
   inputValidators?: Partial<Record<string, InputValidator>>;

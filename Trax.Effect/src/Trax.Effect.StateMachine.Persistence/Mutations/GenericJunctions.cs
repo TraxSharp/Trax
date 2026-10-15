@@ -10,7 +10,7 @@ namespace Trax.Effect.StateMachine.Persistence.Mutations;
 internal static class SnapshotGuards
 {
     /// <summary>The refusal code of a client prediction that differs from the server's result.</summary>
-    public const string ClientDivergence = "client-divergence";
+    public const RefusalCode ClientDivergence = RefusalCode.ClientDivergence;
 
     /// <summary>The UTF-8 length of <paramref name="value"/>, or 0 for null.</summary>
     public static int Bytes(string? value) => value is null ? 0 : Encoding.UTF8.GetByteCount(value);
@@ -46,7 +46,7 @@ internal static class SnapshotGuards
     /// <summary>
     /// The runtime schema-hash handshake. When the client sends its machine hash (<see cref="IMachine.SchemaHash"/>,
     /// embedded in the twin) and it differs from the server's registered machine, the client is running an
-    /// outdated definition. Returns a <c>schema-mismatch</c> problem so the request is refused and the client
+    /// outdated definition. Returns a <c>SCHEMA_MISMATCH</c> problem so the request is refused and the client
     /// reloads; null when the hashes agree or the client sent none (an older client — no check, so the handshake
     /// rolls out gradually as clients start sending their hash).
     /// </summary>
@@ -60,7 +60,7 @@ internal static class SnapshotGuards
         && !string.Equals(client, server, StringComparison.Ordinal)
             ? new SnapshotProblem
             {
-                Code = "schema-mismatch",
+                Code = RefusalCode.SchemaMismatch,
                 Message =
                     "This client is running an outdated version of the machine. Reload the page to continue.",
             }
@@ -74,7 +74,7 @@ internal static class SnapshotGuards
     /// </summary>
     public static SnapshotProblem Failure(
         ILogger? logger,
-        string code,
+        RefusalCode code,
         string message,
         Exception? exception,
         string machine,
@@ -90,7 +90,7 @@ internal static class SnapshotGuards
             "The {Machine} draft {DraftId} failed with {Code}. Reference {Reference}.",
             machine,
             id,
-            code,
+            code.ToWire(),
             reference
         );
         return new SnapshotProblem { Code = code, Message = $"{message} Reference: {reference}." };
@@ -106,18 +106,21 @@ internal class SaveSnapshotJunction(
 {
     /// <summary>
     /// Autosaves <see cref="SaveSnapshotInput.Snapshot"/> for the current user. Every refusal is returned as a
-    /// <see cref="SnapshotProblem"/>: <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>,
-    /// <c>conflict</c>, or the code of an <see cref="AutosaveResult.Rejected"/>.
+    /// <see cref="SnapshotProblem"/>: <c>UNAUTHENTICATED</c>, <c>UNKNOWN_MACHINE</c>, <c>SCHEMA_MISMATCH</c>,
+    /// <c>CONFLICT</c>, or the code of an <see cref="AutosaveResult.Rejected"/>.
     /// </summary>
     public override async Task<SaveSnapshotOutput> Run(SaveSnapshotInput input)
     {
         if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
-                "unauthenticated",
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (registry.Service(input.Machine) is not { } service)
-            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+            return Problem(
+                RefusalCode.UnknownMachine,
+                $"No registered machine named '{input.Machine}'."
+            );
 
         if (
             SnapshotGuards.SchemaMismatch(registry, input.Machine, input.SchemaHash) is { } mismatch
@@ -144,14 +147,14 @@ internal class SaveSnapshotJunction(
                 )
             ),
             AutosaveResult.Conflict => Problem(
-                "conflict",
+                RefusalCode.Conflict,
                 "The draft changed elsewhere; reload and retry."
             ),
-            _ => Problem("internal-error", "Unknown autosave result."),
+            _ => Problem(RefusalCode.InternalError, "Unknown autosave result."),
         };
     }
 
-    private static SaveSnapshotOutput Problem(string code, string message) =>
+    private static SaveSnapshotOutput Problem(RefusalCode code, string message) =>
         new()
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
@@ -171,19 +174,22 @@ internal class AdvanceSnapshotJunction(
 {
     /// <summary>
     /// Advances the current user's draft by one trigger. Refusals are returned as a
-    /// <see cref="SnapshotProblem"/>: <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>,
-    /// <c>too-large</c> (input over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>malformed</c> (input
-    /// is not JSON), <c>not-found</c>, <c>conflict</c>, or the reason of an <see cref="AdvanceOutcome.Rejected"/>.
+    /// <see cref="SnapshotProblem"/>: <c>UNAUTHENTICATED</c>, <c>UNKNOWN_MACHINE</c>, <c>SCHEMA_MISMATCH</c>,
+    /// <c>TOO_LARGE</c> (input over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>MALFORMED</c> (input
+    /// is not JSON), <c>NOT_FOUND</c>, <c>CONFLICT</c>, or the reason of an <see cref="AdvanceOutcome.Rejected"/>.
     /// </summary>
     public override async Task<AdvanceSnapshotOutput> Run(AdvanceSnapshotInput input)
     {
         if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
-                "unauthenticated",
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (registry.Service(input.Machine) is not { } service)
-            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+            return Problem(
+                RefusalCode.UnknownMachine,
+                $"No registered machine named '{input.Machine}'."
+            );
 
         if (
             SnapshotGuards.SchemaMismatch(registry, input.Machine, input.SchemaHash) is { } mismatch
@@ -197,14 +203,14 @@ internal class AdvanceSnapshotJunction(
             > SnapshotLimits.MaxSnapshotBytes
         )
             return Problem(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The trigger input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
         // A client's prediction is a snapshot, bounded like one, and refused before it is compared.
         if (SnapshotGuards.Bytes(input.ClientResult) > SnapshotLimits.MaxSnapshotBytes)
             return Problem(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The client result exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -215,7 +221,7 @@ internal class AdvanceSnapshotJunction(
         }
         catch (JsonException)
         {
-            return Problem("malformed", "The trigger input is not valid JSON.");
+            return Problem(RefusalCode.Malformed, "The trigger input is not valid JSON.");
         }
 
         // Runtime differential: when the client sent the snapshot its twin computed for this advance, the
@@ -264,13 +270,13 @@ internal class AdvanceSnapshotJunction(
                 SnapshotGuards.Failure(
                     logger,
                     rejected.Reason,
-                    rejected.Detail ?? rejected.Reason,
+                    rejected.Detail ?? rejected.Reason.ToWire(),
                     rejected.Exception,
                     input.Machine,
                     input.Id
                 )
             ),
-            AdvanceOutcome.NotFound => Problem("not-found", "No draft with that id."),
+            AdvanceOutcome.NotFound => Problem(RefusalCode.NotFound, "No draft with that id."),
             AdvanceOutcome.LoadError loadError => Failed(
                 SnapshotGuards.Failure(
                     logger,
@@ -282,14 +288,14 @@ internal class AdvanceSnapshotJunction(
                 )
             ),
             AdvanceOutcome.Conflict => Problem(
-                "conflict",
+                RefusalCode.Conflict,
                 "The draft changed elsewhere; reload and retry."
             ),
-            _ => Problem("internal-error", "Unknown advance outcome."),
+            _ => Problem(RefusalCode.InternalError, "Unknown advance outcome."),
         };
     }
 
-    private static AdvanceSnapshotOutput Problem(string code, string message) =>
+    private static AdvanceSnapshotOutput Problem(RefusalCode code, string message) =>
         new()
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
@@ -309,7 +315,7 @@ internal class LoadSnapshotJunction(
 {
     /// <summary>
     /// Loads the current user's draft, as a client held to the machine's <c>get</c> rule. A missing (or expired)
-    /// draft, and one the rule does not let the caller read, come back alike as the <c>not-found</c> problem, which
+    /// draft, and one the rule does not let the caller read, come back alike as the <c>NOT_FOUND</c> problem, which
     /// clients treat as "start fresh"; a stored draft that fails validation comes back with its rehydration error
     /// code.
     /// </summary>
@@ -317,11 +323,14 @@ internal class LoadSnapshotJunction(
     {
         if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
-                "unauthenticated",
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (registry.Service(input.Machine) is not { } service)
-            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+            return Problem(
+                RefusalCode.UnknownMachine,
+                $"No registered machine named '{input.Machine}'."
+            );
 
         if (
             SnapshotGuards.SchemaMismatch(registry, input.Machine, input.SchemaHash) is { } mismatch
@@ -341,7 +350,7 @@ internal class LoadSnapshotJunction(
                 RowId = loaded.RowId,
                 DueAt = loaded.DueAt,
             },
-            LoadResult.NotFound => Problem("not-found", "No draft to resume."),
+            LoadResult.NotFound => Problem(RefusalCode.NotFound, "No draft to resume."),
             LoadResult.Invalid invalid => new LoadSnapshotOutput
             {
                 Problem = SnapshotGuards.Failure(
@@ -353,11 +362,11 @@ internal class LoadSnapshotJunction(
                     input.Id
                 ),
             },
-            _ => Problem("internal-error", "Unknown load result."),
+            _ => Problem(RefusalCode.InternalError, "Unknown load result."),
         };
     }
 
-    private static LoadSnapshotOutput Problem(string code, string message) =>
+    private static LoadSnapshotOutput Problem(RefusalCode code, string message) =>
         new()
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
@@ -373,19 +382,22 @@ internal class StartSnapshotJunction(
 {
     /// <summary>
     /// Starts an instance for the current user. Refusals are returned as a <see cref="SnapshotProblem"/>:
-    /// <c>unauthenticated</c>, <c>unknown-machine</c>, <c>schema-mismatch</c>, <c>too-large</c> (input over
-    /// <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>malformed</c> (input is not a JSON object), or the code of a
+    /// <c>UNAUTHENTICATED</c>, <c>UNKNOWN_MACHINE</c>, <c>SCHEMA_MISMATCH</c>, <c>TOO_LARGE</c> (input over
+    /// <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>MALFORMED</c> (input is not a JSON object), or the code of a
     /// <see cref="StartOutcome.Rejected"/>.
     /// </summary>
     public override async Task<StartSnapshotOutput> Run(StartSnapshotInput input)
     {
         if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
-                DraftRefusalCodes.Unauthenticated,
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (registry.Service(input.Machine) is not { } service)
-            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+            return Problem(
+                RefusalCode.UnknownMachine,
+                $"No registered machine named '{input.Machine}'."
+            );
 
         if (
             SnapshotGuards.SchemaMismatch(registry, input.Machine, input.SchemaHash) is { } mismatch
@@ -397,7 +409,7 @@ internal class StartSnapshotJunction(
             > SnapshotLimits.MaxSnapshotBytes
         )
             return Problem(
-                RejectionReasons.TooLarge,
+                RefusalCode.TooLarge,
                 $"The start input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
             );
 
@@ -413,7 +425,7 @@ internal class StartSnapshotJunction(
         }
         catch (JsonException)
         {
-            return Problem("malformed", "The start input is not a JSON object.");
+            return Problem(RefusalCode.Malformed, "The start input is not a JSON object.");
         }
 
         // The request's user acts as a client, checked against the start's rule with the roles and policies it
@@ -436,11 +448,11 @@ internal class StartSnapshotJunction(
                 DueAt = started.DueAt,
             },
             StartOutcome.Rejected rejected => Problem(rejected.Code, rejected.Message),
-            _ => Problem("internal-error", "Unknown start outcome."),
+            _ => Problem(RefusalCode.InternalError, "Unknown start outcome."),
         };
     }
 
-    private static StartSnapshotOutput Problem(string code, string message) =>
+    private static StartSnapshotOutput Problem(RefusalCode code, string message) =>
         new()
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
@@ -456,18 +468,21 @@ internal class DiscardSnapshotJunction(
 {
     /// <summary>
     /// Discards the current user's instance. A missing one, or another user's, is answered as discarded. Refusals
-    /// are returned as a <see cref="SnapshotProblem"/>: <c>unauthenticated</c>, <c>unknown-machine</c>, or the code
+    /// are returned as a <see cref="SnapshotProblem"/>: <c>UNAUTHENTICATED</c>, <c>UNKNOWN_MACHINE</c>, or the code
     /// of a <see cref="DiscardOutcome.Rejected"/>.
     /// </summary>
     public override async Task<DiscardSnapshotOutput> Run(DiscardSnapshotInput input)
     {
         if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
-                DraftRefusalCodes.Unauthenticated,
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (registry.Service(input.Machine) is not { } service)
-            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+            return Problem(
+                RefusalCode.UnknownMachine,
+                $"No registered machine named '{input.Machine}'."
+            );
 
         var outcome = await service.Discard(
             CallerRules.Client(userKey, CallerRules.Caller(services)),
@@ -480,11 +495,11 @@ internal class DiscardSnapshotJunction(
         {
             DiscardOutcome.Discarded => new DiscardSnapshotOutput { Discarded = true },
             DiscardOutcome.Rejected rejected => Problem(rejected.Code, rejected.Message),
-            _ => Problem("internal-error", "Unknown discard outcome."),
+            _ => Problem(RefusalCode.InternalError, "Unknown discard outcome."),
         };
     }
 
-    private static DiscardSnapshotOutput Problem(string code, string message) =>
+    private static DiscardSnapshotOutput Problem(RefusalCode code, string message) =>
         new()
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
@@ -502,28 +517,31 @@ internal class SendSnapshotJunction(
     /// <summary>
     /// Runs the machine's irreversible effect for the current user's draft, keyed by
     /// <see cref="SendSnapshotInput.RequestId"/> or <c>send:{Id}</c> when none is given. Refusals are returned
-    /// as a <see cref="SnapshotProblem"/>, including <c>no-effect</c> when the machine declares none. Any other
-    /// exception is caught and returned as <c>delivery-failed</c> with a fixed message and a reference, and the
+    /// as a <see cref="SnapshotProblem"/>, including <c>NO_EFFECT</c> when the machine declares none. Any other
+    /// exception is caught and returned as <c>DELIVERY_FAILED</c> with a fixed message and a reference, and the
     /// exception is logged under that reference; the draft is not advanced. A cancelled request is not a failed
     /// delivery, so an <see cref="OperationCanceledException"/> propagates when this request was cancelled; one
-    /// raised by the effect itself, such as an outbound call's timeout, is a <c>delivery-failed</c>.
+    /// raised by the effect itself, such as an outbound call's timeout, is a <c>DELIVERY_FAILED</c>.
     /// </summary>
     public override async Task<SendSnapshotOutput> Run(SendSnapshotInput input)
     {
         if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
-                "unauthenticated",
+                RefusalCode.Unauthenticated,
                 "No authenticated user is associated with this request."
             );
         if (registry.Service(input.Machine) is null)
-            return Problem("unknown-machine", $"No registered machine named '{input.Machine}'.");
+            return Problem(
+                RefusalCode.UnknownMachine,
+                $"No registered machine named '{input.Machine}'."
+            );
         if (
             SnapshotGuards.SchemaMismatch(registry, input.Machine, input.SchemaHash) is { } mismatch
         )
             return Problem(mismatch.Code, mismatch.Message);
         if (registry.EffectRunner(input.Machine) is not { } runner)
             return Problem(
-                "no-effect",
+                RefusalCode.NoEffect,
                 $"Machine '{input.Machine}' has no irreversible effect to send."
             );
 
@@ -559,13 +577,13 @@ internal class SendSnapshotJunction(
                     SnapshotGuards.Failure(
                         logger,
                         rejected.Reason,
-                        rejected.Detail ?? rejected.Reason,
+                        rejected.Detail ?? rejected.Reason.ToWire(),
                         rejected.Exception,
                         input.Machine,
                         input.Id
                     )
                 ),
-                AdvanceOutcome.NotFound => Problem("not-found", "No draft with that id."),
+                AdvanceOutcome.NotFound => Problem(RefusalCode.NotFound, "No draft with that id."),
                 AdvanceOutcome.LoadError loadError => Failed(
                     SnapshotGuards.Failure(
                         logger,
@@ -577,10 +595,10 @@ internal class SendSnapshotJunction(
                     )
                 ),
                 AdvanceOutcome.Conflict => Problem(
-                    "conflict",
+                    RefusalCode.Conflict,
                     "The draft changed elsewhere; reload and retry."
                 ),
-                _ => Problem("internal-error", "Unknown send outcome."),
+                _ => Problem(RefusalCode.InternalError, "Unknown send outcome."),
             };
         }
         catch (Exception ex)
@@ -593,7 +611,7 @@ internal class SendSnapshotJunction(
             return Failed(
                 SnapshotGuards.Failure(
                     logger,
-                    "delivery-failed",
+                    RefusalCode.DeliveryFailed,
                     "The action could not be completed. Try again.",
                     ex,
                     input.Machine,
@@ -603,7 +621,7 @@ internal class SendSnapshotJunction(
         }
     }
 
-    private static SendSnapshotOutput Problem(string code, string message) =>
+    private static SendSnapshotOutput Problem(RefusalCode code, string message) =>
         new()
         {
             Problem = new SnapshotProblem { Code = code, Message = message },

@@ -455,7 +455,7 @@ public class InvokesModelTests(ClusterStore store)
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
                 .Be(
-                    DraftRefusalCodes.SaveNotAllowed,
+                    RefusalCode.SaveNotAllowed,
                     "the generic save serves only machines with no server-side behaviour"
                 );
 
@@ -524,7 +524,7 @@ public class InvokesModelTests(ClusterStore store)
                     .Should()
                     .BeOfType<AdvanceOutcome.Rejected>()
                     .Which.Reason.Should()
-                    .Be("outcome-bound", "only a run's outcome fires an outcome trigger");
+                    .Be(RefusalCode.OutcomeBound, "only a run's outcome fires an outcome trigger");
         }
 
         private async Task UserAdvance(Instance user, StepTrigger trigger)

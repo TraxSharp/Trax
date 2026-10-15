@@ -57,7 +57,7 @@ public class GenericSaveTimerTests(StoreProvider provider)
             .Problem.Should()
             .NotBeNull()
             .And.BeEquivalentTo(
-                new { Code = DraftRefusalCodes.SaveNotAllowed },
+                new { Code = RefusalCode.SaveNotAllowed },
                 $"a machine with a timer is reached through its declared events only. See {Adr}"
             );
         (await _host.Rows(id)).Should().BeEmpty("nothing is written");

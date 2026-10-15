@@ -8,7 +8,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// An instance an effect is running on is becoming the record of what the server did, so <c>discard</c> keeps it
-/// and answers <c>discard-not-allowed</c>, whatever state it is in while the effect runs.
+/// and answers <c>DISCARD_NOT_ALLOWED</c>, whatever state it is in while the effect runs.
 /// </summary>
 [TestFixture(StoreProvider.Postgres)]
 [TestFixture(StoreProvider.Sqlite)]
@@ -58,7 +58,7 @@ public class DiscardEffectTests(StoreProvider provider)
             .BeOfType<DiscardOutcome.Rejected>()
             .Which.Code.Should()
             .Be(
-                DraftRefusalCodes.DiscardNotAllowed,
+                RefusalCode.DiscardNotAllowed,
                 $"an instance an effect is running on is becoming the record of what it did. See {Adr}"
             );
         (await host.Rows(id))

@@ -54,8 +54,8 @@ public class StateMachinePagesTests
             );
         Page("sdk-reference/statemachine-api/result-codes.md")
             .Should()
-            .Contain("| `effect-bound` | advance (server) |")
-            .And.Contain("`effect-bound` is not among them");
+            .Contain("| `EFFECT_BOUND` | advance (server) |")
+            .And.Contain("`EFFECT_BOUND` is not among them");
     }
 
     [Test]

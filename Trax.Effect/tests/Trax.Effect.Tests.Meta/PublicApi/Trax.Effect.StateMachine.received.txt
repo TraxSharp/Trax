@@ -4,9 +4,9 @@ namespace Trax.Effect.StateMachine
     {
         public sealed class Rejected : Trax.Effect.StateMachine.AdvanceResult, System.IEquatable<Trax.Effect.StateMachine.AdvanceResult.Rejected>
         {
-            public Rejected(string Reason, string? Detail = null) { }
+            public Rejected(Trax.Effect.StateMachine.RefusalCode Reason, string? Detail = null) { }
             public string? Detail { get; init; }
-            public string Reason { get; init; }
+            public Trax.Effect.StateMachine.RefusalCode Reason { get; init; }
         }
         public sealed class Transitioned : Trax.Effect.StateMachine.AdvanceResult, System.IEquatable<Trax.Effect.StateMachine.AdvanceResult.Transitioned>
         {
@@ -321,20 +321,68 @@ namespace Trax.Effect.StateMachine
     {
         public static System.Text.Json.Nodes.JsonObject Apply(Trax.Effect.StateMachine.Reduction reduction, System.Text.Json.Nodes.JsonObject context, System.Text.Json.Nodes.JsonNode? input, System.Text.Json.Nodes.JsonObject initialContext, System.Collections.Generic.IReadOnlyDictionary<string, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject>>? customReducers = null) { }
     }
-    public static class RehydrationErrorCodes
+    [System.Text.Json.Serialization.JsonConverter(typeof(Trax.Effect.StateMachine.RefusalCodeJsonConverter))]
+    public enum RefusalCode
     {
-        public const string InvalidContext = "invalid-context";
-        public const string Malformed = "malformed";
-        public const string UnknownMachine = "unknown-machine";
-        public const string UnknownState = "unknown-state";
-        public const string VersionMismatch = "version-mismatch";
+        NoTransition = 0,
+        GuardFailed = 1,
+        InvalidContext = 2,
+        InternalError = 3,
+        InvalidInput = 4,
+        OutcomeBound = 5,
+        TimerBound = 6,
+        TooLarge = 7,
+        DiscardNotAllowed = 8,
+        EffectInProgress = 9,
+        Malformed = 10,
+        UnknownMachine = 11,
+        VersionMismatch = 12,
+        UnknownState = 13,
+        Forbidden = 14,
+        RequestIdReused = 15,
+        EffectBound = 16,
+        SaveNotAllowed = 17,
+        ClientOutdated = 18,
+        ServerOutdated = 19,
+        TooManyDrafts = 20,
+        InvalidRequestId = 21,
+        Unauthenticated = 22,
+        NoStart = 23,
+        SystemOwned = 24,
+        NotFound = 25,
+        TooManySubscriptions = 26,
+        SchemaMismatch = 27,
+        Conflict = 28,
+        NoEffect = 29,
+        DeliveryFailed = 30,
+        ClientDivergence = 31,
+        StateReserved = 32,
+        DraftInvoking = 33,
+        DraftUnreadable = 34,
+        DraftCommitted = 35,
+        DraftChanged = 36,
+        InvokeLimitReached = 37,
+        InvokeForbidden = 38,
+        InvokeChainUserOwned = 39,
+    }
+    public sealed class RefusalCodeJsonConverter : System.Text.Json.Serialization.JsonConverter<Trax.Effect.StateMachine.RefusalCode>
+    {
+        public RefusalCodeJsonConverter() { }
+        public override Trax.Effect.StateMachine.RefusalCode Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, Trax.Effect.StateMachine.RefusalCode value, System.Text.Json.JsonSerializerOptions options) { }
+    }
+    public static class RefusalCodes
+    {
+        public static System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.RefusalCode> All { get; }
+        public static string ToWire(this Trax.Effect.StateMachine.RefusalCode code) { }
+        public static bool TryParse(string? text, out Trax.Effect.StateMachine.RefusalCode code) { }
     }
     public abstract class RehydrationResult : System.IEquatable<Trax.Effect.StateMachine.RehydrationResult>
     {
         public sealed class Error : Trax.Effect.StateMachine.RehydrationResult, System.IEquatable<Trax.Effect.StateMachine.RehydrationResult.Error>
         {
-            public Error(string Code, string Message) { }
-            public string Code { get; init; }
+            public Error(Trax.Effect.StateMachine.RefusalCode Code, string Message) { }
+            public Trax.Effect.StateMachine.RefusalCode Code { get; init; }
             public string Message { get; init; }
         }
         public sealed class Ok : Trax.Effect.StateMachine.RehydrationResult, System.IEquatable<Trax.Effect.StateMachine.RehydrationResult.Ok>
@@ -342,19 +390,6 @@ namespace Trax.Effect.StateMachine
             public Ok(Trax.Effect.StateMachine.Snapshot Snapshot) { }
             public Trax.Effect.StateMachine.Snapshot Snapshot { get; init; }
         }
-    }
-    public static class RejectionReasons
-    {
-        public const string DiscardNotAllowed = "discard-not-allowed";
-        public const string EffectInProgress = "effect-in-progress";
-        public const string GuardFailed = "guard-failed";
-        public const string InternalError = "internal-error";
-        public const string InvalidContext = "invalid-context";
-        public const string InvalidInput = "invalid-input";
-        public const string NoTransition = "no-transition";
-        public const string OutcomeBound = "outcome-bound";
-        public const string TimerBound = "timer-bound";
-        public const string TooLarge = "too-large";
     }
     public abstract class Rule : System.IEquatable<Trax.Effect.StateMachine.Rule>
     {

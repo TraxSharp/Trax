@@ -458,7 +458,7 @@ public class TimerDeclarationTests
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
             .Be(
-                RejectionReasons.InvalidInput,
+                RefusalCode.InvalidInput,
                 $"a duration outside its declared bounds cannot arm the timer ({Adr})"
             );
 
@@ -555,7 +555,7 @@ public class TimerDeclarationTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.TimerBound, $"only the server fires a timer ({Adr})");
+            .Be(RefusalCode.TimerBound, $"only the server fires a timer ({Adr})");
         ReminderMachine.Machine.CanFire(review, "Review.after").Should().BeFalse();
     }
 
@@ -567,7 +567,7 @@ public class TimerDeclarationTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
 
         ReminderMachine
             .Machine.AdvanceTimer(ReminderMachine.At(ReminderState.Review), "Review.after")

@@ -77,7 +77,7 @@ transaction that inserts the row, and the row's invoke token names it; a `Start`
 instance queues nothing.
 
 A machine that declares `SystemOwned()` belongs to the system only: no user's draft operation reaches it, and the
-six generic `stateMachine` mutations answer `unknown-machine` for it.
+six generic `stateMachine` mutations answer `UNKNOWN_MACHINE` for it.
 
 Calling `Start` twice with one key, from one host or from several at once, creates one row: the losing insert is a
 lost race, and the call returns the winner's instance with `Created` false. The context of a call that finds an
@@ -96,14 +96,14 @@ instance moves other than by its trains' outcomes, such as a `Retry` out of a fa
 that invokes the train.
 
 It is checked exactly as a user's advance is: the edge's guard, the target state's context rule and the 64 KiB
-cap. An invoked train's outcome trigger (`Ingesting.done`) is refused as `outcome-bound` and a trigger bound to the
-machine's effect as `effect-bound`, so only a run or the effect records what it produced. Leaving an
+cap. An invoked train's outcome trigger (`Ingesting.done`) is refused as `OUTCOME_BOUND` and a trigger bound to the
+machine's effect as `EFFECT_BOUND`, so only a run or the effect records what it produced. Leaving an
 invoking state cancels its run and entering one queues a new run, in the transaction that writes the snapshot,
 and that run is authorized in the trusted scope like every run of a system-owned machine.
 
 It returns an [`AdvanceOutcome`](/docs/sdk-reference/statemachine-api/persistence-ports): `Advanced` with the new
-snapshot, `NotFound` when no instance exists for the key, `Rejected` with the engine's reason (`no-transition`,
-`guard-failed`, `invalid-context`, ...), `LoadError` when the stored snapshot cannot be read, or `Conflict` when
+snapshot, `NotFound` when no instance exists for the key, `Rejected` with the engine's reason (`NO_TRANSITION`,
+`GUARD_FAILED`, `INVALID_CONTEXT`, ...), `LoadError` when the stored snapshot cannot be read, or `Conflict` when
 the instance was written while the call ran (an outcome landed, say). Nothing is written unless it is `Advanced`.
 A machine that is not registered, or not system-owned, throws `InvalidOperationException`.
 

@@ -1,7 +1,6 @@
 import { durationTicks } from "./duration";
 import {
-  RehydrationErrorCodes,
-  RejectionReasons,
+  RefusalCode,
   type AdvanceResult,
   type RehydrationResult,
 } from "./results";
@@ -23,10 +22,10 @@ import type {
  *
  * One engine contract with the server: `advance` takes only the triggers a caller sends, an invoked train's
  * outcome goes through `applyOutcome`, and a state's timer through `applyTimer`. Refusals, first match wins: an
- * unknown state (`no-transition`); an outcome trigger (`outcome-bound`); a timer trigger (`timer-bound`); no edge
- * from the state (`no-transition`); an input that does not match the trigger's declared schema (`invalid-input`);
- * a guard that declines (`guard-failed`); a target whose timer reads a duration the successor context does not hold
- * within bounds (`invalid-input`); a successor context the target refuses (`invalid-context`).
+ * unknown state (`NO_TRANSITION`); an outcome trigger (`OUTCOME_BOUND`); a timer trigger (`TIMER_BOUND`); no edge
+ * from the state (`NO_TRANSITION`); an input that does not match the trigger's declared schema (`INVALID_INPUT`);
+ * a guard that declines (`GUARD_FAILED`); a target whose timer reads a duration the successor context does not hold
+ * within bounds (`INVALID_INPUT`); a successor context the target refuses (`INVALID_CONTEXT`).
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#the-engine-and-the-typed-view
  */
 export class SnapshotMachine<S extends string, T extends string> {
@@ -61,19 +60,19 @@ export class SnapshotMachine<S extends string, T extends string> {
     // Unknown state/trigger tokens can fire nothing, so they degrade to a handled rejection.
     if (!this.stateSet.has(snapshot.state))
       return rejected(
-        RejectionReasons.NoTransition,
+        RefusalCode.NoTransition,
         `Unknown state '${snapshot.state}'.`,
       );
     // An outcome records what an invoked run produced; from a caller, its input would be whatever was sent.
     if (this.outcomeTriggers.has(trigger))
       return rejected(
-        RejectionReasons.OutcomeBound,
+        RefusalCode.OutcomeBound,
         "This step is completed by the outcome of its work, not by an action.",
       );
     // A timer is the server acting once a state has been held long enough; no caller fires it.
     if (this.timerTriggers.has(trigger))
       return rejected(
-        RejectionReasons.TimerBound,
+        RefusalCode.TimerBound,
         "This step moves on by itself when its time is up, not by an action.",
       );
 
@@ -82,14 +81,14 @@ export class SnapshotMachine<S extends string, T extends string> {
     );
     if (matches.length === 0)
       return rejected(
-        RejectionReasons.NoTransition,
+        RefusalCode.NoTransition,
         `No transition from '${snapshot.state}' on '${trigger}'.`,
       );
 
     // The input is checked against the trigger's declared schema before any guard reads it.
     const inputError = this.inputProblem(trigger, input);
     if (inputError != null)
-      return rejected(RejectionReasons.InvalidInput, inputError);
+      return rejected(RefusalCode.InvalidInput, inputError);
 
     try {
       // A guard is hand-written per runtime and may throw on unexpected input, so evaluate it inside the
@@ -101,13 +100,13 @@ export class SnapshotMachine<S extends string, T extends string> {
         const message =
           matches.map((m) => m.guardMessage).find((m) => m != null) ??
           `A transition from '${snapshot.state}' on '${trigger}' exists but its guard rejected the input.`;
-        return rejected(RejectionReasons.GuardFailed, message);
+        return rejected(RefusalCode.GuardFailed, message);
       }
 
       return this.take(snapshot, chosen, input);
     } catch (e) {
       // Totality backstop: the engine must never surface an exception to a caller.
-      return rejected(RejectionReasons.InternalError, errorMessage(e));
+      return rejected(RefusalCode.InternalError, errorMessage(e));
     }
   }
 
@@ -116,8 +115,8 @@ export class SnapshotMachine<S extends string, T extends string> {
    * its input, the way the server applies a run's outcome. The separate entry point for outcomes: `advance` is
    * for the triggers a caller sends, and refuses these. A success tries the state's `OnDone` edges in
    * declaration order and takes the first whose guard accepts the output; an output no edge accepts, and an
-   * outcome of a state the snapshot is not in, are `no-transition`. An output that does not match the train's
-   * output schema is `invalid-input`. Never throws.
+   * outcome of a state the snapshot is not in, are `NO_TRANSITION`. An output that does not match the train's
+   * output schema is `INVALID_INPUT`. Never throws.
    */
   applyOutcome(
     snapshot: Snapshot,
@@ -126,12 +125,12 @@ export class SnapshotMachine<S extends string, T extends string> {
   ): AdvanceResult {
     if (!this.stateSet.has(snapshot.state))
       return rejected(
-        RejectionReasons.NoTransition,
+        RefusalCode.NoTransition,
         `Unknown state '${snapshot.state}'.`,
       );
     if (!this.outcomeTriggers.has(trigger))
       return rejected(
-        RejectionReasons.NoTransition,
+        RefusalCode.NoTransition,
         `'${trigger}' is not an outcome of this machine.`,
       );
 
@@ -140,13 +139,13 @@ export class SnapshotMachine<S extends string, T extends string> {
     );
     if (matches.length === 0)
       return rejected(
-        RejectionReasons.NoTransition,
+        RefusalCode.NoTransition,
         `No transition from '${snapshot.state}' on '${trigger}'.`,
       );
 
     const outputError = this.inputProblem(trigger, output);
     if (outputError != null)
-      return rejected(RejectionReasons.InvalidInput, outputError);
+      return rejected(RefusalCode.InvalidInput, outputError);
 
     try {
       const chosen = matches.find((t) =>
@@ -156,12 +155,12 @@ export class SnapshotMachine<S extends string, T extends string> {
       // something else, so it is a no-transition, as on the server.
       if (!chosen)
         return rejected(
-          RejectionReasons.NoTransition,
+          RefusalCode.NoTransition,
           `No OnDone edge from '${snapshot.state}' accepts the train's output.`,
         );
       return this.take(snapshot, chosen, output);
     } catch (e) {
-      return rejected(RejectionReasons.InternalError, errorMessage(e));
+      return rejected(RefusalCode.InternalError, errorMessage(e));
     }
   }
 
@@ -180,14 +179,17 @@ export class SnapshotMachine<S extends string, T extends string> {
   // The successor of a transition into toState: the target's timer reads its duration from the context first, so a
   // duration the context does not hold within bounds is refused as input before the context is validated, as on the
   // server; then the target's validator.
-  private enter(toState: string, newContext: Record<string, unknown>): AdvanceResult {
+  private enter(
+    toState: string,
+    newContext: Record<string, unknown>,
+  ): AdvanceResult {
     const timerError = this.timerProblem(toState, newContext);
     if (timerError != null)
-      return rejected(RejectionReasons.InvalidInput, timerError);
+      return rejected(RefusalCode.InvalidInput, timerError);
 
     const contextError = this.validateContext(toState, newContext);
     if (contextError != null)
-      return rejected(RejectionReasons.InvalidContext, contextError);
+      return rejected(RefusalCode.InvalidContext, contextError);
 
     return {
       outcome: "transitioned",
@@ -202,7 +204,10 @@ export class SnapshotMachine<S extends string, T extends string> {
 
   // Why entering `state` with `context` cannot arm its timer: the duration field is missing, not an ISO-8601
   // duration, or outside the declared bounds. Null when the state has no timer, a fixed one, or a duration in bounds.
-  private timerProblem(state: string, context: Record<string, unknown>): string | null {
+  private timerProblem(
+    state: string,
+    context: Record<string, unknown>,
+  ): string | null {
     const field = this.def.timers?.[state as S]?.field;
     if (!field) return null;
     const ticks = durationTicks(context[field.name]);
@@ -229,26 +234,26 @@ export class SnapshotMachine<S extends string, T extends string> {
   /**
    * Fires the timer `trigger` (`<State>.after`) of the state the snapshot is in, the way the server applies a due
    * timer: the context is carried to the timer's target unchanged. The separate entry point for timers: `advance`
-   * refuses them. A trigger that is not the timer of the snapshot's state is `no-transition`; a target whose own
-   * timer reads a duration the context does not hold within bounds is `invalid-input`; a target that refuses the
-   * context is `invalid-context`. The twin never fires a timer on its own: it holds no entry time. Never throws.
+   * refuses them. A trigger that is not the timer of the snapshot's state is `NO_TRANSITION`; a target whose own
+   * timer reads a duration the context does not hold within bounds is `INVALID_INPUT`; a target that refuses the
+   * context is `INVALID_CONTEXT`. The twin never fires a timer on its own: it holds no entry time. Never throws.
    */
   applyTimer(snapshot: Snapshot, trigger: string): AdvanceResult {
     if (!this.stateSet.has(snapshot.state))
       return rejected(
-        RejectionReasons.NoTransition,
+        RefusalCode.NoTransition,
         `Unknown state '${snapshot.state}'.`,
       );
     const timer = this.def.timers?.[snapshot.state as S];
     if (!timer || timer.trigger !== trigger)
       return rejected(
-        RejectionReasons.NoTransition,
+        RefusalCode.NoTransition,
         `No timer fires from '${snapshot.state}' on '${trigger}'.`,
       );
     try {
       return this.enter(timer.target, clone(snapshot.context));
     } catch (e) {
-      return rejected(RejectionReasons.InternalError, errorMessage(e));
+      return rejected(RefusalCode.InternalError, errorMessage(e));
     }
   }
 
@@ -273,7 +278,7 @@ export class SnapshotMachine<S extends string, T extends string> {
     try {
       return this.rehydrateCore(json);
     } catch (e) {
-      return error(RehydrationErrorCodes.Malformed, errorMessage(e));
+      return error(RefusalCode.Malformed, errorMessage(e));
     }
   }
 
@@ -282,12 +287,12 @@ export class SnapshotMachine<S extends string, T extends string> {
     try {
       node = JSON.parse(json);
     } catch {
-      return error(RehydrationErrorCodes.Malformed, "Input is not valid JSON.");
+      return error(RefusalCode.Malformed, "Input is not valid JSON.");
     }
 
     if (typeof node !== "object" || node === null || Array.isArray(node))
       return error(
-        RehydrationErrorCodes.Malformed,
+        RefusalCode.Malformed,
         "Snapshot must be a JSON object.",
       );
 
@@ -306,13 +311,13 @@ export class SnapshotMachine<S extends string, T extends string> {
       context === null
     )
       return error(
-        RehydrationErrorCodes.Malformed,
+        RefusalCode.Malformed,
         "Snapshot is missing required fields (machine, version, state, context).",
       );
 
     if (machine !== this.def.id)
       return error(
-        RehydrationErrorCodes.UnknownMachine,
+        RefusalCode.UnknownMachine,
         `Snapshot machine '${machine}' does not match '${this.def.id}'.`,
       );
 
@@ -322,7 +327,7 @@ export class SnapshotMachine<S extends string, T extends string> {
 
     if (effVersion > this.def.version)
       return error(
-        RehydrationErrorCodes.VersionMismatch,
+        RefusalCode.VersionMismatch,
         `Snapshot version ${effVersion} is newer than definition version ${this.def.version}.`,
       );
 
@@ -330,7 +335,7 @@ export class SnapshotMachine<S extends string, T extends string> {
       const migrate = this.def.migrations?.[effVersion];
       if (!migrate)
         return error(
-          RehydrationErrorCodes.VersionMismatch,
+          RefusalCode.VersionMismatch,
           `No migration from version ${effVersion} to ${this.def.version}.`,
         );
       const migrated = migrate(effState, effContext);
@@ -341,13 +346,13 @@ export class SnapshotMachine<S extends string, T extends string> {
 
     if (!this.stateSet.has(effState))
       return error(
-        RehydrationErrorCodes.UnknownState,
+        RefusalCode.UnknownState,
         `Unknown state '${effState}'.`,
       );
 
     const contextError = this.validateContext(effState, effContext);
     if (contextError != null)
-      return error(RehydrationErrorCodes.InvalidContext, contextError);
+      return error(RefusalCode.InvalidContext, contextError);
 
     return {
       result: "ok",
@@ -362,12 +367,12 @@ export class SnapshotMachine<S extends string, T extends string> {
 
   /** Canonical JSON: fixed envelope order, context keys sorted (RFC 8785, ordinal), recursive. */
   serialize(snapshot: Snapshot): string {
-    return JSON.stringify({
-      machine: snapshot.machine,
-      version: snapshot.version,
-      state: snapshot.state,
-      context: canonicalize(snapshot.context),
-    });
+    return (
+      `{"machine":${JSON.stringify(snapshot.machine)}` +
+      `,"version":${JSON.stringify(snapshot.version)}` +
+      `,"state":${JSON.stringify(snapshot.state)}` +
+      `,"context":${canonicalJson(snapshot.context)}}`
+    );
   }
 
   canFire(snapshot: Snapshot, trigger: string, input?: unknown): boolean {
@@ -442,11 +447,11 @@ export class SnapshotMachine<S extends string, T extends string> {
   }
 }
 
-function rejected(reason: string, detail: string): AdvanceResult {
+function rejected(reason: RefusalCode, detail: string): AdvanceResult {
   return { outcome: "rejected", reason, detail };
 }
 
-function error(code: string, message: string): RehydrationResult {
+function error(code: RefusalCode, message: string): RehydrationResult {
   return { result: "error", code, message };
 }
 
@@ -483,18 +488,25 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-/** RFC 8785 §3.2.3: sort object members by UTF-16 code unit (ordinal), recursively. Arrays keep order. */
-function canonicalize(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(canonicalize);
+/**
+ * RFC 8785 §3.2.3: object members sorted by UTF-16 code unit (ordinal), recursively; arrays keep order. The text is
+ * written member by member, because an object built in sorted order would still enumerate integer-like keys first
+ * and would turn a "__proto__" key into its prototype.
+ */
+function canonicalJson(node: unknown): string {
+  if (Array.isArray(node))
+    return `[${node.map((item) => (item === undefined ? "null" : canonicalJson(item))).join(",")}]`;
   if (node !== null && typeof node === "object") {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(node as Record<string, unknown>).sort(
-      ordinal,
-    ))
-      sorted[key] = canonicalize((node as Record<string, unknown>)[key]);
-    return sorted;
+    const record = node as Record<string, unknown>;
+    const members: string[] = [];
+    for (const key of Object.keys(record).sort(ordinal)) {
+      const value = record[key];
+      if (value === undefined) continue;
+      members.push(`${JSON.stringify(key)}:${canonicalJson(value)}`);
+    }
+    return `{${members.join(",")}}`;
   }
-  return node;
+  return JSON.stringify(node) ?? "null";
 }
 
 /** UTF-16 code-unit comparison — the JS default, equal to C# StringComparer.Ordinal. */

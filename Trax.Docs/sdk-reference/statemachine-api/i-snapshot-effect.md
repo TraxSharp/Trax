@@ -46,7 +46,7 @@ public interface ISnapshotEffect
 
 A non-empty receipt. It is handed to the transition's reducer as `input["receipt"]`, which is how the send is
 recorded in the destination context. A `null` or `""` receipt is treated as a failed effect: the mark ends, and the
-send returns `delivery-failed` with the draft unchanged, as if `Run` had thrown. A guard on the same edge can require
+send returns `DELIVERY_FAILED` with the draft unchanged, as if `Run` had thrown. A guard on the same edge can require
 the receipt.
 
 ## Behavior
@@ -56,7 +56,7 @@ proves it happened. Throwing means the effect did not complete: the transition i
 it was, and the client can retry from the same state.
 
 While the effect runs it is pending on the draft's row: the send marks the row before it runs the effect, every other
-write to the draft (another event, a reset, a timer, a discard, the draft sweep) is refused as `effect-in-progress`
+write to the draft (another event, a reset, a timer, a discard, the draft sweep) is refused as `EFFECT_IN_PROGRESS`
 or waits, and the receipt, the move to the effect's target and the end of the mark are one write. An effect that ran
 is therefore either still pending on its draft or recorded in it.
 
@@ -65,10 +65,10 @@ of that send, and new for the next send of the event. Pass it to the system the 
 
 An `OperationCanceledException` is different: a charge can land and its response time out, so a cancellation
 does not say whether the effect happened. The effect stays pending until its lease passes, and a send before then
-is refused as `effect-in-progress`. Once the lease has passed on the database's clock, the next send of the event, or
+is refused as `EFFECT_IN_PROGRESS`. Once the lease has passed on the database's clock, the next send of the event, or
 the outcome reconciler on a host that registers the effect, takes it over and runs it again under the same key, and
 records the result as the answer to the request that sent it. Each effect found past its lease is counted on
-`StateMachineInstruments.EffectsAbandoned` (`trax.machine.effect.abandoned`). The send reports it as `delivery-failed`
+`StateMachineInstruments.EffectsAbandoned` (`trax.machine.effect.abandoned`). The send reports it as `DELIVERY_FAILED`
 unless the request itself was cancelled. The send passes `Run` `CancellationToken.None`, not the request's token:
 a client that disconnects mid-charge does not cancel the charge.
 
@@ -93,20 +93,20 @@ because nothing else wrote the draft while the effect ran.
 
 A host whose snapshot store is its own cannot hold the mark, and keeps a claim in the `effect_claim` ledger beside
 the draft instead. There the receipt is recorded only on the draft as the effect loaded it: a draft saved, reset or
-advanced while the effect ran makes the send report `conflict`, and the claim keeps the receipt with a fingerprint of
+advanced while the effect ran makes the send report `CONFLICT`, and the claim keeps the receipt with a fingerprint of
 the content the effect ran on (`SnapshotFingerprint.Of(service.Serialize(snapshot))`). A later send replays it only
-onto a draft whose content has that fingerprint, and is refused as `draft-changed` otherwise.
+onto a draft whose content has that fingerprint, and is refused as `DRAFT_CHANGED` otherwise.
 
 On the server the transition is fired only by the send. The server refuses an advance of its trigger as
-`effect-bound` (the draft service and `IMachineInstances.Advance` both check it); the bare engine does not:
+`EFFECT_BOUND` (the draft service and `IMachineInstances.Advance` both check it); the bare engine does not:
 `SnapshotMachine.Advance` fires the edge like any other, so code that drives the engine directly is not held to
 the send. The generic save, which serves only machines with no server-side behaviour, refuses every save of a
-machine with an effect as `save-not-allowed`; see
+machine with an effect as `SAVE_NOT_ALLOWED`; see
 [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write).
 
 The receipt `Run` returns is handed to the transition's reducer as `input["receipt"]`, which is how the send
 gets recorded in the destination context. It must be non-empty: a `null` or `""` receipt is treated as a failed
-effect, the mark ends, and the send returns `delivery-failed` with the draft unchanged, exactly as if `Run` had
+effect, the mark ends, and the send returns `DELIVERY_FAILED` with the draft unchanged, exactly as if `Run` had
 thrown. A guard on the same edge can require it (so the transition only
 completes once the effect has produced a receipt).
 

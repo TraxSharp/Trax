@@ -219,8 +219,7 @@ const ir = {
     },
     {
       "effect": {
-        "keyPrefix": "checkout:charge",
-        "type": "Trax.Cli.Tests.Fakes.ICheckoutCharge"
+        "keyPrefix": "checkout:charge"
       },
       "from": "Review",
       "guard": {
@@ -273,7 +272,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "87fbe58679e955f82fabb74270e098d512414331452335b307385e8302ca5247";
+export const irHash = "2dd1b2a48a670045835de952e173b40330e063ff133bff8e53d52753f9779f6b";
 
 /** The checkout machine, built from the IR and typed by CheckoutSpec. No hand-written twin. */
 export const checkout = typedMachineFromIr<CheckoutSpec>(ir, irHash);

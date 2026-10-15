@@ -52,7 +52,7 @@ describe("turnstile migration", () => {
     });
     const result = v3WithGap.rehydrate(V1_UNLOCKED);
     expect(result.result).toBe("error");
-    if (result.result === "error") expect(result.code).toBe("version-mismatch");
+    if (result.result === "error") expect(result.code).toBe("VERSION_MISMATCH");
   });
 
   it("rejects a snapshot newer than the definition as version-mismatch", () => {
@@ -60,7 +60,7 @@ describe("turnstile migration", () => {
       '{"machine":"turnstile","version":2,"state":"Locked","context":{}}',
     );
     expect(result.result).toBe("error");
-    if (result.result === "error") expect(result.code).toBe("version-mismatch");
+    if (result.result === "error") expect(result.code).toBe("VERSION_MISMATCH");
   });
 });
 

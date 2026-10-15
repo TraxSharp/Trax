@@ -113,7 +113,7 @@ public class SnapshotAdvanceGuardTests
             new string('{', SnapshotLimits.MaxSnapshotBytes + 1)
         );
 
-        output.Problem!.Code.Should().Be("too-large");
+        output.Problem!.Code.Should().Be(RefusalCode.TooLarge);
     }
 
     [Test]
@@ -131,7 +131,7 @@ public class SnapshotAdvanceGuardTests
             new JsonObject { ["text"] = half }.ToJsonString()
         );
 
-        output.Problem!.Code.Should().Be("too-large");
+        output.Problem!.Code.Should().Be(RefusalCode.TooLarge);
         (await Load("log", id)).Should().Be(before);
     }
 
@@ -142,7 +142,7 @@ public class SnapshotAdvanceGuardTests
 
         var output = await Advance("note", id, "Write", "{\"text\":\"a\\u0000b\"}");
 
-        output.Problem!.Code.Should().Be(RehydrationErrorCodes.Malformed);
+        output.Problem!.Code.Should().Be(RefusalCode.Malformed);
         (await Load("note", id)).Should().Contain("\"context\":{}");
     }
 
@@ -169,6 +169,6 @@ public class SnapshotAdvanceGuardTests
             new LoadSnapshotInput { Machine = "note", Id = id }
         );
 
-        load.Problem!.Code.Should().Be(RehydrationErrorCodes.Malformed);
+        load.Problem!.Code.Should().Be(RefusalCode.Malformed);
     }
 }

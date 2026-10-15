@@ -186,7 +186,7 @@ and `query { machines { topicMap { get } } }`. The page creates its draft with `
 id on the server, and moves it only with the machine's events, each its own mutation taking its own input type;
 it never writes a snapshot. **Start a new map** leaves no draft behind. A draft in `Building`, or one a build's
 outcome put in `Built`, `BuildFailed` or `BuildCancelled`, is the record of that build, so the server refuses to
-discard it (`discard-not-allowed`); from those states, and from `Expired`, the page sends `StartOver`, which resets
+discard it (`DISCARD_NOT_ALLOWED`); from those states, and from `Expired`, the page sends `StartOver`, which resets
 the same draft to the first step with nothing chosen (from `Building` it cancels the run, and from `Built` it cancels
 the review timer). Before a build, the page discards the draft (`discard`) and starts a new one. If the server refuses
 either, the page shows why and stays on the draft. Every visitor signs in with the same operator key, so all the
@@ -235,19 +235,19 @@ The food order's operations are among the page's own documents: the page sends `
 placeOrder discard } }` and `machineChanged` for the order by the ids in `src/persisted-operations.json`.
 
 A page built before a deploy that changed the machine sends ids the host no longer serves: the host answers
-`client-outdated`, and the page stops and asks to be reloaded. The page's other documents (the runs it starts and
+`CLIENT_OUTDATED`, and the page stops and asks to be reloaded. The page's other documents (the runs it starts and
 reads) are in `src/persisted-operations.json`, which the host registers when it starts (`PageDocuments`) and the page
 sends by id; to change one, edit it there and bump the version at the end of its id. `Recovery:RequirePersistedOperations`
 set to `false` accepts ad-hoc documents again, which only the E2E suite's hand-written requests need.
 
-A client cannot write a build's result: a save of a topic map is refused (`save-not-allowed`), and so is a hand-fired
-`Building.done` (`outcome-bound`). A run a
+A client cannot write a build's result: a save of a topic map is refused (`SAVE_NOT_ALLOWED`), and so is a hand-fired
+`Building.done` (`OUTCOME_BOUND`). A run a
 machine invoked has no manifest, so when the host running a build dies, "recovers" means the next host to start
 fails the orphaned run, the draft moves to `BuildFailed`, and **Rebuild** works from there.
 
 A built map is held for review for seven days (`TopicMapMachine.ReviewWindow`). Then the server fires `Built`'s
 timer (`Built.after`) and moves the draft to `Expired`, from which it can be rebuilt or edited; the page hears the move
-by push. The timer has no client operation, and an advance that names it is refused (`timer-bound`). The page shows
+by push. The timer has no client operation, and an advance that names it is refused (`TIMER_BOUND`). The page shows
 the review deadline from the `dueAt` the server pushes beside the Built snapshot; it never fires the timer itself.
 
 **`order`, a food order each user places.** The page's **Food order** view drives it live, and traxsharp.net plays
@@ -255,7 +255,7 @@ a recording of it (`scripts/recordings/order.mjs`). `addItem` puts an item from 
 enters `Ordered`, which runs `DeliverOrderTrain` (`SendToRestaurant`, `ChargeCard`, `Cook`, `PickUp`, `Deliver`), and
 the run's outcome ends the order. A cart nobody orders is cleared by the server after 30 minutes
 (`OrderMachine.CartWait`; `Recovery:CartWait` shortens it). Pressing **Place order** twice under one request id is
-answered once, and a second request is `no-transition` from `Ordered`: one order, one run, one charge.
+answered once, and a second request is `NO_TRANSITION` from `Ordered`: one order, one run, one charge.
 
 ```
 Cart --PlaceOrder--> Ordered --done-----------------> Delivered

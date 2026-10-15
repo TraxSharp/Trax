@@ -53,7 +53,7 @@ the current definition's schema. Every path that reads a snapshot rehydrates it:
 | `saveSnapshot` | A snapshot an older client sends at an older version is upgraded, validated, and stored at the current version; the response carries the upgraded snapshot. |
 
 A draft whose version has no migration path to the current definition, or is newer than it, rehydrates as
-[`version-mismatch`](/docs/sdk-reference/statemachine-api/result-codes).
+[`VERSION_MISMATCH`](/docs/sdk-reference/statemachine-api/result-codes).
 
 The machines in `Trax.Api.StateMachine/machines/` pin a migration with a migration golden,
 `machines/<machine>/migration.json`: a committed set of stored older-version snapshots and the exact

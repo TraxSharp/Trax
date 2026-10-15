@@ -1,4 +1,4 @@
-import type { AdvanceResult, RehydrationResult } from './results';
+import type { AdvanceResult, ProblemCode, RehydrationResult } from './results';
 
 /** One normalized shape for any declined action or failed load — so a UI reasons over one mental model. */
 export interface Problem {
@@ -7,7 +7,7 @@ export interface Problem {
    * `transport`: the server could not be reached, so nothing is known about the outcome.
    */
   kind: 'rejected' | 'load-error' | 'transport';
-  code: string;
+  code: ProblemCode;
   message: string;
 }
 

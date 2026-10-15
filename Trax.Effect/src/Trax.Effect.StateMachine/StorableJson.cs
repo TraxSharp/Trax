@@ -9,7 +9,7 @@ namespace Trax.Effect.StateMachine;
 /// Finds the values a snapshot context may not carry even though they are valid JSON: a number outside
 /// the range of a double (<c>1e400</c>), which has no canonical wire, and a NUL character in a string or
 /// a key, which a Postgres <c>jsonb</c> column refuses. <see cref="SnapshotMachine{TState,TTrigger}.Rehydrate"/>
-/// refuses both as <c>malformed</c>, and the persistence layer checks an advance's result the same way
+/// refuses both as <c>MALFORMED</c>, and the persistence layer checks an advance's result the same way
 /// before it writes, so a stored draft always serializes and always loads.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]

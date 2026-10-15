@@ -243,7 +243,7 @@ internal static class MachineRenderer
                     t["guardMessage"]?.ToString()
                         ?? (t["guard"] as JsonObject)?["rule"]?.ToString(),
                     (t["reduce"] as JsonObject)?["reduce"]?.ToString(),
-                    ShortName((t["effect"] as JsonObject)?["type"]?.ToString())
+                    (t["effect"] as JsonObject)?["keyPrefix"]?.ToString()
                 ))
                 .ToList();
 
@@ -316,16 +316,6 @@ internal static class MachineRenderer
                         queue.Enqueue(edge.To);
             }
             return seen;
-        }
-
-        // The effect's type without its namespace (and without a generic arity suffix).
-        private static string? ShortName(string? fullName)
-        {
-            if (fullName is null)
-                return null;
-            var name = fullName[(fullName.LastIndexOfAny(['.', '+']) + 1)..];
-            var tick = name.IndexOf('`');
-            return tick < 0 ? name : name[..tick];
         }
     }
 }

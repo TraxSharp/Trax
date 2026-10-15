@@ -72,7 +72,7 @@ public class RevisionTests(StoreProvider provider)
         var id = Guid.NewGuid();
         using var scope = _host.Scope();
         var saved = await _host.Service(scope, machine).Autosave(User, id, json);
-        if (saved is AutosaveResult.Rejected { Code: DraftRefusalCodes.SaveNotAllowed })
+        if (saved is AutosaveResult.Rejected { Code: RefusalCode.SaveNotAllowed })
             (
                 await scope
                     .ServiceProvider.GetRequiredService<ISnapshotStore>()
@@ -468,15 +468,15 @@ public class RevisionTests(StoreProvider provider)
         (await _host.Revision(id)).Should().Be(advanced.Revision);
     }
 
-    [TestCase("guard-failed")]
-    [TestCase("effect-bound")]
-    [TestCase("request-id-reused")]
+    [TestCase(nameof(RefusalCode.GuardFailed))]
+    [TestCase(nameof(RefusalCode.EffectBound))]
+    [TestCase(nameof(RefusalCode.RequestIdReused))]
     [TestCase("ring-replay")]
     [TestCase("stale-token-conflict")]
     [TestCase("unchanged-autosave")]
     [TestCase("refused-save")]
-    [TestCase("invalid-input")]
-    [TestCase("forbidden")]
+    [TestCase(nameof(RefusalCode.InvalidInput))]
+    [TestCase(nameof(RefusalCode.Forbidden))]
     public async Task A_refusal_conflict_or_replay_never_bumps(string refusal)
     {
         var (id, act) = await Refusal(refusal);
@@ -499,7 +499,7 @@ public class RevisionTests(StoreProvider provider)
     {
         switch (refusal)
         {
-            case "guard-failed":
+            case nameof(RefusalCode.GuardFailed):
             {
                 var id = await Saved("turnstile", TestTurnstile.InitialJson);
                 return (
@@ -516,10 +516,10 @@ public class RevisionTests(StoreProvider provider)
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
                             .Which.Reason.Should()
-                            .Be(RejectionReasons.GuardFailed)
+                            .Be(RefusalCode.GuardFailed)
                 );
             }
-            case "invalid-input":
+            case nameof(RefusalCode.InvalidInput):
             {
                 var machine = "declarative-turnstile";
                 var id = await Saved(
@@ -546,10 +546,10 @@ public class RevisionTests(StoreProvider provider)
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
                             .Which.Reason.Should()
-                            .Be(RejectionReasons.InvalidInput)
+                            .Be(RefusalCode.InvalidInput)
                 );
             }
-            case "forbidden":
+            case nameof(RefusalCode.Forbidden):
             {
                 var id = await Saved(
                     GatedTurnstileMachine.Id,
@@ -568,11 +568,11 @@ public class RevisionTests(StoreProvider provider)
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
                             .Which.Reason.Should()
-                            .Be(DraftRefusalCodes.Forbidden);
+                            .Be(RefusalCode.Forbidden);
                     }
                 );
             }
-            case "effect-bound":
+            case nameof(RefusalCode.EffectBound):
             {
                 var id = await Saved("order", OrderMachine.ReviewSnapshot(1));
                 return (
@@ -589,10 +589,10 @@ public class RevisionTests(StoreProvider provider)
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
                             .Which.Reason.Should()
-                            .Be("effect-bound")
+                            .Be(RefusalCode.EffectBound)
                 );
             }
-            case "request-id-reused":
+            case nameof(RefusalCode.RequestIdReused):
             {
                 var id = await Saved("turnstile", TestTurnstile.InitialJson);
                 (await Advance("turnstile", id, "Coin", Quarter, "r1"))
@@ -605,7 +605,7 @@ public class RevisionTests(StoreProvider provider)
                             .Should()
                             .BeOfType<AdvanceOutcome.Rejected>()
                             .Which.Reason.Should()
-                            .Be(DraftRefusalCodes.RequestIdReused)
+                            .Be(RefusalCode.RequestIdReused)
                 );
             }
             case "ring-replay":
@@ -1342,7 +1342,7 @@ public class RevisionTests(StoreProvider provider)
                 .Should()
                 .BeOfType<AutosaveResult.Rejected>()
                 .Which.Code.Should()
-                .Be(DraftRefusalCodes.SaveNotAllowed);
+                .Be(RefusalCode.SaveNotAllowed);
 
             if (_orderState == "Placed" && state != "Draft")
                 return;

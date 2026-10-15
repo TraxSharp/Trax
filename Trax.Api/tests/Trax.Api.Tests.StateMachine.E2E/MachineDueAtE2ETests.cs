@@ -225,7 +225,7 @@ public class MachineDueAtE2ETests
             $"mutation {{ machines {{ snooze {{ start(input: {{ patience: \"PT2H\" }}, requestId: {WizardOps.Literal(WizardOps.NewRequestId())}) {{ {Fields} }} }} }} }}",
             "start"
         );
-        Problem(refused).Should().Be("invalid-input");
+        Problem(refused).Should().Be("INVALID_INPUT");
     }
 
     #endregion

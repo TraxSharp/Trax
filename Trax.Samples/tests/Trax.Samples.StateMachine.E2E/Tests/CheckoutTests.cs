@@ -24,7 +24,7 @@ public class CheckoutTests : StateMachineTestFixture
 
         (await Machines.AdvanceAsync(Alice, Checkout, id!.Value, "Next"))
             .ProblemCode.Should()
-            .Be("guard-failed", "an empty cart cannot be reviewed");
+            .Be("GUARD_FAILED", "an empty cart cannot be reviewed");
         await Machines.AdvanceAsync(
             Alice,
             Checkout,
@@ -59,7 +59,7 @@ public class CheckoutTests : StateMachineTestFixture
 
         (await Machines.AdvanceAsync(Alice, Checkout, id.Value, "Reset")).State.Should().Be("Cart");
         (await Machines.DiscardAsync(Alice, Checkout, id.Value)).Should().BeTrue();
-        (await Machines.LoadAsync(Alice, Checkout, id.Value)).ProblemCode.Should().Be("not-found");
+        (await Machines.LoadAsync(Alice, Checkout, id.Value)).ProblemCode.Should().Be("NOT_FOUND");
     }
 
     [Test]
@@ -120,7 +120,7 @@ public class CheckoutTests : StateMachineTestFixture
 
         foreach (var result in results)
             if (result.ProblemCode is not null)
-                result.ProblemCode.Should().BeOneOf("effect-in-progress", "conflict");
+                result.ProblemCode.Should().BeOneOf("EFFECT_IN_PROGRESS", "CONFLICT");
         var settled = await Machines.SendAsync(Alice, Checkout, id, requestId: "pay-1");
         settled.State.Should().Be("Paid");
         Charges.For(item).Should().ContainSingle();
@@ -161,7 +161,7 @@ public class CheckoutTests : StateMachineTestFixture
         );
 
         saved.ProblemCode.Should().Be(StateMachineClient.NotServed);
-        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("not-found");
+        (await Machines.LoadAsync(Alice, Checkout, id)).ProblemCode.Should().Be("NOT_FOUND");
         Charges.For(item).Should().BeEmpty();
     }
 
@@ -193,7 +193,7 @@ public class CheckoutTests : StateMachineTestFixture
 
         var sent = await Machines.SendAsync(Alice, Checkout, id);
 
-        sent.ProblemCode.Should().Be("no-transition", "only a Review draft can run the charge");
+        sent.ProblemCode.Should().Be("NO_TRANSITION", "only a Review draft can run the charge");
         Charges.For(item).Should().BeEmpty();
         (await Machines.LoadAsync(Alice, Checkout, id)).State.Should().Be("Cart");
     }

@@ -31,7 +31,7 @@ Each row is proved over GraphQL against the running host by `tests/Trax.Samples.
 | Feature | Code | Proved by |
 |---|---|---|
 | One-line discovery: `AddStateMachines(assembly)` before `AddMediator`, both machines exposed and the generic mutations not served; an instance created with `start` under a server-minted id, and a retried start answered with the same one | `Api/Program.cs` | `GenericMutationsOptInTests`, `TurnstileTests`, `CheckoutTests` |
-| Illegal transitions refused as data (`guard-failed`, `no-transition`, `invalid-context`), the stored draft unchanged | `Machines.cs` | `TurnstileTests`, `CheckoutTests` |
+| Illegal transitions refused as data (`GUARD_FAILED`, `NO_TRANSITION`, `INVALID_CONTEXT`), the stored draft unchanged | `Machines.cs` | `TurnstileTests`, `CheckoutTests` |
 | An effect that runs once per intent, however often `pay` is repeated with one request id, and only `pay` reaches `Paid`, taking no input | `Machines.cs`, `RunsOnce<ICharge>`, `Payments.cs` | `CheckoutTests`, `PaymentTests` |
 | A v1 draft upgraded to v2 by `MigrateFrom(1, ...)` when the server reads it | `Machines.cs` | `ForwardMigrationTests` |
 | Server authority: no client saves a draft (the host serves no save), `AddItem` prices the cart on the server, a stored draft whose total disagrees with its items cannot be read, and the charge takes the stored draft's total | `Machines.cs`, `LoggingCharge` | `ServerOwnedTotalTests`, `CheckoutTotalAuthorityTests` |
@@ -63,9 +63,9 @@ npm run dev                # http://localhost:5173
 The page teaches the machine before the example. Each machine has a tab: the turnstile first, as the simplest
 machine, then the checkout, a machine with an effect. A state diagram follows every move and marks the moves out of
 the current state, and every trigger can be sent from any state, so pressing one with no arrow shows the server's
-`no-transition`. The page starts each machine once per user and keeps the id the server minted in the browser, so
+`NO_TRANSITION`. The page starts each machine once per user and keeps the id the server minted in the browser, so
 a reload resumes the same instance. **What the server just did** lists the checks the server made for the last
-request, in the order it makes them, and where it stopped (`guard-failed` for a penny, or for **Next** from an
+request, in the order it makes them, and where it stopped (`GUARD_FAILED` for a penny, or for **Next** from an
 empty cart). On the checkout, **Fill the cart** sends `AddItem` with an item's name only, and the server prices
 the cart. **Side effect: the charge** shows the `RunsOnce<ICharge>` binding, the whole request the page sends to pay
 (only the draft's id), and the payment provider's own list of charges, which grows by one on Pay and not at all on
@@ -109,7 +109,7 @@ mutation {
 ```
 
 The `addItem` answer is the cart with `items: ["book"]` and `total: 999`: the server appends the item and computes
-the total, and no request can set it. `next` from an empty cart is `guard-failed`. The `pay` answer is `Paid` with a
+the total, and no request can set it. `next` from an empty cart is `GUARD_FAILED`. The `pay` answer is `Paid` with a
 `receipt`, and the host logs `Charged 999 cents for checkout Review -> receipt rcpt_...`. Send it again with the same
 `requestId` and the same answer comes back with no second charge. `pay` takes no input: the charge produces the
 receipt the edge records, so a client cannot hand it one, and nothing else reaches `Paid`. The host serves no save,
@@ -326,7 +326,7 @@ snapshot: a stored draft that `get` reads or an event moves:
             )
 ```
 
-A snapshot newer than the server's version is refused as `version-mismatch`. See
+A snapshot newer than the server's version is refused as `VERSION_MISMATCH`. See
 [Migrations](/docs/sdk-reference/statemachine-api/migrations).
 
 ## Tests

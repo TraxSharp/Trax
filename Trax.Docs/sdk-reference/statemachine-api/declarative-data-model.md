@@ -133,7 +133,7 @@ with delegates only.
   `JsonObject`; it never mutates the inputs.
 - `StorableJson.Problem(node)` names the first value a snapshot context may not carry although it is valid JSON (a
   number outside the range of a double, a NUL character in a string or a key), or returns null. It never throws.
-  `Rehydrate` refuses both as `malformed`, and the persistence layer checks an advance's result the same way before
+  `Rehydrate` refuses both as `MALFORMED`, and the persistence layer checks an advance's result the same way before
   it writes.
 
 ## See also

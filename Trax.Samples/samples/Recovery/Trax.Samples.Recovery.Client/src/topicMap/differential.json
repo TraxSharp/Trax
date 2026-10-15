@@ -25,7 +25,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -50,7 +50,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -79,7 +79,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -108,7 +108,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -133,7 +133,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -158,7 +158,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -188,7 +188,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -214,7 +214,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -314,7 +314,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -339,7 +339,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -372,7 +372,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -397,7 +397,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -422,7 +422,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -443,7 +443,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -464,7 +464,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -489,7 +489,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -514,7 +514,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -535,7 +535,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -556,7 +556,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -582,7 +582,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -604,7 +604,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -688,7 +688,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -709,7 +709,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -738,7 +738,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -759,7 +759,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -780,7 +780,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -805,7 +805,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -830,7 +830,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -859,7 +859,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -888,7 +888,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -913,7 +913,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -938,7 +938,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -968,7 +968,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -994,7 +994,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1094,7 +1094,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1119,7 +1119,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1152,7 +1152,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1177,7 +1177,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1202,7 +1202,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1223,7 +1223,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1244,7 +1244,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1269,7 +1269,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1294,7 +1294,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1315,7 +1315,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1336,7 +1336,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1362,7 +1362,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1384,7 +1384,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1468,7 +1468,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1489,7 +1489,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1518,7 +1518,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1539,7 +1539,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1560,7 +1560,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1585,7 +1585,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1610,7 +1610,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1639,7 +1639,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1668,7 +1668,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1718,7 +1718,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1748,7 +1748,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1774,7 +1774,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1799,7 +1799,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1824,7 +1824,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -1899,7 +1899,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -1982,7 +1982,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2003,7 +2003,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2024,7 +2024,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2049,7 +2049,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2074,7 +2074,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2116,7 +2116,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2142,7 +2142,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2164,7 +2164,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2185,7 +2185,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2206,7 +2206,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2269,7 +2269,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -2340,7 +2340,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2365,7 +2365,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2390,7 +2390,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2419,7 +2419,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2448,7 +2448,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2473,7 +2473,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2498,7 +2498,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2528,7 +2528,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2554,7 +2554,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2654,7 +2654,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2679,7 +2679,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2712,7 +2712,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2737,7 +2737,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2787,7 +2787,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2812,7 +2812,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2841,7 +2841,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2870,7 +2870,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2895,7 +2895,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -2920,7 +2920,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -2976,7 +2976,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -3001,7 +3001,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3026,7 +3026,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3051,7 +3051,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3076,7 +3076,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3101,7 +3101,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3134,7 +3134,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3159,7 +3159,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3184,7 +3184,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3205,7 +3205,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3226,7 +3226,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3251,7 +3251,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3276,7 +3276,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3297,7 +3297,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3318,7 +3318,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -3366,7 +3366,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -3387,7 +3387,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3408,7 +3408,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3429,7 +3429,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3450,7 +3450,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3471,7 +3471,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3500,7 +3500,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3521,7 +3521,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3542,7 +3542,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3561,7 +3561,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3580,7 +3580,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3603,7 +3603,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3626,7 +3626,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3645,7 +3645,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3664,7 +3664,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -3708,7 +3708,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -3727,7 +3727,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3746,7 +3746,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3765,7 +3765,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3784,7 +3784,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3803,7 +3803,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3830,7 +3830,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3849,7 +3849,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3868,7 +3868,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3883,7 +3883,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3898,7 +3898,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3917,7 +3917,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3936,7 +3936,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3951,7 +3951,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -3966,7 +3966,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -4002,7 +4002,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -4017,7 +4017,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4032,7 +4032,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4047,7 +4047,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4062,7 +4062,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4077,7 +4077,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4100,7 +4100,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4115,7 +4115,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4130,7 +4130,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4180,7 +4180,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -4238,7 +4238,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -4263,7 +4263,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4288,7 +4288,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4318,7 +4318,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4344,7 +4344,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4369,7 +4369,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4394,7 +4394,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4419,7 +4419,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4444,7 +4444,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4469,7 +4469,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4502,7 +4502,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4527,7 +4527,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4552,7 +4552,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4594,7 +4594,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -4644,7 +4644,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -4665,7 +4665,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4686,7 +4686,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4712,7 +4712,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4734,7 +4734,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4755,7 +4755,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4776,7 +4776,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4797,7 +4797,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4818,7 +4818,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4839,7 +4839,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4868,7 +4868,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4889,7 +4889,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4910,7 +4910,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -4948,7 +4948,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -4994,7 +4994,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "invalid-input"
+        "reason": "INVALID_INPUT"
       }
     },
     {
@@ -5013,7 +5013,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5032,7 +5032,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5056,7 +5056,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5076,7 +5076,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5095,7 +5095,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5114,7 +5114,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5133,7 +5133,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5152,7 +5152,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5171,7 +5171,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5198,7 +5198,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5217,7 +5217,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5236,7 +5236,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5261,7 +5261,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5286,7 +5286,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5315,7 +5315,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5344,7 +5344,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5369,7 +5369,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5394,7 +5394,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5424,7 +5424,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5450,7 +5450,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5550,7 +5550,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5575,7 +5575,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5608,7 +5608,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5633,7 +5633,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     },
     {
@@ -5658,7 +5658,7 @@
       },
       "expect": {
         "outcome": "rejected",
-        "reason": "no-transition"
+        "reason": "NO_TRANSITION"
       }
     }
   ]

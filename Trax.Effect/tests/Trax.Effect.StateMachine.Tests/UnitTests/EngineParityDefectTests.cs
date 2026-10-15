@@ -46,7 +46,7 @@ public class EngineParityDefectTests
             .Should()
             .BeOfType<RehydrationResult.Error>()
             .Which.Code.Should()
-            .Be(RehydrationErrorCodes.UnknownState);
+            .Be(RefusalCode.UnknownState);
     }
 
     [TestCase("0")]
@@ -63,7 +63,7 @@ public class EngineParityDefectTests
             .Should()
             .BeOfType<AdvanceResult.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition);
+            .Be(RefusalCode.NoTransition);
     }
 
     [Test]

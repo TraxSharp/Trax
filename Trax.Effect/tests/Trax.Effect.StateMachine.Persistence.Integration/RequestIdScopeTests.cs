@@ -9,7 +9,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// A request id replays only the request it recorded: the same id and trigger, while the draft still shows
-/// that request's outcome. Anything else fires, or is refused as <c>request-id-reused</c>.
+/// that request's outcome. Anything else fires, or is refused as <c>REQUEST_ID_REUSED</c>.
 ///
 /// <para>Enforces <c>docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md</c>.</para>
 /// </summary>
@@ -90,7 +90,10 @@ public class RequestIdScopeTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("request-id-reused", $"an id replays only for the trigger it recorded ({Adr})");
+            .Be(
+                RefusalCode.RequestIdReused,
+                $"an id replays only for the trigger it recorded ({Adr})"
+            );
 
         (await Service().Load("u", id))
             .Should()
@@ -153,7 +156,7 @@ public class RequestIdScopeTests
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
             .Be(
-                "request-id-reused",
+                RefusalCode.RequestIdReused,
                 $"a request recorded without its trigger never replays ({Adr})"
             );
     }
@@ -312,7 +315,7 @@ public class RequestIdScopeTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be(RejectionReasons.NoTransition, "the turnstile is already unlocked");
+            .Be(RefusalCode.NoTransition, "the turnstile is already unlocked");
     }
 
     [Test]
@@ -329,12 +332,12 @@ public class RequestIdScopeTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("request-id-reused", $"r1 named a Coin, not a Push. See {Ring}");
+            .Be(RefusalCode.RequestIdReused, $"r1 named a Coin, not a Push. See {Ring}");
         (await Service().Advance(user, id, "Coin", new JsonObject { ["coin"] = "dollar" }, "r1"))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("request-id-reused", $"r1 paid a quarter, not a dollar. See {Ring}");
+            .Be(RefusalCode.RequestIdReused, $"r1 paid a quarter, not a dollar. See {Ring}");
         (await Service().Load(user, id))
             .Should()
             .BeOfType<LoadResult.Loaded>()

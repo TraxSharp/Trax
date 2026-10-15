@@ -98,7 +98,7 @@ public class OrderSendTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("effect-in-progress");
+            .Be(RefusalCode.EffectInProgress);
 
         gate.Release();
         (await running).Should().BeOfType<AdvanceOutcome.Advanced>();
@@ -118,7 +118,7 @@ public class OrderSendTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("no-transition");
+            .Be(RefusalCode.NoTransition);
         effect.Calls.Should().Be(0);
     }
 
@@ -235,7 +235,7 @@ public class OrderSendTests
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("request-id-reused");
+            .Be(RefusalCode.RequestIdReused);
         effect.Calls.Should().Be(0, "a refused send must not have charged");
     }
 

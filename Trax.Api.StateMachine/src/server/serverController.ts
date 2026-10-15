@@ -1,3 +1,4 @@
+import { ClientProblemCode, RefusalCode, type ProblemCode } from '../results';
 import type { Problem } from '../problem';
 import type { InputArgs, MachineSpec, TriggerOf, TypedMachine, TypedSnapshot } from '../typed';
 
@@ -28,10 +29,10 @@ export interface ServerSnapshot {
   dueAt?: string | null;
 }
 
-/** A refusal the server answers with. `code` is the contract (`guard-failed`, `client-divergence`, ...). */
+/** A refusal the server answers with. `code` is the contract (`GUARD_FAILED`, `CLIENT_DIVERGENCE`, ...). */
 export interface ServerProblem {
   kind: 'problem';
-  code: string;
+  code: ProblemCode;
   message: string;
 }
 
@@ -39,7 +40,7 @@ export interface ServerProblem {
 export type StartResponse = { kind: 'started'; id: string; snapshot: ServerSnapshot } | ServerProblem;
 /** The answer to one event: the snapshot the server stored, or a refusal. */
 export type EventResponse = { kind: 'ok'; snapshot: ServerSnapshot } | ServerProblem;
-/** The answer to `get`: the instance's current snapshot, or a refusal (`not-found` when there is none to read). */
+/** The answer to `get`: the instance's current snapshot, or a refusal (`NOT_FOUND` when there is none to read). */
 export type GetResponse = { kind: 'ok'; snapshot: ServerSnapshot } | ServerProblem;
 
 /** What the change stream of one instance delivers. */
@@ -74,13 +75,13 @@ export interface MachineServer {
 
 /** Why a controller stopped for good: the instance is gone, or this client is out of date and must reload. */
 export interface ServerMachineError {
-  code: 'gone' | 'client-outdated';
+  code: typeof ClientProblemCode.Gone | typeof RefusalCode.ClientOutdated;
   message: string;
 }
 
 /** What a controller holds, as one immutable value: a new object on every change, the same one otherwise. */
 export interface ServerMachineView<Spec extends MachineSpec> {
-  /** `loading` until the first server snapshot, `stopped` after `gone` or `client-outdated`. */
+  /** `loading` until the first server snapshot, `stopped` after `gone` or `CLIENT_OUTDATED`. */
   status: 'loading' | 'ready' | 'stopped';
   /** The instance id, once started or given. */
   id: string | null;
@@ -112,11 +113,11 @@ export interface ServerMachineOptions<Spec extends MachineSpec> {
   startRequestId?: string;
   /**
    * Mints a requestId; defaults to `crypto.randomUUID`. A custom one must mint 1 to 200 characters, not blank, with no
-   * control character and no unpaired surrogate: the server answers any other id `invalid-request-id`.
+   * control character and no unpaired surrogate: the server answers any other id `INVALID_REQUEST_ID`.
    */
   newRequestId?: () => string;
   /**
-   * Delays, in milliseconds, between retries of a `server-outdated` answer (another node of a rolling deploy answered)
+   * Delays, in milliseconds, between retries of a `SERVER_OUTDATED` answer (another node of a rolling deploy answered)
    * and of a read the transport failed. One retry per delay; after the last, the event fails and `retry` resends it.
    */
   retryDelays?: readonly number[];
@@ -130,15 +131,15 @@ export type SendOutcome =
   | { outcome: 'stopped'; error: ServerMachineError };
 
 /** The problem code of a send or read the transport could not deliver. */
-export const TRANSPORT_FAILED = 'transport-error';
+export const TRANSPORT_FAILED = ClientProblemCode.TransportError;
 
-/** The default delays between retries of a `server-outdated` answer or a failed read. */
+/** The default delays between retries of a `SERVER_OUTDATED` answer or a failed read. */
 export const DEFAULT_RETRY_DELAYS: readonly number[] = [250, 500, 1000, 2000, 4000];
 
-const CLIENT_OUTDATED = 'client-outdated';
-const SERVER_OUTDATED = 'server-outdated';
-const CLIENT_DIVERGENCE = 'client-divergence';
-const NOT_FOUND = 'not-found';
+const CLIENT_OUTDATED = RefusalCode.ClientOutdated;
+const SERVER_OUTDATED = RefusalCode.ServerOutdated;
+const CLIENT_DIVERGENCE = RefusalCode.ClientDivergence;
+const NOT_FOUND = RefusalCode.NotFound;
 
 type EventRequest = Parameters<MachineServer['event']>[0];
 
@@ -152,7 +153,7 @@ interface QueuedEvent {
 
 const defaultRequestId = (): string => globalThis.crypto.randomUUID();
 
-const refusal = (code: string, message: string): Problem => ({ kind: 'rejected', code, message });
+const refusal = (code: ProblemCode, message: string): Problem => ({ kind: 'rejected', code, message });
 
 const transportFailure = (error: unknown): Problem => ({
   kind: 'transport',
@@ -169,13 +170,13 @@ const transportFailure = (error: unknown): Problem => ({
  *   twin refuses is still sent, without a prediction: the server decides.
  * - **Ordering.** Every snapshot, pushed or answered, carries its revision. Anything at or below the revision held is
  *   dropped, so a skipped revision is harmless. The controller reads the instance again only after a reconnect, an
- *   incarnation change or a `client-divergence`, once each.
- * - **Retries.** `server-outdated` is retried under the same requestId after each of `retryDelays`, never reloaded:
+ *   incarnation change or a `CLIENT_DIVERGENCE`, once each.
+ * - **Retries.** `SERVER_OUTDATED` is retried under the same requestId after each of `retryDelays`, never reloaded:
  *   an event, a read and the `start` that creates the instance alike.
  *   A transport failure ends the event (or the start) as `failed`; `retry` resends it under the same requestId, so
  *   the server replays it rather than applying it twice. A later event the server confirms supersedes it, and
  *   `retry` then has nothing to resend.
- * - **Stopping.** `gone` and `client-outdated`, from the stream or an answer, stop the controller for good: the
+ * - **Stopping.** `gone` and `CLIENT_OUTDATED`, from the stream or an answer, stop the controller for good: the
  *   stream is closed and nothing more is sent.
  * - **Timers** are the server's: `dueAt` is shown, never fired. Null means no timer, or one the server cleared; an
  *   answer that cannot know it leaves it out.
@@ -205,7 +206,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
   private sending = false;
   private lastFailed: EventRequest | null = null;
   // Whether the `start` that creates the instance failed in a way `retry` resends (a transport failure, or
-  // `server-outdated` past every retry), and who waits for the start a retry resent.
+  // `SERVER_OUTDATED` past every retry), and who waits for the start a retry resent.
   private startFailed = false;
   private readonly startWaiters: ((outcome: SendOutcome) => void)[] = [];
 
@@ -252,7 +253,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
   }
 
   /**
-   * Resends what last failed (a transport failure, or `server-outdated` past every retry) under the same requestId,
+   * Resends what last failed (a transport failure, or `SERVER_OUTDATED` past every retry) under the same requestId,
    * so the server replays its recorded result if the first attempt did arrive: the `start` that creates the instance
    * while it has none, else the last event that failed, unless a later event has been confirmed since, which
    * supersedes it (resending it then would apply it out of order). A retried start settles `confirmed` with the
@@ -273,7 +274,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
     if (!request)
       return Promise.resolve({
         outcome: 'failed',
-        problem: refusal('nothing-to-retry', 'No event has failed since the last one was retried.'),
+        problem: refusal(ClientProblemCode.NothingToRetry, 'No event has failed since the last one was retried.'),
       });
     this.lastFailed = null;
     return this.enqueue({ trigger: request.trigger, input: request.input === undefined ? [] : [request.input], request });
@@ -354,7 +355,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
         return;
       }
       if (answer.code === CLIENT_OUTDATED) {
-        this.stop({ code: 'client-outdated', message: answer.message });
+        this.stop({ code: RefusalCode.ClientOutdated, message: answer.message });
         this.settleStart({ outcome: 'stopped', error: this.error! });
         return;
       }
@@ -405,10 +406,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
         this.pump();
         return;
       case 'gone':
-        this.stop({ code: 'gone', message: 'The instance was deleted or expired.' });
+        this.stop({ code: ClientProblemCode.Gone, message: 'The instance was deleted or expired.' });
         return;
       case 'client-outdated':
-        this.stop({ code: 'client-outdated', message: 'The server no longer serves this version of the machine. Reload.' });
+        this.stop({ code: RefusalCode.ClientOutdated, message: 'The server no longer serves this version of the machine. Reload.' });
         return;
       case 'reconnected':
         this.reload(null);
@@ -453,8 +454,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
         return;
       }
       this.endRead();
-      if (answer.code === CLIENT_OUTDATED) this.stop({ code: 'client-outdated', message: answer.message });
-      else if (answer.code === NOT_FOUND) this.stop({ code: 'gone', message: answer.message });
+      if (answer.code === CLIENT_OUTDATED) this.stop({ code: RefusalCode.ClientOutdated, message: answer.message });
+      else if (answer.code === NOT_FOUND) this.stop({ code: ClientProblemCode.Gone, message: answer.message });
       else {
         this.problem = refusal(answer.code, answer.message);
         this.emit();
@@ -526,7 +527,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
     if (parsed.result !== 'ok') {
       // The server serves a snapshot this twin cannot read: the page was built for another version of the machine.
       this.stop({
-        code: 'client-outdated',
+        code: RefusalCode.ClientOutdated,
         message: `The server's snapshot is not one this client's machine can read (${parsed.code}): ${parsed.message}`,
       });
       return false;
@@ -609,7 +610,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
 
     switch (answer.code) {
       case CLIENT_OUTDATED:
-        this.stop({ code: 'client-outdated', message: answer.message });
+        this.stop({ code: RefusalCode.ClientOutdated, message: answer.message });
         return;
       case SERVER_OUTDATED:
         if (attempt < this.retryDelays.length) {
@@ -671,7 +672,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
   }
 
   private disposedOutcome(): SendOutcome {
-    return { outcome: 'failed', problem: refusal('disposed', 'The controller was disposed before the server answered.') };
+    return { outcome: 'failed', problem: refusal(ClientProblemCode.Disposed, 'The controller was disposed before the server answered.') };
   }
 
   private emit(): void {

@@ -89,7 +89,7 @@ describe('ServerMachineController', () => {
 
     void controller.send('Coin', { coin: 'quarter' });
     await flushMicrotasks();
-    server.events[0].resolve({ kind: 'problem', code: 'client-divergence', message: 'diverged' });
+    server.events[0].resolve({ kind: 'problem', code: 'CLIENT_DIVERGENCE', message: 'diverged' });
     await flushMicrotasks();
 
     expect(server.gets).toHaveLength(2);
@@ -126,7 +126,7 @@ describe('ServerMachineController', () => {
     void controller.send('Coin', { coin: 'quarter' });
     void controller.send('Push'); // predicted from the Coin prediction: Unlocked, then Push to Locked
     await flushMicrotasks();
-    server.events[0].resolve({ kind: 'problem', code: 'guard-failed', message: 'no' });
+    server.events[0].resolve({ kind: 'problem', code: 'GUARD_FAILED', message: 'no' });
     await flushMicrotasks();
 
     // From the server's Locked, the twin cannot push, so the second event goes without a prediction.
@@ -134,7 +134,7 @@ describe('ServerMachineController', () => {
     expect(server.events[1].request.trigger).toBe('Push');
     expect(server.events[1].request.clientResult).toBeUndefined();
     expect(controller.get().snapshot).toEqual(controller.get().confirmed);
-    expect(controller.get().problem?.code).toBe('guard-failed');
+    expect(controller.get().problem?.code).toBe('GUARD_FAILED');
   });
 
   it('retries a failed request with the same requestId; a new send gets a new one', async () => {
@@ -175,7 +175,7 @@ describe('ServerMachineController', () => {
     const retried = controller.retry();
     await flushMicrotasks();
     expect(server.events).toHaveLength(2);
-    expect(await retried).toMatchObject({ outcome: 'failed', problem: { code: 'nothing-to-retry' } });
+    expect(await retried).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
     expect(controller.get().revision).toBe(2);
   });
 
@@ -190,7 +190,7 @@ describe('ServerMachineController', () => {
     // A refusal moves nothing on the server, so the failed event is still the one to resend.
     void controller.send('Push');
     await flushMicrotasks();
-    server.events[1].resolve({ kind: 'problem', code: 'guard-failed', message: 'no' });
+    server.events[1].resolve({ kind: 'problem', code: 'GUARD_FAILED', message: 'no' });
     await flushMicrotasks();
 
     void controller.retry();
@@ -212,7 +212,7 @@ describe('ServerMachineController', () => {
     await flushMicrotasks();
     server.starts[0].fail();
     await flushMicrotasks();
-    expect(controller.get().problem?.code).toBe('transport-error');
+    expect(controller.get().problem?.code).toBe('TRANSPORT_ERROR');
     expect(controller.get().status).toBe('loading');
 
     const retried = controller.retry();
@@ -229,7 +229,7 @@ describe('ServerMachineController', () => {
     expect(server.openSubscriptions('i-1')).toHaveLength(1);
 
     // The start is spent: a retry now has nothing to resend, and nothing is started again.
-    expect(await controller.retry()).toMatchObject({ outcome: 'failed', problem: { code: 'nothing-to-retry' } });
+    expect(await controller.retry()).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
     expect(server.starts).toHaveLength(2);
   });
 
@@ -239,10 +239,10 @@ describe('ServerMachineController', () => {
 
     void controller.start();
     await flushMicrotasks();
-    server.starts[0].resolve({ kind: 'problem', code: 'too-many-drafts', message: 'cap' });
+    server.starts[0].resolve({ kind: 'problem', code: 'TOO_MANY_DRAFTS', message: 'cap' });
     await flushMicrotasks();
 
-    expect(await controller.retry()).toMatchObject({ outcome: 'failed', problem: { code: 'nothing-to-retry' } });
+    expect(await controller.retry()).toMatchObject({ outcome: 'failed', problem: { code: 'NOTHING_TO_RETRY' } });
     expect(server.starts).toHaveLength(1);
   });
 
@@ -252,14 +252,14 @@ describe('ServerMachineController', () => {
 
     const sent = controller.send('Coin', { coin: 'quarter' });
     await flushMicrotasks();
-    server.events[0].resolve({ kind: 'problem', code: 'server-outdated', message: 'newer node' });
+    server.events[0].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
     await flushMicrotasks();
     expect(server.events).toHaveLength(1);
 
     vi.advanceTimersByTime(100);
     await flushMicrotasks();
     expect(server.events).toHaveLength(2);
-    server.events[1].resolve({ kind: 'problem', code: 'server-outdated', message: 'newer node' });
+    server.events[1].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
     await flushMicrotasks();
 
     vi.advanceTimersByTime(199);
@@ -290,7 +290,7 @@ describe('ServerMachineController', () => {
     void controller.start();
     await flushMicrotasks();
     expect(server.starts).toHaveLength(1);
-    server.starts[0].resolve({ kind: 'problem', code: 'server-outdated', message: 'newer node' });
+    server.starts[0].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
     await flushMicrotasks();
     expect(controller.get().status).not.toBe('stopped');
 
@@ -300,7 +300,7 @@ describe('ServerMachineController', () => {
     vi.advanceTimersByTime(1);
     await flushMicrotasks();
     expect(server.starts).toHaveLength(2);
-    server.starts[1].resolve({ kind: 'problem', code: 'server-outdated', message: 'newer node' });
+    server.starts[1].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
     await flushMicrotasks();
 
     vi.advanceTimersByTime(200);
@@ -326,15 +326,15 @@ describe('ServerMachineController', () => {
 
     void controller.start();
     await flushMicrotasks();
-    server.starts[0].resolve({ kind: 'problem', code: 'server-outdated', message: 'newer node' });
+    server.starts[0].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
     await flushMicrotasks();
     vi.advanceTimersByTime(100);
     await flushMicrotasks();
-    server.starts[1].resolve({ kind: 'problem', code: 'server-outdated', message: 'newer node' });
+    server.starts[1].resolve({ kind: 'problem', code: 'SERVER_OUTDATED', message: 'newer node' });
     await flushMicrotasks();
 
     expect(server.starts).toHaveLength(2);
-    expect(controller.get().problem?.code).toBe('server-outdated');
+    expect(controller.get().problem?.code).toBe('SERVER_OUTDATED');
     expect(controller.get().status).not.toBe('stopped');
   });
 
@@ -451,12 +451,12 @@ describe('ServerMachineController', () => {
     // The server moved the instance itself (a timer, say), then refused the client's event.
     server.stream('i-1').push({ type: 'snapshot', snapshot: serverSnapshot({ revision: 2, ...unlocked('dollar') }) });
     await flushMicrotasks();
-    server.events[0].resolve({ kind: 'problem', code: 'no-transition', message: 'already unlocked' });
+    server.events[0].resolve({ kind: 'problem', code: 'NO_TRANSITION', message: 'already unlocked' });
     await flushMicrotasks();
 
     expect(controller.get().snapshot).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'dollar' }));
     expect(controller.get().revision).toBe(2);
-    expect(controller.get().problem?.code).toBe('no-transition');
+    expect(controller.get().problem?.code).toBe('NO_TRANSITION');
   });
 
   describe('dueAt', () => {
