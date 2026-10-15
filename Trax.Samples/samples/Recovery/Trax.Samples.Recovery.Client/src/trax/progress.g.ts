@@ -116,6 +116,18 @@ export function useRunProgress(runId: string | null | undefined): RunProgressVie
         () => undefined,
       );
     };
+    // The host pushes a step as the run takes it and writes it for a read a little later, so a hook mounted
+    // mid-run can miss a step in both: its read was answered before the step was written, its stream began
+    // after the step was pushed. The run is read again once the stream is open and once more after it ends,
+    // and the steps it holds that the stream did not report are added, in order of position.
+    const fill = () =>
+      readRunProgress(following).then(
+        (run) => {
+          if (live && !run.retriedAs)
+            setView((v) => ({ ...v, steps: v.steps.reduce(withStep, run.steps).sort((a, b) => a.position - b.position) }));
+        },
+        () => undefined,
+      );
     void read(false);
     const stop = followRunProgress(
       following,
@@ -123,6 +135,7 @@ export function useRunProgress(runId: string | null | undefined): RunProgressVie
         events += 1;
         if (event.retriedAs) return retry(event.retriedAs);
         if (last !== 0 && event.sequence !== last + 1) void read(true);
+        else if (events === 1) void fill();
         last = event.sequence;
         setView((v) => ({
           ...v,
@@ -132,9 +145,11 @@ export function useRunProgress(runId: string | null | undefined): RunProgressVie
           problem: event.problem ?? v.problem,
         }));
       },
-      () => {
+      (error) => {
         // The stream of an earlier connection ends when configureTrax closes its socket, not when the run does.
-        if (live && generation === traxGeneration()) setView((v) => ({ ...v, ended: true }));
+        if (!live || generation !== traxGeneration()) return;
+        setView((v) => ({ ...v, ended: true }));
+        if (error === undefined) void fill();
       },
     );
     return () => {

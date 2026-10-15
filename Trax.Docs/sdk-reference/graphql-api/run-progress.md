@@ -114,6 +114,12 @@ The first event is the state the run was in when the subscription started, so a 
 ended still learns how it ended. After that each event is either a step or a change of state. The stream completes
 after the run's last state, with the run's last steps sent before it.
 
+A step is sent when the run takes it, and written for the query on a queue that can run behind, so the stream can send
+a step before the query returns it. A client that subscribes while a run is going can therefore miss a step in both:
+its read was answered before the step was written, and its stream started after the step was sent. Read the run
+again once the first event arrives and again after the stream completes, and keep each step the stream sent over the
+read's copy of it. `useRunProgress` does both.
+
 A run followed while still queued is read again every few seconds until it is dispatched. One cancelled before
 dispatch publishes no state of its own, so the stream sends `CANCELLED` and completes; one whose entry is gone with no
 run recorded answers `NOT_FOUND` and completes.

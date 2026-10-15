@@ -620,6 +620,37 @@ public class MachineGenerateFromPackedToolTests
           expect(result.current.runId).toBe("r1");
         });
 
+        it("A_hook_mounted_mid_run_shows_a_step_its_read_and_its_stream_both_missed", async () => {
+          signIn("Q");
+          const { result } = renderHook(() => useRunProgress("r1"));
+          await settle();
+          const stream = open(sockets.at(-1)).find((s) => s.payload.variables.runId === "r1")!;
+          const step = (position: number, name: string, state = "COMPLETED") => ({ position, kind: "junction", name, state });
+
+          // Step 2 was pushed before the stream opened and written after both reads were answered.
+          await act(async () => stream.sink.next(event("r1", 1, { state: "IN_PROGRESS" })));
+          expect(requests).toHaveLength(2);
+          await act(async () => requests[0].answer({ runProgress: run("r1", { state: "IN_PROGRESS", steps: [step(0, "Load"), step(1, "Check")] }) }));
+          await act(async () => requests[1].answer({ runProgress: run("r1", { state: "IN_PROGRESS", steps: [step(0, "Load"), step(1, "Check")] }) }));
+          await act(async () => {
+            stream.sink.next(event("r1", 2, { step: step(3, "Pay", "IN_PROGRESS") }));
+            stream.sink.next(event("r1", 3, { step: step(3, "Pay") }));
+            stream.sink.next(event("r1", 4, { state: "COMPLETED" }));
+            stream.sink.complete();
+          });
+          expect(result.current.steps.map((s) => s.name)).toEqual(["Load", "Check", "Pay"]);
+
+          expect(requests).toHaveLength(3);
+          await act(async () =>
+            requests[2].answer({ runProgress: run("r1", { state: "COMPLETED", steps: [step(0, "Load"), step(1, "Check"), step(2, "Route"), step(3, "Pay", "IN_PROGRESS")] }) }),
+          );
+          await settle();
+
+          expect(result.current.steps.map((s) => `${s.name}:${s.state}`)).toEqual(["Load:COMPLETED", "Check:COMPLETED", "Route:COMPLETED", "Pay:COMPLETED"]);
+          expect(result.current.state).toBe("COMPLETED");
+          expect(result.current.ended).toBe(true);
+        });
+
         it("A_retry_reported_twice_is_followed_once", async () => {
           signIn("F");
           const { result } = renderHook(() => useRunProgress("r1"));
@@ -650,11 +681,12 @@ public class MachineGenerateFromPackedToolTests
             stream.sink.next(event("r1", 3, { state: "IN_PROGRESS" }));
           });
           await act(async () => stream.sink.next(event("r1", 4, { state: "IN_PROGRESS" })));
-          await act(async () => requests[1].answer({ runProgress: run("r1", { state: "PENDING" }) }));
+          // requests[1] is the read sent once the stream opened; requests[2] the one sent for the lost event.
+          await act(async () => requests[2].answer({ runProgress: run("r1", { state: "PENDING" }) }));
           await settle();
 
-          expect(requests).toHaveLength(3);
-          await act(async () => requests[2].answer({ runProgress: run("r1", { state: "IN_PROGRESS", steps: [{ position: 0, kind: "junction", name: "Lost", state: "COMPLETED" }] }) }));
+          expect(requests).toHaveLength(4);
+          await act(async () => requests[3].answer({ runProgress: run("r1", { state: "IN_PROGRESS", steps: [{ position: 0, kind: "junction", name: "Lost", state: "COMPLETED" }] }) }));
           await settle();
           expect(result.current.steps.map((s) => s.name)).toEqual(["Lost"]);
         });
