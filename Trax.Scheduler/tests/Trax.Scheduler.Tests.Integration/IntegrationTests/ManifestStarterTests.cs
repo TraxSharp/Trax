@@ -29,17 +29,21 @@ public class ManifestStarterTests : TestSetup
     public async Task A_one_off_manifest_started_by_a_caller_queues_its_run_for_them()
     {
         var scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
-        var started = await scheduler.ScheduleOnceAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+        var started = await scheduler.ScheduleOnceAsync<
+            ISchedulerTestTrain,
+            SchedulerTestInput,
+            Unit
+        >(
             "starter-once",
             new SchedulerTestInput { Value = "mine" },
             TimeSpan.Zero,
             o => o.StartedBy("apikey:alice")
         );
-        var nobody = await scheduler.ScheduleOnceAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
-            "starter-nobody",
-            new SchedulerTestInput { Value = "theirs" },
-            TimeSpan.Zero
-        );
+        var nobody = await scheduler.ScheduleOnceAsync<
+            ISchedulerTestTrain,
+            SchedulerTestInput,
+            Unit
+        >("starter-nobody", new SchedulerTestInput { Value = "theirs" }, TimeSpan.Zero);
 
         await Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>().Run(Unit.Default);
 
@@ -53,7 +57,11 @@ public class ManifestStarterTests : TestSetup
     public async Task A_trigger_of_the_manifest_is_queued_for_its_starter_too()
     {
         var scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
-        var manifest = await scheduler.ScheduleOnceAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+        var manifest = await scheduler.ScheduleOnceAsync<
+            ISchedulerTestTrain,
+            SchedulerTestInput,
+            Unit
+        >(
             "starter-trigger",
             new SchedulerTestInput { Value = "again" },
             TimeSpan.FromDays(1),
