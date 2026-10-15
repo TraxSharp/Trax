@@ -158,6 +158,12 @@ public class GraphQLConfiguration
     internal IReadOnlyList<string>? SocketAllowedOrigins { get; init; }
 
     /// <summary>
+    /// The enums <c>ShareEnumWithMachines</c> named: a train or query model may reach them although a served machine
+    /// spells them as the server stores them.
+    /// </summary>
+    internal IReadOnlySet<Type> MachineSpelledEnums { get; init; } = new HashSet<Type>();
+
+    /// <summary>
     /// Creates the configuration. <see cref="Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder"/>
     /// builds it from the builder calls; hosts receive it from DI rather than constructing it.
     /// </summary>

@@ -80,8 +80,12 @@ duration a timer reads (`"PT5M"`), both in an input and in the context, so a tim
 armed from a typed event. An enum a machine's context, start input or event inputs hold is spelled as the server
 stores it, the C# member name (`HighPriority`), not HotChocolate's `HIGH_PRIORITY`: the twin applies an input as the
 client sends it, so it predicts what the server stores only when the two spellings are one. HotChocolate gives a CLR
-enum one GraphQL type, so a train that takes the same enum sees the same values. A member name that is not a GraphQL
-name refuses the host's start. The types the root generates carry the
+enum one GraphQL type, so a train or query model that reaches the same enum would see the same values: the host
+refuses to start, naming the enum, the machine and the train, unless it accepts the new spelling with
+[`ShareEnumWithMachines<TEnum>()`](/docs/sdk-reference/graphql-api/add-trax-graphql). A GraphQL enum type the host binds
+to such an enum itself refuses the start too. So does a member whose stored name is not a GraphQL name, is `true`,
+`false` or `null`, or starts with `__`. Only `System` and the namespaces under it are treated as the framework's; a
+record in `Systematic.Orders` is walked like any other. The types the root generates carry the
 machine's name and the word `Machine` (`TopicMapMachineState`, `TopicMapMachineContext`, `TopicMapMachineResult`,
 `TopicMapMachineChange`, `TopicMapMachineMutations`, `TopicMapMachineQueries`), so a CLR type the schema already holds, such as a machine's
 own state enum a train returns, keeps its name.
@@ -89,7 +93,9 @@ own state enum a train returns, keeps its name.
 The host refuses to build the schema, naming both, when two exposed machines' ids give one field (`map-2d` and
 `map2d`), when two events of a machine give one field, and when an event is named `start`, `discard`, `get` or
 `changed`. A
-host's own field named `machines` on either root is refused at startup. Two registered machine types with one id,
+host's own field named `machines` on either root is refused at startup, and so is a machine whose push field lands on a
+subscription field already there (a machine `on-train-state` on Trax's `onTrainStateChanged`, or `order` on a host's
+own `orderChanged`). Two registered machine types with one id,
 served or not, refuse the host's start too, naming both: a subclass has its base's id, so a host serving a machine
 through a marked subclass registers only the subclass
 ([AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines#serving-a-machine)).

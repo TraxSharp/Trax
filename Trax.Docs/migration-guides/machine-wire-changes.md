@@ -42,12 +42,18 @@ context as its context type, `dueAtKnown` beside `dueAt`. See [The push](/docs/s
   manifest (`createMachineServer`) needs only the new documents; a hand-written subscription document changes its
   field and its selection.
 - **An event named `changed`** is refused at startup, as `start`, `discard` and `get` are.
+- **A push field already taken** is refused at startup, naming the machine: a machine `on-train-state` would be
+  `onTrainStateChanged`, Trax's own, and a machine `order` collides with a host's `orderChanged`. Rename one.
 
 ## Machine enums are spelled as stored
 
 An enum a machine's context, start input or event inputs hold is spelled in GraphQL by its C# member name
-(`HighPriority`), not HotChocolate's `HIGH_PRIORITY`, in inputs and answers alike. A train that takes the same enum
-sees the same spelling. Before, a client that sent `HIGH_PRIORITY` with a `clientResult` was refused as client
+(`HighPriority`), not HotChocolate's `HIGH_PRIORITY`, in inputs and answers alike. GraphQL has one type per enum, so
+a train or query model that reaches the same enum would change its spelling with it: the host refuses to start, naming
+the enum, the machine and the train. Give the train its own enum, or call `ShareEnumWithMachines<TEnum>()` on
+`AddTraxGraphQL` and update that train's clients to the new spelling. A member whose stored name is `true`, `false`,
+`null` or starts with `__`, and a GraphQL enum type the host binds to such an enum itself, are refused at startup too.
+Before, a client that sent `HIGH_PRIORITY` with a `clientResult` was refused as client
 divergence, since the server stored `HighPriority`.
 
 ## The IR no longer names the effect type

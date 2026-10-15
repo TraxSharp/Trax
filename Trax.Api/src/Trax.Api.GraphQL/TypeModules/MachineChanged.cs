@@ -96,21 +96,24 @@ internal static class MachineChangedSubscription
             var pascal = MachineSurface.PascalName(machine.Name);
             var hasContext = MachineContextFields.Of(machine, machine.States).Count > 0;
             yield return EventType(machine, pascal, hasContext);
-            yield return new ObjectTypeExtension(d =>
-            {
-                d.Name(SubscriptionType);
-                d.Field(FieldOf(machine.Name))
-                    .Description(
-                        $"The caller's instance of '{machine.Name}', pushed whenever it is written: first as it is "
-                            + "now, then each newer revision, whole. The stream ends with gone when the instance is "
-                            + "deleted or expires, and with a problem when it cannot go on (CLIENT_OUTDATED after a "
-                            + "newer version of the machine wrote it)."
-                    )
-                    .Argument("id", a => a.Type<NonNullType<UuidType>>())
-                    .Type(new NonNullTypeNode(new NamedTypeNode(TypeNameOf(pascal))))
-                    .Resolve(ctx => ctx.GetEventMessage<MachineChange>())
-                    .Subscribe(ctx => SubscribeAsync(ctx, machine));
-            });
+            yield return new MachinePushExtension(
+                machine.Name,
+                d =>
+                {
+                    d.Name(SubscriptionType);
+                    d.Field(FieldOf(machine.Name))
+                        .Description(
+                            $"The caller's instance of '{machine.Name}', pushed whenever it is written: first as it is "
+                                + "now, then each newer revision, whole. The stream ends with gone when the instance is "
+                                + "deleted or expires, and with a problem when it cannot go on (CLIENT_OUTDATED after a "
+                                + "newer version of the machine wrote it)."
+                        )
+                        .Argument("id", a => a.Type<NonNullType<UuidType>>())
+                        .Type(new NonNullTypeNode(new NamedTypeNode(TypeNameOf(pascal))))
+                        .Resolve(ctx => ctx.GetEventMessage<MachineChange>())
+                        .Subscribe(ctx => SubscribeAsync(ctx, machine));
+                }
+            );
         }
     }
 
@@ -497,4 +500,17 @@ internal sealed class MachineChangedStream(
             Release();
         }
     }
+}
+
+/// <summary>
+/// The extension that puts one machine's push field on the subscription root, carrying the machine's id so
+/// <see cref="MachinePushFieldCollisionInterceptor"/> can name it.
+/// </summary>
+internal sealed class MachinePushExtension(
+    string machineId,
+    Action<IObjectTypeDescriptor> configure
+) : ObjectTypeExtension(configure)
+{
+    /// <summary>The id of the machine whose push this is.</summary>
+    public string MachineId { get; } = machineId;
 }

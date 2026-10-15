@@ -295,6 +295,24 @@ public static class GraphQLServiceExtensions
         if (machinesExposed)
         {
             services.AddSingleton<MachineTypeModule>();
+            // The other surfaces an enum a machine respells could reach: a train's input or output, a query model.
+            services.AddSingleton(
+                new MachineEnumNeighbours(
+                    [
+                        .. trainRegistrations
+                            .Where(t => t.IsQuery || t.IsMutation)
+                            .SelectMany(t =>
+                                new[] { t.InputType, t.OutputType }.Select(root =>
+                                    ($"the train '{t.ServiceType.FullName}'", root)
+                                )
+                            ),
+                        .. config.ModelRegistrations.Select(r =>
+                            ($"the query model '{r.EntityType.FullName}'", r.EntityType)
+                        ),
+                    ],
+                    config.MachineSpelledEnums
+                )
+            );
             services.AddHostedService(sp => new MachineSurfacePersistedOperationsValidator(
                 sp.GetRequiredService<IServiceProviderIsService>(),
                 MachineSurface
@@ -309,6 +327,8 @@ public static class GraphQLServiceExtensions
                 (sp, schema) =>
                 {
                     var root = sp.GetRootServiceProvider();
+                    schema.TryAddTypeInterceptor(new MachineEnumBindingInterceptor());
+                    schema.TryAddTypeInterceptor(new MachinePushFieldCollisionInterceptor());
                     schema.TryAddTypeInterceptor(
                         new MachineJsonNamingInterceptor(
                             root.GetServices<IMachine>(),

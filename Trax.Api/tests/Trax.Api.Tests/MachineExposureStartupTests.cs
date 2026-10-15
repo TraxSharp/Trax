@@ -1,5 +1,9 @@
 using AwesomeAssertions;
+using HotChocolate;
+using HotChocolate.Types;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Tests.Fakes.Machines;
+using Trax.Effect.Attributes;
 using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.Tests;
@@ -131,5 +135,54 @@ public class MachineExposureStartupTests
         var refusal = await MachineSchemaHost.RefusalAsync([typeof(PartsMachine)]);
 
         refusal.Should().BeNull(refusal?.ToString());
+    }
+
+    [Test]
+    public async Task A_machine_whose_push_field_collides_with_a_subscription_is_refused()
+    {
+        var refusal = await MachineSchemaHost.RefusalAsync([typeof(OnTrainStateMachine)]);
+
+        refusal
+            .Should()
+            .NotBeNull(
+                "the push of a machine 'on-train-state' is onTrainStateChanged, Trax's own subscription, per "
+                    + Adr
+            );
+        refusal!
+            .ToString()
+            .Should()
+            .Contain($"The machine '{OnTrainStateMachine.MachineId}'")
+            .And.Contain("'onTrainStateChanged'")
+            .And.Contain("Give the machine another id");
+    }
+
+    [Test]
+    public async Task A_machine_whose_push_field_collides_with_a_host_subscription_is_refused()
+    {
+        var refusal = await MachineSchemaHost.RefusalAsync(
+            [typeof(OrderStepMachine)],
+            graphql => graphql.ConfigureSchema(s => s.AddTypeExtension<HostOrderChanged>())
+        );
+
+        refusal
+            .Should()
+            .NotBeNull(
+                "the push of a machine 'order' is orderChanged, which the host has, per " + Adr
+            );
+        refusal!
+            .ToString()
+            .Should()
+            .Contain($"The machine '{OrderStepMachine.MachineId}'")
+            .And.Contain("'orderChanged'")
+            .And.Contain(typeof(HostOrderChanged).FullName!);
+    }
+
+    /// <summary>A host subscription named like the push of a machine <c>order</c>.</summary>
+    [ExtendObjectType("LifecycleSubscriptions")]
+    public sealed class HostOrderChanged
+    {
+        [TraxAuthorize]
+        [Subscribe]
+        public string OrderChanged([EventMessage] string message) => message;
     }
 }

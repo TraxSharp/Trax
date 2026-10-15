@@ -72,14 +72,14 @@ internal sealed class MachineJsonNamingInterceptor(
         {
             foreach (var argument in type.GetGenericArguments())
                 Add(records, argument);
-            if (type.Namespace?.StartsWith("System", StringComparison.Ordinal) == true)
+            if (MachineEnums.IsFramework(type))
                 return;
         }
         if (
             type.IsPrimitive
             || type.IsEnum
             || type == typeof(string)
-            || type.Namespace?.StartsWith("System", StringComparison.Ordinal) == true
+            || MachineEnums.IsFramework(type)
             || !records.Add(type)
         )
             return;

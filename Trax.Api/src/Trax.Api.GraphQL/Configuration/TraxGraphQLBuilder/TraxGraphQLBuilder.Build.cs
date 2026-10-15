@@ -90,6 +90,7 @@ public partial class TraxGraphQLBuilder
             GetRequestsAllowed = GetRequestsAllowed,
             JunctionAnswersForBroadcastAllowed = JunctionAnswersForBroadcastAllowed,
             SocketAllowedOrigins = SocketAllowedOrigins,
+            MachineSpelledEnums = MachineSpelledEnums,
             MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
             MaxConnectionLifetime = MaxConnectionLifetimeValue,
             ConnectionCredentialRecheckInterval = ConnectionCredentialRecheckIntervalValue,
