@@ -951,7 +951,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     /// <summary>Compile the configuration into an engine-ready definition + host metadata.</summary>
     /// <exception cref="InvalidOperationException">
     /// The machine has no id or no start state, names a custom rule or reduction with no handler bound, binds
-    /// more than one effect with <c>RunsOnce</c>, enters an effect's target state by any other transition, or binds an
+    /// more than one effect with <c>RunsOnce</c>, sends an effect's trigger on any other transition, enters an effect's
+    /// target state by any other transition, or binds an
     /// effect that runs from or lands in a state that invokes a train. Or
     /// a state invokes more than one train, invokes one by a class rather than its interface, or lacks
     /// <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c> (or declares either of the last two twice); an
@@ -980,6 +981,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     + "irreversible effect. Keep RunsOnce on the one transition that performs it."
             );
 
+        RefuseOtherEdgesOnEffectTriggers();
         RefuseOtherEdgesIntoEffectTargets();
         RefuseEffectsOnInvokingStates();
 
@@ -1326,6 +1328,30 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 $"The machine '{_id}' enters {effect.To} from {t.From} on {t.Trigger}, but {effect.To} is the target "
                     + $"of the effect bound with RunsOnce on {effect.From} -> {effect.Trigger}. Only the effect's own "
                     + "transition may enter the state that records its receipt; route the other edge to another state."
+            );
+        }
+    }
+
+    // The server supplies an effect-bound trigger's input and refuses an advance of it, and the twin and the generated
+    // client treat the trigger as effect-bound wherever it is sent. A plain edge on the same trigger would take an
+    // input the client cannot send and a prediction the twin does not make, so the trigger is sent on the effect's
+    // edge only.
+    private void RefuseOtherEdgesOnEffectTriggers()
+    {
+        foreach (var effect in _effects)
+        foreach (var t in _transitions)
+        {
+            if (!EqualityComparer<TTrigger>.Default.Equals(t.Trigger, effect.Trigger))
+                continue;
+            if (
+                EqualityComparer<TState>.Default.Equals(t.From, effect.From)
+                && EqualityComparer<TState>.Default.Equals(t.To, effect.To)
+            )
+                continue;
+            throw new InvalidOperationException(
+                $"The machine '{_id}' sends {t.Trigger} on {t.From} -> {t.To}, but {t.Trigger} runs the effect bound "
+                    + $"with RunsOnce on {effect.From} -> {effect.To}. The trigger an effect is bound to is sent on "
+                    + "that edge only; give the other edge a trigger of its own."
             );
         }
     }

@@ -81,7 +81,9 @@ machine that binds more than one effect with `RunsOnce`: a machine runs exactly 
 second binding would otherwise be declared and never run. And it throws for a machine that enters its effect's
 target state by any transition other than the effect's own: that state means the effect ran, and a plain advance
 of the other edge would put a draft there without it. A self-loop on the target does not enter it and is
-allowed. Handlers may be
+allowed. It throws, too, for a machine that sends the effect's trigger on any other transition: the server
+supplies that trigger's input and the twin and generated clients treat it as effect-bound wherever it is sent, so
+it is sent on the effect's edge only. Handlers may be
 bound before or after the rules that name them. `CustomGuard` and `CustomReducer` are default interface
 methods that throw `NotSupportedException` on a custom `IMachineBuilder` implementation that does not
 override them.

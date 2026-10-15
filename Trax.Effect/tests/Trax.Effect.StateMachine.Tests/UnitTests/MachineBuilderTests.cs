@@ -14,6 +14,7 @@ public class MachineBuilderTests
     {
         A,
         B,
+        C,
     }
 
     private enum T
@@ -183,6 +184,23 @@ public class MachineBuilderTests
         var act = () => b.Build();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*B*effect*");
+    }
+
+    [Test]
+    public void A_trigger_bound_with_RunsOnce_on_one_edge_and_plain_on_another_is_refused()
+    {
+        var b = new MachineBuilder<S, T>();
+        b.Id("m").StartsAt(S.A, () => new JsonObject());
+        b.In(S.A).On(T.Go).RunsOnce<IFakeEffect>().To(S.B);
+        b.In(S.B).On(T.Go).To(S.C);
+
+        var act = () => b.Build();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                "*sends Go on B -> C*effect*A -> B*The trigger an effect is bound to is sent on that edge only*"
+            );
     }
 
     [Test]
