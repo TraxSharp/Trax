@@ -64,3 +64,24 @@ describe("canonical wire conformance (RFC 8785 / ECMAScript)", () => {
     expect(wire(context)).toBe(envelope('{"__proto__":{"x":1},"a":2}'));
   });
 });
+
+// A twin reducer can build a value JSON.stringify would write differently from a member-by-member walk; the wire is
+// what JSON.stringify writes, in canonical order.
+describe("canonical wire of values JSON.stringify treats specially", () => {
+  it("writes a hole as null", () => {
+    expect(wire({ a: [, 1] })).toBe(envelope('{"a":[null,1]}'));
+    expect(wire({ a: new Array(2) })).toBe(envelope('{"a":[null,null]}'));
+  });
+
+  it("skips a function member", () => {
+    expect(wire({ a: 1, f: () => 1, s: Symbol("s") })).toBe(envelope('{"a":1}'));
+    expect(wire({ a: [() => 1] })).toBe(envelope('{"a":[null]}'));
+  });
+
+  it("honours toJSON", () => {
+    const at = new Date(Date.UTC(2026, 9, 15));
+    expect(wire({ at, o: { toJSON: (key: string) => ({ key, z: 1, b: 2 }) } })).toBe(
+      envelope('{"at":"2026-10-15T00:00:00.000Z","o":{"b":2,"key":"o","z":1}}'),
+    );
+  });
+});

@@ -494,19 +494,40 @@ function clone<T>(value: T): T {
  * and would turn a "__proto__" key into its prototype.
  */
 function canonicalJson(node: unknown): string {
-  if (Array.isArray(node))
-    return `[${node.map((item) => (item === undefined ? "null" : canonicalJson(item))).join(",")}]`;
-  if (node !== null && typeof node === "object") {
+  return canonicalValue(node, "") ?? "null";
+}
+
+// A value as JSON.stringify writes it, its members in canonical order: `toJSON` is called first, a hole or a function in
+// an array is null, and a function, symbol or undefined member is left out. Undefined when the value is not written.
+function canonicalValue(node: unknown, key: string): string | undefined {
+  if (
+    node !== null &&
+    (typeof node === "object" || typeof node === "bigint") &&
+    typeof (node as { toJSON?: unknown }).toJSON === "function"
+  )
+    node = (node as { toJSON(key: string): unknown }).toJSON(key);
+  if (node === undefined || typeof node === "function" || typeof node === "symbol")
+    return undefined;
+  if (Array.isArray(node)) {
+    const items: string[] = [];
+    for (let i = 0; i < node.length; i++)
+      items.push(canonicalValue(node[i], String(i)) ?? "null");
+    return `[${items.join(",")}]`;
+  }
+  if (
+    node !== null &&
+    typeof node === "object" &&
+    !(node instanceof Number || node instanceof String || node instanceof Boolean)
+  ) {
     const record = node as Record<string, unknown>;
     const members: string[] = [];
-    for (const key of Object.keys(record).sort(ordinal)) {
-      const value = record[key];
-      if (value === undefined) continue;
-      members.push(`${JSON.stringify(key)}:${canonicalJson(value)}`);
+    for (const member of Object.keys(record).sort(ordinal)) {
+      const value = canonicalValue(record[member], member);
+      if (value !== undefined) members.push(`${JSON.stringify(member)}:${value}`);
     }
     return `{${members.join(",")}}`;
   }
-  return JSON.stringify(node) ?? "null";
+  return JSON.stringify(node);
 }
 
 /** UTF-16 code-unit comparison — the JS default, equal to C# StringComparer.Ordinal. */
