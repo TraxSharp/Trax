@@ -95,6 +95,19 @@ public class OperationsIsAdminOnlyTests
             );
     }
 
+    [Test]
+    public async Task Every_dashboard_operations_selection_exists_in_the_schema()
+    {
+        var (_, missing) = ReadDashboard(await FullSchemaAsync());
+
+        string.Join(", ", missing)
+            .Should()
+            .BeEmpty(
+                "a dashboard document that selects an operations field the schema does not have calls a removed "
+                    + "read or action, and the guard above would skip it rather than see it"
+            );
+    }
+
     // Every field reachable under operations, query and mutation, as Type.field; a nested namespace counts as its
     // fields, not as itself.
     internal static HashSet<string> OperationsFields(ISchemaDefinition schema)
@@ -129,9 +142,17 @@ public class OperationsIsAdminOnlyTests
     }
 
     // Every operations field the dashboard's documents select, resolved against the schema.
-    internal static HashSet<string> DashboardSelections(ISchemaDefinition schema)
+    internal static HashSet<string> DashboardSelections(ISchemaDefinition schema) =>
+        ReadDashboard(schema).Used;
+
+    // What the dashboard's documents select under operations: the fields the schema has, as Type.field, and the
+    // selections it does not, each naming its document and path.
+    private static (HashSet<string> Used, List<string> Missing) ReadDashboard(
+        ISchemaDefinition schema
+    )
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
+        var missing = new List<string>();
         foreach (var text in DashboardDocuments())
         {
             var document = Utf8GraphQLParser.Parse(text);
@@ -143,36 +164,51 @@ public class OperationsIsAdminOnlyTests
                     OperationType.Mutation => schema.MutationType,
                     _ => null,
                 };
-                if (root is null)
-                    continue;
+                var name = operation.Name?.Value ?? "(anonymous)";
                 foreach (var selection in Fields(operation.SelectionSet))
-                    if (
-                        selection.Name.Value == "operations"
-                        && root.Fields.TryGetField("operations", out var operations)
-                        && selection.SelectionSet is { } under
-                    )
-                        Walk((IObjectTypeDefinition)operations.Type.NamedType(), under, used);
+                {
+                    if (selection.Name.Value != "operations")
+                        continue;
+                    if (root is null || !root.Fields.TryGetField("operations", out var operations))
+                    {
+                        missing.Add($"{name}: operations");
+                        continue;
+                    }
+                    if (selection.SelectionSet is { } under)
+                        Walk(
+                            (IObjectTypeDefinition)operations.Type.NamedType(),
+                            under,
+                            used,
+                            missing,
+                            $"{name}: operations"
+                        );
+                }
             }
         }
-        return used;
+        return (used, missing);
     }
 
     private static void Walk(
         IObjectTypeDefinition type,
         SelectionSetNode selections,
-        HashSet<string> used
+        HashSet<string> used,
+        List<string> missing,
+        string path
     )
     {
         foreach (var selection in Fields(selections))
         {
             if (!type.Fields.TryGetField(selection.Name.Value, out var field))
+            {
+                missing.Add($"{path}.{selection.Name.Value}");
                 continue;
+            }
             if (
                 NamespaceField.IsNamespace(field)
                 && field.Type.NamedType() is IObjectTypeDefinition inner
                 && selection.SelectionSet is { } under
             )
-                Walk(inner, under, used);
+                Walk(inner, under, used, missing, $"{path}.{field.Name}");
             else
                 used.Add($"{type.Name}.{field.Name}");
         }
