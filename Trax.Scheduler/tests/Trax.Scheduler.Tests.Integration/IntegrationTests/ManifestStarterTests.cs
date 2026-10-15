@@ -4,6 +4,9 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Models.Manifest;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -71,6 +74,43 @@ public class ManifestStarterTests : TestSetup
         await scheduler.TriggerAsync("starter-trigger");
 
         (await StarterOfEntryFor(manifest.Id)).Should().Be(HashOf("apikey:alice"));
+    }
+
+    [Test]
+    public async Task Reseeding_with_StartedBy_null_clears_the_starter()
+    {
+        var scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
+        Task<Manifest> Seed(Action<ScheduleOptions>? options) =>
+            scheduler.ScheduleAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+                "starter-reseed",
+                new SchedulerTestInput { Value = "again" },
+                Every.Minutes(5),
+                options
+            );
+
+        var manifest = await Seed(o => o.StartedBy("apikey:alice"));
+        await Seed(null);
+        (await StarterOfManifest(manifest.Id))
+            .Should()
+            .Be(HashOf("apikey:alice"), "a re-seed that does not call StartedBy keeps the starter");
+
+        await Seed(o => o.StartedBy(null));
+
+        (await StarterOfManifest(manifest.Id))
+            .Should()
+            .BeNull(
+                "StartedBy(null) records nobody, so the previous caller no longer follows its runs"
+            );
+    }
+
+    private async Task<string?> StarterOfManifest(long manifestId)
+    {
+        DataContext.Reset();
+        return await ((DbContext)DataContext)
+            .Database.SqlQuery<string?>(
+                $"SELECT starter_hash AS \"Value\" FROM trax.manifest WHERE id = {manifestId}"
+            )
+            .SingleAsync();
     }
 
     private async Task<string?> StarterOfEntryFor(long manifestId)

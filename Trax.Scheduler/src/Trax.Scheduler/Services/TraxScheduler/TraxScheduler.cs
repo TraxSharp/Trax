@@ -100,13 +100,13 @@ public class TraxScheduler(
     }
 
     /// <summary>
-    /// Records who the manifest's runs are started for, when the options name one (<see cref="ScheduleOptions.StartedBy"/>).
-    /// Left alone otherwise, so a re-seed that does not name one keeps the starter the manifest has.
+    /// Records who the manifest's runs are started for, when the options call <see cref="ScheduleOptions.StartedBy"/>,
+    /// nobody included. Left alone otherwise, so a re-seed that does not call it keeps the starter the manifest has.
     /// </summary>
     private static void StampStarter(Manifest manifest, ResolvedOptions resolved)
     {
-        if (resolved.StarterHash is { } starter)
-            manifest.StarterHash = starter;
+        if (resolved.StarterStated)
+            manifest.StarterHash = resolved.StarterHash;
     }
 
     private void ValidateTrain(Type trainType, Type inputType) =>
@@ -1904,7 +1904,8 @@ public class TraxScheduler(
             ),
             PrunePrefix: opts._prunePrefix,
             BatchName: opts._batchName,
-            StarterHash: opts._starterHash
+            StarterHash: opts._starterHash,
+            StarterStated: opts._starterStated
         );
     }
 
@@ -1993,6 +1994,7 @@ public class TraxScheduler(
         ManifestGroupSeed Group,
         string? PrunePrefix,
         string? BatchName,
-        string? StarterHash
+        string? StarterHash,
+        bool StarterStated
     );
 }
