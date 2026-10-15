@@ -29,7 +29,13 @@ public class SqliteDashboardMetricsTests : TestSetup
     [TestCase(MetricsRange.Last60Minutes, 60)]
     public async Task Every_aggregation_reads_on_Sqlite(MetricsRange range, int buckets)
     {
-        var start = DateTime.UtcNow.AddMinutes(-30);
+        // Whole milliseconds: Sqlite reads three fractional digits, so a start with finer ticks would
+        // shift a 250 ms duration by up to a millisecond and the average past its tolerance.
+        var now = DateTime.UtcNow.AddMinutes(-30);
+        var start = new DateTime(
+            now.Ticks - now.Ticks % TimeSpan.TicksPerMillisecond,
+            DateTimeKind.Utc
+        );
         await Seed("Trax.Tests.ISlow", TrainState.Completed, start, start.AddSeconds(10));
         await Seed("Trax.Tests.ISlow", TrainState.Completed, start, start.AddSeconds(20));
         await Seed("Trax.Tests.IFast", TrainState.Completed, start, start.AddMilliseconds(250));
