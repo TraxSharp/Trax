@@ -12,7 +12,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@apollo/client": "^3.12.0",
     "graphql": "^16.10.0",
     "graphql-ws": "^6.0.0",
     "react": "^19.0.0",

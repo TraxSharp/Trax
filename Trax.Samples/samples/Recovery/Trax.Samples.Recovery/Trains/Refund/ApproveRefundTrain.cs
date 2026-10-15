@@ -15,6 +15,7 @@ namespace Trax.Samples.Recovery.Trains.Refund;
 /// </summary>
 [TraxBroadcast]
 [TraxAuthorize(Roles = RecoveryRoles.Operator + "," + RecoveryRoles.Viewer)]
+[TraxRunProgress(Answers = true)]
 public class ApproveRefundTrain : ServiceTrain<RefundInput, RefundResult>, IApproveRefundTrain
 {
     protected override Task<Either<Exception, RefundResult>> Junctions() =>

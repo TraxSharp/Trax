@@ -2,31 +2,44 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Mediator.Services.RunStarters;
 
 namespace Trax.Samples.Recovery.Trains.DecisionJournal.Junctions;
 
-public class ReadDecisionJournal(IDataContextProviderFactory dataContexts)
+public class ReadDecisionJournal(IDataContextProviderFactory dataContexts, IRunStarters starters)
     : EffectJunction<DecisionJournalInput, DecisionJournalOutput>
 {
     public override async Task<DecisionJournalOutput> Run(DecisionJournalInput input)
     {
+        // Only the caller who started the run reads its decisions; any other run answers as one with none recorded.
+        if (!await starters.StartedByCurrentCallerAsync(input.RunId, CancellationToken))
+            return new DecisionJournalOutput { RunId = input.RunId, Decisions = [] };
+
         await using var context = await dataContexts.CreateDbContextAsync(CancellationToken);
 
         var metadata = await context
             .Metadatas.AsNoTracking()
-            .Where(m => m.Id == input.MetadataId)
-            .Select(m => new { m.ReplayDecisionsOf, m.ReplayAbandoned })
+            .Where(m => m.ExternalId == input.RunId)
+            .OrderByDescending(m => m.Id)
+            .Select(m => new
+            {
+                m.Id,
+                m.ReplayDecisionsOf,
+                m.ReplayAbandoned,
+            })
             .FirstOrDefaultAsync(CancellationToken);
+        if (metadata is null)
+            return new DecisionJournalOutput { RunId = input.RunId, Decisions = [] };
 
         var rows = await context
             .RecordedDecisions.AsNoTracking()
-            .Where(d => d.MetadataId == input.MetadataId)
+            .Where(d => d.MetadataId == metadata.Id)
             .OrderBy(d => d.Id)
             .ToListAsync(CancellationToken);
 
         return new DecisionJournalOutput
         {
-            MetadataId = input.MetadataId,
+            RunId = input.RunId,
             ReplayDecisionsOf = metadata?.ReplayDecisionsOf,
             ReplayAbandoned = metadata?.ReplayAbandoned ?? false,
             Decisions = rows.Select(d => new RecordedDecisionView

@@ -14,7 +14,7 @@ public interface IOrderTroubleTrain : IServiceTrain<OrderTroubleInput, OrderTrou
 /// next order placed. The order's run id is built by the machine when the order is placed, so the trouble is armed
 /// for the next order rather than for a run, and that order's first step claims it.
 /// </summary>
-[TraxAuthorize(Roles = RecoveryRoles.Operator)]
+[TraxAuthorize(Roles = RecoveryRoles.User)]
 [TraxMutation(
     GraphQLOperation.Run,
     Description = "Chooses what goes wrong with the next food order"

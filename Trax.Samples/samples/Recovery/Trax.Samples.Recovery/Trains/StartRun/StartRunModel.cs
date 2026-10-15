@@ -61,4 +61,10 @@ public record StartRunOutput
 
     /// <summary>How many times the manifest retries a failed run before dead-lettering it.</summary>
     public required int MaxRetries { get; init; }
+
+    /// <summary>
+    /// The external id of the manifest's first run, which the caller follows with runProgress; each retry is named
+    /// by the run before it (<c>retriedAs</c>).
+    /// </summary>
+    public required string FirstRunId { get; init; }
 }

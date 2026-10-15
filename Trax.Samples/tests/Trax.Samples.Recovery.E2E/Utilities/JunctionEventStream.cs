@@ -111,6 +111,8 @@ public sealed class JunctionEventStream : IAsyncDisposable
         }
         catch (OperationCanceledException) { }
         catch (WebSocketException) { }
+        // TestServer's socket throws this, not WebSocketException, when the close lands while a receive is pending.
+        catch (ObjectDisposedException) { }
     }
 
     private async Task SendAsync(object message)

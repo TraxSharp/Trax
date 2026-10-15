@@ -18,7 +18,7 @@ namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 public class TopicMapAuthorizationTests
 {
     [Test]
-    public async Task BuildTopicMapTrain_has_its_Operator_roles_back_and_the_host_starts()
+    public async Task BuildTopicMapTrain_has_the_roles_its_entering_events_declare_and_the_host_starts()
     {
         var authorize = typeof(BuildTopicMapTrain).GetCustomAttribute<TraxAuthorizeAttribute>();
 
@@ -27,13 +27,15 @@ public class TopicMapAuthorizationTests
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Should()
             .Contain(
-                RecoveryRoles.Operator,
-                "an event entering Building declares Operator, so the startup comparison admits an "
-                    + "Operator train (Trax.Docs/adr/0048)"
+                RecoveryRoles.User,
+                "an event entering Building declares recovery-user, so the startup comparison admits a "
+                    + "recovery-user train (Trax.Docs/adr/0048)"
             );
 
         using var http = SharedRecoverySetup.Factory.CreateClient();
         using var health = await http.GetAsync("/trax/health");
-        health.StatusCode.Should().Be(HttpStatusCode.OK, "the host started with the roles back");
+        health
+            .StatusCode.Should()
+            .Be(HttpStatusCode.OK, "the host started with the roles the events declare");
     }
 }

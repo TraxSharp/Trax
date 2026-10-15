@@ -13,8 +13,9 @@
 //   cd samples/Recovery/Trax.Samples.Recovery.Client && npm ci && npm run dev
 // Then open http://localhost:5173. The dashboard is at http://localhost:5260/trax (Development only).
 //
-// Auth: two demo keys, Development only:
-//   X-Api-Key: recovery-operator-key-do-not-use-in-production   (role Operator: what the page uses)
+// Auth: three demo keys, Development only:
+//   X-Api-Key: recovery-user-key-do-not-use-in-production       (role recovery-user: what the page uses)
+//   X-Api-Key: recovery-operator-key-do-not-use-in-production   (roles Operator and recovery-user: the dashboard, the API suites)
 //   X-Api-Key: recovery-viewer-key-do-not-use-in-production     (role Viewer: the broadcast view)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -182,13 +183,15 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// ── Authentication: two demo keys, Development only ──────────────────────────
-// The page needs each question's answer and the names of the junctions on a track, which only the
-// operations view of onJunctionEvent carries. A key carrying "do-not-use-in-production" refuses to
-// start outside Development, and outside it no key exists, so the operations namespace is closed.
+// ── Authentication: three demo keys, Development only ────────────────────────
+// The page signs in as a demo user and follows only its own runs, through runProgress, whose trains show it each
+// answer and track ([TraxRunProgress(Answers = true)]). The operator's key is the dashboard's and the API suites'. A
+// key carrying "do-not-use-in-production" refuses to start outside Development, and outside it no key exists, so the
+// operations namespace is closed.
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys =>
-        keys.Add(DemoKeys.Operator, id: "operator", RecoveryRoles.Operator)
+        keys.Add(DemoKeys.User, id: "demo-user", RecoveryRoles.User)
+            .Add(DemoKeys.Operator, id: "operator", RecoveryRoles.Operator, RecoveryRoles.User)
             .Add(DemoKeys.Viewer, id: "viewer", RecoveryRoles.Viewer)
     );
 builder.Services.AddAuthentication();
@@ -199,10 +202,10 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 
 // ── GraphQL ─────────────────────────────────────────────────────────────────
 // The host runs only persisted documents, as it would in production: an ad-hoc document is refused on every
-// transport, and so is introspection. The topic map's documents are generated and registered by Trax when the
-// host starts, one per operation, under ids that carry the machine's IR hash; the page's other documents are
-// registered from its persisted-operations.json (PageDocuments). The manifest of the topic map's documents,
-// operations { machineDocuments }, is behind the operations gate. Recovery:RequirePersistedOperations turns
+// transport, and so is introspection. Every document the page sends is generated and registered by Trax when the
+// host starts, one per machine operation, exposed train and runProgress operation, and the page holds them in its
+// generated client (src/trax, from the manifest --trax-export-client writes). The hand-written recovery_* documents
+// an earlier version registered are deactivated (RetiredPageDocuments). Recovery:RequirePersistedOperations turns
 // the refusal off, for a suite that drives the API with hand-written documents.
 var requirePersisted = builder.Configuration.GetValue("Recovery:RequirePersistedOperations", true);
 builder.Services.AddTraxGraphQL(graphql =>
@@ -222,7 +225,7 @@ builder.Services.AddTraxGraphQL(graphql =>
                 persisted.DisableIntrospection();
         })
 );
-builder.Services.AddHostedService<PageDocuments>();
+builder.Services.AddHostedService<RetiredPageDocuments>();
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 // ── Dashboard, Development only ─────────────────────────────────────────────

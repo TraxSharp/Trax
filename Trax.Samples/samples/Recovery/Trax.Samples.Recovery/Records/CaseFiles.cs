@@ -11,6 +11,9 @@ public sealed class CaseFiles
 {
     private readonly ConcurrentDictionary<string, Order> _orders = new();
 
+    // Who opened each case: only they may change it.
+    private readonly ConcurrentDictionary<string, string?> _openers = new();
+
     /// <summary>The orders a refund run can be started for.</summary>
     public static readonly IReadOnlyDictionary<string, Order> Catalog = new Dictionary<
         string,
@@ -23,11 +26,12 @@ public sealed class CaseFiles
     };
 
     /// <summary>Opens the case file of a new run, copying the order from the catalog.</summary>
-    public void OpenRefund(string runId, string orderId)
+    public void OpenRefund(string runId, string orderId, string? openedBy = null)
     {
         if (!Catalog.TryGetValue(orderId, out var order))
             throw new ArgumentException($"There is no order {orderId}.", nameof(orderId));
         _orders[runId] = order;
+        _openers[runId] = openedBy;
     }
 
     public Order OrderFor(string runId) =>
@@ -39,9 +43,14 @@ public sealed class CaseFiles
     /// Changes what the run will read next: the customer files another refund. Returns a sentence
     /// saying what changed.
     /// </summary>
-    public string Change(string runId)
+    public string Change(string runId, string? changedBy = null)
     {
-        if (_orders.TryGetValue(runId, out var order))
+        // Another caller's case answers as one that does not exist.
+        if (
+            _orders.TryGetValue(runId, out var order)
+            && _openers.TryGetValue(runId, out var opener)
+            && string.Equals(opener, changedBy, StringComparison.Ordinal)
+        )
         {
             _orders[runId] = order with { PriorRefunds = order.PriorRefunds + 1 };
             return $"Order {order.OrderId} now shows {order.PriorRefunds + 1} earlier refund(s).";

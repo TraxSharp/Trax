@@ -260,37 +260,26 @@ See [Keying the state hash](/docs/effect/decisions#keying-the-state-hash).
 
 ### Who sees what
 
-The page needs each question's answer and the names of the junctions on a track. Over
-`onJunctionEvent`, only the operations view carries those; a subscriber outside it sees the run's
-shape with answers and track steps withheld. The sample exposes the operations namespace behind a
-role (`RecoveryRoles.Operator` is `"Operator"`), and registers two demo keys in Development only:
+The page signs in as a demo user and follows only its own runs, through
+[`runProgress`](/docs/sdk-reference/graphql-api/run-progress). The refund and topic map trains carry
+`[TraxRunProgress(Answers = true)]`, so the user who started a run sees each question's answer and the junctions on a
+track; nobody else sees that run at all. The operations namespace stays behind its own role, for the dashboard and
+an operator. The sample registers three demo keys in Development only:
 
 ```csharp from=Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Api/Program.cs
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys =>
-        keys.Add(DemoKeys.Operator, id: "operator", RecoveryRoles.Operator)
+        keys.Add(DemoKeys.User, id: "demo-user", RecoveryRoles.User)
+            .Add(DemoKeys.Operator, id: "operator", RecoveryRoles.Operator, RecoveryRoles.User)
             .Add(DemoKeys.Viewer, id: "viewer", RecoveryRoles.Viewer)
     );
-// ...
-builder.Services.AddTraxGraphQL(graphql =>
-    graphql
-        // operations.junctionRuns, requeueExecution(askAfresh:), triggerManifest(askAfresh:),
-        // operations.executions(manifestId:), and the operations view of onJunctionEvent.
-        .ExposeOperationQueries()
-        .ExposeOperationMutations()
-        .GateOperations(roles: RecoveryRoles.Operator)
 ```
 
-The refund train carries `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
-so the viewer key follows its steps through the broadcast view. The topic map's train carries
-`[TraxAuthorize(Roles = "Operator")]` and no `[TraxBroadcast]`: the `topic-map` machine invokes it, and a
-user's own machine may not invoke one that broadcasts every run to every subscriber. Each event that
-enters the invoking state requires `Operator` too, which the host checks at startup, and the page
-follows the run's steps through the operations view.
-
-Once a token scheme is registered, a subscription socket without a credential is refused at
-`connection_init`, so a "public" watcher still needs a key. The alternative to an operator key is
-`AllowJunctionAnswersForBroadcastSubscribers()`, called inside `IsDevelopment()` only.
+The page's trains (`startRun`, `decisionJournal`, `changeCaseData`, `orderTrouble`, `tabletCalls`) and the topic
+map's `Build` and `Rebuild` require `recovery-user`. The refund train also carries `[TraxBroadcast]` and
+`[TraxAuthorize(Roles = "Operator,Viewer")]`, so the viewer key follows every refund's steps through the broadcast
+view, without answers. The topic map's train carries no `[TraxBroadcast]`: the `topic-map` machine invokes it, and a
+user's own machine may not invoke one that broadcasts every run to every subscriber.
 
 Outside Development no key exists, the operations namespace answers no one and the dashboard is
 not mapped.
@@ -303,6 +292,7 @@ model two questions, and stores its outcome before it emails the customer:
 ```csharp from=Trax.Samples/samples/Recovery/Trax.Samples.Recovery/Trains/Refund/ApproveRefundTrain.cs
 [TraxBroadcast]
 [TraxAuthorize(Roles = RecoveryRoles.Operator + "," + RecoveryRoles.Viewer)]
+[TraxRunProgress(Answers = true)]
 public class ApproveRefundTrain : ServiceTrain<RefundInput, RefundResult>, IApproveRefundTrain
 {
     protected override Task<Either<Exception, RefundResult>> Junctions() =>
@@ -405,7 +395,7 @@ manifest, so the sample adds one, a `[TraxMutation]` train whose junction calls
 `ITraxScheduler.ScheduleOnceAsync`:
 
 ```csharp from=Trax.Samples/samples/Recovery/Trax.Samples.Recovery/Trains/StartRun/StartRunTrain.cs
-[TraxAuthorize(Roles = RecoveryRoles.Operator)]
+[TraxAuthorize(Roles = RecoveryRoles.User)]
 [TraxMutation(
     GraphQLOperation.Run,
     Description = "Starts a recovery demo run as a one-off manifest"
@@ -424,12 +414,14 @@ Its junction, for a refund:
             externalId,
             new RefundInput { RunId = runId, OrderId = orderId },
             TimeSpan.Zero,
-            options => options.MaxRetries(MaxRetries)
+            // Every run of the manifest, each retry included, is the caller's to follow.
+            options => options.MaxRetries(MaxRetries).StartedBy(caller.GetCurrentPrincipalId())
         );
 ```
 
-`MaxRetries` is 2 in `ScheduleDemoRun`, which allows three attempts. The mutation returns the manifest's id, which the page uses
-to find each attempt with `operations.executions(manifestId:)`.
+`MaxRetries` is 2 in `ScheduleDemoRun`, which allows three attempts. `StartedBy` records the caller as the starter of
+every run of the manifest, so the page follows each attempt through `runProgress`: the mutation answers the first
+run's id, and each failed run names the retry that follows it (`retriedAs`).
 
 ### Crashing once without changing the input
 

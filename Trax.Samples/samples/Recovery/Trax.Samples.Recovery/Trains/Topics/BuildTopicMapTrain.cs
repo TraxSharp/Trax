@@ -25,12 +25,13 @@ namespace Trax.Samples.Recovery.Trains.Topics;
 /// </para>
 /// <para>
 /// The <c>topic-map</c> machine's <c>Building</c> state invokes it. Both events that enter <c>Building</c>,
-/// <c>Build</c> and <c>Rebuild</c>, require <see cref="RecoveryRoles.Operator"/>, and the host compares each
+/// <c>Build</c> and <c>Rebuild</c>, require <see cref="RecoveryRoles.User"/>, and the host compares each
 /// of them with this train's requirement at startup, so the train asks for the same role and a viewer can
 /// neither run it directly nor reach it through the machine.
 /// </para>
 /// </remarks>
-[TraxAuthorize(Roles = RecoveryRoles.Operator)]
+[TraxAuthorize(Roles = RecoveryRoles.User)]
+[TraxRunProgress(Answers = true)]
 public class BuildTopicMapTrain : ServiceTrain<TopicMapInput, TopicMap>, IBuildTopicMapTrain
 {
     protected override Task<Either<Exception, TopicMap>> Junctions() =>

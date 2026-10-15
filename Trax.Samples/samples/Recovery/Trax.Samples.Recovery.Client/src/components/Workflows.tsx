@@ -37,9 +37,9 @@ export function Workflows() {
   const [crashAt, setCrashAt] = useState<RefundCrashKey>(REFUND_CRASHES[0].key);
   const crash = crashAt !== "none";
   const recovery = useRecoveryRun();
-  const { phase, attempts, run, forkTaken, resumable } = recovery;
+  const { phase, attempts, run, forkTaken } = recovery;
 
-  const locked = phase === "starting" || phase === "running" || phase === "backoff" || phase === "retrying" || phase === "requeue";
+  const locked = phase === "starting" || phase === "running" || phase === "backoff" || phase === "retrying";
 
   // A clock for the countdown and the boxes that fill as they run.
   const [now, setNow] = useState(() => Date.now());
@@ -182,23 +182,16 @@ export function Workflows() {
           <button className="action" onClick={recovery.changeData} disabled={!forkable || run?.scenario === "TOPIC_MAP"}>
             Change the data during the backoff
           </button>
-          <div className="action-pair">
-            <button className="action" onClick={recovery.askAfresh} disabled={!forkable && phase !== "done"}>
-              Ask afresh
-            </button>
-            <button className="action" onClick={recovery.reset} disabled={!run || locked}>
-              Reset
-            </button>
-          </div>
-          {resumable && (
-            <button
-              className="action"
-              onClick={recovery.resumeFromNotify}
-              title={`resumeExecution(${resumable.id}, from: "NotifyCustomer#0"): every retry failed, so the run resumes from its checkpoint`}
-            >
-              Resume from NotifyCustomer
-            </button>
-          )}
+          <button className="action" onClick={recovery.reset} disabled={!run || locked}>
+            Reset
+          </button>
+          <p className="hint">
+            Asking the model afresh, requeueing and resuming from the checkpoint are an operator&apos;s: open the run in the{" "}
+            <a href="http://localhost:5260/trax" target="_blank" rel="noreferrer">
+              dashboard
+            </a>
+            .
+          </p>
           <p className="signal-line">
             {recovery.problem ? (
               <span className="run-problem">{recovery.problem}</span>

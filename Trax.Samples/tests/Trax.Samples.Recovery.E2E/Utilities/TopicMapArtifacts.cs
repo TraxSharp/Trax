@@ -25,10 +25,11 @@ internal static class TopicMapArtifacts
     public static string DifferentialCorpus => Path.Combine(Folder, "differential.json");
 
     /// <summary>
-    /// The topic map's persisted documents, as the host's manifest lists them: the ids the page sends. Written by
-    /// <c>TopicMapDocumentsTests</c> with <c>TRAX_UPDATE_MACHINE_DOCUMENTS=1</c>.
+    /// The client manifest the page's generated client was written from (<c>src/trax/manifest.json</c>): every id the
+    /// page sends. Written by <c>--trax-export-client</c>, then <c>trax client</c> generates the client beside it.
     /// </summary>
-    public static string Documents => Path.Combine(Folder, "topic-map.documents.json");
+    public static string ClientManifest =>
+        Path.Combine(Path.GetDirectoryName(Folder)!, "trax", "manifest.json");
 
     /// <summary>
     /// The topic map's engine, built from the machine's own declaration. The machine is sealed and keeps its

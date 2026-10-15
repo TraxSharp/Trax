@@ -3,7 +3,7 @@
 // cards (one per question, with its words and its answer). Pure functions of the attempts, so they are tested alone.
 
 import { RANK } from "./runReads";
-import { branchOf, RESUME_AT, type Attempt, type GraphNode, type Journal, type Phase, type RunGraph, type Step } from "./types";
+import { branchOf, type Attempt, type GraphNode, type Journal, type RunGraph, type Step } from "./types";
 
 /** One box of a lane, as the train declares it: a junction, a question, the track a question picked, the checkpoint. */
 export interface Column {
@@ -108,7 +108,7 @@ export interface LaneSlot {
 }
 
 export interface Lane {
-  id: number;
+  id: string;
   label: string;
   status: { text: string; tone: "running" | "done" | "failed" } | null;
   slots: LaneSlot[];
@@ -136,7 +136,7 @@ const over = (a: Attempt) => a.trainState === "COMPLETED" || a.trainState === "F
  */
 export function lanesOf(attempts: Attempt[], columns: Column[], now: number): Lane[] {
   if (attempts.length === 0)
-    return [{ id: 0, label: "attempt 1", status: null, slots: columns.map((c) => idle(c, false)) }];
+    return [{ id: "none", label: "attempt 1", status: null, slots: columns.map((c) => idle(c, false)) }];
   const checkpointAt = columns.findIndex((c) => c.kind === "checkpoint");
   return attempts.map((attempt) => {
     const steps = Object.values(attempt.steps).sort((a, b) => a.position - b.position);
@@ -364,17 +364,4 @@ export function modelCallsOf(attempts: Attempt[], expectsReplay: (attempt: Attem
     }
   }
   return calls;
-}
-
-/**
- * The attempt "Resume from NotifyCustomer" resumes: once every retry failed (the manifest is dead-lettered), the
- * latest failed attempt whose run graph says it can resume there, from the checkpoint it stored. While the run is
- * alive its own retry already resumes from the checkpoint, and a run is resumed to completion only once, so the
- * page offers it at no other time.
- */
-export function resumableAttempt(attempts: Attempt[], phase: Phase): Attempt | null {
-  if (phase !== "dead") return null;
-  const canResume = (nodes: GraphNode[] | undefined): boolean =>
-    (nodes ?? []).some((n) => (n.id === RESUME_AT && n.canResume) || n.tracks.some((t) => canResume(t.nodes)));
-  return [...attempts].reverse().find((a) => a.trainState === "FAILED" && canResume(a.graph?.nodes)) ?? null;
 }

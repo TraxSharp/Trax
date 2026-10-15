@@ -13,7 +13,7 @@ public interface ITabletCallsTrain : IServiceTrain<TabletCallsInput, TabletCalls
 /// The calls the restaurant's tablet received: the inside of the order's <c>SendToRestaurant</c> step, so a client
 /// can show the attempt that timed out and the one that was answered.
 /// </summary>
-[TraxAuthorize(Roles = RecoveryRoles.Operator)]
+[TraxAuthorize(Roles = RecoveryRoles.User)]
 [TraxQuery(Namespace = "orders", Description = "Lists the calls the restaurant's tablet received.")]
 public class TabletCallsTrain : ServiceTrain<TabletCallsInput, TabletCallsOutput>, ITabletCallsTrain
 {

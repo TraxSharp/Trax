@@ -140,7 +140,7 @@ public sealed record RangeChoice
 /// </para>
 /// <para>
 /// Every event declares who may send it. <c>Build</c> and <c>Rebuild</c> enter <c>Building</c>, which runs
-/// <see cref="IBuildTopicMapTrain"/>, so both require <see cref="RecoveryRoles.Operator"/>, the role the train
+/// <see cref="IBuildTopicMapTrain"/>, so both require <see cref="RecoveryRoles.User"/>, the role the train
 /// asks for: the host compares each event entering the state with the train at startup. Any authenticated user
 /// may move through the rest of the wizard, and only a draft's owner reads it.
 /// </para>
@@ -196,7 +196,7 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
             .AnyAuthenticated()
             .To(TopicMapState.ChoosingFields)
             .On(TopicMapTrigger.Build)
-            .Requires(RecoveryRoles.Operator)
+            .Requires(RecoveryRoles.User)
             .WithInput<RangeChoice>()
             .When(
                 All(
@@ -237,7 +237,7 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
             .After(ReviewWindow)
             .GoTo(TopicMapState.Expired)
             .On(TopicMapTrigger.Rebuild)
-            .Requires(RecoveryRoles.Operator)
+            .Requires(RecoveryRoles.User)
             .To(TopicMapState.Building)
             .On(TopicMapTrigger.Edit)
             .AnyAuthenticated()
@@ -259,7 +259,7 @@ public sealed class TopicMapMachine : Machine<TopicMapState, TopicMapTrigger>
                 .Context<TopicMapContext>()
                 .Requires(HasRange)
                 .On(TopicMapTrigger.Rebuild)
-                .Requires(RecoveryRoles.Operator)
+                .Requires(RecoveryRoles.User)
                 .To(TopicMapState.Building)
                 .On(TopicMapTrigger.Edit)
                 .AnyAuthenticated()

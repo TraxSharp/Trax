@@ -173,7 +173,7 @@ public class TopicMapBrowserTests
     }
 
     [Test]
-    public async Task AViewerRolesOperatorOnlyEvent_IsRefusedOnTheServer()
+    public async Task AViewersUserOnlyEvent_IsRefusedOnTheServer()
     {
         await using var open = await BrowserSetup.NewPageAsync();
         var page = open.Recovery;
@@ -217,7 +217,7 @@ public class TopicMapBrowserTests
             .GetProperty("code")
             .GetString()
             .Should()
-            .Be("FORBIDDEN", $"Build requires Operator, checked on the server ({Adr})");
+            .Be("FORBIDDEN", $"Build requires recovery-user, checked on the server ({Adr})");
         (await DraftRows.RevisionAsync(Guid.Parse(id)))
             .Should()
             .Be(revision, "a refused event writes nothing");
@@ -289,7 +289,7 @@ public class TopicMapBrowserTests
 
         // Built: the typed get, operations.machineInstance and the dashboard agree on the state, the revision,
         // and on there being no live run.
-        var got = await TypedAsync(page, DemoKeysOperator, "get", new { id = draft.Id });
+        var got = await TypedAsync(page, DemoKeysUser, "get", new { id = draft.Id });
         var revision = await DraftRows.RevisionAsync(draft.Id);
         got.GetProperty("state").GetString().Should().Be("Built");
         got.GetProperty("revision").GetInt64().Should().Be(revision);
@@ -384,7 +384,7 @@ public class TopicMapBrowserTests
         // Discarded from elsewhere: the page learns of it by push, as gone.
         var discarded = await TypedAsync(
             page,
-            DemoKeysOperator,
+            DemoKeysUser,
             "discard",
             new { id = draft.Id, requestId = $"elsewhere-{Guid.NewGuid():N}" }
         );
@@ -539,6 +539,9 @@ public class TopicMapBrowserTests
     }
 
     private const string DemoKeysOperator = "recovery-operator-key-do-not-use-in-production";
+
+    // The page signs in as the demo user, so its drafts are the user's: only the user's key reads or discards them.
+    private const string DemoKeysUser = "recovery-user-key-do-not-use-in-production";
 
     private static async Task ChooseFieldsAsync(RecoveryPage page)
     {
@@ -728,7 +731,8 @@ public class TopicMapBrowserTests
             Path.Combine(
                 RecoveryClientBuild.ClientFolder,
                 "src",
-                "topicMap",
+                "trax",
+                "topic-map",
                 "topic-map.machine.g.ts"
             )
         );

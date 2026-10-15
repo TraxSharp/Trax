@@ -11,7 +11,7 @@ namespace Trax.Samples.Recovery.Trains.DecisionJournal;
 /// replayed, and why a replay was refused. Junction events say <c>replayed</c>, but not why an answer
 /// was asked afresh, so the page reads this to tell "state changed" from "asked afresh on purpose".
 /// </summary>
-[TraxAuthorize(Roles = RecoveryRoles.Operator)]
+[TraxAuthorize(Roles = RecoveryRoles.User)]
 [TraxQuery(Description = "The decisions an execution recorded")]
 public class DecisionJournalTrain
     : ServiceTrain<DecisionJournalInput, DecisionJournalOutput>,

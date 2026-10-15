@@ -13,14 +13,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The page's own persisted documents, which the host registers when it starts. One file, read by both. -->
-    <EmbeddedResource
-      Include="../Trax.Samples.Recovery.Client/src/persisted-operations.json"
-      LogicalName="Trax.Samples.Recovery.Api.persisted-operations.json"
-    />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />

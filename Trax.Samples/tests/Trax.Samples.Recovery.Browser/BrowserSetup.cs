@@ -33,7 +33,7 @@ public class BrowserSetup
     {
         Dist = await RecoveryClientBuild.BuildAsync();
         Host = await RecoveryBrowserHost.StartAsync();
-        // Every page starts its draft as the operator, and the database outlives a run.
+        // Every page starts its draft as the demo user, and the database outlives a run.
         await TopicMapDrafts.ClearAsync(RecoveryBrowserHost.ConnectionString);
         _playwright = await Playwright.CreateAsync();
         Browser = await _playwright.Chromium.LaunchAsync(new() { Headless = true });

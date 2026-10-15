@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Effect.StateMachine;
 using Trax.Samples.Recovery.E2E.Factories;
@@ -47,11 +46,16 @@ public class ClientManifestExportTests
         output.Should().NotContain("Now listening on", "an export serves nothing");
         var manifest = ClientManifest.Read(await File.ReadAllTextAsync(path));
         manifest.Machines.Select(m => m.Id).Should().Contain(["order", "topic-map"]);
-        manifest.Types.Should().NotContain("operations");
+        manifest
+            .Types.Should()
+            .NotContainAny(
+                ["type OperationsQueries", "type OperationsMutations", "operations:"],
+                "the operations namespace stays on the server; a description may name it"
+            );
     }
 
     [Test]
-    public async Task Its_topic_map_documents_are_the_ones_the_host_serves()
+    public async Task The_committed_client_manifest_is_the_one_the_host_exports()
     {
         var path = Path.Combine(_folder, "client.json");
         var (exitCode, output) = await RecoveryHostProcess.ExportAsync(
@@ -61,18 +65,15 @@ public class ClientManifestExportTests
         );
         exitCode.Should().Be(0, output);
 
-        var exported = ClientManifest
-            .Read(await File.ReadAllTextAsync(path))
-            .Machines.Single(m => m.Id == "topic-map")
-            .Documents.Select(d => d.Id)
-            .Order(StringComparer.Ordinal);
-        // The committed file holds the documents a running host registers (TopicMapDocumentsTests).
-        var served = JsonDocument
-            .Parse(await File.ReadAllTextAsync(TopicMapArtifacts.Documents))
-            .RootElement.EnumerateArray()
-            .Select(d => d.GetProperty("id").GetString()!)
-            .Order(StringComparer.Ordinal);
-
-        exported.Should().Equal(served);
+        (await File.ReadAllTextAsync(path))
+            .Should()
+            .Be(
+                (await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest)).Replace(
+                    "\r\n",
+                    "\n"
+                ),
+                "the page's generated client is written from this manifest; after changing a machine or a page "
+                    + "train, export it again and run trax client (the sample's README)"
+            );
     }
 }

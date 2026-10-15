@@ -239,9 +239,16 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     /// <summary>What decision recording wrote for the execution, through the sample's query.</summary>
     public async Task<JsonElement> JournalAsync(long metadataId)
     {
+        // The journal is the run's starter's, by the run's external id.
+        var run = await graphQL.SendAsync(
+            $$"""{ operations { execution(id: {{metadataId}}) { externalId } } }""",
+            apiKey
+        );
+        run.HasErrors.Should().BeFalse(run.FirstErrorMessage);
+        var runId = run.GetData("operations", "execution", "externalId").GetString();
         var response = await graphQL.SendAsync(
             $$"""
-            { discover { decisionJournal(input: { metadataId: {{metadataId}} }) {
+            { discover { decisionJournal(input: { runId: "{{runId}}" }) {
                 replayDecisionsOf replayAbandoned
                 decisions { questionKey occurrence replayed replayRefused stateHash }
             } } }

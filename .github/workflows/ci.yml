@@ -563,6 +563,18 @@ jobs:
             echo "::error::The topic map's twin is out of date. Regenerate it with the command in Trax.Samples/samples/Recovery/README.md and commit the result."
             exit 1
           fi
+      - name: The committed client matches the host
+        # The page runs on the client trax client generates from the host's manifest: export it again and check.
+        run: |
+          api=Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Api
+          dotnet restore "$api" --locked-mode
+          node Trax.Api.StateMachine/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
+          (cd "$api" && ConnectionStrings__TraxDatabase="Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none" \
+            dotnet run --no-restore -- --trax-export-client "$RUNNER_TEMP/manifest.json")
+          dotnet run --project Trax.Cli/src/Trax.Cli --no-restore -- client \
+            --manifest "$RUNNER_TEMP/manifest.json" --out "$CLIENT/src/trax" \
+            --tools-dir "$RUNNER_TEMP/engine" --check \
+            || { echo "::error::The Recovery page's generated client is out of date. Regenerate it with the commands in Trax.Samples/samples/Recovery/README.md and commit the result."; exit 1; }
 
   # The StateMachine sample's page (Trax.Samples/samples/StateMachine/web), its own npm project on
   # the client `trax client` generated from the host. It builds the engine from

@@ -869,7 +869,7 @@ const ir = {
     {
       "after": "P7D",
       "rules": [
-        "Requires(Operator)"
+        "Requires(recovery-user)"
       ],
       "state": "Built",
       "target": "Expired",
@@ -1045,7 +1045,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893";
+export const irHash = "6530c3626ff0f1615844cc661ed911e0f92b92eb17c1842365a0489a70dc4198";
 
 /** The topic-map machine, built from the IR and typed by TopicMapSpec. No hand-written twin. */
 export const topicMap = typedMachineFromIr<TopicMapSpec>(ir, irHash);

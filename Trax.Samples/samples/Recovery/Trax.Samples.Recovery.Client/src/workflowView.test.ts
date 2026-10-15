@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COLUMNS } from "./cases";
 import { treeOf, type Attempt, type FlatGraphNode, type Journal, type RunGraph, type Step } from "./types";
-import { columnsOf, lanesOf, modelCallsOf, pendingQuestion, questionOf, resumableAttempt } from "./workflowView";
+import { columnsOf, lanesOf, modelCallsOf, pendingQuestion, questionOf } from "./workflowView";
 // Run graphs and steps read from the Recovery host: a refund crashing while paying and its retry, one crashing while
 // emailing and the retry that started from its checkpoint, and a topic map.
 import fixtures from "./workflowView.fixtures.json";
@@ -14,7 +14,7 @@ const T0 = Date.parse("2026-10-13T12:00:00Z");
 
 function attempt(id: number, recorded: Recorded | null, overrides: Partial<Attempt> = {}): Attempt {
   return {
-    id,
+    id: String(id),
     origin: "manifest",
     startedBy: null,
     trainState: "COMPLETED",
@@ -209,7 +209,7 @@ describe("modelCallsOf", () => {
     const calls = modelCallsOf([first, asking]);
     expect(calls[calls.length - 1]).toMatchObject({ state: "waiting", questionKey: "Problem", attempt: "requeue" });
     expect(calls[calls.length - 1].question?.instructions).toBe("What went wrong with this order?");
-    expect(modelCallsOf([first, asking], (a) => a.id === 261).some((c) => c.state === "waiting")).toBe(false);
+    expect(modelCallsOf([first, asking], (a) => a.id === "261").some((c) => c.state === "waiting")).toBe(false);
   });
 
   it("badges an answer asked again because the state changed", () => {
@@ -219,24 +219,5 @@ describe("modelCallsOf", () => {
     const retry = attempt(260, fixtures.refundRetry as Recorded, { journal: changed });
     retry.steps = Object.fromEntries(Object.values(retry.steps).map((s) => [s.position, { ...s, replayed: false }]));
     expect(modelCallsOf([first, retry])[2].badge).toEqual({ text: "asked afresh: state changed", tone: "afresh" });
-  });
-});
-
-describe("resumableAttempt", () => {
-  const crashed = (id: number, canResume: boolean) => {
-    const recorded = fixtures.refundCrashedWhileEmailing as Recorded;
-    const nodes = recorded.graph.allNodes.map((n) => ({ ...n, canResume: n.id === "NotifyCustomer#0" && canResume }));
-    return attempt(id, { ...recorded, graph: { ...recorded.graph, allNodes: nodes } }, { trainState: "FAILED" });
-  };
-
-  it("is offered only once the run is dead-lettered", () => {
-    const attempts = [crashed(1, true), crashed(2, true), crashed(3, true)];
-    expect(resumableAttempt(attempts, "dead")?.id).toBe(3);
-    expect(resumableAttempt(attempts, "backoff")).toBeNull();
-    expect(resumableAttempt(attempts, "done")).toBeNull();
-  });
-
-  it("is not offered for an attempt that holds no checkpoint to resume from", () => {
-    expect(resumableAttempt([crashed(1, false), crashed(2, false), crashed(3, false)], "dead")).toBeNull();
   });
 });

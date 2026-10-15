@@ -13,15 +13,24 @@ public class GraphQLClient(HttpClient httpClient)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public async Task<GraphQLResponse> SendAsync(
+    public Task<GraphQLResponse> SendAsync(
         string query,
         string? apiKey = null,
         object? variables = null
-    )
+    ) => PostAsync(new { query, variables }, apiKey);
+
+    /// <summary>Sends the persisted document <paramref name="id"/>, as the page's generated client does.</summary>
+    public Task<GraphQLResponse> SendIdAsync(
+        string id,
+        string? apiKey = null,
+        object? variables = null
+    ) => PostAsync(new { id, variables }, apiKey);
+
+    private async Task<GraphQLResponse> PostAsync(object payload, string? apiKey)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
-            Content = JsonContent.Create(new { query, variables }, options: JsonOptions),
+            Content = JsonContent.Create(payload, options: JsonOptions),
         };
 
         if (apiKey != null)

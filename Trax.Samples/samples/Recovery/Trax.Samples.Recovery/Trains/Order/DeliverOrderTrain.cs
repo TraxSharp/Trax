@@ -25,6 +25,7 @@ namespace Trax.Samples.Recovery.Trains.Order;
 /// </para>
 /// </remarks>
 [TraxAuthorize]
+[TraxRunProgress]
 public class DeliverOrderTrain : ServiceTrain<OrderInput, OrderDelivered>, IDeliverOrderTrain
 {
     protected override Task<Either<Exception, OrderDelivered>> Junctions() =>

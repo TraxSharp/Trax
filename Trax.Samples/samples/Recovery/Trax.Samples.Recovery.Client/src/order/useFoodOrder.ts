@@ -1,19 +1,11 @@
-import { useApolloClient } from "@apollo/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { persistedSocket, subscribePersisted } from "../apollo";
+import { createClient } from "graphql-ws";
+import { createMachineServer, persistedMessageReplacer } from "@traxsharp/state-machine/client";
 import { ORDER_SCENARIOS, type OrderScenarioKey } from "../cases";
-import {
-  DELIVERY_RUNS,
-  EXECUTION,
-  JUNCTION_RUNS,
-  ON_JUNCTION_EVENT,
-  ORDER_ADD_ITEM,
-  ORDER_DISCARD,
-  ORDER_PLACE,
-  ORDER_START,
-  ORDER_TROUBLE,
-  TABLET_CALLS,
-} from "../graphql";
+import { connection, SOCKET_URL } from "../connection";
+import { followRunProgress, order, orderServer, ordersTabletCalls, orderTrouble, readRunProgress } from "../trax/index.g";
+import { orderDocuments } from "../trax/order/order.client.g";
+import { sendDocument } from "../trax/client.g";
 import { RANK } from "../runReads";
 import { ENDS, junctionEventsOf, type OrderInfo, type RunStep, type TabletCall, type TimedEvent } from "./orderView";
 
@@ -24,38 +16,31 @@ export const MENU_ITEM = { item: "1 × Margherita", price: "$12.00", restaurant:
 const DOUBLE_CLICK_MS = 120;
 const POLL_MS = 400;
 
-interface Answer {
-  id: string;
-  revision: number;
-  state: string;
-  dueAt: string | null;
-  context: { items: string[] | null; total: number | null } | null;
-  problem: { code: string; message: string } | null;
-}
-
-interface Change {
-  orderChanged: { revision: number | null; state: string | null; gone: boolean; problem: { code: string; message: string } | null };
-}
-
 interface Run {
-  id: number;
   trainState: string;
   failureJunction: string | null;
   failureReason: string | null;
 }
 
+/** A document of the order machine, by operation, from the generated client. */
+const documentOf = (operation: string) => {
+  const found = orderDocuments.find((d) => d.operation === operation);
+  if (!found) throw new Error(`The generated client has no ${operation} document for the order.`);
+  return found;
+};
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const money = (total: number) => `$${total.toFixed(2)}`;
 
 /**
- * One food order, placed live: the laptop sends every request of the order machine, and both the laptop and the
- * phone follow the order through its push, orderChanged, each over a socket of its own; neither polls the order. Pressing
- * Place order starts an order (the server mints its id), adds a Margherita, and presses Place order twice in a hurry
- * under one request id, so the server answers the second from the first. The run Ordered invokes is followed through
- * onJunctionEvent, and the tablet's calls are read while SendToRestaurant runs.
+ * One food order, placed live: the laptop sends every request of the order machine through the generated client, and
+ * both the laptop and the phone follow the order through its push, orderChanged, each over a socket of its own; neither
+ * polls the order. Pressing Place order starts an order (the server mints its id), adds a Margherita, and presses Place
+ * order twice in a hurry under one request id, so the server answers the second from the first. The run Ordered invokes
+ * is the one the order's answer names (invokedRun), followed through runProgress, and the tablet's calls are read while
+ * SendToRestaurant runs.
  */
 export function useFoodOrder() {
-  const client = useApolloClient();
   const [events, setEvents] = useState<TimedEvent[]>([]);
   const [steps, setSteps] = useState<RunStep[]>([]);
   const [calls, setCalls] = useState<TabletCall[]>([]);
@@ -63,13 +48,21 @@ export function useFoodOrder() {
   const [base, setBase] = useState(0);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [order, setOrder] = useState<OrderInfo>(MENU_ITEM);
+  const [shown, setShown] = useState<OrderInfo>(MENU_ITEM);
   const [timer, setTimer] = useState<{ due: number; after: number } | null>(null);
   const [scenario, setScenario] = useState<OrderScenarioKey | null>(null);
 
-  // One socket per screen, as on two devices; the run's steps arrive over the page's own socket.
-  const sockets = useMemo(() => ({ laptop: persistedSocket(), phone: persistedSocket() }), []);
-  useEffect(() => () => void Object.values(sockets).forEach((s) => s.dispose()), [sockets]);
+  // The phone is another device: a socket and a server of its own. The laptop is the generated client's.
+  const phone = useMemo(() => {
+    const socket = createClient({
+      url: SOCKET_URL,
+      connectionParams: connection().connectionParams,
+      lazy: true,
+      jsonMessageReplacer: persistedMessageReplacer,
+    });
+    return { socket, server: createMachineServer(connection().url, { headers: connection().headers, machine: order, documents: orderDocuments, socket }) };
+  }, []);
+  useEffect(() => () => void phone.socket.dispose(), [phone]);
 
   const generation = useRef(0);
   const stops = useRef<(() => void)[]>([]);
@@ -87,7 +80,7 @@ export function useFoodOrder() {
     stopFollowing();
     const left = orderId.current;
     if (left && laptopState.current === "Cart")
-      void client.mutate({ mutation: ORDER_DISCARD, variables: { id: left, requestId: crypto.randomUUID() } }).catch(() => undefined);
+      void sendDocument(documentOf("discard").id, { id: left, requestId: crypto.randomUUID() }, ["machines", "order", "discard"]).catch(() => undefined);
     orderId.current = null;
     laptopState.current = null;
     setEvents([]);
@@ -98,8 +91,8 @@ export function useFoodOrder() {
     setProblem(null);
     setBusy(false);
     setScenario(null);
-    setOrder(MENU_ITEM);
-  }, [client, stopFollowing]);
+    setShown(MENU_ITEM);
+  }, [stopFollowing]);
 
   useEffect(() => () => {
     generation.current++;
@@ -115,17 +108,17 @@ export function useFoodOrder() {
       const at = () => Date.now() - started;
       const add = (...more: TimedEvent[]) => live() && setEvents((all) => [...all, ...more]);
       const chosen = ORDER_SCENARIOS.find((s) => s.key === key) ?? ORDER_SCENARIOS[0];
+      const laptop = orderServer();
       setBase(started);
       setBusy(true);
       setScenario(key);
 
       const answered = new Map<string, number | null>();
+      type Answered = { problem: { code: string; message: string } | null; id: string | null; revision: number | null; state: string | null; context: Record<string, unknown>; dueAt: string | null };
       /** One request from the laptop: the request, then the server's whole answer. */
-      const send = async (operation: "start" | "addItem" | "placeOrder", label: string, mutation: typeof ORDER_START, variables: Record<string, unknown>) => {
-        const requestId = String(variables.requestId);
+      const send = async (operation: "start" | "addItem" | "placeOrder", label: string, requestId: string, request: () => Promise<Answered>) => {
         add({ t: at(), kind: "request", operation, requestId, label });
-        const { data } = await client.mutate({ mutation, variables });
-        const answer = data.machines.order[operation] as Answer;
+        const answer = await request();
         const revision = answer.problem ? null : answer.revision;
         const replayed = answered.has(requestId) ? !answer.problem && answered.get(requestId) === revision : undefined;
         if (!answered.has(requestId)) answered.set(requestId, revision);
@@ -133,21 +126,36 @@ export function useFoodOrder() {
         if (!answer.problem) laptopState.current = answer.state;
         return answer;
       };
+      const answerOf = (response: Awaited<ReturnType<typeof laptop.event>> | Awaited<ReturnType<typeof laptop.start>>): Answered =>
+        response.kind === "problem"
+          ? { problem: { code: response.code, message: response.message }, id: null, revision: null, state: null, context: {}, dueAt: null }
+          : {
+              problem: null,
+              id: "id" in response ? response.id : orderId.current,
+              revision: response.snapshot.revision,
+              state: response.snapshot.state,
+              context: response.snapshot.context,
+              dueAt: response.snapshot.dueAt ?? null,
+            };
+      const event = (trigger: string, requestId: string, input?: unknown) => async () =>
+        answerOf(await laptop.event({ id: orderId.current!, trigger, requestId, ...(input === undefined ? {} : { input }) }));
 
       try {
         // What goes wrong with this order, armed before it is placed, as order.mjs arms it.
-        await client.mutate({ mutation: ORDER_TROUBLE, variables: { trouble: chosen.trouble } });
+        await orderTrouble({ trouble: chosen.trouble } as Parameters<typeof orderTrouble>[0]);
 
-        const start = await send("start", "Start an order", ORDER_START, { requestId: crypto.randomUUID() });
-        if (start.problem) throw new Error(start.problem.message);
+        const startId = crypto.randomUUID();
+        const start = await send("start", "Start an order", startId, async () => answerOf(await laptop.start(undefined, startId)));
+        if (start.problem || !start.id) throw new Error(start.problem?.message ?? "The order did not start.");
         orderId.current = start.id;
 
         // Both screens follow the order, each on its own socket.
         const latest = { laptop: 0, phone: 0 };
-        for (const screen of ["laptop", "phone"] as const)
+        for (const [screen, server] of [["laptop", laptop], ["phone", phone.server]] as const)
           stops.current.push(
-            subscribePersisted<Change>(sockets[screen], "OrderChanged", { id: start.id }, ({ orderChanged: change }) => {
-              if (!live() || change.problem || change.gone || change.revision == null || change.state == null) return;
+            server.subscribe(start.id, (message) => {
+              if (!live() || message.type !== "snapshot") return;
+              const change = message.snapshot;
               if (change.revision <= latest[screen]) return;
               latest[screen] = change.revision;
               if (screen === "laptop") laptopState.current = change.state;
@@ -158,12 +166,15 @@ export function useFoodOrder() {
         if (!live()) return;
 
         await sleep(500);
-        const added = await send("addItem", "Add 1 × Margherita", ORDER_ADD_ITEM, { id: start.id, input: { item: "Margherita" }, requestId: crypto.randomUUID() });
+        const addId = crypto.randomUUID();
+        const added = await send("addItem", "Add 1 × Margherita", addId, event("AddItem", addId, { item: "Margherita" }));
         if (added.problem) throw new Error(added.problem.message);
-        const priced = added.context?.total != null ? money(added.context.total) : MENU_ITEM.price;
-        const restaurant = (await client.query({ query: TABLET_CALLS })).data.discover.orders.tabletCalls.restaurant as string;
+        const items = added.context.items as string[] | null | undefined;
+        const total = added.context.total as number | null | undefined;
+        const priced = total != null ? money(total) : MENU_ITEM.price;
+        const restaurant = (await ordersTabletCalls()).restaurant;
         if (!live()) return;
-        setOrder({ item: `${added.context?.items?.length ?? 1} × ${added.context?.items?.[0] ?? "Margherita"}`, price: priced, restaurant });
+        setShown({ item: `${items?.length ?? 1} × ${items?.[0] ?? "Margherita"}`, price: priced, restaurant });
 
         if (chosen.key === "left-in-cart") {
           // Nobody presses Place order: the server's timer clears the cart, and both screens hear it by push.
@@ -181,19 +192,16 @@ export function useFoodOrder() {
         const placedAt = new Date().toISOString();
         const press = crypto.randomUUID();
         const [first] = await Promise.all([
-          send("placeOrder", "Place order", ORDER_PLACE, { id: start.id, requestId: press }),
-          sleep(DOUBLE_CLICK_MS).then(() => send("placeOrder", "Place order (pressed again)", ORDER_PLACE, { id: start.id, requestId: press })),
+          send("placeOrder", "Place order", press, event("PlaceOrder", press)),
+          sleep(DOUBLE_CLICK_MS).then(() => send("placeOrder", "Place order (pressed again)", press, event("PlaceOrder", press))),
         ]);
         if (first.problem) throw new Error(first.problem.message);
 
-        // The run Ordered queued, and its steps.
-        let runId: number | null = null;
-        for (let i = 0; i < 75 && live() && runId == null; i++) {
-          const found = (await client.query({ query: DELIVERY_RUNS, variables: { after: placedAt } })).data.operations.executions.items[0];
-          if (found) runId = found.id as number;
-          else await sleep(200);
-        }
-        if (!live() || runId == null) throw new Error(live() ? "The delivery run was not queued." : "");
+        // The run Ordered queued: the order's answer names it while the order waits on it, for its owner only.
+        const read = await sendDocument<{ invokedRun: { runId: string } | null } | null>(documentOf("get").id, { id: start.id }, ["machines", "order", "get"]);
+        const runId = read?.invokedRun?.runId;
+        if (!live()) return;
+        if (!runId) throw new Error("The delivery run was not queued.");
         const merge = (incoming: RunStep[]) =>
           live() &&
           setSteps((known) => {
@@ -205,27 +213,36 @@ export function useFoodOrder() {
             }
             return next;
           });
-        const sub = client.subscribe({ query: ON_JUNCTION_EVENT, variables: { metadataId: runId } }).subscribe({
-          next: ({ data }) => data?.onJunctionEvent && merge([data.onJunctionEvent.junction as RunStep]),
-        });
-        stops.current.push(() => sub.unsubscribe());
-        merge((await client.query({ query: JUNCTION_RUNS, variables: { metadataId: runId } })).data.operations.junctionRuns as RunStep[]);
 
-        // Until the run ends: its state, and the tablet's calls since the order was placed.
+        // Until the run ends: its steps and state, and the tablet's calls since the order was placed.
         const readCalls = async () => {
-          const all = (await client.query({ query: TABLET_CALLS })).data.discover.orders.tabletCalls.calls as TabletCall[];
+          const all = (await ordersTabletCalls()).calls as TabletCall[];
           if (live()) setCalls(all.filter((c) => Date.parse(c.startedAt) >= Date.parse(placedAt)));
         };
-        for (;;) {
-          if (!live()) return;
-          const row = (await client.query({ query: EXECUTION, variables: { id: runId } })).data.operations.execution as Run;
+        let ended = false;
+        const follow = (state: string | null | undefined, failure: string | null | undefined) => {
+          if (!state || !live()) return;
+          setRun((r) => {
+            const failed = state === "FAILED";
+            return { trainState: state, failureJunction: failed ? (r?.failureJunction ?? null) : null, failureReason: failure ?? r?.failureReason ?? null };
+          });
+          if (state === "COMPLETED" || state === "FAILED" || state === "CANCELLED") ended = true;
+        };
+        stops.current.push(
+          followRunProgress(runId, (e) => {
+            if (e.step) merge([e.step as unknown as RunStep]);
+            follow(e.state, e.failure);
+          }),
+        );
+        const first_ = await readRunProgress(runId);
+        merge(first_.steps as unknown as RunStep[]);
+        follow(first_.state, first_.failure);
+        while (live() && !ended) {
           await readCalls();
-          if (!live()) return;
-          setRun(row);
-          if (row.trainState === "COMPLETED" || row.trainState === "FAILED" || row.trainState === "CANCELLED") break;
           await sleep(POLL_MS);
         }
-        merge((await client.query({ query: JUNCTION_RUNS, variables: { metadataId: runId } })).data.operations.junctionRuns as RunStep[]);
+        if (!live()) return;
+        merge((await readRunProgress(runId)).steps as unknown as RunStep[]);
         await readCalls();
         // The run's outcome moves the order on; the screens hear it by push.
         for (let i = 0; i < 50 && live() && !ENDS.has(laptopState.current ?? ""); i++) await sleep(100);
@@ -237,13 +254,13 @@ export function useFoodOrder() {
         setBusy(false);
       }
     },
-    [client, reset, sockets],
+    [phone, reset],
   );
 
-  const all = useMemo(
-    () => [...events, ...junctionEventsOf(base, steps, calls, run && { junction: run.failureJunction, reason: run.failureReason })],
-    [events, base, steps, calls, run],
-  );
+  const all = useMemo(() => {
+    const failedStep = steps.find((s) => s.state === "FAILED")?.name ?? null;
+    return [...events, ...junctionEventsOf(base, steps, calls, run && { junction: failedStep, reason: run.failureReason })];
+  }, [events, base, steps, calls, run]);
 
-  return { events: all, base, busy, problem, order, timer, scenario, place, reset };
+  return { events: all, base, busy, problem, order: shown, timer, scenario, place, reset };
 }

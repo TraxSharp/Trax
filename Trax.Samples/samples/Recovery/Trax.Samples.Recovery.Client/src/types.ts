@@ -116,7 +116,8 @@ export interface Journal {
 }
 
 export interface Attempt {
-  id: number;
+  /** The run's external id, which runProgress follows. */
+  id: string;
   /** "manifest" for the manifest's runs, "requeue" for a requeueExecution, "resume" for a resumeExecution. */
   origin: "manifest" | "requeue" | "resume";
   /** What started it, when it was not the first run or the manifest's own retry. */
@@ -138,6 +139,8 @@ export interface RunInfo {
   trainName: string;
   armedCrash: string;
   maxRetries: number;
+  /** The manifest's first run, which the page follows; each retry is named by the run before it. */
+  firstRunId: string;
   scenario: Scenario;
 }
 

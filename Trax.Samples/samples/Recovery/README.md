@@ -189,7 +189,7 @@ outcome put in `Built`, `BuildFailed` or `BuildCancelled`, is the record of that
 discard it (`DISCARD_NOT_ALLOWED`); from those states, and from `Expired`, the page sends `StartOver`, which resets
 the same draft to the first step with nothing chosen (from `Building` it cancels the run, and from `Built` it cancels
 the review timer). Before a build, the page discards the draft (`discard`) and starts a new one. If the server refuses
-either, the page shows why and stays on the draft. Every visitor signs in with the same operator key, so all the
+either, the page shows why and stays on the draft. Every visitor signs in with the same demo user key, so all the
 page's drafts belong to one user, under one per-user draft cap: the host sets `DraftTtl` to a day so a draft an
 abandoned browser leaves stops counting toward it long before a demo database fills it. One left before a build is
 deleted then; one a build moved is kept as the record of that build (one in `Built` until its review timer moves it
@@ -220,25 +220,24 @@ dotnet run --project Trax.Cli/src/Trax.Cli -- machine generate \
 ```
 
 The host runs only persisted documents, as a production host would: an ad-hoc document, and introspection, are
-refused on every transport. Trax generates the topic map's documents from the schema and registers them when the
-host starts, one per operation, under ids that carry the machine's IR hash
-(`trax_machine_topic-map_<operation>_<hash>`); the page sends each by the id `src/topicMap/topic-map.documents.json`
-lists, with its values as variables. That file is the host's manifest (`operations { machineDocuments }`, operator
-only) for the machine, written by a test from the host the E2E suite starts. After regenerating the twin, write it
-again from `tests/Trax.Samples.Recovery.E2E`:
+refused on every transport. Trax generates every document the page sends and registers them when the host starts:
+each machine operation (`trax_machine_<machine>_<operation>_<hash>`), each exposed train (`trax_train_...`) and
+`runProgress` (`trax_progress_...`). The page holds them in its generated client, `src/trax/`, written by
+`trax client` from the manifest the host exports. After changing a machine or a page train, write both again from
+the repository root:
 
 ```bash
-TRAX_UPDATE_MACHINE_DOCUMENTS=1 dotnet test --filter TopicMapDocumentsTests
+(cd Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Api && dotnet run -- --trax-export-client ../Trax.Samples.Recovery.Client/src/trax/manifest.json)
+dotnet run --project Trax.Cli/src/Trax.Cli -- client \
+  --manifest Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/trax/manifest.json \
+  --out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/trax
 ```
 
-The food order's operations are among the page's own documents: the page sends `machines { order { start addItem
-placeOrder discard } }` and `orderChanged` for the order by the ids in `src/persisted-operations.json`.
-
-A page built before a deploy that changed the machine sends ids the host no longer serves: the host answers
-`CLIENT_OUTDATED`, and the page stops and asks to be reloaded. The page's other documents (the runs it starts and
-reads) are in `src/persisted-operations.json`, which the host registers when it starts (`PageDocuments`) and the page
-sends by id; to change one, edit it there and bump the version at the end of its id. `Recovery:RequirePersistedOperations`
-set to `false` accepts ad-hoc documents again, which only the E2E suite's hand-written requests need.
+CI does the same and fails when the committed client differs. A page built before a deploy that changed the machine
+sends ids the host no longer serves: the host answers `CLIENT_OUTDATED`, and the page stops and asks to be reloaded.
+The hand-written `recovery_*` documents an earlier version of the page registered are deactivated when the host
+starts. `Recovery:RequirePersistedOperations` set to `false` accepts ad-hoc documents again, which only the E2E
+suite's hand-written requests need.
 
 A client cannot write a build's result: a save of a topic map is refused (`SAVE_NOT_ALLOWED`), and so is a hand-fired
 `Building.done` (`OUTCOME_BOUND`). A run a
@@ -272,12 +271,13 @@ before `ChargeCard`, and the order is `Cancelled` with nothing charged.
 
 ## Keys
 
-Two demo keys, registered only in Development (a key carrying `do-not-use-in-production` refuses to
+Three demo keys, registered only in Development (a key carrying `do-not-use-in-production` refuses to
 start anywhere else):
 
 | Key | Role | Sees |
 |---|---|---|
-| `recovery-operator-key-do-not-use-in-production` | `Operator` | The operations view: every answer and every step name. The page uses it. |
+| `recovery-user-key-do-not-use-in-production` | `recovery-user` | Its own drafts, orders and runs, each run through `runProgress` with every answer and step name. The page uses it. |
+| `recovery-operator-key-do-not-use-in-production` | `Operator`, `recovery-user` | The operations view and the dashboard: every run, requeue, resume and ask afresh. The API suites use it. |
 | `recovery-viewer-key-do-not-use-in-production` | `Viewer` | The broadcast view of the refund train: the run's shape, with answers and the steps on a track withheld. |
 
 ## Demo-only settings

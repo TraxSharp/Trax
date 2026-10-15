@@ -2,13 +2,13 @@ namespace Trax.Samples.Recovery.Trains.DecisionJournal;
 
 public record DecisionJournalInput
 {
-    /// <summary>The execution's metadata id.</summary>
-    public required long MetadataId { get; init; }
+    /// <summary>The run's external id, as runProgress names it. Only the caller who started the run may read it.</summary>
+    public required string RunId { get; init; }
 }
 
 public record DecisionJournalOutput
 {
-    public required long MetadataId { get; init; }
+    public required string RunId { get; init; }
 
     /// <summary>The run this execution was queued to replay, or null.</summary>
     public long? ReplayDecisionsOf { get; init; }

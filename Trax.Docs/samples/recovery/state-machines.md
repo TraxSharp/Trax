@@ -120,7 +120,7 @@ with a run id of its own, which the pairs the join writes are keyed by; `OnDone`
 with the number of papers and pairs and the co-citation track.
 
 **Every event declares who may send it.** `Build` and `Rebuild` enter `Building`, so both declare
-`.Requires(RecoveryRoles.Operator)`, the role `BuildTopicMapTrain` asks for; the other events declare
+`.Requires(RecoveryRoles.User)`, the role `BuildTopicMapTrain` asks for; the other events declare
 `.AnyAuthenticated()`, and only a draft's owner reads it. At startup the host compares every event that
 enters an invoking state with the train's `[TraxAuthorize]`, and refuses to start when one would let a
 caller run a train they could not run directly. The rule is checked on the server for every event, so a
@@ -140,7 +140,7 @@ sends `StartOver` (any signed-in user), which resets the same draft to the first
 draft and starts a new one. If the server refuses either, the page shows why and stays on the draft rather than
 starting another. A map no draft points at any more goes with the next two sweeps.
 
-**The demo stays under the draft cap.** Every visitor signs in with the same operator key, so every draft
+**The demo stays under the draft cap.** Every visitor signs in with the same demo user key, so every draft
 the page starts belongs to one user, and the server caps the drafts one user holds (50 by default). Besides
 leaving no draft behind when it starts a new map, the host sets `DraftTtl` to one day, so a draft a closed browser
 abandons stops counting toward the cap after a day rather than the default 30, and a demo database that lives for
@@ -163,9 +163,8 @@ The topic map is marked `[TraxMachine]`, so it is served as its own typed operat
 under the [machines root](/docs/sdk-reference/graphql-api/machines),
 `mutation { machines { topicMap { start chooseFields back build cancelBuild rebuild edit startOver discard } } }` and
 `query { machines { topicMap { get } } }`, and the generic `stateMachine` mutations are not served at all. The host also runs only persisted documents: it registers the topic map's own when it starts,
-and the page sends each by the id `topic-map.documents.json` lists, exported from the host's manifest for the IR the
-twin was generated from (`TRAX_UPDATE_MACHINE_DOCUMENTS=1 dotnet test --filter TopicMapDocumentsTests` in
-`Trax.Samples.Recovery.E2E` writes it again).
+and the page sends each by the id its generated client holds (`src/trax/`, written by `trax client` from the manifest
+the host exports with `--trax-export-client`; the sample's README has both commands).
 
 The page drives its draft with `useServerMachine` from `@traxsharp/state-machine/react`, over
 `createMachineServer` from `@traxsharp/state-machine/client`

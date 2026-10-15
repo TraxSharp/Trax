@@ -11,7 +11,7 @@ namespace Trax.Samples.Recovery.Trains.StartRun;
 /// requeue), and Trax.Api has no GraphQL operation for a one-off manifest, so this mutation schedules
 /// one with <c>ITraxScheduler.ScheduleOnceAsync</c>.
 /// </summary>
-[TraxAuthorize(Roles = RecoveryRoles.Operator)]
+[TraxAuthorize(Roles = RecoveryRoles.User)]
 [TraxMutation(
     GraphQLOperation.Run,
     Description = "Starts a recovery demo run as a one-off manifest"

@@ -69,7 +69,7 @@ database, never a delay, and `TraxInvariants` is checked after every one:
 | `TheWizard_RunsEndToEnd_WithAdHocDocumentsRefusedAndGenericMutationsOff` | Fields, years, build to `Built` through the typed operations only; an ad-hoc document is refused, and no `stateMachine` field exists |
 | `TheBuildOutcome_ArrivesByPush_WithNoPollingRequest` | The page makes no request between the `build` answer and rendering `Built` |
 | `TheReviewTimer_ExpiresByPush` | A due review timer moves the draft to `Expired` on the server, and the page shows it with no request of its own |
-| `AViewerRolesOperatorOnlyEvent_IsRefusedOnTheServer` | The viewer key's `build` is `FORBIDDEN`, and the draft's revision does not move |
+| `AViewersUserOnlyEvent_IsRefusedOnTheServer` | The viewer key's `build` is `FORBIDDEN`, and the draft's revision does not move |
 | `TheDashboardAndGraphQL_ShowTheSameStateRevisionAndRuns` | `get`, the stored row and the dashboard's instance page agree on the state and revision, and on no live run |
 | `ReloadingTheTab_ResumesTheServerMintedInstance` | A reload opens the kept draft at its step with one `start` in all and no save |
 | `TwoTabs_SeeEachOthersTransitionsInRevisionOrder` | A step in one tab reaches the other by push, in order |
@@ -78,6 +78,9 @@ database, never a delay, and `TraxInvariants` is checked after every one:
 | `StartingANewMapFromBuilt_ResetsTheDraft_AndLeavesNoneBehind` | **Start a new map** from `Built` resets the same draft with `StartOver`, with one start request in all and the review timer gone |
 | `ADeployWithANewIR_ShowsClientOutdated` | A page built for another IR shows `CLIENT_OUTDATED`, hides the wizard and makes no further request |
 | `KillingTheHostMidBuild_RecoversThroughTheStuckRunPath_AndThePageFollows` | The next host fails the dead build and the page follows to `BuildFailed` by push, with no request of its own |
+| `A_refund_that_crashes_once_is_followed_into_its_retry` | As the demo user, a refund that crashes once shows a crashed attempt and the retry the run named, with every read through `runProgress` and nothing under `operations` |
+| `A_placed_order_is_delivered_and_its_run_followed_by_its_owner` | A placed order's delivery run is the one the order's answer names (`invokedRun`), followed to its end, with nothing under `operations` |
+| `Built_bundle_holds_no_operator_key` | The built page holds no operator key and no retired `recovery_*` id |
 
 They need the page's npm packages (`npm ci` in `Trax.Samples.Recovery.Client` and in `Trax.Api.StateMachine`) and
 chromium (`pwsh tests/Trax.Samples.Recovery.Browser/bin/Debug/net10.0/playwright.ps1 install chromium` after a
