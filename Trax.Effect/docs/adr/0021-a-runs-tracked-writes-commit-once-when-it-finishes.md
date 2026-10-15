@@ -7,7 +7,8 @@ status: accepted
 # A run's tracked writes commit once, when it finishes
 
 Everything a run tracks through its effect runner (its metadata row, and any model passed to `Track`) is saved
-when the run starts and when it finishes, and at no point in between. A junction effect that needs to write while
+when the run starts and when it finishes, and at no point in between. The finishing write commits them whatever
+the outcome: a run that fails or is cancelled still commits what it tracked, together with its state. A junction effect that needs to write while
 the run is going writes only its own columns, through a database context of its own, never through the run's effect
 runner. Junction progress is the one such effect today: it writes `CurrentlyRunningJunction` and `JunctionStartedAt`
 with a bulk update of those two columns.
@@ -22,9 +23,9 @@ and refuses to be taken over uncommitted work.
 
 Because junction progress did the opposite until this decision, and nothing in the code said it was wrong. It saved
 through the run's effect runner before and after every junction, which committed everything else the run had
-tracked so far and saved every other effect provider each time. A run that failed at its third junction left the
-first two junctions' tracked writes committed, and a three-junction run saved the JSON effect eight times instead of
-twice.
+tracked so far and saved every other effect provider each time. While a run's third junction was still
+running, the first two junctions' tracked writes were already in the store, before the run had an outcome; and a
+three-junction run saved the JSON effect eight times instead of twice.
 
 It matters more now that a run can execute branches in parallel: every branch's progress write going through the
 one effect runner would have been concurrent saves on one database context.
@@ -41,11 +42,15 @@ that needs a write while it executes.
 
 - `JunctionProgressWritesOnlyProgressTests` runs a three-junction train with progress on and off and requires the
   same number of saves of another effect provider, and reads the progress column from the store while the junction
-  runs.
+  runs. `A_failed_run_commits_its_tracked_row_only_when_it_finishes` tracks a row and then fails, on InMemory,
+  Sqlite and Postgres: the row is not in the store while the run is going, and is after it has failed.
 
 Not covered: nothing stops a new junction effect from saving through the runner; a reviewer has to catch that.
 
 ## Changelog
+
+- **2026-10-15**: Says that the finishing write commits a failed or cancelled run's tracked writes too. The "why"
+  used to read as if a failed run's earlier writes were never committed, which the code has never done.
 
 - **2026-10-08**: A checkpoint is not an exception after all: it writes its own row through a context of its own
   (central 0047).

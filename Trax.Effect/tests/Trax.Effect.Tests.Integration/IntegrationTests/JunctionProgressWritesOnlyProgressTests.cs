@@ -14,6 +14,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models;
+using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Services.EffectProviderFactory;
@@ -148,6 +149,54 @@ public class JunctionProgressWritesOnlyProgressTests
         row.JunctionStartedAt.Should().BeNull();
     }
 
+    [TestCase(Store.InMemory)]
+    [TestCase(Store.Sqlite)]
+    [TestCase(Store.Postgres)]
+    public async Task A_failed_run_commits_its_tracked_row_only_when_it_finishes(Store store)
+    {
+        await using var host = ProgressHost.Create(store);
+        using var scope = host.Services.CreateScope();
+        var train = (TracksThenFailsTrain)
+            scope.ServiceProvider.GetRequiredService<ITracksThenFailsTrain>();
+        var group = $"progress-failed-{Guid.NewGuid():N}";
+        TracksThenFailsTrain.Instance = train;
+        TracksThenFailsTrain.Factory =
+            host.Services.GetRequiredService<IDataContextProviderFactory>();
+        TracksThenFailsTrain.Group = group;
+        TracksThenFailsTrain.Seen.Clear();
+        TracksThenFailsTrain.GroupSeenMidRun = null;
+
+        await FluentActions
+            .Awaiting(() => train.Run(Unit.Default))
+            .Should()
+            .ThrowAsync<InvalidOperationException>();
+
+        var row = await host.Row(train.Metadata!.Id);
+        var committed = await host.GroupExists(group);
+        await host.DeleteGroup(group);
+        await host.Delete(train.Metadata.Id);
+
+        row.TrainState.Should().Be(TrainState.Failed);
+        TracksThenFailsTrain
+            .Seen.Should()
+            .Equal(
+                [nameof(TracksARow), nameof(FailsAfterTheRow)],
+                "progress writes each junction's name to the store before the junction runs"
+            );
+        TracksThenFailsTrain
+            .GroupSeenMidRun.Should()
+            .BeFalse(
+                "writing the second junction's progress must not commit the row the first "
+                    + $"junction tracked ({Adr})"
+            );
+        committed
+            .Should()
+            .BeTrue(
+                "the run's terminal write commits what it tracked, whatever the outcome "
+                    + $"({Adr})"
+            );
+    }
+
     private static async Task<Models.Metadata.Metadata> RunUntilCancelled<TTrain>(
         Store store,
         int waiting
@@ -240,7 +289,8 @@ public class JunctionProgressWritesOnlyProgressTests
             services
                 .AddScopedTraxRoute<ICancelledTrain, CancelledTrain>()
                 .AddScopedTraxRoute<ICancelledParallelTrain, CancelledParallelTrain>()
-                .AddScopedTraxRoute<ICancelSiblingsTrain, CancelSiblingsTrain>();
+                .AddScopedTraxRoute<ICancelSiblingsTrain, CancelSiblingsTrain>()
+                .AddScopedTraxRoute<ITracksThenFailsTrain, TracksThenFailsTrain>();
             return new ProgressHost(services.BuildServiceProvider(), sqliteFile);
         }
 
@@ -268,6 +318,25 @@ public class JunctionProgressWritesOnlyProgressTests
                 .CreateDbContextAsync(CancellationToken.None);
             var row = await context.Metadatas.SingleAsync(m => m.Id == id);
             context.Metadatas.Remove(row);
+            await context.SaveChanges(CancellationToken.None);
+        }
+
+        public async Task<bool> GroupExists(string name)
+        {
+            await using var context = await Services
+                .GetRequiredService<IDataContextProviderFactory>()
+                .CreateDbContextAsync(CancellationToken.None);
+            return await context.ManifestGroups.AsNoTracking().AnyAsync(g => g.Name == name);
+        }
+
+        public async Task DeleteGroup(string name)
+        {
+            await using var context = await Services
+                .GetRequiredService<IDataContextProviderFactory>()
+                .CreateDbContextAsync(CancellationToken.None);
+            context.ManifestGroups.RemoveRange(
+                await context.ManifestGroups.Where(g => g.Name == name).ToListAsync()
+            );
             await context.SaveChanges(CancellationToken.None);
         }
 
@@ -409,6 +478,69 @@ public class JunctionProgressWritesOnlyProgressTests
                 )
                 .Chain<Join>()
                 .Resolve();
+    }
+
+    /// <summary>
+    /// Tracks a manifest group through the run's effect runner in its first junction and throws in
+    /// its second. Each junction reads its own progress column from the store first, and the second
+    /// also looks for the group.
+    /// </summary>
+    public interface ITracksThenFailsTrain : IServiceTrain<Unit, Unit>;
+
+    public class TracksThenFailsTrain : ServiceTrain<Unit, Unit>, ITracksThenFailsTrain
+    {
+        public static TracksThenFailsTrain Instance = null!;
+        public static IDataContextProviderFactory Factory = null!;
+        public static string Group = "";
+        public static readonly List<string?> Seen = [];
+        public static bool? GroupSeenMidRun;
+
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<TracksARow>().Chain<FailsAfterTheRow>().Resolve();
+
+        public static async Task ReadProgress()
+        {
+            await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+            Seen.Add(
+                await context
+                    .Metadatas.AsNoTracking()
+                    .Where(m => m.Id == Instance.Metadata!.Id)
+                    .Select(m => m.CurrentlyRunningJunction)
+                    .SingleAsync()
+            );
+        }
+    }
+
+    public class TracksARow : EffectJunction<Unit, Unit>
+    {
+        public override async Task<Unit> Run(Unit input)
+        {
+            await TracksThenFailsTrain.ReadProgress();
+            await TracksThenFailsTrain.Instance.EffectRunner!.Track(
+                new ManifestGroup
+                {
+                    Name = TracksThenFailsTrain.Group,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                }
+            );
+            return Unit.Default;
+        }
+    }
+
+    public class FailsAfterTheRow : EffectJunction<Unit, Unit>
+    {
+        public override async Task<Unit> Run(Unit input)
+        {
+            await TracksThenFailsTrain.ReadProgress();
+            await using var context = await TracksThenFailsTrain.Factory.CreateDbContextAsync(
+                CancellationToken.None
+            );
+            TracksThenFailsTrain.GroupSeenMidRun = await context
+                .ManifestGroups.AsNoTracking()
+                .AnyAsync(g => g.Name == TracksThenFailsTrain.Group);
+            throw new InvalidOperationException("fails after the row was tracked");
+        }
     }
 
     private sealed class SaveCounter : IEffectProviderFactory
