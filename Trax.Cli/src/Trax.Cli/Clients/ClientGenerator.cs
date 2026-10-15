@@ -177,9 +177,10 @@ internal sealed class ClientGenerator
     }
 
     /// <summary>
-    /// Writes the client under <paramref name="outDir"/>, replacing generated files that changed. A generated file
-    /// (<c>*.g.ts</c>) the manifest no longer generates is deleted first, then any folder that leaves empty, so a train
-    /// removed on the host leaves nothing behind for <c>--check</c> to report.
+    /// Writes the client under <paramref name="outDir"/>, replacing generated files that changed. A file this
+    /// generator wrote (a <c>*.g.ts</c> starting with one of its headers) that the manifest no longer generates is
+    /// deleted first, then any folder that leaves empty, so a train removed on the host leaves nothing behind for
+    /// <c>--check</c> to report. Any other file is left alone, and a linked folder is not entered.
     /// </summary>
     public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir)
     {
@@ -210,7 +211,7 @@ internal sealed class ClientGenerator
 
     /// <summary>
     /// What differs between the client the manifest generates and the one under <paramref name="outDir"/>: a file
-    /// missing or changed, and a generated file (<c>*.g.ts</c>) that would no longer be written. Line endings are not a
+    /// missing or changed, and a file this generator wrote that would no longer be written. Line endings are not a
     /// difference, so a checkout that writes CRLF passes.
     /// </summary>
     public IReadOnlyList<ClientDrift> Check(ClientGenerateOptions options, string outDir)
@@ -230,18 +231,41 @@ internal sealed class ClientGenerator
         return drift;
     }
 
-    // The generated files under outDir the client does not hold, by their path under it.
+    // The files under outDir this generator wrote and the client no longer holds, by their path under it. A file is
+    // this generator's when its first line is one of its headers: an app's own *.g.ts, or another generator's, is
+    // left alone. A linked folder is not entered, so nothing outside outDir is read or deleted through it.
     private static IReadOnlyList<string> Stale(IReadOnlyList<ClientFile> files, string outDir)
     {
         if (!Directory.Exists(outDir))
             return [];
         var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
+        var enumeration = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            MatchCasing = MatchCasing.CaseSensitive,
+        };
         return Directory
-            .EnumerateFiles(outDir, "*.g.ts", SearchOption.AllDirectories)
+            .EnumerateFiles(outDir, "*.g.ts", enumeration)
+            .Where(Generated)
             .Select(p => Path.GetRelativePath(outDir, p).Replace('\\', '/'))
             .Where(p => !expected.Contains(p))
             .Order(StringComparer.Ordinal)
             .ToList();
+    }
+
+    // The first line of the client's modules, and of a twin's (`// AUTO-GENERATED from <id>.ir.json by ...`).
+    private const string TwinHeader = "// AUTO-GENERATED from ";
+
+    private static bool Generated(string path)
+    {
+        using var reader = new StreamReader(path);
+        var first = reader.ReadLine();
+        return first is not null
+            && (
+                first == Header.TrimEnd('\n')
+                || first.StartsWith(TwinHeader, StringComparison.Ordinal)
+            );
     }
 
     // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id
