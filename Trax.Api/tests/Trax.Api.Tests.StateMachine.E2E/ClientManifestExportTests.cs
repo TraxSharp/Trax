@@ -114,7 +114,10 @@ public class ClientManifestExportTests
                 )
             )
             .Should()
-            .Be(wizard.IrHash, "a twin generated from the manifest's IR names the hash the documents carry");
+            .Be(
+                wizard.IrHash,
+                "a twin generated from the manifest's IR names the hash the documents carry"
+            );
         wizard.Documents.Should().OnlyContain(d => d.Id.Contains(wizard.IrHash));
     }
 

@@ -58,6 +58,10 @@ host's start. An id of another shape answers `CLIENT_OUTDATED` or `SERVER_OUTDAT
 [client manifest](/docs/sdk-reference/statemachine-api/client-manifest) lists every one. The decision is
 [Trax.Api ADR 0040](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md).
 
+A host where a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-api/run-progress) also registers the
+two documents of `runProgress`, under `trax_progress_query_<shapeHash><textHash>` and
+`trax_progress_subscription_<shapeHash><textHash>`, hashed the same way. One pair serves every such train.
+
 ### Registered services
 
 | Service | Lifetime | Purpose |

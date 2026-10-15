@@ -195,6 +195,50 @@ public class JobDispatcherTrainTests : TestSetup
     }
 
     [Test]
+    public async Task Run_CarriesTheEntrysStarterOntoTheRunsMetadata()
+    {
+        // Only the caller who started a run may follow it, so the starter a mutation recorded on
+        // the entry must reach the run's metadata, which runProgress reads
+        // (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(SchedulerTestTrain).FullName!,
+                Input = JsonSerializer.Serialize(
+                    new SchedulerTestInput { Value = "started" },
+                    TraxJsonSerializationOptions.ManifestProperties
+                ),
+                InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
+            }
+        );
+        await DataContext.Track(entry);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+        var starter = new string('c', 64);
+        await ((DbContext)DataContext).Database.ExecuteSqlRawAsync(
+            "UPDATE trax.work_queue SET starter_hash = {0} WHERE id = {1}",
+            starter,
+            entry.Id
+        );
+
+        await _train.Run(Unit.Default);
+
+        DataContext.Reset();
+        var dispatched = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        dispatched.MetadataId.Should().NotBeNull();
+        (
+            await ((DbContext)DataContext)
+                .Database.SqlQueryRaw<string?>(
+                    "SELECT starter_hash AS \"Value\" FROM trax.metadata WHERE id = {0}",
+                    dispatched.MetadataId!.Value
+                )
+                .SingleAsync()
+        )
+            .Should()
+            .Be(starter);
+    }
+
+    [Test]
     public async Task Run_CreatesMetadataWithCorrectTrainName()
     {
         // Arrange

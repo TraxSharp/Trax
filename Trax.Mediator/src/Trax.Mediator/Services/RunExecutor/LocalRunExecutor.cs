@@ -60,10 +60,19 @@ public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory da
     /// The registered <see cref="ITrainBus"/> is not the default one and does not implement
     /// <c>RunByNameAsync</c>.
     /// </exception>
+    public Task<RunTrainResult> ExecuteAsync(
+        string trainName,
+        object input,
+        Type outputType,
+        CancellationToken ct = default
+    ) => ExecuteAsync(trainName, input, outputType, starterHash: null, ct);
+
+    /// <inheritdoc/>
     public async Task<RunTrainResult> ExecuteAsync(
         string trainName,
         object input,
         Type outputType,
+        string? starterHash,
         CancellationToken ct = default
     )
     {
@@ -77,6 +86,7 @@ public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory da
                     Name = trainName,
                     ExternalId = Guid.NewGuid().ToString("N"),
                     Input = null,
+                    StarterHash = starterHash,
                 }
             );
 

@@ -36,7 +36,12 @@ public class HostConfigurationErrorTests
         var logs = new RecordingLoggerProvider();
         var execution = Substitute.For<ITrainExecutionService>();
         execution
-            .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .RunAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Is<RunTrainOptions>(o => o.RecordCaller),
+                Arg.Any<CancellationToken>()
+            )
             .ThrowsAsync(new NoTrainForInputException(typeof(OrphanInput), [ScannedAssembly]));
 
         await using var services = BuildServices(logs, execution);

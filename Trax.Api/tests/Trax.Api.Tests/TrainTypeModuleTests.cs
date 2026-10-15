@@ -782,7 +782,12 @@ public class TrainTypeModuleTests
         // The field must be typed as the renamed wrapper, so externalId and output resolve.
         var executionService = Substitute.For<ITrainExecutionService>();
         executionService
-            .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .RunAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Is<RunTrainOptions>(o => o.RecordCaller),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(
                 new RunTrainResult(
                     7,

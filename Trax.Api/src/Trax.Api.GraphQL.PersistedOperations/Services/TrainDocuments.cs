@@ -118,7 +118,7 @@ internal static class TrainDocuments
     // to one name only.
     private static string Encode(string name) => name.Replace('_', '-');
 
-    private static string TextHash(string shapeHash, string text) =>
+    internal static string TextHash(string shapeHash, string text) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(shapeHash + "\n" + text)))[
             ..MachineDocuments.TextHashLength
         ];
@@ -180,7 +180,15 @@ internal static class TrainDocuments
             text.Append('(')
                 .AppendJoin(", ", arguments.Select(a => $"{a.Name}: ${a.Name}"))
                 .Append(')');
-        text.Append(Selection(schema, definition.Type, [], registration)).Append(" }");
+        text.Append(
+                Selection(
+                    schema,
+                    definition.Type,
+                    [],
+                    $"The train '{registration.ServiceType.FullName}'"
+                )
+            )
+            .Append(" }");
         if (ns is not null)
             text.Append(" }");
         text.Append(" }");
@@ -190,17 +198,17 @@ internal static class TrainDocuments
     // Every field of an object type at every depth, an inline fragment per possible type of a union or interface, and
     // nothing for a leaf. A type met again below itself, or a field that takes a required argument, has no finite
     // document, so it refuses the train.
-    private static string Selection(
+    internal static string Selection(
         ISchemaDefinition schema,
         IType type,
         List<string> ancestors,
-        TrainRegistration train
+        string owner
     )
     {
         switch (type.NamedType())
         {
             case IObjectTypeDefinition objectType:
-                return " { " + Fields(schema, objectType, ancestors, train) + " }";
+                return " { " + Fields(schema, objectType, ancestors, owner) + " }";
             case IUnionTypeDefinition union:
                 return " { __typename "
                     + string.Join(
@@ -208,7 +216,7 @@ internal static class TrainDocuments
                         union
                             .Types.OrderBy(t => t.Name, StringComparer.Ordinal)
                             .Select(t =>
-                                $"... on {t.Name} {{ {Fields(schema, t, ancestors, train)} }}"
+                                $"... on {t.Name} {{ {Fields(schema, t, ancestors, owner)} }}"
                             )
                     )
                     + " }";
@@ -218,7 +226,7 @@ internal static class TrainDocuments
                         " ",
                         Implementations(schema, @interface)
                             .Select(t =>
-                                $"... on {t.Name} {{ {Fields(schema, t, ancestors, train)} }}"
+                                $"... on {t.Name} {{ {Fields(schema, t, ancestors, owner)} }}"
                             )
                     )
                     + " }";
@@ -231,12 +239,12 @@ internal static class TrainDocuments
         ISchemaDefinition schema,
         IObjectTypeDefinition objectType,
         List<string> ancestors,
-        TrainRegistration train
+        string owner
     )
     {
         if (ancestors.Contains(objectType.Name, StringComparer.Ordinal))
             throw new InvalidOperationException(
-                $"The train '{train.ServiceType.FullName}' answers with the type {objectType.Name}, which holds "
+                $"{owner} answers with the type {objectType.Name}, which holds "
                     + $"itself ({string.Join(" > ", ancestors.Append(objectType.Name))}), so no finite document "
                     + "selects it. An exposed train's answer needs a shape that ends: flatten it, or stop exposing "
                     + "the train."
@@ -254,11 +262,11 @@ internal static class TrainDocuments
                 { } required
             )
                 throw new InvalidOperationException(
-                    $"The train '{train.ServiceType.FullName}' answers with {objectType.Name}.{field.Name}, which "
+                    $"{owner} answers with {objectType.Name}.{field.Name}, which "
                         + $"takes the required argument '{required.Name}', so its document cannot select it. Give the "
                         + "argument a default, or leave the field out of the train's output."
                 );
-            fields.Add(field.Name + Selection(schema, field.Type, ancestors, train));
+            fields.Add(field.Name + Selection(schema, field.Type, ancestors, owner));
         }
         ancestors.RemoveAt(ancestors.Count - 1);
         return fields.Count == 0 ? "__typename" : string.Join(" ", fields);
@@ -275,7 +283,7 @@ internal static class TrainDocuments
 
     // The field's signature, then the definition of every type the document reaches but the root and namespace types,
     // in name order, without descriptions.
-    private static string ShapeHash(
+    internal static string ShapeHash(
         ISchemaDefinition schema,
         IReadOnlyDictionary<string, INamedSyntaxNode> sdl,
         IOutputFieldDefinition definition,

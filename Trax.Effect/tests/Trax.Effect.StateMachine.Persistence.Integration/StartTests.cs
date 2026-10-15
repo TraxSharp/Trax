@@ -1,8 +1,10 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 using SqliteMigrator = Trax.Effect.Data.Sqlite.Utils.DatabaseMigrator;
@@ -287,6 +289,43 @@ public class StartTests(StoreProvider provider)
             .Be(RefusalCode.InvokeLimitReached);
         (await _host.UserRows(user, InvokingStartMachine.Id)).Should().ContainSingle();
         _launcher.Launches.Should().ContainSingle();
+    }
+
+    [Test]
+    public async Task A_live_run_still_counts_after_its_instance_is_gone()
+    {
+        // The cap counts by the run's recorded starter, so a run whose instance a draft lifetime or a discard removed
+        // keeps its place until it ends
+        // (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
+        var user = NewUser();
+        var started = Started(
+            await Start(
+                InvokingStartMachine.Id,
+                new Actor.Client(user),
+                new JsonObject { ["source"] = "repo" },
+                "s1"
+            )
+        );
+        using (var scope = _host.Scope())
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.Where(x => x.Id == started.Id)
+                .ExecuteDeleteAsync();
+
+        (
+            await Start(
+                InvokingStartMachine.Id,
+                new Actor.Client(user),
+                new JsonObject { ["source"] = "repo" },
+                "s2"
+            )
+        )
+            .Should()
+            .BeOfType<StartOutcome.Rejected>(
+                "the first run is still queued, though its instance is gone"
+            )
+            .Which.Code.Should()
+            .Be(RefusalCode.InvokeLimitReached);
     }
 
     [Test]

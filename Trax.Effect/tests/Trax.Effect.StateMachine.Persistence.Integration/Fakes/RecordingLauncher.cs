@@ -30,6 +30,7 @@ internal sealed class RecordingLauncher : IInvokedTrainLauncher
                 Input = "{}",
                 InputTypeName = launch.Input.GetType().FullName,
                 InvokedBy = launch.InvokedBy,
+                StarterHash = launch.StarterHash,
             }
         );
         entry.ExternalId = launch.ExternalId;

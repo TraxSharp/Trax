@@ -93,6 +93,7 @@ internal sealed class MachineDocumentRegistration(
         [
             .. (exposed.Count == 0 ? [] : MachineDocuments.Generate(executor.Schema, exposed)),
             .. TrainDocuments.Generate(executor.Schema, trains),
+            .. ProgressDocuments.Generate(executor.Schema),
         ];
         await RegisterAsync(startup: true, cancellationToken).ConfigureAwait(false);
     }

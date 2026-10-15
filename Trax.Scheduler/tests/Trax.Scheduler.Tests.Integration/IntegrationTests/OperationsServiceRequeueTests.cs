@@ -131,6 +131,35 @@ public class OperationsServiceRequeueTests : TestSetup
     }
 
     [Test]
+    public async Task A_requeued_run_keeps_the_starter_of_the_run_it_repeats()
+    {
+        // The caller who started the run follows its repeat too
+        // (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
+        var source = await SeedRunAsync("""{"Value":"again"}""");
+        var starter = new string('d', 64);
+        var db = (DbContext)DataContext;
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE trax.metadata SET starter_hash = {0} WHERE id = {1}",
+            starter,
+            source
+        );
+
+        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+
+        result.Success.Should().BeTrue(result.Message);
+        (
+            await db
+                .Database.SqlQueryRaw<string?>(
+                    "SELECT starter_hash AS \"Value\" FROM trax.work_queue WHERE id = {0}",
+                    result.Id!.Value
+                )
+                .SingleAsync()
+        )
+            .Should()
+            .Be(starter);
+    }
+
+    [Test]
     public async Task A_run_that_recorded_no_decisions_is_requeued_as_an_ordinary_enqueue()
     {
         var source = await SeedRunAsync("""{"Value":"again"}""");

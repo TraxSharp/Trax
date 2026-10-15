@@ -46,6 +46,7 @@ public class DispatchListInputTests
             .RunAsync(
                 Arg.Any<string>(),
                 Arg.Do<string>(json => _sent = json),
+                Arg.Is<RunTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new RunTrainResult(1, "ext-1"));
@@ -53,8 +54,7 @@ public class DispatchListInputTests
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Do<string?>(json => _sent = json),
-                Arg.Any<int>(),
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new QueueTrainResult(2, "ext-2"));

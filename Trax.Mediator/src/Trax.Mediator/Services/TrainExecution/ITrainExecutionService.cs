@@ -84,9 +84,20 @@ public interface ITrainExecutionService
     );
 
     /// <summary>
+    /// Runs a train as <see cref="RunAsync(string, string, CancellationToken)"/> does, with the options that overload
+    /// has no parameter for. An implementation that predates it runs the train and records no starter.
+    /// </summary>
+    Task<RunTrainResult> RunAsync(
+        string trainName,
+        string inputJson,
+        RunTrainOptions options,
+        CancellationToken ct = default
+    ) => RunAsync(trainName, inputJson, ct);
+
+    /// <summary>
     /// Resolves a train by name, authorizes the current caller for it, and reads the caller's
     /// input into the train's input type: the steps <see cref="QueueAsync(string, string?, int, DateTime?, CancellationToken)"/> and
-    /// <see cref="RunAsync"/> take before doing anything else, for a surface that submits the work
+    /// <see cref="RunAsync(string, string, CancellationToken)"/> take before doing anything else, for a surface that submits the work
     /// some other way. Authorization runs before the input is read, so a caller who may not use the
     /// train learns nothing about its input from a parse error. Nothing is written.
     /// </summary>
@@ -152,9 +163,26 @@ public sealed record QueueTrainOptions
 
     /// <summary>The step the new run resumes at, or null for after the latest checkpoint.</summary>
     public string? ResumeAt { get; internal init; }
+
+    /// <summary>
+    /// Records the current caller (<c>ICurrentPrincipalProvider</c>) as the run's starter, so that caller, and only
+    /// that caller, may follow the run's progress (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md). Set by the GraphQL mutations; a queue from
+    /// host code, the dashboard or the operations namespace leaves it off, and its run has no starter.
+    /// </summary>
+    public bool RecordCaller { get; init; }
+
+    /// <summary>The starter to record whatever the caller is: a requeue keeps the original run's. Trax only.</summary>
+    internal string? StarterHash { get; init; }
 }
 
-/// <summary>A completed run from <see cref="ITrainExecutionService.RunAsync"/> or <c>IRunExecutor</c>.</summary>
+/// <summary>How a train is run, beyond its name and input.</summary>
+public sealed record RunTrainOptions
+{
+    /// <summary>Records the current caller as the run's starter, as <see cref="QueueTrainOptions.RecordCaller"/> does.</summary>
+    public bool RecordCaller { get; init; }
+}
+
+/// <summary>A completed run from <see cref="ITrainExecutionService.RunAsync(string, string, CancellationToken)"/> or <c>IRunExecutor</c>.</summary>
 /// <param name="MetadataId">The id of the run's metadata record.</param>
 /// <param name="ExternalId">The run's external id.</param>
 /// <param name="Output">

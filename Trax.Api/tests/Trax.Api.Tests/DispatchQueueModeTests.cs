@@ -39,8 +39,7 @@ public class DispatchQueueModeTests
             .QueueAsync(
                 typeof(IReportTrain).FullName!,
                 Arg.Any<string?>(),
-                7,
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.Priority == 7 && o.RecordCaller),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new QueueTrainResult(42, "ext-42"));
@@ -58,13 +57,17 @@ public class DispatchQueueModeTests
             .QueueAsync(
                 typeof(IReportTrain).FullName!,
                 Arg.Is<string?>(json => json != null && json.Contains("q3")),
-                7,
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.Priority == 7 && o.RecordCaller),
                 Arg.Any<CancellationToken>()
             );
         await _execution
             .DidNotReceiveWithAnyArgs()
-            .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .RunAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Is<RunTrainOptions>(o => o.RecordCaller),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Test]
@@ -74,8 +77,7 @@ public class DispatchQueueModeTests
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
-                Arg.Any<int>(),
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new QueueTrainResult(5, "ext-5"));
@@ -92,8 +94,7 @@ public class DispatchQueueModeTests
             .QueueAsync(
                 typeof(IReportTrain).FullName!,
                 Arg.Any<string?>(),
-                0,
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.Priority == 0 && o.RecordCaller),
                 Arg.Any<CancellationToken>()
             );
     }

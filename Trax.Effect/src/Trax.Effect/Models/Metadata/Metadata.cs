@@ -385,6 +385,13 @@ public class Metadata : IModel, IDisposable
     public SnapshotOwnerKind? InvokingOwnerKind { get; private set; }
 
     /// <summary>
+    /// The SHA-256 of the qualified principal id of whoever started this run (<see cref="RunStarter"/>), carried from
+    /// its work queue entry at dispatch or set by a run mode mutation; null for a run nobody started directly. Only
+    /// that caller may follow the run's progress. Internal and never serialized.
+    /// </summary>
+    internal string? StarterHash { get; set; }
+
+    /// <summary>
     /// The output of a completed invoked run, serialized as its machine's <c>OnDone</c> edges read it
     /// (<see cref="Utils.InvokedRunOutput"/>), and written in the run's terminal write so the outcome survives
     /// any crash after it. Null on every other run, on a run that has not completed, on one whose output was
@@ -546,6 +553,7 @@ public class Metadata : IModel, IDisposable
             InvokingMachine = metadata.InvokedBy?.Machine,
             InvokingInstanceId = metadata.InvokedBy?.InstanceId,
             InvokingOwnerKind = metadata.InvokedBy?.OwnerKind,
+            StarterHash = metadata.StarterHash,
             HostName = host?.HostName,
             HostEnvironment = host?.HostEnvironment,
             HostInstanceId = host?.HostInstanceId,

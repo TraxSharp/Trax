@@ -39,7 +39,7 @@ public abstract class TestSetup
 
         var arrayLoggingProvider = new ArrayLoggingProvider();
 
-        ServiceProvider = new ServiceCollection()
+        var services = new ServiceCollection()
             .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
             .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
             .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
@@ -54,9 +54,13 @@ public abstract class TestSetup
                             .AddJunctionLogger(serializeJunctionData: true)
                     )
                     .AddMediator(assemblies: [typeof(AssemblyMarker).Assembly])
-            )
-            .BuildServiceProvider();
+            );
+        ConfigureServices(services);
+        ServiceProvider = services.BuildServiceProvider();
     }
+
+    /// <summary>Adds to or replaces what the fixture registered, before the provider is built.</summary>
+    protected virtual void ConfigureServices(IServiceCollection services) { }
 
     [OneTimeTearDown]
     public async Task RunAfterAnyTests()

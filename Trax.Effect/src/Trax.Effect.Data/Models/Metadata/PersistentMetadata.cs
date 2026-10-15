@@ -69,6 +69,9 @@ internal class PersistentMetadata : Effect.Models.Metadata.Metadata
             // bytes stored are the bytes the size cap counted.
             entity.Property(e => e.InvokeOutput).HasColumnName("invoke_output");
             entity.Property(e => e.InvokeOutputOversize).HasColumnName("invoke_output_oversize");
+
+            // Who started the run (Postgres 082, SQLite 042), internal like the invoked run's output.
+            entity.Property(e => e.StarterHash).HasColumnName("starter_hash");
         });
     }
 }

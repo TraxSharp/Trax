@@ -100,6 +100,12 @@ internal sealed record InvokedTrainLaunch(
     /// refuses such a launch for a user-owned instance with <see cref="UnauthorizedAccessException"/>.
     /// </summary>
     public bool FromOutcome { get; init; }
+
+    /// <summary>
+    /// The owner of the user-owned instance whose state queues the run, as a run starter (<c>RunStarter</c>), so the
+    /// owner may follow it and the invoked-run cap counts it; null for a system-owned instance.
+    /// </summary>
+    public string? StarterHash { get; init; }
 }
 
 /// <summary>

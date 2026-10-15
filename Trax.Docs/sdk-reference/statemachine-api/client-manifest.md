@@ -31,9 +31,9 @@ a frontend's build needs no running server, no database and no credential, and T
 | `TraxClientExport.Requested`, `TraxClientExport.Path` | Whether, and where to, the process was started to export, read from its command line. `UsePostgres` and `UseSqlite` skip their migration when it is set; a host skips its own seeding the same way. |
 | `TraxClientExport.PathIn(IReadOnlyList<string> args)` | The path `args` name after the argument, or null. The argument without a path throws. |
 | `ITraxStartupCheck` | Marks a hosted service that only checks configuration and the host's own types at startup and refuses a host that is wrong. An export runs every one of these and no other hosted service. Trax's own startup validators carry it, except the two that read the database or call a remote schema. |
-| `ClientManifest` | The file's content: `Format`, `Machines`, `Trains` and `Types`. `ClientManifest.Write(manifest)` gives its text, `ClientManifest.Read(text)` reads it. `ClientManifest.CurrentFormat` is the format this version writes and reads. |
-| `ClientManifestMachine` | One exposed machine: `Id`, `IrHash`, `Ir` and its `Documents`. `Requires` is null: each event's own rule applies. |
-| `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Requires`, `Documents` and declared `Chain`. |
+| `ClientManifest` | The file's content: `Format`, `Machines`, `Trains`, `Progress` and `Types`. `Progress` holds the [`runProgress`](/docs/sdk-reference/graphql-api/run-progress) query's and subscription's documents, and is empty when no train lets its starter follow it. `ClientManifest.Write(manifest)` gives its text, `ClientManifest.Read(text)` reads it. `ClientManifest.CurrentFormat` is the format this version writes and reads. |
+| `ClientManifestMachine` | One exposed machine: `Id`, `IrHash`, `Ir` and its `Documents`. `Requires` is null: each event's own rule applies. `IrText()` gives the IR as canonical JSON, the bytes `IrHash` is the SHA-256 of. |
+| `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Requires` and `Documents`, and `Progress`, whether it carries `[TraxRunProgress]`. |
 | `ClientManifestDocument` | One persisted document: the `Id` a client sends, its `Operation` and its `Document` text. |
 | `ClientManifestRequirement` | What a caller needs, as the train's attributes declare it: `Anonymous` (`[TraxAllowAnonymous]`), `RoleSets` (one per attribute naming roles; the caller holds a role of every set) and `Policies` (each of them). The server enforces it either way. |
 
@@ -55,7 +55,7 @@ a frontend's build needs no running server, no database and no credential, and T
 
 ## Example
 
-```csharp
+```csharp fragment
 var app = builder.Build();
 
 if (!TraxClientExport.Requested)

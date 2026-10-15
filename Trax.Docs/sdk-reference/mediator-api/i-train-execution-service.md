@@ -54,6 +54,13 @@ public interface ITrainExecutionService
         CancellationToken ct = default
     );
 
+    Task<RunTrainResult> RunAsync(
+        string trainName,
+        string inputJson,
+        RunTrainOptions options,
+        CancellationToken ct = default
+    );
+
     Task<PreparedTrain> PrepareAsync(
         string trainName,
         string? inputJson,
@@ -72,6 +79,12 @@ public sealed record QueueTrainOptions
     public long? ReplayDecisionsOf { get; }
     public long? ResumeFrom { get; }
     public string? ResumeAt { get; }
+    public bool RecordCaller { get; init; }
+}
+
+public sealed record RunTrainOptions
+{
+    public bool RecordCaller { get; init; }
 }
 
 public sealed class PreparedTrain
@@ -88,6 +101,7 @@ public sealed class PreparedTrain
 | [`QueueAsync`](#queueasync) | Writes a work queue entry the scheduler dispatches |
 | [`QueueAsync` with `QueueTrainOptions`](#queueasync-with-queuetrainoptions) | The same, with the options the first overload has no parameter for |
 | [`RunAsync`](#runasync) | Runs the train now and returns its output |
+| `RunAsync` with `RunTrainOptions` | The same; `RecordCaller` records the caller as the run's starter on its metadata, as `QueueTrainOptions.RecordCaller` does. An implementation that does not override it runs through the overload above and records nobody |
 | [`PrepareAsync`](#prepareasync) | Looks up, authorizes and reads the input, and writes nothing |
 
 Train lookup, in every member, matches the fully-qualified canonical name first
@@ -245,6 +259,7 @@ the same exceptions for the same reasons.
 | `ReplayDecisionsOf` | `long?` | `null` | The metadata id of an earlier run whose recorded [decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions) the new run replays, so it takes the tracks that run took. Set by Trax only: [`IOperationsService.RequeueExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#requeueexecutionasync) sets it to the run being re-queued when that run has decisions to replay |
 | `ResumeFrom` | `long?` | `null` | The metadata id of a failed run the new run resumes, from the step after its latest checkpoint (or `ResumeAt`). Set by Trax only, by [`IOperationsService.ResumeExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#resumeexecutionasync) |
 | `ResumeAt` | `string?` | `null` | The step a resumed run resumes at, or null for after the latest checkpoint. Set by Trax only |
+| `RecordCaller` | `bool` | `false` | Record the current caller, as `ICurrentPrincipalProvider` gives it, as the run's starter: a hash of the principal id on the entry, which the run's metadata takes at dispatch. Only the starter may follow the run through [`runProgress`](/docs/sdk-reference/graphql-api/run-progress). The GraphQL train mutations set it |
 
 An `ITrainExecutionService` written before this overload existed, a custom one or a decorator
 around the mediator's, gets a default implementation that queues through the overload above. When

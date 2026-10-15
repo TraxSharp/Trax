@@ -194,6 +194,9 @@ public static class GraphQLServiceExtensions
 
         services.AddTraxApi();
         services.AddSingleton<TrainTypeModule>();
+        services.AddSingleton<RunProgressTypeModule>();
+        services.TryAddSingleton<RunProgressAccess>();
+        services.TryAddSingleton<RunProgressLimits>();
 
         // requeueAllDeadLetters runs its fold in the scheduler's job list, in the background,
         // stopped only by the host shutting down; AddScheduler registers the same one, so the
@@ -279,6 +282,8 @@ public static class GraphQLServiceExtensions
             .AddType<JunctionEventGraphType>()
             .AddType<JunctionStepGraphType>()
             .AddTypeModule<TrainTypeModule>()
+            // runProgress, on a host where a train lets its starter follow it; it adds nothing otherwise.
+            .AddTypeModule<RunProgressTypeModule>()
             // The schema container does not forward to the application one, so the filter's
             // logger comes from the root provider HotChocolate exposes for exactly this.
             .AddErrorFilter(sp => new TraxErrorFilter(

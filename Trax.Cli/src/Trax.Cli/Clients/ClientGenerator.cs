@@ -108,6 +108,11 @@ internal sealed class ClientGenerator
             trains.Add((train, function));
         }
 
+        var progress = Progress(manifest);
+        if (progress is not null)
+            foreach (var name in ProgressNames)
+                names.Claim(name, "runProgress");
+
         foreach (var (machine, camel, pascal) in machines)
         {
             files.AddRange(Twin(machine, spec, options.ToolsDir));
@@ -131,6 +136,16 @@ internal sealed class ClientGenerator
         {
             files.Add(new($"trains/{function}.g.ts", Train(train, function, types)));
             index.Append($"export {{ {function} }} from \"./trains/{function}.g\";\n");
+        }
+
+        if (progress is { } documents)
+        {
+            files.Add(
+                new("progress.g.ts", ProgressModule(documents.Query, documents.Stream, manifest))
+            );
+            index.Append(
+                $"export {{ {string.Join(", ", ProgressNames)}, type RunProgressView }} from \"./progress.g\";\n"
+            );
         }
 
         files.Add(new("index.g.ts", index.ToString()));
@@ -211,12 +226,23 @@ internal sealed class ClientGenerator
 
             let connection: TraxConnection | null = null;
             let socket: Client | null = null;
+            let generation = 0;
 
-            /** Tells the generated client where the host is. Call it once, before any hook or train function runs. */
+            /**
+             * Tells the generated client where the host is. Call it before any hook or train function runs, and again when
+             * the connection changes (another user signs in): the socket is closed, and every machine's server is made anew
+             * on its next use.
+             */
             export function configureTrax(next: TraxConnection): void {
               connection = next;
+              generation += 1;
               void socket?.dispose();
               socket = null;
+            }
+
+            /** How many times configureTrax was called: a machine's server made under an earlier count is made again. */
+            export function traxGeneration(): number {
+              return generation;
             }
 
             /** The connection, or a refusal naming what to call. */
@@ -344,7 +370,7 @@ internal sealed class ClientGenerator
         sb.Append(
             $"import {{ useRememberedMachine, useServerMachine, type UseRememberedMachineOptions, type UseServerMachineOptions }} from {TypeScript.Literal(spec + "/react")};\n"
         );
-        sb.Append("import { traxConnection, traxSocket } from \"../client.g\";\n");
+        sb.Append("import { traxConnection, traxGeneration, traxSocket } from \"../client.g\";\n");
         sb.Append($"import {{ {camel} }} from \"./{machine.Id}.machine.g\";\n\n");
         sb.Append($"export {{ {camel} }};\n\n");
         sb.Append(
@@ -362,17 +388,22 @@ internal sealed class ClientGenerator
                 .Append($"    document: {TypeScript.Literal(document.Document)},\n")
                 .Append("  },\n");
         sb.Append("];\n\n");
-        sb.Append($"let server: ReturnType<typeof createMachineServer> | null = null;\n\n");
+        sb.Append($"let server: ReturnType<typeof createMachineServer> | null = null;\n");
+        sb.Append("let serverGeneration = -1;\n\n");
         sb.Append(
             $"/** The server of '{EscapeDocText(machine.Id)}' over the connection given to configureTrax. */\n"
         );
         sb.Append($"export function {camel}Server(): ReturnType<typeof createMachineServer> {{\n");
-        sb.Append("  return (server ??= createMachineServer(traxConnection().url, {\n");
-        sb.Append("    headers: traxConnection().headers,\n");
-        sb.Append($"    machine: {camel},\n");
-        sb.Append($"    documents: {camel}Documents,\n");
-        sb.Append("    socket: traxSocket(),\n");
-        sb.Append("  }));\n}\n\n");
+        sb.Append("  if (server === null || serverGeneration !== traxGeneration()) {\n");
+        sb.Append("    server = createMachineServer(traxConnection().url, {\n");
+        sb.Append("      headers: traxConnection().headers,\n");
+        sb.Append($"      machine: {camel},\n");
+        sb.Append($"      documents: {camel}Documents,\n");
+        sb.Append("      socket: traxSocket(),\n");
+        sb.Append("    });\n");
+        sb.Append("    serverGeneration = traxGeneration();\n");
+        sb.Append("  }\n");
+        sb.Append("  return server;\n}\n\n");
         sb.Append(
             $"/** One instance of '{EscapeDocText(machine.Id)}': the given id, or one started with `startInput`. */\n"
         );
@@ -466,9 +497,164 @@ internal sealed class ClientGenerator
             $"export function {function}({string.Join(", ", parameters)}): Promise<{types.OutputType(answer)}> {{\n"
         );
         sb.Append(
-            $"  return sendDocument({function}DocumentId, {{ {string.Join(", ", values)} }}, [{string.Join(", ", path.Select(TypeScript.Literal))}]);\n"
+            $"  return sendDocument({function}DocumentId, {(values.Count == 0 ? "{}" : $"{{ {string.Join(", ", values)} }}")}, [{string.Join(", ", path.Select(TypeScript.Literal))}]);\n"
         );
         sb.Append("}\n");
+        return sb.ToString();
+    }
+
+    private static readonly string[] ProgressNames =
+    [
+        "readRunProgress",
+        "followRunProgress",
+        "useRunProgress",
+        "runProgressDocumentId",
+        "runProgressEventsDocumentId",
+    ];
+
+    // The query and the subscription of runProgress, or null when no train lets its starter follow it.
+    private static (ClientManifestDocument Query, ClientManifestDocument Stream)? Progress(
+        ClientManifest manifest
+    )
+    {
+        if (manifest.Progress.Count == 0)
+            return null;
+        var query = manifest.Progress.SingleOrDefault(d => d.Operation == "query");
+        var stream = manifest.Progress.SingleOrDefault(d => d.Operation == "subscription");
+        if (query is null || stream is null || manifest.Progress.Count != 2)
+            throw new InvalidOperationException(
+                "The manifest's progress documents are not one query and one subscription. Export the manifest "
+                    + "again from the host."
+            );
+        return (query, stream);
+    }
+
+    private static string ProgressModule(
+        ClientManifestDocument query,
+        ClientManifestDocument stream,
+        ClientManifest manifest
+    )
+    {
+        var followable = manifest
+            .Trains.Where(t => t.Progress)
+            .Select(t => t.Namespace is null ? t.Field : $"{t.Namespace}.{t.Field}")
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var sb = new StringBuilder(Header);
+        sb.Append("import \"./format.g\";\n");
+        sb.Append("import { useEffect, useState } from \"react\";\n");
+        sb.Append("import { sendDocument, traxSocket, TraxOperationError } from \"./client.g\";\n");
+        sb.Append("import type { RunProgress, RunProgressEvent } from \"./types.g\";\n\n");
+        sb.Append("/** The persisted id of the runProgress query, which the host registered. */\n");
+        sb.Append($"export const runProgressDocumentId = {TypeScript.Literal(query.Id)};\n\n");
+        sb.Append(
+            "/** The persisted id of the runProgress subscription, which the host registered. */\n"
+        );
+        sb.Append(
+            $"export const runProgressEventsDocumentId = {TypeScript.Literal(stream.Id)};\n\n"
+        );
+        sb.Append(
+            TypeScript.Doc(
+                "Your run, read once: where it stands and the steps it took. Any run you did not start answers "
+                    + "`problem.code` NOT_FOUND. Runs of these trains can be followed: "
+                    + string.Join(", ", followable)
+                    + "."
+            )
+        );
+        sb.Append(
+            """
+            export function readRunProgress(runId: string): Promise<RunProgress> {
+              return sendDocument(runProgressDocumentId, { runId }, ["runProgress"]);
+            }
+
+            /**
+             * Follows your run: `onEvent` gets each change of state and each step as it happens, then `onEnd()` once the
+             * stream ends, after the run does, or `onEnd(error)` when the host refused it. A `sequence` that skips a number
+             * means events were lost: read the run again. Returns the function that stops following.
+             */
+            export function followRunProgress(
+              runId: string,
+              onEvent: (event: RunProgressEvent) => void,
+              onEnd?: (error?: unknown) => void,
+            ): () => void {
+              const payload = { query: "", id: runProgressEventsDocumentId, variables: { runId } };
+              return traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
+                next: (result) => {
+                  const error = result.errors?.[0];
+                  if (error) onEnd?.(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
+                  else if (result.data) onEvent(result.data.runProgress);
+                },
+                error: (error) => onEnd?.(error),
+                complete: () => onEnd?.(),
+              });
+            }
+
+            /** A run as useRunProgress shows it. */
+            export interface RunProgressView {
+              state: RunProgress["state"];
+              steps: RunProgress["steps"];
+              failure: string | null;
+              problem: RunProgress["problem"];
+              /** The stream ended: the run ended, or the host refused it. */
+              ended: boolean;
+            }
+
+            const nothingYet: RunProgressView = { state: null, steps: [], failure: null, problem: null, ended: false };
+
+            /**
+             * Your run, kept current: read once, then followed until it ends. A step replaces the one at its position, and
+             * a lost event reads the run again. Pass null to follow nothing.
+             */
+            export function useRunProgress(runId: string | null | undefined): RunProgressView {
+              const [view, setView] = useState<RunProgressView>(nothingYet);
+              useEffect(() => {
+                setView(nothingYet);
+                if (!runId) return;
+                let live = true;
+                let last = 0;
+                const read = () =>
+                  readRunProgress(runId).then(
+                    (run) => {
+                      if (live) setView((v) => ({ ...v, state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
+                    },
+                    () => undefined,
+                  );
+                void read();
+                const stop = followRunProgress(
+                  runId,
+                  (event) => {
+                    if (last !== 0 && event.sequence !== last + 1) void read();
+                    last = event.sequence;
+                    setView((v) => ({
+                      ...v,
+                      state: event.state ?? v.state,
+                      steps: event.step ? withStep(v.steps, event.step) : v.steps,
+                      failure: event.failure ?? v.failure,
+                      problem: event.problem ?? v.problem,
+                    }));
+                  },
+                  () => {
+                    if (live) setView((v) => ({ ...v, ended: true }));
+                  },
+                );
+                return () => {
+                  live = false;
+                  stop();
+                };
+              }, [runId]);
+              return view;
+            }
+
+            type Step = RunProgress["steps"][number];
+
+            function withStep(steps: readonly Step[], step: Step): Step[] {
+              const key = (s: Step) => `${s.position}:${s.kind}`;
+              const at = steps.findIndex((s) => key(s) === key(step));
+              return at < 0 ? [...steps, step] : steps.map((s, i) => (i === at ? step : s));
+            }
+
+            """
+        );
         return sb.ToString();
     }
 

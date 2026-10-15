@@ -178,8 +178,9 @@ are authorized.
   `[TraxAuthorize]`. Only a system-owned machine chains runs through outcomes.
 
 One user holds at most 10 live invoked runs across every machine; a machine sets its own limit with
-`InvokedRunLimit(n)`. Past it, entering the state is refused as `INVOKE_LIMIT_REACHED`. System owners are not capped
-here: the dispatcher's `MaxActiveJobs` bounds them.
+`InvokedRunLimit(n)`. Past it, entering the state is refused as `INVOKE_LIMIT_REACHED`. A run counts until it ends,
+even when its instance was discarded or swept in the meantime: each run records the user as its starter. System owners
+are not capped here: the dispatcher's `MaxActiveJobs` bounds them.
 
 ## Retry by entering the state again
 

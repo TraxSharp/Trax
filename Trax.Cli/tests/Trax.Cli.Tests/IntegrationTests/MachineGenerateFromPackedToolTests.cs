@@ -159,11 +159,14 @@ public class MachineGenerateFromPackedToolTests
         );
         clientCheckCode
             .Should()
-            .Be(0, "the client just generated is what the manifest generates: " + clientCheckOutput);
+            .Be(
+                0,
+                "the client just generated is what the manifest generates: " + clientCheckOutput
+            );
         File.WriteAllText(
             Path.Combine(work, "page.ts"),
             """
-            import { configureTrax, useReminder, startRun, type StartRunInput } from "./trax/index.g";
+            import { configureTrax, useReminder, startRun, useRunProgress, followRunProgress, type StartRunInput } from "./trax/index.g";
 
             configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql" });
 
@@ -177,6 +180,16 @@ public class MachineGenerateFromPackedToolTests
 
             const input: StartRunInput = { scenario: "crash" };
             export const run = () => startRun(input, { mode: "QUEUE" });
+
+            export function useRunPage(runId: string | null) {
+              const progress = useRunProgress(runId);
+              const names: string[] = progress.steps.map((s) => s.name);
+              // @ts-expect-error a state is one of the run's states, never any string
+              const wrong: typeof progress.state = "DONE";
+              return { names, done: progress.state === "COMPLETED", wrong };
+            }
+
+            export const stop = followRunProgress("r", (e) => void e.sequence);
             """
         );
 

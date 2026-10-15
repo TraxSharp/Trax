@@ -117,7 +117,12 @@ public class TrainExceptionMessageRuleTests
     {
         var execution = Substitute.For<ITrainExecutionService>();
         execution
-            .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .RunAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Is<RunTrainOptions>(o => o.RecordCaller),
+                Arg.Any<CancellationToken>()
+            )
             .ThrowsAsync(thrown);
 
         await using var services = BuildDetailedServices(execution);
@@ -146,7 +151,12 @@ public class TrainExceptionMessageRuleTests
     {
         var execution = Substitute.For<ITrainExecutionService>();
         execution
-            .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .RunAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Is<RunTrainOptions>(o => o.RecordCaller),
+                Arg.Any<CancellationToken>()
+            )
             .ThrowsAsync(new ArgumentException("development detail"));
 
         await using var services = BuildDetailedServices(execution);
@@ -170,6 +180,15 @@ public class TrainExceptionMessageRuleTests
     )
     {
         var execution = Substitute.For<ITrainExecutionService>();
+        execution
+            .QueueAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(refusal);
+        // The operations namespace queues through the positional overload and records no caller.
         execution
             .QueueAsync(
                 Arg.Any<string>(),

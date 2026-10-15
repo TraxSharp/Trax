@@ -38,7 +38,54 @@ internal static class ClientManifests
           workQueueId: Long
           output: StartRunOutput
         }
+
+        type RunProgress {
+          runId: String!
+          train: String
+          state: RunProgressState
+          steps: [JunctionStep!]!
+          failure: String
+          problem: SnapshotProblem
+        }
+
+        type RunProgressEvent {
+          runId: String!
+          sequence: Long!
+          state: RunProgressState
+          step: JunctionStep
+          failure: String
+          problem: SnapshotProblem
+        }
+
+        enum RunProgressState {
+          QUEUED
+          PENDING
+          IN_PROGRESS
+          COMPLETED
+          FAILED
+          CANCELLED
+        }
+
+        type JunctionStep {
+          position: Int!
+          kind: String!
+          name: String!
+          state: String!
+        }
+
+        type SnapshotProblem {
+          code: String!
+          message: String!
+        }
         """;
+
+    public const string ProgressQuery =
+        "query RunProgress($runId: String!) { runProgress(runId: $runId) { runId train state steps { position kind "
+        + "name state } failure problem { code message } } }";
+
+    public const string ProgressSubscription =
+        "subscription RunProgressEvents($runId: String!) { runProgress(runId: $runId) { runId sequence state step { "
+        + "position kind name state } failure problem { code message } } }";
 
     public const string StartRunDocument =
         "mutation StartRun($input: StartRunInput!, $mode: ExecutionMode, $priority: Int) { dispatch { "
@@ -61,6 +108,7 @@ internal static class ClientManifests
                 {
                     Field = "startRun",
                     Root = "mutation",
+                    Progress = true,
                     Requires = new ClientManifestRequirement
                     {
                         RoleSets =
@@ -80,6 +128,21 @@ internal static class ClientManifests
                             Document = StartRunDocument,
                         },
                     ],
+                },
+            ],
+            Progress =
+            [
+                new ClientManifestDocument
+                {
+                    Id = "trax_progress_query_" + new string('f', 64) + new string('1', 16),
+                    Operation = "query",
+                    Document = ProgressQuery,
+                },
+                new ClientManifestDocument
+                {
+                    Id = "trax_progress_subscription_" + new string('f', 64) + new string('2', 16),
+                    Operation = "subscription",
+                    Document = ProgressSubscription,
                 },
             ],
             Types = TrainTypes,

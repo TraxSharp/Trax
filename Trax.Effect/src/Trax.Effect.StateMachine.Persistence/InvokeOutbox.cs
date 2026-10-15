@@ -7,6 +7,7 @@ using Trax.Effect.Data.Services.DataContextTransaction;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
+using Trax.Effect.Models;
 using Trax.Effect.Models.WorkQueue.DTOs;
 
 namespace Trax.Effect.StateMachine.Persistence;
@@ -550,6 +551,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             )
             {
                 FromOutcome = fromOutcome,
+                StarterHash =
+                    owner.Kind == SnapshotOwnerKind.User ? RunStarter.Hash(owner.UserKey) : null,
             }
         );
     }
@@ -578,7 +581,9 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 cancellationToken
             );
 
-        // A run names the instance that queued it, not the user, so it is joined to the user's instances.
+        // A run records its starter, the instance's owner, so it is counted even after a draft lifetime deleted the
+        // instance. A run written before the starter was recorded is joined to the user's instances, as it was.
+        var starter = RunStarter.Hash(userKey);
         var instances = context.SnapshotDrafts.Where(x =>
             x.OwnerKind == SnapshotOwnerKind.User && x.UserKey == userKey
         );
@@ -587,8 +592,14 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 w.InvokingOwnerKind == SnapshotOwnerKind.User
                 && w.Status == WorkQueueStatus.Queued
                 && w.ExternalId != leavingToken
-                && instances.Any(x =>
-                    x.Id == w.InvokingInstanceId && x.Machine == w.InvokingMachine
+                && (
+                    w.StarterHash == starter
+                    || (
+                        w.StarterHash == null
+                        && instances.Any(x =>
+                            x.Id == w.InvokingInstanceId && x.Machine == w.InvokingMachine
+                        )
+                    )
                 ),
             cancellationToken
         );
@@ -596,8 +607,14 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             m =>
                 m.InvokingOwnerKind == SnapshotOwnerKind.User
                 && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
-                && instances.Any(x =>
-                    x.Id == m.InvokingInstanceId && x.Machine == m.InvokingMachine
+                && (
+                    m.StarterHash == starter
+                    || (
+                        m.StarterHash == null
+                        && instances.Any(x =>
+                            x.Id == m.InvokingInstanceId && x.Machine == m.InvokingMachine
+                        )
+                    )
                 ),
             cancellationToken
         );

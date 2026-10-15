@@ -300,6 +300,10 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             IsQuery = graphql.IsQuery,
             IsMutation = graphql.IsMutation,
             IsBroadcastEnabled = HasBroadcastAttribute(implementationType),
+            IsRunProgressEnabled =
+                implementationType.GetCustomAttribute<TraxRunProgressAttribute>() is not null,
+            RunProgressAnswers =
+                implementationType.GetCustomAttribute<TraxRunProgressAttribute>()?.Answers == true,
             IsRemote = HasRemoteAttribute(implementationType),
             GraphQLName = graphql.Name,
             GraphQLDescription = graphql.Description,

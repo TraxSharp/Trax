@@ -130,6 +130,15 @@ public class TrainRegistration
     public required bool IsBroadcastEnabled { get; init; }
 
     /// <summary>
+    /// Whether the caller who started a run of this train may follow its progress. True when the implementation class
+    /// has a <see cref="TraxRunProgressAttribute"/>.
+    /// </summary>
+    public bool IsRunProgressEnabled { get; init; }
+
+    /// <summary>Whether that caller is shown a step's answers (<see cref="TraxRunProgressAttribute.Answers"/>).</summary>
+    public bool RunProgressAnswers { get; init; }
+
+    /// <summary>
     /// Whether this train should be dispatched to a remote worker when one is configured.
     /// True when the implementation class has a <see cref="TraxRemoteAttribute"/>.
     /// If no remote submitter is configured, this is silently ignored and the train runs locally.

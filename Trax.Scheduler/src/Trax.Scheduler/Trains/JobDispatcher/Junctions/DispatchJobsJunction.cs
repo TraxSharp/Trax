@@ -263,6 +263,7 @@ internal class DispatchJobsJunction(
                 ResumeFrom = claimed.ResumeFrom,
                 ResumeAt = claimed.ResumeAt,
                 InvokedBy = InvokedBy(claimed),
+                StarterHash = claimed.StarterHash,
             }
         );
 
@@ -501,6 +502,7 @@ internal class DispatchJobsJunction(
                 ResumeFrom = claimed.ResumeFrom,
                 ResumeAt = claimed.ResumeAt,
                 InvokedBy = InvokedBy(claimed),
+                StarterHash = claimed.StarterHash,
             }
         );
         metadata.TrainState = TrainState.Failed;

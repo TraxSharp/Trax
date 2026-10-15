@@ -20,7 +20,13 @@ public class ClientManifestTests
                     Id = "topic-map",
                     IrHash = new string('a', 64),
                     Ir = new JsonObject { ["id"] = "topic-map", ["version"] = 1 },
-                    Requires = new ClientManifestRequirement { RoleSets = [["recovery-user"]] },
+                    Requires = new ClientManifestRequirement
+                    {
+                        RoleSets =
+                        [
+                            ["recovery-user"],
+                        ],
+                    },
                     Documents =
                     [
                         new ClientManifestDocument

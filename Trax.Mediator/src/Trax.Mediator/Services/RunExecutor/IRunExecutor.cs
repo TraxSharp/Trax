@@ -26,4 +26,16 @@ public interface IRunExecutor
         Type outputType,
         CancellationToken ct = default
     );
+
+    /// <summary>
+    /// Runs the train as the other overload does, recording <paramref name="starterHash"/> as the run's starter. An
+    /// executor that predates it, or runs the train elsewhere, records none.
+    /// </summary>
+    Task<RunTrainResult> ExecuteAsync(
+        string trainName,
+        object input,
+        Type outputType,
+        string? starterHash,
+        CancellationToken ct = default
+    ) => ExecuteAsync(trainName, input, outputType, ct);
 }

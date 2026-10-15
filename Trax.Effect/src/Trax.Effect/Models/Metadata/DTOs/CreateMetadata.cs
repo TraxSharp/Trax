@@ -52,4 +52,7 @@ public class CreateMetadata
 
     /// <summary>The state-machine instance whose invoking state queued the run, or null.</summary>
     public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
+
+    /// <summary>The hash of whoever started the run (<see cref="RunStarter"/>), or null. Set by Trax only.</summary>
+    internal string? StarterHash { get; set; }
 }

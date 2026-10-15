@@ -16,6 +16,7 @@ internal sealed class LifecycleStreamRule
 {
     private readonly bool _streamAllTrains;
     private readonly HashSet<string> _broadcastTrains;
+    private readonly HashSet<string> _progressTrains;
 
     /// <summary>Captures, once, the trains marked <c>[TraxBroadcast]</c>.</summary>
     public LifecycleStreamRule(
@@ -27,6 +28,11 @@ internal sealed class LifecycleStreamRule
         _broadcastTrains = discovery
             .DiscoverTrains()
             .Where(r => r.IsBroadcastEnabled)
+            .Select(r => r.ServiceType.FullName!)
+            .ToHashSet(StringComparer.Ordinal);
+        _progressTrains = discovery
+            .DiscoverTrains()
+            .Where(r => r.IsRunProgressEnabled)
             .Select(r => r.ServiceType.FullName!)
             .ToHashSet(StringComparer.Ordinal);
     }
@@ -51,7 +57,15 @@ internal sealed class LifecycleStreamRule
 
     /// <summary>Whether events of the train named <paramref name="trainName"/> are published.</summary>
     /// <param name="trainName">The train's canonical name (its interface's full name).</param>
+    /// <remarks>
+    /// A <c>[TraxRunProgress]</c> train is published too, so its starter can follow a run through
+    /// <c>runProgress</c>. A broadcast subscriber still never sees it: its view holds only broadcast trains.
+    /// </remarks>
     public bool Publishes(string trainName) =>
         !MachineTrains.Contains(trainName)
-        && (_streamAllTrains || _broadcastTrains.Contains(trainName));
+        && (
+            _streamAllTrains
+            || _broadcastTrains.Contains(trainName)
+            || _progressTrains.Contains(trainName)
+        );
 }

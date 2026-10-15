@@ -465,6 +465,7 @@ It writes, under `--out`:
 | `<machine>/<machine>.client.g.ts` | The machine's documents by id, `<machine>Server()`, `use<Machine>(options)` over `useServerMachine`, and `useRemembered<Machine>(options)` over `useRememberedMachine`, which keeps the instance across visits. |
 | `trains/<train>.g.ts` | `<train>(input, options?)`, which sends the train's persisted id with its input, `mode` and `priority`, and answers its typed response. Its doc comment names what the train requires of a caller. |
 | `types.g.ts` | The GraphQL types the trains take and answer, as TypeScript. |
+| `progress.g.ts` | When a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-api/run-progress): `readRunProgress(runId)`, `followRunProgress(runId, onEvent, onEnd?)` and `useRunProgress(runId)`, which reads your run once, follows it until it ends and reads it again after a lost event. |
 | `index.g.ts`, `manifest.json` | Everything above re-exported, and the manifest it was generated from. |
 
 The generated client is committed, like a twin, so a frontend's build needs no .NET. CI exports the manifest from the

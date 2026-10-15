@@ -103,6 +103,12 @@ namespace Trax.Effect.Attributes
     {
         public TraxRemoteAttribute() { }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public sealed class TraxRunProgressAttribute : System.Attribute
+    {
+        public TraxRunProgressAttribute() { }
+        public bool Answers { get; init; }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct | System.AttributeTargets.Enum | System.AttributeTargets.Property | System.AttributeTargets.Field | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=true)]
     public sealed class TraxSensitiveAttribute : System.Attribute
     {

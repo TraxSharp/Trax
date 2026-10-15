@@ -82,4 +82,7 @@ public class CreateWorkQueue
     /// invoked-train enqueue sets it.
     /// </summary>
     public InvokedBy? InvokedBy { get; set; }
+
+    /// <summary>The hash of whoever starts the run (<see cref="RunStarter"/>), or null. Set by Trax only.</summary>
+    internal string? StarterHash { get; set; }
 }

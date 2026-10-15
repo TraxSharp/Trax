@@ -11,6 +11,7 @@ using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.WorkQueuePromotion;
 using Trax.Effect.Enums;
+using Trax.Effect.Models;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
@@ -21,6 +22,7 @@ using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.ConcurrencyLimiter;
+using Trax.Mediator.Services.Principal;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -34,8 +36,8 @@ namespace Trax.Mediator.Services.TrainExecution;
 /// intended to be constructed directly.
 /// </summary>
 /// <param name="discoveryService">Resolves train names to registrations.</param>
-/// <param name="runExecutor">Executes <see cref="RunAsync"/>, locally or remotely.</param>
-/// <param name="concurrencyLimiter">Gates <see cref="RunAsync"/>; queued work is not gated here.</param>
+/// <param name="runExecutor">Executes <see cref="RunAsync(string, string, CancellationToken)"/>, locally or remotely.</param>
+/// <param name="concurrencyLimiter">Gates <see cref="RunAsync(string, string, CancellationToken)"/>; queued work is not gated here.</param>
 /// <param name="dataContextFactory">Opens the contexts the enqueue writes through.</param>
 /// <param name="mediatorConfiguration">Supplies the input size cap, hook limit and authorization opt-out.</param>
 /// <param name="serviceProvider">
@@ -152,6 +154,7 @@ public class TrainExecutionService(
                 ReplayDecisionsOf = options.ReplayDecisionsOf,
                 ResumeFrom = options.ResumeFrom,
                 ResumeAt = options.ResumeAt,
+                StarterHash = options.StarterHash ?? (options.RecordCaller ? CallerHash() : null),
             }
         );
         entry.ExternalId = externalId;
@@ -344,6 +347,7 @@ public class TrainExecutionService(
                 InputTypeName = registration.InputType.FullName,
                 SubjectKey = subjectKey,
                 InvokedBy = launch.InvokedBy,
+                StarterHash = launch.StarterHash,
             }
         );
         entry.ExternalId = launch.ExternalId;
@@ -416,12 +420,21 @@ public class TrainExecutionService(
     }
 
     /// <inheritdoc/>
-    public async Task<RunTrainResult> RunAsync(
+    public Task<RunTrainResult> RunAsync(
         string trainName,
         string inputJson,
         CancellationToken ct = default
+    ) => RunAsync(trainName, inputJson, new RunTrainOptions(), ct);
+
+    /// <inheritdoc/>
+    public async Task<RunTrainResult> RunAsync(
+        string trainName,
+        string inputJson,
+        RunTrainOptions options,
+        CancellationToken ct = default
     )
     {
+        ArgumentNullException.ThrowIfNull(options);
         var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct);
 
         registration.ServiceType.FullName.AssertLoaded();
@@ -435,9 +448,17 @@ public class TrainExecutionService(
             registration.ServiceType.FullName,
             input,
             registration.OutputType,
+            options.RecordCaller ? CallerHash() : null,
             ct
         );
     }
+
+    // The current caller as the run's starter: the hash of the principal id the host's provider reads. Resolved here
+    // rather than injected, so a host without one (no HTTP surface) records no starter.
+    private string? CallerHash() =>
+        RunStarter.Hash(
+            serviceProvider.GetService<ICurrentPrincipalProvider>()?.GetCurrentPrincipalId()
+        );
 
     /// <inheritdoc/>
     public async Task<PreparedTrain> PrepareAsync(

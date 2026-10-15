@@ -29,6 +29,9 @@ internal class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
 
             entity.Property(e => e.Input).HasColumnType("jsonb");
 
+            // Who starts the run (Postgres 082, SQLite 042), internal and mapped by name, as metadata's is.
+            entity.Property(e => e.StarterHash).HasColumnName("starter_hash");
+
             entity
                 .HasOne(x => x.Manifest)
                 .WithMany(m => m.WorkQueues)

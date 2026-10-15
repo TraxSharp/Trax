@@ -88,6 +88,8 @@ public class TrainRegistration
     public required bool IsQuery { get; init; }
     public required bool IsMutation { get; init; }
     public required bool IsBroadcastEnabled { get; init; }
+    public bool IsRunProgressEnabled { get; init; }
+    public bool RunProgressAnswers { get; init; }
     public required bool IsRemote { get; init; }
     public string? GraphQLName { get; init; }
     public string? GraphQLDescription { get; init; }
@@ -120,6 +122,8 @@ public class TrainRegistration
 | `IsQuery` | `bool` | Whether the train has `[TraxQuery]`, which exposes it as a typed GraphQL query |
 | `IsMutation` | `bool` | Whether the train has `[TraxMutation]`, which exposes it as typed GraphQL mutations |
 | `IsBroadcastEnabled` | `bool` | Whether the train has `[TraxBroadcast]`, which broadcasts its lifecycle events to subscribers |
+| `IsRunProgressEnabled` | `bool` | Whether the train has [`[TraxRunProgress]`](/docs/sdk-reference/graphql-api/run-progress), which lets a run's starter follow it |
+| `RunProgressAnswers` | `bool` | The attribute's `Answers`: whether the starter sees a step's answer and decision track |
 | `IsRemote` | `bool` | Whether the implementation class has `[TraxRemote]`. A route set with `ForTrain<T>()` on the scheduler builder takes precedence; with no remote submitter configured the train runs locally |
 | `GraphQLName` | `string?` | The name from `[TraxQuery(Name = ...)]` or `[TraxMutation(Name = ...)]`; null means derived |
 | `GraphQLDescription` | `string?` | The description of the generated GraphQL fields |
@@ -167,7 +171,7 @@ enqueue uses the same check to decide whether to ask the train for a key.
    Discovery is permissive; the mutual-exclusion and exposure checks run at host startup.
 6. Reads `[TraxQuery]` and `[TraxMutation]` into `IsQuery`, `IsMutation`, `GraphQLName`,
    `GraphQLDescription`, `GraphQLDeprecationReason`, `GraphQLOperations` and `GraphQLNamespace`;
-   `[TraxBroadcast]` into `IsBroadcastEnabled`; `[TraxRemote]` into `IsRemote`;
+   `[TraxBroadcast]` into `IsBroadcastEnabled`; `[TraxRunProgress]` into `IsRunProgressEnabled` and `RunProgressAnswers`; `[TraxRemote]` into `IsRemote`;
    `[TraxConcurrencyLimit]` into `MaxConcurrentRun`.
 7. Checks whether the implementation overrides `QueueSubjectKey` and sets `HasQueueSubjectKey`.
 8. Caches the result for the lifetime of the service.

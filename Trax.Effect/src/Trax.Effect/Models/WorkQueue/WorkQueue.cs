@@ -272,6 +272,14 @@ public class WorkQueue : IModel
     [JsonInclude]
     public SnapshotOwnerKind? InvokingOwnerKind { get; private set; }
 
+    /// <summary>
+    /// The SHA-256 of the qualified principal id of whoever started this entry's run (<see cref="RunStarter"/>): a
+    /// GraphQL mutation's caller, or the owner of the user-owned instance whose invoking state queued it. Null for
+    /// every other entry. Carried to the run's metadata at dispatch. Internal and never serialized: it says who may
+    /// follow the run, and is not part of any operator view or payload.
+    /// </summary>
+    internal string? StarterHash { get; set; }
+
     #endregion
 
     #region Functions
@@ -309,6 +317,7 @@ public class WorkQueue : IModel
             InvokingMachine = dto.InvokedBy?.Machine,
             InvokingInstanceId = dto.InvokedBy?.InstanceId,
             InvokingOwnerKind = dto.InvokedBy?.OwnerKind,
+            StarterHash = dto.StarterHash,
         };
     }
 

@@ -136,10 +136,12 @@ public partial class TrainTypeModule
     {
         var inputJson = SerializeInput(ctx, registration.InputType);
         var executionService = ctx.Service<ITrainExecutionService>();
-        // The canonical train name is the interface FullName; the short name is not unique.
+        // The canonical train name is the interface FullName; the short name is not unique. The caller is recorded
+        // as the run's starter, so only they may follow its progress (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
         return await executionService.RunAsync(
             registration.ServiceType.FullName!,
             inputJson,
+            new RunTrainOptions { RecordCaller = true },
             ctx.RequestAborted
         );
     }
@@ -174,8 +176,8 @@ public partial class TrainTypeModule
         return await executionService.QueueAsync(
             registration.ServiceType.FullName!,
             inputJson,
-            priority,
-            ct: ctx.RequestAborted
+            new QueueTrainOptions { Priority = priority, RecordCaller = true },
+            ctx.RequestAborted
         );
     }
 

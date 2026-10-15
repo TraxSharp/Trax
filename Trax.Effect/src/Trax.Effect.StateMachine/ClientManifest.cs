@@ -31,6 +31,12 @@ public sealed record ClientManifest
     public IReadOnlyList<ClientManifestTrain> Trains { get; init; } = [];
 
     /// <summary>
+    /// The documents that follow a run of a train whose <see cref="ClientManifestTrain.Progress"/> is set: the
+    /// <c>query</c> that reads it once and the <c>subscription</c> that streams it. Empty when no train sets it.
+    /// </summary>
+    public IReadOnlyList<ClientManifestDocument> Progress { get; init; } = [];
+
+    /// <summary>
     /// The GraphQL type definitions the documents reach, as SDL, so a generator types every input and answer. Only
     /// those types: the rest of the schema stays on the server.
     /// </summary>
@@ -134,8 +140,11 @@ public sealed record ClientManifestTrain
     /// <summary>The train's persisted documents, ordered by operation.</summary>
     public IReadOnlyList<ClientManifestDocument> Documents { get; init; } = [];
 
-    /// <summary>The train's declared chain, for a client that shows its progress, or null.</summary>
-    public JsonObject? Chain { get; init; }
+    /// <summary>
+    /// Whether the caller who starts a run of the train may follow it, through the documents in
+    /// <see cref="ClientManifest.Progress"/>.
+    /// </summary>
+    public bool Progress { get; init; }
 }
 
 /// <summary>One persisted document a client sends by its id.</summary>

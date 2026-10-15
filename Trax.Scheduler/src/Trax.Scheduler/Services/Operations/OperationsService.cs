@@ -173,6 +173,7 @@ public partial class OperationsService : IOperationsService
     {
         string trainName;
         string savedInput;
+        string? starterHash;
         bool hasDecisionsToReplay;
         bool alreadyReplayed = false;
 
@@ -186,6 +187,7 @@ public partial class OperationsService : IOperationsService
                     m.Name,
                     m.Input,
                     m.InvokingMachine,
+                    m.StarterHash,
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -211,6 +213,8 @@ public partial class OperationsService : IOperationsService
 
             trainName = source.Name;
             savedInput = input;
+            // The requeued run is the original's starter's, so they keep following it (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
+            starterHash = source.StarterHash;
 
             // Only a run with decisions to replay is linked: one that recorded a decision, or one
             // that was itself queued to replay another's. The second is a requeue of a requeue
@@ -287,7 +291,8 @@ public partial class OperationsService : IOperationsService
             scheduledAt: null,
             replayDecisionsOf: hasDecisionsToReplay ? metadataId : null,
             ct,
-            requeueOf: metadataId
+            requeueOf: metadataId,
+            starterHash: starterHash
         );
 
         return result.Success && alreadyReplayed ? AskedAfresh(result, metadataId) : result;
@@ -302,6 +307,7 @@ public partial class OperationsService : IOperationsService
     {
         string trainName;
         string savedInput;
+        string? starterHash;
         bool replays;
         bool alreadyReplayed = false;
 
@@ -316,6 +322,7 @@ public partial class OperationsService : IOperationsService
                     m.Input,
                     m.InvokingMachine,
                     m.TrainState,
+                    m.StarterHash,
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -365,6 +372,8 @@ public partial class OperationsService : IOperationsService
 
             trainName = source.Name;
             savedInput = input;
+            // The requeued run is the original's starter's, so they keep following it (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md).
+            starterHash = source.StarterHash;
 
             // The decisions of the run it resumes replay as a requeue's would, so a question asked
             // after the checkpoint takes the track the run took (docs/0041).
@@ -445,7 +454,8 @@ public partial class OperationsService : IOperationsService
             ct,
             requeueOf: metadataId,
             resumeFrom: metadataId,
-            resumeAt: from
+            resumeAt: from,
+            starterHash: starterHash
         );
 
         return result.Success && alreadyReplayed ? AskedAfresh(result, metadataId) : result;
@@ -608,7 +618,8 @@ public partial class OperationsService : IOperationsService
         CancellationToken ct,
         long? requeueOf = null,
         long? resumeFrom = null,
-        string? resumeAt = null
+        string? resumeAt = null,
+        string? starterHash = null
     )
     {
         // Enqueue through the mediator rather than writing the row here. That is what applies
@@ -633,10 +644,10 @@ public partial class OperationsService : IOperationsService
                 return new OperationResult(false, Message: noDispatcher);
             }
 
-            // Only a replay or a resume needs the options overload; every other enqueue goes
+            // Only a replay, a resume or a kept starter needs the options overload; every other enqueue goes
             // through the overload every implementation has.
             queued =
-                replayDecisionsOf is null && resumeFrom is null
+                replayDecisionsOf is null && resumeFrom is null && starterHash is null
                     ? await _trainExecution.QueueAsync(
                         registration.ServiceType.FullName!,
                         inputJson,
@@ -654,6 +665,7 @@ public partial class OperationsService : IOperationsService
                             ReplayDecisionsOf = replayDecisionsOf,
                             ResumeFrom = resumeFrom,
                             ResumeAt = resumeAt,
+                            StarterHash = starterHash,
                         },
                         ct
                     );
@@ -691,7 +703,8 @@ public partial class OperationsService : IOperationsService
                 ct,
                 requeueOf,
                 resumeFrom,
-                resumeAt
+                resumeAt,
+                starterHash
             );
             return afresh.Success ? AskedAfresh(afresh, replayed) : afresh;
         }

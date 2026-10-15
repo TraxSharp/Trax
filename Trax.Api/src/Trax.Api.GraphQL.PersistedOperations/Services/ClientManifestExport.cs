@@ -68,6 +68,7 @@ internal static class ClientManifestExport
     {
         var documents = exposed.Count == 0 ? [] : MachineDocuments.Generate(schema, exposed);
         var trainDocuments = TrainDocuments.Generate(schema, trains);
+        var progressDocuments = ProgressDocuments.Generate(schema);
         var machines = exposed
             .OrderBy(m => m.Name, StringComparer.Ordinal)
             .Select(machine => new ClientManifestMachine
@@ -98,6 +99,7 @@ internal static class ClientManifestExport
                     Root = d.Root,
                     Namespace = d.Namespace,
                     Requires = RequirementOf(d.Registration),
+                    Progress = progressDocuments.Count > 0 && d.Registration.IsRunProgressEnabled,
                     Documents =
                     [
                         new ClientManifestDocument
@@ -109,9 +111,20 @@ internal static class ClientManifestExport
                     ],
                 })
                 .ToList(),
+            Progress = progressDocuments
+                .Select(d => new ClientManifestDocument
+                {
+                    Id = d.Id,
+                    Operation = d.Operation,
+                    Document = d.Text,
+                })
+                .ToList(),
             Types = DocumentTypes.Sdl(
                 schema,
-                documents.Select(d => d.Text).Concat(trainDocuments.Select(d => d.Text))
+                documents
+                    .Select(d => d.Text)
+                    .Concat(trainDocuments.Select(d => d.Text))
+                    .Concat(progressDocuments.Select(d => d.Text))
             ),
         };
     }

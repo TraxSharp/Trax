@@ -103,6 +103,71 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
+    public void A_machine_server_is_made_again_after_the_connection_changes()
+    {
+        var files = Render();
+
+        Text(files, "client.g.ts")
+            .Should()
+            .Contain("generation += 1;")
+            .And.Contain("export function traxGeneration(): number");
+        Text(files, "checkout/checkout.client.g.ts")
+            .Should()
+            .Contain(
+                "if (server === null || serverGeneration !== traxGeneration())",
+                "a server made before configureTrax was called again holds the socket it closed"
+            )
+            .And.NotContain("server ??=");
+    }
+
+    [Test]
+    public void A_host_whose_trains_can_be_followed_gets_a_progress_module()
+    {
+        var files = Render();
+        var progress = Text(files, "progress.g.ts");
+
+        FirstImport(progress).Should().Match("*format.g\";");
+        progress
+            .Should()
+            .Contain("export const runProgressDocumentId = \"trax_progress_query_")
+            .And.Contain("export const runProgressEventsDocumentId = \"trax_progress_subscription_")
+            .And.Contain("export function readRunProgress(runId: string): Promise<RunProgress>")
+            .And.Contain("export function followRunProgress(")
+            .And.Contain("export function useRunProgress(")
+            .And.Contain("Runs of these trains can be followed: startRun.")
+            .And.NotContain(
+                ClientManifests.ProgressQuery,
+                "a document is sent by its id, never its text"
+            );
+        Text(files, "index.g.ts")
+            .Should()
+            .Contain("useRunProgress")
+            .And.Contain("type RunProgressView");
+    }
+
+    [Test]
+    public void A_host_without_one_gets_none()
+    {
+        var files = Render(ClientManifests.Sample() with { Progress = [] });
+
+        files.Should().NotContain(f => f.Path == "progress.g.ts");
+        Text(files, "index.g.ts").Should().NotContain("RunProgress");
+    }
+
+    [Test]
+    public void A_progress_section_that_is_not_one_query_and_one_subscription_is_refused()
+    {
+        var manifest = ClientManifests.Sample() with
+        {
+            Progress = [ClientManifests.Sample().Progress[0]],
+        };
+
+        var render = () => Render(manifest);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*progress documents*");
+    }
+
+    [Test]
     public void A_description_cannot_close_its_comment()
     {
         var types = Text(Render(), "types.g.ts");

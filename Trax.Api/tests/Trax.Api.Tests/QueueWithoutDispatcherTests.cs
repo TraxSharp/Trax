@@ -47,8 +47,7 @@ public class QueueWithoutDispatcherTests
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
-                Arg.Any<int>(),
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new QueueTrainResult(42, "ext-42"));
@@ -84,8 +83,7 @@ public class QueueWithoutDispatcherTests
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
-                Arg.Any<int>(),
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -126,8 +124,7 @@ public class QueueWithoutDispatcherTests
             .QueueAsync(
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
-                Arg.Any<int>(),
-                Arg.Any<DateTime?>(),
+                Arg.Is<QueueTrainOptions>(o => o.RecordCaller),
                 Arg.Any<CancellationToken>()
             );
     }
