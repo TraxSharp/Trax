@@ -44,8 +44,8 @@ const KEY = 'test.turnstile';
 let minted = 0;
 const newRequestId = () => `minted-${++minted}`;
 
-function Page(props: { server: FakeMachineServer }) {
-  const m = useRememberedMachine(turnstile, { server: props.server, rememberKey: KEY, newRequestId });
+function Page(props: { server: FakeMachineServer; rememberKey?: string }) {
+  const m = useRememberedMachine(turnstile, { server: props.server, rememberKey: props.rememberKey ?? KEY, newRequestId });
   return (
     <div>
       <p data-testid="id">{m.id ?? ''}</p>
@@ -114,6 +114,68 @@ describe('useRememberedMachine', () => {
 
     expect(server.starts).toHaveLength(1);
     expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('keeps an instance the server answers NOT_FOUND, and stops', async () => {
+    localStorage.setItem(KEY, 'i-7');
+    const server = new FakeMachineServer();
+    render(<Page server={server} />);
+    await settle();
+    await settle(() => server.gets[0].resolve({ kind: 'problem', code: 'NOT_FOUND', message: 'No such instance.' }));
+    await settle();
+
+    expect(server.starts).toHaveLength(0);
+    expect(localStorage.getItem(KEY)).toBe('i-7');
+  });
+
+  it('keeps an instance whose stream answers NOT_FOUND', async () => {
+    localStorage.setItem(KEY, 'i-7');
+    const server = new FakeMachineServer();
+    render(<Page server={server} />);
+    await settle();
+
+    await settle(() => server.stream('i-7').push({ type: 'gone', notFound: true }));
+    await settle();
+
+    expect(server.starts).toHaveLength(0);
+    expect(localStorage.getItem(KEY)).toBe('i-7');
+  });
+
+  it("a changed rememberKey opens that key's instance", async () => {
+    localStorage.setItem('k.alice', 'i-a');
+    localStorage.setItem('k.bob', 'i-b');
+    const server = new FakeMachineServer();
+    const page = render(<Page server={server} rememberKey="k.alice" />);
+    await settle();
+
+    page.rerender(<Page server={server} rememberKey="k.bob" />);
+    await settle();
+    await settle(() => screen.getByText('forget').click());
+
+    expect(server.gets.map((g) => g.request.id)).toEqual(['i-a', 'i-b']);
+    expect(localStorage.getItem('k.alice')).toBe('i-a');
+    expect(localStorage.getItem('k.bob')).toBeNull();
+  });
+
+  it("another user's instance is not forgotten under a per-user key", async () => {
+    localStorage.setItem('k.alice', 'i-a');
+    const server = new FakeMachineServer();
+    const page = render(<Page server={server} rememberKey="k.alice" />);
+    await settle();
+    await settle(() => server.gets[0].resolve({ kind: 'ok', snapshot: serverSnapshot() }));
+
+    // Bob signs in on the same browser: his key holds nothing, so he starts his own and Alice's stays.
+    page.rerender(<Page server={server} rememberKey="k.bob" />);
+    await settle();
+    await settle(() => server.starts[0].resolve({ kind: 'started', id: 'i-b', snapshot: serverSnapshot() }));
+
+    expect(localStorage.getItem('k.bob')).toBe('i-b');
+    expect(localStorage.getItem('k.alice')).toBe('i-a');
+
+    page.rerender(<Page server={server} rememberKey="k.alice" />);
+    await settle();
+    expect(server.gets.at(-1)!.request.id).toBe('i-a');
+    expect(server.starts).toHaveLength(1);
   });
 
   it('forget starts a new instance under a new requestId', async () => {

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
 using Trax.Cli.Clients;
@@ -35,8 +36,11 @@ public partial class ClientGeneratorTests
                 Directory.Delete(dir, recursive: true);
     }
 
-    private IReadOnlyList<ClientFile> Render(ClientManifest? manifest = null) =>
-        new ClientGenerator(new FakeNodeRunner()).Render(
+    private IReadOnlyList<ClientFile> Render(
+        ClientManifest? manifest = null,
+        FakeNodeRunner? node = null
+    ) =>
+        new ClientGenerator(node ?? new FakeNodeRunner()).Render(
             new ClientGenerateOptions(manifest ?? ClientManifests.Sample(), ToolsDir: _tools)
         );
 
@@ -76,7 +80,12 @@ public partial class ClientGeneratorTests
         text.Should()
             .Contain("export function useCheckout(")
             .And.Contain("export function useRememberedCheckout(");
-        text.Should().Contain("rememberKey: \"trax.checkout\"");
+        text.Should()
+            .Contain("{ user: string; rememberKey?: string }")
+            .And.Contain(
+                "const key = (rememberKey ?? \"trax.checkout\") + \".\" + encodeURIComponent(user);",
+                "each user's instance is kept under a key of its own"
+            );
     }
 
     [Test]
@@ -114,9 +123,11 @@ public partial class ClientGeneratorTests
         Text(files, "checkout/checkout.client.g.ts")
             .Should()
             .Contain(
-                "if (server === null || serverGeneration !== traxGeneration())",
+                "if (server === null || serverGeneration !== generation)",
                 "a server made before configureTrax was called again holds the socket it closed"
             )
+            .And.Contain("headers: () => traxConnection().headers?.() ?? {}")
+            .And.Contain("useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);")
             .And.NotContain("server ??=");
     }
 
@@ -231,6 +242,257 @@ public partial class ClientGeneratorTests
                 ("trains/startRun.g.ts", DriftStatus.Drifted),
                 ("trains/gone.g.ts", DriftStatus.Drifted),
             ]);
+    }
+
+    [Test]
+    public void An_ir_whose_id_differs_from_the_machine_is_refused()
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var ir = (JsonObject)checkout.Ir.DeepClone();
+        ir["id"] = "../escaped";
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
+
+        var render = () => Render(manifest, node);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*'checkout'*'../escaped'*");
+        node.Calls.Should().BeEmpty("the IR is refused before node reads it");
+    }
+
+    [Test]
+    public void A_state_name_that_is_not_an_identifier_is_refused()
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var ir = (JsonObject)checkout.Ir.DeepClone();
+        ((JsonArray)ir["states"]!).Add("Done\"; alert(1); \"");
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
+
+        var render = () => Render(manifest, node);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*state*not an identifier*");
+        node.Calls.Should().BeEmpty();
+    }
+
+    [Test]
+    public void An_outcome_that_is_not_a_state_and_a_kind_is_refused()
+    {
+        var checkout = ClientManifests.Sample().Machines[0];
+        var ir = (JsonObject)checkout.Ir.DeepClone();
+        ir["outcomes"] = new JsonObject { ["Fetching.done;x"] = new JsonObject() };
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
+
+        var render = () => Render(manifest);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*outcome*not an identifier*");
+    }
+
+    [Test]
+    public void An_ir_hash_that_is_not_the_irs_is_refused()
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var manifest = ClientManifests.Sample() with
+        {
+            Machines = [checkout with { IrHash = new string('0', 64) }],
+        };
+
+        var render = () => Render(manifest, node);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*hashes to*");
+        node.Calls.Should().BeEmpty();
+    }
+
+    [Test]
+    public void An_identifier_with_a_trailing_newline_is_refused()
+    {
+        var train = ClientManifests.Sample().Trains[0];
+        var manifest = ClientManifests.Sample() with
+        {
+            Trains = [train with { Field = "startRun\n" }],
+        };
+
+        var render = () => Render(manifest);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*not an identifier*");
+        TypeScript.IsIdentifier("startRun\n").Should().BeFalse();
+    }
+
+    [Test]
+    public void Write_removes_a_generated_file_the_manifest_no_longer_generates()
+    {
+        var generator = new ClientGenerator(new FakeNodeRunner());
+        var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
+        generator.Write(options, _out);
+        File.WriteAllText(Path.Combine(_out, "notes.ts"), "// the app's own\n");
+        Directory.CreateDirectory(Path.Combine(_out, "old"));
+        File.WriteAllText(Path.Combine(_out, "old", "old.client.g.ts"), "");
+
+        var trainless = ClientManifests.Sample() with { Trains = [], Progress = [] };
+        generator.Write(options with { Manifest = trainless }, _out);
+
+        File.Exists(Path.Combine(_out, "trains", "startRun.g.ts")).Should().BeFalse();
+        Directory
+            .Exists(Path.Combine(_out, "trains"))
+            .Should()
+            .BeFalse("a folder left empty goes too");
+        Directory.Exists(Path.Combine(_out, "old")).Should().BeFalse();
+        File.Exists(Path.Combine(_out, "notes.ts"))
+            .Should()
+            .BeTrue("only generated files are removed");
+        generator.Check(options with { Manifest = trainless }, _out).Should().BeEmpty();
+    }
+
+    [TestCase("configureTrax")]
+    [TestCase("TraxOperationError")]
+    public void A_train_or_type_that_takes_a_runtime_name_is_refused(string name)
+    {
+        var train = ClientManifests.Sample().Trains[0] with { Field = name };
+        var trainManifest = ClientManifests.Sample() with { Trains = [train] };
+        var typeManifest = ClientManifests.Sample() with
+        {
+            Types = ClientManifests.TrainTypes + $"\ntype {name} {{ x: Int }}\n",
+        };
+
+        ((Action)(() => Render(trainManifest)))
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*runtime*{name}*");
+        ((Action)(() => Render(typeManifest)))
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*runtime*{name}*");
+    }
+
+    [Test]
+    public void Two_trains_differing_only_in_case_are_refused()
+    {
+        var train = ClientManifests.Sample().Trains[0];
+        var manifest = ClientManifests.Sample() with
+        {
+            Trains =
+            [
+                train with
+                {
+                    Field = "fooBar",
+                },
+                train with
+                {
+                    Field = "foobar",
+                    Documents = [train.Documents[0] with { Id = train.Documents[0].Id + "2" }],
+                },
+            ],
+            Types = ClientManifests.TrainTypes.Replace(
+                "type DispatchMutations {",
+                "type DispatchMutations {\n  fooBar: Int\n  foobar: Int"
+            ),
+        };
+
+        var render = () => Render(manifest);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*fooBar*foobar*");
+    }
+
+    [Test]
+    public void A_mutation_and_a_query_of_one_name_are_refused()
+    {
+        var train = ClientManifests.Sample().Trains[0];
+        var manifest = ClientManifests.Sample() with
+        {
+            Trains =
+            [
+                train,
+                train with
+                {
+                    Root = "query",
+                    Documents = [train.Documents[0] with { Id = train.Documents[0].Id + "2" }],
+                },
+            ],
+        };
+
+        var render = () => Render(manifest);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*mutation train startRun*query train startRun*");
+    }
+
+    [TestCase("options")]
+    [TestCase("sendDocument")]
+    [TestCase("startRunDocumentId")]
+    public void A_variable_named_as_a_local_of_the_train_function_is_refused(string name)
+    {
+        var train = ClientManifests.Sample().Trains[0];
+        var document = train.Documents[0] with
+        {
+            Document = ClientManifests.StartRunDocument.Replace("$input", "$" + name),
+        };
+        var manifest = ClientManifests.Sample() with
+        {
+            Trains = [train with { Documents = [document] }],
+        };
+
+        var render = () => Render(manifest);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*");
+    }
+
+    [Test]
+    public void A_reserved_word_the_runtime_forbids_is_refused()
+    {
+        foreach (var word in new[] { "eval", "arguments" })
+        {
+            var train = ClientManifests.Sample().Trains[0] with { Field = word };
+            var render = () => Render(ClientManifests.Sample() with { Trains = [train] });
+            render.Should().Throw<InvalidOperationException>().WithMessage($"*'{word}'*reserves*");
+        }
+    }
+
+    [Test]
+    public void A_document_that_is_not_graphql_is_refused_with_a_sentence()
+    {
+        var train = ClientManifests.Sample().Trains[0];
+        var manifest = ClientManifests.Sample() with
+        {
+            Trains =
+            [
+                train with
+                {
+                    Documents = [train.Documents[0] with { Document = "mutation {" }],
+                },
+            ],
+        };
+
+        var render = () => Render(manifest);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*not GraphQL*Export*");
+    }
+
+    [Test]
+    public void A_train_with_no_document_is_refused()
+    {
+        var train = ClientManifests.Sample().Trains[0] with { Documents = [] };
+
+        var render = () => Render(ClientManifests.Sample() with { Trains = [train] });
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*0 documents*");
+    }
+
+    [Test]
+    public void A_progress_module_with_no_followable_train_names_none()
+    {
+        var train = ClientManifests.Sample().Trains[0] with { Progress = false };
+
+        var progress = Text(
+            Render(ClientManifests.Sample() with { Trains = [train] }),
+            "progress.g.ts"
+        );
+
+        progress.Should().NotContain("can be followed");
     }
 
     [Test]

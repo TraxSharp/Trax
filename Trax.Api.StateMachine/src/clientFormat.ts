@@ -9,7 +9,7 @@
 // code asks for this check before it loads any twin, so a stale client is told about both formats in this order.
 
 /** The client format this runtime serves and the generator writes. */
-export const clientFormat = 1;
+export const clientFormat = 2;
 
 /** The oldest client format this runtime still serves. */
 export const oldestClientFormatServed = 1;

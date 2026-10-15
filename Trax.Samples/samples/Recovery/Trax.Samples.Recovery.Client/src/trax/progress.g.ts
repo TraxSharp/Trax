@@ -10,7 +10,7 @@ export const runProgressDocumentId = "trax_progress_query_ef318a7ed13f500e13e6d3
 /** The persisted id of the runProgress subscription, which the host registered. */
 export const runProgressEventsDocumentId = "trax_progress_subscription_d928f7f3ffd53bb8549434f97a8d17f64736fe41360b5ddde861ddd443e8008e8d098114ae7d6c1a";
 
-/** Your run, read once: where it stands and the steps it took. Any run you did not start answers `problem.code` NOT_FOUND. Runs of these trains can be followed: . */
+/** Your run, read once: where it stands and the steps it took. Any run you did not start answers `problem.code` NOT_FOUND. */
 export function readRunProgress(runId: string): Promise<RunProgress> {
   return sendDocument(runProgressDocumentId, { runId }, ["runProgress"]);
 }
@@ -71,27 +71,39 @@ export function useRunProgress(runId: string | null | undefined): RunProgressVie
     if (!following) return;
     let live = true;
     let last = 0;
+    // How many events the stream delivered: a read sent before the last of them answers with an older run.
+    let events = 0;
     // The view of this run: what was held, when it was this run's, else an empty one.
     const fresh = (v: RunProgressView): RunProgressView =>
       v.runId === following ? v : { ...nothingYet, runId: following };
+    // The read and the stream can both report the retry: the first moves on to it, the second finds it moved.
     const retry = (next: string) => {
-      if (live) setCurrent((c) => ({ ...c, run: next, earlier: [...c.earlier, following] }));
+      if (live) setCurrent((c) => (c.run === following ? { ...c, run: next, earlier: [...c.earlier, following] } : c));
     };
-    const read = () =>
-      readRunProgress(following).then(
+    // A read answered after an event arrived is dropped, never shown over it; one that was sent for lost events
+    // is sent again, until it answers with no event since.
+    const read = (forLost: boolean) => {
+      const sent = events;
+      return readRunProgress(following).then(
         (run) => {
           if (!live) return;
           if (run.retriedAs) return retry(run.retriedAs);
+          if (events !== sent) {
+            if (forLost) void read(true);
+            return;
+          }
           setView((v) => ({ ...fresh(v), state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
         },
         () => undefined,
       );
-    void read();
+    };
+    void read(false);
     const stop = followRunProgress(
       following,
       (event) => {
+        events += 1;
         if (event.retriedAs) return retry(event.retriedAs);
-        if (last !== 0 && event.sequence !== last + 1) void read();
+        if (last !== 0 && event.sequence !== last + 1) void read(true);
         last = event.sequence;
         setView((prior) => {
           const v = fresh(prior);

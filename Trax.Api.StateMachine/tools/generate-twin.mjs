@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, resolve } from "node:path";
 import { invokedDirectly, parseFlags, requireFlags } from "./lib/args.mjs";
 import { loadEngine } from "./lib/engine-loader.mjs";
 
@@ -40,9 +40,18 @@ export async function generateTwin({
   const contexts = generateContextTypes(ir);
   const factory = generateMachineFactory(ir, { importStyle, specifier, irHash });
 
+  // The IR's id names the files: one that would put them anywhere but outDir is refused before anything is written.
+  const into = (name) => {
+    const path = resolve(outDir, name);
+    if (typeof ir.id !== "string" || dirname(path) !== resolve(outDir))
+      throw new Error(
+        `The IR's id ${JSON.stringify(ir.id)} would write ${JSON.stringify(name)} outside ${outDir}.`,
+      );
+    return path;
+  };
+  const contextsPath = into(`${ir.id}.contexts.g.ts`);
+  const machinePath = into(`${ir.id}.machine.g.ts`);
   mkdirSync(outDir, { recursive: true });
-  const contextsPath = join(outDir, `${ir.id}.contexts.g.ts`);
-  const machinePath = join(outDir, `${ir.id}.machine.g.ts`);
   writeFileSync(contextsPath, contexts);
   writeFileSync(machinePath, factory);
   return { contextsPath, machinePath };

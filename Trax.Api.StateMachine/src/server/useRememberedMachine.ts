@@ -45,8 +45,13 @@ interface Opening {
 /**
  * One instance of a machine the server owns that this browser keeps across visits: it opens the instance it
  * remembered, or starts one under a requestId it keeps until the start answers, so closing the page mid-start and
- * coming back answers with the instance the first start created. An instance the server no longer holds (deleted
- * elsewhere, or expired) is forgotten and a new one started.
+ * coming back answers with the instance the first start created. A `rememberKey` that changes opens that key's
+ * instance in the same way.
+ *
+ * An instance the stream says was deleted or expired is forgotten and a new one started. One the server answers
+ * `NOT_FOUND` stops the hook (`error.code` `GONE`, `error.deleted` false) and stays remembered: the server answers a
+ * missing instance and another caller's alike, and forgetting another caller's would leave it on the server for good.
+ * Keep each user's instance under a key of its own, and call `forget()` to start over.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function useRememberedMachine<Spec extends MachineSpec>(
@@ -60,18 +65,32 @@ export function useRememberedMachine<Spec extends MachineSpec>(
     [rest.newRequestId],
   );
 
-  const pendingStart = useCallback((): string => {
-    const kept = read(startKey);
-    if (kept) return kept;
-    const requestId = mint();
-    write(startKey, requestId);
-    return requestId;
-  }, [startKey, mint]);
+  const pendingStart = useCallback(
+    (key: string): string => {
+      const kept = read(`${key}:start`);
+      if (kept) return kept;
+      const requestId = mint();
+      write(`${key}:start`, requestId);
+      return requestId;
+    },
+    [mint],
+  );
 
-  const [opening, setOpening] = useState<Opening>(() => {
-    const id = read(rememberKey);
-    return id ? { id } : { startRequestId: pendingStart() };
-  });
+  const openingFor = (key: string): Opening => {
+    const id = read(key);
+    return id ? { id } : { startRequestId: pendingStart(key) };
+  };
+
+  const [held, setHeld] = useState<{ key: string; opening: Opening }>(() => ({
+    key: rememberKey,
+    opening: openingFor(rememberKey),
+  }));
+  // A new key opens its own instance in this render, so nothing of the old key's is sent under it.
+  let opening = held.opening;
+  if (held.key !== rememberKey) {
+    opening = openingFor(rememberKey);
+    setHeld({ key: rememberKey, opening });
+  }
 
   const result = useServerMachine(machine, {
     ...rest,
@@ -80,6 +99,11 @@ export function useRememberedMachine<Spec extends MachineSpec>(
     startStorageKey: null,
   });
 
+  // In the first render after the key changed, the result is still the old key's instance: it is neither remembered
+  // nor forgotten under the new key.
+  const committedKey = useRef(rememberKey);
+  const current = committedKey.current === rememberKey;
+
   // The instance last forgotten: its id can still show for a render after, and is never remembered again.
   const dropped = useRef<string | null>(null);
 
@@ -87,25 +111,32 @@ export function useRememberedMachine<Spec extends MachineSpec>(
     dropped.current = read(rememberKey) ?? dropped.current;
     write(rememberKey, null);
     write(startKey, null);
-    setOpening({ startRequestId: pendingStart() });
+    setHeld({ key: rememberKey, opening: { startRequestId: pendingStart(rememberKey) } });
   }, [rememberKey, startKey, pendingStart]);
 
   // A started instance is remembered, and its start is no longer pending.
   useEffect(() => {
+    if (!current) return;
     if (result.id && opening.id === undefined && result.id !== dropped.current) {
       write(rememberKey, result.id);
       write(startKey, null);
     }
-  }, [result.id, opening.id, rememberKey, startKey]);
+  }, [current, result.id, opening.id, rememberKey, startKey]);
 
-  // An instance the server no longer holds is forgotten, and a new one started, once.
+  // An instance the stream says was deleted is forgotten, and a new one started, once.
   const forgotten = useRef<string | null>(null);
   useEffect(() => {
-    if (result.error?.code !== ClientProblemCode.Gone || forgotten.current === result.id) return;
+    if (!current) return;
+    if (result.error?.code !== ClientProblemCode.Gone || !result.error.deleted) return;
+    if (forgotten.current === result.id) return;
     forgotten.current = result.id;
     dropped.current = result.id;
     forget();
-  }, [result.error, result.id, forget]);
+  }, [current, result.error, result.id, forget]);
+
+  useEffect(() => {
+    committedKey.current = rememberKey;
+  }, [rememberKey]);
 
   return { ...result, forget };
 }

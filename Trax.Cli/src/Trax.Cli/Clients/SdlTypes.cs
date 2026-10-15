@@ -46,6 +46,10 @@ internal sealed class SdlTypes
                 _definitions[type.Name.StringValue] = definition;
     }
 
+    /// <summary>The names <see cref="Render"/> exports, in name order.</summary>
+    public IEnumerable<string> Declared =>
+        _definitions.Keys.Where(n => !IsWrapper(n)).Order(StringComparer.Ordinal);
+
     /// <summary>The type of <paramref name="field"/> on the object type <paramref name="parent"/>, or null.</summary>
     public GraphQLType? FieldType(string parent, string field) =>
         _definitions.GetValueOrDefault(parent) is GraphQLObjectTypeDefinition type
@@ -161,9 +165,7 @@ internal sealed class SdlTypes
 
     // A property name: an identifier as it is, anything else quoted.
     private static string Property(string name) =>
-        System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_$][A-Za-z0-9_$]*$")
-            ? name
-            : TypeScript.Literal(name);
+        TypeScript.IsIdentifier(name) ? name : TypeScript.Literal(name);
 
     private string Bare(GraphQLType type, bool input) =>
         type switch

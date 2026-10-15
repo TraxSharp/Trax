@@ -49,8 +49,8 @@ function Wizard({ id }: { id?: string }) {
   runs persisted documents refuses one beside an id, so pass `persistedMessageReplacer` as the client's
   `jsonMessageReplacer` and it leaves the empty `query` out. The package does not depend on graphql-ws; any socket
   with its `subscribe(payload, sink)` shape (`PersistedSubscriptionSocket`) does.
-- **Maps the stream:** a snapshot with its `rowId` and `revision`; `gone: true`, and the `NOT_FOUND` a missing id is
-  answered with, as gone; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A stream that ends any
+- **Maps the stream:** a snapshot with its `rowId` and `revision`; `gone: true` as gone, and the `NOT_FOUND` a missing
+  id is answered with as gone with `notFound`; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A stream that ends any
   other way (its host stopped, the socket gave up, `TOO_MANY_SUBSCRIPTIONS`) is subscribed again after
   `resubscribeDelays` (1, 2, then every 5 seconds); the new stream's first event is the instance as it is then, so
   nothing is read again.
@@ -74,7 +74,8 @@ function Wizard({ id }: { id?: string }) {
 - **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included; it
   reads the instance again only after `reload`, an incarnation change or a `CLIENT_DIVERGENCE`.
 - **Stops for good** on `gone` or `CLIENT_OUTDATED`: `status` is `stopped`, `error.code` says which, and nothing more
-  is sent. `dueAt` is shown, never fired: the server runs a state's timer and pushes the move. It is taken from
+  is sent. With `GONE`, `error.deleted` is true when the stream said the instance was deleted or expired, and false
+  when the server answered `NOT_FOUND`, which it answers alike for a missing instance and another caller's. `dueAt` is shown, never fired: the server runs a state's timer and pushes the move. It is taken from
   every answer and push the hook accepts, and null always clears it: the state has no timer, or the server gave up
   on it and cleared it. An answer that does not carry the field, or cannot know it (`dueAtKnown: false`, a replay
   whose recorded revision the row has moved past, which `createMachineServer` delivers with no `dueAt`), keeps the

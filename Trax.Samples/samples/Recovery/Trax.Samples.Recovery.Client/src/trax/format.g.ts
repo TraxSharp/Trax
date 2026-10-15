@@ -3,5 +3,5 @@
 // it on load, naming both, before any twin is read.
 import { requireClientFormat } from "@traxsharp/state-machine";
 
-export const generatedClientFormat = 1;
+export const generatedClientFormat = 2;
 requireClientFormat(generatedClientFormat);

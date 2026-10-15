@@ -89,4 +89,30 @@ public class ClientManifestTests
 
         read.Should().Throw<InvalidOperationException>().WithMessage("*not a client manifest*");
     }
+
+    [Test]
+    public void A_manifest_missing_a_required_field_is_refused_with_a_message()
+    {
+        var missing = JsonNode.Parse(ClientManifest.Write(Sample()))!.AsObject();
+        missing["machines"]![0]!.AsObject().Remove("irHash");
+
+        var read = () => ClientManifest.Read(missing.ToJsonString());
+
+        read.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*malformed*irHash*Export it again*");
+    }
+
+    [TestCase("""{ "format": 1, "machines": [null] }""")]
+    [TestCase(
+        """{ "format": 1, "trains": [{ "field": "a", "root": "mutation", "documents": [null] }] }"""
+    )]
+    [TestCase("""{ "format": 1, "types": null }""")]
+    [TestCase("""{ "format": 1, "machines": [{ "id": "m", "irHash": "h", "ir": 3 }] }""")]
+    public void A_null_or_a_value_of_another_kind_is_refused_with_a_message(string text)
+    {
+        var read = () => ClientManifest.Read(text);
+
+        read.Should().Throw<InvalidOperationException>().WithMessage("*malformed*Export it again*");
+    }
 }

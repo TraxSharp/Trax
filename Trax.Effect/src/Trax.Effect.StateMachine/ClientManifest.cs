@@ -52,6 +52,12 @@ public sealed record ClientManifest
         NewLine = "\n",
     };
 
+    // Reading refuses a null where the type holds none, so a field a host never writes null is never read as one.
+    private static readonly JsonSerializerOptions ReadJson = new(Json)
+    {
+        RespectNullableAnnotations = true,
+    };
+
     /// <summary>
     /// The manifest as its file holds it: indented JSON with <c>\n</c> line ends and a final newline, the same bytes
     /// for the same content, so a committed copy can be compared.
@@ -64,7 +70,8 @@ public sealed record ClientManifest
 
     /// <summary>
     /// Reads a manifest. Throws <see cref="InvalidOperationException"/> naming both formats when the file was written
-    /// in another format than <see cref="CurrentFormat"/>, and when the text is not a manifest at all.
+    /// in another format than <see cref="CurrentFormat"/>, and saying what is wrong when the text is not a manifest at
+    /// all, or a field is missing, null or of another type.
     /// </summary>
     public static ClientManifest Read(string text)
     {
@@ -92,9 +99,55 @@ public sealed record ClientManifest
                     )
             );
 
-        return root.Deserialize<ClientManifest>(Json)
-            ?? throw new InvalidOperationException("The file is not a client manifest.");
+        ClientManifest manifest;
+        try
+        {
+            manifest =
+                root.Deserialize<ClientManifest>(ReadJson)
+                ?? throw new InvalidOperationException("The file is not a client manifest.");
+        }
+        catch (JsonException ex)
+        {
+            throw Malformed(ex.Path, ex.Message, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A value of the wrong kind where a JsonObject is expected (the IR) is refused this way.
+            throw Malformed(null, ex.Message, ex);
+        }
+
+        // A null in a list is not a nullable annotation's to refuse: it is found here.
+        if (manifest.Machines.Any(m => m is null || m.Documents.Any(d => d is null)))
+            throw Malformed("$.machines", "A machine or one of its documents is null.");
+        if (manifest.Trains.Any(t => t is null || t.Documents.Any(d => d is null)))
+            throw Malformed("$.trains", "A train or one of its documents is null.");
+        if (manifest.Progress.Any(d => d is null))
+            throw Malformed("$.progress", "A progress document is null.");
+        var requirements = manifest
+            .Machines.Select(m => m.Requires)
+            .Concat(manifest.Trains.Select(t => t.Requires))
+            .OfType<ClientManifestRequirement>();
+        if (
+            requirements.Any(r =>
+                r.Policies.Any(p => p is null)
+                || r.RoleSets.Any(set => set is null || set.Any(role => role is null))
+            )
+        )
+            throw Malformed(null, "A role set, role or policy is null.");
+        return manifest;
     }
+
+    private static InvalidOperationException Malformed(
+        string? path,
+        string reason,
+        Exception? inner = null
+    ) =>
+        new(
+            "The client manifest is malformed"
+                + (string.IsNullOrEmpty(path) ? "" : $" at {path}")
+                + $": {reason.Trim()} Export it again from the host.",
+            inner
+        );
 }
 
 /// <summary>One exposed machine in a <see cref="ClientManifest"/>.</summary>

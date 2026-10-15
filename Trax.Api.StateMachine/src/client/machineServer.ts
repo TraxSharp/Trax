@@ -120,8 +120,8 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  * transport failure.
  *
  * The stream maps each push event onto the controller's messages: a snapshot (with its incarnation as
- * `rowId`), `gone` for a deleted or expired instance and for one the server will not let the caller watch (the answer
- * it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload. A stream that ends
+ * `rowId`), `gone` for a deleted or expired instance, `gone` with `notFound` for one the server will not let the caller
+ * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload. A stream that ends
  * any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
  * event is the instance as it is then, so nothing written meanwhile is lost and nothing is read again.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
@@ -212,7 +212,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
             if (!change) return;
             if (change.problem) {
               if (change.problem.code === CLIENT_OUTDATED) deliver({ type: 'client-outdated' });
-              else if (change.problem.code === NOT_FOUND) deliver({ type: 'gone' });
+              else if (change.problem.code === NOT_FOUND) deliver({ type: 'gone', notFound: true });
               else again();
               return;
             }

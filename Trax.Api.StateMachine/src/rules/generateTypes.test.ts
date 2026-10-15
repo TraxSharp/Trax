@@ -348,3 +348,32 @@ describe("generateMachineFactory import styles", () => {
     ).not.toContain('"differential"');
   });
 });
+
+// The IR is data a host exported: its names are checked before any of them is written as code.
+describe("generated names", () => {
+  const ir = JSON.parse(fs.readFileSync(irFile("turnstile"), "utf8")) as IrDocument;
+
+  it("refuses a state that is not an identifier", () => {
+    const quoted = { ...ir, states: [...ir.states, 'Done"; alert(1); "'] };
+    expect(() => generateContextTypes(quoted)).toThrow(/not an identifier/);
+    expect(() => generateMachineFactory(quoted)).toThrow(/not an identifier/);
+  });
+
+  it("refuses a trigger that is not an identifier", () => {
+    expect(() => generateContextTypes({ ...ir, triggers: ["Coin\nexport"] })).toThrow(/not an identifier/);
+  });
+
+  it("refuses an outcome that is not <State>.<kind>", () => {
+    const outcomes = { "Fetching.done;x": { from: "Locked" } } as unknown as IrDocument["outcomes"];
+    expect(() => generateContextTypes({ ...ir, outcomes })).toThrow(/not <State>.<kind>/);
+  });
+
+  it("refuses an id that is not kebab-case", () => {
+    expect(() => generateContextTypes({ ...ir, id: "../escaped" })).toThrow(/kebab-case/);
+    expect(() => generateMachineFactory({ ...ir, id: "turnstile\n// x" })).toThrow(/kebab-case/);
+  });
+
+  it("writes each state of the union as a string literal", () => {
+    expect(generateContextTypes(ir)).toContain('export type TurnstileState = "Locked" | "Unlocked";');
+  });
+});

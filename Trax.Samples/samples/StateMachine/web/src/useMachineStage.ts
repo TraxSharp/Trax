@@ -53,7 +53,8 @@ type Outcome =
  * the last request and its answer for the walkthrough.
  */
 export function useMachineStage(machine: keyof typeof HOOKS, user: string) {
-  const rememberKey = `trax-statemachine.${user}.${machine}`;
+  // The key the generated hook keeps this user's instance under.
+  const rememberKey = `trax.${machine}.${encodeURIComponent(user)}`;
   const [started] = useState(() => {
     try {
       return localStorage.getItem(rememberKey) === null;
@@ -61,11 +62,18 @@ export function useMachineStage(machine: keyof typeof HOOKS, user: string) {
       return true;
     }
   });
-  const m = HOOKS[machine]({ rememberKey });
+  const m = HOOKS[machine]({ user });
   const [last, setLast] = useState<LastAction | null>(null);
   const announced = useRef(false);
 
   const snapshot = (m.snapshot as Snapshot | null) ?? null;
+
+  // The server answers NOT_FOUND for an instance that is missing and for one that is not this user's alike, so the hook
+  // keeps it. Under this user's own key it can only be missing (the database was reset, say): start a new one.
+  const { error, forget } = m;
+  useEffect(() => {
+    if (error?.code === "GONE" && error.deleted === false) forget();
+  }, [error, forget]);
 
   // A stage that started a new instance says so once the server answers with it.
   useEffect(() => {

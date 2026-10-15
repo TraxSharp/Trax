@@ -131,7 +131,8 @@ internal static class ClientCommand
             Console.WriteLine($"Generated {written.Count} file(s) in {outDir}.");
             return 0;
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
+            when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine(ex.Message);
             return 1;

@@ -18,22 +18,33 @@ export interface TraxConnection {
 let connection: TraxConnection | null = null;
 let socket: Client | null = null;
 let generation = 0;
+const listeners = new Set<() => void>();
 
 /**
  * Tells the generated client where the host is. Call it before any hook or train function runs, and again when
- * the connection changes (another user signs in): the socket is closed, and every machine's server is made anew
- * on its next use.
+ * the connection changes (another user signs in): the socket is closed, every machine's server is made anew on
+ * its next use, and every mounted machine hook renders again onto it.
  */
 export function configureTrax(next: TraxConnection): void {
   connection = next;
   generation += 1;
-  void socket?.dispose();
+  const closing = socket;
   socket = null;
+  void closing?.dispose();
+  for (const listener of [...listeners]) listener();
 }
 
 /** How many times configureTrax was called: a machine's server made under an earlier count is made again. */
 export function traxGeneration(): number {
   return generation;
+}
+
+/** Calls `listener` after each configureTrax, until the function it returns is called. The machine hooks render on it. */
+export function subscribeTrax(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /** The connection, or a refusal naming what to call. */

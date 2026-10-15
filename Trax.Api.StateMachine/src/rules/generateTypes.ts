@@ -17,6 +17,7 @@ import { irFormatVersion } from "./irFormat";
 import type { IrDocument } from "./irMachine";
 
 export function generateContextTypes(ir: IrDocument): string {
+  checkNames(ir);
   const machine = pascal(ir.id);
   const lines: string[] = [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateContextTypes. Do not edit by hand.`,
@@ -133,6 +134,7 @@ export function generateMachineFactory(
   ir: IrDocument,
   options: MachineFactoryOptions = {},
 ): string {
+  checkNames(ir);
   const machine = pascal(ir.id);
   const importStyle = options.importStyle ?? "relative";
   const specifier = options.specifier ?? "@traxsharp/state-machine";
@@ -287,8 +289,43 @@ const outcomeTypeName = (machine: string, outcome: string): string =>
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join("")}Output`;
 
+// Each value as a string literal: its JSON, so nothing in it can end the literal.
 const union = (values: readonly string[]): string =>
-  values.map((v) => `"${v}"`).join(" | ");
+  values.map((v) => JSON.stringify(v)).join(" | ");
+
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/**
+ * Refuses an IR whose names cannot be written as code: the id names files and every type, a state or trigger names a
+ * type and a key, and an outcome is `<State>.<kind>`, each half a part of a type name. The IR is data a host
+ * exported, so it is checked before any of it is written.
+ */
+function checkNames(ir: IrDocument): void {
+  if (typeof ir.id !== "string" || !/^[a-z][a-z0-9]*([-_][a-z0-9]+)*$/.test(ir.id))
+    throw new Error(
+      `The machine id ${JSON.stringify(ir.id)} is not kebab-case (lowercase letters and digits in words joined by '-'), so it cannot name generated code.`,
+    );
+  const names: [string, unknown[]][] = [
+    ["state", ir.states],
+    ["trigger", ir.triggers],
+  ];
+  for (const [what, list] of names) {
+    if (!Array.isArray(list))
+      throw new Error(`The machine '${ir.id}' has no ${what}s.`);
+    for (const name of list)
+      if (typeof name !== "string" || !IDENTIFIER.test(name))
+        throw new Error(
+          `The machine '${ir.id}' has the ${what} ${JSON.stringify(name)}, which is not an identifier.`,
+        );
+  }
+  for (const outcome of Object.keys(ir.outcomes ?? {})) {
+    const parts = outcome.split(".");
+    if (parts.length !== 2 || !parts.every((p) => IDENTIFIER.test(p)))
+      throw new Error(
+        `The machine '${ir.id}' has the outcome ${JSON.stringify(outcome)}, which is not <State>.<kind>.`,
+      );
+  }
+}
 
 // A machine id is kebab/snake (ship-to-store); its type prefix is PascalCase (ShipToStore) and its
 // exported const is camelCase (shipToStore). Splitting on - and _ is what makes a multi-word id emit valid

@@ -16,6 +16,10 @@ describe('the client format', () => {
     expect(() => requireClientFormat(oldestClientFormatServed - 1)).toThrow(/no longer serves.*trax client/);
   });
 
+  it('still serves the first format, which clients generated before it were written in', () => {
+    expect(() => requireClientFormat(1)).not.toThrow();
+  });
+
   it('refuses something that is not a format number', () => {
     expect(() => requireClientFormat(1.5)).toThrow(/not a format number/);
   });

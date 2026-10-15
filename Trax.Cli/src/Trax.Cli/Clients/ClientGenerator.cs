@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using GraphQLParser;
 using GraphQLParser.AST;
 using Trax.Cli.Machines;
@@ -36,7 +38,7 @@ internal sealed class ClientGenerator
     /// The client format this generator writes, held equal to the runtime's <c>clientFormat</c>
     /// (<c>Trax.Api.StateMachine/src/clientFormat.ts</c>) by <c>ClientFormatParityTests</c>.
     /// </summary>
-    public const int ClientFormat = 1;
+    public const int ClientFormat = 2;
 
     /// <summary>The module generated code imports the runtime from when none is named.</summary>
     public const string DefaultSpecifier = "@traxsharp/state-machine";
@@ -65,10 +67,9 @@ internal sealed class ClientGenerator
             new("manifest.json", ClientManifest.Write(manifest)),
         };
         var names = new Names();
-        var sdl = string.IsNullOrWhiteSpace(manifest.Types)
-            ? new GraphQLDocument([])
-            : Parser.Parse(manifest.Types);
-        var types = new SdlTypes(sdl);
+        foreach (var name in RuntimeNames)
+            names.Claim(name, "the client's runtime");
+        var types = new SdlTypes(ParseTypes(manifest.Types));
 
         var index = new StringBuilder(Header).Append("import \"./format.g\";\n");
         index.Append(
@@ -93,25 +94,43 @@ internal sealed class ClientGenerator
             names.Claim($"{camel}Server", machine.Id);
             machines.Add((machine, camel, pascal));
         }
-        var trains = new List<(ClientManifestTrain Train, string Function)>();
+        var trains = new List<(string Function, string Text)>();
+        // A train's file is claimed by its path in lower case, so two that differ only in case are refused before a
+        // case-insensitive disk writes one over the other.
+        var paths = new Names(StringComparer.OrdinalIgnoreCase);
         foreach (
-            var train in manifest.Trains.OrderBy(t => t.Documents[0].Id, StringComparer.Ordinal)
+            var train in manifest
+                .Trains.Select(CheckTrain)
+                .OrderBy(t => t.Documents[0].Id, StringComparer.Ordinal)
         )
         {
+            var owner =
+                $"the {train.Root} train {(train.Namespace is null ? "" : train.Namespace + ".")}{train.Field}";
             var function = TypeScript.Identifier(
                 train.Namespace is null
                     ? train.Field
                     : train.Namespace + TypeScript.Upper(train.Field),
                 "train field"
             );
-            names.Claim(function, $"the train {train.Field}");
-            trains.Add((train, function));
+            names.Claim(function, owner);
+            paths.Claim($"trains/{function}.g.ts", owner);
+            trains.Add((function, Train(train, function, types)));
         }
+        // types.g.ts is exported from the index beside everything else, so its names are claimed with them.
+        if (trains.Count > 0)
+            foreach (var type in types.Declared)
+                names.Claim(type, $"the GraphQL type {type}");
 
         var progress = Progress(manifest);
         if (progress is not null)
-            foreach (var name in ProgressNames)
+            foreach (var name in ProgressNames.Append("RunProgressView"))
                 names.Claim(name, "runProgress");
+
+        var typesText = trains.Count > 0 ? types.Render() : null;
+
+        // The IR is checked before node reads it: its id names the twin's files, and its names are written as code.
+        foreach (var (machine, _, _) in machines)
+            CheckIr(machine);
 
         foreach (var (machine, camel, pascal) in machines)
         {
@@ -127,14 +146,14 @@ internal sealed class ClientGenerator
             );
         }
 
-        if (trains.Count > 0)
+        if (typesText is not null)
         {
-            files.Add(new("types.g.ts", types.Render()));
+            files.Add(new("types.g.ts", typesText));
             index.Append("export type * from \"./types.g\";\n");
         }
-        foreach (var (train, function) in trains)
+        foreach (var (function, text) in trains)
         {
-            files.Add(new($"trains/{function}.g.ts", Train(train, function, types)));
+            files.Add(new($"trains/{function}.g.ts", text));
             index.Append($"export {{ {function} }} from \"./trains/{function}.g\";\n");
         }
 
@@ -152,10 +171,29 @@ internal sealed class ClientGenerator
         return files.OrderBy(f => f.Path, StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>Writes the client under <paramref name="outDir"/>, replacing generated files that changed.</summary>
+    /// <summary>
+    /// Writes the client under <paramref name="outDir"/>, replacing generated files that changed. A generated file
+    /// (<c>*.g.ts</c>) the manifest no longer generates is deleted first, then any folder that leaves empty, so a train
+    /// removed on the host leaves nothing behind for <c>--check</c> to report.
+    /// </summary>
     public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir)
     {
         var files = Render(options);
+        foreach (var stale in Stale(files, outDir))
+        {
+            var path = Path.Combine(outDir, stale);
+            File.Delete(path);
+            var root = Path.GetFullPath(outDir).TrimEnd(Path.DirectorySeparatorChar);
+            for (
+                var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+                dir is not null
+                    && dir.Length > root.Length
+                    && dir.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    && !Directory.EnumerateFileSystemEntries(dir).Any();
+                dir = Path.GetDirectoryName(dir)
+            )
+                Directory.Delete(dir);
+        }
         foreach (var file in files)
         {
             var path = Path.Combine(outDir, file.Path);
@@ -182,20 +220,129 @@ internal sealed class ClientGenerator
             else if (File.ReadAllText(path).Replace("\r\n", "\n") != file.Text)
                 drift.Add(new(file.Path, DriftStatus.Drifted));
         }
-        if (Directory.Exists(outDir))
-        {
-            var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
-            foreach (
-                var stale in Directory
-                    .EnumerateFiles(outDir, "*.g.ts", SearchOption.AllDirectories)
-                    .Select(p => Path.GetRelativePath(outDir, p).Replace('\\', '/'))
-                    .Where(p => !expected.Contains(p))
-                    .Order(StringComparer.Ordinal)
-            )
-                drift.Add(new(stale, DriftStatus.Drifted));
-        }
+        foreach (var stale in Stale(files, outDir))
+            drift.Add(new(stale, DriftStatus.Drifted));
         return drift;
     }
+
+    // The generated files under outDir the client does not hold, by their path under it.
+    private static IReadOnlyList<string> Stale(IReadOnlyList<ClientFile> files, string outDir)
+    {
+        if (!Directory.Exists(outDir))
+            return [];
+        var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
+        return Directory
+            .EnumerateFiles(outDir, "*.g.ts", SearchOption.AllDirectories)
+            .Select(p => Path.GetRelativePath(outDir, p).Replace('\\', '/'))
+            .Where(p => !expected.Contains(p))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    // The names the client's own modules export from the index, which no machine, train or type may take.
+    private static readonly string[] RuntimeNames =
+    [
+        "configureTrax",
+        "TraxOperationError",
+        "TraxConnection",
+    ];
+
+    // The SDL of the manifest's types, or a refusal saying the manifest is malformed.
+    private static GraphQLDocument ParseTypes(string? types)
+    {
+        if (string.IsNullOrWhiteSpace(types))
+            return new GraphQLDocument([]);
+        try
+        {
+            return Parser.Parse(types);
+        }
+        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
+        {
+            throw new InvalidOperationException(
+                $"The manifest's types are not GraphQL SDL ({ex.Message.Trim()}). Export the manifest again from the "
+                    + "host.",
+                ex
+            );
+        }
+    }
+
+    // A train the generator can write: a root it knows and one document, which names its operation.
+    private static ClientManifestTrain CheckTrain(ClientManifestTrain train)
+    {
+        if (train.Root is not ("mutation" or "query"))
+            throw new InvalidOperationException(
+                $"The train '{train.Field}' is under the root '{train.Root}', which is neither mutation nor query. "
+                    + "Export the manifest again from the host."
+            );
+        if (train.Documents.Count != 1)
+            throw new InvalidOperationException(
+                $"The train '{train.Field}' has {train.Documents.Count} documents where it has one. Export the "
+                    + "manifest again from the host."
+            );
+        return train;
+    }
+
+    /// <summary>
+    /// Refuses an IR the twin generator must not read: one naming another machine than the manifest entry (its id
+    /// names the twin's files), one whose state, trigger or outcome names are not identifiers (they are written into
+    /// the twin as code), and one whose SHA-256 is not the <see cref="ClientManifestMachine.IrHash"/> its documents
+    /// carry.
+    /// </summary>
+    private static void CheckIr(ClientManifestMachine machine)
+    {
+        var ir = machine.Ir;
+        var id = ir["id"] is JsonValue value && value.TryGetValue<string>(out var s) ? s : null;
+        if (id != machine.Id)
+            throw new InvalidOperationException(
+                $"The IR of the machine '{machine.Id}' is the IR of '{id}'. Export the manifest again from the host."
+            );
+        foreach (var (key, what) in new[] { ("states", "state"), ("triggers", "trigger") })
+        {
+            if (ir[key] is not JsonArray list)
+                throw new InvalidOperationException(
+                    $"The IR of the machine '{machine.Id}' has no {key}. Export the manifest again from the host."
+                );
+            foreach (var item in list)
+                if (
+                    item is not JsonValue v
+                    || !v.TryGetValue<string>(out var name)
+                    || !TypeScript.IsIdentifier(name)
+                )
+                    throw NotAnIdentifier(machine.Id, what, item?.ToJsonString());
+        }
+        if (ir["outcomes"] is not (null or JsonObject))
+            throw new InvalidOperationException(
+                $"The IR of the machine '{machine.Id}' has outcomes that are not an object. Export the manifest "
+                    + "again from the host."
+            );
+        // An outcome is <State>.<kind> (Fetching.done): each half is written into a type name.
+        foreach (var (name, _) in ir["outcomes"] as JsonObject ?? [])
+            if (
+                name.Split('.') is not [var state, var kind]
+                || !TypeScript.IsIdentifier(state)
+                || !TypeScript.IsIdentifier(kind)
+            )
+                throw NotAnIdentifier(machine.Id, "outcome", name);
+
+        var hash = Convert.ToHexStringLower(
+            SHA256.HashData(Encoding.UTF8.GetBytes(machine.IrText()))
+        );
+        if (hash != machine.IrHash)
+            throw new InvalidOperationException(
+                $"The IR of the machine '{machine.Id}' hashes to {hash}, and the manifest names {machine.IrHash}: "
+                    + "its documents were registered for another IR. Export the manifest again from the host."
+            );
+    }
+
+    private static InvalidOperationException NotAnIdentifier(
+        string machine,
+        string what,
+        string? name
+    ) =>
+        new(
+            $"The machine '{machine}' has the {what} {name}, which is not an identifier, so it cannot be written "
+                + "into its twin. Rename it on the host."
+        );
 
     private static string Format(string spec) =>
         Header
@@ -227,22 +374,33 @@ internal sealed class ClientGenerator
             let connection: TraxConnection | null = null;
             let socket: Client | null = null;
             let generation = 0;
+            const listeners = new Set<() => void>();
 
             /**
              * Tells the generated client where the host is. Call it before any hook or train function runs, and again when
-             * the connection changes (another user signs in): the socket is closed, and every machine's server is made anew
-             * on its next use.
+             * the connection changes (another user signs in): the socket is closed, every machine's server is made anew on
+             * its next use, and every mounted machine hook renders again onto it.
              */
             export function configureTrax(next: TraxConnection): void {
               connection = next;
               generation += 1;
-              void socket?.dispose();
+              const closing = socket;
               socket = null;
+              void closing?.dispose();
+              for (const listener of [...listeners]) listener();
             }
 
             /** How many times configureTrax was called: a machine's server made under an earlier count is made again. */
             export function traxGeneration(): number {
               return generation;
+            }
+
+            /** Calls `listener` after each configureTrax, until the function it returns is called. The machine hooks render on it. */
+            export function subscribeTrax(listener: () => void): () => void {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
             }
 
             /** The connection, or a refusal naming what to call. */
@@ -365,12 +523,15 @@ internal sealed class ClientGenerator
         var sb = new StringBuilder(Header);
         sb.Append("import \"../format.g\";\n");
         sb.Append(
-            $"import {{ createMachineServer, type MachineDocument }} from {TypeScript.Literal(spec + "/client")};\n"
+            $"import {{ createMachineServer, type MachineDocument, type PersistedSubscriptionSocket }} from {TypeScript.Literal(spec + "/client")};\n"
         );
         sb.Append(
             $"import {{ useRememberedMachine, useServerMachine, type UseRememberedMachineOptions, type UseServerMachineOptions }} from {TypeScript.Literal(spec + "/react")};\n"
         );
-        sb.Append("import { traxConnection, traxGeneration, traxSocket } from \"../client.g\";\n");
+        sb.Append("import { useSyncExternalStore } from \"react\";\n");
+        sb.Append(
+            "import { subscribeTrax, traxConnection, traxGeneration, traxSocket } from \"../client.g\";\n"
+        );
         sb.Append($"import {{ {camel} }} from \"./{machine.Id}.machine.g\";\n\n");
         sb.Append($"export {{ {camel} }};\n\n");
         sb.Append(
@@ -394,33 +555,52 @@ internal sealed class ClientGenerator
             $"/** The server of '{EscapeDocText(machine.Id)}' over the connection given to configureTrax. */\n"
         );
         sb.Append($"export function {camel}Server(): ReturnType<typeof createMachineServer> {{\n");
-        sb.Append("  if (server === null || serverGeneration !== traxGeneration()) {\n");
+        sb.Append("  const generation = traxGeneration();\n");
+        sb.Append("  if (server === null || serverGeneration !== generation) {\n");
+        sb.Append("    const socket: PersistedSubscriptionSocket = traxSocket();\n");
         sb.Append("    server = createMachineServer(traxConnection().url, {\n");
-        sb.Append("      headers: traxConnection().headers,\n");
+        sb.Append("      // Read per request, from the connection configureTrax was given last.\n");
+        sb.Append("      headers: () => traxConnection().headers?.() ?? {},\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
-        sb.Append("      socket: traxSocket(),\n");
+        sb.Append(
+            "      // Once configureTrax is called again, a stream that ends is not opened again on the socket it closed.\n"
+        );
+        sb.Append("      socket: {\n");
+        sb.Append(
+            "        subscribe: (payload, sink) => (generation === traxGeneration() ? socket.subscribe(payload, sink) : () => {}),\n"
+        );
+        sb.Append("      },\n");
         sb.Append("    });\n");
-        sb.Append("    serverGeneration = traxGeneration();\n");
+        sb.Append("    serverGeneration = generation;\n");
         sb.Append("  }\n");
         sb.Append("  return server;\n}\n\n");
         sb.Append(
-            $"/** One instance of '{EscapeDocText(machine.Id)}': the given id, or one started with `startInput`. */\n"
+            $"/**\n * One instance of '{EscapeDocText(machine.Id)}': the given id, or one started with `startInput`. It renders again\n"
+                + " * when configureTrax is called, onto a server over the new connection.\n */\n"
         );
         sb.Append(
             $"export function use{pascal}(options: Omit<UseServerMachineOptions, \"server\"> = {{}}) {{\n"
         );
+        sb.Append("  useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);\n");
         sb.Append(
             $"  return useServerMachine({camel}, {{ ...options, server: {camel}Server() }});\n}}\n\n"
         );
         sb.Append(
-            $"/** The instance of '{EscapeDocText(machine.Id)}' this browser keeps across visits, started when there is none. */\n"
+            $"/**\n * The instance of '{EscapeDocText(machine.Id)}' this browser keeps across visits for `user`, started when there\n"
+                + " * is none. `user` is the signed-in user's id: each user's instance is kept under a key of its own, so a browser\n"
+                + $" * two people sign in to never opens one's instance for the other. `rememberKey` replaces the {EscapeDocText(TypeScript.Literal("trax." + machine.Id))}\n"
+                + " * the key starts with. It renders again when configureTrax is called, onto a server over the new connection.\n */\n"
         );
         sb.Append(
-            $"export function useRemembered{pascal}(options: Omit<UseRememberedMachineOptions, \"server\" | \"rememberKey\"> & {{ rememberKey?: string }} = {{}}) {{\n"
+            $"export function useRemembered{pascal}({{ user, rememberKey, ...options }}: Omit<UseRememberedMachineOptions, \"server\" | \"rememberKey\"> & {{ user: string; rememberKey?: string }}) {{\n"
+        );
+        sb.Append("  useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);\n");
+        sb.Append(
+            $"  const key = (rememberKey ?? {TypeScript.Literal("trax." + machine.Id)}) + \".\" + encodeURIComponent(user);\n"
         );
         sb.Append(
-            $"  return useRememberedMachine({camel}, {{ rememberKey: {TypeScript.Literal("trax." + machine.Id)}, ...options, server: {camel}Server() }});\n}}\n"
+            $"  return useRememberedMachine({camel}, {{ ...options, rememberKey: key, server: {camel}Server() }});\n}}\n"
         );
         return sb.ToString();
     }
@@ -428,10 +608,26 @@ internal sealed class ClientGenerator
     private static string Train(ClientManifestTrain train, string function, SdlTypes types)
     {
         var document = train.Documents[0];
-        var operation = Parser
-            .Parse(document.Document)
-            .Definitions.OfType<GraphQLOperationDefinition>()
-            .Single();
+        GraphQLDocument parsed;
+        try
+        {
+            parsed = Parser.Parse(document.Document);
+        }
+        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
+        {
+            throw new InvalidOperationException(
+                $"The document of the train '{train.Field}' is not GraphQL ({ex.Message.Trim()}). Export the "
+                    + "manifest again from the host.",
+                ex
+            );
+        }
+        var operation = parsed.Definitions.OfType<GraphQLOperationDefinition>().ToList()
+            is [var single]
+            ? single
+            : throw new InvalidOperationException(
+                $"The document of the train '{train.Field}' does not hold one operation. Export the manifest "
+                    + "again from the host."
+            );
         var root = train.Root == "mutation" ? "dispatch" : "discover";
         var parentType =
             (train.Namespace is null ? "" : TypeScript.Upper(train.Namespace))
@@ -450,9 +646,16 @@ internal sealed class ClientGenerator
         var optional = variables.Except(required).ToList();
 
         var parameters = new List<string>();
+        // The names the function's body uses, which a parameter would hide.
+        string[] locals = ["sendDocument", "options", $"{function}DocumentId"];
         foreach (var variable in required)
         {
             var name = TypeScript.Identifier(variable.Variable.Name.StringValue, "variable");
+            if (locals.Contains(name, StringComparer.Ordinal))
+                throw new InvalidOperationException(
+                    $"The train '{train.Field}' has a variable '{name}', a name its generated function uses. "
+                        + "Rename it on the host."
+                );
             parameters.Add($"{name}: {types.InputType(variable.Type)}");
         }
         if (optional.Count > 0)
@@ -556,9 +759,14 @@ internal sealed class ClientGenerator
         sb.Append(
             TypeScript.Doc(
                 "Your run, read once: where it stands and the steps it took. Any run you did not start answers "
-                    + "`problem.code` NOT_FOUND. Runs of these trains can be followed: "
-                    + string.Join(", ", followable)
-                    + "."
+                    + "`problem.code` NOT_FOUND."
+                    + (
+                        followable.Count == 0
+                            ? ""
+                            : " Runs of these trains can be followed: "
+                                + string.Join(", ", followable)
+                                + "."
+                    )
             )
         );
         sb.Append(
@@ -623,27 +831,39 @@ internal sealed class ClientGenerator
                 if (!following) return;
                 let live = true;
                 let last = 0;
+                // How many events the stream delivered: a read sent before the last of them answers with an older run.
+                let events = 0;
                 // The view of this run: what was held, when it was this run's, else an empty one.
                 const fresh = (v: RunProgressView): RunProgressView =>
                   v.runId === following ? v : { ...nothingYet, runId: following };
+                // The read and the stream can both report the retry: the first moves on to it, the second finds it moved.
                 const retry = (next: string) => {
-                  if (live) setCurrent((c) => ({ ...c, run: next, earlier: [...c.earlier, following] }));
+                  if (live) setCurrent((c) => (c.run === following ? { ...c, run: next, earlier: [...c.earlier, following] } : c));
                 };
-                const read = () =>
-                  readRunProgress(following).then(
+                // A read answered after an event arrived is dropped, never shown over it; one that was sent for lost events
+                // is sent again, until it answers with no event since.
+                const read = (forLost: boolean) => {
+                  const sent = events;
+                  return readRunProgress(following).then(
                     (run) => {
                       if (!live) return;
                       if (run.retriedAs) return retry(run.retriedAs);
+                      if (events !== sent) {
+                        if (forLost) void read(true);
+                        return;
+                      }
                       setView((v) => ({ ...fresh(v), state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
                     },
                     () => undefined,
                   );
-                void read();
+                };
+                void read(false);
                 const stop = followRunProgress(
                   following,
                   (event) => {
+                    events += 1;
                     if (event.retriedAs) return retry(event.retriedAs);
-                    if (last !== 0 && event.sequence !== last + 1) void read();
+                    if (last !== 0 && event.sequence !== last + 1) void read(true);
                     last = event.sequence;
                     setView((prior) => {
                       const v = fresh(prior);
@@ -698,16 +918,20 @@ internal sealed class ClientGenerator
 
     private static string EscapeDocText(string text) => text.Replace("*/", "*\\/");
 
-    // The identifiers the client's index exports, so two never collide.
-    private sealed class Names
+    // The identifiers the client's index exports, or the paths of its files, so two never collide.
+    private sealed class Names(StringComparer? comparer = null)
     {
-        private readonly Dictionary<string, string> _owners = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _owners = new(
+            comparer ?? StringComparer.Ordinal
+        );
 
         public string Claim(string name, string owner)
         {
-            if (_owners.TryGetValue(name, out var other) && other != owner)
+            if (_owners.TryGetValue(name, out var other))
                 throw new InvalidOperationException(
-                    $"'{other}' and '{owner}' both generate the name '{name}'. Rename one of them on the host."
+                    other == owner
+                        ? $"'{owner}' is listed twice in the manifest. Export the manifest again from the host."
+                        : $"'{other}' and '{owner}' both generate the name '{name}'. Rename one of them on the host."
                 );
             _owners[name] = owner;
             return name;

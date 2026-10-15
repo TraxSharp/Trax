@@ -46,8 +46,11 @@ export type GetResponse = { kind: 'ok'; snapshot: ServerSnapshot } | ServerProbl
 /** What the change stream of one instance delivers. */
 export type StreamMessage =
   | { type: 'snapshot'; snapshot: ServerSnapshot }
-  /** The instance was deleted. Needs no re-read. */
-  | { type: 'gone' }
+  /**
+   * The instance was deleted. Needs no re-read. With `notFound`, the server answered NOT_FOUND instead, which it
+   * answers alike for an instance that is missing and one that is not the caller's.
+   */
+  | { type: 'gone'; notFound?: boolean }
   /** The transport reconnected after a drop: anything may have been missed. */
   | { type: 'reconnected' }
   /** The stream ended because the server no longer serves this client's version of the machine. */
@@ -77,6 +80,11 @@ export interface MachineServer {
 export interface ServerMachineError {
   code: typeof ClientProblemCode.Gone | typeof RefusalCode.ClientOutdated;
   message: string;
+  /**
+   * With `GONE`: true when the stream said the instance was deleted or expired, false when the server answered
+   * `NOT_FOUND`, which does not tell a missing instance from one that is not the caller's.
+   */
+  deleted?: boolean;
 }
 
 /** What a controller holds, as one immutable value: a new object on every change, the same one otherwise. */
@@ -406,7 +414,11 @@ export class ServerMachineController<Spec extends MachineSpec> {
         this.pump();
         return;
       case 'gone':
-        this.stop({ code: ClientProblemCode.Gone, message: 'The instance was deleted or expired.' });
+        this.stop(
+          message.notFound
+            ? { code: ClientProblemCode.Gone, message: 'The server holds no such instance for this caller.', deleted: false }
+            : { code: ClientProblemCode.Gone, message: 'The instance was deleted or expired.', deleted: true },
+        );
         return;
       case 'client-outdated':
         this.stop({ code: RefusalCode.ClientOutdated, message: 'The server no longer serves this version of the machine. Reload.' });
@@ -455,7 +467,7 @@ export class ServerMachineController<Spec extends MachineSpec> {
       }
       this.endRead();
       if (answer.code === CLIENT_OUTDATED) this.stop({ code: RefusalCode.ClientOutdated, message: answer.message });
-      else if (answer.code === NOT_FOUND) this.stop({ code: ClientProblemCode.Gone, message: answer.message });
+      else if (answer.code === NOT_FOUND) this.stop({ code: ClientProblemCode.Gone, message: answer.message, deleted: false });
       else {
         this.problem = refusal(answer.code, answer.message);
         this.emit();

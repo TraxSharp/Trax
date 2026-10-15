@@ -250,7 +250,7 @@ describe('createMachineServer change stream', () => {
 
     const missing = follow();
     missing.socket.push({ problem: { code: 'NOT_FOUND', message: 'No instance.' } });
-    expect(missing.messages).toEqual([{ type: 'gone' }]);
+    expect(missing.messages).toEqual([{ type: 'gone', notFound: true }]);
 
     const outdated = follow();
     outdated.socket.push({ problem: { code: 'CLIENT_OUTDATED', message: 'Reload.' } });

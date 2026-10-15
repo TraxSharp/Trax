@@ -75,6 +75,8 @@ internal static partial class TypeScript
         "of",
         "Array",
         "Promise",
+        "eval",
+        "arguments",
     };
 
     private static readonly JsonSerializerOptions Json = new()
@@ -88,13 +90,19 @@ internal static partial class TypeScript
     /// </summary>
     public static string Identifier(string name, string what)
     {
-        if (!IdentifierPattern().IsMatch(name) || Reserved.Contains(name))
+        if (!IsIdentifier(name) || Reserved.Contains(name))
             throw new InvalidOperationException(
                 $"The {what} '{name}' cannot name generated TypeScript: it is not an identifier, or it is a word "
                     + "TypeScript reserves. Rename it on the host."
             );
         return name;
     }
+
+    /// <summary>
+    /// Whether <paramref name="name"/> is ASCII letters, digits, <c>_</c> and <c>$</c>, not starting with a digit, and
+    /// nothing after it: a trailing newline is not part of an identifier.
+    /// </summary>
+    public static bool IsIdentifier(string name) => IdentifierPattern().IsMatch(name);
 
     /// <summary>A string as a TypeScript literal: its JSON, so nothing in it can end the literal.</summary>
     public static string Literal(string value) => JsonSerializer.Serialize(value, Json);
@@ -135,6 +143,6 @@ internal static partial class TypeScript
     public static string Upper(string name) =>
         name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name[1..];
 
-    [GeneratedRegex("^[A-Za-z_$][A-Za-z0-9_$]*$")]
+    [GeneratedRegex(@"^[A-Za-z_$][A-Za-z0-9_$]*\z")]
     private static partial Regex IdentifierPattern();
 }
