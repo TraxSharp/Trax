@@ -5,7 +5,6 @@ using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
 using Trax.Effect.StateMachine;
-using Trax.Testing.Red;
 
 namespace Trax.Api.StateMachine.E2E;
 
@@ -89,10 +88,6 @@ public class MachineDocumentStorageTests
     }
 
     [Test]
-    [Red(
-        "ADR 0048 has a newer version collect an older one once it has been stored for the grace period, even "
-            + "while a node still registers the older one; keeping both needs that rule changed"
-    )]
     public async Task Two_hosts_registering_one_slot_keep_both_documents_runnable()
     {
         var clock = new ManualClock(DateTimeOffset.UtcNow);
@@ -100,25 +95,37 @@ public class MachineDocumentStorageTests
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "two_v1", Collecting(clock))
         );
         var v1 = await ShelfIdsAsync();
-        Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "two_v2", Collecting(clock)));
+        var second = Track(
+            await ShelfHosts.StartAsync(Database, ShelfShape.V2, "two_v2", Collecting(clock))
+        );
+        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        v2.Should().NotBeEmpty("the second host registered its own version of the slot");
 
-        clock.Advance(TimeSpan.FromDays(400));
-        // negative-wait: both hosts register several times past the grace period, and each keeps what it serves.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        await MachineDocumentOps.PassTheGracePeriodRegisteringAsync(
+            Database,
+            clock,
+            [.. v1, .. v2]
+        );
 
         (await ActiveAsync(v1))
             .Should()
-            .Be(v1.Count, "a host that still registers its documents keeps them");
-        var id = await first.StartShelfAsync(E2EHost.AliceKey);
-        using var get = await first.PostPersistedAsync(
-            Pick(v1, "get"),
-            new { id },
-            E2EHost.AliceKey
-        );
-        MachineDocumentOps
-            .Succeeded(get, ShelfMachine.MachineId, "get")
-            .Should()
-            .BeTrue("the first host's clients still run its documents");
+            .Be(v1.Count, "a host that still registers its documents keeps them, per " + Adr);
+        (await ActiveAsync(v2)).Should().Be(v2.Count, "and so does the other");
+        foreach (var (host, ids) in new[] { (first, v1), (second, v2) })
+        {
+            var id = await host.StartShelfAsync(E2EHost.AliceKey);
+            using var get = await host.PostPersistedAsync(
+                Pick(ids, "get"),
+                new { id },
+                E2EHost.AliceKey
+            );
+            MachineDocumentOps
+                .Succeeded(get, ShelfMachine.MachineId, "get")
+                .Should()
+                .BeTrue(
+                    "each host's clients still run its documents: " + MachineDocumentOps.Show(get)
+                );
+        }
     }
 
     [Test]

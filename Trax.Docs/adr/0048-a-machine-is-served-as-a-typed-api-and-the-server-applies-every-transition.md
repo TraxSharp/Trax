@@ -228,17 +228,23 @@ the oldest forgotten first. A flood of more made-up, well-formed ids than the bo
 real stale client on `server-outdated` while it lasts. That is accepted: the flood is bounded in memory and in reads,
 runs nothing, and its effect ends with it. Bounding the waiting ids per client or per machine was the alternative,
 and protects nothing, since the caller may be anonymous and the machine segment of the id is the caller's to choose. Neither answer is a server error: `client-outdated` is HTTP 400 and `server-outdated` 409,
-and the client reads the code. Old ids are collected only after a grace period, by a registration every running
-node repeats on a timer. A registration marks the documents of a machine the registering node does not serve
-`unexposed:`, a node serving the machine clears the mark, and a document still marked after the grace period is
-collected. A node that serves no machine registers an empty set of documents the same way, so a deploy that stops
-serving every machine still has the older documents collected and their clients reload; a failed registration does
-not stop such a node, which retries at the next interval. A newer version than a node's own that no node has
-registered for the grace period is collected too, and its ids answer `client-outdated`, so a rollback's clients reload;
-each registration writes its own documents' `updated_at` again once it is a quarter of the grace period old, which is
-how a node tells. Only rows a host generated take part: a row under a reserved prefix whose body does not hash to its
-id was never generated, and registration leaves it alone. A collected document is made active again only at a node's startup or when no newer version of its
-machine is stored. The row's stored IR hash ends an older node's stream when a newer version writes the row. This
+and the client reads the code. A version goes only when no node has registered it for a grace period, whatever its
+number, by a registration every running node repeats on a timer, at least every quarter of the grace period. Each
+registration writes its own documents' `updated_at` again once it is a quarter of the grace period old, and collects
+any other version of a slot it serves whose `updated_at` is older than the grace period plus that quarter, counted
+from no earlier than its own version's first registration (so a node built before the re-stamp keeps its documents
+for the grace period after a newer one appears). After a rolling deploy the older version goes; after a rollback
+the newer one goes, and its ids answer `client-outdated`, so its clients reload instead of retrying forever. Two hosts
+on one database that register two versions of one slot keep both, and a node left running on an older version keeps
+its documents as long as it runs; both were chosen over collecting an older version once a newer one had been
+stored for the grace period, which stranded such a host's clients until it restarted. A registration marks the
+documents of a slot the registering node does not serve `unexposed:`, a node serving the slot clears the mark, and a
+document still marked after the grace period is collected. A node that serves no machine registers an empty set of
+documents the same way, so a deploy that stops serving every machine still has the older documents collected and
+their clients reload; a failed registration does not stop such a node, which retries at the next interval. Only rows
+a host generated take part: a row under a reserved prefix whose body does not hash to its id was never generated, and
+registration leaves it alone. A node makes its own collected documents active again whenever it registers, not only
+at startup: a node that registers is running. The row's stored IR hash ends an older node's stream when a newer version writes the row. This
 replaces the optional, fail-open `schemaHash` handshake.
 
 ### Timers
@@ -366,8 +372,8 @@ In `Trax.Api.Tests.StateMachine.E2E`:
 - `GenericOptInE2ETests`: `Without_the_opt_in_the_schema_has_no_stateMachine_field`, `With_the_opt_in_the_gate_policy_is_enforced_on_all_six`, `The_opt_in_without_a_policy_refuses_startup`, `A_host_with_unexposed_raw_delegate_machines_starts_and_serves_the_generic_opt_in`
 - `MachineChangedE2ETests`: `The_machineChanged_document_is_registered_under_the_reserved_prefix`, `It_runs_by_id_over_the_socket`, `The_subscriber_registers_before_the_initial_read_and_the_first_event_is_the_current_snapshot`, `Revisions_arrive_in_order_never_repeating_or_decreasing`, `A_burst_is_coalesced_to_the_latest_revision_and_a_skipped_revision_triggers_no_reload`, `A_server_made_outcome_applied_on_another_host_reaches_the_subscriber`, `A_missing_id_another_users_id_and_a_system_instance_id_get_the_same_answer`, `The_read_rule_is_checked_once_at_subscribe_and_routing_follows_row_id`, `A_principal_whose_read_rule_fails_is_refused_at_subscribe`, `Delete_yields_gone_without_a_re_read_and_completes`, `Expiry_by_the_sweeper_yields_gone`, `A_recreate_under_the_same_id_does_not_reach_a_stream_on_the_old_incarnation`, `Token_expiry_ends_the_stream`, `The_user_key_comes_from_the_socket_principal_under_jwt_and_api_key`, `An_older_hash_subscription_id_is_refused_client_outdated`, `A_row_written_by_a_newer_ir_ends_an_older_nodes_stream_client_outdated`, `Subscriptions_are_capped_per_principal_and_instance`, `machineChanged_counts_toward_the_100_operation_socket_cap`, `An_unlisted_origin_cannot_upgrade_for_machineChanged` (a guard, green today), `An_aborted_socket_releases_its_instance_watch`, `An_anonymous_socket_is_refused`, `A_forged_notice_for_an_unchanged_row_sends_nothing`, `N_subscribers_and_M_notices_on_one_row_cost_one_coalesced_read`, `A_row_the_host_cannot_parse_ends_that_stream_only`
 - `MachineClientResultE2ETests`: `A_mismatched_clientResult_is_refused_as_client_divergence_and_counted`, `A_replayed_request_does_not_falsely_diverge`, `ClientResult_is_capped_and_only_its_hash_and_length_are_logged`
-- `MachineDocumentCrossNodeTests`: `Two_nodes_starting_together_register_each_document_once_and_both_start`, `Document_text_is_identical_across_processes`, `A_graphql_naming_change_without_an_ir_change_yields_a_new_id`, `After_an_ir_change_the_old_id_answers_client_outdated_and_the_new_one_works`, `A_node_serves_machine_documents_only_for_its_own_hashes`, `A_newer_hash_on_an_older_node_is_server_outdated_and_retryable`, `A_client_bouncing_between_old_and_new_nodes_never_gets_client_outdated_for_a_newer_hash`, `Startup_never_deactivates_an_older_irs_documents`, `Old_ids_are_collected_only_after_the_grace_period`, `A_running_node_collects_old_ids_after_the_grace_period_without_a_restart`, `A_machine_exposed_only_on_a_newer_node_is_server_outdated_on_an_older_one`, `Adding_a_timer_changes_the_document_ids`, `A_machine_a_newer_deploy_stopped_exposing_is_client_outdated_once_its_documents_are_collected`, `A_machine_a_newer_node_serves_is_never_collected_by_an_older_node_that_does_not`, `An_older_node_past_the_grace_period_does_not_reactivate_what_a_newer_node_collected`, `A_deploy_that_serves_no_machine_still_collects_the_old_documents_and_old_ids_turn_client_outdated`
-- `MachineDocumentStorageTests`: `A_newer_shape_no_node_registers_turns_client_outdated_after_grace`, `A_preexisting_row_under_a_new_prefix_is_not_collected`, and `Two_hosts_registering_one_slot_keep_both_documents_runnable`, marked `[Red]` while the older-version rule stands
+- `MachineDocumentCrossNodeTests`: `Two_nodes_starting_together_register_each_document_once_and_both_start`, `Document_text_is_identical_across_processes`, `A_graphql_naming_change_without_an_ir_change_yields_a_new_id`, `After_an_ir_change_the_old_id_answers_client_outdated_and_the_new_one_works`, `A_node_serves_machine_documents_only_for_its_own_hashes`, `A_newer_hash_on_an_older_node_is_server_outdated_and_retryable`, `A_client_bouncing_between_old_and_new_nodes_never_gets_client_outdated_for_a_newer_hash`, `Startup_never_deactivates_an_older_irs_documents`, `Old_ids_are_collected_only_after_the_grace_period`, `A_running_node_collects_old_ids_after_the_grace_period_without_a_restart`, `A_machine_exposed_only_on_a_newer_node_is_server_outdated_on_an_older_one`, `Adding_a_timer_changes_the_document_ids`, `A_machine_a_newer_deploy_stopped_exposing_is_client_outdated_once_its_documents_are_collected`, `A_machine_a_newer_node_serves_is_never_collected_by_an_older_node_that_does_not`, `An_older_node_still_registering_keeps_its_documents_past_the_grace_period`, `An_older_version_no_node_registers_is_collected_after_the_grace_period`, `A_deploy_that_serves_no_machine_still_collects_the_old_documents_and_old_ids_turn_client_outdated`
+- `MachineDocumentStorageTests`: `A_newer_shape_no_node_registers_turns_client_outdated_after_grace`, `A_preexisting_row_under_a_new_prefix_is_not_collected`, and `Two_hosts_registering_one_slot_keep_both_documents_runnable`
 - `MachineDocumentRegistryTests`: `An_unseen_id_is_answered_at_once_and_concurrent_misses_never_wait_on_each_other`, `An_id_the_store_still_lacks_after_a_later_read_is_client_outdated`, `Misses_read_the_store_at_most_once_per_interval`, `A_stored_active_id_of_a_machine_this_node_does_not_serve_is_server_outdated`, `A_collected_id_of_a_machine_this_node_does_not_serve_is_client_outdated`, `An_unseen_id_of_a_machine_this_node_does_not_serve_is_client_outdated_once_a_later_read_lacks_it`, `A_flood_of_unseen_ids_forgets_the_oldest_and_keeps_an_id_asked_for_after_most_of_it`
 - `MachineDocumentsE2ETests`: `Every_machine_document_is_registered_at_startup_under_the_reserved_prefix`, `Restarting_a_node_writes_no_history_and_broadcasts_nothing_for_unchanged_documents`, `A_lookup_whose_stored_body_does_not_match_its_id_is_refused`, `Startup_repairs_a_tampered_machine_document_and_alerts`, `Machine_documents_are_registered_under_the_null_tenant_and_a_tenant_row_does_not_shadow_them`, `A_request_arriving_before_registration_completes_does_not_pin_a_miss`, `Unknown_reserved_prefix_ids_read_the_store_at_most_once_per_refresh_interval`, `A_well_formed_made_up_id_is_answered_without_a_server_error_status`, `The_manifest_query_lists_every_document_with_its_hash_behind_the_operations_gate`, `A_recursive_input_or_context_type_refuses_startup_rather_than_generating_forever`
 - `MachineErrorMappingE2ETests`: `An_infrastructure_failure_inside_advance_is_a_typed_problem_without_server_detail`
@@ -543,6 +549,12 @@ to trust it. The twin's prediction is checked against the server only where the 
 
 ## Changelog
 
+- **2026-10-15**: A generated version is collected only when no node has registered it for the grace period, older or
+  newer; the rule that a newer version collects an older one once it has been stored for the grace period is gone.
+  Two hosts on one database that register two versions of one slot keep both, and a node left running on an older
+  version keeps its documents. A node restores its own collected documents whenever it registers, not only at
+  startup, and registers at least every quarter of the grace period. The time is counted from no earlier than the
+  registering node's own version's first registration, so a node that does not re-stamp still gets the grace period.
 - **2026-10-15**: A version newer than a registering node's that no node has registered for the grace period is
   collected, and a collected newer version answers `client-outdated`, so a rollback's clients reload instead of
   retrying forever. A registration rewrites its documents' `updated_at` once it is a quarter of the grace period old,

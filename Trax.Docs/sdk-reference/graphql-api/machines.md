@@ -201,20 +201,21 @@ transport like any other.
   such ids arrive, and the ids waiting for a read are bounded (4096), the oldest forgotten first: a flood of more
   made-up ids than that within a second keeps a real stale client on `SERVER_OUTDATED` until the flood stops. A document id's machine is
   the segment between the `trax_machine_` prefix and the next underscore; a machine id never contains one.
-- **Older documents are collected** once a node's own set has been stored for
+- **A version is collected once no node registers it.** Each running node registers its documents again every
+  hour (or every quarter of the grace period, if that is shorter), under the same lock, and each registration writes
+  the `updated_at` of the node's own documents again once it is a quarter of the grace period old. A version of a
+  machine the node serves, older or newer than its own, that no node has registered for
   [`KeepOlderMachineDocumentsFor`](/docs/sdk-reference/persisted-operations/persisted-operations-builder) (seven
-  days by default). Each running node registers its documents again every hour, under the same lock, and that is
-  when it collects: a node starting inside the grace period deactivates nothing, and an older set is collected
-  within the hour after the grace period ends, with no restart. A registration also marks the active documents of a
-  machine the registering node does not serve as unexposed (their deprecation reason starts `unexposed:`), and a
-  node that serves the machine clears the mark when it registers, so a machine any running node serves is never
-  collected; one still marked after the grace period is collected, and its clients then reload. A collected document
-  is made active again only when a node serving it starts (a rollback) or when no newer version of its machine is
-  stored, so a node still running an older version past the grace period does not bring back what a newer one
-  collected. A registration writes the `updated_at` of the node's own documents again once it is a quarter of the
-  grace period old, and a version newer than the node's that no node has registered for the grace period (and that
-  quarter) is collected, so after a rollback its clients reload rather than retry. Its ids then answer
-  `client-outdated`. Only rows a host generated take part: a row under a reserved prefix whose body does not hash
+  days by default) plus that quarter is collected, with no restart. After a rolling deploy the older version goes;
+  after a rollback the newer one goes, and its ids then answer `CLIENT_OUTDATED`, so its clients reload rather than
+  retry. A node still running another version keeps its documents for as long as it runs, so two hosts on one
+  database that serve two versions of one machine keep both. The time is counted from no earlier than the
+  registering node's own version first registered, so a node starting inside the grace period deactivates nothing.
+  A registration also marks the active documents of a machine the registering node does not serve as unexposed
+  (their deprecation reason starts `unexposed:`), and a node that serves the machine clears the mark when it
+  registers, so a machine any running node serves is never collected; one still marked after the grace period is
+  collected, and its clients then reload. A node makes its own collected documents active again whenever it
+  registers them. Only rows a host generated take part: a row under a reserved prefix whose body does not hash
   to its id, such as one uploaded before the prefix was reserved, is never numbered against, marked or collected.
   A node that serves no machine registers too, with no documents of its own, so a deploy that stops
   serving every machine still collects the older documents after the grace period; a registration that fails there

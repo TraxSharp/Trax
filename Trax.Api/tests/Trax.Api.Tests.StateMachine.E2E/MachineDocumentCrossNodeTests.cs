@@ -596,42 +596,117 @@ public class MachineDocumentCrossNodeTests
     }
 
     [Test]
-    public async Task An_older_node_past_the_grace_period_does_not_reactivate_what_a_newer_node_collected()
+    public async Task An_older_node_still_registering_keeps_its_documents_past_the_grace_period()
     {
         var clock = new ManualClock(DateTimeOffset.UtcNow);
-        Track(
+        var older = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V1, "lingering_v1", Collecting(clock))
         );
         var v1 = await ShelfIdsAsync();
-        Track(
+        var newer = Track(
             await ShelfHosts.StartAsync(Database, ShelfShape.V2, "lingering_v2", Collecting(clock))
         );
+        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+
+        await MachineDocumentOps.PassTheGracePeriodRegisteringAsync(
+            Database,
+            clock,
+            [.. v1, .. v2]
+        );
+
+        (await DeactivationsAsync(v1))
+            .Should()
+            .Be(
+                0,
+                "a node still running an older version registers its documents, so no newer node collects "
+                    + "them, per "
+                    + Adr
+            );
+        (await ActiveAsync(v1)).Should().Be(v1.Count);
+        var id = await older.StartShelfAsync(E2EHost.AliceKey);
+        using var onOlder = await older.PostPersistedAsync(
+            Pick(v1, "get"),
+            new { id },
+            E2EHost.AliceKey
+        );
+        MachineDocumentOps
+            .Succeeded(onOlder, ShelfMachine.MachineId, "get")
+            .Should()
+            .BeTrue("the older node's clients still run: " + MachineDocumentOps.Show(onOlder));
+        using var onNewer = await newer.PostPersistedAsync(
+            Pick(v1, "get"),
+            new { id },
+            E2EHost.AliceKey
+        );
+        MachineDocumentOps
+            .Codes(onNewer)
+            .Should()
+            .Contain(
+                RefusalCode.ClientOutdated.ToWire(),
+                "an older id sent to a newer node still tells the client to reload"
+            );
+    }
+
+    [Test]
+    public async Task An_older_version_no_node_registers_is_collected_after_the_grace_period()
+    {
+        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var older = Track(
+            await ShelfHosts.StartAsync(Database, ShelfShape.V1, "gone_v1", Collecting(clock))
+        );
+        var v1 = await ShelfIdsAsync();
+        var newer = Track(
+            await ShelfHosts.StartAsync(Database, ShelfShape.V2, "gone_v2", Collecting(clock))
+        );
+        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        // The older node is stopped: nothing registers its documents from here on.
+        _hosts.Remove(older);
+        await ShelfHosts.StopAsync(older);
+
+        clock.Advance(TimeSpan.FromDays(1));
+        // negative-wait: the newer node registers several times inside the grace period, and nothing may be collected.
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        (await ActiveAsync(v1))
+            .Should()
+            .Be(v1.Count, "within the grace period a node of the older version may still run");
 
         clock.Advance(TimeSpan.FromDays(400));
         (await E2EWait.UntilAsync(async () => await ActiveAsync(v1) == 0))
             .Should()
-            .BeTrue("the newer node collects the older version's documents past the grace period");
-        // negative-wait: the older node registers again several times; none may bring its documents back.
-        await Task.Delay(TimeSpan.FromSeconds(2));
-
-        (await RestoresAsync(v1))
-            .Should()
-            .Be(
-                0,
-                "a node still running an older version after the grace period never reactivates what a newer one "
-                    + "collected, per "
+            .BeTrue(
+                "no node has registered the older version for the grace period, so it is collected, per "
                     + Adr
             );
-        (await ActiveAsync(v1)).Should().Be(0);
+        (await ActiveAsync(v2)).Should().Be(v2.Count, "the newer node's own stay");
+        var id = await newer.StartShelfAsync(E2EHost.AliceKey);
+        using var old = await newer.PostPersistedAsync(
+            Pick(v1, "get"),
+            new { id },
+            E2EHost.AliceKey
+        );
+        MachineDocumentOps
+            .Codes(old)
+            .Should()
+            .Contain(
+                RefusalCode.ClientOutdated.ToWire(),
+                "a collected older id, with its own node gone, tells the client to reload, per "
+                    + Adr
+            );
 
-        // A node rolled back to the older version, starting, brings them back.
-        Track(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "rolled_back_v1"));
+        // A node rolled back to the older version brings them back when it registers, and keeps them.
+        Track(
+            await ShelfHosts.StartAsync(
+                Database,
+                ShelfShape.V1,
+                "rolled_back_v1",
+                Collecting(clock)
+            )
+        );
+        // negative-wait: both nodes register several times; the newer one may not collect what the older registers.
+        await Task.Delay(TimeSpan.FromSeconds(1));
         (await ActiveAsync(v1))
             .Should()
-            .Be(
-                v1.Count,
-                "a node starting on the older version is a rollback and serves them again"
-            );
+            .Be(v1.Count, "a node on the older version serves them again");
     }
 
     // A host on the shared clock that registers its machine documents again every 200 ms.
@@ -648,9 +723,6 @@ public class MachineDocumentCrossNodeTests
                 options.MachineDocumentCollectionInterval = TimeSpan.FromMilliseconds(200);
             },
         };
-
-    private static Task<long> RestoresAsync(IReadOnlyList<string> ids) =>
-        HistoryOfAsync(ids, PersistedOperationChangeType.Restore);
 
     private static Task<long> DeactivationsAsync(IReadOnlyList<string> ids) =>
         HistoryOfAsync(ids, PersistedOperationChangeType.Deactivate);

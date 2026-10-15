@@ -509,26 +509,29 @@ internal sealed class DbPersistedOperationStorage
     /// store is written with a history row; each whose stored body differs from the generated one is written back
     /// and counted; and a set of documents this node registers for the first time is numbered one past every set of
     /// its machine stored before it. Documents already stored as generated are left alone: no write, no history row,
-    /// no broadcast. An older version's documents are deactivated only once this node's have been stored for
-    /// <paramref name="grace"/>; a newer version's never are.
+    /// no broadcast. Another version's documents, older or newer, are deactivated only once no node has registered
+    /// them for <paramref name="grace"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A document of this node's that was collected is made active again only when <paramref name="startup"/> is
-    /// set (a node rolled back to it) or no newer version of its machine is stored: a node still running an older
-    /// version after the grace period never brings back what a newer one collected.
-    /// </para>
-    /// <para>
-    /// An active document of a machine this node does not serve is marked unexposed (its deprecation reason, with
-    /// the time in its <c>updated_at</c>), once; a node that serves it clears the mark when it registers. A document
-    /// still marked after <paramref name="grace"/> is collected: no node registering since has served its machine, so
-    /// its clients reload instead of retrying.
-    /// </para>
-    /// <para>
     /// Every registration writes the <c>updated_at</c> of this node's active documents again once it is a quarter of
-    /// <paramref name="grace"/> old, so a document some node still registers always has a recent one. A version newer
-    /// than this node's whose documents nobody has registered for longer than <paramref name="grace"/> is collected:
-    /// after a rollback, its clients reload instead of retrying forever.
+    /// <paramref name="grace"/> old, so a document some node still registers always has a recent one. A document of a
+    /// slot this node serves that is not its own, and whose <c>updated_at</c> is older than <paramref name="grace"/>
+    /// plus that quarter, is collected whatever its version: its nodes were stopped or rolled back. Two hosts on one
+    /// database that register two versions of one slot keep both, and so does a node left running on an older
+    /// version. The time is counted from no earlier than when this node's version of the slot was first stored, so a
+    /// node that does not write <c>updated_at</c> again (one built before it did) still keeps its documents for the
+    /// grace period after a newer version appears.
+    /// </para>
+    /// <para>
+    /// A document of this node's that was collected is made active again whenever it registers: the node is
+    /// running, so its documents are registered again.
+    /// </para>
+    /// <para>
+    /// An active document of a slot this node does not serve is marked unexposed (its deprecation reason, with the
+    /// time in its <c>updated_at</c>), once; a node that serves it clears the mark when it registers. A document
+    /// still marked after <paramref name="grace"/> is collected: no node registering since has served its slot, so
+    /// its clients reload instead of retrying.
     /// </para>
     /// <para>
     /// Only rows a host generated take part (<see cref="GeneratedDocuments.IsGenerated"/>). A row uploaded under a
@@ -543,8 +546,7 @@ internal sealed class DbPersistedOperationStorage
     )> RegisterMachineDocumentsAsync(
         IReadOnlyList<GeneratedDocument> documents,
         TimeSpan grace,
-        CancellationToken ct,
-        bool startup = true
+        CancellationToken ct
     )
     {
         var now = _clock.GetUtcNow().UtcDateTime;
@@ -601,29 +603,21 @@ internal sealed class DbPersistedOperationStorage
                     ? mine.Max(d => byId[d.Id].Version)
                     : checked(ofMachine.Select(r => r.Version).DefaultIfEmpty(0).Max() + 1);
                 ownVersions[machine.Key] = version;
-                var mayRestore = startup || !ofMachine.Any(r => r.Version > version);
 
                 foreach (var document in mine)
-                    marked |= Register(
-                        ctx,
-                        document,
-                        version,
-                        mayRestore,
-                        byId,
-                        rows,
-                        changed,
-                        now,
-                        refresh
-                    );
+                    marked |= Register(ctx, document, version, byId, rows, changed, now, refresh);
 
-                // A newer version no node has registered for the grace period is not coming back: its nodes were
-                // rolled back or stopped, so its clients reload rather than retry.
+                // Another version no node has registered for the grace period is not coming back: its nodes were
+                // stopped or rolled back, so its clients reload rather than retry. Counted from no earlier than this
+                // version's first registration, so a node that never writes updated_at again keeps its documents for
+                // the grace period after this one appears.
+                var registeredAt = mine.Max(d => byId[d.Id].CreatedAt);
                 foreach (
                     var stale in ofMachine.Where(r =>
                         r.IsActive
-                        && r.Version > version
                         && !ownIds.Contains(r.Id)
-                        && now - r.UpdatedAt >= grace + refresh
+                        && now - (r.UpdatedAt > registeredAt ? r.UpdatedAt : registeredAt)
+                            >= grace + refresh
                     )
                 )
                 {
@@ -634,26 +628,6 @@ internal sealed class DbPersistedOperationStorage
                     stale.UpdatedAt = now;
                     History(ctx, stale, PersistedOperationChangeType.Deactivate, now, reason);
                     changed.Add((stale.Id, PersistedOperationChangeType.Deactivate));
-                }
-
-                // A node still running an older version needs its documents, so they stay until this version has
-                // been stored for the grace period.
-                var registeredAt = mine.Max(d => byId[d.Id].CreatedAt);
-                if (now - registeredAt < grace)
-                    continue;
-                foreach (
-                    var old in ofMachine.Where(r =>
-                        r.IsActive && r.Version < version && !ownIds.Contains(r.Id)
-                    )
-                )
-                {
-                    var reason =
-                        $"collected: superseded by version {version} of '{machine.Key}' for longer than {grace}";
-                    old.IsActive = false;
-                    old.DeprecationReason = reason;
-                    old.UpdatedAt = now;
-                    History(ctx, old, PersistedOperationChangeType.Deactivate, now, reason);
-                    changed.Add((old.Id, PersistedOperationChangeType.Deactivate));
                 }
             }
 
@@ -722,14 +696,13 @@ internal sealed class DbPersistedOperationStorage
         reason is not null && reason.StartsWith(UnexposedMark, StringComparison.Ordinal);
 
     // Writes one generated document: a new row, a row written back over a body that does not match its id, a row
-    // collected earlier that this node serves again (when it may restore it), a row whose unexposed mark this node
-    // clears, or an active row whose updated_at is older than refresh, which records that a node still registers it.
+    // collected earlier that this node serves again, a row whose unexposed mark this node clears, or an active row
+    // whose updated_at is older than refresh, which records that a node still registers it.
     // Returns whether it changed a row without a history entry (the mark or the refresh).
     private bool Register(
         Trax.Effect.Data.Services.DataContext.IDataContext ctx,
         GeneratedDocument document,
         int version,
-        bool mayRestore,
         Dictionary<string, PersistedOperation> byId,
         List<PersistedOperation> rows,
         List<(string Id, string ChangeType)> changed,
@@ -763,11 +736,8 @@ internal sealed class DbPersistedOperationStorage
             row.Document = document.Text;
             row.ShapeFingerprint = ShapeFingerprintComputer.Compute(document.Text);
             row.OperationName = ExtractOperationName(document.Text);
-            if (row.IsActive || mayRestore)
-            {
-                row.IsActive = true;
-                row.DeprecationReason = null;
-            }
+            row.IsActive = true;
+            row.DeprecationReason = null;
             row.UpdatedAt = now;
             History(
                 ctx,
@@ -789,8 +759,6 @@ internal sealed class DbPersistedOperationStorage
         }
         else if (!row.IsActive)
         {
-            if (!mayRestore)
-                return false;
             row.IsActive = true;
             row.DeprecationReason = null;
             row.UpdatedAt = now;

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 
@@ -138,6 +139,37 @@ public static class MachineDocumentOps
             "SELECT count(*) FROM trax.persisted_operation_history WHERE starts_with(id, @prefix)",
             ("prefix", MachineDocuments.ReservedIdPrefix)
         );
+
+    /// <summary>
+    /// Moves <paramref name="clock"/> past the default grace period a day at a time, and after each day waits until
+    /// every one of <paramref name="registered"/> has an <c>updated_at</c> less than a quarter of the grace period old.
+    /// The nodes that register them keep up as they would over a real week, instead of every document looking
+    /// unregistered at once, as one jump of the clock past the grace period would make it look.
+    /// </summary>
+    public static async Task PassTheGracePeriodRegisteringAsync(
+        string database,
+        ManualClock clock,
+        IReadOnlyList<string> registered
+    )
+    {
+        var grace = PersistedOperationsOptions.DefaultMachineDocumentGracePeriod;
+        for (var day = TimeSpan.Zero; day <= grace + grace / 2; day += TimeSpan.FromDays(1))
+        {
+            clock.Advance(TimeSpan.FromDays(1));
+            var refreshed = await E2EWait.UntilAsync(async () =>
+                await E2ESql.ScalarAsync<long>(
+                    database,
+                    "SELECT count(*) FROM trax.persisted_operation WHERE id = ANY(@ids) AND updated_at < @since",
+                    ("ids", registered.ToArray()),
+                    ("since", clock.GetUtcNow() - grace / 4)
+                ) == 0
+            );
+            if (!refreshed)
+                Assert.Fail(
+                    $"A node stopped writing updated_at on its documents {day.TotalDays + 1} days in."
+                );
+        }
+    }
 
     /// <summary>
     /// POSTs a request naming the persisted document <paramref name="documentId"/> with

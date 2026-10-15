@@ -62,6 +62,11 @@ A host where a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-a
 two documents of `runProgress`, under `trax_progress_query_<shapeHash><textHash>` and
 `trax_progress_subscription_<shapeHash><textHash>`, hashed the same way. One pair serves every such train.
 
+A version of a train's or the progress documents is kept for as long as any node registers it, and collected once no
+node has for the grace period, the way a machine's is
+([collection](/docs/sdk-reference/graphql-api/machines#persisted-documents)): two hosts on one database that expose
+one train field with two shapes keep both.
+
 ### Registered services
 
 | Service | Lifetime | Purpose |
