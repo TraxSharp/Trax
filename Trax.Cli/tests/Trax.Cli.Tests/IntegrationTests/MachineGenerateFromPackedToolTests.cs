@@ -83,6 +83,96 @@ public class MachineGenerateFromPackedToolTests
         new TurnstileReplaying(corpus).SelfCheck().Should().BeEmpty();
     }
 
+    // An outside developer installs both packages and nothing else of this repository: the engine from its npm tarball
+    // and the tool from its nupkg. A break that shows only in what is published (an export-map entry, a file left out
+    // of the tarball) fails here instead of in the next outside developer's build.
+    [Test]
+    public void The_published_engine_and_tool_typecheck_together_in_an_empty_project()
+    {
+        var tool = PackAndUnpackTheTool();
+        var engine = RepoFolder("Trax.Api.StateMachine");
+        var (packed, packOutput) = Run("npm", _root, "pack", engine, "--pack-destination", _root);
+        packed.Should().Be(0, packOutput);
+        var tarball = Directory.GetFiles(_root, "traxsharp-state-machine-*.tgz").Single();
+
+        var work = Path.Combine(_root, "outside");
+        Directory.CreateDirectory(work);
+        File.WriteAllText(
+            Path.Combine(work, "package.json"),
+            """{ "name": "outside", "private": true, "type": "module" }"""
+        );
+        var (installed, installOutput) = Run(
+            "npm",
+            work,
+            "install",
+            "--no-audit",
+            "--no-fund",
+            tarball,
+            $"typescript@{EngineDevDependency(engine, "typescript")}"
+        );
+        installed.Should().Be(0, installOutput);
+
+        var (generated, generateOutput) = Run(
+            "dotnet",
+            work,
+            Path.Combine(tool, "trax.dll"),
+            "machine",
+            "generate",
+            "--assembly",
+            typeof(DeclarativeTurnstileMachine).Assembly.Location,
+            "--machine",
+            typeof(DeclarativeTurnstileMachine).FullName!,
+            "--twin-out",
+            "twin"
+        );
+        generated.Should().Be(0, generateOutput);
+
+        File.WriteAllText(
+            Path.Combine(work, "consumer.ts"),
+            """
+            import { requireClientFormat, clientFormat, RefusalCode } from "@traxsharp/state-machine";
+            import { createMachineExecutor } from "@traxsharp/state-machine/client";
+            import { turnstile } from "./twin/turnstile.machine.g";
+
+            requireClientFormat(clientFormat);
+            const code: RefusalCode = RefusalCode.GuardFailed;
+            export const state: string = turnstile.initial().state;
+            export const make = () => createMachineExecutor("/graphql", { machines: [{ machine: turnstile, documents: [] }] });
+            export { code };
+            """
+        );
+        File.WriteAllText(
+            Path.Combine(work, "tsconfig.json"),
+            """
+            {
+              "compilerOptions": {
+                "strict": true, "noEmit": true, "target": "ES2022", "module": "ESNext",
+                "moduleResolution": "bundler", "skipLibCheck": false, "lib": ["ES2022", "DOM"]
+              },
+              "include": ["consumer.ts", "twin/*.ts"]
+            }
+            """
+        );
+        var (checkedCode, checkOutput) = Run(
+            "node",
+            work,
+            Path.Combine(work, "node_modules", "typescript", "bin", "tsc"),
+            "-p",
+            "tsconfig.json"
+        );
+        checkedCode.Should().Be(0, checkOutput);
+    }
+
+    // A dev dependency's version as the engine pins it, so the outside project typechecks with the TypeScript the
+    // engine is built with.
+    private static string EngineDevDependency(string engine, string name) =>
+        System
+            .Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(engine, "package.json")))
+            .RootElement.GetProperty("devDependencies")
+            .GetProperty(name)
+            .GetString()!
+            .TrimStart('^', '~');
+
     // The turnstile, shipping the corpus the tool just wrote, so SelfCheck replays it through the C# engine.
     // Its constructor takes the corpus, which keeps the CLI's machine loader from picking it up.
     private sealed class TurnstileReplaying(string corpus) : DeclarativeTurnstileMachine
