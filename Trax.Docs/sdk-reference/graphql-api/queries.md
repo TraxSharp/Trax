@@ -44,7 +44,7 @@ The fields directly under `operations`, each on the page that documents it.
 
 ### health
 
-The scheduler's health, as the `/trax/health` check reports it. [operations: system queries](/docs/sdk-reference/graphql-api/queries/operations#health)
+The scheduler's health, as the `/trax/health` check reports it, for the dashboard; a monitor reads `/trax/health`. [operations: system queries](/docs/sdk-reference/graphql-api/queries/operations#health)
 
 ### trains
 

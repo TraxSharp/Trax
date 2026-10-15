@@ -19,6 +19,8 @@ source:
 
 The `operations.metrics` namespace returns the data behind the dashboard's KPI cards, charts, and server health panel. Every field comes from the shared `IOperationsService`, so the GraphQL response and the dashboard render exactly the same numbers.
 
+These are the dashboard's reads, behind the operations gate. A monitor that only needs to know whether the host is healthy reads `/trax/health` ([AddTraxHealthCheck](/docs/sdk-reference/graphql-api/add-trax-health-check)), not GraphQL.
+
 ## dashboard
 
 ```graphql

@@ -20,6 +20,8 @@ Fields of `OperationsQueries`, the type behind `query { operations { ... } }`, t
 
 Returns the current health status of the Trax scheduler system. This is the same data reported by the ASP.NET `IHealthCheck` at `/trax/health`, exposed as a structured GraphQL type.
 
+It is the dashboard's home page read, behind the operations gate like every field here. A monitor, load balancer or scraper reads `/trax/health` instead ([AddTraxHealthCheck](/docs/sdk-reference/graphql-api/add-trax-health-check) and `MapHealthChecks`), which needs no GraphQL document and no operator credential.
+
 ```graphql
 query {
   operations {
