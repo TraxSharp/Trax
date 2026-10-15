@@ -21,7 +21,9 @@ started directly, gets the same `NOT_FOUND`.
 ## Decisions
 
 - **The starter is recorded, not inferred.** `starter_hash` (migrations 082 and 083, SQLite 042) holds the hex SHA-256
-  of the qualified principal id, so the table never stores an id a reader could use elsewhere. A train mutation
+  of a tag and an id, so the table never stores an id a reader could use elsewhere: `p\0` and the qualified principal
+  id for a caller who started the run, `u\0` and the user key for the owner of the instance that invoked it. The tag
+  keeps a host's user key that happens to read like someone's principal id from matching their runs. A train mutation
   records its caller in both modes, a user-owned machine instance records its owner for the runs it invokes, a
   requeue or resume keeps the original run's, and a scheduled, dashboard, operations or remote run records nobody.
   The invoked-run cap counts by the same column, so a run whose instance was deleted still counts until it ends.

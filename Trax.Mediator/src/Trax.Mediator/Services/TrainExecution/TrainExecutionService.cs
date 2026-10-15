@@ -456,7 +456,7 @@ public class TrainExecutionService(
     // The current caller as the run's starter: the hash of the principal id the host's provider reads. Resolved here
     // rather than injected, so a host without one (no HTTP surface) records no starter.
     private string? CallerHash() =>
-        RunStarter.Hash(
+        RunStarter.OfPrincipal(
             serviceProvider.GetService<ICurrentPrincipalProvider>()?.GetCurrentPrincipalId()
         );
 

@@ -607,8 +607,10 @@ deploy before an instance's effect is sent, or drain sends first.
 ## Run starter (082 and 083, SQLite 042)
 
 `082_run_starter.sql` (SQLite `042`) adds a nullable `starter_hash` (`text`) to `trax.work_queue` and `trax.metadata`:
-the lowercase hex SHA-256 of the qualified principal id of whoever started the run, never the id itself. Who counts as
-the starter:
+the lowercase hex SHA-256 of a tag and the id of whoever started the run, never the id itself. The stored form is
+`SHA-256("p\0" + principalId)` for a caller, with the qualified principal id, and `SHA-256("u\0" + userKey)` for a
+machine instance's owner, with the instance's user key, so a user key never matches a principal id that reads the
+same. Who counts as the starter:
 
 - A GraphQL train mutation records its caller, in `RUN` mode on the metadata row and in `QUEUE` mode on the work queue
   entry, which the dispatcher copies to the run's metadata.
@@ -633,7 +635,7 @@ cannot be followed, and is counted by the cap only through its instance.
 ## Manifest starter (084, SQLite 043)
 
 `084_manifest_starter.sql` (SQLite `043`) adds a nullable `starter_hash` (`text`) to `trax.manifest`, the hash of a
-principal id in the form `082` uses. It is set when a manifest is scheduled with
+principal id in the `p\0` form `082` uses. It is set when a manifest is scheduled with
 [`ScheduleOptions.StartedBy`](/docs/sdk-reference/scheduler-api/schedule), and the scheduler copies it onto every work
 queue entry it queues for the manifest, a retry, a trigger and a dead letter's requeue included, so the caller who
 scheduled a one-off manifest can follow each of its runs through

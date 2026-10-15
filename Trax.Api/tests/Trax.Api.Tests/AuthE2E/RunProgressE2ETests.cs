@@ -4,10 +4,12 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
@@ -24,6 +26,7 @@ using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 
 namespace Trax.Api.Tests.AuthE2E;
@@ -86,6 +89,8 @@ public class RunProgressE2ETests
                         );
                         services.AddTraxApi();
                         services.AddTraxGraphQL();
+                        services.AddHttpContextAccessor();
+                        services.AddScoped<ISnapshotPrincipal, HeaderUserKey>();
                     })
                     .Configure(app =>
                     {
@@ -179,6 +184,34 @@ public class RunProgressE2ETests
         Answer(alice).GetProperty("state").GetString().Should().Be("FAILED");
         Answer(alice).GetProperty("failure").ValueKind.Should().Be(JsonValueKind.Null);
         alice.RootElement.GetRawText().Should().NotContain(Marker);
+    }
+
+    [Test]
+    public async Task A_user_key_equal_to_another_callers_principal_id_does_not_reach_their_run()
+    {
+        var runId = await RunAsync(AliceKey, fail: false);
+        var alicePrincipalId = TraxPrincipalId.Qualify(ApiKeyDefaults.SchemeName, "alice");
+
+        using var bob = await _host.PostGraphQLAsync(
+            $$"""{ runProgress(runId: "{{runId}}") { {{Fields}} } }""",
+            r =>
+            {
+                r.Headers.Add("X-Api-Key", BobKey);
+                r.Headers.Add(HeaderUserKey.Header, alicePrincipalId);
+            }
+        );
+
+        Answer(bob)
+            .GetProperty("problem")
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be(
+                "NOT_FOUND",
+                "a machine user key is hashed apart from a principal id, so a key that reads like "
+                    + "alice's id is not alice, per "
+                    + Adr
+            );
     }
 
     [Test]
@@ -429,6 +462,17 @@ public class RunProgressE2ETests
             .OrderByDescending(m => m.Id)
             .Select(m => m.ExternalId)
             .FirstAsync();
+    }
+
+    // A host whose machine user key is whatever the request says, as a host that maps a raw claim would be.
+    private sealed class HeaderUserKey(IHttpContextAccessor http) : ISnapshotPrincipal
+    {
+        internal const string Header = "X-User-Key";
+
+        public string? CurrentUserKey =>
+            http.HttpContext?.Request.Headers[Header].FirstOrDefault() is { Length: > 0 } key
+                ? key
+                : null;
     }
 
     /// <summary>One graphql-transport-ws connection with one runProgress subscription.</summary>

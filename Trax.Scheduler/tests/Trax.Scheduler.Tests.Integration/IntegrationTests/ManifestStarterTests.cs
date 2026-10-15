@@ -23,7 +23,7 @@ public class ManifestStarterTests : TestSetup
         "Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md";
 
     private static string HashOf(string principal) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(principal)));
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("p\0" + principal)));
 
     [Test]
     public async Task A_one_off_manifest_started_by_a_caller_queues_its_run_for_them()

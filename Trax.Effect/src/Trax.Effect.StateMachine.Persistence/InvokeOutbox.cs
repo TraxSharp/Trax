@@ -552,7 +552,9 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             {
                 FromOutcome = fromOutcome,
                 StarterHash =
-                    owner.Kind == SnapshotOwnerKind.User ? RunStarter.Hash(owner.UserKey) : null,
+                    owner.Kind == SnapshotOwnerKind.User
+                        ? RunStarter.OfUserKey(owner.UserKey)
+                        : null,
             }
         );
     }
@@ -583,7 +585,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
 
         // A run records its starter, the instance's owner, so it is counted even after a draft lifetime deleted the
         // instance. A run written before the starter was recorded is joined to the user's instances, as it was.
-        var starter = RunStarter.Hash(userKey);
+        var starter = RunStarter.OfUserKey(userKey);
         var instances = context.SnapshotDrafts.Where(x =>
             x.OwnerKind == SnapshotOwnerKind.User && x.UserKey == userKey
         );

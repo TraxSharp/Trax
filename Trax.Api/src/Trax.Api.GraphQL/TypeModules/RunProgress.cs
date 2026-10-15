@@ -599,7 +599,7 @@ internal sealed class RunProgressAccess(
     {
         var principalId = services.GetService<ICurrentPrincipalProvider>()?.GetCurrentPrincipalId();
         var userKey = services.GetService<ISnapshotPrincipal>()?.CurrentUserKey;
-        return new[] { RunStarter.Hash(principalId), RunStarter.Hash(userKey) }
+        return new[] { RunStarter.OfPrincipal(principalId), RunStarter.OfUserKey(userKey) }
             .Where(h => h is not null)
             .Select(h => h!)
             .Distinct(StringComparer.Ordinal)

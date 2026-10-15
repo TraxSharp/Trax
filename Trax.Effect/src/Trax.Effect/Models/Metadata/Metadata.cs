@@ -385,7 +385,7 @@ public class Metadata : IModel, IDisposable
     public SnapshotOwnerKind? InvokingOwnerKind { get; private set; }
 
     /// <summary>
-    /// The SHA-256 of the qualified principal id of whoever started this run (<see cref="RunStarter"/>), carried from
+    /// The tagged SHA-256 of whoever started this run (<see cref="RunStarter"/>), carried from
     /// its work queue entry at dispatch or set by a run mode mutation; null for a run nobody started directly. Only
     /// that caller may follow the run's progress. Internal and never serialized.
     /// </summary>

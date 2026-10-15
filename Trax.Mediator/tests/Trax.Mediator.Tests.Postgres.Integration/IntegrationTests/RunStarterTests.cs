@@ -26,7 +26,7 @@ public class RunStarterTests : TestSetup
     private const string Principal = "apikey:alice";
 
     private static readonly string Hash = Convert.ToHexStringLower(
-        SHA256.HashData(Encoding.UTF8.GetBytes(Principal))
+        SHA256.HashData(Encoding.UTF8.GetBytes("p\0" + Principal))
     );
 
     private static string Train => typeof(QueueInputTests.IOptionalInputTrain).FullName!;

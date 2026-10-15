@@ -257,7 +257,7 @@ public class ScheduleOptions
     /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/run-progress">Run progress</seealso>
     public ScheduleOptions StartedBy(string? principalId)
     {
-        _starterHash = Trax.Effect.Models.RunStarter.Hash(principalId);
+        _starterHash = Trax.Effect.Models.RunStarter.OfPrincipal(principalId);
         return this;
     }
 
