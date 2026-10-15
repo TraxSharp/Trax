@@ -212,7 +212,8 @@ transport like any other.
   after a rollback the newer one goes, and its ids then answer `CLIENT_OUTDATED`, so its clients reload rather than
   retry. A node still running another version keeps its documents for as long as it runs, so two hosts on one
   database that serve two versions of one machine keep both. The time is counted from no earlier than the
-  registering node's own version first registered, so a node starting inside the grace period deactivates nothing.
+  registering node's own version last became active (first stored, or restored after a rollback), so a node starting
+  inside the grace period deactivates nothing.
   A registration also marks the active documents of a machine the registering node does not serve as unexposed
   (their deprecation reason starts `unexposed:`), and a node that serves the machine clears the mark when it
   registers, so a machine any running node serves is never collected; one still marked after the grace period is

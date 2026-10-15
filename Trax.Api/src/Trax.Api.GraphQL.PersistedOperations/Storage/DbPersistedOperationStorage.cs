@@ -519,9 +519,9 @@ internal sealed class DbPersistedOperationStorage
     /// slot this node serves that is not its own, and whose <c>updated_at</c> is older than <paramref name="grace"/>
     /// plus that quarter, is collected whatever its version: its nodes were stopped or rolled back. Two hosts on one
     /// database that register two versions of one slot keep both, and so does a node left running on an older
-    /// version. The time is counted from no earlier than when this node's version of the slot was first stored, so a
-    /// node that does not write <c>updated_at</c> again (one built before it did) still keeps its documents for the
-    /// grace period after a newer version appears.
+    /// version. The time is counted from no earlier than when this node's version of the slot last became active
+    /// (stored, or restored after it was collected), so a node that does not write <c>updated_at</c> again (one built
+    /// before it did) still keeps its documents for the grace period after a newer version appears or comes back.
     /// </para>
     /// <para>
     /// A document of this node's that was collected is made active again whenever it registers: the node is
@@ -589,6 +589,8 @@ internal sealed class DbPersistedOperationStorage
                 .Where(r => own.Contains(r.Id) || GeneratedDocuments.IsGenerated(r.Id, r.Document))
                 .ToList();
             var byId = rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
+            var activeSince = await ActiveSinceAsync(ctx, documents, byId, now, ct)
+                .ConfigureAwait(false);
 
             foreach (var machine in documents.GroupBy(d => d.Slot, StringComparer.Ordinal))
             {
@@ -609,9 +611,9 @@ internal sealed class DbPersistedOperationStorage
 
                 // Another version no node has registered for the grace period is not coming back: its nodes were
                 // stopped or rolled back, so its clients reload rather than retry. Counted from no earlier than this
-                // version's first registration, so a node that never writes updated_at again keeps its documents for
-                // the grace period after this one appears.
-                var registeredAt = mine.Max(d => byId[d.Id].CreatedAt);
+                // version last became active, so a node that never writes updated_at again keeps its documents for
+                // the grace period after this one appears, or comes back after a rollback.
+                var registeredAt = mine.Max(d => activeSince[d.Id]);
                 foreach (
                     var stale in ofMachine.Where(r =>
                         r.IsActive
@@ -687,6 +689,51 @@ internal sealed class DbPersistedOperationStorage
         }
 
         return (ownVersions, stored);
+    }
+
+    // When each of this node's documents last became active: now for one this registration inserts or restores, else
+    // its latest insert or restore in the history, else its created_at. A version deployed, rolled back and deployed
+    // again restores rows created long ago, and a second node of that version finds them already restored.
+    private static async Task<Dictionary<string, DateTime>> ActiveSinceAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        IReadOnlyList<GeneratedDocument> documents,
+        Dictionary<string, PersistedOperation> byId,
+        DateTime now,
+        CancellationToken ct
+    )
+    {
+        var active = documents
+            .Select(d => d.Id)
+            .Where(id => byId.TryGetValue(id, out var row) && row.IsActive)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var activations = (
+            await ctx
+                .PersistedOperationHistories.AsNoTracking()
+                .Where(h =>
+                    h.TenantKey == NoTenantSentinel
+                    && active.Contains(h.Id)
+                    && (
+                        h.ChangeType == PersistedOperationChangeType.Upsert
+                        || h.ChangeType == PersistedOperationChangeType.Restore
+                    )
+                )
+                .Select(h => new { h.Id, h.ChangedAt })
+                .ToListAsync(ct)
+                .ConfigureAwait(false)
+        )
+            .GroupBy(h => h.Id, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Max(h => h.ChangedAt), StringComparer.Ordinal);
+
+        var since = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        foreach (var document in documents)
+            since[document.Id] =
+                !active.Contains(document.Id) ? now
+                : activations.TryGetValue(document.Id, out var at)
+                && at > byId[document.Id].CreatedAt
+                    ? at
+                : byId[document.Id].CreatedAt;
+        return since;
     }
 
     // The deprecation reason an active machine document carries while no node registering serves its machine.

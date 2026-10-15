@@ -10,8 +10,9 @@ namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
 /// The versions of a generated document's slot in the cases a rolling deploy does not cover: a rollback, which leaves
-/// a newer version no node registers; two hosts on one database that register two versions of one slot for good; and
-/// a row uploaded under a reserved prefix before the prefix was reserved, which no host generated.
+/// a newer version no node registers; two hosts on one database that register two versions of one slot for good; a
+/// version redeployed beside nodes that do not re-stamp; and a row uploaded under a reserved prefix before the prefix
+/// was reserved, which no host generated.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
 /// </summary>
 [Property(
@@ -188,6 +189,68 @@ public class MachineDocumentStorageTests
             .Be(
                 2,
                 "an uploaded row's version is not counted, so the next version is numbered after v1's"
+            );
+    }
+
+    [Test]
+    public async Task A_redeployed_version_still_gives_a_node_that_does_not_restamp_the_grace_period()
+    {
+        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V1, "re_v1"));
+        var v1 = await ShelfIdsAsync();
+        await ShelfHosts.StopAsync(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2"));
+        var v2 = (await ShelfIdsAsync()).Except(v1).ToList();
+        v2.Should().NotBeEmpty("the newer deploy registered its documents");
+
+        // Long ago the newer shape was deployed and rolled back, and its documents were collected. The older shape
+        // still runs on nodes built before a registration wrote updated_at again, so its rows carry their first one.
+        await E2ESql.ExecuteAsync(
+            Database,
+            "UPDATE trax.persisted_operation SET created_at = now() - interval '400 days', "
+                + "updated_at = now() - interval '400 days' WHERE starts_with(id, @prefix)",
+            ("prefix", MachineDocuments.ReservedIdPrefix)
+        );
+        await E2ESql.ExecuteAsync(
+            Database,
+            "UPDATE trax.persisted_operation_history SET changed_at = now() - interval '400 days' "
+                + "WHERE starts_with(id, @prefix)",
+            ("prefix", MachineDocuments.ReservedIdPrefix)
+        );
+        await E2ESql.ExecuteAsync(
+            Database,
+            "UPDATE trax.persisted_operation SET is_active = false, deprecation_reason = 'collected', "
+                + "updated_at = now() - interval '300 days' WHERE id = ANY(@ids)",
+            ("ids", v2.ToArray())
+        );
+
+        // The newer shape is deployed again, on two nodes one after the other.
+        Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2_a", Collecting(clock)));
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v2) == v2.Count))
+            .Should()
+            .BeTrue("the redeployed node restores its documents");
+        // negative-wait: the node registers several times, and must leave the older shape's documents alone.
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        (await ActiveAsync(v1))
+            .Should()
+            .Be(
+                v1.Count,
+                "the grace period counts from when the redeployed version became active again, not from when it "
+                    + "was first stored, per "
+                    + Adr
+            );
+
+        Track(await ShelfHosts.StartAsync(Database, ShelfShape.V2, "re_v2_b", Collecting(clock)));
+        // negative-wait: a second node of the redeployed version finds its documents already restored.
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        (await ActiveAsync(v1))
+            .Should()
+            .Be(v1.Count, "a second node counts from the restore too, per " + Adr);
+
+        clock.Advance(TimeSpan.FromDays(400));
+        (await E2EWait.UntilAsync(async () => await ActiveAsync(v1) == 0))
+            .Should()
+            .BeTrue(
+                "once the grace period has passed, the older shape nobody re-stamps is collected"
             );
     }
 
