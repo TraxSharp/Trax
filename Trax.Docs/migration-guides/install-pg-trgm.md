@@ -25,7 +25,9 @@ FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
 WHERE e.extname = 'pg_trgm';
 ```
 
-A row means it is installed: go to step 3. No row, and
+A row means it is installed, in whichever schema it shows, and there is nothing more to do: the
+migrator adds that schema to the search path of the session that runs the scripts. Go to step 3 only
+to build the indexes ahead of time. No row, and
 `SELECT * FROM pg_available_extensions WHERE name = 'pg_trgm';` also returns none, means the server
 lacks Postgres's contrib modules; install them through your distribution or managed service first.
 
@@ -39,18 +41,12 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 It goes into the first schema on that session's search path, normally `public`.
 
-## 3. Put its schema on Trax's search path
-
-The migration names the `gin_trgm_ops` operator class through the search path. If the query in step 1
-shows a schema that is not on the search path of the role Trax connects with, add it to the
-connection string, for example `Search Path=trax,public,extensions`.
-
-## 4. Optionally, build the indexes ahead of the upgrade
+## 3. Optionally, build the indexes ahead of the upgrade
 
 On a large `trax.log` the index builds are the cost of this upgrade (about 23 s and 11 s at three
 million short entries), and startup waits for them. The migration skips an index that already
 exists under its name, so the indexes can be built beforehand, on the running version, as the
-role Trax migrates with:
+role Trax migrates with, in a session whose search path includes the extension's schema:
 
 ```sql
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_log_message_trgm

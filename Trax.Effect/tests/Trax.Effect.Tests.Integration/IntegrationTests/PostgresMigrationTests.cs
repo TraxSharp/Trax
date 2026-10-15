@@ -452,6 +452,92 @@ public class PostgresMigrationTests
     }
 
     /// <summary>
+    /// pg_trgm is per database, so the <c>CREATE EXTENSION IF NOT EXISTS</c> in 063 and 066 is
+    /// satisfied by an extension installed in any schema, while <c>gin_trgm_ops</c> resolves only
+    /// through the migrating connection's search path. A database restored from a dump taken as
+    /// another role carries the extension in that role's schema, and the migration must still
+    /// find it without the host being told to add the schema to its own search path.
+    /// </summary>
+    [Test]
+    public async Task Migrates_when_pg_trgm_was_installed_in_a_schema_off_the_search_path()
+    {
+        await WithEmptyDatabase(async connectionString =>
+        {
+            var offPath = new NpgsqlConnectionStringBuilder(connectionString)
+            {
+                SearchPath = "public",
+            }.ConnectionString;
+
+            await using (var setup = new NpgsqlConnection(offPath))
+            {
+                await setup.OpenAsync();
+                await Exec(setup, "CREATE SCHEMA ext_home;");
+                await Exec(setup, "CREATE EXTENSION pg_trgm WITH SCHEMA ext_home;");
+            }
+
+            await DatabaseMigrator.Migrate(offPath);
+
+            await using var connection = new NpgsqlConnection(offPath);
+            await connection.OpenAsync();
+            (await ExternalIds(connection, "SELECT current_setting('search_path');"))
+                .Should()
+                .Equal(
+                    ["public"],
+                    "the migration does not change the host connection's search path"
+                );
+            foreach (
+                var index in new[]
+                {
+                    "ix_log_message_trgm",
+                    "ix_log_category_trgm",
+                    "ix_metadata_failure_reason_trgm",
+                }
+            )
+                (await IndexState(connection, index)).Should().Be("valid, not unique", index);
+        });
+    }
+
+    /// <summary>
+    /// The control: with no pg_trgm anywhere, 063 installs it in the first schema on the search
+    /// path, as it has always, and the trigram indexes come up valid.
+    /// </summary>
+    [Test]
+    public async Task Migrates_when_pg_trgm_is_absent_and_installs_it_in_the_first_search_path_schema()
+    {
+        await WithEmptyDatabase(async connectionString =>
+        {
+            var offPath = new NpgsqlConnectionStringBuilder(connectionString)
+            {
+                SearchPath = "public",
+            }.ConnectionString;
+
+            await DatabaseMigrator.Migrate(offPath);
+
+            await using var connection = new NpgsqlConnection(offPath);
+            await connection.OpenAsync();
+            (
+                await ExternalIds(
+                    connection,
+                    "SELECT n.nspname FROM pg_extension e "
+                        + "JOIN pg_namespace n ON n.oid = e.extnamespace "
+                        + "WHERE e.extname = 'pg_trgm';"
+                )
+            )
+                .Should()
+                .Equal(["public"], "063 installs the extension in the first search-path schema");
+            foreach (
+                var index in new[]
+                {
+                    "ix_log_message_trgm",
+                    "ix_log_category_trgm",
+                    "ix_metadata_failure_reason_trgm",
+                }
+            )
+                (await IndexState(connection, index)).Should().Be("valid, not unique", index);
+        });
+    }
+
+    /// <summary>
     /// A search of runs by the text of their failure, written as the executions query writes it:
     /// lowered, a parameter for the pattern, and an escape clause. Like the log's text search,
     /// the trigram index serves only the expression it was built over.

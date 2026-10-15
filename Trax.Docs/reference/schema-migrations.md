@@ -289,7 +289,8 @@ three characters has no trigram to look up, so it still reads the table.
 and since Postgres 13 it is a trusted extension, so a role with `CREATE` on the database installs it
 without being a superuser. The script runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, which fails when the role Trax migrates
 with may not create it. The extension is created in the first schema on the session's search path
-(normally `public`) and the operator class is looked up through the same path. See
+(normally `public`). One already installed in another schema is found too: the migrator adds that
+schema to the search path of the session that runs the scripts. See
 [Install pg_trgm before migration 063](/docs/migration-guides/install-pg-trgm).
 
 The indexes are built `CREATE INDEX CONCURRENTLY`, so log writes carry on while they build, but the

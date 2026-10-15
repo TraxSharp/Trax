@@ -84,6 +84,11 @@ public static partial class DatabaseMigrator
     /// from the host's pool.
     /// </para>
     /// <para>
+    /// When <c>pg_trgm</c> is already installed in a schema that is not on the connection's search
+    /// path, the script session adds that schema to its path, so 063 and 066 find
+    /// <c>gin_trgm_ops</c>. The host's own connections are not changed.
+    /// </para>
+    /// <para>
     /// <c>UsePostgres</c> calls this during service registration unless migrations are skipped.
     /// </para>
     /// </remarks>
@@ -121,6 +126,16 @@ public static partial class DatabaseMigrator
                 await lockConnection.ReloadTypesAsync();
                 await Execute(lockConnection, "create schema if not exists trax;");
 
+                // Set as a server option, not as Search Path: DbUp reads Search Path from the
+                // connection string as one schema name and creates it.
+                if (await ScriptSearchPath(lockConnection) is { } searchPath)
+                {
+                    migrationConnection.SearchPath = null;
+                    migrationConnection.Options +=
+                        $" -c search_path={searchPath.Replace(@"\", @"\\").Replace(" ", @"\ ")}";
+                    scriptConnectionString = migrationConnection.ConnectionString;
+                }
+
                 for (var attempt = 1; ; attempt++)
                 {
                     // Again before every attempt: a concurrent index build that gave up on its
@@ -155,6 +170,35 @@ public static partial class DatabaseMigrator
             );
             throw;
         }
+    }
+
+    /// <summary>
+    /// The search path the scripts run with: the connection's own, plus the schema an existing
+    /// <c>pg_trgm</c> lives in when that schema is not already on it.
+    /// </summary>
+    /// <remarks>
+    /// An extension is installed once per database, so <c>CREATE EXTENSION IF NOT EXISTS</c> in 063
+    /// is satisfied by a <c>pg_trgm</c> in any schema, while <c>gin_trgm_ops</c> is found only
+    /// through the search path. A database restored from a dump taken as another role can carry
+    /// the extension in that role's schema. Only the script session's path changes; the host's
+    /// connections keep theirs. <c>null</c> when nothing needs adding.
+    /// </remarks>
+    private static async Task<string?> ScriptSearchPath(NpgsqlConnection connection)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT current_setting('search_path'), n.nspname
+            FROM pg_extension e
+            JOIN pg_namespace n ON n.oid = e.extnamespace
+            WHERE e.extname = 'pg_trgm' AND NOT n.nspname = ANY(current_schemas(false));
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+            return null;
+
+        var path = reader.GetString(0);
+        var schema = "\"" + reader.GetString(1).Replace("\"", "\"\"") + "\"";
+        return string.IsNullOrWhiteSpace(path) ? schema : $"{path}, {schema}";
     }
 
     /// <summary>

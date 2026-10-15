@@ -10,9 +10,8 @@
 -- service, and is a trusted extension from Postgres 13: a role with CREATE on the database can
 -- install it without being a superuser. Where the migration's role cannot, install it once as a
 -- role that can (CREATE EXTENSION pg_trgm) and this script finds it there. The extension goes into
--- the first schema on the session's search path, normally public, and the operator class is named
--- through that same path, so an existing pg_trgm installed in a schema that is not on the path
--- needs that schema added to the connection string's Search Path.
+-- the first schema on the session's search path, normally public. One already installed in a schema
+-- off that path is found too: the migrator adds its schema to this session's search path.
 --
 -- Built CONCURRENTLY so log writes carry on while it builds (effect/0014). On a large log table the
 -- build is the cost of this upgrade: about 23 s for the message index and 11 s for the category
