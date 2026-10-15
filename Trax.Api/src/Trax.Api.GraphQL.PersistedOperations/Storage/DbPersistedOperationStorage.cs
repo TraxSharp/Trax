@@ -718,12 +718,12 @@ internal sealed class DbPersistedOperationStorage
                         || h.ChangeType == PersistedOperationChangeType.Restore
                     )
                 )
-                .Select(h => new { h.Id, h.ChangedAt })
+                // One row per id, its latest activation, rather than the whole history of each.
+                .GroupBy(h => h.Id)
+                .Select(g => new { Id = g.Key, At = g.Max(h => h.ChangedAt) })
                 .ToListAsync(ct)
                 .ConfigureAwait(false)
-        )
-            .GroupBy(h => h.Id, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Max(h => h.ChangedAt), StringComparer.Ordinal);
+        ).ToDictionary(a => a.Id, a => a.At, StringComparer.Ordinal);
 
         var since = new Dictionary<string, DateTime>(StringComparer.Ordinal);
         foreach (var document in documents)
