@@ -1,6 +1,6 @@
 ---
 title: Adapt to the machine wire changes
-description: "Upgrade steps for the release that made refusal codes one enum, gave each machine its own push, and spelled machine enums as stored."
+description: "Upgrade steps for the release that made refusal codes one enum, gave each machine its own push, spelled machine enums as stored, and let a run be followed by its starter."
 type: how-to
 area: upgrading
 parent: Upgrading
@@ -84,3 +84,26 @@ documents a host registered.
 - **`createDraftSession` and `startDraft`** take the executor (`{ executor, machine, id }`) in place of a client.
 - **Generated code checks its client format.** Code `trax client` generates calls `requireClientFormat` when it
   loads, and a package that serves another format throws, naming both.
+
+## A run can be followed by the caller who started it
+
+A train marked [`[TraxRunProgress]`](/docs/sdk-reference/graphql-api/run-progress) can be read with
+`query { runProgress(runId) }` and followed with `subscription { runProgress(runId) }` by the caller who started the
+run, and by nobody else. A client that followed its own runs through the broadcast feeds or with an operator
+credential moves to it.
+
+- **Runs record their starter.** Migrations 082, 083 and 084 (SQLite 042 and 043) add `starter_hash` to
+  `work_queue`, `metadata` and `manifest` and run on startup. Nothing is backfilled, so a run from before the upgrade,
+  or one a node on the previous version starts during a rolling deploy, cannot be followed. See
+  [Run starter](/docs/reference/schema-migrations#run-starter-082-and-083-sqlite-042).
+- **A scheduled run records nobody**, unless the manifest is scheduled for a caller with
+  [`ScheduleOptions.StartedBy`](/docs/sdk-reference/scheduler-api/schedule). Then each of its runs, its retries
+  included, carries that caller, and a failed run answers `retriedAs` with the run that retries it once that run is
+  queued.
+- **A machine that invokes a train** answers its user owner `invokedRun { runId }` while the instance sits in the
+  state that queued the run, and the run records the owner as its starter, so the owner follows it with
+  `runProgress`. A committed client regenerates to pick up the field.
+- **The invoked-run cap counts by starter.** A user's run still counts after its draft expired, until the run ends.
+- **Generated code.** `trax client` writes `progress.g.ts` (`readRunProgress`, `followRunProgress`,
+  `useRunProgress`) when the manifest lists a train that carries the attribute. See
+  [`trax client`](/docs/reference/cli#frontend-clients-trax-client).
