@@ -6,8 +6,11 @@ multi-step flow's state as language-neutral JSON so a browser client and a C# ba
 operation is total (it never throws).
 
 ```bash
-npm install @traxsharp/state-machine
+npm install @traxsharp/state-machine graphql-ws
 ```
+
+`graphql-ws` is an optional peer dependency: a machine's push and the client `trax client` generates open their
+socket with it. React is one too, for `@traxsharp/state-machine/react` and the generated hooks.
 
 It is published with every Trax release, at the same version as the `Trax.*` NuGet packages.
 

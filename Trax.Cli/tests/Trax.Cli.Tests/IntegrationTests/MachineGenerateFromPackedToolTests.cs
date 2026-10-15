@@ -181,6 +181,71 @@ public class MachineGenerateFromPackedToolTests
         checkedCode.Should().Be(0, checkOutput);
     }
 
+    // A fresh `npm create vite -- --template react-ts` app turns on flags the engine's own build does not: a parameter
+    // property or an enum fails erasableSyntaxOnly, a type imported as a value fails verbatimModuleSyntax, and an unused
+    // import fails noUnusedLocals. The generated client is checked under that app's compiler options.
+    [Test]
+    public void The_generated_client_typechecks_under_a_vite_react_ts_tsconfig()
+    {
+        var tool = PackAndUnpackTheTool();
+        var work = OutsideProject(RepoFolder("Trax.Api.StateMachine"));
+        GenerateClient(tool, work);
+        File.WriteAllText(
+            Path.Combine(work, "main.ts"),
+            """
+            import { configureTrax, TraxOperationError, useRememberedCheckout, useRunProgress, startRun } from "./trax/index.g";
+
+            configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
+
+            export function usePage(runId: string | null) {
+              const checkout = useRememberedCheckout();
+              const progress = useRunProgress(runId);
+              return { state: checkout.state, steps: progress.steps.length };
+            }
+
+            export const failed = (e: unknown) => e instanceof TraxOperationError && e.code === "CLIENT_OUTDATED";
+            export const run = () => startRun({ scenario: "ok" });
+            """
+        );
+        // The compiler options create-vite's react-ts template writes into tsconfig.app.json, less its vite/client types.
+        File.WriteAllText(
+            Path.Combine(work, "tsconfig.json"),
+            """
+            {
+              "compilerOptions": {
+                "target": "ES2022",
+                "lib": ["ES2023", "DOM", "DOM.Iterable"],
+                "module": "ESNext",
+                "skipLibCheck": true,
+                "moduleResolution": "bundler",
+                "allowImportingTsExtensions": true,
+                "verbatimModuleSyntax": true,
+                "moduleDetection": "force",
+                "noEmit": true,
+                "jsx": "react-jsx",
+                "strict": true,
+                "noUnusedLocals": true,
+                "noUnusedParameters": true,
+                "erasableSyntaxOnly": true,
+                "noFallthroughCasesInSwitch": true,
+                "noUncheckedSideEffectImports": true
+              },
+              "include": ["main.ts", "trax/**/*.ts"]
+            }
+            """
+        );
+
+        var (code, output) = Run(
+            "node",
+            work,
+            Path.Combine(work, "node_modules", "typescript", "bin", "tsc"),
+            "-p",
+            "tsconfig.json"
+        );
+
+        code.Should().Be(0, output);
+    }
+
     // The generated hooks run under vitest in a project that installed only the published packages, against a fake
     // graphql-ws socket and a fetch that answers when told to: what configureTrax does to a mounted hook, and what
     // useRunProgress shows when the stream and a read answer out of order.

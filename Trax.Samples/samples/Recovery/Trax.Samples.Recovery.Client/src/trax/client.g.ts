@@ -74,12 +74,12 @@ export function traxSocket(): Client {
 
 /** A train operation the host refused: `code` is its `extensions.code` (`CLIENT_OUTDATED`, `TRAX_AUTHORIZATION`, ...). */
 export class TraxOperationError extends Error {
-  constructor(
-    readonly code: string | undefined,
-    message: string,
-  ) {
+  readonly code: string | undefined;
+
+  constructor(code: string | undefined, message: string) {
     super(message);
     this.name = "TraxOperationError";
+    this.code = code;
   }
 }
 

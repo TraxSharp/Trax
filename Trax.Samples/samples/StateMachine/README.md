@@ -103,8 +103,9 @@ which is what makes the migration load-bearing.
 
 ## Web frontend
 
-A React app in [web/](web/) drives both machines through these mutations with a machine-agnostic transport
-and a `useMachine` hook. Start this host, then `cd web && npm install && npm run dev` and open
+A React app in [web/](web/) drives both machines through the client `trax client` generated from this host's
+manifest: `useRememberedTurnstile` and `useRememberedCheckout` keep each user's instance, and every request is sent
+by the persisted id the host registered. Start this host, then `cd web && npm install && npm run dev` and open
 http://localhost:5173. The host allows that origin only, so Vite refuses to start rather than move to
 another port while a different sample's client holds 5173.
 
