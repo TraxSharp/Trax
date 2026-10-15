@@ -9,7 +9,8 @@ namespace Trax.Api.Tests;
 
 /// <summary>
 /// A runProgress stream on a failed run of a manifest waits for its retry: it looks less often the longer it waits, and
-/// stops looking once it is disposed, whether or not its reader was cancelled.
+/// stops looking once it is disposed, whether or not its reader was cancelled. A stream on a queued run keeps reading
+/// its fate after a failed read.
 /// </summary>
 [TestFixture]
 [Property("adr", Adr)]
@@ -82,24 +83,74 @@ public class RunProgressStreamTests
         await reader.DisposeAsync();
     }
 
+    [Test]
+    public async Task A_queued_poll_that_throws_keeps_watching_and_ends_on_cancel()
+    {
+        var reads = 0;
+        var lease = new Counted();
+        await using var stream = new RunProgressStream(
+            Run(RunProgressState.Queued),
+            new Silent<TrainLifecycleEvent>(),
+            0,
+            new Silent<JunctionEvent>(),
+            0,
+            _ => ValueTask.FromResult(0L),
+            lease
+        )
+        {
+            ReadQueued = (_, _) =>
+                ++reads == 1
+                    ? Task.FromException<QueuedFate>(
+                        new InvalidOperationException("connection dropped")
+                    )
+                    : Task.FromResult(QueuedFate.Cancelled),
+            Delay = (_, _) => Task.CompletedTask,
+        };
+
+        var events = new List<RunProgressEvent>();
+        await foreach (
+            var e in stream
+                .ReadEventsAsync()
+                .WithCancellation(new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token)
+        )
+            events.Add(e);
+
+        reads.Should().Be(2, "a failed read is read again at the next poll");
+        events
+            .Select(e => e.State)
+            .Should()
+            .Equal(RunProgressState.Queued, RunProgressState.Cancelled);
+        lease.Disposed.Should().Be(1, "the ended stream gives its place back");
+    }
+
+    private static RunProgressRun Run(RunProgressState state) =>
+        new(
+            new string('a', 32),
+            "Train",
+            null,
+            1,
+            state,
+            null,
+            "starter",
+            new LifecycleVisibility(false, new HashSet<string>(StringComparer.Ordinal))
+        )
+        {
+            ManifestId = 1,
+        };
+
+    private sealed class Counted : IDisposable
+    {
+        public int Disposed;
+
+        public void Dispose() => Disposed++;
+    }
+
     private static RunProgressStream Failed(
         Func<RunProgressRun, CancellationToken, Task<(string? RetriedAs, bool NoRetry)>> nextTry,
         Func<TimeSpan, CancellationToken, Task> delay
     ) =>
         new(
-            new RunProgressRun(
-                new string('a', 32),
-                "Train",
-                null,
-                1,
-                RunProgressState.Failed,
-                null,
-                "starter",
-                new LifecycleVisibility(false, new HashSet<string>(StringComparer.Ordinal))
-            )
-            {
-                ManifestId = 1,
-            },
+            Run(RunProgressState.Failed),
             new Silent<TrainLifecycleEvent>(),
             0,
             new Silent<JunctionEvent>(),

@@ -12,6 +12,7 @@ using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Subscriptions;
@@ -339,6 +340,7 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             {
                 NextTry = access.NextTryAsync,
                 ReadQueued = access.QueuedFateAsync,
+                Logger = services.GetService<ILoggerFactory>()?.CreateLogger<RunProgressStream>(),
             };
         }
         catch
@@ -761,6 +763,9 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
     /// <summary>What became of a run first found queued, read while it waits.</summary>
     public Func<RunProgressRun, CancellationToken, Task<QueuedFate>>? ReadQueued { get; init; }
 
+    /// <summary>Where a failed read of a queued run is logged.</summary>
+    public ILogger? Logger { get; init; }
+
     /// <summary>How the stream waits between two reads; replaced in tests.</summary>
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; init; } = Task.Delay;
 
@@ -957,6 +962,15 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
         finally
         {
             await stop.CancelAsync().ConfigureAwait(false);
+            if (closed is not null)
+                try
+                {
+                    await closed.ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is OperationCanceledException or ChannelClosedException)
+                {
+                    // The watch only ends this way once the stream is stopping.
+                }
             await DisposeAsync().ConfigureAwait(false);
         }
     }
@@ -1017,7 +1031,22 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             while (true)
             {
                 await Delay(QueuedPoll, ct).ConfigureAwait(false);
-                var fate = await ReadQueued(run, ct).ConfigureAwait(false);
+                QueuedFate fate;
+                try
+                {
+                    fate = await ReadQueued(run, ct).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    // A dropped connection and the like: the run is read again at the next poll, so a cancel after it
+                    // still ends the stream and releases its place.
+                    Logger?.LogWarning(
+                        e,
+                        "Reading queued run {RunId} failed; reading it again.",
+                        run.RunId
+                    );
+                    continue;
+                }
                 if (fate == QueuedFate.Dispatched)
                     return null;
                 if (fate == QueuedFate.Waiting)
