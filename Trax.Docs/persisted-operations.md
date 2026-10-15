@@ -189,7 +189,9 @@ Where Trax checks authorization is in
 
 A host without HotChocolate in process, such as a CI uploader or a dashboard running alone, uses
 `AddPersistedOperationStore`. A dashboard running alone declares its gate there, with
-`store.GateManagement(...)`. With no schema to validate against it gets a validator that accepts
+`store.GateManagement(...)`. A process that also calls `UsePersistedOperations` declares the gate
+there only: its options are the ones in force whichever call comes first, and a store gate that
+differs from it refuses the host at startup. With no schema to validate against it gets a validator that accepts
 every document; the shape check still runs.
 
 ## SDK Reference

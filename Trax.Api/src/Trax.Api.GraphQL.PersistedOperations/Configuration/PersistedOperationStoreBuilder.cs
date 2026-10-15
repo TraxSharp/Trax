@@ -30,7 +30,9 @@ public sealed class PersistedOperationStoreBuilder
     /// Declares who may manage documents through this process's surfaces, such as the dashboard's
     /// persisted-operations pages, as <c>GateManagement</c> does on <c>UsePersistedOperations</c>.
     /// Without it the dashboard shows no management pages. Code that calls the service with no
-    /// person behind it (a deploy step, a migration) is not gated.
+    /// person behind it (a deploy step, a migration) is not gated. In a process that also calls
+    /// <c>UsePersistedOperations</c>, its gate is the one in force, and a different one declared
+    /// here refuses the host at startup.
     /// </summary>
     /// <param name="policy">An ASP.NET Core authorization policy name that must be satisfied.</param>
     /// <param name="roles">A comma-separated list of roles. The caller must hold at least one.</param>

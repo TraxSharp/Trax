@@ -78,12 +78,16 @@ The same `IServiceCollection`.
   `store => store.UseRabbitMqInvalidation(rabbitMqInvalidationConnectionString)`.
 - Called alongside [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
   in one host, the GraphQL registration's validator replaces the no-op one.
+- Called alongside `UsePersistedOperations` in one host, `UsePersistedOperations`' options are the
+  ones in force, whichever call comes first: its gate, enforcement and invalidation. A store that
+  declares no gate takes that one. A store whose `GateManagement` differs from the one
+  `UsePersistedOperations` declares refuses the host at startup, naming both calls.
 
 ### Registered services
 
 | Service | Lifetime | Implementation |
 |---------|----------|----------------|
-| `PersistedOperationsOptions` | Singleton | Built with `SingleNode()` or the broker |
+| `PersistedOperationsOptions` | Singleton (TryAdd) | Built with `SingleNode()` or the broker; `UsePersistedOperations` replaces it |
 | `IPersistedOperationStore` | Singleton | `DbPersistedOperationStorage` |
 | `IPersistedOperationsService` | Singleton (TryAdd) | The shared management service |
 | `IPersistedOperationsManagementGate` | Scoped (TryAdd) | The declared management gate, evaluated with the caller's services |

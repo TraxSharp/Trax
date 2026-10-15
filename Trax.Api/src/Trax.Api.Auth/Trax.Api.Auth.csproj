@@ -27,6 +27,8 @@
     <InternalsVisibleTo Include="Trax.Api.Auth.Jwt" />
     <InternalsVisibleTo Include="Trax.Api.Auth.Oidc" />
     <InternalsVisibleTo Include="Trax.Api.GraphQL" />
+    <!-- StartupGate, for the persisted-operations startup checks. -->
+    <InternalsVisibleTo Include="Trax.Api.GraphQL.PersistedOperations" />
     <InternalsVisibleTo Include="Trax.Api.Tests" />
   </ItemGroup>
 

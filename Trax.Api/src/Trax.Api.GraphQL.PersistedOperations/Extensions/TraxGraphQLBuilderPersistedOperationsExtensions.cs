@@ -75,7 +75,12 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
 
         var services = builder.Services;
 
+        // One set of options per process, and this one wins over AddPersistedOperationStore's in
+        // either order: the store registers its own only when none is there yet, and this
+        // replaces one it finds. A store that declared a different gate is refused at startup.
+        services.RemoveAll<PersistedOperationsOptions>();
         services.AddSingleton(options);
+        services.AddHostedService<PersistedOperations.Startup.PersistedOperationStoreGateValidator>();
 
         // Which boundary is in front of this endpoint is invisible in a running system: the schema
         // is the same either way. Say it once at startup so it can be checked where it is claimed.

@@ -71,7 +71,7 @@ one train field with two shapes keep both.
 
 | Service | Lifetime | Purpose |
 |---|---|---|
-| `PersistedOperationsOptions` | Singleton | Resolved configuration. |
+| `PersistedOperationsOptions` | Singleton (Replace) | Resolved configuration. Replaces the options `AddPersistedOperationStore` registers, in either order, so a process has one set. |
 | `IPersistedOperationCache` -> `NoOp` or `InMemory` | Singleton | Cache layer. No-op unless `WithInMemoryCache()` was called. |
 | `IPersistedOperationBroadcaster` -> `NoOp` or `RabbitMq` | Singleton | Multi-node invalidation. RabbitMQ with `UseRabbitMqInvalidation()`, no-op with `SingleNode()`. |
 | `PersistedOperationReceiverService` | Hosted (when broadcaster is RabbitMQ) | Subscribes to the fanout exchange and empties the document, prepared-operation and Trax caches on broadcast, on losing the broker connection, and on recovering it. When the broker closes its channel alone it empties them, subscribes again on a new channel, and empties them once more. |
@@ -122,6 +122,7 @@ Configuration errors throw `InvalidOperationException` when `UsePersistedOperati
 | `AllowOperations` contains an empty entry | Throws. |
 | `GateManagement()` with neither a policy nor roles, or with a role list of only separators | Throws when called. |
 | A policy `GateManagement` names is not registered | The host fails at startup, naming the policy and the field. |
+| `AddPersistedOperationStore` in the same host declares a different `GateManagement` | The host fails at startup, naming both calls. |
 
 ## Examples
 

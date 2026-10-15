@@ -356,6 +356,54 @@ public class PersistedOperationsManagementGateTests
             );
     }
 
+    [Test]
+    public async Task A_store_registered_after_UsePersistedOperations_does_not_change_the_gate_or_enforcement()
+    {
+        foreach (var storeFirst in new[] { false, true })
+        {
+            var order = storeFirst ? "store first" : "store last";
+            Action<IServiceCollection> differentGate = s =>
+                s.AddPersistedOperationStore(store =>
+                    store.SingleNode().GateManagementToAuthenticatedUsers()
+                );
+
+            var refused = () =>
+                StartAsync(
+                    g => g,
+                    po => po.SingleNode().GateManagement(roles: "Deployer"),
+                    storeFirst ? differentGate : null,
+                    configureAfter: storeFirst ? null : differentGate
+                );
+            (await refused.Should().ThrowAsync<Exception>(order))
+                .Which.ToString()
+                .Should()
+                .Contain("AddPersistedOperationStore declares the management gate")
+                .And.Contain("UsePersistedOperations declares (roles 'Deployer')");
+
+            Action<IServiceCollection> sameGate = s =>
+                s.AddPersistedOperationStore(store =>
+                    store.SingleNode().GateManagement(roles: "Deployer")
+                );
+            await using var app = await StartAsync(
+                g => g,
+                po => po.SingleNode().GateManagement(roles: "Deployer"),
+                storeFirst ? sameGate : null,
+                configureAfter: storeFirst ? null : sameGate
+            );
+
+            app.Services.GetServices<PersistedOperationsOptions>()
+                .Should()
+                .ContainSingle(order + ": one process has one set of options");
+            app.Services.GetRequiredService<PersistedOperationsOptions>()
+                .RequirePersisted.Should()
+                .BeFalse(
+                    order
+                        + ": UsePersistedOperations turned enforcement off, and the store "
+                        + "registration does not turn it back on"
+                );
+        }
+    }
+
     private const string ScopedPolicy = "ManagesThroughAScopedHandler";
     private const string ClaimPolicy = "HoldsCanManage";
     private const string PrincipalHeader = "X-Test-Principal";
@@ -456,7 +504,8 @@ public class PersistedOperationsManagementGateTests
         Func<TraxGraphQLBuilder, TraxGraphQLBuilder> graphql,
         Action<PersistedOperationsBuilder> persisted,
         Action<IServiceCollection>? configure = null,
-        bool withTestPrincipals = false
+        bool withTestPrincipals = false,
+        Action<IServiceCollection>? configureAfter = null
     )
     {
         var builder = WebApplication.CreateBuilder(
@@ -502,6 +551,7 @@ public class PersistedOperationsManagementGateTests
                     persisted(po);
                 })
         );
+        configureAfter?.Invoke(services);
 
         var app = builder.Build();
         app.UseRouting();
