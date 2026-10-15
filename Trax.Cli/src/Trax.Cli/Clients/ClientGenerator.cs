@@ -801,8 +801,10 @@ internal sealed class ClientGenerator
             .ToList();
         var sb = new StringBuilder(Header);
         sb.Append("import \"./format.g\";\n");
-        sb.Append("import { useEffect, useState } from \"react\";\n");
-        sb.Append("import { sendDocument, traxSocket, TraxOperationError } from \"./client.g\";\n");
+        sb.Append("import { useEffect, useState, useSyncExternalStore } from \"react\";\n");
+        sb.Append(
+            "import { sendDocument, subscribeTrax, traxGeneration, traxSocket, TraxOperationError } from \"./client.g\";\n"
+        );
         sb.Append("import type { RunProgress, RunProgressEvent } from \"./types.g\";\n\n");
         sb.Append("/** The persisted id of the runProgress query, which the host registered. */\n");
         sb.Append($"export const runProgressDocumentId = {TypeScript.Literal(query.Id)};\n\n");
@@ -871,8 +873,8 @@ internal sealed class ClientGenerator
 
             /**
              * Your run, kept current: read once, then followed until it ends. A step replaces the one at its position, a lost
-             * event reads the run again, and a failed run the scheduler retries is followed into its retry. Pass null to
-             * follow nothing.
+             * event reads the run again, and a failed run the scheduler retries is followed into its retry. After
+             * configureTrax the run is read and followed again over the new connection. Pass null to follow nothing.
              */
             export function useRunProgress(runId: string | null | undefined): RunProgressView {
               const [view, setView] = useState<RunProgressView>(nothingYet);
@@ -882,6 +884,8 @@ internal sealed class ClientGenerator
               if (current.asked !== runId) setCurrent({ asked: runId, run: runId, earlier: [] });
               const following = current.asked === runId ? current.run : runId;
               const earlier = current.asked === runId ? current.earlier : [];
+              // configureTrax closes the socket the stream is on: the run is followed again over the new one.
+              const generation = useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);
 
               useEffect(() => {
                 if (!following) return;
@@ -896,8 +900,9 @@ internal sealed class ClientGenerator
                 const retry = (next: string) => {
                   if (live) setCurrent((c) => (c.run === following ? { ...c, run: next, earlier: [...c.earlier, following] } : c));
                 };
-                // A read answered after an event arrived is dropped, never shown over it; one that was sent for lost events
-                // is sent again, until it answers with no event since.
+                // A read answered after an event arrived never shows its state over the event's: only the steps it holds that
+                // no event has reported are added. One that was sent for lost events is sent again, until it answers with no
+                // event since.
                 const read = (forLost: boolean) => {
                   const sent = events;
                   return readRunProgress(following).then(
@@ -905,6 +910,10 @@ internal sealed class ClientGenerator
                       if (!live) return;
                       if (run.retriedAs) return retry(run.retriedAs);
                       if (events !== sent) {
+                        setView((prior) => {
+                          const v = fresh(prior);
+                          return { ...v, steps: v.steps.reduce(withStep, run.steps) };
+                        });
                         if (forLost) void read(true);
                         return;
                       }
@@ -933,14 +942,15 @@ internal sealed class ClientGenerator
                     });
                   },
                   () => {
-                    if (live) setView((v) => ({ ...fresh(v), ended: true }));
+                    // The stream of an earlier connection ends when configureTrax closes its socket, not when the run does.
+                    if (live && generation === traxGeneration()) setView((v) => ({ ...fresh(v), ended: true }));
                   },
                 );
                 return () => {
                   live = false;
                   stop();
                 };
-              }, [following]);
+              }, [following, generation]);
               // A view of an earlier run is not shown: a run just asked for, or retried into, starts empty.
               return { ...(view.runId === (following ?? null) ? view : { ...nothingYet, runId: following ?? null }), earlier };
             }

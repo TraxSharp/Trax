@@ -322,6 +322,48 @@ public class MachineGenerateFromPackedToolTests
           expect(result.current.ended).toBe(true);
         });
 
+        it("A_read_answered_after_the_first_event_still_shows_the_earlier_steps", async () => {
+          signIn("E2");
+          const { result } = renderHook(() => useRunProgress("r1"));
+          await settle();
+          const stream = open(sockets.at(-1)).find((s) => s.payload.variables.runId === "r1")!;
+
+          // On a warm socket the state-only first event beats the read, which holds the steps taken before mount.
+          await act(async () => stream.sink.next(event("r1", 1, { state: "IN_PROGRESS" })));
+          const steps = [
+            { position: 0, kind: "junction", name: "Load", state: "COMPLETED" },
+            { position: 1, kind: "junction", name: "Charge", state: "IN_PROGRESS" },
+          ];
+          await act(async () => requests[0].answer({ runProgress: run("r1", { state: "PENDING", steps }) }));
+          await settle();
+          expect(result.current.state).toBe("IN_PROGRESS");
+          expect(result.current.steps.map((s) => s.name)).toEqual(["Load", "Charge"]);
+
+          // A step an event reported is newer than the read's.
+          await act(async () => stream.sink.next(event("r1", 2, { step: { ...steps[1], state: "COMPLETED" } })));
+          expect(result.current.steps.map((s) => s.state)).toEqual(["COMPLETED", "COMPLETED"]);
+        });
+
+        it("A_followed_run_is_followed_again_after_configureTrax", async () => {
+          signIn("H");
+          const { result } = renderHook(() => useRunProgress("r1"));
+          await settle();
+          const h = sockets.at(-1)!;
+          await act(async () => requests[0].answer({ runProgress: run("r1", { state: "IN_PROGRESS" }) }));
+          expect(open(h).filter((s) => s.payload.variables.runId === "r1")).toHaveLength(1);
+
+          await act(async () => signIn("I"));
+          await settle();
+
+          expect(result.current.ended).toBe(false);
+          expect(result.current.state).toBe("IN_PROGRESS");
+          const i = sockets.at(-1)!;
+          expect(i).not.toBe(h);
+          expect(i.params()).toEqual({ apiKey: "I" });
+          expect(open(i).filter((s) => s.payload.variables.runId === "r1")).toHaveLength(1);
+          expect(requests.at(-1)!.headers["X-Api-Key"]).toBe("I");
+        });
+
         it("A_retry_reported_twice_is_followed_once", async () => {
           signIn("F");
           const { result } = renderHook(() => useRunProgress("r1"));
