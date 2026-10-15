@@ -33,7 +33,7 @@ a frontend's build needs no running server, no database and no credential, and T
 | `ITraxStartupCheck` | Marks a hosted service that only checks configuration and the host's own types at startup and refuses a host that is wrong. An export runs every one of these and no other hosted service. Trax's own startup validators carry it, except the two that read the database or call a remote schema. |
 | `ClientManifest` | The file's content: `Format`, `Machines`, `Trains`, `Progress` and `Types`. `Progress` holds the [`runProgress`](/docs/sdk-reference/graphql-api/run-progress) query's and subscription's documents, and is empty when no train lets its starter follow it. `ClientManifest.Write(manifest)` gives its text, `ClientManifest.Read(text)` reads it. `ClientManifest.CurrentFormat` is the format this version writes and reads. |
 | `ClientManifestMachine` | One exposed machine: `Id`, `IrHash`, `Ir` and its `Documents`. `Requires` is null: each event's own rule applies. `IrText()` gives the IR as canonical JSON, the bytes `IrHash` is the SHA-256 of. |
-| `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Requires` and `Documents`, and `Progress`, whether it carries `[TraxRunProgress]`. |
+| `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Answer` (the field's type as SDL writes it), `Requires` and `Documents`, and `Progress`, whether it carries `[TraxRunProgress]`. |
 | `ClientManifestDocument` | One persisted document: the `Id` a client sends, its `Operation` and its `Document` text. |
 | `ClientManifestRequirement` | What a caller needs, as the train's attributes declare it: `Anonymous` (`[TraxAllowAnonymous]`), `RoleSets` (one per attribute naming roles; the caller holds a role of every set) and `Policies` (each of them). The server enforces it either way. |
 
@@ -44,8 +44,10 @@ a frontend's build needs no running server, no database and no credential, and T
   listens, sweeps, registers documents or opens a database. A host that seeds data at startup checks
   `TraxClientExport.Requested` first.
 - **Only what a client sends.** The manifest lists the documents of exposed machines and trains, never one under
-  `operations`. `Types` holds the SDL of the types those documents reach and nothing else; the root operation types
-  are left out, so the rest of the schema stays on the server.
+  `operations`. `Types` holds the SDL of the types those documents reach and nothing else. The root operation types
+  and every type a namespace field reaches (`dispatch`, `discover`, `machines` and the namespaces under them) are
+  left out, since each lists every sibling operation, so the rest of the schema stays on the server. A train's
+  answer type is in its `Answer` instead.
 - **The same bytes.** `Write` writes indented JSON with `\n` line ends and a final newline, the same bytes for the
   same content, so a committed manifest can be compared in CI.
 - **One format.** `Read` refuses a file in any format other than `CurrentFormat`, naming both, and anything that is

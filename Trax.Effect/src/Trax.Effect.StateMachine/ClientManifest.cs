@@ -187,6 +187,12 @@ public sealed record ClientManifestTrain
     /// <summary>The namespace the field sits under (<c>dispatch</c>, <c>discover</c>, or the train's own), or null.</summary>
     public string? Namespace { get; init; }
 
+    /// <summary>
+    /// The type the train's field answers with, as SDL writes it (<c>StartRunResponse!</c>). The types it names are in
+    /// <see cref="ClientManifest.Types"/>; the type holding the field is not, since it holds every other train too.
+    /// </summary>
+    public string? Answer { get; init; }
+
     /// <summary>What a caller needs to run the train, as its attributes declare it.</summary>
     public ClientManifestRequirement? Requires { get; init; }
 

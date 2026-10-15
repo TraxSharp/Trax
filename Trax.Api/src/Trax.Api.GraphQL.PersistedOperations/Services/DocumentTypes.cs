@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using HotChocolate;
 using HotChocolate.Language;
 using HotChocolate.Types;
+using Trax.Api.GraphQL.Validation;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
@@ -49,32 +50,46 @@ internal static partial class DocumentTypes
     }
 
     /// <summary>
-    /// The SDL of every type the documents reach but the root operation types, in name order, so the fields a client
-    /// cannot send, the operations namespace among them, are never listed.
+    /// The SDL of every type the documents reach but the <see cref="Wrappers"/>, in name order, so the fields a client
+    /// cannot send, the operations namespace and every sibling train and query model among them, are never listed.
     /// </summary>
     public static string Sdl(ISchemaDefinition schema, IEnumerable<string> documents)
     {
         var definitions = Definitions(schema);
-        var roots = Roots(schema);
+        var wrappers = Wrappers(schema);
         return string.Join(
                 "\n\n",
                 Reached(schema, documents)
-                    .Where(name => !roots.Contains(name) && definitions.ContainsKey(name))
+                    .Where(name => !wrappers.Contains(name) && definitions.ContainsKey(name))
                     .Select(name => definitions[name].ToString(indented: true))
             )
             .Replace("\r\n", "\n");
     }
 
     /// <summary>
-    /// Whether <paramref name="name"/> is a type that holds operations rather than data: a root type, or a type the
-    /// trains' <c>dispatch</c> and <c>discover</c> fields, their namespaces, or the <c>machines</c> root reach through.
-    /// Each holds every sibling operation, so a hash over it would move whenever another operation is exposed.
+    /// The types that hold operations rather than data: the root types, and every type a namespace field reaches from
+    /// them, which are <c>dispatch</c>, <c>discover</c>, <c>operations</c>, <c>machines</c> and the namespaces under
+    /// them. Each holds every sibling operation, so a hash over it would move whenever another operation is exposed,
+    /// and a client manifest that listed it would list them all. Found by the marker the schema puts on a namespace
+    /// field, never by a type's name, so a consumer's type named like one is still data.
     /// </summary>
-    public static bool IsWrapper(ISchemaDefinition schema, string name) =>
-        Roots(schema).Contains(name)
-        || name.EndsWith("DispatchMutations", StringComparison.Ordinal)
-        || name.EndsWith("DiscoverQueries", StringComparison.Ordinal)
-        || name is "MachinesMutations" or "MachinesQueries";
+    public static HashSet<string> Wrappers(ISchemaDefinition schema)
+    {
+        var wrappers = Roots(schema);
+        var pending = new Queue<string>(wrappers);
+        while (pending.TryDequeue(out var name))
+        {
+            if (
+                !schema.Types.TryGetType(name, out var type)
+                || type is not IComplexTypeDefinition complex
+            )
+                continue;
+            foreach (var field in complex.Fields)
+                if (NamespaceField.IsNamespace(field) && wrappers.Add(field.Type.NamedType().Name))
+                    pending.Enqueue(field.Type.NamedType().Name);
+        }
+        return wrappers;
+    }
 
     /// <summary>A definition's SDL without its descriptions, so editing a doc comment changes nothing.</summary>
     public static string WithoutDescriptions(INamedSyntaxNode node)

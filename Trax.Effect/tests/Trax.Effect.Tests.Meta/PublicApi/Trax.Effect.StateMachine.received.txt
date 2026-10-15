@@ -64,6 +64,7 @@ namespace Trax.Effect.StateMachine
     public sealed class ClientManifestTrain : System.IEquatable<Trax.Effect.StateMachine.ClientManifestTrain>
     {
         public ClientManifestTrain() { }
+        public string? Answer { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestDocument> Documents { get; init; }
         public required string Field { get; init; }
         public string? Namespace { get; init; }

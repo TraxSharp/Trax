@@ -32,6 +32,7 @@ internal static class ProgressDocuments
         ArgumentNullException.ThrowIfNull(schema);
 
         var sdl = DocumentTypes.Definitions(schema);
+        var wrappers = DocumentTypes.Wrappers(schema);
         var documents = new List<ProgressDocument>();
         foreach (
             var (operation, root, name) in new[]
@@ -50,7 +51,7 @@ internal static class ProgressDocuments
                 $"{operation} {name}($runId: String!) {{ {RunProgressTypeModule.Field}(runId: $runId)"
                 + TrainDocuments.Selection(schema, definition.Type, [], $"The {Owner} {operation}")
                 + " }";
-            var shape = TrainDocuments.ShapeHash(schema, sdl, definition, text);
+            var shape = TrainDocuments.ShapeHash(schema, sdl, wrappers, definition, text);
             documents.Add(
                 new ProgressDocument(
                     $"{SlotFor(operation)}_{shape}{TrainDocuments.TextHash(shape, text)}",

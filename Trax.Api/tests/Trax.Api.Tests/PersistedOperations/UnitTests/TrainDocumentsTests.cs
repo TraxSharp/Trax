@@ -151,6 +151,21 @@ public class TrainDocumentsTests
     }
 
     [Test]
+    public async Task A_user_type_with_a_wrapper_suffix_still_moves_the_shape_hash()
+    {
+        var before = await OneAsync(Mutation<StartInput>("Ship", typeof(ShipV1)));
+        var after = await OneAsync(Mutation<StartInput>("Ship", typeof(ShipV2)));
+
+        after.Slot.Should().Be(before.Slot);
+        after
+            .Id.Should()
+            .NotBe(
+                before.Id,
+                "a type is left out of the shape because a namespace field reaches it, not because of its name"
+            );
+    }
+
+    [Test]
     public async Task One_schema_writes_the_same_documents()
     {
         var first = await OneAsync(Mutation<StartInput>("StartRun", typeof(RunOutput)));
@@ -178,6 +193,19 @@ public class TrainDocumentsTests
     {
         public string Name { get; init; } = "";
         public bool Done { get; init; }
+    }
+
+    [GraphQLName("ShipDispatchMutations")]
+    public record ShipV1
+    {
+        public string Name { get; init; } = "";
+    }
+
+    [GraphQLName("ShipDispatchMutations")]
+    public record ShipV2
+    {
+        public string Name { get; init; } = "";
+        public int Crates { get; init; }
     }
 
     public record Node

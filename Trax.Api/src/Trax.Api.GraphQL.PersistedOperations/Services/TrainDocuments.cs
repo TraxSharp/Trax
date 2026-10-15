@@ -57,6 +57,7 @@ internal static class TrainDocuments
         ArgumentNullException.ThrowIfNull(names);
 
         var sdl = DocumentTypes.Definitions(schema);
+        var wrappers = DocumentTypes.Wrappers(schema);
         var documents = new List<TrainDocument>();
         foreach (var (registration, trainName) in names)
         {
@@ -69,7 +70,7 @@ internal static class TrainDocuments
                 continue;
 
             var text = Document(schema, root, ns, field, definition, registration);
-            var shape = ShapeHash(schema, sdl, definition, text);
+            var shape = ShapeHash(schema, sdl, wrappers, definition, text);
             documents.Add(
                 new TrainDocument(
                     IdOf(root, ns, field, shape, text),
@@ -78,6 +79,7 @@ internal static class TrainDocuments
                     field,
                     text,
                     shape,
+                    Print(definition.Type),
                     registration
                 )
             );
@@ -286,6 +288,7 @@ internal static class TrainDocuments
     internal static string ShapeHash(
         ISchemaDefinition schema,
         IReadOnlyDictionary<string, INamedSyntaxNode> sdl,
+        IReadOnlySet<string> wrappers,
         IOutputFieldDefinition definition,
         string text
     )
@@ -303,7 +306,7 @@ internal static class TrainDocuments
                 .Append(argument.DefaultValue?.ToString() ?? "");
         shape.Append("->").Append(Print(definition.Type)).Append('\n');
         foreach (var name in reached)
-            if (sdl.TryGetValue(name, out var node) && !DocumentTypes.IsWrapper(schema, name))
+            if (sdl.TryGetValue(name, out var node) && !wrappers.Contains(name))
                 shape.Append(DocumentTypes.WithoutDescriptions(node)).Append('\n');
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(shape.ToString())));
     }
@@ -327,6 +330,7 @@ internal static class TrainDocuments
 /// <param name="Field">The train's field.</param>
 /// <param name="Text">The GraphQL document text.</param>
 /// <param name="ShapeHash">The hash of the train's shape the id carries.</param>
+/// <param name="Answer">The field's type as SDL writes it (<c>StartRunResponse!</c>).</param>
 /// <param name="Registration">The train.</param>
 internal sealed record TrainDocument(
     string Id,
@@ -335,6 +339,7 @@ internal sealed record TrainDocument(
     string Field,
     string Text,
     string ShapeHash,
+    string Answer,
     TrainRegistration Registration
 ) : GeneratedDocument(Id, Text)
 {

@@ -98,6 +98,7 @@ internal static class ClientManifestExport
                     Field = d.Field,
                     Root = d.Root,
                     Namespace = d.Namespace,
+                    Answer = d.Answer,
                     Requires = RequirementOf(d.Registration),
                     Progress = progressDocuments.Count > 0 && d.Registration.IsRunProgressEnabled,
                     Documents =

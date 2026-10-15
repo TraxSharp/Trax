@@ -11,10 +11,6 @@ namespace Trax.Cli.Tests.Fakes;
 internal static class ClientManifests
 {
     public const string TrainTypes = """
-        type DispatchMutations {
-          startRun(input: StartRunInput!, mode: ExecutionMode = RUN, priority: Int): StartRunResponse!
-        }
-
         enum ExecutionMode {
           RUN
           QUEUE
@@ -110,6 +106,7 @@ internal static class ClientManifests
                 {
                     Field = "startRun",
                     Root = "mutation",
+                    Answer = "StartRunResponse!",
                     Progress = true,
                     Requires = new ClientManifestRequirement
                     {

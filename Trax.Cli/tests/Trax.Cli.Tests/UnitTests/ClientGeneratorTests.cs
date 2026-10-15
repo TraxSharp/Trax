@@ -112,6 +112,34 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
+    public void A_type_named_like_an_operation_holder_is_still_data()
+    {
+        var sample = ClientManifests.Sample();
+        var manifest = sample with
+        {
+            Types = sample.Types + "\n\ntype OrderDispatchMutations {\n  id: String!\n}\n",
+        };
+
+        Text(Render(manifest), "types.g.ts")
+            .Should()
+            .Contain(
+                "export interface OrderDispatchMutations",
+                "the host leaves out the types that hold operations, so every type it lists is data"
+            );
+    }
+
+    [Test]
+    public void A_train_without_its_answer_is_refused()
+    {
+        var sample = ClientManifests.Sample();
+        var manifest = sample with { Trains = [sample.Trains[0] with { Answer = null }] };
+
+        var render = () => Render(manifest);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*startRun*answers with*");
+    }
+
+    [Test]
     public void A_machine_server_is_made_again_after_the_connection_changes()
     {
         var files = Render();

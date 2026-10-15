@@ -47,20 +47,24 @@ internal sealed class SdlTypes
     }
 
     /// <summary>The names <see cref="Render"/> exports, in name order.</summary>
-    public IEnumerable<string> Declared =>
-        _definitions.Keys.Where(n => !IsWrapper(n)).Order(StringComparer.Ordinal);
+    public IEnumerable<string> Declared => _definitions.Keys.Order(StringComparer.Ordinal);
 
-    /// <summary>The type of <paramref name="field"/> on the object type <paramref name="parent"/>, or null.</summary>
-    public GraphQLType? FieldType(string parent, string field) =>
-        _definitions.GetValueOrDefault(parent) is GraphQLObjectTypeDefinition type
-            ? type.Fields?.Items.FirstOrDefault(f => f.Name.StringValue == field)?.Type
-            : null;
+    /// <summary>A type written as SDL writes it (<c>[Order!]!</c>), or null when there is none.</summary>
+    public static GraphQLType? ParseType(string? text) =>
+        string.IsNullOrWhiteSpace(text)
+            ? null
+            : GraphQLParser
+                .Parser.Parse($"type T {{ f: {text} }}")
+                .Definitions.OfType<GraphQLObjectTypeDefinition>()
+                .Single()
+                .Fields!.Items.Single()
+                .Type;
 
     /// <summary>The named type <paramref name="type"/> holds when it is one this file declares, else null.</summary>
     public string? NameOf(GraphQLType type)
     {
         var name = Named(type);
-        return _definitions.ContainsKey(name) && !IsWrapper(name) ? name : null;
+        return _definitions.ContainsKey(name) ? name : null;
     }
 
     /// <summary>The declared types <paramref name="types"/> name.</summary>
@@ -80,8 +84,8 @@ internal sealed class SdlTypes
             : $"{Bare(type, input: false)} | null";
 
     /// <summary>
-    /// The file every train imports its types from: each declared type but the ones that only hold operations, in
-    /// name order, each name claimed once among everything the client exports.
+    /// The file every train imports its types from: each declared type in name order, each name claimed once among
+    /// everything the client exports.
     /// </summary>
     public string Render()
     {
@@ -90,8 +94,6 @@ internal sealed class SdlTypes
         );
         foreach (var (name, definition) in _definitions.OrderBy(d => d.Key, StringComparer.Ordinal))
         {
-            if (IsWrapper(name))
-                continue;
             var identifier = TypeScript.Identifier(name, "GraphQL type");
             sb.Append('\n');
             switch (definition)
@@ -179,7 +181,7 @@ internal sealed class SdlTypes
 
     private string Scalar(string name) =>
         Scalars.TryGetValue(name, out var ts) ? ts
-        : _definitions.ContainsKey(name) && !IsWrapper(name) ? name
+        : _definitions.ContainsKey(name) ? name
         : "unknown";
 
     private static string Named(GraphQLType type) =>
@@ -190,12 +192,4 @@ internal sealed class SdlTypes
             GraphQLNamedType named => named.Name.StringValue,
             _ => "",
         };
-
-    // A type that holds operations, not data: it lists every train or machine, so the client never needs it.
-    private static bool IsWrapper(string name) =>
-        name.EndsWith("DispatchMutations", StringComparison.Ordinal)
-        || name.EndsWith("DiscoverQueries", StringComparison.Ordinal)
-        || name.EndsWith("MachineMutations", StringComparison.Ordinal)
-        || name.EndsWith("MachineQueries", StringComparison.Ordinal)
-        || name is "MachinesMutations" or "MachinesQueries";
 }

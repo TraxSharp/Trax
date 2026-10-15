@@ -629,14 +629,11 @@ internal sealed class ClientGenerator
                     + "again from the host."
             );
         var root = train.Root == "mutation" ? "dispatch" : "discover";
-        var parentType =
-            (train.Namespace is null ? "" : TypeScript.Upper(train.Namespace))
-            + (train.Root == "mutation" ? "DispatchMutations" : "DiscoverQueries");
         var answer =
-            types.FieldType(parentType, train.Field)
+            SdlTypes.ParseType(train.Answer)
             ?? throw new InvalidOperationException(
-                $"The manifest's types do not hold {parentType}.{train.Field}, the answer of the train "
-                    + $"'{train.Field}'. Export the manifest again from the host."
+                $"The manifest does not say what the train '{train.Field}' answers with. Export the manifest again "
+                    + "from the host."
             );
 
         var variables = operation.Variables?.Items ?? [];
