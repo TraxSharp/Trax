@@ -116,6 +116,7 @@ else
 
     private bool _available;
     private bool _allowed;
+    private IPersistedOperationsManagementGate? _gate;
     private IPersistedOperationsService? _service;
     private TraxDataGrid<PersistedOperationDto>? _grid;
     private string _tenantScope = TenantScopeAll;
@@ -130,18 +131,20 @@ else
         // AddPersistedOperationStore both register them. The page is served only once the host
         // declared the management gate, and only to a user who meets it, as the API's
         // persistedOperations fields are.
-        var gate = ServiceProvider.GetService<IPersistedOperationsManagementGate>();
-        _service = gate is { IsDeclared: true }
+        _gate = ServiceProvider.GetService<IPersistedOperationsManagementGate>();
+        _service = _gate is { IsDeclared: true }
             ? ServiceProvider.GetService<IPersistedOperationsService>()
             : null;
         _available = _service is not null;
-        _allowed = _available && await Authorization.EnsureManagesPersistedOperationsAsync(gate);
+        _allowed = _available && await Authorization.EnsureManagesPersistedOperationsAsync(_gate);
     }
 
     /// <summary>
     /// One page of rows from the shared persisted-operations service the API's
     /// <c>persistedOperations</c> field calls, with the same filter, ordering and page bounds
     /// (central ADR 0022). Nothing is capped: the grid pages through every row the filter admits.
+    /// Every page checks the management gate again, as every GraphQL request does, so an operator
+    /// who lost it reads nothing more.
     /// </summary>
     private async Task<ServerDataResult<PersistedOperationDto>> LoadPageAsync(
         LoadDataArgs args,
@@ -150,6 +153,12 @@ else
     {
         if (_service is null || !_allowed)
             return new ServerDataResult<PersistedOperationDto>([], 0);
+        if (!await Authorization.EnsureManagesPersistedOperationsAsync(_gate))
+        {
+            _allowed = false;
+            await InvokeAsync(StateHasChanged);
+            return new ServerDataResult<PersistedOperationDto>([], 0);
+        }
         var page = await _service.ListAsync(BuildFilter(), skip: args.Skip ?? 0, take: args.Top ?? 25, ct);
         return new ServerDataResult<PersistedOperationDto>(page.Items, page.TotalCount);
     }

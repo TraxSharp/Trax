@@ -152,6 +152,8 @@ else
             ? ServiceProvider.GetService<IPersistedOperationsService>()
             : null;
         _available = _service is not null;
+        // LoadAsync checks the gate again before it reads; checking here first keeps the page from
+        // showing anything to a user who does not meet it while the first read runs.
         _allowed = _available && await Authorization.EnsureManagesPersistedOperationsAsync(_gate);
         if (_allowed)
             await LoadAsync();
@@ -162,11 +164,20 @@ else
     /// Reads the row and its history through the shared persisted-operations service the API's
     /// <c>persistedOperation</c> and <c>persistedOperationHistory</c> fields call, for this page's
     /// tenant and id (central ADR 0022). A failed read is shown on the page rather than thrown,
-    /// which would end the operator's circuit.
+    /// which would end the operator's circuit. Every read checks the management gate again, as
+    /// every GraphQL request does, so an operator who lost it reads nothing more.
     /// </summary>
     private async Task LoadAsync()
     {
         if (_service is null) return;
+        if (!await Authorization.EnsureManagesPersistedOperationsAsync(_gate))
+        {
+            _allowed = false;
+            _row = null;
+            _history = [];
+            _loading = false;
+            return;
+        }
         _loading = true;
         _loadError = null;
         try

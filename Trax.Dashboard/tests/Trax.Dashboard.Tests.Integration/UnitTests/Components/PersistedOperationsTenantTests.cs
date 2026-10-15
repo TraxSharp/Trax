@@ -294,6 +294,39 @@ public class PersistedOperationsTenantTests
         (await ReadRowsAsync()).Should().ContainSingle("once the policy is met the upload goes");
     }
 
+    [Test]
+    public async Task An_operator_who_loses_the_management_role_cannot_page_the_list()
+    {
+        await SeedAsync(
+            Enumerable.Range(0, 60).Select(i => Row(null, $"op{i}.v1", "query Q { a }")).ToArray()
+        );
+        var page = _ctx.RenderComponent<PersistedOperationsPage>();
+        RadzenDataGrid<PersistedOperationDto> grid = null!;
+        page.WaitForAssertion(
+            () =>
+            {
+                grid = page.FindComponent<RadzenDataGrid<PersistedOperationDto>>().Instance;
+                grid.Count.Should().Be(60);
+            },
+            Wait
+        );
+        var calls = _ctx.Services.GetRequiredService<ScriptedPersistedOperationsService>().Calls;
+        var reads = calls.Count(c => c == "ListAsync");
+
+        // The role is taken away while the circuit lives; GraphQL refuses the next request.
+        _auth.SetRoles("Reader");
+        await page.InvokeAsync(() => grid.GoToPage(1));
+
+        page.WaitForAssertion(
+            () => page.Markup.Should().Contain("You do not meet this server's persisted-operation"),
+            Wait
+        );
+        calls
+            .Count(c => c == "ListAsync")
+            .Should()
+            .Be(reads, "every page read checks the management gate again" + Adr);
+    }
+
     // Registered last, so its options are the ones the service and the gate resolve.
     private void UseStore(
         Action<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder> configure
