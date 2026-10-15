@@ -3,6 +3,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
+using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -213,6 +214,51 @@ public class PersistedOperationsManagementGateTests
             .Should()
             .Contain("NoSuchManagementPolicy")
             .And.Contain("persistedOperations");
+    }
+
+    [Test]
+    public async Task A_host_root_field_named_persistedOperations_is_refused_once_management_is_served()
+    {
+        // Without the gate the name is the host's: nothing of this package is at the root.
+        await using (
+            var ungated = await StartAsync(
+                g => g.ConfigureSchema(b => b.AddTypeExtension<HostPersistedOperationsOnRoot>()),
+                po => po.SingleNode()
+            )
+        )
+        {
+            RootFields((await ExecutorAsync(ungated)).Schema)
+                .Should()
+                .Contain("persistedOperations");
+        }
+
+        var start = () =>
+            StartAsync(
+                g => g.ConfigureSchema(b => b.AddTypeExtension<HostPersistedOperationsOnRoot>()),
+                po => po.SingleNode().GateManagement(roles: "Deployer")
+            );
+
+        (await start.Should().ThrowAsync<Exception>())
+            .Which.ToString()
+            .Should()
+            .Contain("RootQuery.persistedOperations")
+            .And.Contain(typeof(HostResolvers).FullName!);
+    }
+
+    // Built with a descriptor rather than [ExtendObjectType], so an assembly scan does not pick it up.
+    public sealed class HostPersistedOperationsOnRoot : ObjectTypeExtension
+    {
+        protected override void Configure(IObjectTypeDescriptor descriptor)
+        {
+            descriptor.Name("RootQuery");
+            descriptor.Field<HostResolvers>(r => r.PersistedOperations());
+        }
+    }
+
+    public sealed class HostResolvers
+    {
+        [Trax.Effect.Attributes.TraxAllowAnonymous]
+        public string PersistedOperations() => "the host's own";
     }
 
     private static Dictionary<string, object?> UploadVariables(string id) =>

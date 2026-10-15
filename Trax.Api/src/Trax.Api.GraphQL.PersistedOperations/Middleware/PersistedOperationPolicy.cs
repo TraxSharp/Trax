@@ -44,8 +44,10 @@ internal sealed class PersistedOperationPolicy(
             return PersistedOperationDecision.PassThrough;
 
         // Both carve-outs ask what the document selects, which its text cannot answer, and
-        // neither may be decided by a cheaper check that runs first.
-        if (ManagementOperationDetector.IsManagementOperation(document))
+        // neither may be decided by a cheaper check that runs first. The management one holds only
+        // while the management fields are served: without them a root persistedOperations is
+        // nothing of this package's, and the census does not reserve the name for it.
+        if (options.ManagementServed && ManagementOperationDetector.IsManagementOperation(document))
             return PersistedOperationDecision.PassThrough;
 
         if (options.AllowIntrospection && IntrospectionDetector.IsPureIntrospection(document))

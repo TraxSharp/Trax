@@ -69,6 +69,14 @@ internal sealed class SchemaNameCensus
         if (configuration.OperationMutationsExposed)
             census.Field("RootMutation", "operations", Trax("operations"));
 
+        // A feature package's own root fields, such as persistedOperations once its management
+        // gate is declared, on both roots.
+        foreach (var field in configuration.FeatureRootFields)
+        {
+            census.Field("RootQuery", field, Trax(field));
+            census.Field("RootMutation", field, Trax(field));
+        }
+
         foreach (var reg in configuration.ModelRegistrations)
         {
             var parent = census.Parent(Discover, reg.Attribute.Namespace);

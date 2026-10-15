@@ -46,7 +46,7 @@ services.AddTraxGraphQL(graphql => graphql
 
 The gate is not the operations gate. `GateOperations` and `RequireAuthorization()` govern `operations`; `GateManagement` governs `persistedOperations`. A deploy pipeline that uploads documents holds the management role and reaches nothing under `operations`, and an operator who manages documents at the dashboard holds both. `RequireAuthorization()` on the builder still gates the whole endpoint, these fields included.
 
-These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), since a client cannot send them by an id it has not uploaded yet. A document is admitted inline only when every operation in it selects nothing at the root but `persistedOperations`; mixing in another field sends it through enforcement like any other document.
+These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), since a client cannot send them by an id it has not uploaded yet. A document is admitted inline only when every operation in it selects nothing at the root but `persistedOperations`; mixing in another field sends it through enforcement like any other document. A host that declares no management gate serves none of these fields and gets no bypass.
 
 ## Mutations
 

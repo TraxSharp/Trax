@@ -140,10 +140,13 @@ public class GraphQLConfiguration
     internal bool GetRequestsAllowed { get; init; }
 
     /// <summary>
-    /// Whether a feature package adds fields of its own to both root types, the persisted-operation
-    /// management fields, so the root types are built for it.
+    /// The fields a feature package adds to both root types, the persisted-operation management
+    /// fields. The root types are built for them, and the census reserves their names.
     /// </summary>
-    internal bool FeatureRootFieldsAdded { get; init; }
+    internal IReadOnlySet<string> FeatureRootFields { get; init; } = new HashSet<string>();
+
+    /// <summary>Whether a feature package adds fields of its own to both root types.</summary>
+    internal bool FeatureRootFieldsAdded => FeatureRootFields.Count > 0;
 
     /// <summary>
     /// Whether broadcast subscribers see the answers on <c>onJunctionEvent</c>, set by

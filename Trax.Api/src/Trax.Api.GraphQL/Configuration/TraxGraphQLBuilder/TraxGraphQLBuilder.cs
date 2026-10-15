@@ -26,11 +26,11 @@ public partial class TraxGraphQLBuilder
     internal List<Action<IRequestExecutorBuilder>> SchemaConfigurations { get; } = [];
 
     /// <summary>
-    /// Set by a feature package that adds its own fields to both root types, the persisted-operation
-    /// management fields, so <c>RootQuery</c> and <c>RootMutation</c> are in the schema even when
-    /// nothing else fills them.
+    /// The fields a feature package adds to both root types, the persisted-operation management
+    /// fields, so <c>RootQuery</c> and <c>RootMutation</c> are in the schema even when nothing else
+    /// fills them, and a host field of the same name is refused at startup.
     /// </summary>
-    internal bool FeatureRootFieldsAdded { get; set; }
+    internal HashSet<string> FeatureRootFields { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Creates a builder over <paramref name="services"/>. <c>AddTraxGraphQL(graphql =&gt; ...)</c>

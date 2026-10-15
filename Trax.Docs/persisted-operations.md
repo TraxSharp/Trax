@@ -160,6 +160,9 @@ bypass is decided from the document's structure, not its text: it applies only w
 operation selects nothing at the root but `persistedOperations`. A document that mixes in any
 other field, `operations` included, is enforced normally, as is one that does not parse; an alias
 or a string argument that reads `persistedOperations` does not count.
+The bypass holds only while the management fields are served, so a host without `GateManagement`
+gets none. Once they are served, the name is Trax's at the root, and a host field called
+`persistedOperations` fails startup.
 
 That bypass is not an authorization boundary either. What protects the management fields is their
 own gate, which the host declares with `GateManagement(policy, roles)`:

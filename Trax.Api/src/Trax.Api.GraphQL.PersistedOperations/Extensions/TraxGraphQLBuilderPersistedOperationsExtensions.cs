@@ -133,7 +133,7 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // gate declared the fields are not served.
         if (options.ManagementServed)
         {
-            builder.FeatureRootFieldsAdded = true;
+            builder.FeatureRootFields.Add("persistedOperations");
             builder.ConfigureSchema(schema =>
             {
                 schema.AddType(new ObjectType<GraphQL.PersistedOperationQueries>());

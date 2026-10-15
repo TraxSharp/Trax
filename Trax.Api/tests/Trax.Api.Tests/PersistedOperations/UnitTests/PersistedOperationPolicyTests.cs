@@ -89,7 +89,7 @@ public class PersistedOperationPolicyTests
     {
         // Persisting the upload mutation by id would be a chicken-and-egg.
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(true).GateManagement(roles: "admin")),
                 """
                 mutation {
                   persistedOperations {
@@ -106,11 +106,24 @@ public class PersistedOperationPolicyTests
     public void ManagementQuery_PassesThrough()
     {
         Decide(
-                Build(b => b.RequirePersisted(true)),
+                Build(b => b.RequirePersisted(true).GateManagement(roles: "admin")),
                 "query { persistedOperations { persistedOperations { totalCount } } }"
             )
             .Should()
             .Be(PersistedOperationDecision.PassThrough);
+    }
+
+    [Test]
+    public void Without_a_management_gate_a_root_persistedOperations_document_is_not_carved_out()
+    {
+        // The management fields are not served, so a root field of that name is the host's own
+        // and gets no pass from this package.
+        Decide(
+                Build(b => b.RequirePersisted(true)),
+                "query { persistedOperations { persistedOperations { totalCount } } }"
+            )
+            .Should()
+            .Be(PersistedOperationDecision.Reject);
     }
 
     [Test]
