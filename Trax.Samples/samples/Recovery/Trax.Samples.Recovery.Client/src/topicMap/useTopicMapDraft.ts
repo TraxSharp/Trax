@@ -1,6 +1,6 @@
 // The topic map wizard's draft, owned by the server. The host exposes the topic map, so the page drives it through
 // its own typed operations, machines { topicMap { start chooseFields build ... get } }, and its push,
-// machineChanged, and nothing else: useServerMachine sends each declared event to the server, which applies it,
+// topicMapChanged, and nothing else: useServerMachine sends each declared event to the server, which applies it,
 // stores it and answers what it stored, while the generated twin only predicts the step so the page moves at once.
 // Whatever the server does to the draft (the build's outcome, the review timer, a recovery after a crash, another
 // tab's step) is pushed to the page: it never polls.

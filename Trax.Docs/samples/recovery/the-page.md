@@ -26,7 +26,7 @@ wraps under itself with a hanging indent, and the line numbers stay the file's.
 **Food order.** Place order arms the scenario's trouble with `dispatch { orderTrouble }`, then sends the order
 machine's own operations, `machines { order { start addItem placeOrder } }`, as `scripts/recordings/order.mjs`
 does: `placeOrder` twice, 120 ms apart, under one request id. The laptop and the phone each subscribe to
-`machineChanged` for the order on a socket of their own, and neither polls the order. The page finds the run
+`orderChanged` for the order on a socket of their own, and neither polls the order. The page finds the run
 `Ordered` queued with `operations.executions(trainName:, startedAfter:)`, follows its steps with `onJunctionEvent`
 and `operations.junctionRuns`, and reads `discover { orders { tabletCalls } }` while the run lasts, so a tablet call
 that went unanswered shows as a failed try, a retry and the next try of `SendToRestaurant`. Everything on screen is

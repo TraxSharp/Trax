@@ -232,7 +232,7 @@ TRAX_UPDATE_MACHINE_DOCUMENTS=1 dotnet test --filter TopicMapDocumentsTests
 ```
 
 The food order's operations are among the page's own documents: the page sends `machines { order { start addItem
-placeOrder discard } }` and `machineChanged` for the order by the ids in `src/persisted-operations.json`.
+placeOrder discard } }` and `orderChanged` for the order by the ids in `src/persisted-operations.json`.
 
 A page built before a deploy that changed the machine sends ids the host no longer serves: the host answers
 `CLIENT_OUTDATED`, and the page stops and asks to be reloaded. The page's other documents (the runs it starts and

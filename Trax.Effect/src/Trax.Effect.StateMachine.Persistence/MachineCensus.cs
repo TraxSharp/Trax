@@ -11,7 +11,7 @@ public static class MachineCensus
     public const string Undeclared = "undeclared";
 
     /// <summary>
-    /// One entry per trigger, per read (<c>start</c>, <c>get</c>, <c>machineChanged</c>) and for <c>discard</c> of each
+    /// One entry per trigger, per read (<c>start</c>, <c>get</c>, the push (<c>&lt;machine&gt;Changed</c>)) and for <c>discard</c> of each
     /// machine. A client
     /// or effect-bound event names its rule and the surfaces that send it: on a user-owned machine its typed
     /// operation once exposed, the generic mutations while opted in, and host code acting for a client through the
@@ -98,7 +98,7 @@ public static class MachineCensus
             {
                 ("start", rules.Start),
                 ("get", rules.Get),
-                ("machineChanged", rules.Watch),
+                ("changed", rules.Watch),
             }
         )
             yield return new MachineCensusEntry(
@@ -145,7 +145,7 @@ public static class MachineCensus
 
 /// <summary>One trigger or read of a machine, as <see cref="MachineCensus.Describe"/> lists it.</summary>
 /// <param name="Machine">The machine's id.</param>
-/// <param name="Name">The trigger's name, the read's (<c>start</c>, <c>get</c>, <c>machineChanged</c>), or <c>discard</c>.</param>
+/// <param name="Name">The trigger's name, the read's (<c>start</c>, <c>get</c>, the push (<c>&lt;machine&gt;Changed</c>)), or <c>discard</c>.</param>
 /// <param name="Kind">The trigger's <see cref="TriggerKind"/> name, <c>Read</c> for a read, or <c>Discard</c>.</param>
 /// <param name="Rule">The rule that guards it, as a reader would write it.</param>
 /// <param name="Surfaces">The surfaces that reach it, such as the machine's own operations or host code.</param>

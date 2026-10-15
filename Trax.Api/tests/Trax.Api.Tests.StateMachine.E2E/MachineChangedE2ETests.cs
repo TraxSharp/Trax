@@ -25,7 +25,7 @@ using Trax.Effect.StateMachine.Persistence;
 namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
-/// <c>machineChanged</c> over a real socket, on two nodes over one database: the subscriber registers before the
+/// the push (<c>&lt;machine&gt;Changed</c>) over a real socket, on two nodes over one database: the subscriber registers before the
 /// first read, whose snapshot is the first event; every write after it arrives as a whole snapshot with a rising
 /// revision, a burst coalesced to its latest, an outcome applied on the other node included; a delete or an expiry
 /// ends the stream with <c>gone</c>; a stream follows one incarnation of a row; a missing id, another user's and a
@@ -113,7 +113,7 @@ public class MachineChangedE2ETests
     #region Registration
 
     [Test]
-    public async Task The_machineChanged_document_is_registered_under_the_reserved_prefix()
+    public async Task The_push_document_is_registered_under_the_reserved_prefix()
     {
         (await MachineDocumentOps.MachineDocumentsAsync(Database, WizardMachine.MachineId))
             .Where(d => d.Operation(WizardMachine.MachineId) == MachineDocumentOps.MachineChanged)
@@ -457,8 +457,8 @@ public class MachineChangedE2ETests
         var executor = await A.ExecutorAsync();
         var subscriptions = executor.Schema.SubscriptionType;
         subscriptions.Should().NotBeNull("the host serves subscriptions");
-        var field = subscriptions!.Fields.FirstOrDefault(f => f.Name == "machineChanged");
-        field.Should().NotBeNull("machineChanged is a subscription, per " + Adr);
+        var field = subscriptions!.Fields.FirstOrDefault(f => f.Name == "wizardChanged");
+        field.Should().NotBeNull("each machine's push is a subscription, per " + Adr);
         field!
             .Arguments.Select(a => a.Name)
             .Should()
@@ -627,7 +627,7 @@ public class MachineChangedE2ETests
     }
 
     [Test]
-    public async Task machineChanged_counts_toward_the_100_operation_socket_cap()
+    public async Task A_push_counts_toward_the_100_operation_socket_cap()
     {
         // One instance started through the API, and the rest written beside it for the same user: the test is about
         // the socket's operations, not about starting.
@@ -650,14 +650,13 @@ public class MachineChangedE2ETests
             .Should()
             .Contain(
                 SocketLimitCode,
-                "a machineChanged stream holds one of the socket's 100 places, per api/0015 and "
-                    + Adr
+                "a push stream holds one of the socket's 100 places, per api/0015 and " + Adr
             );
     }
 
-    // Green today, and kept as the guard: the upgrade is refused before any operation, machineChanged included.
+    // Green today, and kept as the guard: the upgrade is refused before any operation, a push included.
     [Test]
-    public async Task An_unlisted_origin_cannot_upgrade_for_machineChanged()
+    public async Task An_unlisted_origin_cannot_upgrade_for_a_push()
     {
         var client = A.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");

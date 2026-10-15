@@ -242,7 +242,7 @@ comes once the listener is listening. It is registered with the
 operations queries and behind the operations gate, like `operations.machineInstances`; a subscriber the gate refuses
 gets an error at subscribe. It reads `IOperationsService.WatchMachineInstancesAsync`, the feed the dashboard's
 instance page follows, so both read one listener per host. A user follows their own instance through
-[`machineChanged`](/docs/sdk-reference/graphql-api/machines#machinechanged).
+[its push](/docs/sdk-reference/graphql-api/machines#the-push).
 
 ## Data Change Signals
 

@@ -77,7 +77,7 @@ exception, until it does:
 | each client or effect-bound event | `.On(trigger)` followed by the rule | `Requires(roles)`, `RequiresPolicy(name)`, `AnyAuthenticated()` |
 | `start` | `Start<TStartInput>(s => s.Reduce(...).<rule>())` | `Requires`, `RequiresPolicy`, `AnyAuthenticated` |
 | `get` | `Get(r => ...)` | owner-only or stricter |
-| `machineChanged` | `Watch(r => ...)` | owner-only or stricter |
+| the push (`<machine>Changed`) | `Watch(r => ...)` | owner-only or stricter |
 | `discard` | `Discard(r => ...)` | owner-only or stricter |
 
 `Anonymous()` on an event or the start of a user-owned machine refuses startup, and so does a policy the host does not
@@ -117,7 +117,7 @@ instead.
 | `loadSnapshot(machine, id)` | `query { machines { <machine> { get(id) } } }` |
 | `discardSnapshot(machine, id, requestId)` | `discard(id, requestId)` |
 | `saveSnapshot(machine, id, snapshot)` | none: every change is a declared event |
-| polling `loadSnapshot` for server-made changes | `subscription { machineChanged(...) }`, pushed on every write |
+| polling `loadSnapshot` for server-made changes | `subscription { <machine>Changed(id: ...) }`, pushed on every write |
 
 `requestId` is required on every event, `start` and `discard`; a retry with the same id answers what the first
 request recorded. Each event takes the record its `WithInput<T>()` declares, typed in the schema, and an event without
@@ -156,7 +156,7 @@ The opt-in brings three conditions:
 - **A policy is required.** Calling it without `Policy` refuses startup.
 - **Every user-owned machine needs its rules.** While the opt-in is on, the generic mutations reach every user-owned
   machine, so each one is held to the same startup check as an exposed machine: a rule on every event, the start,
-  `get`, `machineChanged` and `discard`, as in step 3 above. System-owned machines are not reachable and need none.
+  `get`, the push and `discard`, as in step 3 above. System-owned machines are not reachable and need none.
 - **The generic save serves only machines with no server-side behaviour.** `saveSnapshot` answers
   `save-not-allowed`, and writes nothing, for a machine with an event or start whose rule restricts callers
   (`Requires` or `RequiresPolicy`), a timer, an invoked train or an effect. Such a machine moves only through its

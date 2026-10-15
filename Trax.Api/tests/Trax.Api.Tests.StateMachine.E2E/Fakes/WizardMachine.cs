@@ -155,7 +155,7 @@ public sealed class BuildWizardStep : EffectJunction<BuildWizardInput, WizardArt
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every client event declares its rule, <c>start</c>, <c>get</c> and <c>machineChanged</c> declare theirs, and the
+/// Every client event declares its rule, <c>start</c>, <c>get</c> and the push (<c>&lt;machine&gt;Changed</c>) declare theirs, and the
 /// start takes its own <see cref="WizardStartInput"/>. The outcome triggers of <see cref="WizardState.Building"/>,
 /// the timer of <see cref="WizardState.Approving"/> and the effect's receipt are server-only, so none of them may
 /// appear as a client argument.

@@ -8,7 +8,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// Refuses to start a host that serves a machine to clients without a rule for everything a client can do to it. A
 /// machine a client can reach is one marked <see cref="Trax.Effect.Attributes.TraxMachineAttribute"/>, however it was
 /// registered, or, while the generic mutations are opted in, every user-owned machine. Each must declare a rule for
-/// every client and effect-bound event, for its <c>start</c>, <c>get</c>, <c>machineChanged</c> and <c>discard</c>; none of its events or
+/// every client and effect-bound event, for its <c>start</c>, <c>get</c>, the push (<c>&lt;machine&gt;Changed</c>) and <c>discard</c>; none of its events or
 /// its start may be <c>Anonymous()</c>, since a user's instance needs an owner; a read or the discard may not be looser
 /// than owner-only; and every
 /// policy a rule names must be registered. A marked machine must also have an IR (no raw delegates, no delegate
@@ -186,14 +186,14 @@ internal sealed class MachineRulesStartupValidator(
         if (rules.Get is null)
             undeclared.Add("get");
         if (rules.Watch is null)
-            undeclared.Add("machineChanged");
+            undeclared.Add("changed");
         if (rules.Discard is null)
             undeclared.Add("discard");
         if (undeclared.Count > 0)
             problems.Add(
                 $"The machine '{name}' is {reach}, and declares no rule for {string.Join(", ", undeclared)}. "
                     + "Every event a client can send declares Requires(...), RequiresPolicy(...), AnyAuthenticated() "
-                    + "or Anonymous(), and start, get, machineChanged and discard declare theirs with Start(...), "
+                    + "or Anonymous(), and start, get, the push (changed) and discard declare theirs with Start(...), "
                     + "Get(...), Watch(...) and Discard(...). There is no machine-level default."
             );
 
@@ -215,7 +215,7 @@ internal sealed class MachineRulesStartupValidator(
             var (read, rule) in new[]
             {
                 ("get", rules.Get),
-                ("machineChanged", rules.Watch),
+                ("changed", rules.Watch),
                 ("discard", rules.Discard),
             }
         )

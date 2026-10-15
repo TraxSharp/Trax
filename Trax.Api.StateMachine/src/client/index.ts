@@ -10,7 +10,7 @@
  *                   client and sessions drive it
  *   draftSession.ts one machine + one draft id, bound; every method total (never throws); and
  *                   startDraft, which creates a draft under an id the server mints
- *   machineServer.ts createMachineServer: the typed operations and the machineChanged stream of one exposed
+ *   machineServer.ts createMachineServer: the typed operations and the push stream of one exposed
  *                   machine, as the MachineServer a ServerMachineController (or useServerMachine, at
  *                   `@traxsharp/state-machine/react`) drives an instance through: the server owns it, the twin predicts
  *

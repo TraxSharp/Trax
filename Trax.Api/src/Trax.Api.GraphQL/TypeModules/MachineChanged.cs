@@ -14,20 +14,20 @@ using Trax.Effect.StateMachine.Persistence;
 namespace Trax.Api.GraphQL.TypeModules;
 
 /// <summary>
-/// One <c>machineChanged</c> event: the instance's whole snapshot with its revision, or the end of the stream
-/// (<see cref="Gone"/>, or a <see cref="Problem"/>).
+/// One event of a machine's push (<c>&lt;machine&gt;Changed</c>): the instance's whole snapshot with its revision, or
+/// the end of the stream (<see cref="Gone"/>, or a <see cref="Problem"/>).
 /// </summary>
 /// <param name="RowId">The row the stream follows (the instance's incarnation), or null on a refusal.</param>
 /// <param name="Revision">The snapshot's revision, or null when the event carries no snapshot.</param>
 /// <param name="State">The state the instance is in, or null when the event carries no snapshot.</param>
-/// <param name="Context">The instance's context, or null when the event carries no snapshot.</param>
+/// <param name="Context">The instance's context, read by the machine's context type, or null without a snapshot.</param>
 /// <param name="Gone">Whether the instance was deleted or expired. The last event of the stream.</param>
 /// <param name="Problem">Why the stream was refused or ended, or null.</param>
 internal sealed record MachineChange(
     long? RowId,
     long? Revision,
     string? State,
-    JsonElement? Context,
+    JsonObject? Context,
     bool Gone,
     SnapshotProblem? Problem
 )
@@ -47,8 +47,9 @@ internal sealed record MachineChange(
 }
 
 /// <summary>
-/// The <c>machineChanged</c> subscription: one exposed machine's instance, pushed to its owner whenever any path on
-/// any host writes it. See
+/// Each exposed machine's push, <c>subscription { &lt;machine&gt;Changed(id) }</c> (<c>topicMapChanged</c>): one
+/// instance, pushed to its owner whenever any path on any host writes it, in the machine's own types, the ones its
+/// <c>get</c> answers. See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
 /// </summary>
 /// <remarks>
@@ -72,12 +73,6 @@ internal sealed record MachineChange(
 /// </remarks>
 internal static class MachineChangedSubscription
 {
-    /// <summary>The subscription field.</summary>
-    public const string Field = "machineChanged";
-
-    /// <summary>The type each event is.</summary>
-    public const string TypeName = "MachineChange";
-
     /// <summary>The subscription root Trax registers.</summary>
     public const string SubscriptionType = "LifecycleSubscriptions";
 
@@ -86,35 +81,46 @@ internal static class MachineChangedSubscription
     internal const string OutdatedMessage =
         "A newer version of the machine than this server runs wrote the instance. Reload.";
 
-    /// <summary>The event type and the subscription field over <paramref name="machines"/>.</summary>
+    /// <summary>The push's field for the machine <paramref name="machineId"/>: <c>topic-map</c> is <c>topicMapChanged</c>.</summary>
+    public static string FieldOf(string machineId) =>
+        MachineSurface.FieldName(machineId) + "Changed";
+
+    /// <summary>The type of one event of a machine's push.</summary>
+    public static string TypeNameOf(string pascal) => $"{pascal}MachineChange";
+
+    /// <summary>One push field and its event type per machine in <paramref name="machines"/>.</summary>
     public static IEnumerable<ITypeSystemMember> Types(IReadOnlyList<IMachine> machines)
     {
-        var exposed = machines.ToDictionary(m => m.Name, StringComparer.Ordinal);
-        yield return EventType();
-        yield return new ObjectTypeExtension(d =>
+        foreach (var machine in machines)
         {
-            d.Name(SubscriptionType);
-            d.Field(Field)
-                .Description(
-                    "The caller's instance of an exposed machine, pushed whenever it is written: first as it is now, "
-                        + "then each newer revision, whole. The stream ends with gone when the instance is deleted or "
-                        + "expires, and with a problem when it cannot go on (client-outdated after a newer version of "
-                        + "the machine wrote it)."
-                )
-                .Argument("machine", a => a.Type<NonNullType<StringType>>())
-                .Argument("id", a => a.Type<NonNullType<UuidType>>())
-                .Type(new NonNullTypeNode(new NamedTypeNode(TypeName)))
-                .Resolve(ctx => ctx.GetEventMessage<MachineChange>())
-                .Subscribe(ctx => SubscribeAsync(ctx, exposed));
-        });
+            var pascal = MachineSurface.PascalName(machine.Name);
+            var hasContext = MachineContextFields.Of(machine, machine.States).Count > 0;
+            yield return EventType(machine, pascal, hasContext);
+            yield return new ObjectTypeExtension(d =>
+            {
+                d.Name(SubscriptionType);
+                d.Field(FieldOf(machine.Name))
+                    .Description(
+                        $"The caller's instance of '{machine.Name}', pushed whenever it is written: first as it is "
+                            + "now, then each newer revision, whole. The stream ends with gone when the instance is "
+                            + "deleted or expires, and with a problem when it cannot go on (CLIENT_OUTDATED after a "
+                            + "newer version of the machine wrote it)."
+                    )
+                    .Argument("id", a => a.Type<NonNullType<UuidType>>())
+                    .Type(new NonNullTypeNode(new NamedTypeNode(TypeNameOf(pascal))))
+                    .Resolve(ctx => ctx.GetEventMessage<MachineChange>())
+                    .Subscribe(ctx => SubscribeAsync(ctx, machine));
+            });
+        }
     }
 
-    private static ObjectType EventType() =>
+    private static ObjectType EventType(IMachine machine, string pascal, bool hasContext) =>
         new(d =>
         {
-            d.Name(TypeName);
+            d.Name(TypeNameOf(pascal));
             d.Description(
-                "One machineChanged event: the instance's whole snapshot with its revision, or the end of the stream."
+                $"One event of the push of '{machine.Name}': the instance's whole snapshot with its revision, in the "
+                    + "types its get answers, or the end of the stream."
             );
             d.Field("rowId")
                 .Type<LongType>()
@@ -128,19 +134,29 @@ internal static class MachineChangedSubscription
                 )
                 .Resolve(ctx => ctx.Parent<MachineChange>().Revision);
             d.Field("state")
-                .Type<StringType>()
+                .Type(new NamedTypeNode(MachineSurface.StateTypeName(pascal)))
                 .Description(
                     "The state the instance is in, or null on an event that carries no snapshot."
                 )
                 .Resolve(ctx => ctx.Parent<MachineChange>().State);
-            d.Field("context")
-                .Type<AnyType>()
-                .Description("The instance's context, as the machine's typed get answers it.")
-                .Resolve(ctx => ctx.Parent<MachineChange>().Context);
+            if (hasContext)
+                d.Field("context")
+                    .Type(new NamedTypeNode(MachineSurface.ContextTypeName(pascal)))
+                    .Description(
+                        "The instance's context, as get answers it, or null on an event that carries no snapshot."
+                    )
+                    .Resolve(ctx => ctx.Parent<MachineChange>().Context);
             d.Field("dueAt")
                 .Type<DateTimeType>()
                 .Description("When the timer of the state the instance is in fires, or null.")
                 .Resolve(ctx => ctx.Parent<MachineChange>().DueAt);
+            d.Field("dueAtKnown")
+                .Type<NonNullType<BooleanType>>()
+                .Description(
+                    "Whether dueAt can be trusted. A push is the row as it is now, so it always can; the field is "
+                        + "here so a push and a get decode with one type."
+                )
+                .Resolve(_ => true);
             d.Field("gone")
                 .Type<NonNullType<BooleanType>>()
                 .Description("The instance was deleted or expired. The last event of the stream.")
@@ -161,11 +177,10 @@ internal static class MachineChangedSubscription
 
     private static async ValueTask<ISourceStream> SubscribeAsync(
         IResolverContext ctx,
-        IReadOnlyDictionary<string, IMachine> exposed
+        IMachine machine
     )
     {
         var services = ctx.Services;
-        var name = ctx.ArgumentValue<string>("machine");
         var id = ctx.ArgumentValue<Guid>("id");
 
         // The topic key is the socket's principal: an anonymous caller has no instance to watch.
@@ -175,9 +190,8 @@ internal static class MachineChangedSubscription
 
         long? rowId = null;
         if (
-            exposed.TryGetValue(name, out var machine)
-            && services.GetService<ISnapshotMachineRegistry>()?.Service(name)
-                is ISnapshotWatchAccess access
+            services.GetService<ISnapshotMachineRegistry>()?.Service(machine.Name)
+            is ISnapshotWatchAccess access
         )
         {
             var caller = services.GetService<ICallerAuthorization>();
@@ -269,7 +283,7 @@ internal static class MachineChangedSubscription
                     change.RowId,
                     change.Revision,
                     ok.Snapshot.State,
-                    JsonSerializer.SerializeToElement(ok.Snapshot.Context),
+                    (JsonObject)ok.Snapshot.Context.DeepClone(),
                     false,
                     null
                 )
@@ -332,7 +346,7 @@ internal static class MachineChangedSubscription
 }
 
 /// <summary>
-/// Orders the IR hashes of one machine by when each version was deployed, so a <c>machineChanged</c> stream can tell
+/// Orders the IR hashes of one machine by when each version was deployed, so a machine's push can tell
 /// a row written by a newer version (which ends it) from one written by an older node mid-deploy (which does not).
 /// Registered by the persisted operations, which number each version's documents as it registers them.
 /// </summary>
@@ -346,7 +360,7 @@ internal interface IMachineIrOrder
 }
 
 /// <summary>
-/// How many <c>machineChanged</c> streams a principal may hold open: <see cref="PerInstance"/> on one instance and
+/// How many push streams a principal may hold open: <see cref="PerInstance"/> on one instance and
 /// <see cref="PerPrincipal"/> in all, on this host. A stream holds its place until it ends.
 /// </summary>
 internal sealed class MachineWatchLimits
@@ -420,7 +434,7 @@ internal sealed class MachineWatchLimits
 }
 
 /// <summary>
-/// One <c>machineChanged</c> stream: the events of one row watch, and its place under the limits, both released once
+/// One push stream: the events of one row watch, and its place under the limits, both released once
 /// when the stream ends or HotChocolate disposes it (the client completed it, or the socket went away).
 /// </summary>
 internal sealed class MachineChangedStream(

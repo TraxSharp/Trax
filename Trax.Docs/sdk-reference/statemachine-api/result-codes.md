@@ -40,14 +40,14 @@ in order, and `RefusalCodeJsonConverter`, which the enum carries, writes and rea
 | `VERSION_MISMATCH` | rehydrate | the snapshot version is newer than the definition, or a [migration](/docs/sdk-reference/statemachine-api/migrations) is missing |
 | `UNKNOWN_MACHINE` | rehydrate, save, advance, load, send | no registered machine has that name, or the machine is [system-owned](/docs/sdk-reference/statemachine-api/machine-instances), which no user's draft operation reaches |
 | `UNAUTHENTICATED` | save, advance, load, send, start, discard | the request carries no user: `ISnapshotPrincipal.CurrentUserKey` is null, empty or whitespace. Checked before anything is read or written (on `start` and `discard`, after only `SYSTEM_OWNED`) |
-| `NOT_FOUND` | advance, load, send, `machineChanged` | no draft with that id exists for this user and machine, or it expired and was deleted; start a new one. Another user's id, a system instance's and one the read rule refuses the caller get the same answer |
+| `NOT_FOUND` | advance, load, send, the push | no draft with that id exists for this user and machine, or it expired and was deleted; start a new one. Another user's id, a system instance's and one the read rule refuses the caller get the same answer |
 | `FORBIDDEN` | advance, send, start, discard | the caller does not meet the rule the event, `start` or `discard` declares (a machine that declares rules admits nobody to one without a rule); nothing was written or launched |
 | `SAVE_NOT_ALLOWED` | save | the generic save serves only machines with no server-side behaviour, and this one has a gated event or start, a timer, an invoked train or an effect; nothing was written. Move it with its declared events |
 | `TOO_MANY_DRAFTS` | start, save | the user already holds `MaxDraftsPerUser` drafts, and this request would create another; nothing was written |
 | `INVALID_REQUEST_ID` | advance, send, start, discard | the request id is empty, whitespace, longer than 200 characters, or holds a control character (C0, DEL or C1) or an unpaired surrogate; nothing was read, written or run |
 | `NO_START` | start | the machine declares no `Start<TStartInput>(...)`, so a client cannot create an instance of it |
 | `SYSTEM_OWNED` | start, discard | the machine is [system-owned](/docs/sdk-reference/statemachine-api/machine-instances): only host code creates and ends its instances |
-| `TOO_MANY_SUBSCRIPTIONS` | `machineChanged` | the caller already holds as many open subscriptions as one principal may, on this instance or in all; one that completes frees its place |
+| `TOO_MANY_SUBSCRIPTIONS` | the push | the caller already holds as many open subscriptions as one principal may, on this instance or in all; one that completes frees its place |
 | `TIMER_BOUND` | advance | the trigger is a state's timer, which only the server fires; nothing was written |
 | `CLIENT_OUTDATED`, `SERVER_OUTDATED` | a persisted machine document | the document id belongs to another version of the machine than the node runs; see below |
 | `SCHEMA_MISMATCH` | save, advance, load, send | the client's machine [schema hash](/docs/sdk-reference/statemachine-api/runtime-integrity) differs from the server's; the client is out of date and should reload |

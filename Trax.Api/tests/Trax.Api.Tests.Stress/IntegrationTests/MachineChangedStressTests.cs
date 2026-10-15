@@ -35,7 +35,7 @@ using OperationResult = HotChocolate.Execution.OperationResult;
 namespace Trax.Api.Tests.Stress.IntegrationTests;
 
 /// <summary>
-/// <c>machineChanged</c> under load: a thousand subscribers on one host, one per instance, while another host makes
+/// the push (<c>&lt;machine&gt;Changed</c>) under load: a thousand subscribers on one host, one per instance, while another host makes
 /// ten thousand writes. The subscribing host reads the database at most once per notice, every subscriber ends on
 /// its instance's last revision, the time from a write to its event stays bounded, and the host's memory does not
 /// grow with the number of writes.
@@ -159,7 +159,7 @@ public class MachineChangedStressTests
                         var revision = JsonDocument
                             .Parse(result.ToJson())
                             .RootElement.GetProperty("data")
-                            .GetProperty("machineChanged")
+                            .GetProperty("stressToggleChanged")
                             .GetProperty("revision")
                             .GetInt64();
                         latest[id] = revision;
@@ -407,7 +407,7 @@ public class MachineChangedStressTests
     {
         var result = await _subscriptions.ExecuteAsync(
             Request(
-                $"subscription {{ machineChanged(machine: \"stress-toggle\", id: \"{id}\") {{ revision state gone }} }}"
+                $"subscription {{ stressToggleChanged(id: \"{id}\") {{ revision state gone }} }}"
             )
         );
         if (result is OperationResult refused)

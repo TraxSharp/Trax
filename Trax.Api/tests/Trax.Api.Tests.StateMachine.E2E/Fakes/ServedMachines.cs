@@ -25,6 +25,10 @@ public sealed class ServedSnoozeMachine : SnoozeMachine;
 [TraxMachine]
 public sealed class ServedShelfMachine : ShelfMachine;
 
+/// <summary><see cref="TicketMachine"/>, served.</summary>
+[TraxMachine]
+public sealed class ServedTicketMachine : TicketMachine;
+
 /// <summary>Registers this assembly's machines on a host, serving the ones it names.</summary>
 public static class E2EMachines
 {

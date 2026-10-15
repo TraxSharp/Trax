@@ -1,6 +1,6 @@
 ---
 title: Drive a machine instance from React
-description: "Bind a state machine's typed operations and machineChanged stream with createMachineServer, and drive one instance from a component with useServerMachine."
+description: "Bind a state machine's typed operations and push stream with createMachineServer, and drive one instance from a component with useServerMachine."
 type: how-to
 area: machines
 nav_order: 21
@@ -9,7 +9,7 @@ nav_order: 21
 # Drive a machine instance from React
 
 `createMachineServer(endpoint, { machine, documents, socket })`, from `@traxsharp/state-machine/client`, binds one exposed
-machine's typed operations and its [`machineChanged`](/docs/sdk-reference/graphql-api/machines#machinechanged) stream into the `MachineServer` that
+machine's typed operations and its [push](/docs/sdk-reference/graphql-api/machines#the-push) stream into the `MachineServer` that
 `useServerMachine` (from `@traxsharp/state-machine/react`) and its framework-free `ServerMachineController` drive an instance
 through. The server applies every transition, stores it and answers what it stored; the twin only predicts.
 
@@ -44,7 +44,7 @@ function Wizard({ id }: { id?: string }) {
 ## What createMachineServer does
 
 - **Sends every operation by its persisted id,** through the same executor as `createMachineExecutor`, so the same
-  document checks apply. `documents` must hold the `machineChanged` document, or it throws when it is built.
+  document checks apply. `documents` must hold the push document (`changed`), or it throws when it is built.
 - **Subscribes by id over the socket you pass,** with an empty document: graphql-ws requires one, and a host that
   runs persisted documents refuses one beside an id, so pass `persistedMessageReplacer` as the client's
   `jsonMessageReplacer` and it leaves the empty `query` out. The package does not depend on graphql-ws; any socket

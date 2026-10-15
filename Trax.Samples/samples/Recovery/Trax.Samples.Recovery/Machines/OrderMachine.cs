@@ -62,7 +62,7 @@ public sealed record NewItem
 /// </summary>
 /// <remarks>
 /// User-owned: the order is the user's own, and their laptop and their phone both follow it by
-/// <c>machineChanged</c>. A client sends only its events; no client fires the run's outcome or the cart's timer.
+/// <c>orderChanged</c>. A client sends only its events; no client fires the run's outcome or the cart's timer.
 /// </remarks>
 [TraxMachine]
 public sealed class OrderMachine : Machine<OrderState, OrderTrigger>

@@ -142,7 +142,7 @@ guarded by the concurrency token, and the store bumps the revision itself.
 
 `[TraxMachine]` (from `Trax.Effect.Attributes`) on a machine's class serves it through its own typed operations
 under the [machines root](/docs/sdk-reference/graphql-api/machines): `start`, one mutation per event, `discard`,
-`get` and `machineChanged`. It is to a machine what `[TraxQuery]` and `[TraxMutation]` are to a train, and as with
+`get` and its push. It is to a machine what `[TraxQuery]` and `[TraxMutation]` are to a train, and as with
 trains it is the only switch: there is no option that serves an unmarked machine, or every machine. The attribute
 is read from every machine the host registers, however it was registered: found by the `AddStateMachines` scan, or
 registered as `IMachine` by the host itself. It is not inherited: a subclass of a marked machine is served only if
@@ -160,9 +160,9 @@ A machine a client can reach, one marked `[TraxMachine]` or, while the generic m
 every user-owned machine, must declare who may do everything a client can do to it. The host refuses to start,
 listing every problem in one exception, when such a machine:
 
-- leaves a client or effect-bound event, its `start`, `get`, `machineChanged` or `discard` without a rule;
+- leaves a client or effect-bound event, its `start`, `get`, push or `discard` without a rule;
 - declares `Anonymous()` on an event or its start (a user's instance needs an owner);
-- declares a `get`, `machineChanged` or `discard` rule looser than owner-only (`AnyAuthenticated()` or
+- declares a `get`, push or `discard` rule looser than owner-only (`AnyAuthenticated()` or
   `Anonymous()`);
 - names a policy the host does not register, checked through `ICallerAuthorization.IsPolicyRegistered`;
 - declares a start whose reduction copies its input into a field an invoked train's outcome, the effect or an event
@@ -181,7 +181,7 @@ subclass. A machine nothing serves, with the opt-in off, needs no rules. Indepen
 records (`Machine`, `Name`, `Kind`, `Rule`, `Surfaces`), so a host can review what clients and its own code may do.
 A client or effect-bound event names its rule (`MachineCensus.Undeclared` when it has none) and the surfaces that
 send it; on a system-owned machine that is host code through `IMachineInstances`, which no rule is checked against.
-An outcome or timer trigger is listed as the server's own; a timer with the union of the rules of everything that enters its state, which it acts for. `start`, `get` and `machineChanged` are listed with
+An outcome or timer trigger is listed as the server's own; a timer with the union of the rules of everything that enters its state, which it acts for. `start`, `get` and the push are listed with
 the kind `Read`, and `discard` with the kind `Discard` and the surfaces that reach it: the typed `discard`, the generic
 `discardSnapshot`, and host code acting for a client through `ISnapshotDraftService.Discard`.
 
@@ -250,7 +250,7 @@ with `gone`, also while an operator feed watches every row. A Postgres host whos
 same way and opens no listening session. A row is re-read once for all its subscribers and once per
 burst of notices (notices that arrive within 10 ms of each other are one burst, waiting at most 100 ms), coalesced
 to its latest revision, and only when this host has a subscriber for it. Two readers sit on it: the
-[`machineChanged`](/docs/sdk-reference/graphql-api/machines#machinechanged) subscription, which follows one
+[push](/docs/sdk-reference/graphql-api/machines#the-push) subscription, which follows one
 instance for its owner, and `IOperationsService.WatchMachineInstancesAsync`, the operator feed the dashboard and
 `onMachineInstanceChanged` read.
 

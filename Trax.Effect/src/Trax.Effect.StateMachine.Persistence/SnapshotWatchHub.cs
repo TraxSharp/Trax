@@ -12,7 +12,7 @@ using Trax.Effect.Enums;
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>
-/// The per-host seam between the change notices and whatever pushes instances to clients: <c>machineChanged</c> and
+/// The per-host seam between the change notices and whatever pushes instances to clients: the push (<c>&lt;machine&gt;Changed</c>) and
 /// the operator feed in Trax.Api and the operations service. A consumer watches a row by its <c>row_id</c> (the
 /// incarnation it verified the caller may read), or every row of a machine, and reads
 /// <see cref="SnapshotRowChange"/>s; the hub turns the listener's hints into re-read rows.

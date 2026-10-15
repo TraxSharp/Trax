@@ -56,7 +56,7 @@ export type StreamMessage =
 /**
  * The seam to the server: the machine's own start / event / get operations and its change stream. A
  * rejected promise is a transport error; a refusal is a resolved {@link ServerProblem}.
- * `createMachineServer` builds one over a host's typed `machines` root and its `machineChanged` subscription.
+ * `createMachineServer` builds one over a host's typed `machines` root and its push subscription.
  */
 export interface MachineServer {
   start(input: unknown, requestId: string): Promise<StartResponse>;

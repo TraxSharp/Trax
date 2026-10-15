@@ -29,7 +29,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// A document takes its values as variables, one per argument of its field, named like the argument: <c>input</c>
 /// and <c>requestId</c> for <c>start</c>; <c>id</c>, <c>input</c> (when the event has one), <c>requestId</c> and
 /// <c>clientResult</c> for an event; <c>id</c> and <c>requestId</c> for <c>discard</c>; <c>id</c> for <c>get</c>; and
-/// <c>id</c> for <c>machineChanged</c>, the instance's push, whose document names its machine.
+/// <c>id</c> for the push (<c>&lt;machine&gt;Changed</c>), the instance's push, whose document names its machine.
 /// It selects every field of the answer, at every depth, so a client reads the whole instance. The text is built
 /// from the schema in the order the schema declares fields, so two processes building one schema write the same
 /// bytes.
@@ -42,6 +42,9 @@ internal static class MachineDocuments
     public const string ReservedIdPrefix = "trax_machine_";
 
     /// <summary>How many hex characters of the IR hash an id carries: all of them.</summary>
+    /// <summary>The operation a machine's push document is registered under.</summary>
+    public const string ChangedOperation = "changed";
+
     internal const int IrHashLength = 64;
 
     /// <summary>How many hex characters of the text hash an id carries.</summary>
@@ -192,23 +195,24 @@ internal static class MachineDocuments
         if (documents.Count == 0)
             throw NotServed(machine);
 
-        // The instance's push: the machine is fixed in the document, so a client sends only the id.
+        // The instance's push: the machine's own field, so a client sends only the id.
+        var pushField = MachineChangedSubscription.FieldOf(machine.Name);
         if (
             schema.SubscriptionType is { } subscriptions
-            && subscriptions.Fields.TryGetField(MachineChangedSubscription.Field, out var changed)
+            && subscriptions.Fields.TryGetField(pushField, out var changed)
         )
         {
             var id = changed.Arguments.First(a => a.Name == "id");
             var text =
                 $"subscription {pascal}MachineChanged($id: {Print(id.Type)}) {{ "
-                + $"{MachineChangedSubscription.Field}(machine: {JsonSerializer.Serialize(machine.Name)}, id: $id)"
+                + $"{pushField}(id: $id)"
                 + Selection(changed.Type, [], machine)
                 + " }";
             documents.Add(
                 new MachineDocument(
-                    IdOf(machine.Name, MachineChangedSubscription.Field, irHash, text),
+                    IdOf(machine.Name, ChangedOperation, irHash, text),
                     machine.Name,
-                    MachineChangedSubscription.Field,
+                    ChangedOperation,
                     text,
                     irHash
                 )

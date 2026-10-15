@@ -16,7 +16,7 @@ This repo owns four things:
 | Piece | Location |
 | --- | --- |
 | The `@traxsharp/state-machine` package (engine, rule interpreter, typed facade, React hook) | [`src/`](src) |
-| The `@traxsharp/state-machine/client` subpath (a host's typed `machines` operations and `machineChanged` stream, and the opt-in generic snapshot mutations) | [`src/client/`](src/client) |
+| The `@traxsharp/state-machine/client` subpath (a host's typed `machines` operations and its push stream, and the opt-in generic snapshot mutations) | [`src/client/`](src/client) |
 | The server-authoritative controller and its React hook, `useServerMachine` | [`src/server/`](src/server) |
 | The shared, language-neutral fixtures both engines drive (the cross-language oracle) | [`machines/`](machines) |
 | The IR-driven generators (`generateContextTypes` / `generateMachineFactory`) and the node entrypoints the `trax machine` CLI shells out to, which `tools/bundle-cli.mjs` bundles into the CLI's package with the engine compiled in | [`src/rules/generateTypes.ts`](src/rules/generateTypes.ts), [`tools/`](tools) |
@@ -138,7 +138,7 @@ disagree on.
 ### A machine the server owns
 
 A host serves each machine marked `[TraxMachine]` as its own typed operations, by persisted id, and pushes every
-write of an instance on `machineChanged`. `createMachineServer` binds those to one machine, from the documents in
+write of an instance on its push (`<machine>Changed`). `createMachineServer` binds those to one machine, from the documents in
 the host's manifest and a graphql-ws socket the page owns;
 `useServerMachine` (at `@traxsharp/state-machine/react`) drives one instance through it:
 

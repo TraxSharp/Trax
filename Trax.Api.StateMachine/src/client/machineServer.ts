@@ -1,5 +1,5 @@
 /**
- * A {@link MachineServer} over a host's typed `machines` root and its `machineChanged` subscription: what
+ * A {@link MachineServer} over a host's typed `machines` root and its push (`<machine>Changed`): what
  * `ServerMachineController` and `useServerMachine` drive one instance through.
  *
  * Every operation is sent by the persisted id the host's manifest lists for it, with its values as variables, through
@@ -18,7 +18,7 @@ import type {
   StartResponse,
   StreamMessage,
 } from '../server/serverController';
-import { createMachineExecutor, withoutNulls, type MachineDocument } from './machines';
+import { createMachineExecutor, machineField, withoutNulls, type MachineDocument } from './machines';
 import { createSnapshotClient, type HttpExecutorOptions, type SnapshotOutput } from './transport';
 
 /** What a subscription delivers: one GraphQL result per event, as graphql-ws hands it to a sink. */
@@ -41,7 +41,7 @@ export interface MachineServerOptions extends HttpExecutorOptions {
   machine: TypedMachine<MachineSpec> | { id: string; version: number };
   /**
    * The machine's persisted documents, from the host's manifest (`operations { machineDocuments { ... } }`),
-   * `machineChanged` included. Each must be of this machine and of the IR its twin was generated from.
+   * its push (`changed`) included. Each must be of this machine and of the IR its twin was generated from.
    */
   documents: readonly MachineDocument[];
   /** The socket the change stream is subscribed over. */
@@ -73,7 +73,8 @@ export function persistedMessageReplacer(key: string, value: unknown): unknown {
   return key === 'query' && value === '' ? undefined : value;
 }
 
-const MACHINE_CHANGED = 'machineChanged';
+/** The operation a machine's push document is registered under. */
+const CHANGED = 'changed';
 const CLIENT_OUTDATED = RefusalCode.ClientOutdated;
 const NOT_FOUND = RefusalCode.NotFound;
 
@@ -118,7 +119,7 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  * than `CLIENT_OUTDATED` or `SERVER_OUTDATED`, or a failed request, rejects, which the controller reports as a
  * transport failure.
  *
- * The stream maps each `machineChanged` event onto the controller's messages: a snapshot (with its incarnation as
+ * The stream maps each push event onto the controller's messages: a snapshot (with its incarnation as
  * `rowId`), `gone` for a deleted or expired instance and for one the server will not let the caller watch (the answer
  * it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload. A stream that ends
  * any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
@@ -127,11 +128,13 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  */
 export function createMachineServer(endpoint: string, options: MachineServerOptions): TypedMachineServer {
   const { machine, documents, socket } = options;
-  const machineChanged = documents.find((d) => d.operation === MACHINE_CHANGED);
-  if (!machineChanged)
+  const changed = documents.find((d) => d.operation === CHANGED);
+  if (!changed)
     throw new Error(
-      `The documents of '${machine.id}' have no ${MACHINE_CHANGED} document. Export them again from the host's manifest.`,
+      `The documents of '${machine.id}' have no ${CHANGED} document. Export them again from the host's manifest.`,
     );
+  // The push is the machine's own subscription field: `topic-map` is `topicMapChanged`.
+  const pushField = `${machineField(machine.id)}Changed`;
   const delays = options.resubscribeDelays?.length ? options.resubscribeDelays : DEFAULT_RESUBSCRIBE_DELAYS;
   const client = createSnapshotClient(
     createMachineExecutor(endpoint, {
@@ -196,7 +199,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
       };
 
       unsubscribe = socket.subscribe(
-        { query: '', id: machineChanged.id, variables: { id } },
+        { query: '', id: changed.id, variables: { id } },
         {
           next: (value) => {
             const error = value.errors?.[0];
@@ -205,7 +208,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
               else again();
               return;
             }
-            const change = (value.data as { machineChanged?: MachineChange } | null | undefined)?.machineChanged;
+            const change = (value.data as Record<string, MachineChange | undefined> | null | undefined)?.[pushField];
             if (!change) return;
             if (change.problem) {
               if (change.problem.code === CLIENT_OUTDATED) deliver({ type: 'client-outdated' });

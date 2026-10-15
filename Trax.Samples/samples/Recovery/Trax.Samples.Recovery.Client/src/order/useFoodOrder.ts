@@ -34,7 +34,7 @@ interface Answer {
 }
 
 interface Change {
-  machineChanged: { revision: number | null; state: string | null; gone: boolean; problem: { code: string; message: string } | null };
+  orderChanged: { revision: number | null; state: string | null; gone: boolean; problem: { code: string; message: string } | null };
 }
 
 interface Run {
@@ -49,7 +49,7 @@ const money = (total: number) => `$${total.toFixed(2)}`;
 
 /**
  * One food order, placed live: the laptop sends every request of the order machine, and both the laptop and the
- * phone follow the order through machineChanged, each over a socket of its own; neither polls the order. Pressing
+ * phone follow the order through its push, orderChanged, each over a socket of its own; neither polls the order. Pressing
  * Place order starts an order (the server mints its id), adds a Margherita, and presses Place order twice in a hurry
  * under one request id, so the server answers the second from the first. The run Ordered invokes is followed through
  * onJunctionEvent, and the tablet's calls are read while SendToRestaurant runs.
@@ -146,7 +146,7 @@ export function useFoodOrder() {
         const latest = { laptop: 0, phone: 0 };
         for (const screen of ["laptop", "phone"] as const)
           stops.current.push(
-            subscribePersisted<Change>(sockets[screen], "OrderChanged", { id: start.id }, ({ machineChanged: change }) => {
+            subscribePersisted<Change>(sockets[screen], "OrderChanged", { id: start.id }, ({ orderChanged: change }) => {
               if (!live() || change.problem || change.gone || change.revision == null || change.state == null) return;
               if (change.revision <= latest[screen]) return;
               latest[screen] = change.revision;

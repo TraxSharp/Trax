@@ -180,7 +180,7 @@ server owns the draft; the twin only predicts:
   sends it as `clientResult`; the server applies the event itself, refuses a result that differs from its own, and
   answers what it stored, which replaces the prediction. A refused step is rolled back and its code shown.
 - Whatever else moves the draft (the build's outcome, the review timer, a recovery after a crash, a step from another
-  tab) reaches the page on `machineChanged`, subscribed by its persisted id over the socket. The page never polls:
+  tab) reaches the page on `topicMapChanged`, subscribed by its persisted id over the socket. The page never polls:
   while the draft is `Building` it sends nothing until the outcome is pushed. Every answer and push carries the
   draft's revision, and anything at or below the revision shown is dropped, so a slow answer never puts back a draft
   a push has moved on.

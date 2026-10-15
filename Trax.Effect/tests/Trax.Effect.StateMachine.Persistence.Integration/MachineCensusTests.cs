@@ -59,7 +59,7 @@ public class MachineCensusTests
             .Rule.Should()
             .NotContain(DeskRoles.Operator);
 
-        foreach (var read in new[] { "start", "get", "machineChanged" })
+        foreach (var read in new[] { "start", "get", "changed" })
         {
             var entry = Entry(census, RuledDeskMachine.Id, read);
             entry.Kind.Should().Be("Read");

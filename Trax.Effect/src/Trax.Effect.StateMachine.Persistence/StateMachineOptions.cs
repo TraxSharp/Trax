@@ -212,7 +212,7 @@ public sealed class StateMachineOptions
     internal string? GenericMutationsPolicy { get; private set; }
 
     /// <summary>
-    /// How this host hears that an instance changed, to push it to the clients watching it (<c>machineChanged</c>,
+    /// How this host hears that an instance changed, to push it to the clients watching it (the push (<c>&lt;machine&gt;Changed</c>),
     /// the operator feed). Defaults to <see cref="StateMachineChangeFeed.Notify"/>. It matters on Postgres only:
     /// SQLite and InMemory have no notifications and always poll.
     /// </summary>

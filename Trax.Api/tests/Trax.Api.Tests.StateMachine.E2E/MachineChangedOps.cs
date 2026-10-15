@@ -3,14 +3,14 @@ using System.Text.Json;
 namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
-/// The <c>machineChanged</c> subscription and the operator feed, and the readers of their events. The documents are
-/// the contract the push is written to:
+/// A machine's push (<c>&lt;machine&gt;Changed</c>) and the operator feed, and the readers of their events. The
+/// documents are the contract the push is written to:
 /// <code>
-/// subscription { machineChanged(machine: "wizard", id: "...") { revision state gone reload problem { code message } } }
+/// subscription { wizardChanged(id: "...") { revision state gone reload problem { code message } } }
 /// subscription { onMachineInstanceChanged(machine: "wizard") { rowId machine ownerKind id state revision hasLiveInvokedRun } }
 /// </code>
 /// <para>
-/// Each <c>machineChanged</c> event is the instance's whole snapshot with its revision; the stream ends after an event
+/// Each push event is the instance's whole snapshot with its revision; the stream ends after an event
 /// with <c>gone</c> set (the instance was deleted or expired) or a <c>problem</c> (<c>CLIENT_OUTDATED</c> and the
 /// like). <c>reload</c> is set on an event after which the client must read the instance again, which a skipped
 /// revision never causes. The user key is the socket's principal, never an argument. The operator feed carries an
@@ -19,16 +19,24 @@ namespace Trax.Api.StateMachine.E2E;
 /// </summary>
 public static class MachineChangedOps
 {
-    /// <summary>What a <c>machineChanged</c> event selects.</summary>
+    /// <summary>What a push event selects.</summary>
     public const string EventFields = "revision state gone reload problem { code message }";
 
     /// <summary>What an operator feed event selects.</summary>
     public const string OperatorFields =
         "rowId machine ownerKind id state revision hasLiveInvokedRun";
 
-    /// <summary>The <c>machineChanged</c> subscription of instance <paramref name="id"/> of <paramref name="machine"/>.</summary>
+    /// <summary>The push of instance <paramref name="id"/> of <paramref name="machine"/>.</summary>
     public static string Subscribe(Guid id, string machine = Fakes.WizardMachine.MachineId) =>
-        $"subscription {{ machineChanged(machine: {WizardOps.Literal(machine)}, id: {WizardOps.Literal(id.ToString())}) {{ {EventFields} }} }}";
+        $"subscription {{ {Field(machine)}(id: {WizardOps.Literal(id.ToString())}) {{ {EventFields} }} }}";
+
+    /// <summary>The push's field for <paramref name="machine"/>: <c>wizard</c> is <c>wizardChanged</c>.</summary>
+    public static string Field(string machine = Fakes.WizardMachine.MachineId) =>
+        string.Concat(
+            machine
+                .Split('-')
+                .Select((part, i) => i == 0 ? part : char.ToUpperInvariant(part[0]) + part[1..])
+        ) + "Changed";
 
     /// <summary>The operator feed, of one machine or of every machine.</summary>
     public static string SubscribeOperator(string? machine = Fakes.WizardMachine.MachineId) =>
@@ -37,14 +45,18 @@ public static class MachineChangedOps
             : $"subscription {{ onMachineInstanceChanged(machine: {WizardOps.Literal(machine)}) {{ {OperatorFields} }} }}";
 
     /// <summary>
-    /// The next <c>machineChanged</c> event of operation <paramref name="operation"/>. Throws, quoting the message,
+    /// The next push event of operation <paramref name="operation"/>, whatever machine it follows. Throws, quoting the message,
     /// when the operation errors or completes instead.
     /// </summary>
     public static async Task<MachineChange> NextChangeAsync(
         this GraphQLWs ws,
         string operation,
         TimeSpan? timeout = null
-    ) => new((await ws.NextDataAsync(operation, timeout)).GetProperty("machineChanged").Clone());
+    ) => new(Only(await ws.NextDataAsync(operation, timeout)));
+
+    /// <summary>The one field a push's data holds.</summary>
+    public static JsonElement Only(JsonElement data) =>
+        data.EnumerateObject().Single().Value.Clone();
 
     /// <summary>
     /// Reads events of <paramref name="operation"/> until one has <paramref name="revision"/> or more, and returns
@@ -129,15 +141,15 @@ public static class MachineChangedOps
         var hasSnapshot =
             doc.RootElement.TryGetProperty("data", out var data)
             && data.ValueKind == JsonValueKind.Object
-            && data.TryGetProperty("machineChanged", out var changed)
-            && changed.ValueKind == JsonValueKind.Object
+            && data.EnumerateObject().SingleOrDefault().Value
+                is { ValueKind: JsonValueKind.Object } changed
             && changed.TryGetProperty("state", out var state)
             && state.ValueKind == JsonValueKind.String;
         return (!hasSnapshot || codes.Count > 0, codes, raw);
     }
 }
 
-/// <summary>One <c>machineChanged</c> event.</summary>
+/// <summary>One push event.</summary>
 public sealed record MachineChange(JsonElement Raw)
 {
     /// <summary>The revision of the snapshot, or 0 when the event carries none.</summary>

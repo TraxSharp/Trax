@@ -1,6 +1,6 @@
 ---
 title: Machines root
-description: "Reference for the machines GraphQL root: each exposed state machine served as its own typed start, events, discard and get, and machineChanged."
+description: "Reference for the machines GraphQL root: each exposed state machine served as its own typed start, events, discard and get, and its push."
 type: reference
 area: api
 surface: graphql
@@ -76,13 +76,18 @@ The input types are the CLR records, named as HotChocolate names them (`WizardSt
 however many machines and trains take one record. Their fields, and the context's, carry the record's JSON names:
 camelCase, or the `[JsonPropertyName]` a property declares (`note_text`). A `TimeSpan` crosses as the ISO-8601
 duration a timer reads (`"PT5M"`), both in an input and in the context, so a timer whose duration the context holds is
-armed from a typed event. The types the root generates carry the
+armed from a typed event. An enum a machine's context, start input or event inputs hold is spelled as the server
+stores it, the C# member name (`HighPriority`), not HotChocolate's `HIGH_PRIORITY`: the twin applies an input as the
+client sends it, so it predicts what the server stores only when the two spellings are one. HotChocolate gives a CLR
+enum one GraphQL type, so a train that takes the same enum sees the same values. A member name that is not a GraphQL
+name refuses the host's start. The types the root generates carry the
 machine's name and the word `Machine` (`TopicMapMachineState`, `TopicMapMachineContext`, `TopicMapMachineResult`,
-`TopicMapMachineMutations`, `TopicMapMachineQueries`), so a CLR type the schema already holds, such as a machine's
+`TopicMapMachineChange`, `TopicMapMachineMutations`, `TopicMapMachineQueries`), so a CLR type the schema already holds, such as a machine's
 own state enum a train returns, keeps its name.
 
 The host refuses to build the schema, naming both, when two exposed machines' ids give one field (`map-2d` and
-`map2d`), when two events of a machine give one field, and when an event is named `start`, `discard` or `get`. A
+`map2d`), when two events of a machine give one field, and when an event is named `start`, `discard`, `get` or
+`changed`. A
 host's own field named `machines` on either root is refused at startup. Two registered machine types with one id,
 served or not, refuse the host's start too, naming both: a subclass has its base's id, so a host serving a machine
 through a marked subclass registers only the subclass
@@ -100,7 +105,7 @@ Each write dispatches the internal train it stands for through the mediator, as 
 path every surface shares, and the machine's rules and input validation run below it. Those internal trains are
 never published on the lifecycle subscriptions, whatever the host streams, and no lifecycle hook receives their
 output: the broadcaster (RabbitMQ) and SignalR carry their runs' state changes with `output` null, so an instance's
-context reaches its owner only through `get` and `machineChanged`. Their runs are recorded as any other train's.
+context reaches its owner only through `get` and its push. Their runs are recorded as any other train's.
 
 - **One write per operation.** The fields under a namespace resolve in parallel, so an operation that selects more
   than one `start`, `discard` or event, on one machine or several, is refused at validation with
@@ -119,12 +124,15 @@ context reaches its owner only through `get` and `machineChanged`. Their runs ar
   one, so a prediction rebuilt from a typed answer matches. A retried request is compared with the result recorded
   for it.
 
-### machineChanged
+### The push
 
-`subscription { machineChanged(machine: "topic-map", id: "...") { rowId revision state context dueAt gone reload problem { code message } } }`
+`subscription { topicMapChanged(id: "...") { rowId revision state context { ... } dueAt dueAtKnown gone reload problem { code message } } }`
 pushes the caller's instance whenever any path on any host writes it: a step from another tab, an invoked train's
-outcome applied on another node, a recovery. Over the socket only, by its persisted id when persisted operations are
-on.
+outcome applied on another node, a recovery. Each exposed machine has its own field, named from its id
+(`topic-map` is `topicMapChanged`), and its events are typed as the machine's `get` answers: the state as the
+machine's state enum, the context as its context type, field for field, with `dueAtKnown` (always true on a push)
+beside `dueAt`. An event that ends the stream carries no state and no context. Over the socket only, by its persisted
+id when persisted operations are on.
 
 - **Verified once, routed by row.** The user key is the socket's principal (the host's `ISnapshotPrincipal`), never
   an argument, and the machine's `Watch` rule is checked once, at subscribe. A missing id, another user's, a system
@@ -158,8 +166,8 @@ persisted operations serves its machines with no upload, and an ad-hoc machine d
 transport like any other.
 
 - **What is registered.** After the schema builds, and before the host serves anything, one document per operation:
-  `start`, `discard`, every client event, `get` and `machineChanged` (never an outcome or a timer). The
-  `machineChanged` document names its machine, so it takes only `$id`. A document takes its values as
+  `start`, `discard`, every client event, `get` and the push, registered as `changed` (never an outcome or a
+  timer). The push document takes only `$id`. A document takes its values as
   variables named like its field's arguments (`input`, `requestId`, `id`, `clientResult`) and selects every field of
   the answer. Its text is built from the schema alone, so every process building one schema writes the same bytes.
 - **The id** is `trax_machine_<machine>_<operation>_<irHash><textHash>`: the machine's id, the operation's field,

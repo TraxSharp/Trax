@@ -135,7 +135,7 @@ public class PersistedOperationTransportTests
         const string MachineMutation =
             "mutation { machines { wizard { start(input: { title: \"Atlas\" }, requestId: \"r1\") { id } } } }";
         const string MachineSubscription =
-            "subscription { machineChanged(machine: \"wizard\", id: \"6f9619ff-8b86-d011-b42d-00c04fc964ff\") { revision } }";
+            "subscription { wizardChanged(id: \"6f9619ff-8b86-d011-b42d-00c04fc964ff\") { revision } }";
         const string Because =
             "a hand-written machine document is refused like any inline document, per "
             + Adr

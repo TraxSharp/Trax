@@ -10,7 +10,7 @@ namespace Trax.Api.GraphQL.Startup;
 /// <remarks>
 /// A machine's operations are served as persisted documents whose ids carry the machine's IR hash, and the store those
 /// documents are registered in is what orders the versions of a machine across the nodes of a rolling deploy. Without
-/// it a node cannot tell a row written by a newer version (which ends a <c>machineChanged</c> stream) from one written
+/// it a node cannot tell a row written by a newer version (which ends a the push (<c>&lt;machine&gt;Changed</c>) stream) from one written
 /// by an older node mid-deploy (which does not), so it refuses to start rather than guess. See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
 /// </remarks>

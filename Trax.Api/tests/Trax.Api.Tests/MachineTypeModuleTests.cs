@@ -272,10 +272,7 @@ public class MachineTypeModuleTests
             .Where(e => e.Kind == "Read")
             .Select(e => e.Name)
             .Should()
-            .BeEquivalentTo(
-                ["start", "get", "machineChanged"],
-                "every read is listed with its rule"
-            );
+            .BeEquivalentTo(["start", "get", "changed"], "every read is listed with its rule");
 
         var approve = entries.Single(e => e.Name == "Approve");
         approve.Rule.Should().Contain("Approver");
@@ -317,7 +314,7 @@ public class MachineTypeModuleTests
             .Select(d => d.Operation)
             .Should()
             .BeEquivalentTo(
-                ["start", "discard", "get", "machineChanged", .. ShopMachine.ClientEventFields],
+                ["start", "discard", "get", "changed", .. ShopMachine.ClientEventFields],
                 "no persisted document fires a timer either: the documents are the operations and the instance's push"
             );
     }

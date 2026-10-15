@@ -2,7 +2,7 @@ namespace Trax.Effect.Attributes;
 
 /// <summary>
 /// Serves a state machine to clients through its own typed operations under the <c>machines</c> root: a
-/// <c>start</c>, one mutation per event, <c>discard</c>, a <c>get</c> query and the <c>machineChanged</c>
+/// <c>start</c>, one mutation per event, <c>discard</c>, a <c>get</c> query and the the push (<c>&lt;machine&gt;Changed</c>)
 /// subscription. It is to a machine what <see cref="TraxMutationAttribute"/> and <see cref="TraxQueryAttribute"/>
 /// are to a train.
 /// </summary>

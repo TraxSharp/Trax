@@ -8,7 +8,7 @@ namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
 /// The due time of an instance's timer travels beside its snapshot on every answer: <c>start</c>, each event, an
-/// effect's send, <c>get</c> and every <c>machineChanged</c> push carry the row's <c>due_at</c>, and null once the
+/// effect's send, <c>get</c> and every push carry the row's <c>due_at</c>, and null once the
 /// instance is in a state with no timer. A timer whose duration the context holds is armed from the typed surface,
 /// which writes and reads a <see cref="TimeSpan"/> as the ISO-8601 duration the engine reads.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
@@ -102,10 +102,10 @@ public class MachineDueAtE2ETests
         await using var ws = await GraphQLWs.ConnectAsync(_host, E2EHost.AliceKey);
         await ws.SubscribeAsync(
             "1",
-            $"subscription {{ machineChanged(machine: \"wizard\", id: {WizardOps.Literal(paying.Id.ToString())}) {{ revision state dueAt gone problem {{ code message }} }} }}"
+            $"subscription {{ wizardChanged(id: {WizardOps.Literal(paying.Id.ToString())}) {{ revision state dueAt gone problem {{ code message }} }} }}"
         );
         var first = await ws.NextDataAsync("1");
-        DueAt(first.GetProperty("machineChanged")).Should().BeNull("Paying has no timer");
+        DueAt(first.GetProperty("wizardChanged")).Should().BeNull("Paying has no timer");
 
         // Another connection moves the instance into the timed state.
         var paid = await _host.AdvanceWizardAsync(E2EHost.AliceKey, "pay", paying.Id);
@@ -275,7 +275,7 @@ public class MachineDueAtE2ETests
     {
         while (true)
         {
-            var change = (await ws.NextDataAsync("1")).GetProperty("machineChanged").Clone();
+            var change = (await ws.NextDataAsync("1")).GetProperty("wizardChanged").Clone();
             if (change.GetProperty("revision").GetInt64() >= revision)
                 return change;
         }

@@ -71,7 +71,7 @@ The page opens on **Food order**. Pick a scenario and press **Place order**:
    order and one run. `Ordered` invokes `DeliverOrderTrain`: the code panel switches from `OrderMachine.cs` to
    `DeliverOrderTrain.cs` and lights each junction as it runs, the timeline fills the train's row
    (`SendToRestaurant`, `ChargeCard`, `Cook`, `PickUp`, `Deliver`), and the run's outcome moves the order to
-   `Delivered`. The phone follows every change by `machineChanged` on a socket of its own. The file tabs flip
+   `Delivered`. The phone follows every change by `orderChanged` on a socket of its own. The file tabs flip
    between the two files by hand; a tab picked holds until the next order.
 2. **The restaurant's tablet times out.** The tablet does not answer the first call, `SendToRestaurant` tries it
    again inside the same run, and the order is delivered. The phone says the restaurant has not answered yet, and

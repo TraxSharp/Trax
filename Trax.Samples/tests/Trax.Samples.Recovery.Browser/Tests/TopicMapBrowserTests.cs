@@ -142,7 +142,7 @@ public class TopicMapBrowserTests
             .Select(r => r.PostData)
             .Should()
             .BeEmpty(
-                $"the build's outcome and its review deadline are pushed to the page by machineChanged ({Adr}): "
+                $"the build's outcome and its review deadline are pushed to the page by topicMapChanged ({Adr}): "
                     + "it makes no request between the Build event's answer and rendering them"
             );
     }

@@ -19,7 +19,7 @@ namespace Trax.Api.StateMachine.E2E;
 /// so <c>_</c> separates them unambiguously.</item>
 /// <item>A document takes its values as variables: <c>input</c> and <c>requestId</c> for <c>start</c>; <c>id</c>,
 /// <c>input</c> (when the event has one) and <c>requestId</c> for an event and <c>discard</c>; <c>id</c> for
-/// <c>get</c> and <c>machineChanged</c>.</item>
+/// <c>get</c> and the push, <c>changed</c>.</item>
 /// <item>The answer has the shape of the inline operation: <c>data.machines.&lt;machine&gt;.&lt;operation&gt;</c>.</item>
 /// </list>
 /// </summary>
@@ -35,7 +35,7 @@ public static class MachineDocumentOps
     ];
 
     /// <summary>The subscription's operation, registered with the rest.</summary>
-    public const string MachineChanged = "machineChanged";
+    public const string MachineChanged = "changed";
 
     /// <summary>
     /// Persisted operations over the host's data context, on one node's cache, with inline documents still served

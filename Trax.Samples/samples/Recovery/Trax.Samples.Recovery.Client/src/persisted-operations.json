@@ -87,8 +87,8 @@
     },
     {
       "name": "OrderChanged",
-      "id": "recovery_OrderChanged_v1",
-      "document": "subscription OrderChanged($id: UUID!) { machineChanged(machine: \"order\", id: $id) { revision state gone problem { code message } } }"
+      "id": "recovery_OrderChanged_v2",
+      "document": "subscription OrderChanged($id: UUID!) { orderChanged(id: $id) { revision state gone problem { code message } } }"
     },
     {
       "name": "DeliveryRuns",

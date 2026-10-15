@@ -70,10 +70,10 @@
     "document": "query TopicMapGet($id: UUID!) { machines { topicMap { get(id: $id) { id revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown problem { code message } } } } }"
   },
   {
-    "id": "trax_machine_topic-map_machineChanged_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893588547ffc2ca1116",
+    "id": "trax_machine_topic-map_changed_acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd789392324a4218d17142",
     "machine": "topic-map",
-    "operation": "machineChanged",
+    "operation": "changed",
     "irHash": "acfcf8e48098e5a240701ae073b326d227fdb555d38d66b9a0a9afbadafd7893",
-    "document": "subscription TopicMapMachineChanged($id: UUID!) { machineChanged(machine: \"topic-map\", id: $id) { rowId revision state context dueAt gone reload problem { code message } } }"
+    "document": "subscription TopicMapMachineChanged($id: UUID!) { topicMapChanged(id: $id) { rowId revision state context { fields fromYear toYear mapId papers topicPairs coCitationTrack } dueAt dueAtKnown gone reload problem { code message } } }"
   }
 ]

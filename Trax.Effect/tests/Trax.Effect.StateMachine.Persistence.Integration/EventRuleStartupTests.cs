@@ -144,7 +144,7 @@ public class EventRuleStartupTests
     }
 
     [Test]
-    public async Task An_undeclared_start_get_or_machineChanged_rule_refuses_startup()
+    public async Task An_undeclared_start_get_or_push_rule_refuses_startup()
     {
         var refusal = await StartingHost.Start(_ => { }, Marked.Machine<UndeclaredReadsMachine>());
 
@@ -157,7 +157,7 @@ public class EventRuleStartupTests
             .Contain(UndeclaredReadsMachine.Id)
             .And.Contain("start")
             .And.Contain("get")
-            .And.Contain("machineChanged");
+            .And.Contain("changed");
     }
 
     [Test]

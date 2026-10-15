@@ -362,7 +362,7 @@ public interface IMachineBuilder<TState, TTrigger>
         throw new NotSupportedException($"{GetType().Name} does not support Get.");
 
     /// <summary>
-    /// Declare who may watch an instance through <c>machineChanged</c>, under the same floor as
+    /// Declare who may watch an instance through the push (<c>&lt;machine&gt;Changed</c>), under the same floor as
     /// <see cref="Get"/>.
     /// </summary>
     /// <param name="rule">Declares the subscription's rule.</param>
@@ -405,7 +405,7 @@ public interface IStartBuilder<TStartInput>
 }
 
 /// <summary>
-/// Declares who may read an instance, through <c>get</c> or <c>machineChanged</c>, or delete one through
+/// Declares who may read an instance, through <c>get</c> or the push (<c>&lt;machine&gt;Changed</c>), or delete one through
 /// <c>discard</c>. See <see cref="IMachineBuilder{TState,TTrigger}.Get"/>,
 /// <see cref="IMachineBuilder{TState,TTrigger}.Watch"/> and <see cref="IMachineBuilder{TState,TTrigger}.Discard"/>.
 /// </summary>
@@ -830,7 +830,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     public IMachineBuilder<TState, TTrigger> Watch(Action<IReadRuleBuilder> rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
-        _watchRule = new CallerRuleDraft($"The machine '{_id}' machineChanged", read: true);
+        _watchRule = new CallerRuleDraft($"The machine '{_id}' push (changed)", read: true);
         rule(new ReadRuleBuilder(_watchRule));
         return this;
     }

@@ -30,7 +30,10 @@ internal static class MachineSurface
     /// <summary>The type <c>discard</c> answers with, shared by every machine.</summary>
     public const string DiscardResultType = "MachineDiscardResult";
 
-    /// <summary>The operations every machine has, which no event may be named like.</summary>
+    /// <summary>
+    /// The operations every machine has, which no event may be named like: its fields, and <c>changed</c>, the name its
+    /// push's persisted document is registered under.
+    /// </summary>
     public static readonly IReadOnlySet<string> Operations = new HashSet<string>(
         StringComparer.Ordinal
     )
@@ -38,6 +41,7 @@ internal static class MachineSurface
         "start",
         "discard",
         "get",
+        "changed",
     };
 
     /// <summary>
@@ -138,7 +142,7 @@ internal static class MachineSurface
             if (Operations.Contains(EventField(trigger.Name)))
                 problems.Add(
                     $"The machine '{machine.Name}' declares the event {trigger.Name}, whose field "
-                        + $"'{EventField(trigger.Name)}' is an operation every machine has (start, discard, get). "
+                        + $"'{EventField(trigger.Name)}' is an operation every machine has (start, discard, get, changed). "
                         + "Rename the trigger."
                 );
 

@@ -34,7 +34,7 @@ const DOCUMENTS: MachineDocument[] = [
   doc('coin', '$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String'),
   doc('push', '$id: UUID!, $requestId: String!, $clientResult: String'),
   doc('get', '$id: UUID!'),
-  doc('machineChanged', '$id: UUID!'),
+  doc('changed', '$id: UUID!'),
 ];
 
 interface Sent {
@@ -71,7 +71,7 @@ class FakeSocket implements PersistedSubscriptionSocket {
   }
 
   push(change: Record<string, unknown>) {
-    this.last.sink.next({ data: { machineChanged: { reload: false, gone: false, problem: null, ...change } } });
+    this.last.sink.next({ data: { turnstileChanged: { reload: false, gone: false, problem: null, ...change } } });
   }
 }
 
@@ -195,15 +195,15 @@ describe('createMachineServer operations', () => {
     expect(sent).toEqual([{ id: `trax_machine_turnstile_discard_${hash}`, variables: { id: 'i-1', requestId: 'rq-d' } }]);
   });
 
-  it('refuses at creation a document set without the machineChanged document', () => {
+  it('refuses at creation a document set without the push document', () => {
     expect(() =>
       createMachineServer('/graphql', {
         fetch: http().fetch,
         machine: turnstile,
-        documents: DOCUMENTS.filter((d) => d.operation !== 'machineChanged'),
+        documents: DOCUMENTS.filter((d) => d.operation !== 'changed'),
         socket: new FakeSocket(),
       }),
-    ).toThrow(/machineChanged/);
+    ).toThrow(/changed/);
   });
 });
 
@@ -215,13 +215,13 @@ describe('createMachineServer change stream', () => {
     return { socket, messages, close };
   };
 
-  it('subscribes by the machineChanged id with an empty document', () => {
+  it('subscribes by the push document id with an empty document', () => {
     const { socket } = follow();
 
     expect(socket.subscriptions).toHaveLength(1);
     expect(socket.last.payload).toEqual({
       query: '',
-      id: `trax_machine_turnstile_machineChanged_${hash}`,
+      id: `trax_machine_turnstile_changed_${hash}`,
       variables: { id: 'i-1' },
     });
   });

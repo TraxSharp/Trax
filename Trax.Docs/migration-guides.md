@@ -18,6 +18,7 @@ each package had its own version, so older guides name the package too.
 
 | Guide | Applies from |
 |---|---|
+| [Adapt to the machine wire changes](/docs/migration-guides/machine-wire-changes) | Trax 1.64.0 |
 | [Regenerate twins after the trax machine generate defaults changed](/docs/migration-guides/trax-machine-generate-defaults) | Trax 1.63.1 |
 | [Move off the generic state-machine mutations](/docs/migration-guides/generic-state-machine-mutations) | Trax 1.63.1 |
 | [Upgrade schedulers from Trax.Effect 1.57.2 or earlier](/docs/migration-guides/scheduler-leader-lock) | Trax.Effect 1.57.3 |

@@ -65,6 +65,7 @@ internal sealed class MachineTypeModule(
         foreach (var machine in exposed)
             AddMachine(types, machine);
         types.AddRange(MachineChangedSubscription.Types(exposed));
+        types.AddRange(MachineEnums.Types(exposed));
 
         return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
     }

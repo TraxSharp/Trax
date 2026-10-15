@@ -669,7 +669,7 @@ public class AnonymousUserMachine : Machine<TurnstileState, TurnstileTrigger>
         RuledTurnstile.Declare(m, Id, e => e.Anonymous(), e => e.Anonymous());
 }
 
-/// <summary>Every event declares a rule; <c>start</c>, <c>get</c> and <c>machineChanged</c> declare none.</summary>
+/// <summary>Every event declares a rule; <c>start</c>, <c>get</c> and the push (<c>&lt;machine&gt;Changed</c>) declare none.</summary>
 public class UndeclaredReadsMachine : Machine<TurnstileState, TurnstileTrigger>
 {
     public const string Id = "undeclared-reads";

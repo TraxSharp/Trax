@@ -163,7 +163,7 @@ internal sealed class CallerRuleDraft(string where, bool read)
 /// <param name="Events">Each declared event's rule, by trigger name.</param>
 /// <param name="Start">The <c>start</c> rule, or <c>null</c>.</param>
 /// <param name="Get">The <c>get</c> rule, or <c>null</c>.</param>
-/// <param name="Watch">The <c>machineChanged</c> rule, or <c>null</c>.</param>
+/// <param name="Watch">The the push (<c>&lt;machine&gt;Changed</c>) rule, or <c>null</c>.</param>
 /// <param name="Discard">The <c>discard</c> rule, or <c>null</c>.</param>
 internal sealed record MachineRules(
     IReadOnlyDictionary<string, CallerRule> Events,
@@ -202,7 +202,7 @@ internal sealed record MachineRules(
         if (Get is not null)
             yield return ("get", Get);
         if (Watch is not null)
-            yield return ("machineChanged", Watch);
+            yield return ("changed", Watch);
         if (Discard is not null)
             yield return ("discard", Discard);
     }

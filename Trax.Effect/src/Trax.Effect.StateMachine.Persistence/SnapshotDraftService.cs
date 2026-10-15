@@ -463,7 +463,7 @@ internal interface IEffectRunnerSlot
 }
 
 /// <summary>
-/// A draft service that can tell a <c>machineChanged</c> subscription which row it may follow. Every service
+/// A draft service that can tell a the push (<c>&lt;machine&gt;Changed</c>) subscription which row it may follow. Every service
 /// <see cref="ISnapshotMachineRegistry"/> builds implements it; a subscription to any other is refused.
 /// </summary>
 internal interface ISnapshotWatchAccess
@@ -1286,7 +1286,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     }
 
     /// <summary>
-    /// The row id of the caller's instance <paramref name="id"/>, the incarnation a <c>machineChanged</c> stream
+    /// The row id of the caller's instance <paramref name="id"/>, the incarnation a the push (<c>&lt;machine&gt;Changed</c>) stream
     /// follows, when the machine's watch rule admits the caller; null for anything else, alike: no such instance,
     /// another user's, a system instance, an actor that names no user, a caller the rule refuses, and a machine that
     /// declares no watch rule. It reads the row once and rehydrates nothing: the stream's first event is the row as it
