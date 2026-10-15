@@ -337,7 +337,8 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                 lease
             )
             {
-                Access = access,
+                NextTry = access.NextTryAsync,
+                ReadQueued = access.QueuedFateAsync,
             };
         }
         catch
@@ -361,10 +362,26 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             step
         );
 
-    private static SnapshotProblem NotFound() =>
+    internal static SnapshotProblem NotFound() =>
         new() { Code = RefusalCode.NotFound, Message = NotFoundMessage };
 
     private static ISourceStream Once(RunProgressEvent answer) => new RunProgressStream(answer);
+}
+
+/// <summary>What became of a run first found queued (<see cref="RunProgressAccess.QueuedFateAsync"/>).</summary>
+internal enum QueuedFate
+{
+    /// <summary>Its entry is still queued.</summary>
+    Waiting,
+
+    /// <summary>It was dispatched, or ran: its lifecycle events say the rest.</summary>
+    Dispatched,
+
+    /// <summary>Its entry was cancelled before dispatch.</summary>
+    Cancelled,
+
+    /// <summary>Its entry is gone and no run was recorded under its id.</summary>
+    Gone,
 }
 
 /// <summary>One run a caller may follow, as <see cref="RunProgressAccess.FindAsync"/> found it.</summary>
@@ -504,8 +521,37 @@ internal sealed class RunProgressAccess(
     }
 
     /// <summary>
+    /// What became of <paramref name="run"/>, first found queued: its latest entry's status for the same starter, or,
+    /// with no entry, whether a run was recorded under its id.
+    /// </summary>
+    public async Task<QueuedFate> QueuedFateAsync(RunProgressRun run, CancellationToken ct)
+    {
+        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var status = await db
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.ExternalId == run.RunId && w.StarterHash == run.Starter)
+            .OrderByDescending(w => w.Id)
+            .Select(w => (WorkQueueStatus?)w.Status)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        return status switch
+        {
+            WorkQueueStatus.Queued => QueuedFate.Waiting,
+            WorkQueueStatus.Cancelled => QueuedFate.Cancelled,
+            WorkQueueStatus.Dispatched => QueuedFate.Dispatched,
+            _ => await db
+                .Metadatas.AsNoTracking()
+                .AnyAsync(m => m.ExternalId == run.RunId && m.StarterHash == run.Starter, ct)
+                .ConfigureAwait(false)
+                ? QueuedFate.Dispatched
+                : QueuedFate.Gone,
+        };
+    }
+
+    /// <summary>
     /// For a failed run of a manifest: the run that retries it, once queued, and whether no retry will come because
-    /// the manifest was dead-lettered after it. A retry is the manifest's next run or queued entry for the same starter.
+    /// the manifest was dead-lettered after it or is disabled. A retry is the manifest's next run or queued entry for
+    /// the same starter.
     /// </summary>
     public async Task<(string? RetriedAs, bool NoRetry)> NextTryAsync(
         RunProgressRun run,
@@ -555,6 +601,14 @@ internal sealed class RunProgressAccess(
             .ConfigureAwait(false);
         if (queued is not null)
             return (queued, false);
+
+        // A disabled manifest is not retried, so the stream need not wait out RetryWait for it.
+        var disabled = await db
+            .Manifests.AsNoTracking()
+            .AnyAsync(m => m.Id == manifestId && !m.IsEnabled, ct)
+            .ConfigureAwait(false);
+        if (disabled)
+            return (null, true);
 
         var since = ran.EndTime ?? run.EndedAt ?? DateTime.MinValue;
         var deadLettered = await db
@@ -698,13 +752,36 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
     private readonly Func<CancellationToken, ValueTask<long>>? _stepsLastPublished;
 
     /// <summary>Where a failed run's retry is looked up, after the run ends.</summary>
-    public RunProgressAccess? Access { get; init; }
+    public Func<
+        RunProgressRun,
+        CancellationToken,
+        Task<(string? RetriedAs, bool NoRetry)>
+    >? NextTry { get; init; }
+
+    /// <summary>What became of a run first found queued, read while it waits.</summary>
+    public Func<RunProgressRun, CancellationToken, Task<QueuedFate>>? ReadQueued { get; init; }
+
+    /// <summary>How the stream waits between two reads; replaced in tests.</summary>
+    internal Func<TimeSpan, CancellationToken, Task> Delay { get; init; } = Task.Delay;
 
     /// <summary>How long a failed run of a manifest waits for its retry before the stream ends without one.</summary>
     internal static TimeSpan RetryWait { get; set; } = TimeSpan.FromMinutes(30);
 
-    /// <summary>How often the retry is looked for while the stream waits.</summary>
+    /// <summary>How long the stream waits before it first looks for the retry again. It doubles up to <see cref="RetryPollMax"/>.</summary>
     internal static TimeSpan RetryPoll { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>The longest wait between two looks for the retry.</summary>
+    internal static TimeSpan RetryPollMax { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How often a run first found queued is read while it waits, so one cancelled before dispatch, which publishes no
+    /// lifecycle event, still ends its stream.
+    /// </summary>
+    internal static TimeSpan QueuedPoll { get; set; } = TimeSpan.FromSeconds(5);
+
+    // Cancelled when the stream is disposed, so a read the subscription never cancels (a retry wait, a queued poll)
+    // does not outlive the stream's place.
+    private readonly CancellationTokenSource _disposing = new();
     private int _disposed;
 
     public RunProgressStream(RunProgressEvent only) => _only = only;
@@ -736,6 +813,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
+        await _disposing.CancelAsync().ConfigureAwait(false);
         if (_states is not null)
             await _states.DisposeAsync().ConfigureAwait(false);
         if (_steps is not null)
@@ -760,7 +838,7 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             bool Lost
         )>();
         var stepsSeen = new StrongBox<long>(_stepsBaseline);
-        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, _disposing.Token);
         var pumps = Task.WhenAll(
             Pump(
                 _states!,
@@ -780,6 +858,11 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             )
         );
         _ = pumps.ContinueWith(_ => merged.Writer.TryComplete(), TaskScheduler.Default);
+        // A queued run cancelled before dispatch publishes nothing, so its fate is read while it waits.
+        var closed =
+            run.State == RunProgressState.Queued
+                ? WatchQueued(run, merged.Writer, stop.Token)
+                : null;
 
         var sequence = 0L;
         try
@@ -823,6 +906,12 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             RunProgressEvent? end = null;
             await foreach (var item in merged.Reader.ReadAllAsync(stop.Token).ConfigureAwait(false))
             {
+                if (closed is not null && item is { State: null, Step: null, Lost: false })
+                {
+                    if (await closed.ConfigureAwait(false) is { } last)
+                        yield return (TOut)(object)(last with { Sequence = ++sequence });
+                    yield break;
+                }
                 if (Next(run, item, ref sequence, out end) is { } next)
                     yield return (TOut)(object)next;
                 if (end is not null)
@@ -879,21 +968,26 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
         [EnumeratorCancellation] CancellationToken ct
     )
     {
-        if (run.State != RunProgressState.Failed || Access is null)
+        if (run.State != RunProgressState.Failed || NextTry is null)
             yield break;
         var failed = run with { EndedAt = run.EndedAt ?? DateTime.UtcNow.AddSeconds(-5) };
         using var waiting = CancellationTokenSource.CreateLinkedTokenSource(ct);
         waiting.CancelAfter(RetryWait);
+        // Backed off, so many streams waiting on retries that are minutes away do not poll the database every second.
+        var poll = RetryPoll;
         while (true)
         {
             (string? RetriedAs, bool NoRetry) next;
             try
             {
-                next = await Access.NextTryAsync(failed, waiting.Token).ConfigureAwait(false);
+                next = await NextTry(failed, waiting.Token).ConfigureAwait(false);
                 if (next.RetriedAs is null && !next.NoRetry)
-                    await Task.Delay(RetryPoll, waiting.Token).ConfigureAwait(false);
+                {
+                    await Delay(poll, waiting.Token).ConfigureAwait(false);
+                    poll = poll * 2 < RetryPollMax ? poll * 2 : RetryPollMax;
+                }
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
                 yield break;
             }
@@ -904,6 +998,55 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             }
             if (next.NoRetry)
                 yield break;
+        }
+    }
+
+    // Reads a run first found queued every QueuedPoll until it is dispatched, whose lifecycle events then say the rest,
+    // or until it is cancelled or gone, which publish none. Then it writes an empty item to wake the reader and answers
+    // the event to end on.
+    private async Task<RunProgressEvent?> WatchQueued(
+        RunProgressRun run,
+        ChannelWriter<(TrainLifecycleEvent?, JunctionEvent?, bool)> writer,
+        CancellationToken ct
+    )
+    {
+        if (ReadQueued is null)
+            return null;
+        try
+        {
+            while (true)
+            {
+                await Delay(QueuedPoll, ct).ConfigureAwait(false);
+                var fate = await ReadQueued(run, ct).ConfigureAwait(false);
+                if (fate == QueuedFate.Dispatched)
+                    return null;
+                if (fate == QueuedFate.Waiting)
+                    continue;
+                var last =
+                    fate == QueuedFate.Cancelled
+                        ? new RunProgressEvent(
+                            run.RunId,
+                            0,
+                            RunProgressState.Cancelled,
+                            null,
+                            null,
+                            null
+                        )
+                        : new RunProgressEvent(
+                            run.RunId,
+                            0,
+                            null,
+                            null,
+                            null,
+                            RunProgressTypeModule.NotFound()
+                        );
+                await writer.WriteAsync((null, null, false), ct).ConfigureAwait(false);
+                return last;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
         }
     }
 

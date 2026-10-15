@@ -113,8 +113,13 @@ The first event is the state the run was in when the subscription started, so a 
 ended still learns how it ended. After that each event is either a step or a change of state. The stream completes
 after the run's last state, with the run's last steps sent before it.
 
+A run followed while still queued is read again every few seconds until it is dispatched. One cancelled before
+dispatch publishes no state of its own, so the stream sends `CANCELLED` and completes; one whose entry is gone with no
+run recorded answers `NOT_FOUND` and completes.
+
 A failed run of a manifest stays open after its last state until the scheduler queues its retry, then sends one more
-event with `retriedAs` and completes. It completes without one when the manifest is dead-lettered, or after 30
+event with `retriedAs` and completes. It looks for the retry after one second, then waits twice as long each time, up
+to 30 seconds between looks. It completes without one when the manifest is dead-lettered or disabled, or after 30
 minutes. [`useRunProgress`](/docs/reference/cli#frontend-clients-trax-client) follows the retry on its own.
 
 `sequence` counts up by one per event. A skipped number means events were lost on the way, from a full buffer or a

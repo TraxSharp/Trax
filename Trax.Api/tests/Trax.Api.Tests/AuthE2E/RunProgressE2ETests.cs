@@ -13,6 +13,7 @@ using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.TypeModules;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
@@ -274,6 +275,47 @@ public class RunProgressE2ETests
             .GetString()
             .Should()
             .Be("COMPLETED");
+    }
+
+    [Test]
+    public async Task A_followed_queued_run_that_is_cancelled_before_dispatch_ends_the_stream()
+    {
+        var runId = await QueueAsync(AliceKey);
+        var poll = RunProgressStream.QueuedPoll;
+        RunProgressStream.QueuedPoll = TimeSpan.FromMilliseconds(100);
+        try
+        {
+            await using var alice = await Socket.ConnectAsync(_host, AliceKey);
+            await alice.SubscribeAsync(
+                $$"""subscription { runProgress(runId: "{{runId}}") { {{EventFields}} } }"""
+            );
+            (await alice.NextAsync()).GetProperty("state").GetString().Should().Be("QUEUED");
+
+            // As leaving an invoking state or the operations surface cancels it: the entry, and no lifecycle event.
+            await using (
+                var db = await _host
+                    .Services.GetRequiredService<IDataContextProviderFactory>()
+                    .CreateDbContextAsync(CancellationToken.None)
+            )
+                await db
+                    .WorkQueues.Where(w => w.ExternalId == runId)
+                    .ExecuteUpdateAsync(u =>
+                        u.SetProperty(w => w.Status, WorkQueueStatus.Cancelled)
+                    );
+            var events = await alice.ReadUntilCompleteAsync();
+
+            events
+                .Should()
+                .ContainSingle()
+                .Which.GetProperty("state")
+                .GetString()
+                .Should()
+                .Be("CANCELLED", "a run cancelled before dispatch ends its stream, per " + Adr);
+        }
+        finally
+        {
+            RunProgressStream.QueuedPoll = poll;
+        }
     }
 
     [Test]
