@@ -27,6 +27,28 @@ internal static class RetryReplayLinks
     internal const string QueuedResumeIndex = "ix_work_queue_unique_queued_resume";
 
     /// <summary>
+    /// The unique index that holds at most one queued entry per manifest. Trax.Effect creates it
+    /// (Postgres 017, Sqlite 001 and 014).
+    /// </summary>
+    internal const string QueuedManifestIndex = "ix_work_queue_unique_queued_manifest";
+
+    /// <summary>
+    /// Whether <paramref name="exception"/>, or one it wraps, is an insert refused because the
+    /// manifest already has a queued entry: a unique violation on <see cref="QueuedManifestIndex"/>.
+    /// Any other failure is false.
+    /// </summary>
+    internal static bool IsQueuedManifestConflict(
+        Exception exception,
+        ISqlDialect? dialect = null
+    ) =>
+        IsConflictOn(
+            exception,
+            dialect,
+            QueuedManifestIndex,
+            "UNIQUE constraint failed: work_queue.manifest_id"
+        );
+
+    /// <summary>
     /// Whether <paramref name="exception"/>, or one it wraps, is an insert refused because a queued
     /// entry already replays the same run: a unique violation on <see cref="QueuedReplayIndex"/>,
     /// which Postgres names and Sqlite reports by its column. Any other failure, another unique

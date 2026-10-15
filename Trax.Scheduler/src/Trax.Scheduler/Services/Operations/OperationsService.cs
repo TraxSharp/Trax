@@ -1862,7 +1862,7 @@ public partial class OperationsService : IOperationsService
             manifest,
             runAt,
             askAfresh,
-            beforeRelease: null,
+            seams: null,
             ct
         );
         _changeSignal?.Notify(ChangeDomain.WorkQueue);
@@ -2036,7 +2036,7 @@ public partial class OperationsService : IOperationsService
                     manifest,
                     runAt: now,
                     tally.AskAfresh,
-                    beforeRelease: null,
+                    seams: null,
                     ct
                 );
                 tally.Add(id, manifest, outcome);
