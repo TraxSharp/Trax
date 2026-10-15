@@ -432,7 +432,7 @@ public class RunProgressE2ETests
     }
 
     /// <summary>One graphql-transport-ws connection with one runProgress subscription.</summary>
-    private sealed class Socket : IAsyncDisposable
+    internal sealed class Socket : IAsyncDisposable
     {
         private readonly WebSocket _socket;
         private readonly StringBuilder _received = new();

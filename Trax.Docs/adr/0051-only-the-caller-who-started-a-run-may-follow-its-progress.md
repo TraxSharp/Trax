@@ -58,7 +58,9 @@ started directly, gets the same `NOT_FOUND`.
 
 **Enforced elsewhere:** `RunProgressE2ETests` in `Trax.Api.Tests` (the starter reads and follows a run; another
 caller, a missing id and an anonymous caller are refused alike; no data reaches anyone) and `RunProgressLimitsTests`
-in `Trax.Api.Tests` (the per-run and per-caller caps).
+in `Trax.Api.Tests` (the per-run and per-caller caps), `RunProgressCrossNodeE2ETests` (a run dispatched on another
+node reaches its starter through the broadcaster) and `RunProgressInvokedRunE2ETests` (a machine-invoked run is
+followed by the instance's owner after the draft is gone), both in `Trax.Api.Tests`.
 
 - [Run progress](/docs/sdk-reference/graphql-api/run-progress) is the rule as published.
 
