@@ -11,7 +11,6 @@ nav_order: 5
 source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationMutations.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationQueries.cs
-  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/MachineDocumentQueries.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Management.cs
 ---
 
@@ -106,16 +105,6 @@ Look up a single row. Returns null when missing.
 ### `persistedOperationHistory(id, tenantKey, take, skip)`
 
 Audit history for an operation, most-recent first. Same `take` / `skip` defaults as `persistedOperations`.
-
-### `machineDocuments`
-
-`operations { machineDocuments { id machine operation irHash document } }`: the manifest of the
-[machine documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) this node serves, one per
-operation of each exposed machine, with the IR hash of the machine it was generated for. A generated client reads
-it at build time and sends each operation by its id. It sits directly under `operations`, behind the gate the host
-declared for the namespace, and is served only when the host exposes the operations queries itself. Like
-`persistedOperations`, it is admitted as an inline document when the host requires persisted operations, since a
-client cannot ask for its ids by an id it does not have yet.
 
 ## Reserved ids
 

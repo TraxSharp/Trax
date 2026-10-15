@@ -220,9 +220,9 @@ transport like any other.
   A node that serves no machine registers too, with no documents of its own, so a deploy that stops
   serving every machine still collects the older documents after the grace period; a registration that fails there
   is logged and tried again an interval later, and does not stop the host.
-- **The manifest** is `operations { machineDocuments { id machine operation irHash document } }`, behind the
-  operations gate: the documents this node serves, which a client reads at build time. It is served when the host
-  exposes the operations queries (`ExposeOperationQueries()`); `UsePersistedOperations` does not expose them.
+- **The manifest** is the [client manifest](/docs/sdk-reference/statemachine-api/client-manifest) the host
+  exports with `--trax-export-client`: every document this node serves, which a client reads at build time. It is
+  written by the code that registers the documents, so its ids are the ones the host serves.
 
 The id carries the IR hash, so the typed surface needs no `schemaHash`: the optional handshake stays on the generic
 mutations only.

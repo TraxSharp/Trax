@@ -64,7 +64,8 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted => persisted.SingleNode()));
 ```
 
-A client reads the documents' ids from `operations { machineDocuments { ... } }` at build time (see
+A client reads the documents' ids from the exported
+[client manifest](/docs/sdk-reference/statemachine-api/client-manifest) at build time (see
 [Persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents)).
 
 ### 3. Declare a rule on everything a client can do

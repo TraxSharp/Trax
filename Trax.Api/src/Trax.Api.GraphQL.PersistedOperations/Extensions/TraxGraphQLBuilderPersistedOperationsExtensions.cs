@@ -157,14 +157,6 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
             });
         }
 
-        // machineDocuments hangs off operations, which only the host exposes, so it is added only
-        // when the host did. Read when the schema is built, after the host's configuration ran.
-        builder.ConfigureSchema(schema =>
-        {
-            if (builder.OperationQueriesExposed)
-                schema.AddTypeExtension<GraphQL.OperationsQueriesMachineDocumentsExtension>();
-        });
-
         // HotChocolate cache invalidator. The schema name is captured below
         // inside ConfigureSchema so the invalidator can evict the right executor.
         services.AddSingleton<HotChocolateOperationCacheInvalidator>();

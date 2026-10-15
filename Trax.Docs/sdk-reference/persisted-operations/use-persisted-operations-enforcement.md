@@ -47,7 +47,7 @@ For each operation:
 2. If the request carries HotChocolate's `AllowNonPersistedOperation()` override, which only host code building its own request can set: execute it.
 3. Otherwise the document is inline:
    - **Allowlist match** (operation name in `AllowOperations` or matching a predicate; the document id when there is no name): execute it. Both keys are chosen by the caller and the document is not inspected, so the allowlist is a convenience for trusted networks, not a control. See [Allowlist and dev carve-outs](/docs/persisted-operations#allowlist-and-dev-carve-outs).
-   - **Management surface** (every operation selects `persistedOperations { ... }` at the root and nothing else, or only `operations { machineDocuments }`): execute it. Authorization still applies.
+   - **Management surface** (every operation selects `persistedOperations { ... }` at the root and nothing else): execute it. Authorization still applies.
    - **Introspection** (the parsed document's top-level selections are all `__schema`, `__type` or `__typename`): execute it unless `DisableIntrospection()` was called.
    - **Enforcement off** (`RequirePersisted(false)`): execute it, logging at Information when `LogNonPersistedRequests(true)`.
    - **Otherwise**: refuse it. Over HTTP the status is `400 Bad Request` and the body is:

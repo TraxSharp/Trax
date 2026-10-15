@@ -42,8 +42,6 @@ public class OperationsIsAdminOnlyTests
         StringComparer.Ordinal
     )
     {
-        ["OperationsQueries.machineDocuments"] =
-            "The machine-document manifest a client generator once read; the exported client manifest replaced it.",
         ["OperationsQueries.declaredChain"] =
             "A train's declared graph for a client following progress; runProgress replaced it, and the dashboard reads runGraph.",
         ["OperationsQueries.execution"] =
@@ -236,7 +234,7 @@ public class OperationsIsAdminOnlyTests
     private static readonly Regex Interpolation = new(@"\$\{[^}]*\}", RegexOptions.Compiled);
 
     // The whole operations surface: both halves of the namespace, the machine instance feed it carries, and the
-    // persisted-operation package, which grafts machineDocuments onto it.
+    // persisted-operation package, so a field it grafted onto operations would be caught.
     private static async Task<ISchemaDefinition> FullSchemaAsync()
     {
         var services = new ServiceCollection();

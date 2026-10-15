@@ -128,25 +128,29 @@ public class PersistedOperationPolicyTests
     }
 
     [Test]
-    public void MachineDocumentsManifest_PassesThrough()
+    public void AnInlineOperationsRead_IsRejected()
     {
         Decide(
                 Build(b => b.RequirePersisted(true)),
                 "query { operations { machineDocuments { id } } }"
             )
             .Should()
-            .Be(PersistedOperationDecision.PassThrough);
+            .Be(
+                PersistedOperationDecision.Reject,
+                "the only inline carve-out is root persistedOperations; a client reads machine document ids "
+                    + "from the exported client manifest"
+            );
     }
 
     [Test]
-    public void ManagementMixedWithTheMachineDocumentsManifest_IsRejected()
+    public void ManagementMixedWithAnOperationsRead_IsRejected()
     {
         Decide(
                 Build(b => b.RequirePersisted(true)),
                 """
                 query {
                   persistedOperations { persistedOperations { totalCount } }
-                  operations { machineDocuments { id } }
+                  operations { executions { totalCount } }
                 }
                 """
             )

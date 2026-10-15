@@ -24,8 +24,8 @@ import type { MachineSpec, TypedMachine } from '../typed';
 import type { HttpExecutorOptions, SnapshotExecutor, SnapshotOutput } from './transport';
 
 /**
- * One entry of a host's machine documents manifest, as `query { operations { machineDocuments { id machine operation
- * irHash document } } }` lists it: the persisted document of one operation of one exposed machine.
+ * One machine document from the host's exported client manifest (`--trax-export-client`): the persisted document of
+ * one operation of one exposed machine.
  */
 export interface MachineDocument {
   /** The persisted id the client sends. */

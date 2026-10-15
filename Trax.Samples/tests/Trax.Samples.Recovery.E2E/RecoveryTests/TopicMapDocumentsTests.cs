@@ -1,8 +1,8 @@
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Effect.StateMachine;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Api;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
@@ -25,37 +25,45 @@ namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 )]
 public class TopicMapDocumentsTests : RecoveryTestFixture
 {
-    private const string Served =
-        "{ operations { machineDocuments { id machine operation irHash document } } }";
-
     [Test]
     public async Task The_committed_topic_map_documents_are_the_ones_the_host_serves()
     {
-        var response = await GraphQL.SendAsync(Served, OperatorKey);
-        response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
-        var served = response
-            .Data.GetProperty("operations")
-            .GetProperty("machineDocuments")
-            .EnumerateArray()
-            .Where(d => d.GetProperty("machine").GetString() == "topic-map")
-            .Select(d =>
-                (
-                    Id: d.GetProperty("id").GetString()!,
-                    Document: d.GetProperty("document").GetString()!
-                )
-            )
-            .OrderBy(d => d.Id, StringComparer.Ordinal)
-            .ToList();
-        served.Should().NotBeEmpty("the host exposes the topic map, so it serves its documents");
-
+        var services = SharedRecoverySetup.Factory.Services;
         var committed = ClientManifest
             .Read(await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest))
-            .Machines.Single(m => m.Id == "topic-map")
-            .Documents.Select(d => (d.Id, d.Document))
+            .Machines.Single(m => m.Id == "topic-map");
+
+        services
+            .GetServices<IMachine>()
+            .Single(m => m.Name == "topic-map")
+            .SchemaHash.Should()
+            .Be(
+                committed.IrHash,
+                "the page is built for the machine as the host declares it now; after changing the machine, "
+                    + "export the manifest and regenerate the client"
+            );
+
+        // The host registers its documents at startup, keyed by the machine's IR hash. An older version's rows can
+        // still be active for a grace period, so only the current version's are compared.
+        var prefix = "trax_machine_topic-map_";
+        var served = (
+            await services
+                .GetRequiredService<IPersistedOperationStore>()
+                .ListAsync(null, CancellationToken.None)
+        )
+            .Where(o =>
+                o.IsActive
+                && o.Id.StartsWith(prefix, StringComparison.Ordinal)
+                && o.Id.Contains(committed.IrHash, StringComparison.Ordinal)
+            )
+            .Select(o => (o.Id, o.Document))
             .OrderBy(d => d.Id, StringComparer.Ordinal)
             .ToList();
+        served.Should().NotBeEmpty("the host exposes the topic map, so it registers its documents");
 
         committed
+            .Documents.Select(d => (d.Id, d.Document))
+            .OrderBy(d => d.Id, StringComparer.Ordinal)
             .Should()
             .Equal(
                 served,

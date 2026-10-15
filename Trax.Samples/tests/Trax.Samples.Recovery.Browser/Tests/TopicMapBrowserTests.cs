@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
+using Trax.Effect.StateMachine;
 using Trax.Samples.Recovery.Browser.Factories;
 using Trax.Samples.Recovery.Browser.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
@@ -635,27 +636,13 @@ public class TopicMapBrowserTests
             .GetProperty(field);
     }
 
-    // The id of the topic map's document for an operation, from the host's manifest, which the operations gate
-    // admits to the operator.
-    private static async Task<string> DocumentIdAsync(string operation)
-    {
-        var manifest = await GraphQLForTest()
-            .SendAsync(
-                "{ operations { machineDocuments { id machine operation } } }",
-                DemoKeysOperator
-            );
-        manifest.HasErrors.Should().BeFalse(manifest.FirstErrorMessage);
-        return manifest
-            .Data.GetProperty("operations")
-            .GetProperty("machineDocuments")
-            .EnumerateArray()
-            .Single(d =>
-                d.GetProperty("machine").GetString() == "topic-map"
-                && d.GetProperty("operation").GetString() == operation
-            )
-            .GetProperty("id")
-            .GetString()!;
-    }
+    // The id of the topic map's document for an operation, from the committed client manifest the page is built from.
+    private static async Task<string> DocumentIdAsync(string operation) =>
+        ClientManifest
+            .Read(await File.ReadAllTextAsync(TopicMapArtifacts.ClientManifest))
+            .Machines.Single(m => m.Id == "topic-map")
+            .Documents.Single(d => d.Operation == operation)
+            .Id;
 
     private static GraphQLClient GraphQLForTest() => new(BrowserSetup.Host.Http);
 

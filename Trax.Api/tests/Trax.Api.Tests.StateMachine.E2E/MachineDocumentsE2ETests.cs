@@ -19,8 +19,8 @@ namespace Trax.Api.StateMachine.E2E;
 /// tenant, with an id that hashes the document's text with the machine's IR. A restart that changes nothing writes
 /// nothing; a stored body that does not match its id is refused and repaired; an unknown id under the prefix costs
 /// no database read when it is malformed and at most one read per interval when it is well formed, and is never
-/// answered with a 5xx; a request that arrives while the host starts never pins a miss; the manifest lists every
-/// document behind the operations gate; and a type no finite document can describe refuses startup.
+/// answered with a 5xx; a request that arrives while the host starts never pins a miss; the exported client manifest
+/// lists every document; and a type no finite document can describe refuses startup.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
 /// </summary>
 [Property(
@@ -448,54 +448,53 @@ public class MachineDocumentsE2ETests
         + $"{i:x8}".PadLeft(MachineDocuments.IrHashLength + MachineDocuments.TextHashLength, '9');
 
     [Test]
-    public async Task The_manifest_query_lists_every_document_with_its_hash_behind_the_operations_gate()
+    public async Task The_exported_manifest_lists_every_document_the_host_registered()
     {
-        const string Manifest =
-            "{ operations { machineDocuments { id machine operation irHash document } } }";
-
-        using var asOperator = await _host.PostAsync(Manifest, apiKey: E2EHost.OperatorKey);
-        WizardOps
-            .FirstErrorMessage(asOperator)
-            .Should()
-            .BeNull(MachineDocumentOps.Show(asOperator));
-        var listed = asOperator
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty("machineDocuments")
-            .EnumerateArray()
-            .ToList();
-        var stored = (await MachineDocumentOps.MachineDocumentsAsync(Database))
-            .Where(d => d.IsActive)
-            .ToList();
-        stored.Should().NotBeEmpty();
-        listed
-            .Select(d => d.GetProperty("id").GetString())
-            .Should()
-            .BeEquivalentTo(
-                stored.Select(d => d.Id),
-                "the manifest lists every document, per " + Adr
-            );
-        listed
-            .Should()
-            .OnlyContain(d =>
-                !string.IsNullOrEmpty(d.GetProperty("irHash").GetString())
-                && !string.IsNullOrEmpty(d.GetProperty("document").GetString())
-            );
-
-        foreach (var caller in new[] { null, E2EHost.BobKey })
+        var path = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            $"trax-machine-documents-{Guid.NewGuid():N}",
+            "client.json"
+        );
+        try
         {
-            using var refused = await _host.PostAsync(Manifest, apiKey: caller);
-            var data = refused.RootElement.TryGetProperty("data", out var d) ? d : default;
-            (
-                data.ValueKind != JsonValueKind.Object
-                || data.GetProperty("operations").ValueKind == JsonValueKind.Null
-            )
+            await ClientManifestExport.WriteAsync(_host.Services, path, CancellationToken.None);
+            var listed = ClientManifest
+                .Read(await File.ReadAllTextAsync(path))
+                .Machines.SelectMany(m => m.Documents)
+                .ToList();
+            var stored = (await MachineDocumentOps.MachineDocumentsAsync(Database))
+                .Where(d => d.TenantKey == "" && d.IsActive)
+                .ToList();
+            stored.Should().NotBeEmpty();
+            listed
+                .Select(d => d.Id)
                 .Should()
-                .BeTrue(
-                    $"the manifest is behind the operations gate, so {caller ?? "an anonymous caller"} "
-                        + "reads nothing"
+                .BeEquivalentTo(
+                    stored.Select(d => d.Id),
+                    "a client reads every document id from the exported manifest, per " + Adr
                 );
+            listed.Should().OnlyContain(d => !string.IsNullOrEmpty(d.Document));
         }
+        finally
+        {
+            Directory.Delete(System.IO.Path.GetDirectoryName(path)!, recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task The_operations_manifest_field_is_gone()
+    {
+        using var response = await _host.PostAsync(
+            "{ operations { machineDocuments { id } } }",
+            apiKey: E2EHost.OperatorKey
+        );
+
+        WizardOps
+            .FirstErrorMessage(response)
+            .Should()
+            .NotBeNull(
+                "the exported client manifest replaced the operations read, so even the operator is refused"
+            );
     }
 
     [TestCase(ShelfShape.RecursiveInput)]

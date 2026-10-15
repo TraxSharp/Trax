@@ -40,8 +40,8 @@ export interface MachineServerOptions extends HttpExecutorOptions {
   /** The machine the server drives; its id names its field under `machines`. */
   machine: TypedMachine<MachineSpec> | { id: string; version: number };
   /**
-   * The machine's persisted documents, from the host's manifest (`operations { machineDocuments { ... } }`),
-   * its push (`changed`) included. Each must be of this machine and of the IR its twin was generated from.
+   * The machine's persisted documents, from the host's exported client manifest, its push (`changed`)
+   * included. Each must be of this machine and of the IR its twin was generated from.
    */
   documents: readonly MachineDocument[];
   /** The socket the change stream is subscribed over. */

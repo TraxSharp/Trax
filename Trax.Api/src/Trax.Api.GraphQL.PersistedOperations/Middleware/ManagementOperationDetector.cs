@@ -21,17 +21,12 @@ namespace Trax.Api.GraphQL.PersistedOperations.Middleware;
 /// </remarks>
 internal static class ManagementOperationDetector
 {
-    private const string OperationsField = "operations";
     private const string PersistedOperationsField = "persistedOperations";
-
-    // The machine documents manifest under operations, behind the operations gate.
-    private const string MachineDocumentsField = "machineDocuments";
 
     /// <summary>
     /// Whether every operation in the document selects nothing at the root but
-    /// <c>persistedOperations</c>, or nothing but <c>operations { machineDocuments }</c>. A null
-    /// document, which is what a document that did not parse becomes, is not a management
-    /// operation, so the rejection path runs.
+    /// <c>persistedOperations</c>. A null document, which is what a document that did not parse
+    /// becomes, is not a management operation, so the rejection path runs.
     /// </summary>
     public static bool IsManagementOperation(DocumentNode? document)
     {
@@ -43,17 +38,12 @@ internal static class ManagementOperationDetector
             return false;
 
         return operations.All(operation =>
-            SelectsOnly(operation.SelectionSet, PersistedOperationsField, _ => true)
-            || SelectsOnly(operation.SelectionSet, OperationsField, SelectsOnlyMachineDocuments)
+            SelectsOnly(operation.SelectionSet, PersistedOperationsField)
         );
     }
 
-    private static bool SelectsOnlyMachineDocuments(FieldNode operationsField) =>
-        operationsField.SelectionSet is not null
-        && SelectsOnly(operationsField.SelectionSet, MachineDocumentsField, _ => true);
-
     /// <summary>
-    /// Whether every selection in the set is the named field and satisfies <paramref name="inner"/>.
+    /// Whether every selection in the set is the named field.
     /// <c>__typename</c> is tolerated: it reveals nothing and asks for nothing.
     /// </summary>
     /// <remarks>
@@ -61,11 +51,7 @@ internal static class ManagementOperationDetector
     /// or inline fragment is not a field, so it cannot be shown to stay inside the carve-out and
     /// disqualifies the document.
     /// </remarks>
-    private static bool SelectsOnly(
-        SelectionSetNode selectionSet,
-        string fieldName,
-        Func<FieldNode, bool> inner
-    )
+    private static bool SelectsOnly(SelectionSetNode selectionSet, string fieldName)
     {
         foreach (var selection in selectionSet.Selections)
         {
@@ -76,9 +62,6 @@ internal static class ManagementOperationDetector
                 continue;
 
             if (!string.Equals(field.Name.Value, fieldName, StringComparison.Ordinal))
-                return false;
-
-            if (!inner(field))
                 return false;
         }
 

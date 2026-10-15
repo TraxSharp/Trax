@@ -138,5 +138,10 @@ types, behind a gate of their own. `UsePersistedOperations` no longer exposes th
   `ExposeOperationQueries()` or `ExposeOperationMutations()` and answers for it there, as before. A host whose only
   `GateOperations(...)` call was there for the management fields drops it: with nothing under `operations` exposed,
   a gate on it fails startup.
-- **The machine documents manifest**, `operations { machineDocuments }`, is served only when the host exposes the
-  operations queries.
+
+## The machine documents manifest is gone
+
+`operations { machineDocuments }` is removed. The exported client manifest replaces it: start the host with
+`--trax-export-client <path>` and read the ids from the file, which needs no running server and no credential. See
+[Client manifest](/docs/sdk-reference/statemachine-api/client-manifest). A request that still selects the field is
+refused as an unknown field, and under `RequirePersisted` it is no longer admitted as an inline document.

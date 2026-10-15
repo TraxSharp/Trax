@@ -211,7 +211,7 @@ under [Serving a machine](/docs/sdk-reference/statemachine-api/add-state-machine
 The machine is now `machines { checkout { ... } }`: `start`, one mutation per client event (`chooseItems`, `next`,
 `back`), the effect event `pay`, `discard`, and the `get` query, each answering with the state, its typed context and
 the revision, or a `problem`. With persisted operations required (the default), a client sends each operation by
-its persisted id, which it reads from `operations { machineDocuments { ... } }` at build time; the
+its persisted id, which it reads from the exported [client manifest](/docs/sdk-reference/statemachine-api/client-manifest) at build time; the
 [TypeScript client](/docs/statemachine/call-a-machine-from-typescript) does that from the machine's
 documents. The `chooseItems` operation, written out as a document (the generated one selects every field of the
 answer):
