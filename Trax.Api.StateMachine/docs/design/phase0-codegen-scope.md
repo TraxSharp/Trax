@@ -212,7 +212,7 @@ piece 6 is Increment D.
 
 4. **The generators (IR -> code).** *Exists:* `generate.mjs` emits TS structure + a `--check` drift gate.
    *New:* generalize it to consume the IR and emit, per language: the context type, the shape + declarative
-   validators (TS can use valibot, already a dependency), custom-handler interface stubs, and a differential
+   validators (in TS, the engine's own `validateSchema`; the package has no dependencies), custom-handler interface stubs, and a differential
    replay entry; then add a **C# generator target** (the `csOut` the generator of the day left a stub for).
    *Hard part:* the C# target is net-new; and validators-from-schema is new on both sides. **Not built, and
    will not be:** C# is the source and interprets the IR directly, so there is nothing to generate for it.
@@ -520,7 +520,7 @@ Two things that keep it straightforward:
 - **The rules run through a shared interpreter, so behavior is identical to the lambda version.** A guard
   rule is data; the engine evaluates it. This is the key to Increment A: turnstile re-authored this way must
   produce a byte-identical differential corpus, which is exactly what the existing suite proves. Codegen (a
-  later increment) emits per-language validators from the *same* rule data (TS via valibot); until then the
+  later increment) emits per-language validators from the *same* rule data (TS through the engine's `validateSchema`); until then the
   interpreter is the single implementation both the export and the runtime share.
 
 Custom logic is named, never anonymous: `.When("payable", (ctx, input) => ...)`. The name is the
@@ -559,7 +559,7 @@ Everything else is **generated from that one C# file**:
 | the IR (`<id>.ir.json`) | the interchange contract |
 | state/trigger types + the transition table | every runtime |
 | the context type(s) | every runtime |
-| the shape validators + declarative guards | every runtime (TS via valibot) |
+| the shape validators + declarative guards | every runtime (TS through `validateSchema`) |
 | interface/stubs for any `named(...)` handlers | every runtime (a missing one is a compile error) |
 | the differential `replay` entry | every runtime |
 | the four GraphQL mutations + effect-runner wiring | server only |
