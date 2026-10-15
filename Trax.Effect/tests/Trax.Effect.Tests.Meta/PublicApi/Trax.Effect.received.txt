@@ -117,6 +117,17 @@ namespace Trax.Effect.Configuration.BroadcasterBuilder
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
     }
 }
+namespace Trax.Effect.Configuration.ClientExport
+{
+    public interface ITraxStartupCheck { }
+    public static class TraxClientExport
+    {
+        public const string Argument = "--trax-export-client";
+        public static string? Path { get; }
+        public static bool Requested { get; }
+        public static string? PathIn(System.Collections.Generic.IReadOnlyList<string> args) { }
+    }
+}
 namespace Trax.Effect.Configuration.TraxBuilder
 {
     public class TraxBuilder

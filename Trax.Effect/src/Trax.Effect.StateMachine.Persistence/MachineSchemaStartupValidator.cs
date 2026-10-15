@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -16,7 +17,8 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <c>StartAsync</c>; something that calls only <c>StartAsync</c> gets the check from there.
 /// </remarks>
 internal sealed class MachineSchemaStartupValidator(IEnumerable<IMachine> machines)
-    : IHostedLifecycleService
+    : IHostedLifecycleService,
+        ITraxStartupCheck
 {
     private bool _checked;
 

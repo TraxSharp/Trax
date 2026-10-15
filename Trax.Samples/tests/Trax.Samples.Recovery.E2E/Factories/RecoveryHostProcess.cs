@@ -197,6 +197,55 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     );
 
     // The host project's own build output, which carries its runtime config and dependencies. The test
+    /// <summary>
+    /// Runs the host's build output with <c>--trax-export-client &lt;path&gt;</c> in the production configuration
+    /// against <paramref name="connectionString"/>, and returns its exit code and output once it exits. Kills it when
+    /// it has not exited by <paramref name="timeout"/>.
+    /// </summary>
+    public static async Task<(int ExitCode, string Output)> ExportAsync(
+        string path,
+        string connectionString,
+        TimeSpan timeout
+    )
+    {
+        var assembly = HostAssembly();
+        var start = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = Path.GetDirectoryName(assembly)!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.ArgumentList.Add(assembly);
+        start.ArgumentList.Add("--trax-export-client");
+        start.ArgumentList.Add(path);
+        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+        start.Environment["ConnectionStrings__TraxDatabase"] = connectionString;
+
+        var output = new StringBuilder();
+        using var process = new Process { StartInfo = start };
+        process.OutputDataReceived += (_, e) => Append(output, e.Data);
+        process.ErrorDataReceived += (_, e) => Append(output, e.Data);
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        using var cancel = new CancellationTokenSource(timeout);
+        try
+        {
+            await process.WaitForExitAsync(cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            lock (output)
+                return (-1, $"Killed after {timeout}.\n{output}");
+        }
+        lock (output)
+            return (process.ExitCode, output.ToString());
+    }
+
     // project references the host, so it is built in the same configuration.
     private static string HostAssembly()
     {

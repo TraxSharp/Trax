@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -11,7 +12,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 internal sealed class StartDeclarationValidator(
     IEnumerable<IMachine> machines,
     StateMachineOptions options
-) : IHostedLifecycleService
+) : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;
 

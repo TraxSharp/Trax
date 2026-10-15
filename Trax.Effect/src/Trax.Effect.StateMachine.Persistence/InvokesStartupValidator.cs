@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Services.JunctionEffectProviderFactory;
 using Trax.Effect.Utils;
@@ -26,7 +27,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 internal sealed class InvokesStartupValidator(
     IEnumerable<IMachine> machines,
     IServiceScopeFactory scopeFactory
-) : IHostedLifecycleService
+) : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -17,7 +18,8 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// See <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
 /// </remarks>
 internal sealed class MachineIdStartupValidator(IEnumerable<IMachine> machines)
-    : IHostedLifecycleService
+    : IHostedLifecycleService,
+        ITraxStartupCheck
 {
     private bool _checked;
 

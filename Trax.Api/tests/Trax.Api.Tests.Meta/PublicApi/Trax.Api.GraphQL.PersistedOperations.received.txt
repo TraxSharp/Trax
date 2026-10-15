@@ -83,6 +83,10 @@ namespace Trax.Api.GraphQL.PersistedOperations.Extensions
             "validation(...)).")]
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddPersistedOperationStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string databaseConnectionString, string rabbitMqInvalidationConnectionString) { }
     }
+    public static class TraxClientManifestExtensions
+    {
+        public static System.Threading.Tasks.Task RunTraxAsync(this Microsoft.AspNetCore.Builder.WebApplication app, string[]? args = null) { }
+    }
     public static class TraxGraphQLBuilderPersistedOperationsExtensions
     {
         public static Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder UsePersistedOperations(this Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder builder, System.Action<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder> configure) { }

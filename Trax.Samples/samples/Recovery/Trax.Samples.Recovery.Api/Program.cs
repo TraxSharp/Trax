@@ -25,6 +25,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Core.Decisions;
 using Trax.Dashboard.Extensions;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
@@ -242,9 +243,13 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Creates the topic_map schema and loads the canned corpus, skipping papers already there, then the
-// canned index records partitions are ingested from, skipping records already there.
-await CorpusSeeder.SeedAsync(app.Services);
-await IndexSeeder.SeedAsync(app.Services);
+// canned index records partitions are ingested from, skipping records already there. An export of the client
+// manifest (--trax-export-client) opens no database, so it seeds nothing.
+if (!TraxClientExport.Requested)
+{
+    await CorpusSeeder.SeedAsync(app.Services);
+    await IndexSeeder.SeedAsync(app.Services);
+}
 
 app.UseCors();
 app.UseAuthentication();
@@ -254,7 +259,8 @@ if (app.Environment.IsDevelopment())
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-app.Run();
+// Serves, or writes the client manifest and exits when started with --trax-export-client <path>.
+await app.RunTraxAsync(args);
 
 namespace Trax.Samples.Recovery.Api
 {

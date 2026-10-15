@@ -25,6 +25,49 @@ namespace Trax.Effect.StateMachine
         public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.EffectBinding<TState, TTrigger>> Effects { get; init; }
         public Trax.Effect.StateMachine.SnapshotMachine<TState, TTrigger> Engine { get; }
     }
+    public sealed class ClientManifest : System.IEquatable<Trax.Effect.StateMachine.ClientManifest>
+    {
+        public const int CurrentFormat = 1;
+        public ClientManifest() { }
+        public int Format { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestMachine> Machines { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestTrain> Trains { get; init; }
+        public string Types { get; init; }
+        public static Trax.Effect.StateMachine.ClientManifest Read(string text) { }
+        public static string Write(Trax.Effect.StateMachine.ClientManifest manifest) { }
+    }
+    public sealed class ClientManifestDocument : System.IEquatable<Trax.Effect.StateMachine.ClientManifestDocument>
+    {
+        public ClientManifestDocument() { }
+        public required string Document { get; init; }
+        public required string Id { get; init; }
+        public required string Operation { get; init; }
+    }
+    public sealed class ClientManifestMachine : System.IEquatable<Trax.Effect.StateMachine.ClientManifestMachine>
+    {
+        public ClientManifestMachine() { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestDocument> Documents { get; init; }
+        public required string Id { get; init; }
+        public required System.Text.Json.Nodes.JsonObject Ir { get; init; }
+        public required string IrHash { get; init; }
+        public Trax.Effect.StateMachine.ClientManifestRequirement? Requires { get; init; }
+    }
+    public sealed class ClientManifestRequirement : System.IEquatable<Trax.Effect.StateMachine.ClientManifestRequirement>
+    {
+        public ClientManifestRequirement() { }
+        public System.Collections.Generic.IReadOnlyList<string> Policies { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Roles { get; init; }
+    }
+    public sealed class ClientManifestTrain : System.IEquatable<Trax.Effect.StateMachine.ClientManifestTrain>
+    {
+        public ClientManifestTrain() { }
+        public System.Text.Json.Nodes.JsonObject? Chain { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestDocument> Documents { get; init; }
+        public required string Field { get; init; }
+        public string? Namespace { get; init; }
+        public Trax.Effect.StateMachine.ClientManifestRequirement? Requires { get; init; }
+        public required string Root { get; init; }
+    }
     public enum CompareOp
     {
         GreaterThan = 0,

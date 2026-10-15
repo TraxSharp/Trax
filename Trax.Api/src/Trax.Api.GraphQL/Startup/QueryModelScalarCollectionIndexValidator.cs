@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Filtering.ListElements;
+using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Api.GraphQL.Startup;
 
@@ -37,7 +38,7 @@ internal sealed class QueryModelScalarCollectionIndexValidator(
     GraphQLConfiguration configuration,
     IServiceProvider serviceProvider,
     ILogger<QueryModelScalarCollectionIndexValidator> logger
-) : IHostedService
+) : IHostedService, ITraxStartupCheck
 {
     private const string NpgsqlProviderName = "Npgsql.EntityFrameworkCore.PostgreSQL";
 

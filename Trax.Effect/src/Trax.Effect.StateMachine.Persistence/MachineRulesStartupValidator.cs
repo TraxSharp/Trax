@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Effect.Attributes;
+using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -22,7 +23,7 @@ internal sealed class MachineRulesStartupValidator(
     IEnumerable<IMachine> machines,
     StateMachineOptions options,
     IServiceScopeFactory scopeFactory
-) : IHostedLifecycleService
+) : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;
 

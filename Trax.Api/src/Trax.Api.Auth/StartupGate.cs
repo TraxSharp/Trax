@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Api.Auth;
 
@@ -13,7 +14,7 @@ namespace Trax.Api.Auth;
 /// <c>StartAsync</c>, such as a custom <c>IHost</c> or a test harness, gets the same check from
 /// <see cref="StartAsync"/>, so the gate does not open because a lifecycle step was skipped.
 /// </remarks>
-internal abstract class StartupGate : IHostedLifecycleService
+internal abstract class StartupGate : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;
 

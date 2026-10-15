@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
+using Trax.Effect.Configuration.ClientExport;
 
 namespace Trax.Effect.Services.Decisions;
 
@@ -25,7 +26,9 @@ namespace Trax.Effect.Services.Decisions;
 /// same way, with what building it threw; a host observer known to be best effort that cannot be
 /// built is left out by the composite and refuses nothing.</para>
 /// </remarks>
-internal sealed class DecisionObserverCheck(IServiceProvider services) : IHostedLifecycleService
+internal sealed class DecisionObserverCheck(IServiceProvider services)
+    : IHostedLifecycleService,
+        ITraxStartupCheck
 {
     private readonly Lazy<string?> _problem = new(() => Find(services));
     private bool _checked;

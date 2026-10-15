@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.FeatureDbConfigurator;
@@ -43,7 +44,8 @@ public static class ServiceExtensions
     )
     {
         // Run migrations unless explicitly skipped
-        if (!configurationBuilder.MigrationsDisabled)
+        // A process started to export its client manifest opens no database (TraxClientExport).
+        if (!configurationBuilder.MigrationsDisabled && !TraxClientExport.Requested)
             DatabaseMigrator.Migrate(connectionString).Wait();
 
         // Enable WAL mode for better concurrent read/write performance

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Trax.Core.Exceptions;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Postgres.Services.InvokedRunListener;
 using Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
@@ -122,7 +123,8 @@ public static class ServiceExtensions
     )
     {
         // Migrate the database schema to the latest version (unless explicitly skipped)
-        if (!configurationBuilder.MigrationsDisabled)
+        // A process started to export its client manifest opens no database (TraxClientExport).
+        if (!configurationBuilder.MigrationsDisabled && !TraxClientExport.Requested)
             DatabaseMigrator.Migrate(connectionString).Wait();
 
         // The data source is built by the container, once per service provider, so the provider

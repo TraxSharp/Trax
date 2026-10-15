@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Effect.Attributes;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -34,7 +35,7 @@ internal sealed class AuthorizationRegistrationValidator(
     ITrainDiscoveryService discoveryService,
     MediatorConfiguration configuration,
     IServiceProvider serviceProvider
-) : IHostedLifecycleService
+) : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;
 

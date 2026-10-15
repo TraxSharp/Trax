@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Monad;
 using Trax.Effect.Attributes;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -58,7 +59,7 @@ internal sealed class TrainChainStartupValidator(
     IServiceScopeFactory scopeFactory,
     MediatorConfiguration configuration,
     ILogger<TrainChainStartupValidator>? logger = null
-) : IHostedLifecycleService
+) : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;
 

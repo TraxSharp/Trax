@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Decisions;
 using Trax.Core.Monad;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Scheduler.Services.DecisionRecording;
@@ -42,7 +43,7 @@ internal sealed class DecisionRecordingStartupCheck(
     // Optional: AddTraxJobRunner registers this check, and a host built without AddMediator has
     // no trains to check, which the mediator's own validation reports.
     ITrainDiscoveryService? discoveryService = null
-) : IHostedLifecycleService
+) : IHostedLifecycleService, ITraxStartupCheck
 {
     private bool _checked;
 

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Effect.Configuration.ClientExport;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
@@ -29,7 +30,7 @@ namespace Trax.Scheduler.Services.MetadataCleanupPollingService;
 internal class MetadataCleanupConfigurationValidator(
     IServiceProvider serviceProvider,
     SchedulerConfiguration configuration
-) : IHostedService
+) : IHostedService, ITraxStartupCheck
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {
