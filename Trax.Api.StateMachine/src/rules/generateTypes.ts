@@ -47,9 +47,12 @@ export function generateContextTypes(ir: IrDocument): string {
     lines.push(`  ${state}: ${machine}${state}Context;`);
   lines.push("};", "");
 
-  // An input type per trigger that declares one, and the trigger -> input map (undefined when none).
+  // An input type per trigger that declares one, and the trigger -> input map (undefined when none). An
+  // effect-bound trigger's input is the receipt the server's effect runner hands it, so a client sends it with none.
+  const effectBound = new Set(ir.transitions.filter((t) => t.effect).map((t) => t.trigger));
+  const inputOf = (trigger: string) => (effectBound.has(trigger) ? undefined : own(ir.inputs, trigger));
   for (const trigger of ir.triggers) {
-    const schema = own(ir.inputs, trigger);
+    const schema = inputOf(trigger);
     if (schema && schema.fields.length > 0)
       lines.push(
         ...emitType(`${machine}${trigger}Input`, schema, "input"),
@@ -68,7 +71,7 @@ export function generateContextTypes(ir: IrDocument): string {
   }
   lines.push(`export type ${machine}Inputs = {`);
   for (const trigger of ir.triggers) {
-    const schema = own(ir.inputs, trigger);
+    const schema = inputOf(trigger);
     const type =
       schema && schema.fields.length > 0
         ? `${machine}${trigger}Input`

@@ -56,6 +56,16 @@ describe("generateContextTypes", () => {
     );
   });
 
+  it("an effect-bound trigger takes no input in send", () => {
+    const checkoutIr = JSON.parse(fs.readFileSync(irFile("checkout"), "utf8")) as IrDocument;
+    expect(checkoutIr.inputs.Pay?.fields.length).toBeGreaterThan(0);
+
+    const types = generateContextTypes(checkoutIr);
+
+    expect(types).toContain("  Pay: undefined;");
+    expect(types).not.toContain("CheckoutPayInput");
+  });
+
   // A field's own constraints ARE type information: reading them is what keeps a consumer from
   // hand-maintaining a precise copy of a context the IR already describes exactly.
   describe("constraint-derived field types", () => {

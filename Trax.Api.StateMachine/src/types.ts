@@ -83,6 +83,12 @@ export interface MachineDefinition<S extends string, T extends string> {
    */
   outcomeTriggers?: readonly string[];
   /**
+   * The triggers whose edge runs an effect (`RunsOnce` in C#). The server's effect runner hands such a trigger its
+   * input (the receipt), so a client sends it with none, and a server-authoritative client does not predict through
+   * it: what it leads to depends on the effect.
+   */
+  effectTriggers?: readonly string[];
+  /**
    * The timers of timed states, keyed by the timed state. Only the server fires one, through `applyTimer` here as
    * there: `advance` refuses a timer trigger as `TIMER_BOUND`, `canFire` is false for it and `availableTriggers`
    * never offers it. A transition into a state whose timer reads its duration from the context refuses a duration

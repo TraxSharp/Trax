@@ -4,6 +4,7 @@ import type { ReminderSpec } from '../machines/reminder/reminder.contexts.g';
 import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
 import type { IrDocument } from '../rules/irMachine';
 import { typedMachineFromIr } from '../typed';
+import { checkout, type CheckoutSpec } from '../machines/checkout/checkout';
 import { ServerMachineController, type ServerMachineOptions } from './serverController';
 import {
   FakeMachineServer,
@@ -69,6 +70,33 @@ describe('ServerMachineController', () => {
     expect(server.events[0].request.clientResult).toBeUndefined();
     expect(controller.get().snapshot?.state).toBe('Locked');
     expect(controller.get().pending).toBe(true);
+  });
+
+  it('sends an effect-bound event with no input and no prediction, and can follows the edge alone', async () => {
+    const server = new FakeMachineServer();
+    const controller = new ServerMachineController<CheckoutSpec>({
+      machine: checkout,
+      server,
+      id: 'c-1',
+      newRequestId: sequentialRequestIds(),
+    });
+    const started = controller.start();
+    await flushMicrotasks();
+    const review = { currency: 'USD', items: ['latte'], receipt: null, total: 4 };
+    server.gets[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ state: 'Review', context: review }) });
+    await started;
+    await flushMicrotasks();
+
+    expect(checkout.isEffectBound('Pay')).toBe(true);
+    expect(controller.can('Pay')).toBe(true);
+    void controller.send('Pay');
+    void controller.send('Restart');
+    await flushMicrotasks();
+
+    expect(server.events[0].request).toMatchObject({ id: 'c-1', trigger: 'Pay' });
+    expect(server.events[0].request.input).toBeUndefined();
+    expect(server.events[0].request.clientResult).toBeUndefined();
+    expect(controller.get().snapshot?.state).toBe('Review');
   });
 
   it('sends the prediction as clientResult', async () => {

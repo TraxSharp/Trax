@@ -232,6 +232,7 @@ export function machineFromIr(
     transitions,
     committedStates: ir.committedStates,
     outcomeTriggers,
+    effectTriggers: [...effectBound].sort(),
     timers,
     inputValidators,
     contextValidators,

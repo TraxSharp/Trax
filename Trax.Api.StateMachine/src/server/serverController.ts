@@ -175,7 +175,8 @@ const transportFailure = (error: unknown): Problem => ({
  * - **Events** are sent one at a time per instance, each under its own requestId, in the order `send` was called.
  *   While one is pending, the view shows the twin's prediction (sent as `clientResult`); the server's answer replaces
  *   it, and a refusal or a transport failure rolls it back to the last snapshot the server confirmed. An event the
- *   twin refuses is still sent, without a prediction: the server decides.
+ *   twin refuses is still sent, without a prediction: the server decides. An effect-bound event (one whose edge runs
+ *   an effect) is sent with no input and no prediction, and nothing queued after it is predicted until it answers.
  * - **Ordering.** Every snapshot, pushed or answered, carries its revision. Anything at or below the revision held is
  *   dropped, so a skipped revision is harmless. The controller reads the instance again only after a reconnect, an
  *   incarnation change or a `CLIENT_DIVERGENCE`, once each.
@@ -305,6 +306,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
   can<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): boolean {
     const shown = this.view.snapshot;
     if (!shown || this.status === 'stopped') return false;
+    // An effect-bound trigger's guard reads the input only the server's effect runner has: the server decides it.
+    if (this.machine.isEffectBound(trigger)) return this.machine.available(shown).includes(trigger);
     return this.machine.can(shown, trigger, ...input);
   }
 
@@ -588,14 +591,17 @@ export class ServerMachineController<Spec extends MachineSpec> {
     this.sending = true;
 
     if (next.request === null) {
-      const predicted = this.machine.advance(
-        this.confirmed,
-        next.trigger as TriggerOf<Spec>,
-        ...(next.input as InputArgs<Spec, TriggerOf<Spec>>),
-      );
+      // An effect-bound event is sent without a prediction: what it leads to depends on the effect's result.
+      const predicted = this.machine.isEffectBound(next.trigger as TriggerOf<Spec>)
+        ? null
+        : this.machine.advance(
+            this.confirmed,
+            next.trigger as TriggerOf<Spec>,
+            ...(next.input as InputArgs<Spec, TriggerOf<Spec>>),
+          );
       const request: EventRequest = { id: this.id, trigger: next.trigger, requestId: this.newRequestId() };
       if (next.input.length > 0) request.input = next.input[0];
-      if (predicted.outcome === 'transitioned') request.clientResult = this.machine.serialize(predicted.snapshot);
+      if (predicted?.outcome === 'transitioned') request.clientResult = this.machine.serialize(predicted.snapshot);
       next.request = request;
     }
     void this.deliver(next, next.request, 0);
@@ -711,13 +717,16 @@ export class ServerMachineController<Spec extends MachineSpec> {
     };
   }
 
-  // The confirmed snapshot with every pending event the twin allows applied in order: what the page will show
-  // if the server agrees. An event the twin refuses leaves it as it is; the server still decides.
+  // The confirmed snapshot with every pending event the twin allows applied in order, up to the first effect-bound
+  // one: what the page will show if the server agrees. An event the twin refuses leaves it as it is; the server still
+  // decides.
   private predicted(): TypedSnapshot<Spec> | null {
     const confirmed = this.confirmed;
     if (!confirmed || this.status === 'stopped') return confirmed;
     let shown: TypedSnapshot<Spec> = confirmed;
     for (const queued of this.queue) {
+      // Nothing is predicted through an effect-bound event, nor past it: what follows depends on the effect.
+      if (this.machine.isEffectBound(queued.trigger as TriggerOf<Spec>)) break;
       const next = this.machine.advance(
         shown,
         queued.trigger as TriggerOf<Spec>,

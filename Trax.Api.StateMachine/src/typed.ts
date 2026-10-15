@@ -93,6 +93,14 @@ export class TypedMachine<Spec extends MachineSpec> {
     return this.core.definition.committedStates?.includes(state) ?? false;
   }
 
+  /**
+   * Whether `trigger`'s edge runs an effect: the server's effect runner hands it its input, so a client sends it with
+   * none, and nothing on the client predicts what it leads to.
+   */
+  isEffectBound(trigger: TriggerOf<Spec>): boolean {
+    return this.core.definition.effectTriggers?.includes(trigger) ?? false;
+  }
+
   advance<T extends TriggerOf<Spec>>(
     snapshot: TypedSnapshot<Spec>,
     trigger: T,

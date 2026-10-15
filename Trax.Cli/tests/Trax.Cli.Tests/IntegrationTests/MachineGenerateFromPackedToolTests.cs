@@ -129,6 +129,14 @@ public class MachineGenerateFromPackedToolTests
               return useRememberedCheckout({ rememberKey: "drafts" }).forget;
             }
 
+            export function usePay() {
+              const checkout = useRememberedCheckout();
+              void checkout.send("Pay");
+              // @ts-expect-error an effect-bound trigger's input is the receipt the server's effect runner hands it
+              void checkout.send("Pay", { receipt: "made-up" });
+              return checkout.can("Pay");
+            }
+
             const input: StartRunInput = { scenario: "crash" };
             export const run = () => startRun(input, { mode: "QUEUE" });
 

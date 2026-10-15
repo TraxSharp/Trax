@@ -30,14 +30,10 @@ export type CheckoutContexts = {
   Review: CheckoutReviewContext;
 };
 
-export type CheckoutPayInput = {
-  receipt: string;
-};
-
 export type CheckoutInputs = {
   Back: undefined;
   Next: undefined;
-  Pay: CheckoutPayInput;
+  Pay: undefined;
   Restart: undefined;
 };
 

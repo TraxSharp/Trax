@@ -31,15 +31,11 @@ export type CheckoutAddItemInput = {
   item: string;
 };
 
-export type CheckoutPayInput = {
-  receipt: string;
-};
-
 export type CheckoutInputs = {
   AddItem: CheckoutAddItemInput;
   Back: undefined;
   Next: undefined;
-  Pay: CheckoutPayInput;
+  Pay: undefined;
   Reset: undefined;
 };
 
