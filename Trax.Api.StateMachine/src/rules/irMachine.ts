@@ -192,14 +192,21 @@ export function machineFromIr(
   for (const state of validatedStates) {
     const schema = ir.context[state];
     const invariant = ir.invariants?.[state];
-    contextValidators[state] = (ctx) => {
+    // A snapshot the server sent was checked there, custom rules included, so on that read a custom rule this twin
+    // has no handler for counts as passed. Everywhere else (a predicted transition, a stored draft) it is a reject:
+    // the twin cannot tell that it holds, so it does not predict past it and waits for the server.
+    const serverGuards = invariant
+      ? trustUnhandled(invariant, customGuards)
+      : customGuards;
+    contextValidators[state] = (ctx, options) => {
       if (schema) {
         const error = validateSchema(schema, ctx);
         if (error) return error;
       }
-      // The per-state .Requires policy, evaluated after the shape. Matches the C# validator (no custom
-      // handlers at the validator layer), so a custom rule here is a reject.
-      if (invariant && !evaluateRule(invariant, ctx, null))
+      // The per-state .Requires policy, evaluated after the shape with the bound custom handlers, as the C# validator
+      // evaluates it.
+      const guards = options?.fromServer ? serverGuards : customGuards;
+      if (invariant && !evaluateRule(invariant, ctx, null, guards))
         return "A state requirement was not satisfied.";
       return null;
     };
@@ -232,6 +239,19 @@ export function machineFromIr(
 }
 
 const emptyInput: ContextSchema = { fields: [] };
+
+// The handlers `rule` is evaluated with on a snapshot the server sent: the bound ones, and a passing one for every
+// custom rule it names that has none.
+function trustUnhandled(rule: Rule, bound: CustomGuards): CustomGuards {
+  const guards: CustomGuards = { ...bound };
+  const visit = (r: Rule): void => {
+    if (r.rule === "custom") {
+      if (!Object.prototype.hasOwnProperty.call(guards, r.name)) guards[r.name] = () => true;
+    } else if (r.rule === "all" || r.rule === "any") r.rules.forEach(visit);
+  };
+  visit(rule);
+  return guards;
+}
 
 // What an effect-bound trigger that declares no record takes: the receipt the effect runner hands it, or nothing.
 // The C# builder derives the same schema for the same edge.

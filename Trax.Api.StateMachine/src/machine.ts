@@ -273,16 +273,27 @@ export class SnapshotMachine<S extends string, T extends string> {
     };
   }
 
-  rehydrate(json: string): RehydrationResult {
+  /**
+   * Reads a stored snapshot. Pass `{ fromServer: true }` only for a snapshot the server sent: its context is then
+   * trusted on a custom rule this twin has no handler for (the server already evaluated it), and still checked for
+   * its shape and every built-in rule. A snapshot from anywhere else is checked in full.
+   */
+  rehydrate(
+    json: string,
+    options?: { fromServer?: boolean },
+  ): RehydrationResult {
     // Totality backstop: any parse/validation path that throws degrades to a typed Error here.
     try {
-      return this.rehydrateCore(json);
+      return this.rehydrateCore(json, options?.fromServer === true);
     } catch (e) {
       return error(RefusalCode.Malformed, errorMessage(e));
     }
   }
 
-  private rehydrateCore(json: string): RehydrationResult {
+  private rehydrateCore(
+    json: string,
+    fromServer: boolean,
+  ): RehydrationResult {
     let node: unknown;
     try {
       node = JSON.parse(json);
@@ -350,7 +361,11 @@ export class SnapshotMachine<S extends string, T extends string> {
         `Unknown state '${effState}'.`,
       );
 
-    const contextError = this.validateContext(effState, effContext);
+    const contextError = this.validateContext(
+      effState,
+      effContext,
+      fromServer,
+    );
     if (contextError != null)
       return error(RefusalCode.InvalidContext, contextError);
 
@@ -441,9 +456,11 @@ export class SnapshotMachine<S extends string, T extends string> {
   private validateContext(
     state: string,
     context: Record<string, unknown>,
+    fromServer = false,
   ): string | null {
     const validate = this.def.contextValidators?.[state as S];
-    return validate ? validate(context) : null;
+    if (!validate) return null;
+    return fromServer ? validate(context, { fromServer }) : validate(context);
   }
 }
 

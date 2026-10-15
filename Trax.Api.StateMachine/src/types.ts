@@ -12,7 +12,15 @@ export interface Snapshot {
 
 export type Guard = (context: Record<string, unknown>, input: unknown) => boolean;
 export type Reduce = (context: Record<string, unknown>, input: unknown) => Record<string, unknown>;
-export type ContextValidator = (context: Record<string, unknown>) => string | null;
+/**
+ * Checks a context against its state: null when it is legal there, else a message. `fromServer` is set when the
+ * context is one the server sent, which already passed the server's own checks: a validator built from the IR then
+ * counts a custom rule it has no handler for as passed, and still checks the shape and every built-in rule.
+ */
+export type ContextValidator = (
+  context: Record<string, unknown>,
+  options?: { fromServer?: boolean },
+) => string | null;
 /** Checks a trigger's input against the schema it declares: null when it matches, else a message. */
 export type InputValidator = (input: unknown) => string | null;
 

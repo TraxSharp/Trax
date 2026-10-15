@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reminder } from '../machines/reminder/reminder.machine.g';
 import type { ReminderSpec } from '../machines/reminder/reminder.contexts.g';
 import { turnstile, type TurnstileSpec } from '../machines/turnstile/turnstile';
+import type { IrDocument } from '../rules/irMachine';
+import { typedMachineFromIr } from '../typed';
 import { ServerMachineController, type ServerMachineOptions } from './serverController';
 import {
   FakeMachineServer,
@@ -657,6 +659,105 @@ describe('ServerMachineController', () => {
       server.gets[1].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: 4, ...unlocked('q'), dueAt: due }) });
       await flushMicrotasks();
       expect(controller.get().dueAt).toBe(due);
+    });
+  });
+
+  describe('a machine with a custom invariant', () => {
+    // A cart whose total only the server can price: the vocabulary has no arithmetic, so Cart requires a custom rule
+    // the twin has no handler for, beside a built-in one.
+    interface PricedSpec {
+      states: {
+        Cart: { items: string[]; total: number; receipt: string | null };
+        Paid: { items: string[]; total: number; receipt: string | null };
+      };
+      triggers: { AddItem: { item: string }; Pay: undefined };
+    }
+    const fields = [
+      { name: 'items', type: 'array', nullable: false, values: { type: 'string', nullable: false }, constraints: [] },
+      { name: 'total', type: 'integer', nullable: false, constraints: [] },
+      { name: 'receipt', type: 'string', nullable: true, constraints: [] },
+    ];
+    const priced = typedMachineFromIr<PricedSpec>({
+      irFormat: 1,
+      id: 'priced',
+      version: 1,
+      initialState: 'Cart',
+      initialContext: { items: [], total: 0, receipt: null },
+      states: ['Cart', 'Paid'],
+      triggers: ['AddItem', 'Pay'],
+      committedStates: ['Paid'],
+      context: { Cart: { fields }, Paid: { fields } },
+      inputs: { AddItem: { fields: [{ name: 'item', type: 'string', nullable: false, constraints: [] }] } },
+      invariants: {
+        Cart: {
+          rule: 'all',
+          rules: [
+            { rule: 'absent', source: 'context', field: 'receipt' },
+            { rule: 'custom', name: 'priced:total-matches-items' },
+          ],
+        },
+      },
+      transitions: [
+        { from: 'Cart', trigger: 'AddItem', to: 'Cart', reduce: { reduce: 'custom', name: 'priced:add-item' } },
+        { from: 'Cart', trigger: 'Pay', to: 'Paid' },
+      ],
+    } as IrDocument);
+
+    const cart = { items: ['apple'], total: 120, receipt: null };
+
+    async function open(snapshot: Parameters<FakeMachineServer['gets'][number]['resolve']>[0]) {
+      const server = new FakeMachineServer();
+      const controller = new ServerMachineController<PricedSpec>({
+        machine: priced,
+        server,
+        id: 'c-1',
+        newRequestId: sequentialRequestIds(),
+      });
+      const started = controller.start();
+      await flushMicrotasks();
+      server.gets[0].resolve(snapshot);
+      await started;
+      await flushMicrotasks();
+      return { server, controller };
+    }
+
+    it('reads a server snapshot under a custom invariant', async () => {
+      const { controller } = await open({ kind: 'ok', snapshot: serverSnapshot({ state: 'Cart', context: cart }) });
+
+      expect(controller.get().status).toBe('ready');
+      expect(controller.get().error).toBeNull();
+      expect(controller.get().snapshot).toEqual(priced.snapshotAt('Cart', cart));
+    });
+
+    it('still refuses a server snapshot that breaks a built-in rule beside it', async () => {
+      const { controller } = await open({
+        kind: 'ok',
+        snapshot: serverSnapshot({ state: 'Cart', context: { ...cart, receipt: 'r-1' } }),
+      });
+
+      expect(controller.get().status).toBe('stopped');
+      expect(controller.get().error?.code).toBe('CLIENT_OUTDATED');
+    });
+
+    it('still refuses a server snapshot of the wrong shape', async () => {
+      const { controller } = await open({
+        kind: 'ok',
+        snapshot: serverSnapshot({ state: 'Cart', context: { items: ['apple'], total: 'many', receipt: null } }),
+      });
+
+      expect(controller.get().status).toBe('stopped');
+      expect(controller.get().error?.code).toBe('CLIENT_OUTDATED');
+    });
+
+    it('does not predict a transition into a state whose custom rule it cannot check', async () => {
+      const { server, controller } = await open({ kind: 'ok', snapshot: serverSnapshot({ state: 'Cart', context: cart }) });
+
+      void controller.send('AddItem', { item: 'pear' });
+      await flushMicrotasks();
+
+      expect(server.events).toHaveLength(1);
+      expect(server.events[0].request.clientResult).toBeUndefined();
+      expect(controller.get().snapshot).toEqual(priced.snapshotAt('Cart', cart));
     });
   });
 });

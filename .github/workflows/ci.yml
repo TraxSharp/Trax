@@ -637,6 +637,10 @@ jobs:
         # tsc typechecks it, then vite builds it.
         working-directory: ${{ env.WEB }}
         run: npm run build
+      - name: Test
+        # The committed twins against the snapshots the host answers.
+        working-directory: ${{ env.WEB }}
+        run: npm test
       - name: Audit runtime dependencies
         working-directory: ${{ env.WEB }}
         run: npm audit --omit=dev --audit-level=high

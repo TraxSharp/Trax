@@ -86,6 +86,60 @@ describe("machine built from an IR with per-state invariants", () => {
   });
 });
 
+describe("machine built from an IR with a custom invariant", () => {
+  const ir: IrDocument = {
+    id: "priced",
+    version: 1,
+    initialState: "Cart",
+    states: ["Cart"],
+    triggers: [],
+    committedStates: [],
+    context: {
+      Cart: {
+        fields: [
+          { name: "total", type: "integer", nullable: false, constraints: [] },
+          { name: "note", type: "string", nullable: true, constraints: [] },
+        ],
+      },
+    },
+    inputs: {},
+    invariants: {
+      Cart: {
+        rule: "all",
+        rules: [
+          { rule: "absent", source: "context", field: "note" },
+          { rule: "custom", name: "priced:total" },
+        ],
+      },
+    },
+    transitions: [],
+  };
+  const wire = (context: unknown) =>
+    JSON.stringify({ machine: "priced", version: 1, state: "Cart", context });
+  const fromServer = { fromServer: true };
+
+  it("refuses an unhandled custom rule, except on a snapshot the server sent", () => {
+    const machine = new SnapshotMachine(machineFromIr(ir));
+    expect(machine.rehydrate(wire({ total: 5, note: null })).result).not.toBe("ok");
+    expect(machine.rehydrate(wire({ total: 5, note: null }), fromServer).result).toBe("ok");
+  });
+
+  it("still checks the shape and the built-in rules of a snapshot the server sent", () => {
+    const machine = new SnapshotMachine(machineFromIr(ir));
+    expect(machine.rehydrate(wire({ total: 5, note: "x" }), fromServer).result).not.toBe("ok");
+    expect(machine.rehydrate(wire({ total: "5", note: null }), fromServer).result).not.toBe("ok");
+  });
+
+  it("evaluates a bound handler, on every read", () => {
+    const machine = new SnapshotMachine(
+      machineFromIr(ir, { "priced:total": (ctx) => ctx.total === 5 }),
+    );
+    expect(machine.rehydrate(wire({ total: 5, note: null })).result).toBe("ok");
+    expect(machine.rehydrate(wire({ total: 6, note: null })).result).not.toBe("ok");
+    expect(machine.rehydrate(wire({ total: 6, note: null }), fromServer).result).not.toBe("ok");
+  });
+});
+
 describe("machine built from an IR with an effect edge", () => {
   const ir = JSON.parse(
     fs.readFileSync(irFile("checkout"), "utf8"),

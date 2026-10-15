@@ -86,7 +86,9 @@ both engines evaluate through the same interpreter.
 For a guard or reduction the vocabulary has no form for (arithmetic, a lookup), use a custom one rather than a
 delegate: `new Rule.Custom(name)` with `CustomGuard(name, handler)`, or `new Reduction.Custom(name)` with
 `CustomReducer(name, handler)`, on the machine builder. The IR carries the name, and each runtime binds a handler
-for it (`customGuards` and `customReducers` in TypeScript). `Build()` throws for a name with no handler. See
+for it (`customGuards` and `customReducers` in TypeScript). `Build()` throws for a name with no handler. A generated
+twin binds none: it reads a snapshot the server sent as passing the rule, and does not predict a transition that
+needs it, so the server's answer is what a client shows. See
 [Beyond the vocabulary](/docs/statemachine/delegates-and-declarative-rules#why-the-vocabulary-is-small).
 
 ## 4. Check that the machine exports

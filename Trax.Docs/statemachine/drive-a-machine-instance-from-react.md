@@ -71,6 +71,11 @@ function Wizard({ id }: { id?: string }) {
   it under its own requestId with the twin's prediction as `clientResult`, and shows the prediction until the answer
   or a push replaces it. A refusal or a transport failure rolls it back and sets `problem`; `CLIENT_DIVERGENCE`
   also reads the instance again. `SERVER_OUTDATED` is retried under the same requestId after each of `retryDelays`.
+  The twin holds no handler for a custom rule, so it predicts nothing that needs one: such an event is sent without a
+  prediction, and the answer is what the hook shows.
+- **Trusts the server on custom rules.** A snapshot the server sends is checked for its shape and every built-in
+  rule; a custom rule the twin has no handler for counts as passed, because the server evaluated it. A snapshot that
+  fails a check it can make stops the hook with `CLIENT_OUTDATED`.
 - **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included; it
   reads the instance again only after `reload`, an incarnation change or a `CLIENT_DIVERGENCE`.
 - **Stops for good** on `gone` or `CLIENT_OUTDATED`: `status` is `stopped`, `error.code` says which, and nothing more

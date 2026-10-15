@@ -113,8 +113,9 @@ export class TypedMachine<Spec extends MachineSpec> {
     return this.core.applyOutcome(snapshot, trigger, output[0]) as TypedAdvanceResult<Spec>;
   }
 
-  rehydrate(json: string): TypedRehydrationResult<Spec> {
-    return this.core.rehydrate(json) as TypedRehydrationResult<Spec>;
+  /** Reads a stored snapshot; `{ fromServer: true }` for one the server sent (see `SnapshotMachine.rehydrate`). */
+  rehydrate(json: string, options?: { fromServer?: boolean }): TypedRehydrationResult<Spec> {
+    return this.core.rehydrate(json, options) as TypedRehydrationResult<Spec>;
   }
 
   serialize(snapshot: TypedSnapshot<Spec>): string {

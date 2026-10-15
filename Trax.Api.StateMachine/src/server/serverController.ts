@@ -535,6 +535,9 @@ export class ServerMachineController<Spec extends MachineSpec> {
         state: incoming.state,
         context: incoming.context,
       }),
+      // The server applied every transition and checked the result, custom rules included; the twin holds no
+      // handler for those, so it trusts them here and checks the shape and the built-in rules.
+      { fromServer: true },
     );
     if (parsed.result !== 'ok') {
       // The server serves a snapshot this twin cannot read: the page was built for another version of the machine.
