@@ -310,6 +310,27 @@ describe('useServerMachine', () => {
     expect(text('paid')).toBe('');
   });
 
+  it('a new server shows nothing of the instance on the one before, from its first render', async () => {
+    const seen: (string | null)[] = [];
+    function Probe({ server }: { server: FakeMachineServer }) {
+      const m = useServerMachine(turnstile, { server, id: 'i-1', newRequestId: sequentialRequestIds() });
+      seen.push(m.state);
+      return null;
+    }
+    const first = new FakeMachineServer();
+    const view = render(<Probe server={first} />);
+    await settle();
+    await settle(() => first.gets[0].resolve({ kind: 'ok', snapshot: serverSnapshot() }));
+    expect(seen.at(-1)).toBe('Locked');
+
+    seen.length = 0;
+    view.rerender(<Probe server={new FakeMachineServer()} />);
+    await settle();
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((state) => state === null)).toBe(true);
+  });
+
   it('shows dueAt from beside the snapshot and never fires a timer', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'Date'] });
     vi.setSystemTime(new Date('2026-10-09T12:00:00Z'));

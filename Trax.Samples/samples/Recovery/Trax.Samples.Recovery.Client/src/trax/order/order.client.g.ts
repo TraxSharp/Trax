@@ -3,7 +3,7 @@ import "../format.g";
 import { createMachineServer, type MachineDocument, type PersistedSubscriptionSocket } from "@traxsharp/state-machine/client";
 import { useRememberedMachine, useServerMachine, type UseRememberedMachineOptions, type UseServerMachineOptions } from "@traxsharp/state-machine/react";
 import { useSyncExternalStore } from "react";
-import { subscribeTrax, traxConnection, traxGeneration, traxSocket } from "../client.g";
+import { subscribeTrax, traxConnection, traxGeneration, traxSocket, TraxOperationError } from "../client.g";
 import { order } from "./order.machine.g";
 
 export { order };
@@ -57,19 +57,32 @@ export const orderDocuments: readonly MachineDocument[] = [
 let server: ReturnType<typeof createMachineServer> | null = null;
 let serverGeneration = -1;
 
-/** The server of 'order' over the connection given to configureTrax. */
+/**
+ * The server of 'order' over the connection given to configureTrax. Once configureTrax is
+ * called again, a server made before refuses every request and stream with a TraxOperationError
+ * (`CONNECTION_CHANGED`): call this again for the server over the new connection.
+ */
 export function orderServer(): ReturnType<typeof createMachineServer> {
   const generation = traxGeneration();
   if (server === null || serverGeneration !== generation) {
+    const connection = traxConnection();
     const socket: PersistedSubscriptionSocket = traxSocket();
-    server = createMachineServer(traxConnection().url, {
-      // Read per request, from the connection configureTrax was given last.
-      headers: () => traxConnection().headers?.() ?? {},
+    const changed = () =>
+      new TraxOperationError("CONNECTION_CHANGED", "configureTrax was called since this server was made: nothing is sent on it.");
+    server = createMachineServer(connection.url, {
+      // The headers of the connection this server was made on, and only while it is the current one.
+      headers: () => {
+        if (generation !== traxGeneration()) throw changed();
+        return connection.headers?.() ?? {};
+      },
       machine: order,
       documents: orderDocuments,
-      // Once configureTrax is called again, a stream that ends is not opened again on the socket it closed.
       socket: {
-        subscribe: (payload, sink) => (generation === traxGeneration() ? socket.subscribe(payload, sink) : () => {}),
+        subscribe: (payload, sink) => {
+          if (generation === traxGeneration()) return socket.subscribe(payload, sink);
+          queueMicrotask(() => sink.error(changed()));
+          return () => {};
+        },
       },
     });
     serverGeneration = generation;
@@ -79,21 +92,28 @@ export function orderServer(): ReturnType<typeof createMachineServer> {
 
 /**
  * One instance of 'order': the given id, or one started with `startInput`. It renders again
- * when configureTrax is called, onto a server over the new connection.
+ * when configureTrax is called, onto a server over the new connection. A start in flight is kept per user (the
+ * `user` given to configureTrax), so it is never sent again as another user.
  */
 export function useOrder(options: Omit<UseServerMachineOptions, "server"> = {}) {
   useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);
-  return useServerMachine(order, { ...options, server: orderServer() });
+  const { user } = traxConnection();
+  const startStorageKey = options.startStorageKey !== undefined ? options.startStorageKey : "trax-start:order" + (user === undefined ? "" : "." + encodeURIComponent(user));
+  return useServerMachine(order, { ...options, startStorageKey, server: orderServer() });
 }
 
 /**
- * The instance of 'order' this browser keeps across visits for `user`, started when there
- * is none. `user` is the signed-in user's id: each user's instance is kept under a key of its own, so a browser
+ * The instance of 'order' this browser keeps across visits for the `user` given to
+ * configureTrax, started when there is none. Each user's instance is kept under a key of its own, so a browser
  * two people sign in to never opens one's instance for the other. `rememberKey` replaces the "trax.order"
- * the key starts with. It renders again when configureTrax is called, onto a server over the new connection.
+ * the key starts with. It renders again when configureTrax is called, onto a server over the new connection and
+ * the new user's key at once.
  */
-export function useRememberedOrder({ user, rememberKey, ...options }: Omit<UseRememberedMachineOptions, "server" | "rememberKey"> & { user: string; rememberKey?: string }) {
+export function useRememberedOrder({ rememberKey, ...options }: Omit<UseRememberedMachineOptions, "server" | "rememberKey"> & { rememberKey?: string } = {}) {
   useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);
+  const { user } = traxConnection();
+  if (user === undefined)
+    throw new Error("useRememberedOrder keeps an instance per user: give configureTrax the signed-in user's id as `user`.");
   const key = (rememberKey ?? "trax.order") + "." + encodeURIComponent(user);
   return useRememberedMachine(order, { ...options, rememberKey: key, server: orderServer() });
 }

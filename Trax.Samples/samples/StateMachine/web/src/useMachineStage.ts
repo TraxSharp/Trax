@@ -53,7 +53,7 @@ type Outcome =
  * the last request and its answer for the walkthrough.
  */
 export function useMachineStage(machine: keyof typeof HOOKS, user: string) {
-  // The key the generated hook keeps this user's instance under.
+  // The key the generated hook keeps this user's instance under: `user` is the one signIn gave configureTrax.
   const rememberKey = `trax.${machine}.${encodeURIComponent(user)}`;
   const [started] = useState(() => {
     try {
@@ -62,7 +62,8 @@ export function useMachineStage(machine: keyof typeof HOOKS, user: string) {
       return true;
     }
   });
-  const m = HOOKS[machine]({ user });
+  // The generated hook keeps the instance of the user signIn gave configureTrax.
+  const m = HOOKS[machine]();
   const [last, setLast] = useState<LastAction | null>(null);
   const announced = useRef(false);
 

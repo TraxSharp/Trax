@@ -81,7 +81,15 @@ public partial class ClientGeneratorTests
             .Contain("export function useCheckout(")
             .And.Contain("export function useRememberedCheckout(");
         text.Should()
-            .Contain("{ user: string; rememberKey?: string }")
+            .Contain(
+                "const { user } = traxConnection();",
+                "the user is the connection's, so it cannot disagree with the headers for a render"
+            )
+            .And.Contain("give configureTrax the signed-in user's id as `user`")
+            .And.NotContain("user: string")
+            .And.Contain(
+                "\"trax-start:checkout\" + (user === undefined ? \"\" : \".\" + encodeURIComponent(user))"
+            )
             .And.Contain(
                 "const key = (rememberKey ?? \"trax.checkout\") + \".\" + encodeURIComponent(user);",
                 "each user's instance is kept under a key of its own"
@@ -209,7 +217,12 @@ public partial class ClientGeneratorTests
                 "if (server === null || serverGeneration !== generation)",
                 "a server made before configureTrax was called again holds the socket it closed"
             )
-            .And.Contain("headers: () => traxConnection().headers?.() ?? {}")
+            .And.Contain(
+                "if (generation !== traxGeneration()) throw changed();",
+                "a server made before configureTrax was called again sends nothing"
+            )
+            .And.Contain("return connection.headers?.() ?? {};")
+            .And.NotContain("traxConnection().headers")
             .And.Contain("useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);")
             .And.NotContain("server ??=");
     }

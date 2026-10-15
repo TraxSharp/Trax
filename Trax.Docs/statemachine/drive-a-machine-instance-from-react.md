@@ -90,6 +90,9 @@ function Wizard({ id }: { id?: string }) {
   server replays its result rather than applying it twice. A later event the server confirms supersedes the failed
   one: resending it then would apply it after the later one, so `retry()` answers `NOTHING_TO_RETRY`. A refused
   start is not resent. `send` again would be a new request.
+- **Moves with its options.** A new `server`, `machine`, `id` or `startRequestId` closes the old instance's stream
+  and opens the new one. From that render on the hook is `loading` and sends nothing, so a page whose server changed
+  (another user signed in) never shows the instance before it under the new caller.
 - **Mints request ids** with `newRequestId`, `crypto.randomUUID` by default, which never makes one the server
   refuses. A custom one must keep to the server's rule: 1 to 200 characters, not blank, with no control character
   and no unpaired surrogate; anything else is answered `INVALID_REQUEST_ID`.

@@ -139,8 +139,9 @@ function startSettled(view: ServerMachineView<MachineSpec>): boolean {
  * - `dueAt` is shown, never fired: the server runs a state's timer and pushes the result. Null means no timer, or one
  *   the server cleared.
  *
- * Changing `server`, `machine`, `id` or `startRequestId` closes the old instance's stream and opens the new one; unmounting closes it
- * and drops every late answer. Built over the framework-free {@link ServerMachineController}.
+ * Changing `server`, `machine`, `id` or `startRequestId` closes the old instance's stream and opens the new one, and
+ * the hook is `loading` from that render until the new one answers; unmounting closes it and drops every late answer.
+ * Built over the framework-free {@link ServerMachineController}.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function useServerMachine<Spec extends MachineSpec>(
@@ -149,7 +150,14 @@ export function useServerMachine<Spec extends MachineSpec>(
 ): UseServerMachineResult<Spec> {
   const { server, id } = options;
   const givenStartRequestId = id === undefined ? options.startRequestId : undefined;
-  const [controller, setController] = useState<ServerMachineController<Spec> | null>(null);
+  // The controller, with what it was made for: one made for another server, machine or instance is never shown.
+  const [held, setHeld] = useState<{
+    controller: ServerMachineController<Spec>;
+    machine: TypedMachine<Spec>;
+    server: MachineServer;
+    id: string | undefined;
+    startRequestId: string | undefined;
+  } | null>(null);
 
   // The options that may change identity on every render are read when a controller is built, never as triggers.
   const latest = useRef(options);
@@ -200,13 +208,25 @@ export function useServerMachine<Spec extends MachineSpec>(
         forget?.();
       });
     }
-    setController(next);
+    setHeld({ controller: next, machine, server, id, startRequestId: givenStartRequestId });
     void next.start();
     return () => {
       forget?.();
       next.dispose();
     };
   }, [machine, server, id, givenStartRequestId]);
+
+  // Until the effect has made the controller of what is asked for now, the hook is loading: a render between a new
+  // server (configureTrax, another user signing in) and its effect would otherwise show the instance before it, and
+  // send to it, under the new caller.
+  const controller =
+    held !== null &&
+    held.machine === machine &&
+    held.server === server &&
+    held.id === id &&
+    held.startRequestId === givenStartRequestId
+      ? held.controller
+      : null;
 
   const view = useSyncExternalStore(
     controller ? (listener) => controller.subscribe(listener) : noSubscription,

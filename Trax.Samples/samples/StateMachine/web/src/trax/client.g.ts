@@ -13,6 +13,12 @@ export interface TraxConnection {
   headers?: () => Record<string, string>;
   /** What the socket sends in `connection_init`: a browser cannot set headers on a socket. */
   connectionParams?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
+  /**
+   * The signed-in user's id. A remembered machine is kept under it, so a browser two people sign in to never
+   * opens one's instance for the other, and a start in flight is never sent again as another user. Given here,
+   * with the headers, so the two cannot disagree for a render.
+   */
+  user?: string;
 }
 
 let connection: TraxConnection | null = null;
@@ -21,9 +27,10 @@ let generation = 0;
 const listeners = new Set<() => void>();
 
 /**
- * Tells the generated client where the host is. Call it before any hook or train function runs, and again when
- * the connection changes (another user signs in): the socket is closed, every machine's server is made anew on
- * its next use, and every mounted machine hook renders again onto it.
+ * Tells the generated client where the host is and who is signed in. Call it before any hook or train function
+ * runs, and again when the connection changes (another user signs in): the socket is closed, a machine's server
+ * made before refuses to send, every machine's server is made anew on its next use, and every mounted machine
+ * hook renders again onto it.
  */
 export function configureTrax(next: TraxConnection): void {
   connection = next;

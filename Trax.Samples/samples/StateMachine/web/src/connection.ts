@@ -17,7 +17,10 @@ export interface User {
 
 let signedIn: User | null = null;
 
-/** Points the generated client at the host as `user`. Switching users closes the socket and opens a new one. */
+/**
+ * Points the generated client at the host as `user`. Switching users closes the socket and opens a new one, and the
+ * remembered machines move to the new user's instances in the same render.
+ */
 export function signIn(user: User): void {
   signedIn = user;
   configureTrax({
@@ -25,6 +28,7 @@ export function signIn(user: User): void {
     socketUrl: SOCKET,
     headers: () => ({ "X-Api-Key": user.key }),
     connectionParams: () => ({ apiKey: user.key }),
+    user: user.label,
   });
 }
 

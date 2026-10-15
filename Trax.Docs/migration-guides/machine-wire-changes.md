@@ -90,9 +90,12 @@ documents a host registered.
 - **`createDraftSession` and `startDraft`** take the executor (`{ executor, machine, id }`) in place of a client.
 - **Generated code checks its client format.** Code `trax client` generates calls `requireClientFormat` when it
   loads, and a package that serves another format throws, naming both.
-- **`useRemembered<Machine>` takes the user** (`useRememberedCheckout({ user })`) and keeps each user's instance
-  under its own key, `trax.<machine id>.<user>`, so an instance remembered under the old `trax.<machine id>` is not
-  opened again. `useRememberedMachine` no longer forgets an instance the server answers `NOT_FOUND` (it answers
+- **`configureTrax` takes the user** (`configureTrax({ url, socketUrl, headers, user })`), and
+  `useRemembered<Machine>()` keeps each user's instance under its own key, `trax.<machine id>.<user>`, so an
+  instance remembered under the old `trax.<machine id>` is not opened again. The hook throws when `configureTrax` was
+  given no `user`. `use<Machine>()` keeps a start in flight per user too, under `trax-start:<machine id>.<user>`. A
+  server `<machine>Server()` made before the last `configureTrax` rejects every request with a `TraxOperationError`
+  whose `code` is `CONNECTION_CHANGED`: call `<machine>Server()` again for the server over the new connection. `useRememberedMachine` no longer forgets an instance the server answers `NOT_FOUND` (it answers
   another caller's instance the same way): the hook stops with `error.deleted` false, and `forget()` starts over.
   This is client format 2; the runtime still serves format 1.
 

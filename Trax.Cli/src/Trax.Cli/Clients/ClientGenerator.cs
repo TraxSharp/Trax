@@ -283,7 +283,10 @@ internal sealed class ClientGenerator
         "useRememberedMachine",
         "useSyncExternalStore",
         "generation",
+        "connection",
         "socket",
+        "changed",
+        "startStorageKey",
         "user",
         "rememberKey",
         "key",
@@ -428,6 +431,12 @@ internal sealed class ClientGenerator
               headers?: () => Record<string, string>;
               /** What the socket sends in `connection_init`: a browser cannot set headers on a socket. */
               connectionParams?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
+              /**
+               * The signed-in user's id. A remembered machine is kept under it, so a browser two people sign in to never
+               * opens one's instance for the other, and a start in flight is never sent again as another user. Given here,
+               * with the headers, so the two cannot disagree for a render.
+               */
+              user?: string;
             }
 
             let connection: TraxConnection | null = null;
@@ -436,9 +445,10 @@ internal sealed class ClientGenerator
             const listeners = new Set<() => void>();
 
             /**
-             * Tells the generated client where the host is. Call it before any hook or train function runs, and again when
-             * the connection changes (another user signs in): the socket is closed, every machine's server is made anew on
-             * its next use, and every mounted machine hook renders again onto it.
+             * Tells the generated client where the host is and who is signed in. Call it before any hook or train function
+             * runs, and again when the connection changes (another user signs in): the socket is closed, a machine's server
+             * made before refuses to send, every machine's server is made anew on its next use, and every mounted machine
+             * hook renders again onto it.
              */
             export function configureTrax(next: TraxConnection): void {
               connection = next;
@@ -589,7 +599,7 @@ internal sealed class ClientGenerator
         );
         sb.Append("import { useSyncExternalStore } from \"react\";\n");
         sb.Append(
-            "import { subscribeTrax, traxConnection, traxGeneration, traxSocket } from \"../client.g\";\n"
+            "import { subscribeTrax, traxConnection, traxGeneration, traxSocket, TraxOperationError } from \"../client.g\";\n"
         );
         sb.Append($"import {{ {camel} }} from \"./{machine.Id}.machine.g\";\n\n");
         sb.Append($"export {{ {camel} }};\n\n");
@@ -611,24 +621,37 @@ internal sealed class ClientGenerator
         sb.Append($"let server: ReturnType<typeof createMachineServer> | null = null;\n");
         sb.Append("let serverGeneration = -1;\n\n");
         sb.Append(
-            $"/** The server of '{EscapeDocText(machine.Id)}' over the connection given to configureTrax. */\n"
+            $"/**\n * The server of '{EscapeDocText(machine.Id)}' over the connection given to configureTrax. Once configureTrax is\n"
+                + " * called again, a server made before refuses every request and stream with a TraxOperationError\n"
+                + " * (`CONNECTION_CHANGED`): call this again for the server over the new connection.\n */\n"
         );
         sb.Append($"export function {camel}Server(): ReturnType<typeof createMachineServer> {{\n");
         sb.Append("  const generation = traxGeneration();\n");
         sb.Append("  if (server === null || serverGeneration !== generation) {\n");
+        sb.Append("    const connection = traxConnection();\n");
         sb.Append("    const socket: PersistedSubscriptionSocket = traxSocket();\n");
-        sb.Append("    server = createMachineServer(traxConnection().url, {\n");
-        sb.Append("      // Read per request, from the connection configureTrax was given last.\n");
-        sb.Append("      headers: () => traxConnection().headers?.() ?? {},\n");
+        sb.Append("    const changed = () =>\n");
+        sb.Append(
+            "      new TraxOperationError(\"CONNECTION_CHANGED\", \"configureTrax was called since this server was made: nothing is sent on it.\");\n"
+        );
+        sb.Append("    server = createMachineServer(connection.url, {\n");
+        sb.Append(
+            "      // The headers of the connection this server was made on, and only while it is the current one.\n"
+        );
+        sb.Append("      headers: () => {\n");
+        sb.Append("        if (generation !== traxGeneration()) throw changed();\n");
+        sb.Append("        return connection.headers?.() ?? {};\n");
+        sb.Append("      },\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
-        sb.Append(
-            "      // Once configureTrax is called again, a stream that ends is not opened again on the socket it closed.\n"
-        );
         sb.Append("      socket: {\n");
+        sb.Append("        subscribe: (payload, sink) => {\n");
         sb.Append(
-            "        subscribe: (payload, sink) => (generation === traxGeneration() ? socket.subscribe(payload, sink) : () => {}),\n"
+            "          if (generation === traxGeneration()) return socket.subscribe(payload, sink);\n"
         );
+        sb.Append("          queueMicrotask(() => sink.error(changed()));\n");
+        sb.Append("          return () => {};\n");
+        sb.Append("        },\n");
         sb.Append("      },\n");
         sb.Append("    });\n");
         sb.Append("    serverGeneration = generation;\n");
@@ -636,25 +659,36 @@ internal sealed class ClientGenerator
         sb.Append("  return server;\n}\n\n");
         sb.Append(
             $"/**\n * One instance of '{EscapeDocText(machine.Id)}': the given id, or one started with `startInput`. It renders again\n"
-                + " * when configureTrax is called, onto a server over the new connection.\n */\n"
+                + " * when configureTrax is called, onto a server over the new connection. A start in flight is kept per user (the\n"
+                + " * `user` given to configureTrax), so it is never sent again as another user.\n */\n"
         );
         sb.Append(
             $"export function use{pascal}(options: Omit<UseServerMachineOptions, \"server\"> = {{}}) {{\n"
         );
         sb.Append("  useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);\n");
+        sb.Append("  const { user } = traxConnection();\n");
         sb.Append(
-            $"  return useServerMachine({camel}, {{ ...options, server: {camel}Server() }});\n}}\n\n"
+            $"  const startStorageKey = options.startStorageKey !== undefined ? options.startStorageKey : {TypeScript.Literal("trax-start:" + machine.Id)} + (user === undefined ? \"\" : \".\" + encodeURIComponent(user));\n"
         );
         sb.Append(
-            $"/**\n * The instance of '{EscapeDocText(machine.Id)}' this browser keeps across visits for `user`, started when there\n"
-                + " * is none. `user` is the signed-in user's id: each user's instance is kept under a key of its own, so a browser\n"
+            $"  return useServerMachine({camel}, {{ ...options, startStorageKey, server: {camel}Server() }});\n}}\n\n"
+        );
+        sb.Append(
+            $"/**\n * The instance of '{EscapeDocText(machine.Id)}' this browser keeps across visits for the `user` given to\n"
+                + " * configureTrax, started when there is none. Each user's instance is kept under a key of its own, so a browser\n"
                 + $" * two people sign in to never opens one's instance for the other. `rememberKey` replaces the {EscapeDocText(TypeScript.Literal("trax." + machine.Id))}\n"
-                + " * the key starts with. It renders again when configureTrax is called, onto a server over the new connection.\n */\n"
+                + " * the key starts with. It renders again when configureTrax is called, onto a server over the new connection and\n"
+                + " * the new user's key at once.\n */\n"
         );
         sb.Append(
-            $"export function useRemembered{pascal}({{ user, rememberKey, ...options }}: Omit<UseRememberedMachineOptions, \"server\" | \"rememberKey\"> & {{ user: string; rememberKey?: string }}) {{\n"
+            $"export function useRemembered{pascal}({{ rememberKey, ...options }}: Omit<UseRememberedMachineOptions, \"server\" | \"rememberKey\"> & {{ rememberKey?: string }} = {{}}) {{\n"
         );
         sb.Append("  useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);\n");
+        sb.Append("  const { user } = traxConnection();\n");
+        sb.Append("  if (user === undefined)\n");
+        sb.Append(
+            $"    throw new Error(\"useRemembered{pascal} keeps an instance per user: give configureTrax the signed-in user's id as `user`.\");\n"
+        );
         sb.Append(
             $"  const key = (rememberKey ?? {TypeScript.Literal("trax." + machine.Id)}) + \".\" + encodeURIComponent(user);\n"
         );

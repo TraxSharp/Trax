@@ -113,7 +113,7 @@ public class MachineGenerateFromPackedToolTests
             """
             import { configureTrax, useReminder, useRememberedCheckout, startRun, useRunProgress, followRunProgress, type StartRunInput } from "./trax/index.g";
 
-            configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql" });
+            configureTrax({ url: "/graphql", socketUrl: "ws://localhost/graphql", user: "u-1" });
 
             export function usePage() {
               const reminder = useReminder({ startInput: {} });
@@ -123,10 +123,10 @@ public class MachineGenerateFromPackedToolTests
               return reminder.state;
             }
 
-            export function useDraft(user: string) {
-              // @ts-expect-error a remembered instance is kept per user, so the hook needs one
-              useRememberedCheckout({});
-              return useRememberedCheckout({ user }).forget;
+            export function useDraft() {
+              // @ts-expect-error the user is the connection's, given to configureTrax, never the hook's
+              useRememberedCheckout({ user: "u-2" });
+              return useRememberedCheckout({ rememberKey: "drafts" }).forget;
             }
 
             const input: StartRunInput = { scenario: "crash" };
@@ -243,7 +243,7 @@ public class MachineGenerateFromPackedToolTests
           },
         }));
 
-        import { configureTrax, reminderServer, useReminder, useRunProgress } from "./trax/index.g";
+        import { configureTrax, reminderServer, useRememberedReminder, useReminder, useRunProgress } from "./trax/index.g";
 
         // Every request, with its headers, answered only when the test says so.
         const requests: { id: string; variables: Record<string, unknown>; headers: Record<string, string>; answer(data: unknown): void }[] = [];
@@ -253,13 +253,21 @@ public class MachineGenerateFromPackedToolTests
             requests.push({ id, variables, headers: init.headers, answer: (data) => resolve({ json: async () => ({ data }) } as Response) });
           })) as unknown as typeof fetch;
 
-        const signIn = (key: string) =>
+        const signIn = (key: string, user = key) =>
           configureTrax({
             url: "http://host/graphql",
             socketUrl: "ws://host/graphql",
             headers: () => ({ "X-Api-Key": key }),
             connectionParams: () => ({ apiKey: key }),
+            user,
           });
+
+        // The reminder's starts and reads as the host answers them: its initial state is Idle, with an empty context.
+        const starts = () => requests.filter((r) => r.id.startsWith("trax_machine_reminder_start_"));
+        const reads = (id: string) => requests.filter((r) => r.id.startsWith("trax_machine_reminder_get_") && r.variables.id === id);
+        const instance = (id: string) => ({ id, state: "Idle", context: {}, revision: 1, problem: null });
+        const started = (id: string) => ({ machines: { reminder: { start: instance(id) } } });
+        const got = (id: string) => ({ machines: { reminder: { get: instance(id) } } });
 
         const open = (socket: Socket | undefined) => socket?.subscriptions.filter((s) => !s.closed) ?? [];
         const run = (runId: string, fields: Record<string, unknown>) => ({ runId, train: "startRun", state: null, steps: [], failure: null, problem: null, retriedAs: null, ...fields });
@@ -271,6 +279,8 @@ public class MachineGenerateFromPackedToolTests
           cleanup();
           vi.useRealTimers();
           requests.length = 0;
+          localStorage.clear();
+          sessionStorage.clear();
         });
 
         it("A_mounted_hook_moves_to_the_new_connection_after_configureTrax", async () => {
@@ -303,6 +313,109 @@ public class MachineGenerateFromPackedToolTests
 
           expect(c.subscriptions).toHaveLength(1);
           expect(sockets.flatMap((s) => s.subscriptions).filter((s) => s.payload.variables.id === "i-2")).toHaveLength(1);
+        });
+
+        it("A_server_made_before_configureTrax_refuses_to_send", async () => {
+          signIn("J");
+          const server = reminderServer();
+          signIn("K");
+
+          await expect(server.get("i-4")).rejects.toMatchObject({ name: "TraxOperationError", code: "CONNECTION_CHANGED" });
+          expect(requests).toHaveLength(0);
+          const stop = server.subscribe("i-4", () => {});
+          await settle();
+          stop();
+          expect(sockets.flatMap((s) => s.subscriptions).filter((s) => s.payload.variables.id === "i-4")).toHaveLength(0);
+          expect(reminderServer()).not.toBe(server);
+        });
+
+        it("The_remembered_key_follows_the_user_given_to_configureTrax", async () => {
+          signIn("L", "alice");
+          const { result } = renderHook(() => useRememberedReminder());
+          await settle();
+          const aliceStart = starts().at(-1)!;
+          expect(aliceStart.headers["X-Api-Key"]).toBe("L");
+          await act(async () => aliceStart.answer(started("rem-a")));
+          await settle();
+          expect(localStorage.getItem("trax.reminder.alice")).toBe("rem-a");
+
+          await act(async () => signIn("M", "bob"));
+          await settle();
+
+          const bobStart = starts().at(-1)!;
+          expect(bobStart.headers["X-Api-Key"]).toBe("M");
+          expect(bobStart.variables.requestId).not.toBe(aliceStart.variables.requestId);
+          await act(async () => bobStart.answer(started("rem-b")));
+          await settle();
+          expect(result.current.id).toBe("rem-b");
+          expect(localStorage.getItem("trax.reminder.bob")).toBe("rem-b");
+          expect(localStorage.getItem("trax.reminder.alice")).toBe("rem-a");
+        });
+
+        it("A_connection_change_before_the_user_changes_writes_nothing_under_the_previous_user", async () => {
+          signIn("N", "alice");
+          // The app's own idea of who is signed in moves a render after configureTrax does.
+          const { rerender } = renderHook(({ user }: { user: string }) => ({ user, m: useRememberedReminder() }), {
+            initialProps: { user: "alice" },
+          });
+          await settle();
+          const aliceStart = starts().at(-1)!;
+
+          await act(async () => signIn("O", "bob"));
+          await settle();
+          await act(async () => aliceStart.answer(started("rem-a2")));
+          await settle();
+          rerender({ user: "bob" });
+          await settle();
+
+          const bobStarts = starts().filter((r) => r.headers["X-Api-Key"] === "O");
+          expect(bobStarts.length).toBeGreaterThan(0);
+          expect(bobStarts.map((r) => r.variables.requestId)).not.toContain(aliceStart.variables.requestId);
+          expect(localStorage.getItem("trax.reminder.alice")).toBeNull();
+          expect(localStorage.getItem("trax.reminder.bob")).toBeNull();
+          await act(async () => bobStarts.at(-1)!.answer(started("rem-b2")));
+          await settle();
+          expect(localStorage.getItem("trax.reminder.bob")).toBe("rem-b2");
+          expect(localStorage.getItem("trax.reminder.alice")).toBeNull();
+        });
+
+        it("The_first_render_after_configureTrax_shows_nothing_of_the_previous_user", async () => {
+          signIn("P", "alice");
+          let phase = "alice";
+          const seen: { phase: string; state: string | null }[] = [];
+          renderHook(() => {
+            const m = useReminder({ id: "i-5" });
+            seen.push({ phase, state: m.state });
+            return m;
+          });
+          await settle();
+          await act(async () => reads("i-5")[0].answer(got("i-5")));
+          await settle();
+          expect(seen.at(-1)).toEqual({ phase: "alice", state: "Idle" });
+
+          phase = "bob";
+          await act(async () => signIn("Q", "bob"));
+          await settle();
+
+          const bob = seen.filter((s) => s.phase === "bob");
+          expect(bob.length).toBeGreaterThan(0);
+          expect(bob.map((s) => s.state)).toEqual(bob.map(() => null));
+        });
+
+        it("A_start_request_id_is_not_carried_across_configureTrax", async () => {
+          signIn("R", "alice");
+          renderHook(() => useReminder());
+          await settle();
+          const aliceStart = starts().at(-1)!;
+
+          await act(async () => signIn("S", "bob"));
+          await settle();
+
+          const bobStart = starts().at(-1)!;
+          expect(bobStart).not.toBe(aliceStart);
+          expect(bobStart.headers["X-Api-Key"]).toBe("S");
+          expect(bobStart.variables.requestId).not.toBe(aliceStart.variables.requestId);
+          expect(sessionStorage.getItem("trax-start:reminder.alice")).toBe(aliceStart.variables.requestId);
         });
 
         it("A_read_answered_after_the_stream_ended_does_not_rewind_the_view", async () => {
