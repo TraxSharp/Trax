@@ -28,7 +28,7 @@ a frontend's build needs no running server, no database and no credential, and T
 | --- | --- |
 | `app.RunTraxAsync(string[]? args = null)` | Runs the host as `app.RunAsync()` does, unless the process was started with `--trax-export-client <path>`: then it runs the host's startup checks, writes the manifest to the path and returns without serving. `args` defaults to the process's command line. In `Trax.Api.GraphQL.PersistedOperations.Extensions`. |
 | `TraxClientExport.Argument` | `--trax-export-client`. It takes the path next (`--trax-export-client out/client.json`) or after `=`. |
-| `TraxClientExport.Requested`, `TraxClientExport.Path` | Whether, and where to, the process was started to export, read from its command line. `UsePostgres` and `UseSqlite` skip their migration when it is set; a host skips its own seeding the same way. |
+| `TraxClientExport.Requested`, `TraxClientExport.Path` | Whether, and where to, the process was started to export, read from its command line when first used. `UsePostgres` and `UseSqlite` skip their migration when it is set; a host skips its own seeding the same way. The argument without a path throws an `ArgumentException` that says so where it is read. |
 | `TraxClientExport.PathIn(IReadOnlyList<string> args)` | The path `args` name after the argument, or null. The argument without a path throws. |
 | `ITraxStartupCheck` | Marks a hosted service that only checks configuration and the host's own types at startup and refuses a host that is wrong. An export runs every one of these and no other hosted service. Trax's own startup validators carry it, except the two that read the database or call a remote schema. |
 | `ClientManifest` | The file's content: `Format`, `Machines`, `Trains`, `Progress` and `Types`. `Progress` holds the [`runProgress`](/docs/sdk-reference/graphql-api/run-progress) query's and subscription's documents, and is empty when no train lets its starter follow it. `ClientManifest.Write(manifest)` gives its text, `ClientManifest.Read(text)` reads it. `ClientManifest.CurrentFormat` is the format this version writes and reads. |
@@ -43,6 +43,9 @@ a frontend's build needs no running server, no database and no credential, and T
   writes, so a configuration production refuses fails the export too. No other hosted service starts: nothing
   listens, sweeps, registers documents or opens a database. A host that seeds data at startup checks
   `TraxClientExport.Requested` first.
+- **Started to export, never serves.** A host started with `--trax-export-client` whose provider skipped its
+  migration refuses to start if it serves anyway, because it calls `app.Run()` rather than `RunTraxAsync`: its
+  database was not migrated. The refusal names `RunTraxAsync`.
 - **Only what a client sends.** The manifest lists the documents of exposed machines and trains, never one under
   `operations`. `Types` holds the SDL of the types those documents reach and nothing else. The root operation types
   and every type a namespace field reaches (`dispatch`, `discover`, `machines` and the namespaces under them) are

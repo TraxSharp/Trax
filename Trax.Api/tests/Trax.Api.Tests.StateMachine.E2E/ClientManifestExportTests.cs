@@ -164,6 +164,44 @@ public class ClientManifestExportTests
         File.Exists(_path).Should().BeFalse("nothing is written for a host that would not start");
     }
 
+    [Test]
+    public async Task A_host_started_to_export_that_calls_Run_refuses_to_serve()
+    {
+        var database = Database + "_serve";
+        await E2EHost.RecreateDatabaseAsync(database);
+        try
+        {
+            // As UsePostgres does when the process was started with the flag: it skips the migration and registers
+            // the gate. Starting the host is what app.Run() does.
+            var start = () =>
+                E2EHost.StartAsync(
+                    database,
+                    new CountingCharge(),
+                    new E2EHostOptions
+                    {
+                        Served = [typeof(WizardMachine)],
+                        GraphQL = MachineDocumentOps.Persisted(),
+                        Services = services =>
+                            TraxClientExport.SkipsDatabase(
+                                services,
+                                new ClientExportFlag(() =>
+                                    ["host.dll", TraxClientExport.Argument, _path]
+                                )
+                            ),
+                    }
+                );
+
+            await start
+                .Should()
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage("*--trax-export-client*not migrated*RunTraxAsync*");
+        }
+        finally
+        {
+            await E2EHost.DropDatabaseAsync(database);
+        }
+    }
+
     [TestCase(new string[0], null)]
     [TestCase(new[] { "--urls", "x" }, null)]
     [TestCase(new[] { "--trax-export-client", "out/client.json" }, "out/client.json")]

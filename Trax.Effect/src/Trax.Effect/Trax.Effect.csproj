@@ -75,4 +75,10 @@
     <InternalsVisibleTo Include="Trax.Api.Tests" />
     <InternalsVisibleTo Include="Trax.Dashboard.Tests.Integration" />
   </ItemGroup>
+
+  <!-- A host started to export its client manifest that serves instead is refused (ClientExportServeGate); the
+       state-machine end-to-end host drives it with a command line of its own (ClientExportFlag). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
+  </ItemGroup>
 </Project>

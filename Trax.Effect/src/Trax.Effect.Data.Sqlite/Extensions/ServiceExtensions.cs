@@ -43,13 +43,17 @@ public static class ServiceExtensions
         string connectionString
     )
     {
+        // A process started to export its client manifest opens no database, and refuses to serve if it is not
+        // exporting after all (TraxClientExport).
+        var export = TraxClientExport.SkipsDatabase(configurationBuilder.ServiceCollection);
+
         // Run migrations unless explicitly skipped
-        // A process started to export its client manifest opens no database (TraxClientExport).
-        if (!configurationBuilder.MigrationsDisabled && !TraxClientExport.Requested)
+        if (!configurationBuilder.MigrationsDisabled && !export)
             DatabaseMigrator.Migrate(connectionString).Wait();
 
         // Enable WAL mode for better concurrent read/write performance
-        EnableWalMode(connectionString);
+        if (!export)
+            EnableWalMode(connectionString);
 
         // The in-process notice a dispatcher in this host wakes on when a save commits queued
         // work. It watches every context the factory below builds.
