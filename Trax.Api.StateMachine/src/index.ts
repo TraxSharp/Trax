@@ -99,6 +99,9 @@ export type {
   CustomReducers,
 } from './rules/interpreter';
 export { generateContextTypes, generateMachineFactory } from './rules/generateTypes';
+
+// The client format: what code `trax client` generates checks the installed package serves, when it loads.
+export { clientFormat, oldestClientFormatServed, requireClientFormat } from './clientFormat';
 export type { MachineFactoryOptions } from './rules/generateTypes';
 
 // ── 6. Cross-runtime conformance ──────────────────────────────────────────────────────────────────

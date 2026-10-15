@@ -51,17 +51,12 @@ export interface TypedMachineOperations {
   /** The machine: its id names its field under `machines`, and its version stamps the snapshots rebuilt. */
   machine: TypedMachine<MachineSpec> | { id: string; version: number };
   /**
-   * The machine's persisted documents, from the host's manifest. Given, every operation is sent by its id with its
-   * values as variables, and {@link context} is not read: each document selects the whole answer. Each must be of
-   * this machine and, for a {@link TypedMachine} that carries its IR hash, of the IR the twin was generated from;
-   * otherwise {@link createMachineExecutor} throws.
+   * The machine's persisted documents, from the host's client manifest. Every operation is sent by its id with its
+   * values as variables; each document selects the whole answer. Each must be of this machine and, for a
+   * {@link TypedMachine} that carries its IR hash, of the IR the twin was generated from; otherwise
+   * {@link createMachineExecutor} throws. A machine with none throws too: a client never sends a document of its own.
    */
-  documents?: readonly MachineDocument[];
-  /**
-   * The selection of the machine's context, as GraphQL selects it: `"title pages note"`, with a sub-selection for
-   * a nested record (`"address { street }"`). Omit for a machine whose states declare no context record.
-   */
-  context?: string;
+  documents: readonly MachineDocument[];
   /**
    * The event bound to the machine's irreversible effect (`"Pay"`), which `sendSnapshot` fires. Omit for a machine
    * with no effect.
@@ -91,18 +86,6 @@ export const eventField = (trigger: string): string => {
   if (upper === 0) return trigger;
   if (upper === 1 || upper === trigger.length) return trigger.slice(0, upper).toLowerCase() + trigger.slice(upper);
   return trigger.slice(0, upper - 1).toLowerCase() + trigger.slice(upper - 1);
-};
-
-/** A JSON value as a GraphQL literal: objects with bare keys, everything else as JSON writes it. */
-export const graphqlLiteral = (value: unknown): string => {
-  if (value === null || value === undefined) return 'null';
-  if (Array.isArray(value)) return `[${value.map(graphqlLiteral).join(', ')}]`;
-  if (typeof value === 'object')
-    return `{ ${Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => `${k}: ${graphqlLiteral(v)}`)
-      .join(', ')} }`;
-  return JSON.stringify(value);
 };
 
 interface TypedAnswer {
@@ -148,9 +131,12 @@ const declaredVariables = (document: string | undefined): Set<string> | null =>
 
 // Checks a machine's documents against the machine, keyed by operation. A document of another machine, or of another
 // IR than the twin's, is refused here rather than sent: the host would answer it client-outdated on every request.
-const documentsOf = (typed: TypedMachineOperations): Map<string, MachineDocument> | null => {
-  if (!typed.documents) return null;
+const documentsOf = (typed: TypedMachineOperations): Map<string, MachineDocument> => {
   const machineId = typed.machine.id;
+  if (!typed.documents?.length)
+    throw new Error(
+      `The machine '${machineId}' has no persisted documents. Export the host's client manifest (--trax-export-client) and pass its documents: a client sends only the ids the host registered.`,
+    );
   const irHash = 'schemaHash' in typed.machine ? typed.machine.schemaHash : '';
   const byOperation = new Map<string, MachineDocument>();
   for (const document of typed.documents) {
@@ -207,13 +193,6 @@ export function createMachineExecutor(
     const typed = machines.get(machineId);
     if (!typed) return problem(RefusalCode.UnknownMachine, `No typed machine named '${machineId}' is configured.`);
 
-    const field = machineField(machineId);
-    const result = `id revision state dueAt dueAtKnown ${typed.context ? `context { ${typed.context} } ` : ''}problem { code message }`;
-    const args = (values: Record<string, unknown>) =>
-      Object.entries(values)
-        .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => `${k}: ${graphqlLiteral(v)}`)
-        .join(', ');
 
     // The answer as the generic mutations give it: the snapshot as JSON, the twin's shape.
     const output = (answer: TypedAnswer | null | undefined): SnapshotOutput | null => {
@@ -234,30 +213,21 @@ export function createMachineExecutor(
       };
     };
 
-    // One operation: by its persisted id, its values as variables, when the machine has documents; else inline.
-    const run = async (
-      keyword: 'mutation' | 'query',
-      name: string,
-      values: Record<string, unknown>,
-      selection = result,
-    ): Promise<Answered> => {
-      if (typed.byOperation) {
-        const document = typed.byOperation.get(name);
-        if (!document)
-          return {
-            refused: problem(
-              RefusalCode.ClientOutdated,
-              `There is no document for '${machineId}.${name}': the documents are of another version of the machine.`,
-            ),
-          };
-        const declared = declaredVariables(document.document);
-        const variables = Object.fromEntries(
-          Object.entries(values).filter(([k, v]) => v !== undefined && (declared === null || declared.has(k))),
-        );
-        return post({ id: document.id, variables }, name);
-      }
-      const root = keyword === 'mutation' ? 'mutation ' : '';
-      return post({ query: `${root}{ machines { ${field} { ${name}(${args(values)}) { ${selection} } } } }` }, name);
+    // One operation, by its persisted id, its values as variables.
+    const run = async (name: string, values: Record<string, unknown>): Promise<Answered> => {
+      const document = typed.byOperation.get(name);
+      if (!document)
+        return {
+          refused: problem(
+            RefusalCode.ClientOutdated,
+            `There is no document for '${machineId}.${name}': the documents are of another version of the machine.`,
+          ),
+        };
+      const declared = declaredVariables(document.document);
+      const variables = Object.fromEntries(
+        Object.entries(values).filter(([k, v]) => v !== undefined && (declared === null || declared.has(k))),
+      );
+      return post({ id: document.id, variables }, name);
     };
 
     const answer = async (answered: Promise<Answered>) => {
@@ -267,11 +237,11 @@ export function createMachineExecutor(
 
     switch (operation) {
       case 'startSnapshot':
-        return answer(run('mutation', 'start', { input: parseInput(input.input), requestId: input.requestId }));
+        return answer(run('start', { input: parseInput(input.input), requestId: input.requestId }));
 
       case 'advanceSnapshot':
         return answer(
-          run('mutation', eventField(String(input.trigger)), {
+          run(eventField(String(input.trigger)), {
             id: input.id,
             input: parseInput(input.input),
             requestId: input.requestId,
@@ -282,25 +252,20 @@ export function createMachineExecutor(
       case 'sendSnapshot':
         if (!typed.effectEvent) return problem(RefusalCode.NoEffect, `Machine '${machineId}' has no effect to send.`);
         return answer(
-          run('mutation', eventField(typed.effectEvent), {
+          run(eventField(typed.effectEvent), {
             id: input.id,
             requestId: input.requestId ?? `send:${String(input.id)}`,
           }),
         );
 
       case 'loadSnapshot': {
-        const done = await run('query', 'get', { id: input.id });
+        const done = await run('get', { id: input.id });
         if ('refused' in done) return done.refused;
         return done.answer ? output(done.answer) : problem(RefusalCode.NotFound, 'No draft with that id.');
       }
 
       case 'discardSnapshot': {
-        const done = await run(
-          'mutation',
-          'discard',
-          { id: input.id, requestId: input.requestId },
-          'id discarded problem { code message }',
-        );
+        const done = await run('discard', { id: input.id, requestId: input.requestId });
         if ('refused' in done) return done.refused;
         const discarded = done.answer;
         return discarded

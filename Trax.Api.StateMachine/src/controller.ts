@@ -10,8 +10,6 @@ export interface MachineObserver<Spec extends MachineSpec> {
 
 export interface ControllerOptions<Spec extends MachineSpec> {
   initial: TypedSnapshot<Spec> | (() => TypedSnapshot<Spec>);
-  /** Runs after every successful transition — persistence is transition-driven, never a decoupled timer. */
-  persist?(snapshot: TypedSnapshot<Spec>): void | Promise<void>;
   observer?: MachineObserver<Spec>;
 }
 
@@ -21,8 +19,9 @@ export interface ControllerView<Spec extends MachineSpec> {
 }
 
 /**
- * A framework-free store over a {@link TypedMachine}. Holds the current snapshot, performs transitions,
- * persists after each success, and notifies subscribers. Critically, a DECLINED action still emits a new
+ * A framework-free store over a {@link TypedMachine}, held in memory: it holds the current snapshot, performs
+ * transitions and notifies subscribers, and stores nothing. A machine a server owns is driven through
+ * `ServerMachineController` instead. Critically, a DECLINED action still emits a new
  * view (with `problem` set) so a UI re-renders and surfaces the rejection instead of silently swallowing it.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#driving-a-machine-the-client-owns
  */
@@ -70,7 +69,6 @@ export class MachineController<Spec extends MachineSpec> {
       const from = this.view.snapshot.state;
       this.view = { snapshot: result.snapshot, problem: null };
       this.options.observer?.onTransition?.(from, trigger, result.snapshot.state, result.snapshot);
-      void this.options.persist?.(result.snapshot);
       this.emit();
       return true;
     }

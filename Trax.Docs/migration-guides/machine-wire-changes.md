@@ -69,3 +69,18 @@ client sends that id and gets `CLIENT_OUTDATED` after the train changes, not a v
   the host's start, naming the train and the type. Flatten the output, or stop exposing the train.
 - **The first rolling deploy.** A node from before this release does not reserve `trax_train_`, so while old and new
   nodes overlap a client sending a new train id to an old node gets one validation error. It happens once.
+
+## The TypeScript client sends only registered documents
+
+`@traxsharp/state-machine` no longer ships the client-authoritative path, and its client sends only the persisted
+documents a host registered.
+
+- **Gone:** `useMachine` (from `/react`), `createSnapshotClient` and `createHttpExecutor` (from `/client`), and the
+  `persist` option of `MachineController`, which now only holds a machine in memory. A machine a server holds is
+  driven by `useServerMachine` or `ServerMachineController` over `createMachineServer`.
+- **`createMachineExecutor`** takes each machine's `documents` (from the host's
+  [client manifest](/docs/sdk-reference/statemachine-api/client-manifest)) and throws when a machine has none; its
+  `context` option is gone, since each document selects the whole answer.
+- **`createDraftSession` and `startDraft`** take the executor (`{ executor, machine, id }`) in place of a client.
+- **Generated code checks its client format.** Code `trax client` generates calls `requireClientFormat` when it
+  loads, and a package that serves another format throws, naming both.

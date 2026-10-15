@@ -5,9 +5,9 @@
  * subpath is the one place that knows a server exists. It is a separate entry point so importing the
  * engine never drags a transport (or the `fetch` global) into a bundle that only wanted the reducer.
  *
- *   transport.ts    the generic mutations, machine-agnostic — `(machine, id)` on every call
- *   machines.ts     an executor over the typed `machines` root, for a machine the host exposes: the same
- *                   client and sessions drive it
+ *   transport.ts    the shapes an executor answers, and the client the sessions use inside
+ *   machines.ts     an executor over the typed `machines` root, for a machine the host exposes, which sends
+ *                   only the persisted documents the host registered
  *   draftSession.ts one machine + one draft id, bound; every method total (never throws); and
  *                   startDraft, which creates a draft under an id the server mints
  *   machineServer.ts createMachineServer: the typed operations and the push stream of one exposed
@@ -16,16 +16,14 @@
  *
  * Typical wiring:
  *
- *   const client  = createSnapshotClient(createHttpExecutor('/graphql'));
- *   const started = await startDraft({ client, machine: checkout, requestId: crypto.randomUUID() });
+ *   const executor = createMachineExecutor('/graphql', { machines: [{ machine: checkout, documents }] });
+ *   const started  = await startDraft({ executor, machine: checkout, requestId: crypto.randomUUID() });
  *   if (started.ok) {
- *     const session = createDraftSession({ client, machine: checkout, id: started.id });
+ *     const session = createDraftSession({ executor, machine: checkout, id: started.id });
  *     await session.advance('Next', { requestId: crypto.randomUUID() });
  *   }
  */
 export {
-  createSnapshotClient,
-  createHttpExecutor,
   type AdvanceOptions,
   type HttpExecutorOptions,
   type StartOptions,

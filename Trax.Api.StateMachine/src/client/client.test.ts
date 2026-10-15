@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { checkout } from '../machines/checkout/checkout';
 import { createDraftSession, startDraft, TRANSPORT_ERROR } from './draftSession';
 import {
-  createHttpExecutor,
   createSnapshotClient,
   type SnapshotExecutor,
   type SnapshotOutput,
@@ -88,65 +87,10 @@ describe('createSnapshotClient', () => {
   });
 });
 
-describe('createHttpExecutor', () => {
-  it('posts the operation under dispatch.stateMachine and unwraps its output', async () => {
-    const fetchMock = vi.fn(async () => ({
-      json: async () => ({
-        data: { dispatch: { stateMachine: { saveSnapshot: { output: { snapshot: '{}', problem: null } } } } },
-      }),
-    })) as unknown as typeof globalThis.fetch;
-
-    const execute = createHttpExecutor('/graphql', {
-      fetch: fetchMock,
-      headers: () => ({ 'X-Api-Key': 'k' }),
-    });
-    const output = await execute('saveSnapshot', { machine: 'checkout', id: 'd' });
-
-    expect(output).toEqual({ snapshot: '{}', problem: null });
-    const [, init] = (fetchMock as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
-    expect((init.headers as Record<string, string>)['X-Api-Key']).toBe('k');
-    expect(JSON.parse(init.body as string).query).toContain('saveSnapshot(input:$i)');
-  });
-
-  it('reads the minted id of a start and gives a discard\'s output a null snapshot', async () => {
-    const answers: Record<string, unknown> = {
-      startSnapshot: { output: { id: 'minted', created: true, snapshot: '{}', problem: null } },
-      discardSnapshot: { output: { discarded: true, problem: null } },
-    };
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
-      const query = JSON.parse(init.body as string).query as string;
-      const field = query.includes('startSnapshot') ? 'startSnapshot' : 'discardSnapshot';
-      return { json: async () => ({ data: { dispatch: { stateMachine: { [field]: answers[field] } } } }) };
-    }) as unknown as typeof globalThis.fetch;
-    const execute = createHttpExecutor('/graphql', { fetch: fetchMock });
-
-    await expect(execute('startSnapshot', { machine: 'checkout', requestId: 'r' })).resolves.toEqual({
-      id: 'minted',
-      created: true,
-      snapshot: '{}',
-      problem: null,
-    });
-    await expect(execute('discardSnapshot', { machine: 'checkout', id: 'd', requestId: 'r' })).resolves.toEqual({
-      discarded: true,
-      snapshot: null,
-      problem: null,
-    });
-  });
-
-  it('throws on a GraphQL error, which arrives at HTTP 200 (an auth refusal looks like this)', async () => {
-    const fetchMock = vi.fn(async () => ({
-      json: async () => ({ errors: [{ message: 'not authorized' }] }),
-    })) as unknown as typeof globalThis.fetch;
-
-    const execute = createHttpExecutor('/graphql', { fetch: fetchMock });
-    await expect(execute('loadSnapshot', {})).rejects.toThrow('not authorized');
-  });
-});
-
 describe('createDraftSession', () => {
   const session = (execute: SnapshotExecutor, messages?: Record<string, string>) =>
     createDraftSession({
-      client: createSnapshotClient(execute),
+      executor: execute,
       machine: checkout,
       id: 'draft-1',
       messages,
@@ -220,7 +164,7 @@ describe('createDraftSession', () => {
   it('accepts a raw machine name with an explicit schema hash', async () => {
     const { calls, execute } = recorder();
     const s = createDraftSession({
-      client: createSnapshotClient(execute),
+      executor: execute,
       machine: 'turnstile',
       id: 'd',
       schemaHash: 'hash-1',
@@ -234,7 +178,7 @@ describe('startDraft', () => {
   it('returns the server-minted id and the first snapshot', async () => {
     const { calls, execute } = recorder({ id: 'minted', created: true, snapshot: '{"state":"Cart"}', problem: null });
 
-    const started = await startDraft({ client: createSnapshotClient(execute), machine: checkout, requestId: 'r-1' });
+    const started = await startDraft({ executor: execute, machine: checkout, requestId: 'r-1' });
 
     expect(started).toEqual({ ok: true, id: 'minted', snapshot: '{"state":"Cart"}', created: true });
     expect(calls[0].input).toMatchObject({ machine: checkout.id, requestId: 'r-1', schemaHash: checkout.schemaHash });
@@ -243,20 +187,20 @@ describe('startDraft', () => {
   it('surfaces a refusal as a typed result, and never throws', async () => {
     const refused = recorder({ snapshot: null, problem: { code: 'TOO_MANY_DRAFTS', message: 'Too many.' } });
     await expect(
-      startDraft({ client: createSnapshotClient(refused.execute), machine: 'checkout', requestId: 'r' }),
+      startDraft({ executor: refused.execute, machine: 'checkout', requestId: 'r' }),
     ).resolves.toEqual({ ok: false, code: 'TOO_MANY_DRAFTS', message: 'Too many.' });
 
     const offline: SnapshotExecutor = async () => {
       throw new Error('offline');
     };
     await expect(
-      startDraft({ client: createSnapshotClient(offline), machine: 'checkout', requestId: 'r' }),
+      startDraft({ executor: offline, machine: 'checkout', requestId: 'r' }),
     ).resolves.toMatchObject({ ok: false, code: TRANSPORT_ERROR });
   });
 
   it('discards the bound draft through its session', async () => {
     const { calls, execute } = recorder({ snapshot: null, problem: null, discarded: true });
-    const s = createDraftSession({ client: createSnapshotClient(execute), machine: checkout, id: 'draft-1' });
+    const s = createDraftSession({ executor: execute, machine: checkout, id: 'draft-1' });
 
     await expect(s.discard('d-1')).resolves.toEqual({ ok: true, snapshot: null });
     expect(calls[0]).toEqual({

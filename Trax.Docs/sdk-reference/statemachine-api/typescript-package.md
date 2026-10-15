@@ -35,8 +35,8 @@ regenerating keeps working until the format itself changes.
 | Entry point | Holds |
 | --- | --- |
 | `@traxsharp/state-machine` | The engine, the typed view, the framework-free stores, the IR interpreter and the generators. Pure: no I/O. |
-| `@traxsharp/state-machine/client` | Everything that talks to a Trax server: the generic and typed executors, draft sessions, and the server-authoritative controller. |
-| `@traxsharp/state-machine/react` | `useMachine` and `useServerMachine`. React is an optional peer dependency. |
+| `@traxsharp/state-machine/client` | Everything that talks to a Trax server: the typed executor over persisted documents, draft sessions, and the server-authoritative controller. |
+| `@traxsharp/state-machine/react` | `useServerMachine`. React is an optional peer dependency. |
 
 ### The engine and the typed view
 
@@ -51,16 +51,16 @@ regenerating keeps working until the format itself changes.
 | `evaluateRule`, `applyReduction`, `validateSchema`, `validateInput` | The rule interpreter. `validateSchema(schema, context)` checks a context; `validateInput(schema, input)` checks a trigger's input as the C# engine does (no input reads as `{}`, anything but a plain object is refused). Both answer null when valid, else a message, and never throw. |
 | `Rule`, `Reduction`, `ValueSource`, `SetStep`, `ContextSchema`, `FieldSchema`, `ValueSchema`, `RuleSource`, `JsonFieldType`, `CompareOp`, `CustomGuards`, `CustomReducers` | The [declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model). `ValueSchema` is the shape of one value (its `type`, `nullable`, an integer's `minimum` and `maximum`, a record's `fields`, a map's or list's `values`); `FieldSchema` adds the field's `name` and `constraints`. |
 | `generateContextTypes`, `generateMachineFactory` | The generators that emit a twin from an IR. `trax machine generate` and the drift check call them. |
+| `clientFormat`, `oldestClientFormatServed`, `requireClientFormat(n)` | The client format: the API code `trax client` generates calls. Generated code calls `requireClientFormat` with the format it was generated for when it loads, before any twin, and the runtime throws naming both formats and whether to upgrade the package or regenerate. |
 | `enumerate`, `serializeCorpus` | Enumerate a machine into the differential corpus the C# engine replays. |
 
-### Driving a machine the client owns
+### Driving a machine in memory
 
-From `@traxsharp/state-machine` (`useMachine` from `@traxsharp/state-machine/react`), for a snapshot the browser holds:
+From `@traxsharp/state-machine`, for a machine no server holds (a preview, a test, a form's own steps):
 
 | Export | What it is |
 | --- | --- |
-| `MachineController` | A framework-free store: `send`, `can`, `available`, `reset`, `subscribe`, `getSnapshot`. It persists through `persist` after every successful transition, and a refused action still emits a view with its `problem`. |
-| `useMachine(machine, { initial, persist?, observer?, devtools? })` | From `@traxsharp/state-machine/react`: the controller as a hook. It returns `snapshot`, `state`, `context`, `send`, `can`, `available`, `lastProblem` and `reset`. |
+| `MachineController` | A framework-free store held in memory: `send`, `can`, `available`, `reset`, `subscribe`, `getSnapshot`. It stores nothing, and a refused action still emits a view with its `problem`. A machine a server holds is driven through `ServerMachineController` instead. |
 | `createFormView(machine, { steps, toContext })` | For a UI that owns its data and asks the machine: maps each UI step to a state (one to one), and gives `advance`, `can`, `snapshotFor`, `serialize`, `resume` and `isCommitted` in the UI's own step names. |
 | `problemFromAdvance`, `problemFromRehydration`, `Problem` | A refusal shaped for display. |
 | `createDevLogger` | Logs transitions and refusals in development. |
@@ -71,10 +71,8 @@ From `@traxsharp/state-machine/client` (`useServerMachine` from `@traxsharp/stat
 
 | Export | What it is |
 | --- | --- |
-| `createSnapshotClient(executor)` | A client for the six generic operations, `(machine, id)` on every call. Served only when the host [opts in](/docs/migration-guides/generic-state-machine-mutations). |
-| `createHttpExecutor(endpoint, options?)` | The executor that sends the generic mutations' documents over HTTP. |
-| `createMachineExecutor(endpoint, { machines, ... })` | The executor for machines the host exposes on the typed root, behind the same client and sessions. Given each machine's `documents` (`MachineDocument`), it sends persisted ids. |
-| `createDraftSession({ client, machine, id })`, `startDraft({ client, machine, requestId, input? })` | One draft of one machine, every method total: a refusal is a `{ ok: false, code, message }`, an unreachable server is `TRANSPORT_ERROR` (`ClientProblemCode.TransportError`). `startDraft` creates a draft under an id the server mints. |
+| `createMachineExecutor(endpoint, { machines, ... })` | The executor for machines the host exposes on the typed root. Each machine is given its `documents` (`MachineDocument`, from the [client manifest](/docs/sdk-reference/statemachine-api/client-manifest)), and every operation is sent by its persisted id; a machine with none throws when the executor is built. A client never sends a document of its own. |
+| `createDraftSession({ executor, machine, id })`, `startDraft({ executor, machine, requestId, input? })` | One draft of one machine, every method total: a refusal is a `{ ok: false, code, message }`, an unreachable server is `TRANSPORT_ERROR` (`ClientProblemCode.TransportError`). `startDraft` creates a draft under an id the server mints. |
 | `createMachineServer(endpoint, { machine, documents, socket })` | One exposed machine's typed operations and its push stream (`<machine>Changed`), as the `MachineServer` a controller drives. `persistedMessageReplacer` is the graphql-ws `jsonMessageReplacer` it needs, and `DEFAULT_RESUBSCRIBE_DELAYS` (1, 2, then 5 seconds) the delays before a dropped stream is subscribed again. |
 | `ServerMachineController` | The framework-free, server-authoritative store: the server applies every transition and the twin predicts. `start`, `send`, `retry` (which resends a start or event that failed in transport, or stayed `SERVER_OUTDATED` past every retry, under its first request id), `can`, `available`, `get`, `subscribe`, `dispose`. |
 | `DEFAULT_RETRY_DELAYS` | The controller's default delays between retries of a `SERVER_OUTDATED` answer or a failed read: 250, 500, 1,000, 2,000 and 4,000 ms. Override with `retryDelays`. |

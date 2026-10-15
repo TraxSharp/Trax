@@ -6,10 +6,9 @@ const make = (opts: Partial<ControllerOptions<TurnstileSpec>> = {}) =>
   new MachineController<TurnstileSpec>(turnstile, { initial: () => turnstile.initial(), ...opts });
 
 describe('MachineController', () => {
-  it('transitions, persists after the step, and notifies once on a successful send', () => {
-    const persist = vi.fn();
+  it('transitions and notifies once on a successful send', () => {
     const listener = vi.fn();
-    const c = make({ persist });
+    const c = make();
     c.subscribe(listener);
 
     const moved = c.send('Coin', { coin: 'quarter' });
@@ -17,15 +16,13 @@ describe('MachineController', () => {
     expect(moved).toBe(true);
     expect(c.state).toBe('Unlocked');
     expect(c.context).toEqual({ paidWith: 'quarter' });
-    expect(persist).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledOnce();
     expect(c.lastProblem).toBeNull();
   });
 
   it('surfaces a rejection without changing state, STILL notifies, and returns false', () => {
-    const persist = vi.fn();
     const listener = vi.fn();
-    const c = make({ persist });
+    const c = make();
     c.subscribe(listener);
 
     const moved = c.send('Push'); // no transition out of Locked
@@ -34,7 +31,6 @@ describe('MachineController', () => {
     expect(c.state).toBe('Locked');
     expect(c.lastProblem?.code).toBe('NO_TRANSITION');
     expect(listener).toHaveBeenCalledOnce(); // a declined action is never dropped
-    expect(persist).not.toHaveBeenCalled();
     // a new view object is emitted so useSyncExternalStore re-renders
     expect(c.getSnapshot().problem).not.toBeNull();
   });

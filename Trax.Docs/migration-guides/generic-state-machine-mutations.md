@@ -20,9 +20,9 @@ typed API instead, under the [machines root](/docs/sdk-reference/graphql-api/mac
 Before, `AddStateMachines` put these under `dispatch { stateMachine { ... } }` for every registered machine:
 `saveSnapshot`, `advanceSnapshot`, `loadSnapshot` and `sendSnapshot`. After the upgrade none of them, nor the new
 `startSnapshot` and `discardSnapshot`, is in the schema unless the host opts in. A client that still sends
-them gets a GraphQL validation error, so nothing runs. That includes the TypeScript client built with
-`createSnapshotClient(createHttpExecutor(...))` and the `createDraftSession` on top of it, which send these
-documents.
+them gets a GraphQL validation error, so nothing runs. That includes a TypeScript client from before Trax 1.64.0
+built with `createSnapshotClient(createHttpExecutor(...))`, which sent these documents; the package no longer ships
+either.
 
 The trains behind the mutations are still registered as mediator routes, so host code that dispatches them keeps
 working. Only the GraphQL fields are gone.
@@ -128,8 +128,8 @@ that changes the context a declared event with an input record, and let the serv
 
 ### 5. Move the client
 
-In TypeScript, `createMachineExecutor(endpoint, { machines })` drives the typed API through the same
-`createSnapshotClient`, `createDraftSession` and `startDraft` as before, and `createMachineServer` with
+In TypeScript, `createMachineExecutor(endpoint, { machines })` drives the typed API by its persisted documents, behind
+`createDraftSession` and `startDraft`, and `createMachineServer` with
 `useServerMachine` drives one instance from React, with the server applying every transition and pushing each
 change. Both are described under [The TypeScript client](/docs/statemachine/call-a-machine-from-typescript)
 and [Driving an instance from React](/docs/statemachine/drive-a-machine-instance-from-react).

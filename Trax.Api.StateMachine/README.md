@@ -73,7 +73,7 @@ hand-authored `machine.json` and the `generate.mjs` node generator that read it 
 
 ## Driving a UI that owns its own data
 
-`useMachine` / `MachineController` assume the machine owns the snapshot. A wizard built on a form
+`MachineController` assumes the machine owns the snapshot. A wizard built on a form
 library doesn't — the form is the source of truth, and the machine is an oracle: *given these values at
 this step, may I fire this, and where does it land?* `createFormView` derives that whole bridge from
 the only two things an app can supply:
@@ -100,31 +100,23 @@ comes from the machine's IR (`.Committed()` in C#) — never a state name repeat
 The engine above is pure: a reducer and a rule interpreter, no I/O. Persisting a draft is a separate
 subpath, so importing the engine never pulls a transport into a bundle that only wanted the reducer.
 
-These mutations are served only when the host opts in; upgrading from a version that served them by default is
-covered in [Generic State-Machine Mutations](https://traxsharp.net/docs/migration-guides/generic-state-machine-mutations).
-When the host opts in (`ExposeGenericStateMachineMutations`), `Trax.Effect.StateMachine.Persistence` exposes
-**one** set of operations for **every** machine —
-`startSnapshot`, `saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot` and `discardSnapshot` under
-`dispatch { stateMachine { … } }`,
-each carrying a `machine` discriminator the server resolves in its registry. So there is one client, not
-one per machine:
+A host serves each machine it exposes as typed operations under `machines`, registered as persisted documents and
+listed in its [client manifest](https://traxsharp.net/docs/sdk-reference/statemachine-api/client-manifest). The client
+sends only those ids, never a document of its own:
 
 ```ts
-import { createSnapshotClient, createHttpExecutor, createDraftSession } from '@traxsharp/state-machine/client';
+import { createMachineExecutor, createDraftSession } from '@traxsharp/state-machine/client';
 
-const client  = createSnapshotClient(createHttpExecutor('/graphql'));
-const session = createDraftSession({ client, machine: checkout, id: DRAFT_ID });
+const executor = createMachineExecutor('/graphql', { machines: [{ machine: checkout, documents }] });
+const session  = createDraftSession({ executor, machine: checkout, id: DRAFT_ID });
 
-await session.save(machine.serialize(snapshot));   // soft autosave
-await session.advance('Next');                     // authoritative transition
+await session.advance('Next');                     // the server applies the transition
 await session.send(requestId);                     // the exactly-once effect
 ```
 
-- **`createSnapshotClient(executor)`** — the six operations, machine-agnostic: `(machine, id)` on every
-  call. The `executor` is the seam to the host's GraphQL stack. An app with generated typed documents
-  writes a small one against those; an app without can use `createHttpExecutor`, which builds the six
-  documents itself.
-- **`createDraftSession({ client, machine, id })`** — one machine's one draft, with `machine` and
+- **`createMachineExecutor(endpoint, { machines })`**: every operation by its persisted id. A machine with no
+  documents throws when the executor is built.
+- **`createDraftSession({ executor, machine, id })`** — one machine's one draft, with `machine` and
   `schemaHash` read off the `TypedMachine` so they cannot disagree with the machine actually running.
   Every method is **total**: a refusal arrives as a typed `problem` and an unreachable server as
   `TRANSPORT_ERROR`, so no call site needs a try/catch. Fallback copy is overridable via `messages`.
