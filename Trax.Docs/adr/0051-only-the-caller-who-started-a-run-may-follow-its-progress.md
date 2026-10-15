@@ -56,9 +56,10 @@ started directly, gets the same `NOT_FOUND`.
 
 ## Exemplars
 
-- `RunProgressE2ETests` in Trax.Api.Tests: the starter reads and follows a run; another caller, a missing id and an
-  anonymous caller are refused alike; no data reaches anyone.
-- `RunProgressLimitsTests` in Trax.Api.Tests: the per-run and per-caller caps.
+**Enforced elsewhere:** `RunProgressE2ETests` in `Trax.Api.Tests` (the starter reads and follows a run; another
+caller, a missing id and an anonymous caller are refused alike; no data reaches anyone) and `RunProgressLimitsTests`
+in `Trax.Api.Tests` (the per-run and per-caller caps).
+
 - [Run progress](/docs/sdk-reference/graphql-api/run-progress) is the rule as published.
 
 Not covered: a remote runner records no starter, so a run it executes from a `RUN` mutation cannot be followed.
