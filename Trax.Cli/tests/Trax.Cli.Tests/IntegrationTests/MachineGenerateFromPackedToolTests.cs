@@ -543,8 +543,10 @@ public class MachineGenerateFromPackedToolTests
           await act(async () => requests[0].answer({ runProgress: run("r1", { state: "IN_PROGRESS" }) }));
           expect(open(h).filter((s) => s.payload.variables.runId === "r1")).toHaveLength(1);
 
-          await act(async () => signIn("I"));
+          // The token is refreshed for the same user.
+          await act(async () => signIn("I", "H"));
           await settle();
+          await act(async () => requests.at(-1)!.answer({ runProgress: run("r1", { state: "IN_PROGRESS" }) }));
 
           expect(result.current.ended).toBe(false);
           expect(result.current.state).toBe("IN_PROGRESS");
@@ -553,6 +555,69 @@ public class MachineGenerateFromPackedToolTests
           expect(i.params()).toEqual({ apiKey: "I" });
           expect(open(i).filter((s) => s.payload.variables.runId === "r1")).toHaveLength(1);
           expect(requests.at(-1)!.headers["X-Api-Key"]).toBe("I");
+        });
+
+        it("A_run_refused_before_configureTrax_is_live_again_after_it", async () => {
+          signIn("J");
+          const { result } = renderHook(() => useRunProgress("r1"));
+          await settle();
+          await act(async () => requests[0].answer({ runProgress: run("r1", { state: "IN_PROGRESS" }) }));
+          const j = open(sockets.at(-1)).find((s) => s.payload.variables.runId === "r1")!;
+
+          // The token expired: the host refuses the stream, and the run shows as ended.
+          await act(async () => j.sink.next({ errors: [{ message: "expired", extensions: { code: "AUTH_NOT_AUTHENTICATED" } }] }));
+          expect(result.current.ended).toBe(true);
+
+          await act(async () => signIn("K", "J"));
+          await settle();
+          expect(result.current.ended).toBe(false);
+          const k = open(sockets.at(-1)).find((s) => s.payload.variables.runId === "r1")!;
+          await act(async () => k.sink.next(event("r1", 1, { state: "COMPLETED" })));
+
+          expect(result.current.state).toBe("COMPLETED");
+          expect(result.current.ended).toBe(false);
+        });
+
+        it("The_first_render_after_configureTrax_shows_nothing_of_the_previous_users_run", async () => {
+          signIn("L");
+          const { result } = renderHook(() => useRunProgress("r1"));
+          await settle();
+          const steps = [{ position: 0, kind: "junction", name: "Load", state: "COMPLETED" }];
+          await act(async () => requests[0].answer({ runProgress: run("r1", { state: "FAILED", steps, failure: "L's failure" }) }));
+          expect(result.current.steps).toHaveLength(1);
+
+          await act(async () => signIn("M"));
+
+          expect(result.current.runId).toBeNull();
+          expect(result.current.state).toBeNull();
+          expect(result.current.steps).toEqual([]);
+          expect(result.current.failure).toBeNull();
+          expect(result.current.problem).toBeNull();
+          expect(result.current.ended).toBe(false);
+        });
+
+        it("A_run_id_given_under_the_previous_user_is_not_followed_after_the_user_changes", async () => {
+          signIn("N");
+          const { result, rerender } = renderHook(({ id }) => useRunProgress(id), { initialProps: { id: "r1" as string | null } });
+          await settle();
+          await act(async () => requests[0].answer({ runProgress: run("r1", { state: "IN_PROGRESS" }) }));
+          const sent = requests.length;
+
+          await act(async () => signIn("O"));
+          await settle();
+
+          expect(requests).toHaveLength(sent);
+          expect(open(sockets.at(-1)).filter((s) => s.payload.variables.runId === "r1")).toHaveLength(0);
+          expect(result.current.runId).toBeNull();
+          expect(result.current.state).toBeNull();
+
+          // The caller gives the run id again: it is the new user's to follow.
+          rerender({ id: null });
+          rerender({ id: "r1" });
+          await settle();
+          expect(requests.at(-1)!.headers["X-Api-Key"]).toBe("O");
+          expect(open(sockets.at(-1)).filter((s) => s.payload.variables.runId === "r1")).toHaveLength(1);
+          expect(result.current.runId).toBe("r1");
         });
 
         it("A_retry_reported_twice_is_followed_once", async () => {

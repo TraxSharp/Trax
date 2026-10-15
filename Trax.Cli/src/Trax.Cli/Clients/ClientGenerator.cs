@@ -984,7 +984,7 @@ internal sealed class ClientGenerator
         sb.Append("import \"./format.g\";\n");
         sb.Append("import { useEffect, useState, useSyncExternalStore } from \"react\";\n");
         sb.Append(
-            "import { sendDocument, subscribeTrax, traxGeneration, traxSocket, TraxOperationError } from \"./client.g\";\n"
+            "import { sendDocument, subscribeTrax, traxConnection, traxGeneration, traxSocket, TraxOperationError } from \"./client.g\";\n"
         );
         sb.Append("import type { RunProgress, RunProgressEvent } from \"./types.g\";\n\n");
         sb.Append("/** The persisted id of the runProgress query, which the host registered. */\n");
@@ -1055,18 +1055,30 @@ internal sealed class ClientGenerator
             /**
              * Your run, kept current: read once, then followed until it ends. A step replaces the one at its position, a lost
              * event reads the run again, and a failed run the scheduler retries is followed into its retry. After
-             * configureTrax the run is read and followed again over the new connection. Pass null to follow nothing.
+             * configureTrax the run is read and followed again over the new connection, starting from nothing: what was
+             * shown before, ended or refused included, belonged to the connection before. When configureTrax names another
+             * `user`, a run id given before is the previous user's and is not followed until a run id is given again. Pass
+             * null to follow nothing.
              */
             export function useRunProgress(runId: string | null | undefined): RunProgressView {
-              const [view, setView] = useState<RunProgressView>(nothingYet);
-              const [current, setCurrent] = useState<{ asked: string | null | undefined; run: string | null | undefined; earlier: string[] }>(
-                { asked: runId, run: runId, earlier: [] },
-              );
-              if (current.asked !== runId) setCurrent({ asked: runId, run: runId, earlier: [] });
-              const following = current.asked === runId ? current.run : runId;
-              const earlier = current.asked === runId ? current.earlier : [];
               // configureTrax closes the socket the stream is on: the run is followed again over the new one.
               const generation = useSyncExternalStore(subscribeTrax, traxGeneration, traxGeneration);
+              // The view, and the configureTrax it was made under: one made under an earlier one is never shown.
+              const [held, setHeld] = useState<{ generation: number; view: RunProgressView }>({ generation, view: nothingYet });
+              // The user given to configureTrax: a run id is followed only for the user it was given under.
+              const user = generation === 0 ? undefined : traxConnection().user;
+              const [current, setCurrent] = useState<{
+                asked: string | null | undefined;
+                run: string | null | undefined;
+                earlier: string[];
+                user: string | undefined;
+              }>({ asked: runId, run: runId, earlier: [], user });
+              if (current.asked !== runId) setCurrent({ asked: runId, run: runId, earlier: [], user });
+              // Another user signed in while the run id stayed: it was the previous user's, so nothing is followed until a
+              // run id is given again. A token refresh for the same user follows it again.
+              const kept = current.asked === runId && current.user === user;
+              const following = current.asked === runId ? (kept ? current.run : null) : runId;
+              const earlier = kept ? current.earlier : [];
 
               useEffect(() => {
                 if (!following) return;
@@ -1074,9 +1086,12 @@ internal sealed class ClientGenerator
                 let last = 0;
                 // How many events the stream delivered: a read sent before the last of them answers with an older run.
                 let events = 0;
-                // The view of this run: what was held, when it was this run's, else an empty one.
-                const fresh = (v: RunProgressView): RunProgressView =>
-                  v.runId === following ? v : { ...nothingYet, runId: following };
+                // The view of this run on this connection: what was held, when it was, else an empty one.
+                const setView = (change: (v: RunProgressView) => RunProgressView) =>
+                  setHeld((h) => ({
+                    generation,
+                    view: change(h.generation === generation && h.view.runId === following ? h.view : { ...nothingYet, runId: following }),
+                  }));
                 // The read and the stream can both report the retry: the first moves on to it, the second finds it moved.
                 const retry = (next: string) => {
                   if (live) setCurrent((c) => (c.run === following ? { ...c, run: next, earlier: [...c.earlier, following] } : c));
@@ -1091,14 +1106,11 @@ internal sealed class ClientGenerator
                       if (!live) return;
                       if (run.retriedAs) return retry(run.retriedAs);
                       if (events !== sent) {
-                        setView((prior) => {
-                          const v = fresh(prior);
-                          return { ...v, steps: v.steps.reduce(withStep, run.steps) };
-                        });
+                        setView((v) => ({ ...v, steps: v.steps.reduce(withStep, run.steps) }));
                         if (forLost) void read(true);
                         return;
                       }
-                      setView((v) => ({ ...fresh(v), state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
+                      setView((v) => ({ ...v, state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
                     },
                     () => undefined,
                   );
@@ -1111,20 +1123,17 @@ internal sealed class ClientGenerator
                     if (event.retriedAs) return retry(event.retriedAs);
                     if (last !== 0 && event.sequence !== last + 1) void read(true);
                     last = event.sequence;
-                    setView((prior) => {
-                      const v = fresh(prior);
-                      return {
+                    setView((v) => ({
                       ...v,
                       state: event.state ?? v.state,
                       steps: event.step ? withStep(v.steps, event.step) : v.steps,
                       failure: event.failure ?? v.failure,
                       problem: event.problem ?? v.problem,
-                      };
-                    });
+                    }));
                   },
                   () => {
                     // The stream of an earlier connection ends when configureTrax closes its socket, not when the run does.
-                    if (live && generation === traxGeneration()) setView((v) => ({ ...fresh(v), ended: true }));
+                    if (live && generation === traxGeneration()) setView((v) => ({ ...v, ended: true }));
                   },
                 );
                 return () => {
@@ -1132,8 +1141,10 @@ internal sealed class ClientGenerator
                   stop();
                 };
               }, [following, generation]);
-              // A view of an earlier run is not shown: a run just asked for, or retried into, starts empty.
-              return { ...(view.runId === (following ?? null) ? view : { ...nothingYet, runId: following ?? null }), earlier };
+              // A view of an earlier run or connection is not shown: a run just asked for, retried into, or followed again
+              // after configureTrax starts empty.
+              const shown = held.generation === generation && held.view.runId === (following ?? null);
+              return { ...(shown ? held.view : { ...nothingYet, runId: following ?? null }), earlier };
             }
 
             type Step = RunProgress["steps"][number];
