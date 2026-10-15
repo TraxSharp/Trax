@@ -99,7 +99,6 @@ public class RunProgressInvokedRunE2ETests
                                 po.SingleNode()
                                     .RequirePersisted(false)
                                     .LogNonPersistedRequests(true)
-                                    .ExposeOperationsNamespace(false)
                             )
                         );
                     })
