@@ -53,7 +53,8 @@ public class ImportOrdersTrain : ServiceTrain<ImportOrdersInput, ImportOrdersOut
 
 ## Who started a run
 
-A run records its starter as a hash of the caller's principal id
+A run records its starter as a hash, never the id itself: `SHA-256("p\0" + principalId)` for a caller, with the
+qualified principal id, and `SHA-256("u\0" + userKey)` for a machine instance's owner
 ([schema migration 082](/docs/reference/schema-migrations#run-starter-082-and-083-sqlite-042)):
 
 | Started by | Starter |
