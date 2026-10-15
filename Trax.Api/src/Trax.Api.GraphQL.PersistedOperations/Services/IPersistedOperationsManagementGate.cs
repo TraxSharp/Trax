@@ -9,7 +9,9 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// the same requirements, so a caller this gate refuses is refused there too.
 /// </summary>
 /// <remarks>
-/// Registered by <c>UsePersistedOperations</c> and <c>AddPersistedOperationStore</c>. A process that
+/// Registered by <c>UsePersistedOperations</c> and <c>AddPersistedOperationStore</c>, scoped: resolve
+/// it from the caller's scope (the request, the dashboard's circuit), where its policies are
+/// evaluated, as GraphQL evaluates the fields' in the request's. A process that
 /// calls the service with no person behind it (a deploy step, a migration) does not ask the gate.
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/i-persisted-operations-service">SDK reference</seealso>
@@ -22,9 +24,9 @@ public interface IPersistedOperationsManagementGate
     bool IsDeclared { get; }
 
     /// <summary>
-    /// Whether <paramref name="user"/> meets every requirement of the gate: authenticated, every
-    /// policy satisfied, and at least one role of each role list held. False when no gate is
-    /// declared, and when a requirement cannot be evaluated.
+    /// Whether <paramref name="user"/> meets every requirement of the gate: any of its identities
+    /// authenticated, every policy satisfied, and at least one role of each role list held. False
+    /// when no gate is declared, and when a requirement cannot be evaluated.
     /// </summary>
     Task<bool> AllowsAsync(ClaimsPrincipal user, CancellationToken ct = default);
 }

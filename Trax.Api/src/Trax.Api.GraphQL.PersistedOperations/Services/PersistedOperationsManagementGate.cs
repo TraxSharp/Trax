@@ -11,6 +11,10 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// fields get from <see cref="AuthorizeDirectives"/>: each requirement on its own, all of them
 /// required, a role list any of.
 /// </summary>
+/// <remarks>
+/// Scoped, so a policy is evaluated with the caller's services (a request, a dashboard circuit),
+/// where GraphQL evaluates it, and a scoped authorization handler is resolved from that scope.
+/// </remarks>
 internal sealed class PersistedOperationsManagementGate(
     PersistedOperationsOptions options,
     IServiceProvider services
@@ -21,7 +25,8 @@ internal sealed class PersistedOperationsManagementGate(
     public async Task<bool> AllowsAsync(ClaimsPrincipal user, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(user);
-        if (!options.ManagementServed || user.Identity?.IsAuthenticated != true)
+        // Any authenticated identity, as @authorize counts one, not only the first.
+        if (!options.ManagementServed || !user.Identities.Any(i => i.IsAuthenticated))
             return false;
 
         AuthorizeDirectives.ExtractRules(

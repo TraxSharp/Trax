@@ -86,7 +86,7 @@ The same `IServiceCollection`.
 | `PersistedOperationsOptions` | Singleton | Built with `SingleNode()` or the broker |
 | `IPersistedOperationStore` | Singleton | `DbPersistedOperationStorage` |
 | `IPersistedOperationsService` | Singleton (TryAdd) | The shared management service |
-| `IPersistedOperationsManagementGate` | Singleton (TryAdd) | The declared management gate |
+| `IPersistedOperationsManagementGate` | Scoped (TryAdd) | The declared management gate, evaluated with the caller's services |
 | `IPersistedOperationValidator` | Singleton (TryAdd) | `NoOpPersistedOperationValidator` |
 | `IPersistedOperationCache` | Singleton (TryAdd) | A no-op cache |
 | `IPersistedOperationBroadcaster` | Singleton (TryAdd) | RabbitMQ with `UseRabbitMqInvalidation`, a no-op with `SingleNode` |

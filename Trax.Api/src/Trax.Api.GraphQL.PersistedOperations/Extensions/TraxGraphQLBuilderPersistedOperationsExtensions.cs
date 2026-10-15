@@ -128,9 +128,10 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         services.AddSingleton<IPersistedOperationsCapability, PersistedOperationsCapability>();
 
         // The same gate, for a surface that calls the service on a person's behalf without
-        // GraphQL (the Blazor dashboard), so it refuses whom the fields refuse.
+        // GraphQL (the Blazor dashboard), so it refuses whom the fields refuse. Scoped, so its
+        // policies are evaluated with the caller's services, as the fields' are.
         services.Replace(
-            ServiceDescriptor.Singleton<
+            ServiceDescriptor.Scoped<
                 Services.IPersistedOperationsManagementGate,
                 Services.PersistedOperationsManagementGate
             >()
@@ -302,7 +303,9 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
     }
 
     // persistedOperations on a root type: a namespace field carrying the management gate, so
-    // everything under it is unreachable without it.
+    // everything under it is unreachable without it. A policy directive alone admits an
+    // unauthenticated principal that satisfies the policy, so the field also requires an
+    // authenticated caller, as the management gate the dashboard asks does.
     private static ObjectTypeExtension ManagementRoot<TNamespace>(
         string rootType,
         string description,
@@ -318,6 +321,7 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 .Type<ObjectType<TNamespace>>()
                 .Resolve(_ => new TNamespace());
             AuthorizeDirectives.Apply(field, options.ManagementGate);
+            field.Authorize(HotChocolate.Authorization.ApplyPolicy.BeforeResolver);
         });
 
     /// <summary>

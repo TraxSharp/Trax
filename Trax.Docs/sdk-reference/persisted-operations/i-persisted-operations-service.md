@@ -65,7 +65,7 @@ The inputs, payloads and DTOs are sealed records in `Trax.Api.GraphQL.PersistedO
 
 ## IPersistedOperationsManagementGate
 
-The management gate the host declared with `GateManagement`, for a surface that calls the service on a person's behalf without GraphQL. The Trax dashboard asks it before every read and write on its persisted-operations pages, so it refuses the people the `persistedOperations` fields refuse. Registered by `UsePersistedOperations` and `AddPersistedOperationStore`. The service itself does not ask it: a deploy step or a migration calls the service with no person behind it.
+The management gate the host declared with `GateManagement`, for a surface that calls the service on a person's behalf without GraphQL. The Trax dashboard asks it before every read and write on its persisted-operations pages, so it refuses the people the `persistedOperations` fields refuse. Registered by `UsePersistedOperations` and `AddPersistedOperationStore`, scoped: resolve it from the caller's scope (the request, or the dashboard's circuit), so a policy whose handler is scoped is evaluated there. The service itself does not ask it: a deploy step or a migration calls the service with no person behind it.
 
 ```csharp fragment
 public interface IPersistedOperationsManagementGate
@@ -78,7 +78,7 @@ public interface IPersistedOperationsManagementGate
 | Member | Description |
 |--------|-------------|
 | `IsDeclared` | True once the host declared a gate. When false no surface manages documents |
-| `AllowsAsync(user)` | True when `user` is authenticated, satisfies every policy and holds at least one role of each role list. False when no gate is declared, and when a policy is not registered or the host registers no authorization |
+| `AllowsAsync(user)` | True when any identity of `user` is authenticated, satisfies every policy and holds at least one role of each role list. False when no gate is declared, and when a policy is not registered or the host registers no authorization |
 
 ## Example
 

@@ -1,9 +1,11 @@
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Types;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -16,6 +18,7 @@ using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -245,6 +248,179 @@ public class PersistedOperationsManagementGateTests
             .And.Contain(typeof(HostResolvers).FullName!);
     }
 
+    [Test]
+    public async Task A_policy_with_a_scoped_handler_is_evaluated_in_the_callers_scope()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAuthorization(o =>
+            o.AddPolicy(ScopedPolicy, p => p.AddRequirements(new ScopedRequirement()))
+        );
+        // A handler that needs something per request, such as a DbContext.
+        services.AddScoped<IAuthorizationHandler, ScopedRequirementHandler>();
+        services.AddPersistedOperationStore(store =>
+            store.SingleNode().GateManagement(policy: ScopedPolicy)
+        );
+        await using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true }
+        );
+        await using var scope = provider.CreateAsyncScope();
+
+        var gate = scope.ServiceProvider.GetRequiredService<IPersistedOperationsManagementGate>();
+
+        (await gate.AllowsAsync(Principals["deployer"]))
+            .Should()
+            .BeTrue(
+                "the gate evaluates the policy in the caller's scope, where GraphQL evaluates the "
+                    + "fields' policy, so a scoped handler is resolved there"
+            );
+    }
+
+    [Test]
+    public async Task The_gate_and_the_persistedOperations_fields_admit_the_same_principals()
+    {
+        // Gate, then for each principal whether both surfaces admit it.
+        var table = new (
+            string Gate,
+            Action<PersistedOperationsBuilder> Declare,
+            string[] Admitted
+        )[]
+        {
+            (
+                "roles Deployer",
+                po => po.GateManagement(roles: "Deployer"),
+                ["deployer", "anonymous-first-deployer"]
+            ),
+            (
+                "roles Deployer or Releaser, and Auditor",
+                po =>
+                    po.GateManagement(roles: "Deployer,Releaser").GateManagement(roles: "Auditor"),
+                ["releaser-auditor"]
+            ),
+            (
+                "policy alone",
+                po => po.GateManagement(policy: ClaimPolicy),
+                ["can-manage", "anonymous-first-deployer"]
+            ),
+            (
+                "authenticated only",
+                po => po.GateManagementToAuthenticatedUsers(),
+                [
+                    "deployer",
+                    "reader",
+                    "releaser-auditor",
+                    "can-manage",
+                    "authenticated",
+                    "anonymous-first-deployer",
+                ]
+            ),
+        };
+
+        var mismatches = new List<string>();
+        foreach (var (gateName, declare, admitted) in table)
+        {
+            await using var app = await StartAsync(
+                g => g,
+                po => declare(po.SingleNode()),
+                services =>
+                    services.AddAuthorization(o =>
+                        o.AddPolicy(ClaimPolicy, p => p.RequireClaim("can-manage"))
+                    ),
+                withTestPrincipals: true
+            );
+
+            foreach (var (name, principal) in Principals)
+            {
+                var expected = admitted.Contains(name);
+
+                var response = await PostAsPrincipalAsync(app, name, List);
+                var graphql = !response.RootElement.TryGetProperty("errors", out _);
+
+                await using var scope = app.Services.CreateAsyncScope();
+                var gate = await scope
+                    .ServiceProvider.GetRequiredService<IPersistedOperationsManagementGate>()
+                    .AllowsAsync(principal);
+
+                if (graphql != expected || gate != expected)
+                    mismatches.Add(
+                        $"{gateName}, {name}: expected {expected}, GraphQL {graphql}, gate {gate}"
+                    );
+            }
+        }
+
+        mismatches
+            .Should()
+            .BeEmpty(
+                "the dashboard's gate and the GraphQL persistedOperations fields refuse the same "
+                    + "people"
+            );
+    }
+
+    private const string ScopedPolicy = "ManagesThroughAScopedHandler";
+    private const string ClaimPolicy = "HoldsCanManage";
+    private const string PrincipalHeader = "X-Test-Principal";
+
+    private static readonly Dictionary<string, ClaimsPrincipal> Principals = new()
+    {
+        ["deployer"] = Authenticated(new Claim(ClaimTypes.Role, "Deployer")),
+        ["reader"] = Authenticated(new Claim(ClaimTypes.Role, "Reader")),
+        ["releaser-auditor"] = Authenticated(
+            new Claim(ClaimTypes.Role, "Releaser"),
+            new Claim(ClaimTypes.Role, "Auditor")
+        ),
+        ["can-manage"] = Authenticated(new Claim("can-manage", "true")),
+        ["authenticated"] = Authenticated(),
+        // An identity with no authentication type is not authenticated, whatever it claims.
+        ["unauthenticated-deployer"] = new ClaimsPrincipal(
+            new ClaimsIdentity([
+                new Claim(ClaimTypes.Role, "Deployer"),
+                new Claim("can-manage", "true"),
+            ])
+        ),
+        ["anonymous-first-deployer"] = new ClaimsPrincipal([
+            new ClaimsIdentity(),
+            new ClaimsIdentity(
+                [new Claim(ClaimTypes.Role, "Deployer"), new Claim("can-manage", "true")],
+                "Test"
+            ),
+        ]),
+    };
+
+    private static ClaimsPrincipal Authenticated(params Claim[] claims) =>
+        new(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "someone"), .. claims], "Test")
+        );
+
+    private sealed class ScopedRequirement : IAuthorizationRequirement;
+
+    private sealed class ScopedRequirementHandler : AuthorizationHandler<ScopedRequirement>
+    {
+        protected override Task HandleRequirementAsync(
+            AuthorizationHandlerContext context,
+            ScopedRequirement requirement
+        )
+        {
+            context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+    }
+
+    private static async Task<JsonDocument> PostAsPrincipalAsync(
+        WebApplication app,
+        string principal,
+        string query
+    )
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
+        {
+            Content = JsonContent.Create(new { query }),
+        };
+        request.Headers.Add(PrincipalHeader, principal);
+
+        var response = await app.GetTestClient().SendAsync(request);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    }
+
     // Built with a descriptor rather than [ExtendObjectType], so an assembly scan does not pick it up.
     public sealed class HostPersistedOperationsOnRoot : ObjectTypeExtension
     {
@@ -278,7 +454,9 @@ public class PersistedOperationsManagementGateTests
 
     private static async Task<WebApplication> StartAsync(
         Func<TraxGraphQLBuilder, TraxGraphQLBuilder> graphql,
-        Action<PersistedOperationsBuilder> persisted
+        Action<PersistedOperationsBuilder> persisted,
+        Action<IServiceCollection>? configure = null,
+        bool withTestPrincipals = false
     )
     {
         var builder = WebApplication.CreateBuilder(
@@ -304,6 +482,7 @@ public class PersistedOperationsManagementGateTests
         services.AddSingleton(
             Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
         );
+        configure?.Invoke(services);
         services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UsePostgres(PostgresFixture.ConnectionString))
         );
@@ -327,6 +506,19 @@ public class PersistedOperationsManagementGateTests
         var app = builder.Build();
         app.UseRouting();
         app.UseAuthentication();
+        if (withTestPrincipals)
+            // The principal a request names, as an authentication handler would have set it.
+            app.Use(
+                (context, next) =>
+                {
+                    if (
+                        context.Request.Headers.TryGetValue(PrincipalHeader, out var name)
+                        && Principals.TryGetValue(name.ToString(), out var principal)
+                    )
+                        context.User = principal;
+                    return next(context);
+                }
+            );
         app.UseAuthorization();
         app.UseTraxGraphQL();
         try

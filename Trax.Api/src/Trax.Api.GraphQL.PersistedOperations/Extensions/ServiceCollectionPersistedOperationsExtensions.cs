@@ -122,7 +122,7 @@ public static class ServiceCollectionPersistedOperationsExtensions
             Services.IPersistedOperationsService,
             Services.PersistedOperationsService
         >();
-        services.TryAddSingleton<
+        services.TryAddScoped<
             Services.IPersistedOperationsManagementGate,
             Services.PersistedOperationsManagementGate
         >();
