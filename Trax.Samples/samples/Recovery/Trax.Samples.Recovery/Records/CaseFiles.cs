@@ -45,10 +45,12 @@ public sealed class CaseFiles
     /// </summary>
     public string Change(string runId, string? changedBy = null)
     {
-        // Another caller's case answers as one that does not exist.
+        // Another caller's case answers as one that does not exist. A case nobody opened is nobody's, so a caller
+        // without an id changes nothing.
         if (
             _orders.TryGetValue(runId, out var order)
             && _openers.TryGetValue(runId, out var opener)
+            && opener is not null
             && string.Equals(opener, changedBy, StringComparison.Ordinal)
         )
         {

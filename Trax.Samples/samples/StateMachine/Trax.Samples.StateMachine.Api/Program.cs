@@ -19,7 +19,7 @@
 //
 // The host serves persisted documents only: the page sends each operation by the id its generated client holds, and a
 // document sent as text is refused. To regenerate the client after changing a machine or a train:
-//   dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api -- --trax-export-client ../web/src/trax/manifest.json
+//   (cd samples/StateMachine/Trax.Samples.StateMachine.Api && dotnet run -- --trax-export-client ../web/src/trax/manifest.json)
 //   trax client --manifest samples/StateMachine/web/src/trax/manifest.json --out samples/StateMachine/web/src/trax
 //
 // Docs: https://traxsharp.net/docs/samples/state-machine

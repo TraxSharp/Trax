@@ -15,7 +15,9 @@ public sealed class FaultInjector
 {
     private readonly ConcurrentDictionary<string, CrashPoint> _armed = new();
     private readonly ConcurrentDictionary<string, CrashPoint> _everyAttempt = new();
-    private int _nextOrder = (int)CrashPoint.None;
+    private readonly ConcurrentDictionary<string, CrashPoint> _nextOrder = new(
+        StringComparer.Ordinal
+    );
 
     /// <summary>Arms <paramref name="point"/> for the run <paramref name="runId"/>.</summary>
     public void Arm(string runId, CrashPoint point)
@@ -61,16 +63,25 @@ public sealed class FaultInjector
         || _armed.TryRemove(new KeyValuePair<string, CrashPoint>(runId, point));
 
     /// <summary>
-    /// Arms <paramref name="point"/> for the next food order, whose run id nobody knows yet: the
-    /// <c>order</c> machine builds it when the order is placed. <see cref="ClaimNextOrder"/> moves it onto that run.
+    /// Arms <paramref name="point"/> for the next food order <paramref name="owner"/> places, whose run id nobody knows
+    /// yet: the <c>order</c> machine builds it when the order is placed. <see cref="ClaimNextOrder"/> moves it onto
+    /// that run. Another user's order never claims it.
     /// </summary>
-    public void ArmNextOrder(CrashPoint point) => Interlocked.Exchange(ref _nextOrder, (int)point);
-
-    /// <summary>Moves whatever <see cref="ArmNextOrder"/> armed onto the order <paramref name="orderId"/>, once.</summary>
-    public void ClaimNextOrder(string orderId)
+    public void ArmNextOrder(string owner, CrashPoint point)
     {
-        var point = (CrashPoint)Interlocked.Exchange(ref _nextOrder, (int)CrashPoint.None);
-        if (point != CrashPoint.None)
+        if (point == CrashPoint.None)
+            _nextOrder.TryRemove(owner, out _);
+        else
+            _nextOrder[owner] = point;
+    }
+
+    /// <summary>
+    /// Moves whatever <paramref name="owner"/> armed with <see cref="ArmNextOrder"/> onto their order
+    /// <paramref name="orderId"/>, once. An order with no known owner claims nothing.
+    /// </summary>
+    public void ClaimNextOrder(string? owner, string orderId)
+    {
+        if (owner is not null && _nextOrder.TryRemove(owner, out var point))
             Arm(orderId, point);
     }
 }

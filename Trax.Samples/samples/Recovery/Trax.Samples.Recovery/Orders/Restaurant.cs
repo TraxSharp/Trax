@@ -5,9 +5,9 @@ namespace Trax.Samples.Recovery.Orders;
 
 /// <summary>
 /// The pizzeria the <c>order</c> machine orders from, simulated: its tablet takes an order after a short pause. The
-/// demo can arm trouble for the next order (<see cref="FaultInjector.ArmNextOrder"/>): a tablet that does not answer
-/// once, or a restaurant that is closed. Every call to the tablet is kept, so a client can see an attempt that timed
-/// out and the one that was answered.
+/// demo can arm trouble for a user's next order (<see cref="FaultInjector.ArmNextOrder"/>): a tablet that does not
+/// answer once, or a restaurant that is closed. Every call to the tablet is kept with the user whose order it carried,
+/// so a client can see an attempt that timed out and the one that was answered, for its own orders only.
 /// </summary>
 public sealed class Restaurant(FaultInjector faults, DemoPace pace)
 {
@@ -15,15 +15,28 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
     public const string Name = "Pizzeria Napoli";
 
     private const int Kept = 200;
-    private readonly ConcurrentQueue<TabletCall> _calls = new();
+    private readonly ConcurrentQueue<(string? Owner, TabletCall Call)> _calls = new();
 
-    /// <summary>The last calls to the tablet, oldest first.</summary>
-    public IReadOnlyList<TabletCall> Calls => [.. _calls];
+    /// <summary>The last calls to the tablet for <paramref name="owner"/>'s orders, oldest first; none for nobody.</summary>
+    public IReadOnlyList<TabletCall> CallsOf(string? owner) =>
+        owner is null
+            ? []
+            :
+            [
+                .. _calls
+                    .Where(c => string.Equals(c.Owner, owner, StringComparison.Ordinal))
+                    .Select(c => c.Call),
+            ];
 
     /// <summary>Sends the order to the restaurant's tablet, once, and waits for it to answer.</summary>
     /// <exception cref="TimeoutException">The tablet did not answer within <see cref="DemoPace.TabletTimeout"/>.</exception>
     /// <exception cref="InvalidOperationException">The restaurant is closed.</exception>
-    public async Task SendAsync(string orderId, int attempt, CancellationToken cancellationToken)
+    public async Task SendAsync(
+        string orderId,
+        string? owner,
+        int attempt,
+        CancellationToken cancellationToken
+    )
     {
         var startedAt = DateTimeOffset.UtcNow;
         try
@@ -40,18 +53,21 @@ public sealed class Restaurant(FaultInjector faults, DemoPace pace)
             if (faults.TryFire(orderId, CrashPoint.RestaurantClosed))
                 throw new InvalidOperationException($"{Name} is closed.");
 
-            Keep(new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, null));
+            Keep(owner, new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, null));
         }
         catch (Exception e) when (e is TimeoutException or InvalidOperationException)
         {
-            Keep(new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, e.Message));
+            Keep(
+                owner,
+                new TabletCall(orderId, attempt, startedAt, DateTimeOffset.UtcNow, e.Message)
+            );
             throw;
         }
     }
 
-    private void Keep(TabletCall call)
+    private void Keep(string? owner, TabletCall call)
     {
-        _calls.Enqueue(call);
+        _calls.Enqueue((owner, call));
         while (_calls.Count > Kept)
             _calls.TryDequeue(out _);
     }

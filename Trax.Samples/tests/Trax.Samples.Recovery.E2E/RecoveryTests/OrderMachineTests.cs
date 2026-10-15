@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.StateMachine.Persistence;
+using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.Samples.Recovery.Machines;
@@ -127,6 +128,51 @@ public class OrderMachineTests : RecoveryTestFixture
     }
 
     [Test]
+    public async Task OrderTrouble_armed_by_one_user_does_not_hit_another_users_order()
+    {
+        var theirs = new OrderDraft(GraphQL, DemoKeys.User);
+        await ArmAsync("RESTAURANT_CLOSED", DemoKeys.User);
+        try
+        {
+            await _order.StartAsync();
+            await _order.AddItemAsync("Margherita");
+            await _order.PlaceOrderAsync();
+
+            await _order.WaitForStateAsync(nameof(OrderState.Delivered));
+
+            // The trouble waited for its own user's order.
+            await theirs.StartAsync();
+            await theirs.AddItemAsync("Margherita");
+            await theirs.PlaceOrderAsync();
+            await theirs.WaitForStateAsync(nameof(OrderState.Cancelled));
+        }
+        finally
+        {
+            await ArmAsync("NONE", DemoKeys.User);
+        }
+    }
+
+    [Test]
+    public async Task TabletCalls_lists_only_the_callers_orders()
+    {
+        await _order.StartAsync();
+        await _order.AddItemAsync("Margherita");
+        await _order.PlaceOrderAsync();
+        await _order.WaitForStateAsync(nameof(OrderState.Delivered));
+
+        var mine = (await TabletCallsAsync()).Select(OrderIdOf).ToHashSet();
+        var theirs = (await TabletCallsAsync(DemoKeys.User)).Select(OrderIdOf).ToList();
+
+        mine.Should().NotBeEmpty("the operator's order called the tablet");
+        theirs
+            .Should()
+            .NotContain(
+                id => mine.Contains(id),
+                "another user's calls are not the caller's to read"
+            );
+    }
+
+    [Test]
     public async Task ACartNobodyOrders_IsClearedByTheServer()
     {
         await _order.StartAsync();
@@ -164,11 +210,13 @@ public class OrderMachineTests : RecoveryTestFixture
     private static string Target(JsonObject outcomes, string trigger) =>
         outcomes[trigger]!["edges"]![0]!["to"]!.GetValue<string>();
 
-    private async Task ArmAsync(string trouble)
+    private static string OrderIdOf(JsonElement call) => call.GetProperty("orderId").GetString()!;
+
+    private async Task ArmAsync(string trouble, string key = OperatorKey)
     {
         var response = await GraphQL.SendAsync(
             "mutation($t: OrderTrouble!) { dispatch { orderTrouble(input: { trouble: $t }) { output { trouble } } } }",
-            OperatorKey,
+            key,
             new { t = trouble }
         );
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
@@ -203,11 +251,11 @@ public class OrderMachineTests : RecoveryTestFixture
             .ToList();
     }
 
-    private async Task<List<JsonElement>> TabletCallsAsync()
+    private async Task<List<JsonElement>> TabletCallsAsync(string key = OperatorKey)
     {
         var response = await GraphQL.SendAsync(
             "{ discover { orders { tabletCalls { calls { orderId attempt problem } } } } }",
-            OperatorKey
+            key
         );
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response

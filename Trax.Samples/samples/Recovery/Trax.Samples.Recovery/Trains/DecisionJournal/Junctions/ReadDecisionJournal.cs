@@ -12,15 +12,21 @@ public class ReadDecisionJournal(IDataContextProviderFactory dataContexts, IRunS
     public override async Task<DecisionJournalOutput> Run(DecisionJournalInput input)
     {
         // Only the caller who started the run reads its decisions; any other run answers as one with none recorded.
-        if (!await starters.StartedByCurrentCallerAsync(input.RunId, CancellationToken))
+        // The execution read is the caller's own latest under the id, never another one recorded under the same id.
+        if (
+            await starters.LatestExecutionStartedByCurrentCallerAsync(
+                input.RunId,
+                CancellationToken
+            )
+            is not { } metadataId
+        )
             return new DecisionJournalOutput { RunId = input.RunId, Decisions = [] };
 
         await using var context = await dataContexts.CreateDbContextAsync(CancellationToken);
 
         var metadata = await context
             .Metadatas.AsNoTracking()
-            .Where(m => m.ExternalId == input.RunId)
-            .OrderByDescending(m => m.Id)
+            .Where(m => m.Id == metadataId)
             .Select(m => new
             {
                 m.Id,

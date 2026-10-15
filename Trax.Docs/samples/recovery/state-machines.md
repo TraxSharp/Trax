@@ -221,9 +221,9 @@ Two things the recording shows are worth knowing. Place order pressed twice unde
 the second answer replays the first, and a press under a new request id is `NO_TRANSITION` from `Ordered`, so one
 order makes one run and one charge. And the scheduler never retries a run a machine invoked, so a step that fails
 fails the run, which is the order's `Cancelled`. The restaurant's tablet that does not answer
-(`dispatch { orderTrouble(input: { trouble: TABLET_TIMES_OUT }) }`, armed for the next order) is therefore tried
+(`dispatch { orderTrouble(input: { trouble: TABLET_TIMES_OUT }) }`, armed for the caller's next order) is therefore tried
 again inside `SendToRestaurant`, and the machine sees one run that recovered; `discover { orders { tabletCalls } }`
-lists both attempts. A closed restaurant (`RESTAURANT_CLOSED`) fails the run at `SendToRestaurant`, before
+lists both attempts, for the caller's own orders only. A closed restaurant (`RESTAURANT_CLOSED`) fails the run at `SendToRestaurant`, before
 `ChargeCard`, so the order is `Cancelled` with nothing charged.
 
 ## SDK Reference

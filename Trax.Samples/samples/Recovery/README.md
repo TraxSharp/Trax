@@ -262,11 +262,11 @@ Cart --PlaceOrder--> Ordered --done-----------------> Delivered
   └──after 30 minutes──> Cleared
 ```
 
-`dispatch { orderTrouble(input: { trouble: TABLET_TIMES_OUT }) }` arms trouble for the next order placed, as
+`dispatch { orderTrouble(input: { trouble: TABLET_TIMES_OUT }) }` arms trouble for the caller's next order, as
 **Crash once** does for a run: the restaurant's tablet does not answer once, or (`RESTAURANT_CLOSED`) the restaurant
 is closed. The scheduler never retries a run a machine invoked, and a failed run would be the order's `Cancelled`, so
 the tablet is tried again inside `SendToRestaurant`: the machine sees one run that recovered, and
-`discover { orders { tabletCalls } }` lists both attempts. A closed restaurant fails the run at `SendToRestaurant`,
+`discover { orders { tabletCalls } }` lists both attempts, for the caller's own orders only. A closed restaurant fails the run at `SendToRestaurant`,
 before `ChargeCard`, and the order is `Cancelled` with nothing charged.
 
 ## Keys

@@ -64,6 +64,7 @@ builder.Services.AddSingleton<CaseFiles>();
 // The food order's restaurant, simulated, and how long a cart waits for its order (30 minutes unless
 // Recovery:CartWait shortens it, as the recording does). Set before AddStateMachines builds the machine.
 builder.Services.AddSingleton<Restaurant>();
+builder.Services.AddSingleton<OrderOwners>();
 if (builder.Configuration.GetValue<TimeSpan?>("Recovery:CartWait") is { } cartWait)
     OrderMachine.CartWait = cartWait;
 
@@ -130,7 +131,7 @@ builder.Services.AddTrax(trax =>
         .AddStateMachines(
             o =>
             {
-                // Every visitor of the demo signs in with the same operator key, so all their topic maps
+                // Every visitor of the demo's page signs in with the same user key, so all their topic maps
                 // belong to one user and count against that one user's draft cap (50 by default). Starting
                 // over leaves no draft behind: the page resets a draft a build began (StartOver), which the
                 // server will not discard, and discards an earlier one. A draft a closed browser abandoned
@@ -206,8 +207,11 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 // host starts, one per machine operation, exposed train and runProgress operation, and the page holds them in its
 // generated client (src/trax, from the manifest --trax-export-client writes). The hand-written recovery_* documents
 // an earlier version registered are deactivated (RetiredPageDocuments). Recovery:RequirePersistedOperations turns
-// the refusal off, for a suite that drives the API with hand-written documents.
-var requirePersisted = builder.Configuration.GetValue("Recovery:RequirePersistedOperations", true);
+// the refusal off, for a suite that drives the API with hand-written documents, in Development only: anywhere else
+// the setting is ignored and only registered documents run.
+var requirePersisted =
+    !builder.Environment.IsDevelopment()
+    || builder.Configuration.GetValue("Recovery:RequirePersistedOperations", true);
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         // operations.junctionRuns, requeueExecution(askAfresh:), triggerManifest(askAfresh:),

@@ -42,7 +42,7 @@ After changing a machine or a train, export the host's manifest and regenerate (
 Trax.Cli tool):
 
 ```bash
-dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api -- --trax-export-client ../web/src/trax/manifest.json
+(cd samples/StateMachine/Trax.Samples.StateMachine.Api && dotnet run -- --trax-export-client ../web/src/trax/manifest.json)
 trax client --manifest samples/StateMachine/web/src/trax/manifest.json --out samples/StateMachine/web/src/trax
 ```
 
