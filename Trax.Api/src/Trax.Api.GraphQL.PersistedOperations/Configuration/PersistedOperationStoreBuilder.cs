@@ -1,3 +1,5 @@
+using Trax.Effect.Attributes;
+
 namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 
 /// <summary>
@@ -17,6 +19,43 @@ public sealed class PersistedOperationStoreBuilder
 
     private string? _rabbitMqConnectionString;
     private bool _singleNode;
+
+    // Validated and accumulated as UsePersistedOperations does, so the two gates read the same.
+    private readonly PersistedOperationsBuilder _management = new();
+
+    /// <summary>The management requirements declared here, empty when none was.</summary>
+    internal IReadOnlyList<TraxAuthorizeAttribute> ManagementGate => _management.ManagementGate;
+
+    /// <summary>
+    /// Declares who may manage documents through this process's surfaces, such as the dashboard's
+    /// persisted-operations pages, as <c>GateManagement</c> does on <c>UsePersistedOperations</c>.
+    /// Without it the dashboard shows no management pages. Code that calls the service with no
+    /// person behind it (a deploy step, a migration) is not gated.
+    /// </summary>
+    /// <param name="policy">An ASP.NET Core authorization policy name that must be satisfied.</param>
+    /// <param name="roles">A comma-separated list of roles. The caller must hold at least one.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Neither <paramref name="policy"/> nor <paramref name="roles"/> is given, or
+    /// <paramref name="roles"/> names no role.
+    /// </exception>
+    public PersistedOperationStoreBuilder GateManagement(
+        string? policy = null,
+        string? roles = null
+    )
+    {
+        _management.GateManagement(policy, roles);
+        return this;
+    }
+
+    /// <summary>
+    /// Lets any authenticated person manage documents through this process's surfaces. Prefer
+    /// <see cref="GateManagement"/>.
+    /// </summary>
+    public PersistedOperationStoreBuilder GateManagementToAuthenticatedUsers()
+    {
+        _management.GateManagementToAuthenticatedUsers();
+        return this;
+    }
 
     /// <summary>
     /// Broadcast every change over RabbitMQ to the GraphQL nodes that call

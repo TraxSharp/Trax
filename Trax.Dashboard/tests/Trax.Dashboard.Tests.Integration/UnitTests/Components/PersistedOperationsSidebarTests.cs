@@ -15,8 +15,9 @@ namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 /// <summary>
 /// The sidebar links the persisted-operations pages exactly when the pages can work: when the
 /// host registers <c>IPersistedOperationsService</c>, which <c>UsePersistedOperations</c> and
-/// <c>AddPersistedOperationStore</c> both do. The GraphQL capability marker, which only
-/// <c>UsePersistedOperations</c> registers, neither shows nor hides it.
+/// <c>AddPersistedOperationStore</c> both do, and declares the management gate. The GraphQL
+/// capability marker, which only <c>UsePersistedOperations</c> registers, neither shows nor hides
+/// it.
 ///
 /// <para>Enforces <c>docs/adr/0005-persisted-operations-pages-call-the-shared-service.md</c>.</para>
 /// </summary>
@@ -63,10 +64,29 @@ public class PersistedOperationsSidebarTests
     }
 
     [Test]
+    public void Sidebar_WithServiceButNoManagementGate_HidesPersistedOperationsItem()
+    {
+        // A host that manages documents out of band: the store, and no GateManagement.
+        _ctx.Services.AddSingleton(UnusedService<IPersistedOperationsService>.Create());
+        _ctx.Services.AddSingleton<IPersistedOperationsManagementGate>(new FakeGate(false));
+
+        var component = _ctx.RenderComponent<DashboardSidebar>();
+
+        component
+            .Markup.Should()
+            .NotContain(
+                "/data/persisted-operations",
+                "management is not served until the host declares who may manage documents"
+            );
+    }
+
+    [Test]
     public void Sidebar_WithService_ShowsPersistedOperationsItem()
     {
-        // What AddPersistedOperationStore registers on a host that serves no GraphQL.
+        // What AddPersistedOperationStore registers on a host that serves no GraphQL, with a
+        // management gate declared.
         _ctx.Services.AddSingleton(UnusedService<IPersistedOperationsService>.Create());
+        _ctx.Services.AddSingleton<IPersistedOperationsManagementGate>(new FakeGate(true));
 
         var component = _ctx.RenderComponent<DashboardSidebar>();
 
@@ -80,4 +100,14 @@ public class PersistedOperationsSidebarTests
     }
 
     private sealed class FakeCapability : IPersistedOperationsCapability { }
+
+    private sealed class FakeGate(bool declared) : IPersistedOperationsManagementGate
+    {
+        public bool IsDeclared => declared;
+
+        public Task<bool> AllowsAsync(
+            System.Security.Claims.ClaimsPrincipal user,
+            CancellationToken ct = default
+        ) => Task.FromResult(declared);
+    }
 }

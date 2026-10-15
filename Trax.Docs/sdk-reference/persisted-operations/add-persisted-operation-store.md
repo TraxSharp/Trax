@@ -45,6 +45,8 @@ public sealed class PersistedOperationStoreBuilder
 {
     public PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString);
     public PersistedOperationStoreBuilder SingleNode();
+    public PersistedOperationStoreBuilder GateManagement(string? policy = null, string? roles = null);
+    public PersistedOperationStoreBuilder GateManagementToAuthenticatedUsers();
 }
 ```
 
@@ -59,6 +61,8 @@ public sealed class PersistedOperationStoreBuilder
 |-----------------------------------------|-------------|
 | `UseRabbitMqInvalidation(connectionString)` | Broadcast every change over the broker the GraphQL nodes use with their own `UseRabbitMqInvalidation`, so each empties its caches. Throws `ArgumentException` for a blank connection string |
 | `SingleNode()` | Declare that no other process caches these operations: this one serves them itself, or nothing serves them while it writes. Nothing checks the claim; a GraphQL node elsewhere sees a change only when its cached entry reaches its maximum age |
+| `GateManagement(policy, roles)` | Declare who may manage documents through this process's surfaces, the dashboard's pages. The same rules as [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)' `GateManagement`: a policy or roles is required, a comma-separated role list is any of, repeated calls are all of. Without it the dashboard shows no management pages. Code calling the service with no person behind it is not gated |
+| `GateManagementToAuthenticatedUsers()` | Let any authenticated person manage documents through the dashboard. Prefer `GateManagement` |
 
 ## Returns
 
@@ -82,6 +86,7 @@ The same `IServiceCollection`.
 | `PersistedOperationsOptions` | Singleton | Built with `SingleNode()` or the broker |
 | `IPersistedOperationStore` | Singleton | `DbPersistedOperationStorage` |
 | `IPersistedOperationsService` | Singleton (TryAdd) | The shared management service |
+| `IPersistedOperationsManagementGate` | Singleton (TryAdd) | The declared management gate |
 | `IPersistedOperationValidator` | Singleton (TryAdd) | `NoOpPersistedOperationValidator` |
 | `IPersistedOperationCache` | Singleton (TryAdd) | A no-op cache |
 | `IPersistedOperationBroadcaster` | Singleton (TryAdd) | RabbitMQ with `UseRabbitMqInvalidation`, a no-op with `SingleNode` |
@@ -90,7 +95,9 @@ The same `IServiceCollection`.
 ## Example
 
 ```csharp compile
-services.AddPersistedOperationStore(store => store.UseRabbitMqInvalidation(rabbitMqConnectionString));
+services.AddPersistedOperationStore(store =>
+    store.UseRabbitMqInvalidation(rabbitMqConnectionString).GateManagement(roles: "Deployer")
+);
 ```
 
 ## See also

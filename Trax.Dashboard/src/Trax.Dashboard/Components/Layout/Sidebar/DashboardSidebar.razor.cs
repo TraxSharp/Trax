@@ -8,7 +8,8 @@ namespace Trax.Dashboard.Components.Layout.Sidebar;
 /// The dashboard's navigation menu, with links built from <c>DashboardOptions.RoutePrefix</c>.
 /// The persisted operations link appears only when the host registers Trax.Api's persisted
 /// operations service, which <c>UsePersistedOperations</c> and <c>AddPersistedOperationStore</c>
-/// both do. Part of the dashboard UI; not intended to be used directly.
+/// both do, and declares who may manage documents with <c>GateManagement</c>. Part of the
+/// dashboard UI; not intended to be used directly.
 /// </summary>
 public partial class DashboardSidebar
 {
@@ -24,12 +25,13 @@ public partial class DashboardSidebar
     private bool _persistedOperationsAvailable;
 
     /// <summary>
-    /// Checks once whether <c>IPersistedOperationsService</c> is registered, which decides
-    /// whether the persisted operations link is shown.
+    /// Checks once whether <c>IPersistedOperationsService</c> is registered and the management
+    /// gate declared, which decides whether the persisted operations link is shown.
     /// </summary>
     protected override void OnInitialized()
     {
         _persistedOperationsAvailable =
-            Services.GetService<IPersistedOperationsService>() is not null;
+            Services.GetService<IPersistedOperationsService>() is not null
+            && Services.GetService<IPersistedOperationsManagementGate>() is { IsDeclared: true };
     }
 }

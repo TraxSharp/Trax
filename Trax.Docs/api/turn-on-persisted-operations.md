@@ -196,10 +196,14 @@ Every builder method is on
 ## 7. Manage operations from the dashboard
 
 With the [dashboard](/docs/dashboard) on the host, a **Persisted Operations** entry appears under
-**Data** whenever `IPersistedOperationsService` is registered: by `UsePersistedOperations(...)` on a
-GraphQL host, or by `AddPersistedOperationStore(...)` on a dashboard host that serves no GraphQL.
-Without either, the entry is hidden and `/trax/data/persisted-operations` shows a "not enabled on
-this server" panel.
+**Data** once the host turns on persisted operations, with `UsePersistedOperations(...)` on a
+GraphQL host or `AddPersistedOperationStore(...)` on a dashboard host that serves no GraphQL, and
+declares the management gate with `GateManagement(...)`. Without both, the entry is hidden and
+`/trax/data/persisted-operations` says management is not served on this server.
+
+The pages hold the operator to the same gate as the `persistedOperations` fields: every read and
+write checks the dashboard's own posture, then the gate's policy and roles. An operator at the
+dashboard who manages documents needs both, as one at the React dashboard does.
 
 The page lists `trax.persisted_operation` a page at a time, filters by tenant, status and id
 prefix, and uploads, edits, deactivates and restores against the row's own tenant. It goes through
@@ -215,7 +219,7 @@ an uploader does:
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 
 builder.Services.AddPersistedOperationStore(store =>
-    store.UseRabbitMqInvalidation(rabbitMqConnectionString)
+    store.UseRabbitMqInvalidation(rabbitMqConnectionString).GateManagement(roles: "Deployer")
 );
 ```
 

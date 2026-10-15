@@ -32,6 +32,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
     }
     public sealed class PersistedOperationStoreBuilder
     {
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder GateManagement(string? policy = null, string? roles = null) { }
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder GateManagementToAuthenticatedUsers() { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder SingleNode() { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString) { }
     }
@@ -233,6 +235,11 @@ namespace Trax.Api.GraphQL.PersistedOperations
 }
 namespace Trax.Api.GraphQL.PersistedOperations.Services
 {
+    public interface IPersistedOperationsManagementGate
+    {
+        bool IsDeclared { get; }
+        System.Threading.Tasks.Task<bool> AllowsAsync(System.Security.Claims.ClaimsPrincipal user, System.Threading.CancellationToken ct = default);
+    }
     public interface IPersistedOperationsService
     {
         System.Threading.Tasks.Task<Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.DeactivatePersistedOperationPayload> DeactivateAsync(Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.DeactivatePersistedOperationInput input, System.Threading.CancellationToken ct);

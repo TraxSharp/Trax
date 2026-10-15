@@ -21,8 +21,8 @@ public sealed class PersistedOperationsOptions
     internal IReadOnlyList<TraxAuthorizeAttribute> ManagementGate { get; init; } = [];
 
     /// <summary>
-    /// Whether the <c>persistedOperations</c> management fields are served: true once the host
-    /// declared who may use them with <c>GateManagement</c>.
+    /// Whether documents are managed through a Trax surface, the <c>persistedOperations</c> fields
+    /// and the dashboard's pages: true once the host declared who may with <c>GateManagement</c>.
     /// </summary>
     public bool ManagementServed => ManagementGate.Count > 0;
 

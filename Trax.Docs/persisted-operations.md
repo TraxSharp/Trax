@@ -179,14 +179,17 @@ services.AddTraxGraphQL(graphql => graphql
 );
 ```
 
-Without it the fields are not in the schema, and documents are managed out of band. The gate is
+Without it the fields are not in the schema, the dashboard shows no management pages, and
+documents are managed out of band. The dashboard's pages check the same gate for the operator,
+after the dashboard's own posture. The gate is
 separate from the `operations` gate, so a deploy pipeline that uploads documents needs none of the
 operator's credential, and turning on persisted operations exposes nothing under `operations`.
 Where Trax checks authorization is in
 [Where Trax checks authorization](/docs/security/where-authorization-is-checked).
 
 A host without HotChocolate in process, such as a CI uploader or a dashboard running alone, uses
-`AddPersistedOperationStore`. With no schema to validate against it gets a validator that accepts
+`AddPersistedOperationStore`. A dashboard running alone declares its gate there, with
+`store.GateManagement(...)`. With no schema to validate against it gets a validator that accepts
 every document; the shape check still runs.
 
 ## SDK Reference

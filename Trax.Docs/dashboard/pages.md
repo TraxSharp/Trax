@@ -338,10 +338,11 @@ JSON that nothing could mask. Reads go through `GetMachineInstanceStateCountsAsy
 
 ### Persisted operations
 
-Shown when the host registers `IPersistedOperationsService`. Rows are addressed by tenant and id,
-each at `/trax/data/persisted-operations/{id}?tenant={key}` (no `tenant` for the default). The
-editor takes a document of up to 1,048,576 characters, and each write re-checks the dashboard's
-posture before it runs. What the page does and how to enable it is in
+Shown when the host registers `IPersistedOperationsService` and declares the management gate
+(`GateManagement`). Rows are addressed by tenant and id, each at
+`/trax/data/persisted-operations/{id}?tenant={key}` (no `tenant` for the default). The editor takes
+a document of up to 1,048,576 characters. Each read and write checks the dashboard's posture and
+then the management gate, so an operator who does not meet the gate is refused, as in GraphQL. What the page does and how to enable it is in
 [Turn on persisted operations](/docs/api/turn-on-persisted-operations#7-manage-operations-from-the-dashboard).
 
 ### Batch actions

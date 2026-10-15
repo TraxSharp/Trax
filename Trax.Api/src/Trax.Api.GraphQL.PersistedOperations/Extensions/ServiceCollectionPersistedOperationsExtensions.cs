@@ -43,7 +43,7 @@ public static class ServiceCollectionPersistedOperationsExtensions
 
         var storeBuilder = new PersistedOperationStoreBuilder();
         configure(storeBuilder);
-        return AddStore(services, storeBuilder.Build());
+        return AddStore(services, storeBuilder.Build(), storeBuilder.ManagementGate);
     }
 
     /// <summary>
@@ -83,10 +83,11 @@ public static class ServiceCollectionPersistedOperationsExtensions
 
     private static IServiceCollection AddStore(
         IServiceCollection services,
-        string? rabbitMqInvalidationConnectionString
+        string? rabbitMqInvalidationConnectionString,
+        IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute> managementGate
     )
     {
-        var builder = new PersistedOperationsBuilder();
+        var builder = new PersistedOperationsBuilder().AddManagementGate(managementGate);
         if (rabbitMqInvalidationConnectionString is null)
             builder.SingleNode();
         else
@@ -120,6 +121,10 @@ public static class ServiceCollectionPersistedOperationsExtensions
         services.TryAddSingleton<
             Services.IPersistedOperationsService,
             Services.PersistedOperationsService
+        >();
+        services.TryAddSingleton<
+            Services.IPersistedOperationsManagementGate,
+            Services.PersistedOperationsManagementGate
         >();
 
         return services;

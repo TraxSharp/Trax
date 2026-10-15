@@ -3,14 +3,16 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
 @using Trax.Api.GraphQL.PersistedOperations.Services
+@using Trax.Dashboard.Services.Authorization
 @inject NavigationManager Navigation
 @inject IServiceProvider ServiceProvider
 @inject DialogService DialogService
 @inject NotificationService NotificationService
+@inject DashboardCircuitAuthorization Authorization
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
     <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">Persisted Operations</RadzenText>
-    @if (_available)
+    @if (_available && _allowed)
     {
         <RadzenButton Text="Upload"
                       Icon="upload"
@@ -27,7 +29,13 @@
 @if (!_available)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter">
-        Persisted Operations is not enabled on this server. Call <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder, or <code>AddPersistedOperationStore(...)</code> on a host that serves no GraphQL, to enable management.
+        Persisted operation management is not served on this server. Turn on persisted operations with <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder, or <code>AddPersistedOperationStore(...)</code> on a host that serves no GraphQL, and declare who may manage documents with <code>GateManagement(...)</code>.
+    </RadzenAlert>
+}
+else if (!_allowed)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter">
+        You do not meet this server's persisted-operation management gate.
     </RadzenAlert>
 }
 else
@@ -107,6 +115,7 @@ else
     private static readonly string[] StatusScopes = [StatusAll, StatusActive, StatusInactive];
 
     private bool _available;
+    private bool _allowed;
     private IPersistedOperationsService? _service;
     private TraxDataGrid<PersistedOperationDto>? _grid;
     private string _tenantScope = TenantScopeAll;
@@ -114,14 +123,19 @@ else
     private string _status = StatusAll;
     private string _idPrefix = "";
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         // Resolved, not injected, so a host without persisted operations gets the notice above
         // rather than a page that fails to construct. UsePersistedOperations and
-        // AddPersistedOperationStore both register it.
-        _service = ServiceProvider.GetService<IPersistedOperationsService>();
+        // AddPersistedOperationStore both register them. The page is served only once the host
+        // declared the management gate, and only to a user who meets it, as the API's
+        // persistedOperations fields are.
+        var gate = ServiceProvider.GetService<IPersistedOperationsManagementGate>();
+        _service = gate is { IsDeclared: true }
+            ? ServiceProvider.GetService<IPersistedOperationsService>()
+            : null;
         _available = _service is not null;
-        return Task.CompletedTask;
+        _allowed = _available && await Authorization.EnsureManagesPersistedOperationsAsync(gate);
     }
 
     /// <summary>
@@ -134,7 +148,7 @@ else
         CancellationToken ct
     )
     {
-        if (_service is null)
+        if (_service is null || !_allowed)
             return new ServerDataResult<PersistedOperationDto>([], 0);
         var page = await _service.ListAsync(BuildFilter(), skip: args.Skip ?? 0, take: args.Top ?? 25, ct);
         return new ServerDataResult<PersistedOperationDto>(page.Items, page.TotalCount);

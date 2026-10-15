@@ -57,8 +57,8 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
     /// It adds nothing to the <c>operations</c> namespace. The management fields
     /// (<c>persistedOperations { ... }</c> at the root) are served only once the host declares who
     /// may use them with <c>GateManagement(...)</c>; without it the endpoint enforces persisted
-    /// operations and documents are managed out of band (a deploy step, the dashboard's service,
-    /// a migration).
+    /// operations, the dashboard shows no management pages, and documents are managed out of band
+    /// (a deploy step or a migration calling the service).
     /// </para>
     /// </remarks>
     public static TraxGraphQLBuilder UsePersistedOperations(
@@ -126,6 +126,15 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // Capability marker: presence in DI signals to consumers (dashboard)
         // that the full persisted-operations subsystem is wired in.
         services.AddSingleton<IPersistedOperationsCapability, PersistedOperationsCapability>();
+
+        // The same gate, for a surface that calls the service on a person's behalf without
+        // GraphQL (the Blazor dashboard), so it refuses whom the fields refuse.
+        services.Replace(
+            ServiceDescriptor.Singleton<
+                Services.IPersistedOperationsManagementGate,
+                Services.PersistedOperationsManagementGate
+            >()
+        );
 
         // The management fields live at the root, behind the gate the host declared for them, and
         // never under operations: turning on persisted operations exposes nothing of the admin

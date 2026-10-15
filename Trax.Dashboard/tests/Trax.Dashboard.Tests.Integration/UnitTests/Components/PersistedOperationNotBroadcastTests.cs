@@ -54,12 +54,17 @@ public class PersistedOperationNotBroadcastTests
         services.AddLogging();
         // A broker that never confirms. Registered first, so the store keeps it.
         services.AddSingleton<IPersistedOperationBroadcaster, UnconfirmedBroadcaster>();
-        services.AddPersistedOperationStore(store => store.SingleNode());
+        services.AddPersistedOperationStore(store =>
+            store.SingleNode().GateManagement(roles: "Deployer")
+        );
         services.AddSingleton<IDataContextProviderFactory>(_data);
         services.AddSingleton(new DashboardOptions().AllowAnonymousDashboard());
         services.AddScoped<DashboardCircuitAuthorization>();
         services.AddSingleton<ILocalStorageService, InMemoryLocalStorageService>();
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
+        var auth = _ctx.AddTestAuthorization();
+        auth.SetAuthorized("operator");
+        auth.SetRoles("Deployer");
     }
 
     [TearDown]

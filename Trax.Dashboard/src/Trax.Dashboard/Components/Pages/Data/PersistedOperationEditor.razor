@@ -1,3 +1,4 @@
+@using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Logging
 @using Trax.Api.GraphQL.PersistedOperations.Services
 @using Trax.Api.GraphQL.PersistedOperations.Storage
@@ -5,6 +6,7 @@
 @using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
 @using Trax.Dashboard.Services.Authorization
 @inject IPersistedOperationsService Service
+@inject IServiceProvider ServiceProvider
 @inject DashboardCircuitAuthorization Authorization
 @inject ILogger<PersistedOperationEditor> Logger
 @inject DialogService DialogService
@@ -147,9 +149,11 @@
         _submitting = true;
         try
         {
-            if (!await Authorization.EnsureAuthorizedAsync())
+            // The dashboard's posture, then the management gate the API's upload carries too.
+            var gate = ServiceProvider.GetService<IPersistedOperationsManagementGate>();
+            if (!await Authorization.EnsureManagesPersistedOperationsAsync(gate))
             {
-                _otherError = "You are no longer authorized to use the dashboard.";
+                _otherError = "You are not authorized to manage persisted operations on this server.";
                 return;
             }
 

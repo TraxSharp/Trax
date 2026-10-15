@@ -13,6 +13,7 @@ namespace:
 source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/IPersistedOperationsService.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/PersistedOperationsService.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Services/IPersistedOperationsManagementGate.cs
 ---
 
 # IPersistedOperationsService
@@ -61,6 +62,23 @@ The inputs, payloads and DTOs are sealed records in `Trax.Api.GraphQL.PersistedO
 - `RestoreAsync` acts on any existing operation, active or deactivated.
 - `GetAsync` returns active and deactivated operations, and null when there is none.
 - `ListAsync` returns the most recently updated first. `GetHistoryAsync` returns the most recent change first. For both, `take` outside 1 to 200 reads as 50 and a negative `skip` reads as 0.
+
+## IPersistedOperationsManagementGate
+
+The management gate the host declared with `GateManagement`, for a surface that calls the service on a person's behalf without GraphQL. The Trax dashboard asks it before every read and write on its persisted-operations pages, so it refuses the people the `persistedOperations` fields refuse. Registered by `UsePersistedOperations` and `AddPersistedOperationStore`. The service itself does not ask it: a deploy step or a migration calls the service with no person behind it.
+
+```csharp fragment
+public interface IPersistedOperationsManagementGate
+{
+    bool IsDeclared { get; }
+    Task<bool> AllowsAsync(ClaimsPrincipal user, CancellationToken ct = default);
+}
+```
+
+| Member | Description |
+|--------|-------------|
+| `IsDeclared` | True once the host declared a gate. When false no surface manages documents |
+| `AllowsAsync(user)` | True when `user` is authenticated, satisfies every policy and holds at least one role of each role list. False when no gate is declared, and when a policy is not registered or the host registers no authorization |
 
 ## Example
 

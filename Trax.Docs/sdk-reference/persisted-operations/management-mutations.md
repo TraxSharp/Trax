@@ -42,7 +42,9 @@ services.AddTraxGraphQL(graphql => graphql
 | `GateManagement(roles: "A,B")` | Callers holding at least one of the roles. |
 | Repeated `GateManagement(...)` calls | Callers meeting every one of them. |
 | `GateManagementToAuthenticatedUsers()` | Any authenticated caller. On a host with public sign-up that is anyone. |
-| none | Nobody: the fields are not in the schema. |
+| none | Nobody: the fields are not in the schema, and the dashboard shows no management pages. |
+
+The Trax dashboard's persisted-operations pages check the same gate for the operator through `IPersistedOperationsManagementGate`, after the dashboard's own posture, so the Blazor dashboard, the React dashboard and GraphQL refuse the same people.
 
 The gate is not the operations gate. `GateOperations` and `RequireAuthorization()` govern `operations`; `GateManagement` governs `persistedOperations`. A deploy pipeline that uploads documents holds the management role and reaches nothing under `operations`, and an operator who manages documents at the dashboard holds both. `RequireAuthorization()` on the builder still gates the whole endpoint, these fields included.
 

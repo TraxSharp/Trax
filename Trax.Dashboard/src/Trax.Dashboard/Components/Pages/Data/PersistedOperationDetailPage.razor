@@ -35,7 +35,13 @@
 @if (!_available)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter">
-        Persisted Operations is not enabled on this server.
+        Persisted operation management is not served on this server. Turn on persisted operations with <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder, or <code>AddPersistedOperationStore(...)</code> on a host that serves no GraphQL, and declare who may manage documents with <code>GateManagement(...)</code>.
+    </RadzenAlert>
+}
+else if (!_allowed)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter">
+        You do not meet this server's persisted-operation management gate.
     </RadzenAlert>
 }
 else if (_loading)
@@ -121,6 +127,8 @@ else
     public string? Tenant { get; set; }
 
     private bool _available;
+    private bool _allowed;
+    private IPersistedOperationsManagementGate? _gate;
     private bool _loading = true;
     private string? _loadError;
     private IPersistedOperationsService? _service;
@@ -136,10 +144,16 @@ else
         // The service is resolved, not injected: a host without persisted operations registers
         // none, and an @inject of it would fail the page's construction and end the circuit
         // instead of showing the notice below. UsePersistedOperations and
-        // AddPersistedOperationStore both register it.
-        _service = ServiceProvider.GetService<IPersistedOperationsService>();
+        // AddPersistedOperationStore both register it. The page is served only once the host
+        // declared the management gate, and only to a user who meets it, as the API's
+        // persistedOperations fields are.
+        _gate = ServiceProvider.GetService<IPersistedOperationsManagementGate>();
+        _service = _gate is { IsDeclared: true }
+            ? ServiceProvider.GetService<IPersistedOperationsService>()
+            : null;
         _available = _service is not null;
-        if (_available)
+        _allowed = _available && await Authorization.EnsureManagesPersistedOperationsAsync(_gate);
+        if (_allowed)
             await LoadAsync();
         _loading = false;
     }
@@ -253,9 +267,9 @@ else
     }
 
     /// <summary>
-    /// Runs one write after re-checking the dashboard's authorization posture, and reports the
-    /// service's verdict. A write that throws (the database is unreachable) is reported, not
-    /// thrown, which would end the operator's circuit.
+    /// Runs one write after re-checking the dashboard's authorization posture and the management
+    /// gate, and reports the service's verdict. A write that throws (the database is unreachable)
+    /// is reported, not thrown, which would end the operator's circuit.
     /// </summary>
     private async Task WriteAsync(
         string summary,
@@ -263,12 +277,12 @@ else
     )
     {
         if (_service is null) return;
-        if (!await Authorization.EnsureAuthorizedAsync())
+        if (!await Authorization.EnsureManagesPersistedOperationsAsync(_gate))
         {
             NotificationService.Notify(
                 NotificationSeverity.Error,
                 "Not changed",
-                "You are no longer authorized to use the dashboard.",
+                "You are no longer authorized to manage persisted operations.",
                 duration: 8000
             );
             return;

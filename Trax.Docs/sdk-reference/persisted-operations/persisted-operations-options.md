@@ -43,7 +43,7 @@ public sealed class PersistedOperationsOptions
 
 | Property | Default | Set by | Description |
 |----------|---------|--------|-------------|
-| `ManagementServed` | `false` | `GateManagement`, `GateManagementToAuthenticatedUsers` | Whether the `persistedOperations` management fields are in the schema: true once a management gate is declared |
+| `ManagementServed` | `false` | `GateManagement`, `GateManagementToAuthenticatedUsers` | Whether documents are managed through a Trax surface, the `persistedOperations` fields and the dashboard's pages: true once a management gate is declared |
 | `RequirePersisted` | `true` | `RequirePersisted` | Whether inline documents are refused with `PERSISTED_OPERATION_REQUIRED` |
 | `LogNonPersistedRequests` | `false` | `LogNonPersistedRequests` | Whether inline-document requests are logged at Information |
 | `AllowedOperationNames` | empty | `AllowOperations` | Operation names that bypass enforcement, compared ordinally |

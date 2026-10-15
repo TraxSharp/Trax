@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Dashboard.Configuration;
 
 namespace Trax.Dashboard.Services.Authorization;
@@ -94,6 +95,41 @@ internal sealed class DashboardCircuitAuthorization : IDisposable
     {
         Attach();
         return RevalidateAsync(stateTask: null);
+    }
+
+    /// <summary>
+    /// Whether this circuit's user may manage persisted operations now: the dashboard's posture,
+    /// then the management gate the host declared, which the API's <c>persistedOperations</c>
+    /// fields carry too. Refuses when no gate is declared, when the host registers no
+    /// <see cref="AuthenticationStateProvider"/>, and when the gate cannot be evaluated. A refusal
+    /// here does not close the circuit: the rest of the dashboard is still the user's.
+    /// </summary>
+    public async Task<bool> EnsureManagesPersistedOperationsAsync(
+        IPersistedOperationsManagementGate? gate
+    )
+    {
+        if (gate is not { IsDeclared: true })
+            return false;
+        if (!await EnsureAuthorizedAsync().ConfigureAwait(false))
+            return false;
+
+        try
+        {
+            var provider = _provider ?? _services.GetService<AuthenticationStateProvider>();
+            if (provider is null)
+                return false;
+            var state = await provider.GetAuthenticationStateAsync().ConfigureAwait(false);
+            return await gate.AllowsAsync(state.User).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "The Trax dashboard could not check the persisted-operation management gate for a "
+                    + "circuit, and refuses the action."
+            );
+            return false;
+        }
     }
 
     /// <summary>Evaluates the posture now, as the interval does.</summary>

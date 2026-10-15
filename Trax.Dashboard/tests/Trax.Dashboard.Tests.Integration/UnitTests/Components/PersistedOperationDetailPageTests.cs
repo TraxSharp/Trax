@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Bunit;
+using Bunit.TestDoubles;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
@@ -40,7 +41,13 @@ public class PersistedOperationDetailPageTests
         _ctx.Services.AddSingleton<IDataContextProviderFactory>(_data);
         _ctx.Services.AddSingleton(new DashboardOptions().AllowAnonymousDashboard());
         _ctx.Services.AddScoped<DashboardCircuitAuthorization>();
+        // An operator who meets the management gate the store declares below.
+        var auth = _ctx.AddTestAuthorization();
+        auth.SetAuthorized("operator");
+        auth.SetRoles(ManagerRole);
     }
+
+    private const string ManagerRole = "Deployer";
 
     [TearDown]
     public void TearDown() => _ctx.Dispose();
@@ -50,7 +57,7 @@ public class PersistedOperationDetailPageTests
     {
         var page = _ctx.RenderComponent<PersistedOperationDetailPage>(p => p.Add(x => x.Id, Id));
 
-        page.Markup.Should().Contain("Persisted Operations is not enabled on this server");
+        page.Markup.Should().Contain("Persisted operation management is not served on this server");
     }
 
     [Test]
@@ -114,7 +121,9 @@ public class PersistedOperationDetailPageTests
     private ScriptedPersistedOperationsService UseScriptedService()
     {
         var services = _ctx.Services;
-        services.AddPersistedOperationStore(store => store.SingleNode());
+        services.AddPersistedOperationStore(store =>
+            store.SingleNode().GateManagement(roles: ManagerRole)
+        );
         var registered = services.Single(d => d.ServiceType == typeof(IPersistedOperationsService));
         services.Remove(registered);
         services.AddSingleton(sp => new ScriptedPersistedOperationsService(

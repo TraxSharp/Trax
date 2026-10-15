@@ -67,4 +67,16 @@ public sealed partial class PersistedOperationsBuilder
         _managementGate.Add(new TraxAuthorizeAttribute());
         return this;
     }
+
+    /// <summary>The management requirements declared so far.</summary>
+    internal IReadOnlyList<TraxAuthorizeAttribute> ManagementGate => _managementGate;
+
+    /// <summary>Adds requirements another builder already validated.</summary>
+    internal PersistedOperationsBuilder AddManagementGate(
+        IEnumerable<TraxAuthorizeAttribute> requirements
+    )
+    {
+        _managementGate.AddRange(requirements);
+        return this;
+    }
 }

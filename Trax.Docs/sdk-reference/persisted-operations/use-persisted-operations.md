@@ -104,7 +104,7 @@ services.AddTraxGraphQL(graphql => graphql
 
 `GateManagement(policy, roles)` puts `@authorize` on both `persistedOperations` fields, with the same rules as [`GateOperations`](/docs/sdk-reference/graphql-api/add-trax-graphql): a policy or roles is required, a comma-separated role list is any of, and repeated calls are all of. `GateManagementToAuthenticatedUsers()` admits any signed-in caller. The gate is separate from the operations gate, so a deploy pipeline that uploads documents holds the management role and none of the operator's, and an operator at the dashboard who manages documents holds both.
 
-Without a management gate the fields are not in the schema. Storage, enforcement, the cache and cross-node invalidation are wired either way, and documents are managed out of band: a deploy step, a migration, or the Trax dashboard, which calls `IPersistedOperationsService` directly.
+Without a management gate the fields are not in the schema and the Trax dashboard shows no management pages. Storage, enforcement, the cache and cross-node invalidation are wired either way, and documents are managed out of band: a deploy step or a migration calling `IPersistedOperationsService`. With a gate, the dashboard's pages check it for the operator through [IPersistedOperationsManagementGate](/docs/sdk-reference/persisted-operations/i-persisted-operations-service#ipersistedoperationsmanagementgate).
 
 ### Validation
 

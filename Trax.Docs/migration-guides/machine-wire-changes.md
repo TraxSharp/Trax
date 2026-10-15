@@ -132,6 +132,10 @@ types, behind a gate of their own. `UsePersistedOperations` no longer exposes th
 - **Move the documents.** `operations { persistedOperations { uploadPersistedOperation(...) } }` becomes
   `persistedOperations { uploadPersistedOperation(...) }`, and the answer loses its `operations` level. Uploaders,
   deploy steps and admin tools change with it; the Trax dashboard already does.
+- **The Blazor dashboard follows the gate.** Its persisted-operations pages show only once a management gate is
+  declared, and each read and write checks it for the operator after the dashboard's posture. A dashboard that
+  runs alone with `AddPersistedOperationStore` declares it there: `store.SingleNode().GateManagement(roles: "...")`.
+  Give the operators who manage documents the gate's role or policy as well as the dashboard's.
 - **`ExposeOperationsNamespace(...)` is gone**, and so is `PersistedOperationsOptions.ExposeOperationsNamespace`.
   Remove the call. `PersistedOperationsOptions.ManagementServed` says whether a gate was declared.
 - **A host that relied on `UsePersistedOperations` for `operations`** exposes it itself with
