@@ -181,11 +181,13 @@ internal sealed class ClientGenerator
     /// generator wrote (a client module starting with its header, or the twin of a machine the previous run served)
     /// that the manifest no longer generates is deleted first, then any folder that leaves empty, so a train removed
     /// on the host leaves nothing behind for <c>--check</c> to report. Any other file is left alone, and a linked
-    /// folder is not entered.
+    /// folder is not entered. A link at any path the client writes, or at a folder on the way there, is refused
+    /// before anything is written.
     /// </summary>
     public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir)
     {
         var files = Render(options);
+        RefuseLinks(files, outDir);
         foreach (var stale in Stale(files, outDir))
         {
             var path = Path.Combine(outDir, stale);
@@ -205,9 +207,47 @@ internal sealed class ClientGenerator
         {
             var path = Path.Combine(outDir, file.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, file.Text);
+            Replace(path, file.Text);
         }
         return files;
+    }
+
+    // Writes the text beside the path and renames it over whatever is there, so a FIFO or a device at the path is
+    // replaced rather than opened.
+    private static void Replace(string path, string text)
+    {
+        var temp = Path.Combine(
+            Path.GetDirectoryName(path)!,
+            $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp"
+        );
+        try
+        {
+            File.WriteAllText(temp, text);
+            File.Move(temp, path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temp);
+        }
+    }
+
+    // Refuses a link at any path the client writes or a folder it creates on the way there: writing through one would
+    // put the generated text outside outDir. outDir itself may be a link; nothing under it may.
+    private static void RefuseLinks(IReadOnlyList<ClientFile> files, string outDir)
+    {
+        foreach (var file in files)
+        {
+            var path = outDir;
+            foreach (var part in file.Path.Split('/'))
+            {
+                path = Path.Combine(path, part);
+                if (new FileInfo(path).LinkTarget is not null)
+                    throw new InvalidOperationException(
+                        $"{path} is a link. trax client writes only real files and folders under --out, never "
+                            + "through a link: remove it, or point --out somewhere without one."
+                    );
+            }
+        }
     }
 
     /// <summary>
@@ -218,13 +258,18 @@ internal sealed class ClientGenerator
     public IReadOnlyList<ClientDrift> Check(ClientGenerateOptions options, string outDir)
     {
         var files = Render(options);
+        RefuseLinks(files, outDir);
         var drift = new List<ClientDrift>();
         foreach (var file in files)
         {
             var path = Path.Combine(outDir, file.Path);
             if (!File.Exists(path))
                 drift.Add(new(file.Path, DriftStatus.Missing));
-            else if (File.ReadAllText(path).Replace("\r\n", "\n") != file.Text)
+            // Twice the text's bytes allows every line ending to be CRLF; anything longer differs anyway.
+            else if (
+                ReadPrefix(path, 2 * Encoding.UTF8.GetByteCount(file.Text) + 1)
+                    ?.Replace("\r\n", "\n") != file.Text
+            )
                 drift.Add(new(file.Path, DriftStatus.Drifted));
         }
         foreach (var stale in Stale(files, outDir))
@@ -267,11 +312,11 @@ internal sealed class ClientGenerator
     {
         var served = new HashSet<string>(StringComparer.Ordinal);
         var manifest = Path.Combine(outDir, "manifest.json");
-        if (File.Exists(manifest))
+        if (ReadPrefix(manifest, ManifestBytes) is { } text)
         {
             try
             {
-                if (JsonNode.Parse(File.ReadAllText(manifest))?["machines"] is JsonArray machines)
+                if (JsonNode.Parse(text)?["machines"] is JsonArray machines)
                     foreach (var machine in machines)
                         if (
                             machine is JsonObject m
@@ -295,11 +340,7 @@ internal sealed class ClientGenerator
         {
             var id = Path.GetFileName(dir);
             var client = Path.Combine(dir, $"{id}.client.g.ts");
-            if (
-                MachineGenerator.IsMachineId(id)
-                && File.Exists(client)
-                && FirstLine(client) == ClientHeaderLine
-            )
+            if (MachineGenerator.IsMachineId(id) && FirstLine(client) == ClientHeaderLine)
                 served.Add(id);
         }
         return served;
@@ -330,10 +371,44 @@ internal sealed class ClientGenerator
             );
     }
 
+    // The most of a file read to find its first line: longer than any header, so a first line cut here is not one.
+    private const int HeaderBytes = 4096;
+
+    // The most of a previous run's manifest.json read: one larger is cut short, is not JSON, and names no machine.
+    private const int ManifestBytes = 64 * 1024 * 1024;
+
+    // The first line of a file, without its line ending, read from at most HeaderBytes of it; null when it is not a
+    // regular file or is empty.
     private static string? FirstLine(string path)
     {
-        using var reader = new StreamReader(path);
-        return reader.ReadLine();
+        var text = ReadPrefix(path, HeaderBytes);
+        if (string.IsNullOrEmpty(text))
+            return null;
+        var end = text.IndexOf('\n', StringComparison.Ordinal);
+        return (end < 0 ? text : text[..end]).TrimEnd('\r');
+    }
+
+    // At most `limit` bytes of a file, as UTF-8, or null when it is not a regular file. .NET reports a FIFO, a socket
+    // or a device as an ordinary file of length 0, and opening a FIFO blocks until something writes to it, so a file
+    // of length 0 is not opened (it holds nothing to read either), and one that opens unseekable is not read.
+    private static string? ReadPrefix(string path, int limit)
+    {
+        var info = new FileInfo(path);
+        if (!info.Exists || info.LinkTarget is not null)
+            return null;
+        if (info.Length == 0)
+            return "";
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite
+        );
+        if (!stream.CanSeek)
+            return null;
+        var buffer = new byte[(int)Math.Min(limit, stream.Length)];
+        stream.ReadExactly(buffer);
+        return Encoding.UTF8.GetString(buffer);
     }
 
     // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id

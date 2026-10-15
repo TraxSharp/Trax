@@ -485,6 +485,81 @@ public partial class ClientGeneratorTests
         generator.Check(options, _out).Should().BeEmpty();
     }
 
+    [Test]
+    public void Write_does_not_write_through_a_symlinked_machine_folder()
+    {
+        var generator = new ClientGenerator(new FakeNodeRunner());
+        var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
+        var outside = Path.Combine(_tools, "elsewhere");
+        Directory.CreateDirectory(outside);
+        Directory.CreateDirectory(_out);
+        Directory.CreateSymbolicLink(Path.Combine(_out, "checkout"), outside);
+
+        var write = () => generator.Write(options, _out);
+
+        write.Should().Throw<InvalidOperationException>().WithMessage("*checkout is a link*");
+        Directory
+            .EnumerateFileSystemEntries(outside)
+            .Should()
+            .BeEmpty("nothing is written through the link");
+        File.Exists(Path.Combine(_out, "format.g.ts"))
+            .Should()
+            .BeFalse("the link is refused before anything is written");
+        var check = () => generator.Check(options, _out);
+        check.Should().Throw<InvalidOperationException>().WithMessage("*checkout is a link*");
+    }
+
+    [Test]
+    public void Write_does_not_write_through_a_symlinked_file()
+    {
+        var generator = new ClientGenerator(new FakeNodeRunner());
+        var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
+        var outside = Path.Combine(_tools, "outside.ts");
+        File.WriteAllText(outside, "// the app's own\n");
+        Directory.CreateDirectory(_out);
+        File.CreateSymbolicLink(Path.Combine(_out, "format.g.ts"), outside);
+
+        var write = () => generator.Write(options, _out);
+
+        write.Should().Throw<InvalidOperationException>().WithMessage("*format.g.ts is a link*");
+        File.ReadAllText(outside).Should().Be("// the app's own\n");
+    }
+
+    [Test]
+    public void Write_skips_a_file_that_is_not_regular()
+    {
+        if (OperatingSystem.IsWindows())
+            Assert.Ignore("A FIFO is made with mkfifo.");
+        var generator = new ClientGenerator(new FakeNodeRunner());
+        var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
+        Directory.CreateDirectory(_out);
+        var fifo = Path.Combine(_out, "x.g.ts");
+        MakeFifo(fifo);
+        MakeFifo(Path.Combine(_out, "format.g.ts"));
+
+        // Opening a FIFO blocks until something writes to it, so a run that opens one never ends.
+        var run = Task.Run(() =>
+        {
+            var drift = generator.Check(options, _out);
+            generator.Write(options, _out);
+            return drift;
+        });
+
+        run.Wait(TimeSpan.FromSeconds(30)).Should().BeTrue("a FIFO under --out is never opened");
+        run.Result.Should().Contain(new ClientDrift("format.g.ts", DriftStatus.Drifted));
+        run.Result.Select(d => d.Path).Should().NotContain("x.g.ts");
+        File.Exists(fifo).Should().BeTrue("a file that is not regular is not this generator's");
+        File.ReadAllText(Path.Combine(_out, "format.g.ts")).Should().StartWith(GeneratedText);
+        generator.Check(options, _out).Should().BeEmpty();
+    }
+
+    private static void MakeFifo(string path)
+    {
+        using var mkfifo = System.Diagnostics.Process.Start("mkfifo", [path]);
+        mkfifo.WaitForExit();
+        mkfifo.ExitCode.Should().Be(0);
+    }
+
     private static string TwinHeader(string id, string kind) =>
         $"// AUTO-GENERATED from {id}.ir.json by {(kind == "machine" ? "generateMachineFactory" : "generateContextTypes")}. Do not edit by hand.\n";
 
