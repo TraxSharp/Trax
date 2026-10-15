@@ -31,13 +31,8 @@ internal sealed class OperationsQueriesMachineDocumentsExtension
         [Service] MachineDocumentRegistry registry
     ) =>
         registry
-            .Documents.Select(d => new MachineDocumentEntry(
-                d.Id,
-                d.Machine,
-                d.Operation,
-                d.IrHash,
-                d.Text
-            ))
+            .Documents.OfType<MachineDocument>()
+            .Select(d => new MachineDocumentEntry(d.Id, d.Machine, d.Operation, d.IrHash, d.Text))
             .ToList();
 }
 

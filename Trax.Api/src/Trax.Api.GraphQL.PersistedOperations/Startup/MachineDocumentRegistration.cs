@@ -9,6 +9,7 @@ using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.StateMachine.Persistence;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Startup;
 
@@ -45,7 +46,7 @@ internal sealed class MachineDocumentRegistration(
     private readonly ILogger _logger = logger ?? NullLogger<MachineDocumentRegistration>.Instance;
     private readonly CancellationTokenSource _stopping = new();
     private bool _registered;
-    private IReadOnlyList<MachineDocument> _documents = [];
+    private IReadOnlyList<GeneratedDocument> _documents = [];
     private Task? _collecting;
 
     public async Task StartingAsync(CancellationToken cancellationToken)
@@ -56,7 +57,10 @@ internal sealed class MachineDocumentRegistration(
             services.GetServices<IMachine>(),
             services.GetService<StateMachineOptions>()
         );
-        if (exposed.Count == 0)
+        var trains = services.GetService<ITrainDiscoveryService>() is { } discovery
+            ? TrainTypeModule.AssignTrainNames(discovery.DiscoverTrains())
+            : new Dictionary<TrainRegistration, string>();
+        if (exposed.Count == 0 && trains.Count == 0)
         {
             // No document of this node's, but the registration still runs: it marks the documents of every machine no
             // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
@@ -85,7 +89,11 @@ internal sealed class MachineDocumentRegistration(
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync(TraxSchemaName, cancellationToken)
             .ConfigureAwait(false);
-        _documents = MachineDocuments.Generate(executor.Schema, exposed);
+        _documents =
+        [
+            .. (exposed.Count == 0 ? [] : MachineDocuments.Generate(executor.Schema, exposed)),
+            .. TrainDocuments.Generate(executor.Schema, trains),
+        ];
         await RegisterAsync(startup: true, cancellationToken).ConfigureAwait(false);
     }
 
@@ -151,7 +159,7 @@ internal sealed class MachineDocumentRegistration(
             {
                 _logger.LogWarning(
                     ex,
-                    "Could not register the machine documents again; older versions' documents are collected at the "
+                    "Could not register the generated documents again; older versions' documents are collected at the "
                         + "next attempt, in {Interval}.",
                     options.MachineDocumentCollectionInterval
                 );

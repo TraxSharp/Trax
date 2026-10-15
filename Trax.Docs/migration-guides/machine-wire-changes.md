@@ -55,3 +55,17 @@ divergence, since the server stored `HighPriority`.
 An IR's effect edge is `{ "keyPrefix": ... }`; the server's effect type name no longer reaches a client. The twin
 reads only that the edge is effect-bound, so the IR format version is unchanged, but the IR hash of a machine with a
 `RunsOnce` edge changes: regenerate its twin.
+
+## Every exposed train has a generated document
+
+A host with persisted operations registers a document for every train it exposes, under `trax_train_`, with an id
+that changes when the train's input or output does
+([Generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents)). A
+client sends that id and gets `CLIENT_OUTDATED` after the train changes, not a validation error.
+
+- **Hand-written train documents keep working** while they stay uploaded; move clients to the generated ids, then
+  deactivate the old ones.
+- **An exposed train whose answer holds itself**, or whose answer has a field with a required argument, now refuses
+  the host's start, naming the train and the type. Flatten the output, or stop exposing the train.
+- **The first rolling deploy.** A node from before this release does not reserve `trax_train_`, so while old and new
+  nodes overlap a client sending a new train id to an old node gets one validation error. It happens once.

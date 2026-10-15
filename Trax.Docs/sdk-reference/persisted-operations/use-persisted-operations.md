@@ -42,6 +42,22 @@ Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required; se
 [One node or many](/docs/persisted-operations#one-node-or-many). The options are checked when
 `UsePersistedOperations` runs (see [Validation](#validation)).
 
+### Generated documents
+
+With persisted operations on, the host registers a document for every exposed machine operation
+([Persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents)) and for every train it exposes
+with `[TraxMutation]` or `[TraxQuery]`, so a host that requires persisted operations serves them with no upload. A
+train's document is registered under `trax_train_<root>_<namespace>_<field>_<shapeHash><textHash>`: the root
+(`mutation` or `query`), the namespace's field (empty without one) and the train's field, each with a `_` written
+`-`, then the SHA-256 of the train's shape and 16 hex characters of a hash of the text. The shape is the field's
+signature and the SDL of every type the document reaches, without descriptions and without the root and namespace
+types, so adding a field to the input moves the id and editing a doc comment does not. The document takes `input`,
+`mode` and `priority` as variables where the field has them, and selects the whole answer, a union or interface
+through a fragment per possible type; an answer that holds itself, or a field with a required argument, refuses the
+host's start. An id of another shape answers `CLIENT_OUTDATED` or `SERVER_OUTDATED` as a machine's does, and the
+[client manifest](/docs/sdk-reference/statemachine-api/client-manifest) lists every one. The decision is
+[Trax.Api ADR 0040](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md).
+
 ### Registered services
 
 | Service | Lifetime | Purpose |

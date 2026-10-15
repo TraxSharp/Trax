@@ -30,10 +30,10 @@ internal static class MachineDocumentMiddleware
     public const string Key = "Trax.MachineDocuments";
 
     internal const string ClientOutdatedMessage =
-        "This client was built for another version of the machine than this server runs. Reload it.";
+        "This client was built for another version of the operation than this server runs. Reload it.";
 
     internal const string ServerOutdatedMessage =
-        "This client runs a newer version of the machine than this server does yet. Retry: another server may run it.";
+        "This client runs a newer version of the operation than this server does yet. Retry: another server may run it.";
 
     /// <summary>
     /// The HTTP status of a <c>SERVER_OUTDATED</c> answer: 409 Conflict, never a 5xx that outlier detection would count
@@ -63,7 +63,7 @@ internal static class MachineDocumentMiddleware
         if (
             request.DocumentId.IsEmpty
             || request.Document is not null
-            || !MachineDocuments.IsReserved(request.DocumentId.Value)
+            || !GeneratedDocuments.IsReserved(request.DocumentId.Value)
         )
         {
             await next(context).ConfigureAwait(false);

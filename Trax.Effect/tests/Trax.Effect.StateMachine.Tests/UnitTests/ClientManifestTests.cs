@@ -20,7 +20,7 @@ public class ClientManifestTests
                     Id = "topic-map",
                     IrHash = new string('a', 64),
                     Ir = new JsonObject { ["id"] = "topic-map", ["version"] = 1 },
-                    Requires = new ClientManifestRequirement { Roles = ["recovery-user"] },
+                    Requires = new ClientManifestRequirement { RoleSets = [["recovery-user"]] },
                     Documents =
                     [
                         new ClientManifestDocument
@@ -48,7 +48,7 @@ public class ClientManifestTests
 
         ClientManifest.Write(read).Should().Be(text);
         read.Machines.Single().Documents.Single().Operation.Should().Be("get");
-        read.Machines.Single().Requires!.Roles.Should().Equal("recovery-user");
+        read.Machines.Single().Requires!.RoleSets.Single().Should().Equal("recovery-user");
     }
 
     [Test]

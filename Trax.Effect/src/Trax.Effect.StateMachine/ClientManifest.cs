@@ -103,7 +103,7 @@ public sealed record ClientManifestMachine
     /// <summary>The machine's IR, from which a twin is generated.</summary>
     public required JsonObject Ir { get; init; }
 
-    /// <summary>What a caller needs to reach the machine, or null when any authenticated caller may.</summary>
+    /// <summary>Null: each of the machine's operations is held to its own declared rule.</summary>
     public ClientManifestRequirement? Requires { get; init; }
 
     /// <summary>The machine's persisted documents, ordered by operation.</summary>
@@ -122,7 +122,7 @@ public sealed record ClientManifestTrain
     /// <summary>The namespace the field sits under (<c>dispatch</c>, <c>discover</c>, or the train's own), or null.</summary>
     public string? Namespace { get; init; }
 
-    /// <summary>What a caller needs to run the train, or null when any authenticated caller may.</summary>
+    /// <summary>What a caller needs to run the train, as its attributes declare it.</summary>
     public ClientManifestRequirement? Requires { get; init; }
 
     /// <summary>The train's persisted documents, ordered by operation.</summary>
@@ -145,11 +145,17 @@ public sealed record ClientManifestDocument
     public required string Document { get; init; }
 }
 
-/// <summary>What a caller needs to reach an operation, as its declaration says.</summary>
+/// <summary>What a caller needs to reach an operation, as its declaration says. The server enforces it either way.</summary>
 public sealed record ClientManifestRequirement
 {
-    /// <summary>Roles the caller must hold, any one of them.</summary>
-    public IReadOnlyList<string> Roles { get; init; } = [];
+    /// <summary>Whether anyone may call it, signed in or not (<c>[TraxAllowAnonymous]</c>).</summary>
+    public bool Anonymous { get; init; }
+
+    /// <summary>
+    /// The role sets, one per attribute that names roles: the caller holds at least one role of every set. Empty when
+    /// no role is required.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>> RoleSets { get; init; } = [];
 
     /// <summary>Policies the caller must satisfy, each of them.</summary>
     public IReadOnlyList<string> Policies { get; init; } = [];

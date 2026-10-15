@@ -520,16 +520,20 @@ public class PersistedOperationMutationTests
             .Be("INVALID_INPUT");
     }
 
-    [Test]
-    public async Task Upload_deactivate_and_restore_refuse_the_reserved_prefix()
+    [TestCase("trax_machine_wizard_get_")]
+    [TestCase("trax_train_mutation__startRun_")]
+    [Property(
+        "adr",
+        "docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md"
+    )]
+    public async Task Upload_deactivate_and_restore_refuse_the_reserved_prefix(string prefix)
     {
         const string Because =
-            "ids under the reserved prefix belong to the host's generated machine documents, per "
-            + "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
-        var uploaded =
-            $"{Trax.Api.GraphQL.PersistedOperations.Services.MachineDocuments.ReservedIdPrefix}wizard_get_upload";
-        var stored =
-            $"{Trax.Api.GraphQL.PersistedOperations.Services.MachineDocuments.ReservedIdPrefix}wizard_get_stored";
+            "ids under a reserved prefix belong to the host's generated machine and train documents, per "
+            + "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md and "
+            + "docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md";
+        var uploaded = $"{prefix}upload";
+        var stored = $"{prefix}stored";
 
         var upload = (await ExecuteMutationAsync(uploaded, GraphQLFixture.ValidDocument))
             .RootElement.GetProperty("data")

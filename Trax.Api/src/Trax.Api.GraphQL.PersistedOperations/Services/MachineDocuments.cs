@@ -41,10 +41,10 @@ internal static class MachineDocuments
     /// <summary>The id prefix every machine document is stored under, and no uploaded document may use.</summary>
     public const string ReservedIdPrefix = "trax_machine_";
 
-    /// <summary>How many hex characters of the IR hash an id carries: all of them.</summary>
     /// <summary>The operation a machine's push document is registered under.</summary>
     public const string ChangedOperation = "changed";
 
+    /// <summary>How many hex characters of the IR hash an id carries: all of them.</summary>
     internal const int IrHashLength = 64;
 
     /// <summary>How many hex characters of the text hash an id carries.</summary>
@@ -336,4 +336,23 @@ internal sealed record MachineDocument(
     string Operation,
     string Text,
     string IrHash
-);
+) : GeneratedDocument(Id, Text)
+{
+    /// <inheritdoc />
+    public override string Slot => Machine;
+
+    /// <inheritdoc />
+    public override string Owner => $"machine '{Machine}'";
+
+    /// <inheritdoc />
+    public override string Description =>
+        $"Generated for the machine '{Machine}' ({Operation}), IR {IrHash}.";
+
+    /// <inheritdoc />
+    public override bool Matches(string stored) =>
+        string.Equals(
+            MachineDocuments.IdOf(Machine, Operation, IrHash, stored),
+            Id,
+            StringComparison.Ordinal
+        );
+}

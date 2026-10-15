@@ -35,7 +35,7 @@ a frontend's build needs no running server, no database and no credential, and T
 | `ClientManifestMachine` | One exposed machine: `Id`, `IrHash`, `Ir` and its `Documents`. `Requires` is null: each event's own rule applies. |
 | `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Requires`, `Documents` and declared `Chain`. |
 | `ClientManifestDocument` | One persisted document: the `Id` a client sends, its `Operation` and its `Document` text. |
-| `ClientManifestRequirement` | What a caller needs: `Roles` (any one of them) and `Policies` (each of them). |
+| `ClientManifestRequirement` | What a caller needs, as the train's attributes declare it: `Anonymous` (`[TraxAllowAnonymous]`), `RoleSets` (one per attribute naming roles; the caller holds a role of every set) and `Policies` (each of them). The server enforces it either way. |
 
 ## Behavior
 

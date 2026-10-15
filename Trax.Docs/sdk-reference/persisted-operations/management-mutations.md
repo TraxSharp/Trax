@@ -89,7 +89,8 @@ requires persisted operations, since a client cannot ask for its ids by an id it
 
 ## Reserved ids
 
-Ids starting with `trax_machine_` belong to the machine documents the host generates and registers itself. Upload,
+Ids starting with `trax_machine_` or `trax_train_` belong to the machine and train documents the host generates and
+registers itself ([generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents)). Upload,
 deactivate and restore refuse them with the code `RESERVED_ID`, and `IPersistedOperationStore`'s `UpsertAsync`,
 `DeactivateAsync` and `RestoreAsync` throw `PersistedOperationInputException`.
 

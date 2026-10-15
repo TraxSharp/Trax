@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using HotChocolate;
 using HotChocolate.Execution;
-using HotChocolate.Language;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,6 +8,7 @@ using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
@@ -47,7 +47,10 @@ internal static class ClientManifestExport
             services.GetServices<IMachine>(),
             services.GetService<StateMachineOptions>()
         );
-        var manifest = Build(executor.Schema, exposed);
+        var trains = services.GetService<ITrainDiscoveryService>() is { } discovery
+            ? TrainTypeModule.AssignTrainNames(discovery.DiscoverTrains())
+            : new Dictionary<TrainRegistration, string>();
+        var manifest = Build(executor.Schema, exposed, trains);
 
         var directory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path));
         if (directory is not null)
@@ -56,10 +59,15 @@ internal static class ClientManifestExport
             .ConfigureAwait(false);
     }
 
-    /// <summary>The manifest of <paramref name="exposed"/> over <paramref name="schema"/>.</summary>
-    public static ClientManifest Build(ISchemaDefinition schema, IReadOnlyList<IMachine> exposed)
+    /// <summary>The manifest of <paramref name="exposed"/> machines and the trains in <paramref name="trains"/>.</summary>
+    public static ClientManifest Build(
+        ISchemaDefinition schema,
+        IReadOnlyList<IMachine> exposed,
+        IReadOnlyDictionary<TrainRegistration, string> trains
+    )
     {
         var documents = exposed.Count == 0 ? [] : MachineDocuments.Generate(schema, exposed);
+        var trainDocuments = TrainDocuments.Generate(schema, trains);
         var machines = exposed
             .OrderBy(m => m.Name, StringComparer.Ordinal)
             .Select(machine => new ClientManifestMachine
@@ -83,87 +91,38 @@ internal static class ClientManifestExport
         return new ClientManifest
         {
             Machines = machines,
-            Types = TypesOf(schema, documents.Select(d => d.Text)),
+            Trains = trainDocuments
+                .Select(d => new ClientManifestTrain
+                {
+                    Field = d.Field,
+                    Root = d.Root,
+                    Namespace = d.Namespace,
+                    Requires = RequirementOf(d.Registration),
+                    Documents =
+                    [
+                        new ClientManifestDocument
+                        {
+                            Id = d.Id,
+                            Operation = d.Field,
+                            Document = d.Text,
+                        },
+                    ],
+                })
+                .ToList(),
+            Types = DocumentTypes.Sdl(
+                schema,
+                documents.Select(d => d.Text).Concat(trainDocuments.Select(d => d.Text))
+            ),
         };
     }
 
-    // The SDL of every named type the documents reach: their variables' types with every input type those hold, and
-    // the types of the fields they select, through every fragment. The root operation types are left out, so the
-    // fields a client cannot send, the operations namespace among them, are never listed.
-    private static string TypesOf(ISchemaDefinition schema, IEnumerable<string> documents)
-    {
-        var reached = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var text in documents)
+    private static ClientManifestRequirement RequirementOf(TrainRegistration train) =>
+        new()
         {
-            var document = Utf8GraphQLParser.Parse(text);
-            foreach (var operation in document.Definitions.OfType<OperationDefinitionNode>())
-            {
-                foreach (var variable in operation.VariableDefinitions)
-                    Reach(schema, variable.Type.NamedType().Name.Value, reached);
-                var root = operation.Operation switch
-                {
-                    OperationType.Mutation => schema.MutationType,
-                    OperationType.Subscription => schema.SubscriptionType,
-                    _ => schema.QueryType,
-                };
-                if (root is not null)
-                    Select(schema, root, operation.SelectionSet, reached);
-            }
-        }
-
-        var roots = new[] { schema.QueryType, schema.MutationType, schema.SubscriptionType }
-            .Where(t => t is not null)
-            .Select(t => t!.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        var definitions = Utf8GraphQLParser
-            .Parse(schema.ToString())
-            .Definitions.OfType<INamedSyntaxNode>()
-            .Where(d => reached.Contains(d.Name.Value) && !roots.Contains(d.Name.Value))
-            .OrderBy(d => d.Name.Value, StringComparer.Ordinal)
-            .Select(d => d.ToString(indented: true));
-        return string.Join("\n\n", definitions).Replace("\r\n", "\n");
-    }
-
-    private static void Select(
-        ISchemaDefinition schema,
-        ITypeDefinition type,
-        SelectionSetNode? selections,
-        SortedSet<string> reached
-    )
-    {
-        if (selections is null)
-            return;
-        foreach (var selection in selections.Selections)
-        {
-            switch (selection)
-            {
-                case FieldNode field
-                    when type is IComplexTypeDefinition complex
-                        && complex.Fields.TryGetField(field.Name.Value, out var definition):
-                    var named = definition.Type.NamedType();
-                    Reach(schema, named.Name, reached);
-                    Select(schema, named, field.SelectionSet, reached);
-                    break;
-                case InlineFragmentNode fragment:
-                    var on =
-                        fragment.TypeCondition is { } condition
-                        && schema.Types.TryGetType(condition.Name.Value, out var conditionType)
-                            ? conditionType
-                            : type;
-                    Reach(schema, on.Name, reached);
-                    Select(schema, on, fragment.SelectionSet, reached);
-                    break;
-            }
-        }
-    }
-
-    // A named type, and every input type an input object holds.
-    private static void Reach(ISchemaDefinition schema, string name, SortedSet<string> reached)
-    {
-        if (!reached.Add(name) || !schema.Types.TryGetType(name, out var type))
-            return;
-        if (type is IInputObjectTypeDefinition input)
-            foreach (var field in input.Fields)
-                Reach(schema, field.Type.NamedType().Name, reached);
-    }
+            Anonymous = train.HasAllowAnonymousAttribute,
+            RoleSets = train
+                .RequiredRoleSets.Select(s => (IReadOnlyList<string>)s.ToList())
+                .ToList(),
+            Policies = train.RequiredPolicies.ToList(),
+        };
 }

@@ -81,10 +81,10 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     public bool IsReady => _state is not null;
 
     /// <summary>This node's own documents, in the order <see cref="MachineDocuments.Generate"/> returned them.</summary>
-    public IReadOnlyList<MachineDocument> Documents => _state?.Documents ?? [];
+    public IReadOnlyList<GeneratedDocument> Documents => _state?.Documents ?? [];
 
     /// <summary>This node's document under <paramref name="id"/>, if it is one of its own.</summary>
-    public bool TryGetOwn(string id, out MachineDocument document)
+    public bool TryGetOwn(string id, out GeneratedDocument document)
     {
         if (_state is { } state && state.Own.TryGetValue(id, out var own))
         {
@@ -101,7 +101,7 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     /// when omitted).
     /// </summary>
     public void Publish(
-        IReadOnlyList<MachineDocument> documents,
+        IReadOnlyList<GeneratedDocument> documents,
         IReadOnlyDictionary<string, int> ownVersions,
         IReadOnlyDictionary<string, StoredMachineDocument> stored,
         long? readStartedAt = null
@@ -146,7 +146,7 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         if (!MachineDocuments.IsWellFormed(id))
             return MachineDocumentVerdict.ClientOutdated;
 
-        var machine = MachineDocuments.MachineOf(id, state.OwnVersions.Keys);
+        var machine = GeneratedDocuments.SlotOf(id, state.OwnVersions.Keys);
         if (state.Stored.TryGetValue(id, out var stored))
         {
             _misses.TryRemove(id, out _);
@@ -206,7 +206,9 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
             return null;
         if (
             state.Documents.Any(d =>
-                d.Machine == machine && string.Equals(d.IrHash, irHash, StringComparison.Ordinal)
+                d is MachineDocument m
+                && m.Machine == machine
+                && string.Equals(m.IrHash, irHash, StringComparison.Ordinal)
             )
         )
             return false;
@@ -280,8 +282,8 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     }
 
     private sealed record State(
-        IReadOnlyList<MachineDocument> Documents,
-        IReadOnlyDictionary<string, MachineDocument> Own,
+        IReadOnlyList<GeneratedDocument> Documents,
+        IReadOnlyDictionary<string, GeneratedDocument> Own,
         IReadOnlyDictionary<string, int> OwnVersions,
         IReadOnlyDictionary<string, StoredMachineDocument> Stored,
         long ReadStartedAt,

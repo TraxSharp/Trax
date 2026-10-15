@@ -35,3 +35,31 @@ public class PingJunction : Junction<PingInput, PingOutput>
     public override Task<PingOutput> Run(PingInput input) =>
         Task.FromResult(new PingOutput { Value = input.Value });
 }
+
+// A mutation train only an approver may run, so a host's train documents include one that is role-gated.
+
+public record RecordNoteInput
+{
+    public string Text { get; init; } = "";
+}
+
+public record RecordNoteOutput
+{
+    public string Text { get; init; } = "";
+}
+
+public interface IRecordNote : IServiceTrain<RecordNoteInput, RecordNoteOutput> { }
+
+[TraxAuthorize(Roles = "Approver")]
+[TraxMutation(Description = "Echoes a note; only an approver may run it.")]
+public class RecordNote : ServiceTrain<RecordNoteInput, RecordNoteOutput>, IRecordNote
+{
+    protected override Task<Either<Exception, RecordNoteOutput>> Junctions() =>
+        Chain<RecordNoteJunction>().Resolve();
+}
+
+public class RecordNoteJunction : Junction<RecordNoteInput, RecordNoteOutput>
+{
+    public override Task<RecordNoteOutput> Run(RecordNoteInput input) =>
+        Task.FromResult(new RecordNoteOutput { Text = input.Text });
+}

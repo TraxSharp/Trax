@@ -147,8 +147,8 @@ internal sealed class DbPersistedOperationStorage
 
         // An id under the reserved prefix is a machine document: only this node's own are read, never one it did
         // not generate, and a miss is not remembered, so the ids a client invents cannot fill the miss cache.
-        MachineDocument? own = null;
-        if (MachineDocuments.IsReserved(id))
+        GeneratedDocument? own = null;
+        if (GeneratedDocuments.IsReserved(id))
         {
             if (!_machineDocuments.TryGetOwn(id, out var generated))
                 return null;
@@ -175,14 +175,14 @@ internal sealed class DbPersistedOperationStorage
                 return null;
             }
 
-            if (own is not null && !Matches(own, document))
+            if (own is not null && !own.Matches(document))
             {
                 MachineDocumentInstruments.Mismatches.Add(
                     1,
-                    new KeyValuePair<string, object?>("machine", own.Machine)
+                    new KeyValuePair<string, object?>("slot", own.Slot)
                 );
                 _logger.LogError(
-                    "The stored body of machine document '{Id}' does not match its id, so it is refused. A restart "
+                    "The stored body of generated document '{Id}' does not match its id, so it is refused. A restart "
                         + "of this node writes the generated body back; until then, find who changed the row.",
                     id
                 );
@@ -530,7 +530,7 @@ internal sealed class DbPersistedOperationStorage
         IReadOnlyDictionary<string, int> OwnVersions,
         IReadOnlyDictionary<string, StoredMachineDocument> Stored
     )> RegisterMachineDocumentsAsync(
-        IReadOnlyList<MachineDocument> documents,
+        IReadOnlyList<GeneratedDocument> documents,
         TimeSpan grace,
         CancellationToken ct,
         bool startup = true
@@ -556,18 +556,21 @@ internal sealed class DbPersistedOperationStorage
             var rows = await ctx
                 .PersistedOperations.Where(p =>
                     p.TenantKey == NoTenantSentinel
-                    && p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
+                    && (
+                        p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
+                    )
                 )
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
             var byId = rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
 
-            foreach (var machine in documents.GroupBy(d => d.Machine, StringComparer.Ordinal))
+            foreach (var machine in documents.GroupBy(d => d.Slot, StringComparer.Ordinal))
             {
                 var mine = machine.ToList();
                 var ownIds = mine.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
                 var ofMachine = rows.Where(r =>
-                        MachineDocuments.MachineOf(r.Id, [machine.Key]) is not null
+                        GeneratedDocuments.SlotOf(r.Id, [machine.Key]) is not null
                     )
                     .ToList();
                 // A set already stored keeps the number it registered under; a new one goes after every other.
@@ -601,7 +604,7 @@ internal sealed class DbPersistedOperationStorage
                 )
                 {
                     var reason =
-                        $"collected: superseded by version {version} of the machine '{machine.Key}' for longer than {grace}";
+                        $"collected: superseded by version {version} of '{machine.Key}' for longer than {grace}";
                     old.IsActive = false;
                     old.DeprecationReason = reason;
                     old.UpdatedAt = now;
@@ -613,21 +616,21 @@ internal sealed class DbPersistedOperationStorage
             var served = ownVersions.Keys.ToList();
             foreach (
                 var row in rows.Where(r =>
-                    r.IsActive && MachineDocuments.MachineOf(r.Id, served) is null
+                    r.IsActive && GeneratedDocuments.SlotOf(r.Id, served) is null
                 )
             )
             {
                 if (!IsUnexposedMark(row.DeprecationReason))
                 {
                     row.DeprecationReason =
-                        $"{UnexposedMark} not served by a node that registered its machine documents at {now:O}";
+                        $"{UnexposedMark} not served by a node that registered its generated documents at {now:O}";
                     row.UpdatedAt = now;
                     marked = true;
                 }
                 else if (now - row.UpdatedAt >= grace)
                 {
                     var reason =
-                        $"collected: no node registering its machine documents has served its machine for longer than {grace}";
+                        $"collected: no node registering its generated documents has served it for longer than {grace}";
                     row.IsActive = false;
                     row.DeprecationReason = reason;
                     row.UpdatedAt = now;
@@ -679,7 +682,7 @@ internal sealed class DbPersistedOperationStorage
     // clears. Returns whether it changed a row without a history entry (the mark).
     private bool Register(
         Trax.Effect.Data.Services.DataContext.IDataContext ctx,
-        MachineDocument document,
+        GeneratedDocument document,
         int version,
         bool mayRestore,
         Dictionary<string, PersistedOperation> byId,
@@ -699,8 +702,7 @@ internal sealed class DbPersistedOperationStorage
                 Document = document.Text,
                 ShapeFingerprint = ShapeFingerprintComputer.Compute(document.Text),
                 IsActive = true,
-                Description =
-                    $"Generated for the machine '{document.Machine}' ({document.Operation}), IR {document.IrHash}.",
+                Description = document.Description,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
@@ -731,10 +733,10 @@ internal sealed class DbPersistedOperationStorage
             changed.Add((row.Id, PersistedOperationChangeType.Upsert));
             MachineDocumentInstruments.Repairs.Add(
                 1,
-                new KeyValuePair<string, object?>("machine", document.Machine)
+                new KeyValuePair<string, object?>("slot", document.Slot)
             );
             _logger.LogError(
-                "The stored body of machine document '{Id}' did not match its id, so it was written back. Find who "
+                "The stored body of generated document '{Id}' did not match its id, so it was written back. Find who "
                     + "changed the row.",
                 row.Id
             );
@@ -770,7 +772,10 @@ internal sealed class DbPersistedOperationStorage
                 .PersistedOperations.AsNoTracking()
                 .Where(p =>
                     p.TenantKey == NoTenantSentinel
-                    && p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
+                    && (
+                        p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
+                    )
                 )
                 .Select(p => new
                 {
@@ -791,14 +796,6 @@ internal sealed class DbPersistedOperationStorage
             await DisposeContextAsync(ctx).ConfigureAwait(false);
         }
     }
-
-    // A stored body matches its id when it hashes, with the machine's IR hash, to the id it is stored under.
-    private static bool Matches(MachineDocument own, string stored) =>
-        string.Equals(
-            MachineDocuments.IdOf(own.Machine, own.Operation, own.IrHash, stored),
-            own.Id,
-            StringComparison.Ordinal
-        );
 
     private static void History(
         Trax.Effect.Data.Services.DataContext.IDataContext ctx,
@@ -826,10 +823,10 @@ internal sealed class DbPersistedOperationStorage
     /// </summary>
     private static void RefuseReserved(string id)
     {
-        if (MachineDocuments.IsReserved(id))
+        if (GeneratedDocuments.PrefixOf(id) is { } prefix)
             throw new PersistedOperationInputException(
-                $"The id '{id}' is under '{MachineDocuments.ReservedIdPrefix}', which is reserved for the machine "
-                    + "documents the host generates and registers itself. Choose another id."
+                $"The id '{id}' is under '{prefix}', which is reserved for the machine and train documents the host "
+                    + "generates and registers itself. Choose another id."
             );
     }
 
