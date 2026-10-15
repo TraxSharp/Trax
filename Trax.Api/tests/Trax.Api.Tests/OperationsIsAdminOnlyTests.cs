@@ -108,6 +108,40 @@ public class OperationsIsAdminOnlyTests
             );
     }
 
+    [Test]
+    public async Task A_selection_made_through_a_named_fragment_is_read()
+    {
+        var schema = await FullSchemaAsync();
+
+        // The fragment defined in the same document, and in a document of its own that another
+        // interpolates, as gql`... ${FIELDS}` does.
+        var (_, sameDocument) = ReadDocuments(
+            schema,
+            [
+                """
+                query Listed { operations { ...Removed } }
+                fragment Removed on OperationsQueries { noSuchRead }
+                """,
+            ]
+        );
+        var (_, ownDocument) = ReadDocuments(
+            schema,
+            [
+                "query Listed { operations { ...Removed } } ${REMOVED}",
+                "fragment Removed on OperationsQueries { executions { totalCount } noSuchRead }",
+            ]
+        );
+        var (used, unknown) = ReadDocuments(
+            schema,
+            ["query Listed { operations { executions { totalCount } ...NotDefined } }"]
+        );
+
+        sameDocument.Should().Equal(["Listed: operations.noSuchRead"]);
+        ownDocument.Should().Equal(["Listed: operations.noSuchRead"]);
+        used.Should().Contain("OperationsQueries.executions");
+        unknown.Should().Equal(["Listed: operations...NotDefined (no such fragment)"]);
+    }
+
     // Every field reachable under operations, query and mutation, as Type.field; a nested namespace counts as its
     // fields, not as itself.
     internal static HashSet<string> OperationsFields(ISchemaDefinition schema)
@@ -149,13 +183,37 @@ public class OperationsIsAdminOnlyTests
     // selections it does not, each naming its document and path.
     private static (HashSet<string> Used, List<string> Missing) ReadDashboard(
         ISchemaDefinition schema
+    ) => ReadDocuments(schema, DashboardDocuments());
+
+    // A spread is read as the selections of the fragment it names: one defined in the same document, or in another
+    // document, which gql`... ${FRAGMENT}` interpolates.
+    private static (HashSet<string> Used, List<string> Missing) ReadDocuments(
+        ISchemaDefinition schema,
+        IEnumerable<string> texts
     )
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
         var missing = new List<string>();
-        foreach (var text in DashboardDocuments())
+        var documents = texts
+            .Select(t => Utf8GraphQLParser.Parse(WithoutInterpolations(t)))
+            .ToList();
+        var shared = new Dictionary<string, FragmentDefinitionNode>(StringComparer.Ordinal);
+        foreach (
+            var fragment in documents.SelectMany(d =>
+                d.Definitions.OfType<FragmentDefinitionNode>()
+            )
+        )
+            shared.TryAdd(fragment.Name.Value, fragment);
+
+        foreach (var document in documents)
         {
-            var document = Utf8GraphQLParser.Parse(text);
+            var fragments = new Dictionary<string, FragmentDefinitionNode>(
+                shared,
+                StringComparer.Ordinal
+            );
+            foreach (var fragment in document.Definitions.OfType<FragmentDefinitionNode>())
+                fragments[fragment.Name.Value] = fragment;
+
             foreach (var operation in document.Definitions.OfType<OperationDefinitionNode>())
             {
                 var root = operation.Operation switch
@@ -165,7 +223,7 @@ public class OperationsIsAdminOnlyTests
                     _ => null,
                 };
                 var name = operation.Name?.Value ?? "(anonymous)";
-                foreach (var selection in Fields(operation.SelectionSet))
+                foreach (var selection in Fields(operation.SelectionSet, fragments, missing, name))
                 {
                     if (selection.Name.Value != "operations")
                         continue;
@@ -178,6 +236,7 @@ public class OperationsIsAdminOnlyTests
                         Walk(
                             (IObjectTypeDefinition)operations.Type.NamedType(),
                             under,
+                            fragments,
                             used,
                             missing,
                             $"{name}: operations"
@@ -191,12 +250,13 @@ public class OperationsIsAdminOnlyTests
     private static void Walk(
         IObjectTypeDefinition type,
         SelectionSetNode selections,
+        IReadOnlyDictionary<string, FragmentDefinitionNode> fragments,
         HashSet<string> used,
         List<string> missing,
         string path
     )
     {
-        foreach (var selection in Fields(selections))
+        foreach (var selection in Fields(selections, fragments, missing, path))
         {
             if (!type.Fields.TryGetField(selection.Name.Value, out var field))
             {
@@ -208,21 +268,92 @@ public class OperationsIsAdminOnlyTests
                 && field.Type.NamedType() is IObjectTypeDefinition inner
                 && selection.SelectionSet is { } under
             )
-                Walk(inner, under, used, missing, $"{path}.{field.Name}");
+                Walk(inner, under, fragments, used, missing, $"{path}.{field.Name}");
             else
                 used.Add($"{type.Name}.{field.Name}");
         }
     }
 
-    private static IEnumerable<FieldNode> Fields(SelectionSetNode set) =>
-        set.Selections.SelectMany(s =>
-            s switch
+    // The fields a selection set selects, through inline fragments and named spreads. A spread of a fragment no
+    // document defines is reported as missing.
+    private static IEnumerable<FieldNode> Fields(
+        SelectionSetNode set,
+        IReadOnlyDictionary<string, FragmentDefinitionNode> fragments,
+        List<string> missing,
+        string path,
+        HashSet<string>? spreading = null
+    )
+    {
+        foreach (var selection in set.Selections)
+        {
+            switch (selection)
             {
-                FieldNode f => [f],
-                InlineFragmentNode i => Fields(i.SelectionSet),
-                _ => Enumerable.Empty<FieldNode>(),
+                case FieldNode field:
+                    yield return field;
+                    break;
+                case InlineFragmentNode inline:
+                    foreach (
+                        var inlined in Fields(
+                            inline.SelectionSet,
+                            fragments,
+                            missing,
+                            path,
+                            spreading
+                        )
+                    )
+                        yield return inlined;
+                    break;
+                case FragmentSpreadNode spread:
+                    var name = spread.Name.Value;
+                    if (!fragments.TryGetValue(name, out var fragment))
+                    {
+                        missing.Add($"{path}...{name} (no such fragment)");
+                        break;
+                    }
+                    // A fragment that spreads itself is invalid GraphQL; read it once rather than forever.
+                    var inside = new HashSet<string>(spreading ?? [], StringComparer.Ordinal);
+                    if (!inside.Add(name))
+                        break;
+                    foreach (
+                        var spreadField in Fields(
+                            fragment.SelectionSet,
+                            fragments,
+                            missing,
+                            path,
+                            inside
+                        )
+                    )
+                        yield return spreadField;
+                    break;
             }
-        );
+        }
+    }
+
+    // An interpolation inside a selection set is a piece of one, never an operations field, so it is read as
+    // __typename; one outside every selection set appends a fragment definition, which is read from its own document.
+    private static string WithoutInterpolations(string text)
+    {
+        var result = new System.Text.StringBuilder(text.Length);
+        var depth = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '$' && i + 1 < text.Length && text[i + 1] == '{')
+            {
+                var end = text.IndexOf('}', i);
+                if (end < 0)
+                    break;
+                result.Append(depth > 0 ? "__typename" : "");
+                i = end;
+                continue;
+            }
+            if (text[i] == '{')
+                depth++;
+            else if (text[i] == '}')
+                depth--;
+            result.Append(text[i]);
+        }
+        return result.ToString();
+    }
 
     private static IEnumerable<IObjectTypeDefinition> Roots(ISchemaDefinition schema)
     {
@@ -231,8 +362,7 @@ public class OperationsIsAdminOnlyTests
             yield return mutation;
     }
 
-    // The gql`...` documents in the dashboard's graphql folder. An interpolated constant is a piece of a selection set,
-    // never an operations field, so it is read as __typename.
+    // The gql`...` documents in the dashboard's graphql folder: its operations, and the fragments they spread.
     private static IEnumerable<string> DashboardDocuments()
     {
         var folder = System.IO.Path.Combine(
@@ -249,15 +379,13 @@ public class OperationsIsAdminOnlyTests
             .SelectMany(f =>
                 GqlTemplate.Matches(File.ReadAllText(f)).Select(m => m.Groups[1].Value)
             )
-            .Select(t => Interpolation.Replace(t, "__typename"))
-            .Where(t => Regex.IsMatch(t, @"^\s*(query|mutation|subscription)\b"))
+            .Where(t => Regex.IsMatch(t, @"^\s*(query|mutation|subscription|fragment)\b"))
             .ToList();
         documents.Should().NotBeEmpty($"the dashboard's documents are read from {folder}");
         return documents;
     }
 
     private static readonly Regex GqlTemplate = new(@"gql`([^`]*)`", RegexOptions.Compiled);
-    private static readonly Regex Interpolation = new(@"\$\{[^}]*\}", RegexOptions.Compiled);
 
     // The whole operations surface: both halves of the namespace, the machine instance feed it carries, and the
     // persisted-operation package, so a field it grafted onto operations would be caught.
