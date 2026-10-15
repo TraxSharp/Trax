@@ -19,6 +19,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.Runs;
 using Trax.Core.Decisions;
 using Trax.Core.Functional;
+using Trax.Core.Monad;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
@@ -76,7 +77,7 @@ public class JunctionEventsE2ETests
         $"{{ operations {{ junctionRuns(metadataId: {metadataId}) {{ {StepFields} }} }} }}";
 
     private static string ExecutionQuery(long metadataId) =>
-        $"{{ operations {{ execution(id: {metadataId}) {{ id }} }} }}";
+        $"{{ operations {{ executionDetail(id: {metadataId}) {{ id }} }} }}";
 
     private IHost _host = null!;
 
@@ -430,9 +431,6 @@ public class JunctionEventsE2ETests
 
     #region The declared graph
 
-    private static string DeclaredChainQuery(string train) =>
-        $"{{ operations {{ declaredChain(train: \"{train}\") {{ train hash nodes {{ id kind opaque tracks {{ name nodes {{ id }} }} }} }} }} }}";
-
     private const string RunNodeFields = "id kind state replayed trackTaken steps { position }";
 
     private static string RunGraphQuery(long metadataId) =>
@@ -440,62 +438,11 @@ public class JunctionEventsE2ETests
         + $"unmatchedSteps {{ position nodeId }} nodes {{ {RunNodeFields} tracks {{ name taken nodes {{ {RunNodeFields} }} }} }} }} }} }}";
 
     [Test]
-    public async Task DeclaredChain_OfARegisteredTrain_IsReadableOnlyInTheOperationsView()
+    public async Task TheDeclaredGraph_OfANameNoTrainIsRegisteredUnder_IsNull()
     {
-        var train = typeof(IHiddenMarkerTrain).FullName!;
-
-        using var forAdmin = await PostAsync(DeclaredChainQuery(train), AdminKey);
-        var graph = forAdmin
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty("declaredChain");
-        graph.GetProperty("hash").GetString().Should().HaveLength(64);
-        graph
-            .GetProperty("nodes")
-            .EnumerateArray()
-            .Select(n => n.GetProperty("id").GetString())
-            .Should()
-            .Equal(
-                "Seed<IDecider>#0",
-                nameof(HoldForRelease) + "#0",
-                "Decide<ChoiceDecision<MarkerLane>>#0",
-                "Switch<MarkerLane>#0",
-                "Decide<ChoiceDecision<MarkerTier>>#0",
-                "Switch<MarkerTier>#0",
-                nameof(FinishOrExplode) + "#0",
-                "Resolve#0"
-            );
-        graph
-            .GetProperty("nodes")[3]
-            .GetProperty("tracks")
-            .EnumerateArray()
-            .Select(t => t.GetProperty("name").GetString())
-            .Should()
-            .Equal("Fast", "Slow");
-
-        foreach (var key in new[] { PlayerKey, GuestKey, null })
-        {
-            using var refused = await PostAsync(DeclaredChainQuery(train), key);
-            Denied(refused)
-                .Should()
-                .BeTrue($"the graph names the train's types (caller {key ?? "anonymous"})");
-            refused.RootElement.GetRawText().Should().NotContain(nameof(HoldForRelease));
-        }
-    }
-
-    [Test]
-    public async Task DeclaredChain_OfANameNoTrainIsRegisteredUnder_IsNull()
-    {
+        var graphs = _host.Services.GetRequiredService<ITrainChainGraphs>();
         foreach (var name in new[] { "System.String", typeof(MarkerTrainBase).FullName!, "Nope" })
-        {
-            using var doc = await PostAsync(DeclaredChainQuery(name), AdminKey);
-            doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
-            doc.RootElement.GetProperty("data")
-                .GetProperty("operations")
-                .GetProperty("declaredChain")
-                .ValueKind.Should()
-                .Be(JsonValueKind.Null, name);
-        }
+            graphs.Find(name).Should().BeNull(name);
     }
 
     [Test]
@@ -517,7 +464,28 @@ public class JunctionEventsE2ETests
 
         graph.GetProperty("hasGraph").GetBoolean().Should().BeTrue();
         graph.GetProperty("train").GetString().Should().Be(typeof(IHiddenMarkerTrain).FullName);
+        graph.GetProperty("hash").GetString().Should().HaveLength(64);
         var nodes = graph.GetProperty("nodes");
+        nodes
+            .EnumerateArray()
+            .Select(n => n.GetProperty("id").GetString())
+            .Should()
+            .Equal(
+                "Seed<IDecider>#0",
+                nameof(HoldForRelease) + "#0",
+                "Decide<ChoiceDecision<MarkerLane>>#0",
+                "Switch<MarkerLane>#0",
+                "Decide<ChoiceDecision<MarkerTier>>#0",
+                "Switch<MarkerTier>#0",
+                nameof(FinishOrExplode) + "#0",
+                "Resolve#0"
+            );
+        nodes[3]
+            .GetProperty("tracks")
+            .EnumerateArray()
+            .Select(t => t.GetProperty("name").GetString())
+            .Should()
+            .Equal("Fast", "Slow");
         var byId = nodes.EnumerateArray().ToDictionary(n => n.GetProperty("id").GetString()!);
         byId["Seed<IDecider>#0"].GetProperty("state").GetString().Should().Be("NOT_RECORDED");
         byId[nameof(HoldForRelease) + "#0"]
@@ -574,7 +542,10 @@ public class JunctionEventsE2ETests
         foreach (var key in new[] { PlayerKey, GuestKey, null })
         {
             using var refused = await PostAsync(RunGraphQuery(run.MetadataId), key);
-            Denied(refused).Should().BeTrue($"caller {key ?? "anonymous"}");
+            Denied(refused)
+                .Should()
+                .BeTrue($"the graph names the train's types (caller {key ?? "anonymous"})");
+            refused.RootElement.GetRawText().Should().NotContain(nameof(HoldForRelease));
         }
     }
 
@@ -601,10 +572,6 @@ public class JunctionEventsE2ETests
     private const string Fork = "Parallel#0";
     private const string NestedFork = "Parallel#0/right/Parallel#0";
 
-    private static string DeclaredParallelQuery(string train) =>
-        $"{{ operations {{ declaredChain(train: \"{train}\") {{ nodes {{ id kind tracks {{ name isFallback "
-        + "nodes { id kind tracks { name nodes { id kind } } } } } } } }";
-
     // Deep enough for a Parallel inside a branch: step, branch, step, branch, step.
     private static string ParallelRunGraphQuery(long metadataId) =>
         $"{{ operations {{ runGraph(metadataId: {metadataId}) {{ unmatchedSteps {{ position }} "
@@ -614,40 +581,24 @@ public class JunctionEventsE2ETests
     private const string ParallelNodeFields = "id kind state trackTaken";
 
     [Test]
-    public async Task DeclaredChain_OfAParallelTrain_HasTheStep_WithEveryBranchAsATrack()
+    public void TheDeclaredGraph_OfAParallelTrain_HasTheStep_WithEveryBranchAsATrack()
     {
-        using var doc = await PostAsync(
-            DeclaredParallelQuery(typeof(IParallelMarkerTrain).FullName!),
-            AdminKey
-        );
-        doc.RootElement.TryGetProperty("errors", out var errors)
-            .Should()
-            .BeFalse(errors.ValueKind == JsonValueKind.Undefined ? "" : errors.GetRawText());
-        var nodes = doc
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty("declaredChain")
-            .GetProperty("nodes");
+        var nodes = _host
+            .Services.GetRequiredService<ITrainChainGraphs>()
+            .Find(typeof(IParallelMarkerTrain).FullName!)!
+            .Nodes;
 
-        var fork = nodes.EnumerateArray().Single(n => n.GetProperty("id").GetString() == Fork);
-        fork.GetProperty("kind").GetString().Should().Be("PARALLEL");
-        var branches = fork.GetProperty("tracks").EnumerateArray().ToList();
-        branches.Select(b => b.GetProperty("name").GetString()).Should().Equal("left", "right");
-        branches.Should().OnlyContain(b => !b.GetProperty("isFallback").GetBoolean());
-        branches[0]
-            .GetProperty("nodes")
-            .EnumerateArray()
-            .Select(n => n.GetProperty("id").GetString())
-            .Should()
-            .Equal($"{Fork}/left/{nameof(ScoreLeft)}#0");
+        var fork = nodes.Single(n => n.Id == Fork);
+        fork.Kind.Should().Be(ChainStepKind.Parallel);
+        fork.Tracks.Select(b => b.Name).Should().Equal("left", "right");
+        fork.Tracks.Should().OnlyContain(b => !b.IsFallback);
+        fork.Tracks[0].Nodes.Select(n => n.Id).Should().Equal($"{Fork}/left/{nameof(ScoreLeft)}#0");
 
-        var nested = branches[1].GetProperty("nodes")[1];
-        nested.GetProperty("id").GetString().Should().Be(NestedFork);
-        nested.GetProperty("kind").GetString().Should().Be("PARALLEL");
+        var nested = fork.Tracks[1].Nodes[1];
+        nested.Id.Should().Be(NestedFork);
+        nested.Kind.Should().Be(ChainStepKind.Parallel);
         nested
-            .GetProperty("tracks")
-            .EnumerateArray()
-            .Select(b => b.GetProperty("nodes")[0].GetProperty("id").GetString())
+            .Tracks.Select(b => b.Nodes[0].Id)
             .Should()
             .Equal($"{NestedFork}/x/{nameof(CountX)}#0", $"{NestedFork}/y/{nameof(CountY)}#0");
     }

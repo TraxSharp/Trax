@@ -28,10 +28,10 @@ using Trax.Scheduler.Services.TraxScheduler;
 namespace Trax.Api.Tests;
 
 /// <summary>
-/// <c>operations.runGraph</c> and <c>operations.declaredChain</c> over HTTP, for a chain nested
-/// deeper than a GraphQL query can follow: the nested <c>tracks { nodes }</c> fields repeat, and the
-/// server's field-cycle limit refuses a query that repeats them past a few levels. Both answer
-/// the whole graph through <c>allNodes</c>, one flat list a client rebuilds the tree from by each
+/// <c>operations.runGraph</c> over HTTP, for a chain nested deeper than a GraphQL query can
+/// follow: the nested <c>tracks { nodes }</c> fields repeat, and the server's field-cycle limit
+/// refuses a query that repeats them past a few levels. It answers the whole graph through
+/// <c>allNodes</c>, one flat list a client rebuilds the tree from by each
 /// node's <c>parentId</c> and <c>track</c>. And a run that has ended shows a step whose end was
 /// never recorded as <c>INTERRUPTED</c>, never as still in progress.
 /// </summary>
@@ -151,27 +151,6 @@ public class RunGraphOverHttpTests
         all[0].GetProperty("depth").GetInt32().Should().Be(0);
 
         // The tree the flat list rebuilds is the one the nested fields describe.
-        Rebuild(all).Should().Be(Shape(_graph.Nodes));
-    }
-
-    [Test]
-    public async Task DeclaredChain_AllNodes_ReachesEveryNode_WithWhereItSits()
-    {
-        var chain = Operations(
-            await PostAsync(
-                $"{{ operations {{ declaredChain(train: \"{Train}\") {{ "
-                    + "allNodes { id kind parentId track depth tracks { name isFallback } } } } }"
-            ),
-            "declaredChain"
-        );
-
-        var all = chain.GetProperty("allNodes").EnumerateArray().ToList();
-        all.Select(n => n.GetProperty("id").GetString())
-            .Should()
-            .Equal(DeclaredOrder(_graph.Nodes));
-        var leaf = all.Single(n => n.GetProperty("id").GetString() == _leafId);
-        leaf.GetProperty("depth").GetInt32().Should().Be(Levels);
-        leaf.GetProperty("parentId").GetString().Should().Be(_parallelIds[^1]);
         Rebuild(all).Should().Be(Shape(_graph.Nodes));
     }
 

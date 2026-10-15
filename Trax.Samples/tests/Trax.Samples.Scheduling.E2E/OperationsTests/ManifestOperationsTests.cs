@@ -63,15 +63,15 @@ public class ManifestOperationsTests : SchedulingTestFixture
     }
 
     [Test]
-    public async Task Manifest_query_reads_one_manifest_by_id()
+    public async Task Manifest_detail_reads_one_manifest_by_id()
     {
         var digest = await Db.Manifest(ManifestNames.SendDailyDigest);
 
         var response = await Operator.Send(
-            $$"""{ operations { manifest(id: {{digest.Id}}) { id externalId isEnabled } } }"""
+            $$"""{ operations { manifestDetail(id: {{digest.Id}}) { id externalId isEnabled } } }"""
         );
 
-        var manifest = response.Data("operations", "manifest");
+        var manifest = response.Data("operations", "manifestDetail");
         manifest.GetProperty("externalId").GetString().Should().Be(ManifestNames.SendDailyDigest);
         manifest.GetProperty("isEnabled").GetBoolean().Should().BeTrue();
     }

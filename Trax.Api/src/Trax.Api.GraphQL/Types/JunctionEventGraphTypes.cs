@@ -67,7 +67,7 @@ internal sealed class JunctionStepGraphType : ObjectType<JunctionStep>
         descriptor
             .Field(s => s.NodeId)
             .Description(
-                "The id of the declared node this step ran for, as operations.declaredChain names "
+                "The id of the declared node this step ran for, as operations.runGraph names "
                     + "it. Null for a step recorded before node ids were, and wherever the step's "
                     + "name is withheld, since the id names the track."
             );

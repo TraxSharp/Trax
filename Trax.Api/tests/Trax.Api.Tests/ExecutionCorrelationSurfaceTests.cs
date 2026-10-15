@@ -16,9 +16,9 @@ namespace Trax.Api.Tests;
 /// Describes what a caller holding a queue receipt can actually ask the operations surface.
 ///
 /// <para>A <c>mode: QUEUE</c> mutation returns a <c>workQueueId</c> and an <c>externalId</c>.
-/// The first is a usable key: <c>workQueue(id:)</c> yields the entry's status and the
-/// <c>metadataId</c> of the execution it became, which <c>execution(id:)</c> then resolves.
-/// The second is not — every execution lookup is keyed on the database id, so the correlation
+/// The first is a usable key: <c>workQueue { detail(id:) }</c> yields the entry's status and the
+/// <c>metadataId</c> of the execution it became, which <c>executionDetail(id:)</c> then resolves.
+/// The second is not: every execution lookup is keyed on the database id, so the correlation
 /// id the framework hands out and later reuses for the execution cannot be queried by.</para>
 /// </summary>
 [TestFixture]
@@ -38,22 +38,23 @@ public class ExecutionCorrelationSurfaceTests
     {
         var types = await IntrospectAsync();
 
-        ArgumentsOf(types, "WorkQueueQueries", "workQueue").Should().Contain("id");
+        ArgumentsOf(types, "WorkQueueQueries", "detail").Should().Contain("id");
 
-        FieldsOf(types, "WorkQueueSummary")
+        FieldsOf(types, "WorkQueueDetail")
             .Should()
             .Contain(
                 ["status", "metadataId"],
                 "following a receipt to its outcome needs the entry's state and the execution it created"
             );
 
-        ArgumentsOf(types, "OperationsQueries", "execution").Should().Contain("id");
-        FieldsOf(types, "ExecutionSummary").Should().Contain(["trainState", "failureReason"]);
+        ArgumentsOf(types, "OperationsQueries", "executionDetail").Should().Contain("id");
+        FieldsOf(types, "ExecutionDetail").Should().Contain(["trainState", "failureReason"]);
     }
 
     /// <summary>
     /// The single-item lookups are keyed on the database id, and that key has the same type as
-    /// the <c>id</c> each summary returns, so an id read off one result can be spent on the other.
+    /// the <c>id</c> each list's summary and each detail returns, so an id read off one result can
+    /// be spent on the other.
     ///
     /// <para>Known gap, deliberately not asserted here: no lookup takes an <c>externalId</c>, so a
     /// caller that kept only the correlation id from its mutation response has nothing to spend
@@ -61,15 +62,15 @@ public class ExecutionCorrelationSurfaceTests
     /// added alongside.</para>
     /// </summary>
     [Test]
-    public async Task SingleItemLookups_AreKeyedOnTheDatabaseIdTheSummariesReturn()
+    public async Task SingleItemLookups_AreKeyedOnTheDatabaseIdTheReadsReturn()
     {
         var types = await IntrospectAsync();
 
         foreach (
-            var (queries, field, summary) in new[]
+            var (queries, field, summary, detail) in new[]
             {
-                ("OperationsQueries", "execution", "ExecutionSummary"),
-                ("WorkQueueQueries", "workQueue", "WorkQueueSummary"),
+                ("OperationsQueries", "executionDetail", "ExecutionSummary", "ExecutionDetail"),
+                ("WorkQueueQueries", "detail", "WorkQueueSummary", "WorkQueueDetail"),
             }
         )
         {
@@ -79,15 +80,18 @@ public class ExecutionCorrelationSurfaceTests
                     "Long!",
                     $"{queries}.{field} is keyed on the database id, a required 64-bit integer"
                 );
-            FieldTypeOf(types, summary, "id")
-                .Should()
-                .Be(
-                    "Long!",
-                    $"{summary}.id is the key {queries}.{field} takes, so it must have the same type"
-                );
-            FieldTypeOf(types, summary, "externalId")
-                .Should()
-                .Be("String!", $"{summary} carries the correlation id as a plain field");
+            foreach (var type in new[] { summary, detail })
+            {
+                FieldTypeOf(types, type, "id")
+                    .Should()
+                    .Be(
+                        "Long!",
+                        $"{type}.id is the key {queries}.{field} takes, so it must have the same type"
+                    );
+                FieldTypeOf(types, type, "externalId")
+                    .Should()
+                    .Be("String!", $"{type} carries the correlation id as a plain field");
+            }
         }
     }
 
@@ -96,12 +100,12 @@ public class ExecutionCorrelationSurfaceTests
     {
         var types = await IntrospectAsync();
 
-        FieldsOf(types, "WorkQueueSummary").Should().Contain("externalId");
-        FieldsOf(types, "ExecutionSummary")
+        FieldsOf(types, "WorkQueueDetail").Should().Contain("externalId");
+        FieldsOf(types, "ExecutionDetail")
             .Should()
             .Contain(
                 "externalId",
-                "the same id identifies the queue entry and the execution it became — it is "
+                "the same id identifies the queue entry and the execution it became. It is "
                     + "emitted on both, which is what makes the missing lookup a gap rather than a design"
             );
     }
@@ -203,6 +207,8 @@ public class ExecutionCorrelationSurfaceTests
               WorkQueueQueries: __type(name: "WorkQueueQueries") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
               WorkQueueSummary: __type(name: "WorkQueueSummary") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
               ExecutionSummary: __type(name: "ExecutionSummary") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+              WorkQueueDetail: __type(name: "WorkQueueDetail") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
+              ExecutionDetail: __type(name: "ExecutionDetail") { fields { name {{TypeRef}} args { name {{TypeRef}} } } }
             }
             """
         );

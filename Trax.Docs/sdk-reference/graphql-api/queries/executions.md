@@ -1,6 +1,6 @@
 ---
 title: "operations: execution queries"
-description: "Reference for the operations queries over runs: executions, an execution's detail and children, junction steps, the declared chain, run graph and decisions."
+description: "Reference for the operations queries over runs: executions, an execution's detail and children, junction steps, the run graph and decisions."
 type: reference
 area: api
 surface: graphql
@@ -92,38 +92,10 @@ On Postgres `failureReasonContains` is served by a trigram index on `lower(failu
 | `currentlyRunningJunction` | `String` | The junction the execution is running now, while it is `IN_PROGRESS`; null otherwise |
 | `failureClass` | `FailureClass!` | How the failure was classified: `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. `UNCLASSIFIED` when the run did not fail, no [failure classifier](/docs/effect/failure-classification) is registered, or it did not recognise the failure. Later releases may add values to `FailureClass`; a client generated from an older schema should treat a value it does not know as `UNCLASSIFIED` rather than failing to read the response |
 
-## execution
-
-Returns a single execution by metadata ID.
-
-```graphql
-query {
-  operations {
-    execution(id: 100) {
-      id
-      externalId
-      name
-      trainState
-      startTime
-      endTime
-      failureJunction
-      failureReason
-    }
-  }
-}
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `Long!` | Yes | The execution's metadata ID |
-
-**Returns**: `ExecutionSummary` (nullable, returns `null` if the ID does not exist)
-
 ## executionDetail
 
 Returns the full detail for a single execution, including the `input` / `output` payloads and
-`stackTrace` that `execution` / `executions` omit to keep list reads lean. Use this for a
-detail page; use `execution` for a light single-row lookup.
+`stackTrace` that `executions` omits to keep list reads lean.
 
 ```graphql
 query {
@@ -271,13 +243,12 @@ a train started from a junction on the track are recorded as for any run. See
 A junction whose end event was dropped stays `IN_PROGRESS` in these rows after its run has ended,
 so read a step's `state` together with the execution's.
 
-It answers to the operations gate, as [`execution`](#execution) does, so a caller refused one is
-refused the other. The rows trail the live subscription by moments: a client following a running
+It answers to the operations gate, as [`executionDetail`](#executiondetail) does, so a caller
+refused one is refused the other. The rows trail the live subscription by moments: a client following a running
 execution subscribes first, then reads this, and keeps for each position whichever is further
 along.
 
-`nodeId` is the id of the declared node the step ran for, as [`declaredChain`](#declaredchain)
-names it: a junction carries its own node's id, a question the id of the `Decide` step that asked
+`nodeId` is the id of the declared node the step ran for, as [`runGraph`](#rungraph) names it: a junction carries its own node's id, a question the id of the `Decide` step that asked
 it, a route the id of its routing step. It is null for a step recorded before node ids were, and
 wherever the step's name is withheld, because the id names the track the step sits on.
 
@@ -285,61 +256,6 @@ wherever the step's name is withheld, because the id names the track the step si
 or null outside any branch. Branches run side by side, so their steps interleave by position; group
 them by `branchPath` to read one branch on its own. It is withheld wherever the step's name is, for
 the same reason as `nodeId`: a branch inside a track names the track.
-
-## declaredChain
-
-The declared chain of a registered train as a graph: every step in the order the chain declares it,
-each routing step's tracks and each `Parallel` step's branches with their own steps, and a hash that
-changes whenever the chain does.
-Nothing runs to read it; see [ChainGraph](/docs/sdk-reference/train-methods/chain-graph).
-
-```graphql
-query {
-  operations {
-    declaredChain(train: "Acme.Orders.IShipOrderTrain") {
-      train
-      input
-      output
-      hash
-      refusals
-      nodes {
-        id
-        kind
-        junction
-        in
-        out
-        opaque
-        tracks { name description isFallback nodes { id kind junction opaque } }
-      }
-    }
-  }
-}
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `train` | `String!` | none | The train's canonical name, the interface's full name, as `execution.name` carries it |
-
-**Returns**: `ChainGraph`, or null when no registered train has that name, or its chain cannot be
-read outside a request (it needs a dependency only a request supplies). Only registered trains are
-looked up, by name, so no name a caller sends makes the host load a type. `kind` is a
-`ChainStepKind` (`CHAIN`, `I_CHAIN`, `SHORT_CIRCUIT`, `EXTRACT`, `RESOLVE`, `SEED`, `DECIDE`,
-`SWITCH`, `GATE`, `SCALE`, `PARALLEL`), and `opaque` is true for a step whose junction is decided only at run
-time. A node's `id` names the step and the routing step and track it sits in, as in
-`Switch<Lane>#0/Fast/Ship#0`, and is what a recorded step's `nodeId` refers to. In C#, each entry of `allNodes` is a
-`DeclaredNode` (`Trax.Api.DTOs`) and each track a `DeclaredTrack`.
-
-A `PARALLEL` step's `tracks` are its branches, one per `Branch` in declared order, with
-`isFallback` false and no `description`. Unlike a routing step's tracks, every branch runs. A step
-inside a branch has the branch in its id, as in `Parallel#0/cocitation/ScoreCoCitation#0`, and a
-`Parallel` or routing step inside a branch nests the same way.
-
-`allNodes` lists every step of the graph at any depth in one list, each with its `parentId`,
-`track` and `depth`, and its tracks' `name`, `description` and `isFallback` without their steps, as
-[`runGraph`'s `allNodes`](#rungraph) does: read it when the chain may nest deeper than a query can
-follow nested `tracks { nodes }` fields.
-
-The graph names the train's types, so it answers to the operations gate and nothing outside it.
 
 ## runGraph
 
@@ -405,7 +321,14 @@ query {
 | `metadataId` | `Long!` | none | The execution's id. 0 or less is refused with `TRAX_INVALID_ARGUMENT` |
 
 **Returns**: `RunGraph`, or null for an id with no execution. In C# its nodes are `RunGraphNode`s, their
-tracks `RunGraphTrack`s, and a node's `state` a `RunNodeState` (all in `Trax.Api.DTOs`). A node's `state` is one of:
+tracks `RunGraphTrack`s, and a node's `state` a `RunNodeState` (all in `Trax.Api.DTOs`). A node's
+`id` names the step and the routing step and track it sits in, as in `Switch<Lane>#0/Fast/Ship#0`,
+and is what a recorded step's `nodeId` refers to. `kind` is a `ChainStepKind` (`CHAIN`, `I_CHAIN`,
+`SHORT_CIRCUIT`, `EXTRACT`, `RESOLVE`, `SEED`, `DECIDE`, `SWITCH`, `GATE`, `SCALE`, `PARALLEL`,
+`CHECKPOINT`), and `opaque` is true for a step whose junction is decided only at run time. A
+`PARALLEL` step's `tracks` are its branches, one per `Branch` in declared order, and a step inside a
+branch has the branch in its id, as in `Parallel#0/cocitation/ScoreCoCitation#0`. To read a train's
+declared chain without a run, use [ChainGraph](/docs/sdk-reference/train-methods/chain-graph) in C#. A node's `state` is one of:
 
 | State | Meaning |
 |-------|---------|

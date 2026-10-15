@@ -123,7 +123,7 @@ export interface JunctionStep {
    * after a route, a junction, a question or a further route, counts as on its track.
    */
   trackPosition: number | null;
-  /** The id of the declared node this step ran for, as operations.declaredChain names it. Null for a step recorded before node ids were, and wherever the step's name is withheld, since the id names the track. */
+  /** The id of the declared node this step ran for, as operations.runGraph names it. Null for a step recorded before node ids were, and wherever the step's name is withheld, since the id names the track. */
   nodeId: string | null;
   /** The path of the Parallel branch the step ran in, such as Parallel#0/cocitation, or null outside any branch. Withheld wherever the step's name is. */
   branchPath: string | null;

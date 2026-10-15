@@ -252,7 +252,14 @@ public class AskAfreshMutationsTests
 
         off.Success.Should().BeTrue(off.Message);
         off.Count.Should().Be(1);
-        (await queries.GetManifest(manifest.Id, _factory, default))!
+        (
+            await queries.GetManifestDetail(
+                manifest.Id,
+                _factory,
+                Substitute.For<ITrainDiscoveryService>(),
+                default
+            )
+        )!
             .ReplayDecisionsOnRetry.Should()
             .BeFalse();
         (await QueuedEntryAsync(manifest.Id))
@@ -274,7 +281,14 @@ public class AskAfreshMutationsTests
             default
         );
         on.Count.Should().Be(1);
-        (await queries.GetManifest(manifest.Id, _factory, default))!
+        (
+            await queries.GetManifestDetail(
+                manifest.Id,
+                _factory,
+                Substitute.For<ITrainDiscoveryService>(),
+                default
+            )
+        )!
             .ReplayDecisionsOnRetry.Should()
             .BeTrue();
     }

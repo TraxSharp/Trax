@@ -1,6 +1,6 @@
 ---
 title: "operations: manifest queries"
-description: "Reference for the operations queries over scheduler manifests: the paged list, one manifest, its detail, its run stats and its exclusions."
+description: "Reference for the operations queries over scheduler manifests: the paged list, one manifest's detail, its run stats and its exclusions."
 type: reference
 area: api
 surface: graphql
@@ -85,36 +85,11 @@ query {
 A manifest's `properties` (the train input it runs with) are not on this type. Read them from
 [`manifestDetail`](#manifestdetail), one manifest at a time.
 
-## manifest
-
-Returns a single manifest by database ID.
-
-```graphql
-query {
-  operations {
-    manifest(id: 42) {
-      id
-      externalId
-      name
-      isEnabled
-      scheduleType
-      cronExpression
-      priority
-    }
-  }
-}
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `Long!` | Yes | The manifest's database ID |
-
-**Returns**: `ManifestSummary` (nullable, returns `null` if the ID does not exist)
-
 ## manifestDetail
 
-Returns everything `manifest` does plus the train input the manifest runs with and the rest of
-its scheduling settings. Use it for a manifest detail page.
+Returns one manifest by database ID: every [`ManifestSummary`](#manifestsummary-fields) field, plus
+the train input the manifest runs with and the rest of its scheduling settings. It backs the
+manifest detail page.
 
 ```graphql
 query {

@@ -275,26 +275,16 @@ public class OperationsQueriesTests
     }
 
     [Test]
-    public async Task GetManifest_ById_ReturnsRow()
+    public async Task GetManifestDetail_ById_ReturnsRow()
     {
         await SeedManifests(2);
         var queries = new OperationsQueries();
         var first = (await queries.GetManifests(_factory, default)).Items.First();
 
-        var fetched = await queries.GetManifest(first.Id, _factory, default);
+        var fetched = await queries.GetManifestDetail(first.Id, _factory, Discovery, default);
 
         fetched.Should().NotBeNull();
         fetched!.Id.Should().Be(first.Id);
-    }
-
-    [Test]
-    public async Task GetManifest_MissingId_ReturnsNull()
-    {
-        var queries = new OperationsQueries();
-
-        var fetched = await queries.GetManifest(99999, _factory, default);
-
-        fetched.Should().BeNull();
     }
 
     [Test]
@@ -1817,24 +1807,16 @@ public class OperationsQueriesTests
     }
 
     [Test]
-    public async Task GetExecution_ById_ReturnsRow()
+    public async Task GetExecutionDetail_ById_ReturnsRow()
     {
         await SeedExecutions(1);
         var queries = new OperationsQueries();
         var first = (await queries.GetExecutions(_factory, default)).Items.First();
 
-        var fetched = await queries.GetExecution(first.Id, _factory, default);
+        var fetched = await queries.GetExecutionDetail(first.Id, _factory, default);
 
         fetched.Should().NotBeNull();
         fetched!.Id.Should().Be(first.Id);
-    }
-
-    [Test]
-    public async Task GetExecution_MissingId_ReturnsNull()
-    {
-        var queries = new OperationsQueries();
-
-        (await queries.GetExecution(99999, _factory, default)).Should().BeNull();
     }
 
     [Test]
@@ -2125,14 +2107,14 @@ public class OperationsQueriesTests
     }
 
     [Test]
-    public async Task GetManifests_AndGetManifest_CarryTheGroupName()
+    public async Task GetManifests_AndGetManifestDetail_CarryTheGroupName()
     {
         var groupId = await SeedManifestGroup("nightly-billing");
         var manifestId = await SeedManifestInGroup(groupId);
 
         var queries = new OperationsQueries();
         var page = await queries.GetManifests(_factory, default);
-        var single = await queries.GetManifest(manifestId, _factory, default);
+        var single = await queries.GetManifestDetail(manifestId, _factory, Discovery, default);
 
         page.Items.Should().ContainSingle().Which.ManifestGroupName.Should().Be("nightly-billing");
         single!.ManifestGroupName.Should().Be("nightly-billing");
@@ -2207,10 +2189,7 @@ public class OperationsQueriesTests
 
         var queries = new OperationsQueries();
 
-        (await queries.GetManifest(optedOut, _factory, default))!
-            .ReplayDecisionsOnRetry.Should()
-            .BeFalse();
-        (await queries.GetManifest(byDefault, _factory, default))!
+        (await queries.GetManifestDetail(byDefault, _factory, Discovery, default))!
             .ReplayDecisionsOnRetry.Should()
             .BeTrue();
         (await queries.GetManifestDetail(optedOut, _factory, Discovery, default))!

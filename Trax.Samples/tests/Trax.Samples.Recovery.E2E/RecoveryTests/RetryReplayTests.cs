@@ -164,10 +164,10 @@ public class RetryReplayTests : RecoveryTestFixture
             async () =>
             {
                 var response = await GraphQL.SendAsync(
-                    $$"""{ operations { manifest(id: {{Run.ManifestId}}) { isEnabled } } }""",
+                    $$"""{ operations { manifestDetail(id: {{Run.ManifestId}}) { isEnabled } } }""",
                     OperatorKey
                 );
-                return !response.GetData("operations", "manifest", "isEnabled").GetBoolean();
+                return !response.GetData("operations", "manifestDetail", "isEnabled").GetBoolean();
             },
             TimeSpan.FromSeconds(30),
             TimeSpan.FromMilliseconds(100)

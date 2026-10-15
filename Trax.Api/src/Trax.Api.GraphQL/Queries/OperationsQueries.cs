@@ -8,7 +8,6 @@ using Trax.Api.GraphQL.Validation;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Services.Runs;
 using Trax.Core.Exceptions;
-using Trax.Core.Monad;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -415,42 +414,6 @@ public partial class OperationsQueries
             isEstimate,
             nextCursor
         );
-    }
-
-    /// <summary>
-    /// One manifest by id, without its train input, or <c>null</c> when none has that id.
-    /// </summary>
-    public async Task<ManifestSummary?> GetManifest(
-        long id,
-        [Service] IDataContextProviderFactory dataContextFactory,
-        CancellationToken ct
-    )
-    {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-
-        return await db
-            .Manifests.AsNoTracking()
-            .Where(m => m.Id == id)
-            .Select(m => new ManifestSummary(
-                m.Id,
-                m.ExternalId,
-                m.Name,
-                m.IsEnabled,
-                m.ScheduleType,
-                m.CronExpression,
-                m.IntervalSeconds,
-                m.MaxRetries,
-                m.TimeoutSeconds,
-                m.LastSuccessfulRun,
-                m.ManifestGroupId,
-                m.DependsOnManifestId,
-                m.Priority,
-                m.ManifestGroup.Name
-            )
-            {
-                ReplayDecisionsOnRetry = m.ReplayDecisionsOnRetry,
-            })
-            .FirstOrDefaultAsync(ct);
     }
 
     /// <summary>
@@ -914,43 +877,6 @@ public partial class OperationsQueries
     };
 
     /// <summary>
-    /// One execution by id, without input, output or stack trace, or <c>null</c> when none has that id.
-    /// </summary>
-    public async Task<ExecutionSummary?> GetExecution(
-        long id,
-        [Service] IDataContextProviderFactory dataContextFactory,
-        CancellationToken ct
-    )
-    {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-
-        return await db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.Id == id)
-            .Select(m => new ExecutionSummary(
-                m.Id,
-                m.ExternalId,
-                m.Name,
-                m.TrainState,
-                m.StartTime,
-                m.EndTime,
-                m.FailureJunction,
-                m.FailureReason,
-                m.ManifestId,
-                m.CancellationRequested,
-                m.HostName,
-                m.HostEnvironment,
-                m.HostInstanceId,
-                m.FailureClass
-            )
-            {
-                ParentId = m.ParentId,
-                CurrentlyRunningJunction = m.CurrentlyRunningJunction,
-            })
-            .FirstOrDefaultAsync(ct);
-    }
-
-    /// <summary>
     /// Full detail for one execution, including its input, output, stack trace and the number of
     /// executions it started, or <c>null</c> when none has that id.
     /// </summary>
@@ -1100,22 +1026,6 @@ public partial class OperationsQueries
         var page = await rows.Take(take).ToListAsync(ct);
         return page.Select(JunctionStep.From).ToList();
     }
-
-    /// <summary>
-    /// The declared chain of the registered train named <paramref name="train"/>, its canonical
-    /// name (the interface's full name, as <c>execution.name</c> carries it), as a graph: every
-    /// step in order, each routing step's tracks, and a hash that changes with the chain. Null when
-    /// no registered train has that name, or its chain cannot be read outside a request.
-    /// </summary>
-    /// <remarks>
-    /// Only registered trains are looked up, by name, so no name a caller sends makes the host load
-    /// a type. Read through <see cref="ITrainChainGraphs"/>, which the dashboard's run page reads
-    /// too. The graph names the train's types, so it is under the operations gate.
-    /// </remarks>
-    /// <param name="train">The train's canonical name.</param>
-    /// <param name="chainGraphs">Resolved from DI; not a GraphQL argument.</param>
-    public ChainGraph? GetDeclaredChain(string train, [Service] ITrainChainGraphs chainGraphs) =>
-        chainGraphs.Find(train);
 
     /// <summary>
     /// One execution drawn on its train's declared chain: each node with the steps the run

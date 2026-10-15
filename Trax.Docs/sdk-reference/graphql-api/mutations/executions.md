@@ -129,7 +129,7 @@ once the dispatcher has dispatched it:
 
 ```graphql
 query {
-  operations { workQueue { workQueue(id: 7) { status metadataId } } }
+  operations { workQueue { detail(id: 7) { status metadataId } } }
 }
 ```
 

@@ -98,10 +98,12 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
             async () =>
             {
                 var response = await graphQL.SendAsync(
-                    $$"""{ operations { execution(id: {{metadataId}}) { trainState } } }""",
+                    $$"""{ operations { executionDetail(id: {{metadataId}}) { trainState } } }""",
                     apiKey
                 );
-                state = response.GetData("operations", "execution", "trainState").GetString()!;
+                state = response
+                    .GetData("operations", "executionDetail", "trainState")
+                    .GetString()!;
                 return state is "COMPLETED" or "FAILED" or "CANCELLED";
             },
             Patience,
@@ -183,10 +185,10 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
             async () =>
             {
                 var entry = await graphQL.SendAsync(
-                    $$"""{ operations { workQueue { workQueue(id: {{entryId}}) { metadataId } } } }""",
+                    $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }""",
                     apiKey
                 );
-                var id = entry.GetData("operations", "workQueue", "workQueue", "metadataId");
+                var id = entry.GetData("operations", "workQueue", "detail", "metadataId");
                 if (id.ValueKind != JsonValueKind.Number)
                     return false;
                 runId = id.GetInt64();
@@ -241,11 +243,11 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     {
         // The journal is the run's starter's, by the run's external id.
         var run = await graphQL.SendAsync(
-            $$"""{ operations { execution(id: {{metadataId}}) { externalId } } }""",
+            $$"""{ operations { executionDetail(id: {{metadataId}}) { externalId } } }""",
             apiKey
         );
         run.HasErrors.Should().BeFalse(run.FirstErrorMessage);
-        var runId = run.GetData("operations", "execution", "externalId").GetString();
+        var runId = run.GetData("operations", "executionDetail", "externalId").GetString();
         var response = await graphQL.SendAsync(
             $$"""
             { discover { decisionJournal(input: { runId: "{{runId}}" }) {

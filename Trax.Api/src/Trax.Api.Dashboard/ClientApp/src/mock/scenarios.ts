@@ -151,7 +151,6 @@ export const manifestScenario: MockSchemaOverrides = {
   resolvers: () => ({
     OperationsQueries: {
       manifests: manifestsResolver(),
-      manifest: (_root: unknown, args: Args) => MANIFEST_ROWS.find((r) => r.id === args.id) ?? null,
       // The detail query ManifestDetailPage reads, keyed by id.
       manifestDetail: (_root: unknown, args: Args) => manifestDetail(args.id as number),
     },
@@ -169,8 +168,6 @@ export const manifestScenarioWithRetired: MockSchemaOverrides = {
 export const manifestDetailScenario: MockSchemaOverrides = {
   resolvers: () => ({
     OperationsQueries: {
-      manifest: (_root: unknown, args: Args) =>
-        MANIFEST_ROWS.find((r) => r.id === args.id) ?? MANIFEST_ROWS[0],
       manifestDetail: (_root: unknown, args: Args) => manifestDetail(args.id as number) ?? manifestDetail(801),
       manifestStats: (_root: unknown, args: Args) => ({
         manifestId: (args.manifestId as number) ?? 801,

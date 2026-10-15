@@ -153,10 +153,10 @@ public class AskAfreshTests : RecoveryTestFixture
             async () =>
             {
                 var entry = await GraphQL.SendAsync(
-                    $$"""{ operations { workQueue { workQueue(id: {{entryId}}) { metadataId } } } }""",
+                    $$"""{ operations { workQueue { detail(id: {{entryId}}) { metadataId } } } }""",
                     OperatorKey
                 );
-                var id = entry.GetData("operations", "workQueue", "workQueue", "metadataId");
+                var id = entry.GetData("operations", "workQueue", "detail", "metadataId");
                 if (id.ValueKind != System.Text.Json.JsonValueKind.Number)
                     return false;
                 runId = id.GetInt64();

@@ -40,17 +40,7 @@ public class OperationsIsAdminOnlyTests
     /// </summary>
     private static readonly Dictionary<string, string> NotADashboardAction = new(
         StringComparer.Ordinal
-    )
-    {
-        ["OperationsQueries.declaredChain"] =
-            "A train's declared graph for a client following progress; runProgress replaced it, and the dashboard reads runGraph.",
-        ["OperationsQueries.execution"] =
-            "A run's summary for a script; the dashboard reads executionDetail.",
-        ["OperationsQueries.manifest"] =
-            "A manifest's summary for a script; the dashboard reads manifestDetail.",
-        ["WorkQueueQueries.workQueue"] =
-            "A queue entry's summary for a script; the dashboard reads workQueue { detail }.",
-    };
+    );
 
     [Test]
     public async Task Every_operations_field_is_selected_by_a_dashboard_document()

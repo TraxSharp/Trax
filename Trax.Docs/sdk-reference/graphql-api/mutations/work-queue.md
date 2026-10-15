@@ -89,7 +89,7 @@ mutation {
 | `trainName` | `String!` | Yes | N/A | Train interface FullName, as for [`queueTrain`](#queuetrain) |
 | `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. Property names match whatever their case and a property given twice is refused. `null` or blank is read as `{}` |
 
-**Returns**: `OperationResponse`. On success, `id` is the execution's metadata id (pass it to `operations.execution` or `executionDetail`), not a work queue id, and `count` is `1`.
+**Returns**: `OperationResponse`. On success, `id` is the execution's metadata id (pass it to `executionDetail`), not a work queue id, and `count` is `1`.
 
 A host that exposes the operations mutations must register an `IJobSubmitter`, or it refuses to start; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql).
 

@@ -116,22 +116,6 @@ namespace Trax.Api.DTOs
         public string? StateHash { get; init; }
         public bool TrackWithheld { get; init; }
     }
-    public sealed class DeclaredNode : System.IEquatable<Trax.Api.DTOs.DeclaredNode>
-    {
-        public DeclaredNode(Trax.Core.Monad.ChainGraphNode Node, string? ParentId, string? Track, int Depth) { }
-        public int Depth { get; init; }
-        public Trax.Core.Monad.ChainGraphNode Node { get; init; }
-        public string? ParentId { get; init; }
-        public string? Track { get; init; }
-        public static System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.DeclaredNode> Flatten(Trax.Core.Monad.ChainGraph graph) { }
-    }
-    public sealed class DeclaredTrack : System.IEquatable<Trax.Api.DTOs.DeclaredTrack>
-    {
-        public DeclaredTrack(string Name, string? Description, bool IsFallback) { }
-        public string? Description { get; init; }
-        public bool IsFallback { get; init; }
-        public string Name { get; init; }
-    }
     public class EffectInfo : System.IEquatable<Trax.Api.DTOs.EffectInfo>
     {
         public EffectInfo(string Name, string FullName, bool Enabled, bool Toggleable, bool IsConfigurable = false, string? ConfigurationTypeName = null, string? Configuration = null) { }

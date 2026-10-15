@@ -101,7 +101,7 @@ const ops = {
   startedAfter: $after, order: OLDEST, take: 1) { items { id } } } }`,
   onJunctionEvent: `subscription ($metadataId: Long!) { onJunctionEvent(metadataId: $metadataId) { junction { ${STEP} } } }`,
   junctionRuns: `query ($metadataId: Long!) { operations { junctionRuns(metadataId: $metadataId) { ${STEP} } } }`,
-  execution: `query ($id: Long!) { operations { execution(id: $id) { trainState failureJunction failureReason } } }`,
+  execution: `query ($id: Long!) { operations { executionDetail(id: $id) { trainState failureJunction failureReason } } }`,
   tabletCalls: `{ discover { orders { tabletCalls { restaurant calls { orderId attempt startedAt endedAt problem } } } } }`,
 };
 
@@ -232,7 +232,7 @@ async function record(scenario, sockets) {
     // The run ends, and its outcome moves the order on, on both screens.
     let run = null;
     await waitFor(async () => {
-      run = (await post(ops.execution, { id: runId })).data.operations.execution;
+      run = (await post(ops.execution, { id: runId })).data.operations.executionDetail;
       return run && ENDED.has(run.trainState);
     }, 60_000, "the delivery run to end");
     await waitFor(() => state.laptop === scenario.end && state.phone === scenario.end, 30_000, `the order to be ${scenario.end}`);

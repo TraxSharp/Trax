@@ -301,13 +301,13 @@ public class WorkQueueOperationsTests
     }
 
     [Test]
-    public async Task GetWorkQueue_ById_ReturnsRow()
+    public async Task GetDetail_ById_ReturnsRow()
     {
         await SeedWorkQueues(2);
         var queries = new WorkQueueQueries();
         var first = (await queries.GetWorkQueues(_factory, default)).Items.First();
 
-        var fetched = await queries.GetWorkQueue(first.Id, _factory, default);
+        var fetched = await queries.GetDetail(first.Id, Operations, default);
 
         fetched.Should().NotBeNull();
         fetched!.Id.Should().Be(first.Id);
@@ -356,7 +356,7 @@ public class WorkQueueOperationsTests
     }
 
     [Test]
-    public async Task GetWorkQueue_AllSummaryFields_PopulatedFromRow()
+    public async Task GetDetail_AllSummaryFields_PopulatedFromRow()
     {
         var when = DateTime.UtcNow.AddMinutes(15);
         await using (var db = await _factory.CreateDbContextAsync(default))
@@ -379,7 +379,7 @@ public class WorkQueueOperationsTests
 
         var queries = new WorkQueueQueries();
         var first = (await queries.GetWorkQueues(_factory, default)).Items.First();
-        var fetched = await queries.GetWorkQueue(first.Id, _factory, default);
+        var fetched = await queries.GetDetail(first.Id, Operations, default);
 
         fetched.Should().NotBeNull();
         fetched!.Id.Should().Be(first.Id);
@@ -395,14 +395,6 @@ public class WorkQueueOperationsTests
         fetched.MetadataId.Should().BeNull();
         fetched.DeadLetterId.Should().BeNull();
         fetched.InputTypeName.Should().Be("Trax.Tests.RichInput");
-    }
-
-    [Test]
-    public async Task GetWorkQueue_MissingId_ReturnsNull()
-    {
-        var queries = new WorkQueueQueries();
-
-        (await queries.GetWorkQueue(99999, _factory, default)).Should().BeNull();
     }
 
     #endregion

@@ -70,10 +70,6 @@ The effects registered in the API process and their settings. [operations: syste
 
 The paged manifest list. [operations: manifest queries](/docs/sdk-reference/graphql-api/queries/manifests#manifests)
 
-### manifest
-
-One manifest by id. [operations: manifest queries](/docs/sdk-reference/graphql-api/queries/manifests#manifest)
-
 ### manifestDetail
 
 One manifest with its input and scheduling settings. [operations: manifest queries](/docs/sdk-reference/graphql-api/queries/manifests#manifestdetail)
@@ -90,10 +86,6 @@ A manifest's exclusion windows. [operations: manifest queries](/docs/sdk-referen
 
 The paged, filtered execution list. [operations: execution queries](/docs/sdk-reference/graphql-api/queries/executions#executions)
 
-### execution
-
-One execution by id. [operations: execution queries](/docs/sdk-reference/graphql-api/queries/executions#execution)
-
 ### executionDetail
 
 One execution with its input, output and stack trace. [operations: execution queries](/docs/sdk-reference/graphql-api/queries/executions#executiondetail)
@@ -105,10 +97,6 @@ The runs started from inside one run. [operations: execution queries](/docs/sdk-
 ### junctionRuns
 
 The steps one run recorded. [operations: execution queries](/docs/sdk-reference/graphql-api/queries/executions#junctionruns)
-
-### declaredChain
-
-A train's declared chain as a graph. [operations: execution queries](/docs/sdk-reference/graphql-api/queries/executions#declaredchain)
 
 ### runGraph
 
@@ -152,7 +140,7 @@ Instance counts by machine, state and owner kind. [operations: machine instance 
 
 ## workQueue (nested under operations)
 
-`workQueues`, `workQueue` and `detail`: [operations.workQueue queries](/docs/sdk-reference/graphql-api/queries/work-queue).
+`workQueues` and `detail`: [operations.workQueue queries](/docs/sdk-reference/graphql-api/queries/work-queue).
 
 ### detail
 

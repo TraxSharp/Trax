@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Queries.OperationsQueries.GetDeclaredChain(System.String,Trax.Mediator.Services.ChainVerification.ITrainChainGraphs)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Queries.OperationsQueries.GetExecution(System.Int64,Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Queries.OperationsQueries.GetManifest(System.Int64,Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Queries.WorkQueueQueries.GetWorkQueue(System.Int64,Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

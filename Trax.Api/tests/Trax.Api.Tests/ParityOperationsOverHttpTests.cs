@@ -60,13 +60,6 @@ public class ParityOperationsOverHttpTests
 
     private const string RoutedTrain = "Acme.IRoutedTrain";
 
-    private const string GraphFields =
-        "train input output refusals hash nodes { id kind junction in out opaque tracks "
-        + "{ name description isFallback nodes { id kind junction opaque tracks { name } } } }";
-
-    private static string DeclaredChain(string train) =>
-        $"{{ operations {{ declaredChain(train: \"{train}\") {{ {GraphFields} }} }} }}";
-
     private const string RunGraph =
         "{ operations { runGraph(metadataId: 7) { metadataId hasGraph nodes { id state } } } }";
 
@@ -314,7 +307,6 @@ public class ParityOperationsOverHttpTests
         yield return new TestCaseData(Decisions).SetName("decisions");
         yield return new TestCaseData(Effects).SetName("effects.fields");
         yield return new TestCaseData(LogLevels).SetName("config.logLevels+version");
-        yield return new TestCaseData(DeclaredChain(RoutedTrain)).SetName("declaredChain");
     }
 
     [TestCaseSource(nameof(Documents))]
@@ -415,62 +407,6 @@ public class ParityOperationsOverHttpTests
                     l != null && l.Count == 1 && l[0] == new LogLevelChange("Trax", LogLevel.Debug)
                 )
             );
-    }
-
-    [Test]
-    public async Task DeclaredChain_OfARegisteredTrain_IsItsGraph_WithItsTracksAndHash()
-    {
-        var graph = Operations(
-            await PostAsync(DeclaredChain(RoutedTrain), AdminKey),
-            "declaredChain"
-        );
-
-        graph.GetProperty("train").GetString().Should().Be("Acme.RoutedTrain");
-        graph.GetProperty("hash").GetString().Should().Be(RoutedGraph.Hash).And.HaveLength(64);
-        var nodes = graph.GetProperty("nodes");
-        nodes
-            .EnumerateArray()
-            .Select(n => n.GetProperty("id").GetString())
-            .Should()
-            .Equal("Fetch#0", "Switch<Lane>#0", "IPay#0");
-        nodes[1].GetProperty("kind").GetString().Should().Be("SWITCH");
-        nodes[2].GetProperty("opaque").GetBoolean().Should().BeTrue();
-        var tracks = nodes[1].GetProperty("tracks");
-        tracks
-            .EnumerateArray()
-            .Select(t => t.GetProperty("name").GetString())
-            .Should()
-            .Equal("Fast", "Otherwise");
-        tracks[0]
-            .GetProperty("nodes")[0]
-            .GetProperty("id")
-            .GetString()
-            .Should()
-            .Be("Switch<Lane>#0/Fast/Ship#0");
-        tracks[1].GetProperty("isFallback").GetBoolean().Should().BeTrue();
-    }
-
-    [TestCase("Acme.IUnknownTrain")]
-    [TestCase("System.String")]
-    [TestCase("")]
-    public async Task DeclaredChain_OfANameNoRegisteredTrainHas_IsNull(string train)
-    {
-        var graph = Operations(await PostAsync(DeclaredChain(train), AdminKey), "declaredChain");
-
-        graph.ValueKind.Should().Be(JsonValueKind.Null);
-    }
-
-    [Test]
-    public async Task DeclaredChain_ForAnAnonymousCaller_IsRefused()
-    {
-        var doc = await PostAsync(DeclaredChain(RoutedTrain), apiKey: null);
-
-        doc.RootElement.GetRawText().Should().NotContain("Switch<Lane>");
-        var noData =
-            !doc.RootElement.TryGetProperty("data", out var data)
-            || data.ValueKind == JsonValueKind.Null
-            || data.GetProperty("operations").ValueKind == JsonValueKind.Null;
-        noData.Should().BeTrue("an anonymous caller gets nothing from the namespace");
     }
 
     [Test]

@@ -122,43 +122,6 @@ public class WorkQueueQueries
     }
 
     /// <summary>
-    /// One work queue entry by id, without its train input, or <c>null</c> when none has that id.
-    /// </summary>
-    public async Task<WorkQueueSummary?> GetWorkQueue(
-        long id,
-        [Service] IDataContextProviderFactory dataContextFactory,
-        CancellationToken ct
-    )
-    {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-
-        return await db
-            .WorkQueues.AsNoTracking()
-            .Where(q => q.Id == id)
-            .Select(q => new WorkQueueSummary(
-                q.Id,
-                q.ExternalId,
-                q.TrainName,
-                q.Status,
-                q.CreatedAt,
-                q.DispatchedAt,
-                q.ScheduledAt,
-                q.Priority,
-                q.DispatchAttempts,
-                q.ManifestId,
-                q.MetadataId,
-                q.DeadLetterId,
-                q.InputTypeName,
-                q.ConfirmedAt,
-                q.SubjectKey
-            )
-            {
-                ReplayDecisionsOf = q.ReplayDecisionsOf,
-            })
-            .FirstOrDefaultAsync(ct);
-    }
-
-    /// <summary>
     /// Full detail for one work queue entry: its train input, and for a queued entry with a
     /// subject, what it is waiting on. The input is on this single-row read only, never on the
     /// <c>workQueues</c> list, the way an execution's input is on <c>executionDetail</c> alone.

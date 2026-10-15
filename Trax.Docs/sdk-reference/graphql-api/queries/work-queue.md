@@ -1,6 +1,6 @@
 ---
 title: "operations.workQueue queries"
-description: "Reference for the operations.workQueue query namespace: the paged work queue, one entry, and an entry's detail with its input."
+description: "Reference for the operations.workQueue query namespace: the paged work queue and one entry's detail with its input."
 type: reference
 area: api
 surface: graphql
@@ -82,27 +82,7 @@ When any filter or `afterId` is supplied, the count is exact and `isEstimatedCou
 | `inputTypeName` | `String` | Fully qualified type name of the input, for deserialization |
 | `confirmedAt` | `DateTime` | When the entry became eligible for dispatch. Null while it is still being staged, and stays null on a staged entry that was cancelled (by an operator, or by the stale staged entry sweep); the dispatcher never claims an unconfirmed entry. Also null on an entry dispatched more than a day before the database was migrated to the version that added it, which the migration does not backfill |
 | `subjectKey` | `String` | The subject the entry is serialized against, from the train's [`QueueSubjectKey`](/docs/mediator/queued-work#two-mutations-for-one-record). Null when the train does not set one. The value is computed by the consumer's train, so it may carry record identifiers |
-| `replayDecisionsOf` | `Long` | The execution whose recorded decisions the run this entry starts will replay (a requeue, or a manifest's retry that replays); null when it will ask its questions afresh. Also on `workQueue(id:)` and `detail` |
-
-## workQueue (single)
-
-Returns a single entry by database ID.
-
-```graphql
-query {
-  operations {
-    workQueue {
-      workQueue(id: 42) { id status priority dispatchAttempts }
-    }
-  }
-}
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `Long!` | Yes | The work queue entry's database ID |
-
-**Returns**: `WorkQueueSummary` (nullable, returns `null` if the ID does not exist).
+| `replayDecisionsOf` | `Long` | The execution whose recorded decisions the run this entry starts will replay (a requeue, or a manifest's retry that replays); null when it will ask its questions afresh. Also on `detail` |
 
 ## detail
 

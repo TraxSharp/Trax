@@ -38,7 +38,7 @@ const ops = {
   changeCaseData: `mutation ($runId: String!) { dispatch { changeCaseData(input: { runId: $runId }) { output { change } } } }`,
   executions: `query ($manifestId: Long!) { operations { executions(manifestId: $manifestId, order: OLDEST, take: 20) {
     items { ${ROW} } } } }`,
-  execution: `query ($id: Long!) { operations { execution(id: $id) { ${ROW} } } }`,
+  execution: `query ($id: Long!) { operations { executionDetail(id: $id) { ${ROW} } } }`,
   junctionRuns: `query ($metadataId: Long!) { operations { junctionRuns(metadataId: $metadataId) { ${STEP} } } }`,
   journal: `query ($metadataId: Long!) { discover { decisionJournal(input: { metadataId: $metadataId }) {
     replayDecisionsOf replayAbandoned decisions { questionKey occurrence replayed replayRefused model decider stateHash
@@ -46,7 +46,7 @@ const ops = {
   triggerAskAfresh: `mutation ($externalId: String!) { operations { triggerManifest(externalId: $externalId, askAfresh: true) {
     success message } } }`,
   requeue: `mutation ($id: Long!) { operations { requeueExecution(id: $id, askAfresh: true) { success message id } } }`,
-  workQueueEntry: `query ($id: Long!) { operations { workQueue { workQueue(id: $id) { id status metadataId } } } }`,
+  workQueueEntry: `query ($id: Long!) { operations { workQueue { detail(id: $id) { id status metadataId } } } }`,
   onJunctionEvent: `subscription ($metadataId: Long!) { onJunctionEvent(metadataId: $metadataId) { junction { ${STEP} } } }`,
 };
 
@@ -150,7 +150,7 @@ async function record(plan, ws) {
     }
     if (requeued) {
       const one = await gql(ops.execution, { id: requeued });
-      if (one.operations.execution) await update(one.operations.execution);
+      if (one.operations.executionDetail) await update(one.operations.executionDetail);
     }
 
     const manifest = manifestAttempts();
@@ -181,11 +181,11 @@ async function record(plan, ws) {
       if (!result.success) throw new Error(`requeue refused: ${result.message}`);
       for (let i = 0; i < 120 && !requeued; i++) {
         const entry = await gql(ops.workQueueEntry, { id: result.id });
-        const metadataId = entry.operations.workQueue.workQueue?.metadataId;
+        const metadataId = entry.operations.workQueue.detail?.metadataId;
         if (metadataId) {
           requeued = metadataId;
           const one = await gql(ops.execution, { id: metadataId });
-          await follow(one.operations.execution, "requeue");
+          await follow(one.operations.executionDetail, "requeue");
         } else await sleep(POLL_MS);
       }
     }

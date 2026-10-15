@@ -352,7 +352,6 @@ public static class GraphQLServiceExtensions
             graphqlBuilder.AddType(new ObjectType<LogQueries>());
             graphqlBuilder.AddType(new ObjectType<MetricsQueries>());
             graphqlBuilder.AddType(new ObjectType<ConfigQueries>());
-            graphqlBuilder.AddType<ChainGraphType>();
             graphqlBuilder.AddType<RunGraphType>();
             // The operator's live feed of state-machine instances, behind the operations gate.
             graphqlBuilder.AddTypeExtension(MachineInstanceFeed.Extension());

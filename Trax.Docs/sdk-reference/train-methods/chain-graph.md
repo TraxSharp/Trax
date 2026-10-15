@@ -155,8 +155,7 @@ a node in that train's graph.
 ### Reading it from a host
 
 A host serves the graph of each registered train through `ITrainChainGraphs.Find(name)`, by its
-canonical name, reading each chain once and keeping it. The operations API returns it as
-[`declaredChain`](/docs/sdk-reference/graphql-api/queries/executions#declaredchain), and draws one run on it as
+canonical name, reading each chain once and keeping it. The operations API draws one run on it as
 [`runGraph`](/docs/sdk-reference/graphql-api/queries/executions#rungraph), matching each recorded step to its
 node by the `nodeId` junction events record; the dashboard's run page shows the same
 [run graph](/docs/dashboard).
@@ -183,4 +182,4 @@ if (graph.Refusals.Count > 0 || graph.ToJson() != File.ReadAllText("OrderTrain.c
 ## See also
 
 - [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain), the recording a graph is built from
-- [declaredChain](/docs/sdk-reference/graphql-api/queries/executions#declaredchain) and [runGraph](/docs/sdk-reference/graphql-api/queries/executions#rungraph), the graph over GraphQL
+- [runGraph](/docs/sdk-reference/graphql-api/queries/executions#rungraph), one run drawn on the graph over GraphQL

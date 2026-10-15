@@ -62,7 +62,7 @@ public sealed record JunctionStep(
 {
     /// <summary>
     /// The id of the declared node this step ran for, as the train's graph names it
-    /// (<c>operations.declaredChain</c>), such as <c>Switch&lt;Source&gt;#0/Papers/FetchPapers#0</c>.
+    /// (<c>operations.runGraph</c>), such as <c>Switch&lt;Source&gt;#0/Papers/FetchPapers#0</c>.
     /// A question carries the id of the <c>Decide</c> step that asked it, a route its routing
     /// step's. Null for a step recorded
     /// before node ids were, and for a step on a track whose answer is withheld, from this caller

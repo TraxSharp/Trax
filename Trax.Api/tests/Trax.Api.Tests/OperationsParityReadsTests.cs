@@ -333,7 +333,7 @@ public class OperationsParityReadsTests
     }
 
     [Test]
-    public async Task ExecutionSummary_CarriesTheRunningJunction_OnEveryRead()
+    public async Task Executions_CarryTheRunningJunction_OnTheListAndTheDetail()
     {
         var running = await SeedRun(m =>
         {
@@ -343,7 +343,7 @@ public class OperationsParityReadsTests
         var queries = new OperationsQueries();
 
         var listed = (await queries.GetExecutions(_factory, default)).Items.Single();
-        var single = await queries.GetExecution(running, _factory, default);
+        var single = await queries.GetExecutionDetail(running, _factory, default);
 
         listed.CurrentlyRunningJunction.Should().Be("ChargeCard");
         listed.ParentId.Should().BeNull();
@@ -458,9 +458,6 @@ public class OperationsParityReadsTests
 
         (await queries.GetWorkQueues(_factory, default))
             .Items.Single()
-            .ReplayDecisionsOf.Should()
-            .Be(original);
-        (await queries.GetWorkQueue(replaying, _factory, default))!
             .ReplayDecisionsOf.Should()
             .Be(original);
         (

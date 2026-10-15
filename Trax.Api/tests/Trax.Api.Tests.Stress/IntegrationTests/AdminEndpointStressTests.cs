@@ -157,13 +157,14 @@ public class AdminEndpointStressTests : StressTestSetup
     public async Task Manifest_PointRead_WithinBudget()
     {
         await MeasureAsync(
-            "operations.manifest (by id)",
+            "operations.manifestDetail (by id)",
             ListBudget,
             async (sp, ct) =>
             {
-                var row = await new OperationsQueries().GetManifest(
+                var row = await new OperationsQueries().GetManifestDetail(
                     Profile.Manifests / 2,
                     Factory(sp),
+                    sp.GetRequiredService<ITrainDiscoveryService>(),
                     ct
                 );
                 row.Should().NotBeNull();
@@ -193,13 +194,13 @@ public class AdminEndpointStressTests : StressTestSetup
     public async Task WorkQueue_PointRead_WithinBudget()
     {
         await MeasureAsync(
-            "operations.workQueue.workQueue (by id)",
+            "operations.workQueue.detail (by id)",
             ListBudget,
             async (sp, ct) =>
             {
-                var row = await new WorkQueueQueries().GetWorkQueue(
+                var row = await new WorkQueueQueries().GetDetail(
                     Profile.WorkQueue / 2,
-                    Factory(sp),
+                    Operations(sp),
                     ct
                 );
                 row.Should().NotBeNull();
@@ -360,11 +361,11 @@ public class AdminEndpointStressTests : StressTestSetup
     public async Task Executions_PointRead_WithinBudget()
     {
         await MeasureAsync(
-            "operations.execution (by id)",
+            "operations.executionDetail (by id)",
             ListBudget,
             async (sp, ct) =>
             {
-                var row = await new OperationsQueries().GetExecution(
+                var row = await new OperationsQueries().GetExecutionDetail(
                     Profile.Metadata / 2,
                     Factory(sp),
                     ct

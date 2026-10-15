@@ -145,3 +145,22 @@ types, behind a gate of their own. `UsePersistedOperations` no longer exposes th
 `--trax-export-client <path>` and read the ids from the file, which needs no running server and no credential. See
 [Client manifest](/docs/sdk-reference/statemachine-api/client-manifest). A request that still selects the field is
 refused as an unknown field, and under `RequirePersisted` it is no longer admitted as an inline document.
+
+## Four operations reads are gone
+
+No page of the operations dashboard used them, and everything under `operations` is now something the dashboard
+does. Each has a replacement that answers at least as much:
+
+- `operations { execution(id) }` becomes
+  [`executionDetail(id)`](/docs/sdk-reference/graphql-api/queries/executions#executiondetail).
+- `operations { manifest(id) }` becomes
+  [`manifestDetail(id)`](/docs/sdk-reference/graphql-api/queries/manifests#manifestdetail).
+- `operations { workQueue { workQueue(id) } }` becomes
+  [`workQueue { detail(id) }`](/docs/sdk-reference/graphql-api/queries/work-queue#detail).
+- `operations { declaredChain(train) }` is gone. A run's graph is
+  [`runGraph(metadataId)`](/docs/sdk-reference/graphql-api/queries/executions#rungraph); a client following its own
+  run reads [`runProgress`](/docs/sdk-reference/graphql-api/run-progress); C# reads the declared chain from
+  `ITrainChainGraphs.Find(name)` ([ChainGraph](/docs/sdk-reference/train-methods/chain-graph)).
+
+In C#, `OperationsQueries.GetExecution`, `GetManifest`, `GetDeclaredChain` and `WorkQueueQueries.GetWorkQueue` are
+removed, and so are `DeclaredNode` and `DeclaredTrack` in `Trax.Api.DTOs`.
