@@ -40,6 +40,24 @@ internal static class GeneratedDocuments
         : null;
 
     /// <summary>
+    /// Whether a stored row is one a host generated: its id is under a reserved prefix and well formed, and its text
+    /// hash is the hash of <paramref name="document"/> with the id's own shape or IR hash. Every generated id is built
+    /// that way, so a row uploaded under one of these prefixes before they were reserved fails it, and registration
+    /// leaves it alone rather than adopting it.
+    /// </summary>
+    public static bool IsGenerated(string id, string document)
+    {
+        if (!IsReserved(id) || !MachineDocuments.IsWellFormed(id))
+            return false;
+        var hash = id[(id.LastIndexOf('_') + 1)..];
+        return string.Equals(
+            TrainDocuments.TextHash(hash[..MachineDocuments.IrHashLength], document),
+            hash[MachineDocuments.IrHashLength..],
+            StringComparison.Ordinal
+        );
+    }
+
+    /// <summary>
     /// The slot out of <paramref name="slots"/> that <paramref name="id"/> belongs to, or null when it belongs to none
     /// of them: a machine id's machine, or a train id's slot.
     /// </summary>

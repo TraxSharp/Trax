@@ -157,7 +157,9 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
                 return stored.IsActive
                     ? MachineDocumentVerdict.ServerOutdated
                     : MachineDocumentVerdict.ClientOutdated;
-            return stored.Version > state.OwnVersions[machine]
+            // A newer version is retried while it is active. Once collected no node serves it any more (a rollback),
+            // so its clients reload.
+            return stored.IsActive && stored.Version > state.OwnVersions[machine]
                 ? MachineDocumentVerdict.ServerOutdated
                 : MachineDocumentVerdict.ClientOutdated;
         }

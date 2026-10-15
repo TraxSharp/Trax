@@ -211,7 +211,12 @@ transport like any other.
   collected; one still marked after the grace period is collected, and its clients then reload. A collected document
   is made active again only when a node serving it starts (a rollback) or when no newer version of its machine is
   stored, so a node still running an older version past the grace period does not bring back what a newer one
-  collected. A node that serves no machine registers too, with no documents of its own, so a deploy that stops
+  collected. A registration writes the `updated_at` of the node's own documents again once it is a quarter of the
+  grace period old, and a version newer than the node's that no node has registered for the grace period (and that
+  quarter) is collected, so after a rollback its clients reload rather than retry. Its ids then answer
+  `client-outdated`. Only rows a host generated take part: a row under a reserved prefix whose body does not hash
+  to its id, such as one uploaded before the prefix was reserved, is never numbered against, marked or collected.
+  A node that serves no machine registers too, with no documents of its own, so a deploy that stops
   serving every machine still collects the older documents after the grace period; a registration that fails there
   is logged and tried again an interval later, and does not stop the host.
 - **The manifest** is `operations { machineDocuments { id machine operation irHash document } }`, behind the
