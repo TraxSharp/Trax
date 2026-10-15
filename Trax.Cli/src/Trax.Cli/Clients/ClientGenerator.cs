@@ -1059,8 +1059,11 @@ internal sealed class ClientGenerator
 
             /**
              * Follows your run: `onEvent` gets each change of state and each step as it happens, then `onEnd()` once the
-             * stream ends, after the run does, or `onEnd(error)` when the host refused it. A `sequence` that skips a number
-             * means events were lost: read the run again. Returns the function that stops following.
+             * stream ends, after the run does, or `onEnd(error)` when the host refused it. When configureTrax is called
+             * while following, it closes the socket the stream is on and the run has not ended: `onEnd` gets a
+             * TraxOperationError with the code `CONNECTION_CHANGED`, so call this again to follow the run over the new
+             * connection. A `sequence` that skips a number means events were lost: read the run again. Returns the
+             * function that stops following.
              */
             export function followRunProgress(
               runId: string,
@@ -1068,14 +1071,22 @@ internal sealed class ClientGenerator
               onEnd?: (error?: unknown) => void,
             ): () => void {
               const payload = { query: "", id: runProgressEventsDocumentId, variables: { runId } };
+              const generation = traxGeneration();
+              // A stream ended by configureTrax closing its socket says so, rather than reading as the run's end.
+              const end = (error?: unknown) =>
+                onEnd?.(
+                  generation === traxGeneration()
+                    ? error
+                    : new TraxOperationError("CONNECTION_CHANGED", "configureTrax was called while following this run: follow it again."),
+                );
               return traxSocket().subscribe<{ runProgress: RunProgressEvent }>(payload, {
                 next: (result) => {
                   const error = result.errors?.[0];
                   if (error) onEnd?.(new TraxOperationError(error.extensions?.code as string | undefined, error.message));
                   else if (result.data) onEvent(result.data.runProgress);
                 },
-                error: (error) => onEnd?.(error),
-                complete: () => onEnd?.(),
+                error: (error) => end(error),
+                complete: () => end(),
               });
             }
 

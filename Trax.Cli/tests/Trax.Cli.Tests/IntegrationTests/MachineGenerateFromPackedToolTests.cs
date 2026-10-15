@@ -316,7 +316,7 @@ public class MachineGenerateFromPackedToolTests
           },
         }));
 
-        import { configureTrax, reminderServer, useRememberedReminder, useReminder, useRunProgress } from "./trax/index.g";
+        import { configureTrax, followRunProgress, reminderServer, TraxOperationError, useRememberedReminder, useReminder, useRunProgress } from "./trax/index.g";
 
         // Every request, with its headers, answered only when the test says so.
         const requests: { id: string; variables: Record<string, unknown>; headers: Record<string, string>; answer(data: unknown): void }[] = [];
@@ -649,6 +649,35 @@ public class MachineGenerateFromPackedToolTests
           expect(result.current.steps.map((s) => `${s.name}:${s.state}`)).toEqual(["Load:COMPLETED", "Check:COMPLETED", "Route:COMPLETED", "Pay:COMPLETED"]);
           expect(result.current.state).toBe("COMPLETED");
           expect(result.current.ended).toBe(true);
+        });
+
+        it("followRunProgress_ends_with_CONNECTION_CHANGED_when_configureTrax_closes_its_socket", async () => {
+          signIn("S");
+          const ends: unknown[] = [];
+          const events: unknown[] = [];
+          followRunProgress("r1", (e) => events.push(e), (error) => ends.push(error));
+          const stream = open(sockets.at(-1)).find((s) => s.payload.variables.runId === "r1")!;
+          stream.sink.next(event("r1", 1, { state: "IN_PROGRESS" }));
+
+          // A token refresh for the same user: the run has not ended.
+          signIn("S2", "S");
+
+          expect(events).toHaveLength(1);
+          expect(ends).toHaveLength(1);
+          expect(ends[0]).toBeInstanceOf(TraxOperationError);
+          expect((ends[0] as TraxOperationError).code).toBe("CONNECTION_CHANGED");
+        });
+
+        it("followRunProgress_ends_with_no_error_when_the_run_ends", async () => {
+          signIn("T");
+          const ends: unknown[] = [];
+          followRunProgress("r1", () => undefined, (error) => ends.push(error));
+          const stream = open(sockets.at(-1)).find((s) => s.payload.variables.runId === "r1")!;
+
+          stream.sink.next(event("r1", 1, { state: "COMPLETED" }));
+          stream.sink.complete();
+
+          expect(ends).toEqual([undefined]);
         });
 
         it("A_retry_reported_twice_is_followed_once", async () => {

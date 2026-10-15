@@ -122,7 +122,9 @@ credential moves to it.
 - **The invoked-run cap counts by starter.** A user's run still counts after its draft expired, until the run ends.
 - **Generated code.** `trax client` writes `progress.g.ts` (`readRunProgress`, `followRunProgress`,
   `useRunProgress`) when the manifest lists a train that carries the attribute. See
-  [`trax client`](/docs/reference/cli#frontend-clients-trax-client).
+  [`trax client`](/docs/reference/cli#frontend-clients-trax-client). When `configureTrax` closes the socket before the
+  run ends, `followRunProgress` calls `onEnd` with a `TraxOperationError` whose `code` is `CONNECTION_CHANGED`, not
+  with nothing: follow the run again over the new connection.
 
 ## Persisted-operation management moved out of operations
 
