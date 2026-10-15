@@ -49,16 +49,39 @@ internal sealed class SdlTypes
     /// <summary>The names <see cref="Render"/> exports, in name order.</summary>
     public IEnumerable<string> Declared => _definitions.Keys.Order(StringComparer.Ordinal);
 
-    /// <summary>A type written as SDL writes it (<c>[Order!]!</c>), or null when there is none.</summary>
-    public static GraphQLType? ParseType(string? text) =>
-        string.IsNullOrWhiteSpace(text)
-            ? null
-            : GraphQLParser
-                .Parser.Parse($"type T {{ f: {text} }}")
-                .Definitions.OfType<GraphQLObjectTypeDefinition>()
-                .Single()
-                .Fields!.Items.Single()
-                .Type;
+    /// <summary>
+    /// A type written as SDL writes it (<c>[Order!]!</c>), or null when there is none. Text that is not one type is
+    /// refused naming <paramref name="owner"/>, never in the parser's words.
+    /// </summary>
+    public static GraphQLType? ParseType(string? text, string owner)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        GraphQLDocument parsed;
+        try
+        {
+            parsed = GraphQLParser.Parser.Parse($"type T {{ f: {text} }}");
+        }
+        catch (GraphQLParser.Exceptions.GraphQLParserException ex)
+        {
+            throw NotAType(text, owner, ex);
+        }
+        // Text that closes the type it is parsed in (`Int } type X { y: Int`) parses, as two definitions.
+        return parsed.Definitions is [GraphQLObjectTypeDefinition { Fields.Items: [var field] }]
+            ? field.Type
+            : throw NotAType(text, owner, null);
+    }
+
+    private static InvalidOperationException NotAType(
+        string text,
+        string owner,
+        Exception? inner
+    ) =>
+        new(
+            $"The manifest says {owner} answers with {TypeScript.Literal(text)}, which is not a GraphQL type. "
+                + "Export the manifest again from the host.",
+            inner
+        );
 
     /// <summary>The named type <paramref name="type"/> holds when it is one this file declares, else null.</summary>
     public string? NameOf(GraphQLType type)

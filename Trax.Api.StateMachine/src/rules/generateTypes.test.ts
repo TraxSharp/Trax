@@ -363,6 +363,17 @@ describe("generated names", () => {
     expect(() => generateContextTypes({ ...ir, triggers: ["Coin\nexport"] })).toThrow(/not an identifier/);
   });
 
+  it("refuses a state or trigger named after an Object.prototype member", () => {
+    for (const name of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+      const state = { ...ir, states: [...ir.states, name] };
+      expect(() => generateContextTypes(state)).toThrow(/every JavaScript object has/);
+      expect(() => generateMachineFactory(state)).toThrow(/every JavaScript object has/);
+      expect(() => generateContextTypes({ ...ir, triggers: [...ir.triggers, name] })).toThrow(
+        /every JavaScript object has/,
+      );
+    }
+  });
+
   it("refuses an outcome that is not <State>.<kind>", () => {
     const outcomes = { "Fetching.done;x": { from: "Locked" } } as unknown as IrDocument["outcomes"];
     expect(() => generateContextTypes({ ...ir, outcomes })).toThrow(/not <State>.<kind>/);

@@ -104,6 +104,28 @@ internal static partial class TypeScript
     /// </summary>
     public static bool IsIdentifier(string name) => IdentifierPattern().IsMatch(name);
 
+    /// <summary>
+    /// Whether <paramref name="name"/> is a member of <c>Object.prototype</c>. A state or trigger named so is found on
+    /// every object a lookup reads it from, and a <c>__proto__</c> key in an object literal sets its prototype.
+    /// </summary>
+    public static bool IsPrototypeMember(string name) => PrototypeMembers.Contains(name);
+
+    private static readonly HashSet<string> PrototypeMembers = new(StringComparer.Ordinal)
+    {
+        "__proto__",
+        "__defineGetter__",
+        "__defineSetter__",
+        "__lookupGetter__",
+        "__lookupSetter__",
+        "constructor",
+        "hasOwnProperty",
+        "isPrototypeOf",
+        "propertyIsEnumerable",
+        "toLocaleString",
+        "toString",
+        "valueOf",
+    };
+
     /// <summary>A string as a TypeScript literal: its JSON, so nothing in it can end the literal.</summary>
     public static string Literal(string value) => JsonSerializer.Serialize(value, Json);
 

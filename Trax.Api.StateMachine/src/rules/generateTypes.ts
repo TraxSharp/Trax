@@ -37,7 +37,7 @@ export function generateContextTypes(ir: IrDocument): string {
     lines.push(
       ...emitType(
         `${machine}${state}Context`,
-        ir.context[state] ?? { fields: [] },
+        own(ir.context, state) ?? { fields: [] },
         "context",
       ),
       "",
@@ -49,7 +49,7 @@ export function generateContextTypes(ir: IrDocument): string {
 
   // An input type per trigger that declares one, and the trigger -> input map (undefined when none).
   for (const trigger of ir.triggers) {
-    const schema = ir.inputs[trigger];
+    const schema = own(ir.inputs, trigger);
     if (schema && schema.fields.length > 0)
       lines.push(
         ...emitType(`${machine}${trigger}Input`, schema, "input"),
@@ -57,7 +57,7 @@ export function generateContextTypes(ir: IrDocument): string {
       );
   }
   // A success outcome's input is the invoked train's output, exported under the outcome.
-  const outputOf = (outcome: string) => ir.outcomes?.[outcome]?.output;
+  const outputOf = (outcome: string) => own(ir.outcomes, outcome)?.output;
   for (const outcome of outcomes) {
     const schema = outputOf(outcome);
     if (schema && schema.fields.length > 0)
@@ -68,7 +68,7 @@ export function generateContextTypes(ir: IrDocument): string {
   }
   lines.push(`export type ${machine}Inputs = {`);
   for (const trigger of ir.triggers) {
-    const schema = ir.inputs[trigger];
+    const schema = own(ir.inputs, trigger);
     const type =
       schema && schema.fields.length > 0
         ? `${machine}${trigger}Input`
@@ -295,6 +295,14 @@ const union = (values: readonly string[]): string =>
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
+// The names every object has (`__proto__`, `constructor`, `toString`): a state or trigger named so is found on every
+// map a lookup reads it from, and a `"__proto__"` key in the twin's IR literal sets its prototype instead.
+const PROTOTYPE_MEMBERS = new Set(Object.getOwnPropertyNames(Object.prototype));
+
+// The value `map` holds under `key` itself, never one it inherits.
+const own = <T>(map: Readonly<Record<string, T>> | undefined, key: string): T | undefined =>
+  map !== undefined && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+
 /**
  * Refuses an IR whose names cannot be written as code: the id names files and every type, a state or trigger names a
  * type and a key, and an outcome is `<State>.<kind>`, each half a part of a type name. The IR is data a host
@@ -316,6 +324,10 @@ function checkNames(ir: IrDocument): void {
       if (typeof name !== "string" || !IDENTIFIER.test(name))
         throw new Error(
           `The machine '${ir.id}' has the ${what} ${JSON.stringify(name)}, which is not an identifier.`,
+        );
+      else if (PROTOTYPE_MEMBERS.has(name))
+        throw new Error(
+          `The machine '${ir.id}' has the ${what} ${JSON.stringify(name)}, a name every JavaScript object has.`,
         );
   }
   for (const outcome of Object.keys(ir.outcomes ?? {})) {

@@ -139,6 +139,61 @@ public partial class ClientGeneratorTests
         render.Should().Throw<InvalidOperationException>().WithMessage("*startRun*answers with*");
     }
 
+    [TestCase("!!")]
+    [TestCase("Int } type X { y: Int")]
+    public void A_train_answer_that_is_not_a_graphql_type_is_refused_with_a_sentence(string answer)
+    {
+        var sample = ClientManifests.Sample();
+        var manifest = sample with { Trains = [sample.Trains[0] with { Answer = answer }] };
+
+        var render = () => Render(manifest);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*startRun*not a GraphQL type*Export*");
+    }
+
+    [TestCase("server")]
+    [TestCase("socket")]
+    [TestCase("trax-socket")]
+    [TestCase("use-server-machine")]
+    [TestCase("ir")]
+    public void A_machine_named_as_a_name_its_client_module_uses_is_refused(string id)
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Id = id }] };
+
+        var render = () => Render(manifest, node);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*'{id}'*its generated modules use*");
+        node.Calls.Should().BeEmpty();
+    }
+
+    [TestCase("states", "__proto__")]
+    [TestCase("states", "constructor")]
+    [TestCase("triggers", "toString")]
+    public void A_state_named___proto___is_refused(string list, string name)
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var ir = (JsonObject)checkout.Ir.DeepClone();
+        ((JsonArray)ir[list]!).Add(name);
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
+
+        var render = () => Render(manifest, node);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*\"{name}\"*every JavaScript object has*");
+        node.Calls.Should().BeEmpty();
+    }
+
     [Test]
     public void A_machine_server_is_made_again_after_the_connection_changes()
     {

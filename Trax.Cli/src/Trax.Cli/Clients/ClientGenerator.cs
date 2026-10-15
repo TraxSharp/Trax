@@ -88,6 +88,11 @@ internal sealed class ClientGenerator
                 TypeScript.Identifier(TypeScript.Camel(machine.Id), "machine"),
                 machine.Id
             );
+            if (MachineModuleNames.Contains(camel))
+                throw new InvalidOperationException(
+                    $"The machine '{machine.Id}' is written as '{camel}', a name its generated modules use. "
+                        + "Rename it on the host."
+                );
             var pascal = TypeScript.Pascal(machine.Id);
             names.Claim($"use{pascal}", machine.Id);
             names.Claim($"useRemembered{pascal}", machine.Id);
@@ -239,6 +244,31 @@ internal sealed class ClientGenerator
             .ToList();
     }
 
+    // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id
+    // would hide or redeclare.
+    private static readonly HashSet<string> MachineModuleNames = new(StringComparer.Ordinal)
+    {
+        "server",
+        "serverGeneration",
+        "subscribeTrax",
+        "traxConnection",
+        "traxGeneration",
+        "traxSocket",
+        "createMachineServer",
+        "useServerMachine",
+        "useRememberedMachine",
+        "useSyncExternalStore",
+        "generation",
+        "socket",
+        "user",
+        "rememberKey",
+        "key",
+        "options",
+        "ir",
+        "irHash",
+        "typedMachineFromIr",
+    };
+
     // The names the client's own modules export from the index, which no machine, train or type may take.
     private static readonly string[] RuntimeNames =
     [
@@ -309,6 +339,11 @@ internal sealed class ClientGenerator
                     || !TypeScript.IsIdentifier(name)
                 )
                     throw NotAnIdentifier(machine.Id, what, item?.ToJsonString());
+                else if (TypeScript.IsPrototypeMember(name))
+                    throw new InvalidOperationException(
+                        $"The machine '{machine.Id}' has the {what} {TypeScript.Literal(name)}, a name every "
+                            + "JavaScript object has, so the twin would read it as something else. Rename it on the host."
+                    );
         }
         if (ir["outcomes"] is not (null or JsonObject))
             throw new InvalidOperationException(
@@ -630,7 +665,7 @@ internal sealed class ClientGenerator
             );
         var root = train.Root == "mutation" ? "dispatch" : "discover";
         var answer =
-            SdlTypes.ParseType(train.Answer)
+            SdlTypes.ParseType(train.Answer, $"the train '{train.Field}'")
             ?? throw new InvalidOperationException(
                 $"The manifest does not say what the train '{train.Field}' answers with. Export the manifest again "
                     + "from the host."

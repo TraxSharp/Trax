@@ -472,9 +472,10 @@ The generated client is committed, like a twin, so a frontend's build needs no .
 host and runs `--check`, which also catches a HotChocolate change that moved a document's id. Every name from the
 manifest is checked before it is written: a machine id or a train field that is a word TypeScript reserves, two
 that generate one name (`map-2d` and `map2d`), two trains whose files differ only in case, and a name the client's
-runtime exports (`configureTrax`) are refused; a string is written as a literal and a description cannot close its
-comment. Each machine's IR must name the machine, its states, triggers and outcomes must be identifiers, and it must
-hash to the `irHash` its documents carry, or nothing is generated. A malformed manifest is refused with a sentence
+runtime exports (`configureTrax`) or a machine's client module declares (`server`, `socket`) are refused; a string is
+written as a literal and a description cannot close its comment. Each machine's IR must name the machine, its states,
+triggers and outcomes must be identifiers and no state or trigger may be named after an `Object.prototype` member
+(`__proto__`, `constructor`), and it must hash to the `irHash` its documents carry, or nothing is generated. A malformed manifest is refused with a sentence
 saying where. The app installs `graphql-ws` beside `@traxsharp/state-machine`.
 
 ## SDK Reference
