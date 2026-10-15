@@ -129,6 +129,36 @@ public class TriggerRaceTests : TestSetup
         inserts.Should().Be(1, "only a conflict on the manifest's queued entry is tried again");
     }
 
+    [Test]
+    public async Task A_non_conflict_update_failure_leaves_nothing_tracked()
+    {
+        var manifest = await ScheduleAsync("trigger-race-untracked");
+        DataContext.Reset();
+        var seams = new TraxScheduler.TriggerSeams(
+            null,
+            (_, _) => throw new DbUpdateException("not a queued-manifest conflict"),
+            null
+        );
+
+        var trigger = () =>
+            TraxScheduler.TriggerManifestAsync(
+                DataContext,
+                manifest,
+                DateTime.UtcNow,
+                askAfresh: false,
+                seams,
+                CancellationToken.None
+            );
+
+        await trigger.Should().ThrowAsync<DbUpdateException>();
+        ((DbContext)DataContext)
+            .ChangeTracker.Entries<WorkQueue>()
+            .Should()
+            .BeEmpty(
+                "the entry that failed to save is untracked, so a later save does not insert it"
+            );
+    }
+
     private async Task<Manifest> ScheduleAsync(string externalId) =>
         await (
             (TraxScheduler)Scope.ServiceProvider.GetRequiredService<ITraxScheduler>()

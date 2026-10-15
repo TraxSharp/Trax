@@ -641,6 +641,13 @@ public class TraxScheduler(
                 if (seams?.AfterCollision is { } afterCollision)
                     await afterCollision(attempt, ct);
             }
+            catch
+            {
+                // Any other failure, a cancel included, is not tried again. The entry is untracked so a later save on
+                // this context does not insert it after all.
+                context.WorkQueues.Entry(entry).State = EntityState.Detached;
+                throw;
+            }
         }
     }
 
