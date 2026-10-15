@@ -565,7 +565,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
     // whose state is left now (leavingToken) is cancelled in this transaction, so it does not. The count is taken
     // under a transaction-scoped lock on the user on Postgres, so two concurrent entries by one user, on any hosts
     // and in any machines, cannot both pass it; SQLite serializes writing transactions already (BEGIN IMMEDIATE).
-    private async Task<InvokeWrite.Refused?> OverLimit(
+    // A user owner whose key names nobody cannot be counted, so it is refused rather than let past the cap.
+    internal async Task<InvokeWrite.Refused?> OverLimit(
         IDataContext context,
         DraftOwner owner,
         string? leavingToken,
@@ -573,12 +574,17 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         CancellationToken cancellationToken
     )
     {
-        if (
-            owner.Kind != SnapshotOwnerKind.User
-            || owner.UserKey is not { } userKey
-            || RunStarter.OfUserKey(userKey) is not { } starter
-        )
+        if (owner.Kind != SnapshotOwnerKind.User)
             return null;
+        if (owner.UserKey is not { } userKey || RunStarter.OfUserKey(userKey) is not { } starter)
+            return new InvokeWrite.Refused(
+                Forbidden,
+                "The step's work could not be started.",
+                new InvalidOperationException(
+                    "A user-owned instance with no user key entered a state that invokes a train, so its live runs "
+                        + "cannot be counted against the cap."
+                )
+            );
 
         if (services.GetService<ISqlDialect>() is { } dialect && context is DbContext db)
             await db.Database.ExecuteSqlRawAsync(
