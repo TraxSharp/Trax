@@ -573,7 +573,11 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         CancellationToken cancellationToken
     )
     {
-        if (owner.Kind != SnapshotOwnerKind.User || owner.UserKey is not { } userKey)
+        if (
+            owner.Kind != SnapshotOwnerKind.User
+            || owner.UserKey is not { } userKey
+            || RunStarter.OfUserKey(userKey) is not { } starter
+        )
             return null;
 
         if (services.GetService<ISqlDialect>() is { } dialect && context is DbContext db)
@@ -585,7 +589,6 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
 
         // A run records its starter, the instance's owner, so it is counted even after a draft lifetime deleted the
         // instance. A run written before the starter was recorded is joined to the user's instances, as it was.
-        var starter = RunStarter.OfUserKey(userKey);
         var instances = context.SnapshotDrafts.Where(x =>
             x.OwnerKind == SnapshotOwnerKind.User && x.UserKey == userKey
         );
@@ -605,21 +608,20 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 ),
             cancellationToken
         );
-        var running = await context.Metadatas.CountAsync(
-            m =>
-                m.InvokingOwnerKind == SnapshotOwnerKind.User
-                && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
-                && (
-                    m.StarterHash == starter
-                    || (
-                        m.StarterHash == null
-                        && instances.Any(x =>
-                            x.Id == m.InvokingInstanceId && x.Machine == m.InvokingMachine
-                        )
-                    )
-                ),
-            cancellationToken
-        );
+        // Two counts, so the one by starter reads ix_metadata_live_invoked_starter (083): an OR with the legacy branch
+        // does not imply that index's predicate, and the planner would fall back to the older ones.
+        var running =
+            await LiveRunsStartedBy(context, starter).CountAsync(cancellationToken)
+            + await context.Metadatas.CountAsync(
+                m =>
+                    m.StarterHash == null
+                    && m.InvokingOwnerKind == SnapshotOwnerKind.User
+                    && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
+                    && instances.Any(x =>
+                        x.Id == m.InvokingInstanceId && x.Machine == m.InvokingMachine
+                    ),
+                cancellationToken
+            );
 
         var live = queued + running;
         return live >= limit
@@ -630,6 +632,18 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             )
             : null;
     }
+
+    // The runs a user's instances invoked that have not ended, by the starter they recorded. Shaped to match the
+    // predicate of ix_metadata_live_invoked_starter.
+    internal static IQueryable<Trax.Effect.Models.Metadata.Metadata> LiveRunsStartedBy(
+        IDataContext context,
+        string starter
+    ) =>
+        context.Metadatas.Where(m =>
+            m.StarterHash == starter
+            && m.InvokingOwnerKind == SnapshotOwnerKind.User
+            && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
+        );
 
     // The store a write goes through: on the write's own context, recording the IR hash of the definition that made
     // it and what it does to the row's timer, as the scoped store does.
