@@ -1,6 +1,6 @@
 ---
 title: Adapt to the machine wire changes
-description: "Upgrade steps for the release that made refusal codes one enum, gave each machine its own push, spelled machine enums as stored, and let a run be followed by its starter."
+description: "Upgrade steps for the release that made refusal codes one enum, typed each machine's push, spelled machine enums as stored, and let starters follow runs."
 type: how-to
 area: upgrading
 parent: Upgrading
