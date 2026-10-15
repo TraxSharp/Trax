@@ -23,6 +23,16 @@ function shipped(dir: string): string[] {
   });
 }
 
+// Every module a file loads: `import … from '…'`, `export … from '…'`, a side-effect `import '…'`, and a dynamic
+// `import('…')`.
+function specifiers(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.matchAll(/(?:^|\n)\s*(?:import|export)\b[^'"`]*?from\s+['"]([^'"]+)['"]/g)) found.push(match[1]);
+  for (const match of text.matchAll(/(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g)) found.push(match[1]);
+  for (const match of text.matchAll(/\bimport\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g)) found.push(match[1]);
+  return found;
+}
+
 // The package a bare specifier names: 'react/jsx-runtime' is 'react', '@scope/name/sub' is '@scope/name'.
 function packageOf(specifier: string): string {
   const parts = specifier.split('/');
@@ -39,13 +49,21 @@ describe('the package', () => {
     const peers = new Set(Object.keys(manifest.peerDependencies ?? {}));
     const strays: string[] = [];
     for (const file of shipped(here)) {
-      const text = readFileSync(file, 'utf8');
-      for (const match of text.matchAll(/(?:^|\n)\s*(?:import|export)\b[^'"`]*?from\s+['"]([^'"]+)['"]/g)) {
-        const specifier = match[1];
+      for (const specifier of specifiers(readFileSync(file, 'utf8'))) {
         if (specifier.startsWith('.') || specifier.startsWith('node:')) continue;
         if (!peers.has(packageOf(specifier))) strays.push(`${path.relative(here, file)}: ${specifier}`);
       }
     }
     expect(strays).toEqual([]);
+  });
+
+  it('reads side-effect and dynamic imports', () => {
+    const text = [
+      "import 'vitest';",
+      "import type { A } from '@testing-library/react';",
+      "const lazy = await import('jsdom');",
+      "export * from './local';",
+    ].join('\n');
+    expect(specifiers(text).sort()).toEqual(['./local', '@testing-library/react', 'jsdom', 'vitest']);
   });
 });

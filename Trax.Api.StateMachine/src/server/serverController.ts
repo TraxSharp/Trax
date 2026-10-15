@@ -314,9 +314,24 @@ export class ServerMachineController<Spec extends MachineSpec> {
   can<T extends TriggerOf<Spec>>(trigger: T, ...input: InputArgs<Spec, T>): boolean {
     const shown = this.view.snapshot;
     if (!shown || this.status === 'stopped') return false;
-    // An effect-bound trigger's guard reads the input only the server's effect runner has: the server decides it.
-    if (this.machine.isEffectBound(trigger)) return this.machine.available(shown).includes(trigger);
+    // An effect-bound trigger's guard reads an input only the server's effect runner has, so its rules on that input
+    // count as passing and its rules on the context still decide.
+    if (this.machine.isEffectBound(trigger)) return this.couldFireWithoutInput(shown, trigger);
     return this.machine.can(shown, trigger, ...input);
+  }
+
+  private couldFireWithoutInput(shown: TypedSnapshot<Spec>, trigger: TriggerOf<Spec>): boolean {
+    if (!this.machine.available(shown).includes(trigger)) return false;
+    try {
+      return this.machine.core.definition.transitions.some(
+        (t) =>
+          t.from === shown.state &&
+          t.trigger === trigger &&
+          (t.guard == null || t.guard(shown.context, undefined, { inputUnknown: true })),
+      );
+    } catch {
+      return false;
+    }
   }
 
   /** The triggers the twin allows from what is shown; none before the first snapshot or once stopped. */

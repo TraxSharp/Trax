@@ -10,7 +10,16 @@ export interface Snapshot {
   context: Record<string, unknown>;
 }
 
-export type Guard = (context: Record<string, unknown>, input: unknown) => boolean;
+/**
+ * Whether an edge may be taken. `options.inputUnknown` is set when the input is one only the server has (an
+ * effect-bound trigger's receipt): a guard built from the IR then counts every rule on the input as passing and
+ * still reads the context. A guard that ignores it is read with no input.
+ */
+export type Guard = (
+  context: Record<string, unknown>,
+  input: unknown,
+  options?: { inputUnknown?: boolean },
+) => boolean;
 export type Reduce = (context: Record<string, unknown>, input: unknown) => Record<string, unknown>;
 /**
  * Checks a context against its state: null when it is legal there, else a message. `fromServer` is set when the

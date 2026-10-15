@@ -77,8 +77,9 @@ function Wizard({ id }: { id?: string }) {
   The twin holds no handler for a custom rule, so it predicts nothing that needs one: such an event is sent without a
   prediction, and the answer is what the hook shows.
   An effect-bound event (its edge runs an effect, such as a charge) is sent with no input and no prediction, since
-  the effect produces what its edge records, and nothing queued after it is predicted until it answers; `can` asks
-  only whether its edge leaves the state shown.
+  the effect produces what its edge records, and nothing queued after it is predicted until it answers; `can` reads
+  its guard with every rule on the input, and every custom rule, counted as passing, so a rule on the context still
+  decides.
 - **Trusts the server on custom rules.** A snapshot the server sends is checked for its shape and every built-in
   rule; a custom rule the twin has no handler for counts as passed, because the server evaluated it. A snapshot that
   fails a check it can make stops the hook with `CLIENT_OUTDATED`.

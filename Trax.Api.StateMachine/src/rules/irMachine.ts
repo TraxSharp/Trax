@@ -133,7 +133,8 @@ export function machineFromIr(
     trigger,
     to,
     guard: guard
-      ? (ctx, input) => evaluateRule(guard, ctx, input, customGuards)
+      ? (ctx, input, options) =>
+          evaluateRule(guard, ctx, input, customGuards, options)
       : undefined,
     guardMessage,
     reduce: reduce

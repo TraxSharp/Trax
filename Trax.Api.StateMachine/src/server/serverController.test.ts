@@ -72,7 +72,7 @@ describe('ServerMachineController', () => {
     expect(controller.get().pending).toBe(true);
   });
 
-  it('sends an effect-bound event with no input and no prediction, and can follows the edge alone', async () => {
+  it('does not predict through an effect-bound event even when the twin could', async () => {
     const server = new FakeMachineServer();
     const controller = new ServerMachineController<CheckoutSpec>({
       machine: checkout,
@@ -89,14 +89,78 @@ describe('ServerMachineController', () => {
 
     expect(checkout.isEffectBound('Pay')).toBe(true);
     expect(controller.can('Pay')).toBe(true);
-    void controller.send('Pay');
+    // A receipt the types do not allow, so a prediction would succeed if the controller tried one.
+    const receipt = { receipt: 'r-1' };
+    expect(checkout.core.advance(checkout.snapshotAt('Review', review), 'Pay', receipt)).toMatchObject({
+      outcome: 'transitioned',
+    });
+    void controller.send('Pay', ...([receipt] as unknown as []));
     void controller.send('Restart');
     await flushMicrotasks();
 
     expect(server.events[0].request).toMatchObject({ id: 'c-1', trigger: 'Pay' });
-    expect(server.events[0].request.input).toBeUndefined();
     expect(server.events[0].request.clientResult).toBeUndefined();
     expect(controller.get().snapshot?.state).toBe('Review');
+  });
+
+  it('can for an effect-bound trigger still reads its guard\'s context rules', async () => {
+    // No invariant on Open, so only the guard's own context rule keeps Pay from an empty order.
+    interface OrderSpec {
+      states: { Open: { items: string[]; receipt: string | null }; Paid: { items: string[]; receipt: string | null } };
+      triggers: { Pay: undefined };
+    }
+    const fields = [
+      { name: 'items', type: 'array', nullable: false, values: { type: 'string', nullable: false }, constraints: [] },
+      { name: 'receipt', type: 'string', nullable: true, constraints: [] },
+    ];
+    const order = typedMachineFromIr<OrderSpec>({
+      irFormat: 1,
+      id: 'order',
+      version: 1,
+      initialState: 'Open',
+      initialContext: { items: [], receipt: null },
+      states: ['Open', 'Paid'],
+      triggers: ['Pay'],
+      committedStates: ['Paid'],
+      context: { Open: { fields }, Paid: { fields } },
+      inputs: {},
+      transitions: [
+        {
+          from: 'Open',
+          trigger: 'Pay',
+          to: 'Paid',
+          effect: { keyPrefix: 'order:charge' },
+          guard: {
+            rule: 'all',
+            rules: [
+              { rule: 'count', source: 'context', field: 'items', op: 'gt', value: 0 },
+              { rule: 'present', source: 'input', field: 'receipt' },
+            ],
+          },
+          reduce: { reduce: 'set', steps: [{ field: 'receipt', value: { input: 'receipt' } }] },
+        },
+      ],
+    } as IrDocument);
+    expect(order.isEffectBound('Pay')).toBe(true);
+
+    const opened = async (items: string[]) => {
+      const server = new FakeMachineServer();
+      const controller = new ServerMachineController<OrderSpec>({
+        machine: order,
+        server,
+        id: 'o-1',
+        newRequestId: sequentialRequestIds(),
+      });
+      const started = controller.start();
+      await flushMicrotasks();
+      server.gets[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ state: 'Open', context: { items, receipt: null } }) });
+      await started;
+      await flushMicrotasks();
+      return controller;
+    };
+
+    expect((await opened([])).can('Pay')).toBe(false);
+    expect((await opened(['latte'])).can('Pay')).toBe(true);
   });
 
   it('sends the prediction as clientResult', async () => {

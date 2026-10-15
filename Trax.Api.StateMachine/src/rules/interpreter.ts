@@ -113,13 +113,21 @@ export type CustomGuards = Record<
 >;
 export type CustomReducers = Record<string, (ctx: Ctx, input: unknown) => Ctx>;
 
-/** Evaluate a declarative guard/validator rule. Total: a missing/wrong-typed field is `false`, never throws. */
+/**
+ * Evaluate a declarative guard/validator rule. Total: a missing/wrong-typed field is `false`, never throws.
+ * `options.inputUnknown` reads a rule whose input nobody here has (an effect-bound trigger's receipt): every leaf on
+ * the input, and every custom rule, counts as passing, so the result is false only when the context alone rules the
+ * edge out. Rules combine with `all` and `any` only, so passing a leaf can never turn a rule false.
+ */
 export function evaluateRule(
   rule: Rule,
   context: Ctx,
   input: unknown,
   customGuards: CustomGuards = {},
+  options?: { inputUnknown?: boolean },
 ): boolean {
+  if (options?.inputUnknown && (rule.rule === "custom" || ("source" in rule && rule.source === "input")))
+    return true;
   switch (rule.rule) {
     case "present":
       return !isNullish(read(rule.source, rule.field, context, input));
@@ -158,14 +166,17 @@ export function evaluateRule(
     }
     case "all":
       return rule.rules.every((r) =>
-        evaluateRule(r, context, input, customGuards),
+        evaluateRule(r, context, input, customGuards, options),
       );
     case "any":
       return rule.rules.some((r) =>
-        evaluateRule(r, context, input, customGuards),
+        evaluateRule(r, context, input, customGuards, options),
       );
     case "custom":
-      return customGuards[rule.name]?.(context, input) ?? false;
+      // Own handlers only: a name like `toString` is not bound by Object.prototype.
+      return hasOwn(customGuards, rule.name)
+        ? customGuards[rule.name](context, input)
+        : false;
   }
 }
 
@@ -191,7 +202,9 @@ export function applyReduction(
       return next;
     }
     case "custom":
-      return customReducers[reduction.name]?.(context, input) ?? { ...context };
+      return hasOwn(customReducers, reduction.name)
+        ? customReducers[reduction.name](context, input)
+        : { ...context };
   }
 }
 
@@ -382,7 +395,7 @@ function read(
   return obj && hasOwn(obj, field) ? obj[field] : undefined;
 }
 
-function hasOwn(obj: Ctx, key: string): boolean {
+function hasOwn(obj: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 

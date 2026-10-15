@@ -353,6 +353,30 @@ describe("evaluateRule: all / any / custom", () => {
     ).toBe(false);
     expect(evaluateRule({ rule: "custom", name: "yes" }, {}, null)).toBe(false);
   });
+
+  it("a custom rule named like an Object member is unbound", () => {
+    for (const name of ["toString", "constructor", "hasOwnProperty", "valueOf"]) {
+      expect(evaluateRule({ rule: "custom", name }, {}, null)).toBe(false);
+      expect(
+        applyReduction({ reduce: "custom", name }, { a: 1 }, null, {}),
+      ).toEqual({ a: 1 });
+    }
+  });
+
+  it("an unknown input passes every rule on the input and still reads the context", () => {
+    const guard: Rule = {
+      rule: "all",
+      rules: [
+        { rule: "count", source: "context", field: "items", op: "gt", value: 0 },
+        { rule: "present", source: "input", field: "receipt" },
+        { rule: "custom", name: "unbound" },
+      ],
+    };
+    const unknown = { inputUnknown: true };
+    expect(evaluateRule(guard, { items: [] }, undefined, {}, unknown)).toBe(false);
+    expect(evaluateRule(guard, { items: ["a"] }, undefined, {}, unknown)).toBe(true);
+    expect(evaluateRule(guard, { items: ["a"] }, undefined)).toBe(false);
+  });
 });
 
 describe("applyReduction", () => {
