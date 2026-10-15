@@ -25,12 +25,30 @@ The Trax CLI generates Trax projects from existing API schemas. Point it at a Gr
 dotnet new install Trax.Samples.Templates
 ```
 
+- `node` 22 or later on `PATH`, for `trax machine generate` and `trax client` (and `--check`), which generate twins
+  with it. A CI image that runs them needs it too.
+
 ## Installation
 
 Install as a global .NET tool:
 
 ```bash
 dotnet tool install --global Trax.Cli
+```
+
+Or, so CI runs the version the repository pins, as a local tool. Create the manifest once at the repository root and
+commit `.config/dotnet-tools.json`:
+
+```bash
+dotnet new tool-manifest
+dotnet tool install Trax.Cli
+```
+
+A fresh checkout, such as a CI container, restores it before running it:
+
+```bash
+dotnet tool restore
+dotnet tool run trax client --manifest web/src/trax/manifest.json --out web/src/trax --check
 ```
 
 ## Usage
@@ -443,7 +461,7 @@ a host exports, and reads nothing else: no running host, no database, no credent
 ```bash
 dotnet run --project Api -- --trax-export-client web/src/trax/manifest.json   # on the host, production configuration
 trax client --target react --manifest web/src/trax/manifest.json --out web/src/trax
-trax client --target react --manifest web/src/trax/manifest.json --out web/src/trax --check   # in CI
+dotnet tool restore && dotnet tool run trax client --target react --manifest web/src/trax/manifest.json --out web/src/trax --check   # in CI
 ```
 
 | Option | What it does |

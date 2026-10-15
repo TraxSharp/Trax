@@ -51,9 +51,16 @@ using Trax.Scheduler.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// An export of the client manifest (--trax-export-client) opens no database, so it needs no connection string. Npgsql
+// still wants a host when the export resolves the services, so it gets one with no database and no credential, which
+// nothing connects to.
 var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
-    ?? throw new InvalidOperationException("Set ConnectionStrings:TraxDatabase.");
+    ?? (
+        TraxClientExport.Requested
+            ? "Host=localhost"
+            : throw new InvalidOperationException("Set ConnectionStrings:TraxDatabase.")
+    );
 
 // ── The demo's own services ─────────────────────────────────────────────────
 var pace = builder.Configuration.GetSection(DemoPace.Section).Get<DemoPace>() ?? new DemoPace();

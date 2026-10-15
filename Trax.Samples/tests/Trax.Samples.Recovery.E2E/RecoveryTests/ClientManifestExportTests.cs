@@ -7,8 +7,8 @@ namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 
 /// <summary>
 /// The Recovery host started with <c>--trax-export-client</c> writes its client manifest and exits, in the production
-/// configuration and with a database it cannot reach, so a frontend's build needs no running server, no database and
-/// no credential. The ids it writes are the ones the host serves.
+/// configuration, with a database it cannot reach or with no connection string at all, so a frontend's build needs no
+/// running server, no database and no credential. The ids it writes are the ones the host serves.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
 /// </summary>
 [TestFixture]
@@ -52,6 +52,25 @@ public class ClientManifestExportTests
                 ["type OperationsQueries", "type OperationsMutations", "operations:"],
                 "the operations namespace stays on the server; a description may name it"
             );
+    }
+
+    [Test]
+    public async Task The_host_writes_its_manifest_without_a_connection_string()
+    {
+        var path = Path.Combine(_folder, "client.json");
+
+        var (exitCode, output) = await RecoveryHostProcess.ExportAsync(
+            path,
+            connectionString: null,
+            TimeSpan.FromMinutes(2)
+        );
+
+        exitCode.Should().Be(0, output);
+        ClientManifest
+            .Read(await File.ReadAllTextAsync(path))
+            .Machines.Select(m => m.Id)
+            .Should()
+            .Contain(["order", "topic-map"]);
     }
 
     [Test]

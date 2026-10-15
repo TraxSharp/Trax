@@ -199,12 +199,12 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     // The host project's own build output, which carries its runtime config and dependencies. The test
     /// <summary>
     /// Runs the host's build output with <c>--trax-export-client &lt;path&gt;</c> in the production configuration
-    /// against <paramref name="connectionString"/>, and returns its exit code and output once it exits. Kills it when
+    /// against <paramref name="connectionString"/>, or with no connection string when it is null, and returns its exit code and output once it exits. Kills it when
     /// it has not exited by <paramref name="timeout"/>.
     /// </summary>
     public static async Task<(int ExitCode, string Output)> ExportAsync(
         string path,
-        string connectionString,
+        string? connectionString,
         TimeSpan timeout
     )
     {
@@ -220,7 +220,10 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         start.ArgumentList.Add("--trax-export-client");
         start.ArgumentList.Add(path);
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
-        start.Environment["ConnectionStrings__TraxDatabase"] = connectionString;
+        if (connectionString is null)
+            start.Environment.Remove("ConnectionStrings__TraxDatabase");
+        else
+            start.Environment["ConnectionStrings__TraxDatabase"] = connectionString;
 
         var output = new StringBuilder();
         using var process = new Process { StartInfo = start };
