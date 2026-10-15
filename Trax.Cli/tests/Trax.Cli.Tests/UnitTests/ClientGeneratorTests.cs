@@ -485,6 +485,64 @@ public partial class ClientGeneratorTests
         generator.Check(options, _out).Should().BeEmpty();
     }
 
+    private static string TwinHeader(string id, string kind) =>
+        $"// AUTO-GENERATED from {id}.ir.json by {(kind == "machine" ? "generateMachineFactory" : "generateContextTypes")}. Do not edit by hand.\n";
+
+    [Test]
+    public void Write_leaves_a_twin_trax_machine_generate_wrote_for_a_machine_the_manifest_does_not_serve()
+    {
+        var generator = new ClientGenerator(new FakeNodeRunner());
+        var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
+        generator.Write(options, _out);
+        Directory.CreateDirectory(Path.Combine(_out, "reminder"));
+        var machine = Path.Combine(_out, "reminder", "reminder.machine.g.ts");
+        var contexts = Path.Combine(_out, "reminder", "reminder.contexts.g.ts");
+        File.WriteAllText(machine, TwinHeader("reminder", "machine"));
+        File.WriteAllText(contexts, TwinHeader("reminder", "contexts"));
+        var other = Path.Combine(_out, "schema.g.ts");
+        File.WriteAllText(other, "// AUTO-GENERATED from schema.graphql by another tool.\n");
+
+        generator.Write(options, _out);
+
+        File.Exists(machine)
+            .Should()
+            .BeTrue(
+                "the previous run did not serve reminder, so trax client did not write its twin"
+            );
+        File.Exists(contexts).Should().BeTrue();
+        File.Exists(other).Should().BeTrue("a header that only starts like a twin's is not one");
+        generator.Check(options, _out).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Write_removes_the_twin_of_a_machine_the_previous_run_served()
+    {
+        var node = new FakeNodeRunner
+        {
+            MachineContent = TwinHeader("checkout", "machine"),
+            ContextsContent = TwinHeader("checkout", "contexts"),
+        };
+        var generator = new ClientGenerator(node);
+        var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
+        generator.Write(options, _out);
+        // The client module goes first, so only the manifest.json the previous run wrote says checkout was served.
+        File.Delete(Path.Combine(_out, "checkout", "checkout.client.g.ts"));
+
+        var machineless = options with
+        {
+            Manifest = ClientManifests.Sample() with { Machines = [] },
+        };
+        generator
+            .Check(machineless, _out)
+            .Select(d => d.Path)
+            .Should()
+            .Contain(["checkout/checkout.machine.g.ts", "checkout/checkout.contexts.g.ts"]);
+        generator.Write(machineless, _out);
+
+        Directory.Exists(Path.Combine(_out, "checkout")).Should().BeFalse();
+        generator.Check(machineless, _out).Should().BeEmpty();
+    }
+
     [TestCase("configureTrax")]
     [TestCase("TraxOperationError")]
     public void A_train_or_type_that_takes_a_runtime_name_is_refused(string name)

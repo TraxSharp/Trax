@@ -178,9 +178,10 @@ internal sealed class ClientGenerator
 
     /// <summary>
     /// Writes the client under <paramref name="outDir"/>, replacing generated files that changed. A file this
-    /// generator wrote (a <c>*.g.ts</c> starting with one of its headers) that the manifest no longer generates is
-    /// deleted first, then any folder that leaves empty, so a train removed on the host leaves nothing behind for
-    /// <c>--check</c> to report. Any other file is left alone, and a linked folder is not entered.
+    /// generator wrote (a client module starting with its header, or the twin of a machine the previous run served)
+    /// that the manifest no longer generates is deleted first, then any folder that leaves empty, so a train removed
+    /// on the host leaves nothing behind for <c>--check</c> to report. Any other file is left alone, and a linked
+    /// folder is not entered.
     /// </summary>
     public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir)
     {
@@ -231,14 +232,18 @@ internal sealed class ClientGenerator
         return drift;
     }
 
-    // The files under outDir this generator wrote and the client no longer holds, by their path under it. A file is
-    // this generator's when its first line is one of its headers: an app's own *.g.ts, or another generator's, is
-    // left alone. A linked folder is not entered, so nothing outside outDir is read or deleted through it.
+    // The files under outDir this generator wrote and the client no longer holds, by their path under it. A client
+    // module is this generator's when its first line is the client's header. A twin is when it sits where this
+    // generator puts one, <id>/<id>.machine.g.ts or <id>/<id>.contexts.g.ts, starts with the header the twin generator
+    // writes for that id, and <id> is a machine the previous run served: trax machine generate writes the same header,
+    // so the header alone does not say which tool wrote it. Anything else, an app's own *.g.ts or another generator's,
+    // is left alone. A linked folder is not entered, so nothing outside outDir is read or deleted through it.
     private static IReadOnlyList<string> Stale(IReadOnlyList<ClientFile> files, string outDir)
     {
         if (!Directory.Exists(outDir))
             return [];
         var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
+        var served = Served(outDir);
         var enumeration = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -247,25 +252,88 @@ internal sealed class ClientGenerator
         };
         return Directory
             .EnumerateFiles(outDir, "*.g.ts", enumeration)
-            .Where(Generated)
-            .Select(p => Path.GetRelativePath(outDir, p).Replace('\\', '/'))
-            .Where(p => !expected.Contains(p))
+            .Select(p => (Full: p, Path: Path.GetRelativePath(outDir, p).Replace('\\', '/')))
+            .Where(f => !expected.Contains(f.Path) && Generated(f.Path, f.Full, served))
+            .Select(f => f.Path)
             .Order(StringComparer.Ordinal)
             .ToList();
     }
 
-    // The first line of the client's modules, and of a twin's (`// AUTO-GENERATED from <id>.ir.json by ...`).
-    private const string TwinHeader = "// AUTO-GENERATED from ";
+    // The machines the previous run served: the ids in the manifest.json it wrote under outDir, and each <id>/ that
+    // holds a client module with this generator's header. The second matters because the host usually exports its
+    // manifest over that manifest.json before trax client runs, so it already names the new set of machines. With
+    // neither, no twin is taken for this generator's: a twin left by an earlier run is kept, not deleted.
+    private static HashSet<string> Served(string outDir)
+    {
+        var served = new HashSet<string>(StringComparer.Ordinal);
+        var manifest = Path.Combine(outDir, "manifest.json");
+        if (File.Exists(manifest))
+        {
+            try
+            {
+                if (JsonNode.Parse(File.ReadAllText(manifest))?["machines"] is JsonArray machines)
+                    foreach (var machine in machines)
+                        if (
+                            machine is JsonObject m
+                            && m["id"] is JsonValue id
+                            && id.TryGetValue<string>(out var value)
+                            && MachineGenerator.IsMachineId(value)
+                        )
+                            served.Add(value);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // A manifest.json that is not JSON names no machine.
+            }
+        }
+        var folders = new EnumerationOptions
+        {
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            MatchCasing = MatchCasing.CaseSensitive,
+        };
+        foreach (var dir in Directory.EnumerateDirectories(outDir, "*", folders))
+        {
+            var id = Path.GetFileName(dir);
+            var client = Path.Combine(dir, $"{id}.client.g.ts");
+            if (
+                MachineGenerator.IsMachineId(id)
+                && File.Exists(client)
+                && FirstLine(client) == ClientHeaderLine
+            )
+                served.Add(id);
+        }
+        return served;
+    }
 
-    private static bool Generated(string path)
+    private static readonly string ClientHeaderLine = Header.TrimEnd('\n');
+
+    // The twin generator's first line for each file of a machine's twin.
+    private static readonly (string Kind, string Generator)[] TwinFiles =
+    [
+        ("machine", "generateMachineFactory"),
+        ("contexts", "generateContextTypes"),
+    ];
+
+    private static bool Generated(string relative, string path, IReadOnlySet<string> served)
+    {
+        var first = FirstLine(path);
+        if (first is null)
+            return false;
+        if (first == ClientHeaderLine)
+            return true;
+        return relative.Split('/') is [var id, var name]
+            && served.Contains(id)
+            && TwinFiles.Any(t =>
+                name == $"{id}.{t.Kind}.g.ts"
+                && first
+                    == $"// AUTO-GENERATED from {id}.ir.json by {t.Generator}. Do not edit by hand."
+            );
+    }
+
+    private static string? FirstLine(string path)
     {
         using var reader = new StreamReader(path);
-        var first = reader.ReadLine();
-        return first is not null
-            && (
-                first == Header.TrimEnd('\n')
-                || first.StartsWith(TwinHeader, StringComparison.Ordinal)
-            );
+        return reader.ReadLine();
     }
 
     // The names a machine's client module and its twin declare or import beside the machine's own, which its camel id
