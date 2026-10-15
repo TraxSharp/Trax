@@ -72,3 +72,4 @@ Not covered: a remote runner records no starter, so a run it executes from a `RU
 
 - **2026-10-15**: Recorded.
 - **2026-10-15**: Amended: manifests scheduled `StartedBy` a caller, `retriedAs`, `invokedRun` and `IRunStarters`.
+- **2026-10-15**: Amended: the starter hash is tagged with whether it hashed a principal id or a user key.
