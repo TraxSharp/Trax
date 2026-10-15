@@ -186,7 +186,8 @@ public class MachineGenerateFromPackedToolTests
               const names: string[] = progress.steps.map((s) => s.name);
               // @ts-expect-error a state is one of the run's states, never any string
               const wrong: typeof progress.state = "DONE";
-              return { names, done: progress.state === "COMPLETED", wrong };
+              const attempts: string[] = [...progress.earlier, ...(progress.runId ? [progress.runId] : [])];
+              return { names, attempts, done: progress.state === "COMPLETED", wrong };
             }
 
             export const stop = followRunProgress("r", (e) => void e.sequence);

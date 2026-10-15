@@ -312,6 +312,7 @@ public static class ServiceExtensions
             // pipeline replace this via AddTraxApi with an HttpContext-backed
             // implementation so per-principal concurrency caps activate.
             .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
+            .AddSingleton<Services.RunStarters.IRunStarters, Services.RunStarters.RunStarters>()
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
             // Singletons, because a singleton the host registers may inject either one and

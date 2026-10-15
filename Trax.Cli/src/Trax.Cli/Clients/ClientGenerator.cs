@@ -591,58 +591,82 @@ internal sealed class ClientGenerator
 
             /** A run as useRunProgress shows it. */
             export interface RunProgressView {
+              /** The run shown: the one asked for, or the retry that followed it. */
+              runId: string | null;
+              /** The runs before it, oldest first: each failed, and the scheduler retried it. */
+              earlier: string[];
               state: RunProgress["state"];
               steps: RunProgress["steps"];
               failure: string | null;
               problem: RunProgress["problem"];
-              /** The stream ended: the run ended, or the host refused it. */
+              /** The stream ended: the run ended with no retry to follow, or the host refused it. */
               ended: boolean;
             }
 
-            const nothingYet: RunProgressView = { state: null, steps: [], failure: null, problem: null, ended: false };
+            const nothingYet: RunProgressView = { runId: null, earlier: [], state: null, steps: [], failure: null, problem: null, ended: false };
 
             /**
-             * Your run, kept current: read once, then followed until it ends. A step replaces the one at its position, and
-             * a lost event reads the run again. Pass null to follow nothing.
+             * Your run, kept current: read once, then followed until it ends. A step replaces the one at its position, a lost
+             * event reads the run again, and a failed run the scheduler retries is followed into its retry. Pass null to
+             * follow nothing.
              */
             export function useRunProgress(runId: string | null | undefined): RunProgressView {
               const [view, setView] = useState<RunProgressView>(nothingYet);
+              const [current, setCurrent] = useState<{ asked: string | null | undefined; run: string | null | undefined; earlier: string[] }>(
+                { asked: runId, run: runId, earlier: [] },
+              );
+              if (current.asked !== runId) setCurrent({ asked: runId, run: runId, earlier: [] });
+              const following = current.asked === runId ? current.run : runId;
+              const earlier = current.asked === runId ? current.earlier : [];
+
               useEffect(() => {
-                setView(nothingYet);
-                if (!runId) return;
+                if (!following) return;
                 let live = true;
                 let last = 0;
+                // The view of this run: what was held, when it was this run's, else an empty one.
+                const fresh = (v: RunProgressView): RunProgressView =>
+                  v.runId === following ? v : { ...nothingYet, runId: following };
+                const retry = (next: string) => {
+                  if (live) setCurrent((c) => ({ ...c, run: next, earlier: [...c.earlier, following] }));
+                };
                 const read = () =>
-                  readRunProgress(runId).then(
+                  readRunProgress(following).then(
                     (run) => {
-                      if (live) setView((v) => ({ ...v, state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
+                      if (!live) return;
+                      if (run.retriedAs) return retry(run.retriedAs);
+                      setView((v) => ({ ...fresh(v), state: run.state, steps: run.steps, failure: run.failure, problem: run.problem }));
                     },
                     () => undefined,
                   );
                 void read();
                 const stop = followRunProgress(
-                  runId,
+                  following,
                   (event) => {
+                    if (event.retriedAs) return retry(event.retriedAs);
                     if (last !== 0 && event.sequence !== last + 1) void read();
                     last = event.sequence;
-                    setView((v) => ({
+                    setView((prior) => {
+                      const v = fresh(prior);
+                      return {
                       ...v,
                       state: event.state ?? v.state,
                       steps: event.step ? withStep(v.steps, event.step) : v.steps,
                       failure: event.failure ?? v.failure,
                       problem: event.problem ?? v.problem,
-                    }));
+                      };
+                    });
                   },
                   () => {
-                    if (live) setView((v) => ({ ...v, ended: true }));
+                    if (live) setView((v) => ({ ...fresh(v), ended: true }));
                   },
                 );
                 return () => {
                   live = false;
                   stop();
                 };
-              }, [runId]);
-              return view;
+              }, [following]);
+              // A view of an earlier run is not shown: a run just asked for, or retried into, starts empty.
+              return { ...(view.runId === (following ?? null) ? view : { ...nothingYet, runId: following ?? null }), earlier };
             }
 
             type Step = RunProgress["steps"][number];

@@ -290,6 +290,62 @@ public class MachineRequestIdE2ETests
     }
 
     [Test]
+    public async Task The_owner_reads_the_run_the_invoking_state_queued_and_nobody_else_does()
+    {
+        var approving = await A.WizardInApprovingAsync(E2EHost.AliceKey);
+        await A.AdvanceWizardAsync(E2EHost.AliceKey, "approve", approving.Id);
+        var token = await E2ESql.ScalarAsync<string>(
+            Database,
+            "SELECT invoke_token FROM trax.snapshot_draft WHERE machine = @m AND id = @id",
+            ("m", WizardMachine.MachineId),
+            ("id", approving.Id)
+        );
+        token.Should().NotBeNull("Building queued a run");
+
+        (await InvokedRunAsync(E2EHost.AliceKey, approving.Id))
+            .Should()
+            .Be(token, "the owner follows the run its state queued through runProgress");
+        (await InvokedRunAsync(E2EHost.BobKey, approving.Id))
+            .Should()
+            .BeNull("another caller reads no instance, and no run of it");
+
+        await FailQueuedRunsAsync(_nodes.B, approving.Id);
+        (
+            await E2EWait.UntilAsync(async () =>
+                (await E2ESql.DraftAsync(Database, WizardMachine.MachineId, approving.Id))?.State
+                == nameof(WizardState.BuildFailed)
+            )
+        )
+            .Should()
+            .BeTrue();
+        (await InvokedRunAsync(E2EHost.AliceKey, approving.Id))
+            .Should()
+            .BeNull("a state the outcome moved the instance to queued nothing");
+    }
+
+    private async Task<string?> InvokedRunAsync(string apiKey, Guid id)
+    {
+        using var doc = await A.PostAsync(
+            $$"""{ machines { wizard { get(id: "{{id}}") { state invokedRun { runId } } } } }""",
+            apiKey: apiKey
+        );
+        doc.RootElement.TryGetProperty("errors", out var errors)
+            .Should()
+            .BeFalse(errors.ToString());
+        var get = doc
+            .RootElement.GetProperty("data")
+            .GetProperty("machines")
+            .GetProperty("wizard")
+            .GetProperty("get");
+        return
+            get.ValueKind == System.Text.Json.JsonValueKind.Object
+            && get.GetProperty("invokedRun")
+                is { ValueKind: System.Text.Json.JsonValueKind.Object } run
+            ? run.GetProperty("runId").GetString()
+            : null;
+    }
+
+    [Test]
     public async Task Twenty_concurrent_starts_with_one_requestId_create_one_instance()
     {
         var requestId = WizardOps.NewRequestId();

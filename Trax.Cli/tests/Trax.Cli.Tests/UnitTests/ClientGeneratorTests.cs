@@ -134,6 +134,7 @@ public partial class ClientGeneratorTests
             .And.Contain("export function readRunProgress(runId: string): Promise<RunProgress>")
             .And.Contain("export function followRunProgress(")
             .And.Contain("export function useRunProgress(")
+            .And.Contain("if (event.retriedAs) return retry(event.retriedAs);")
             .And.Contain("Runs of these trains can be followed: startRun.")
             .And.NotContain(
                 ClientManifests.ProgressQuery,

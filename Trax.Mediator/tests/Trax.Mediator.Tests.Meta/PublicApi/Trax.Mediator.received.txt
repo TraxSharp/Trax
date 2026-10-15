@@ -157,6 +157,13 @@ namespace Trax.Mediator.Services.RunExecutor
         public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> ExecuteAsync(string trainName, object input, System.Type outputType, string? starterHash, System.Threading.CancellationToken ct = default) { }
     }
 }
+namespace Trax.Mediator.Services.RunStarters
+{
+    public interface IRunStarters
+    {
+        System.Threading.Tasks.Task<bool> StartedByCurrentCallerAsync(string runId, System.Threading.CancellationToken ct = default);
+    }
+}
 namespace Trax.Mediator.Services.TrainAuthorization
 {
     public interface ITrainAuthorizationService

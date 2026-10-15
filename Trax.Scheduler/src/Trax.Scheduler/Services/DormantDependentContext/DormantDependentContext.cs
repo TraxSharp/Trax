@@ -235,6 +235,7 @@ internal class DormantDependentContext(
                 Input = inputJson,
                 InputTypeName = typeof(TInput).FullName,
                 ManifestId = manifest.Id,
+                StarterHash = manifest.StarterHash,
                 Priority = effectivePriority,
             }
         );

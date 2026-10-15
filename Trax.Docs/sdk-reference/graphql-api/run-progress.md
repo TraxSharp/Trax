@@ -35,7 +35,8 @@ public sealed class TraxRunProgressAttribute : Attribute
 | `Answers` | `false` | Show the starter a step's answer and confidence, and what ran on a decision track. Off, those are withheld as they are from a [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) subscriber. |
 
 The attribute ships in Trax.Effect, so a train carries it without depending on Trax.Api.GraphQL. The fields exist
-only on a host where at least one exposed train carries it.
+only on a host where at least one train carries it. The train need not be exposed: a scheduled or machine-invoked
+train is followed the same way, by whoever its runs record as their starter.
 
 ## Example
 
@@ -60,6 +61,7 @@ A run records its starter as a hash of the caller's principal id
 | A train mutation, `mode: RUN` or `mode: QUEUE` | the caller |
 | A state machine's invoking state, user-owned instance | the instance's owner |
 | A requeue or resume from the operations surface | the original run's starter |
+| A run of a manifest scheduled with [`StartedBy`](/docs/sdk-reference/scheduler-api/schedule), retries included | the caller it names |
 | A schedule, the dashboard, the operations namespace, a remote runner | nobody |
 
 A run with no starter cannot be followed. The id to pass is the run's `externalId`, which the mutation answers in
@@ -82,11 +84,12 @@ query {
 
 | Field | Meaning |
 |---|---|
-| `train` | The train's field, as the schema serves it. |
+| `train` | The train's field, as the schema serves it; null for a train the schema does not expose. |
 | `state` | `QUEUED`, `PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED` or `CANCELLED`; null with a problem. |
 | `steps` | The steps recorded so far, in order, at most 500. Empty unless the host calls [`AddJunctionEvents()`](/docs/sdk-reference/configuration/add-junction-events). Only an `EffectJunction` records a step. |
 | `failure` | Why the run failed, only when a junction threw a `TrainException`; null for any other exception. |
 | `problem` | `NOT_FOUND` when the id names no run the caller started of a train that carries the attribute. |
+| `retriedAs` | For a failed run of a manifest, the id of the run that retries it, once the scheduler queued it. Follow that run next. |
 
 The query needs an authenticated caller. A missing id, another caller's run, a run nobody started and a run of a
 train without the attribute answer the same `NOT_FOUND`, through the same query, so the answer says nothing about
@@ -110,6 +113,10 @@ The first event is the state the run was in when the subscription started, so a 
 ended still learns how it ended. After that each event is either a step or a change of state. The stream completes
 after the run's last state, with the run's last steps sent before it.
 
+A failed run of a manifest stays open after its last state until the scheduler queues its retry, then sends one more
+event with `retriedAs` and completes. It completes without one when the manifest is dead-lettered, or after 30
+minutes. [`useRunProgress`](/docs/reference/cli#frontend-clients-trax-client) follows the retry on its own.
+
 `sequence` counts up by one per event. A skipped number means events were lost on the way, from a full buffer or a
 step that could not be published in time: read the run again with the query. A refused subscription answers one event
 with a `problem` and completes:
@@ -130,6 +137,21 @@ step's answer and confidence are null, and a step on a decision track is not nam
 The train's events are published to this host's subscriptions because of the attribute. A
 [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) subscriber still never sees a train
 that does not carry `[TraxBroadcast]` itself.
+
+## Checking the starter from a train
+
+A train that reports on a run, such as a decision journal, answers only the caller who started it with
+`IRunStarters` (`Trax.Mediator.Services.RunStarters`), which `AddMediator()` registers:
+
+```csharp fragment
+public interface IRunStarters
+{
+    Task<bool> StartedByCurrentCallerAsync(string runId, CancellationToken ct = default);
+}
+```
+
+It compares the run's recorded starter with the current caller, as `runProgress` does, and answers false alike for a
+missing id, another caller's run and a run nobody started.
 
 ## Persisted operations
 

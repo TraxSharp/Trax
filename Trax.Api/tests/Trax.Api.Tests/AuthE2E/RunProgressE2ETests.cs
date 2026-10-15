@@ -20,6 +20,8 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Manifest;
+using Trax.Effect.Models.Manifest.DTOs;
+using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Extensions;
@@ -49,7 +51,8 @@ public class RunProgressE2ETests
     private const string BobKey = "progress-bob-key";
     internal const string Marker = "PROGRESS-MARKER-41d9";
 
-    private const string Fields = "runId train state failure steps { name state } problem { code }";
+    private const string Fields =
+        "runId train state failure retriedAs steps { name state } problem { code }";
     private const string EventFields =
         "sequence state failure step { name state } problem { code }";
 
@@ -265,6 +268,71 @@ public class RunProgressE2ETests
             .Be("NOT_FOUND");
         bob.Received.Should().NotContain(nameof(WaitForGate));
     }
+
+    #region Retries
+
+    [Test]
+    public async Task A_failed_run_of_a_manifest_names_the_run_that_retries_it()
+    {
+        var failed = await RunAsync(AliceKey, fail: true);
+        var retry = await RunAsync(AliceKey, fail: false);
+        await OfOneManifestAsync(failed, retry);
+
+        using var alice = await ReadAsync(failed, AliceKey);
+        Answer(alice)
+            .GetProperty("retriedAs")
+            .GetString()
+            .Should()
+            .Be(retry, "the starter follows a manifest's retries run by run, per " + Adr);
+
+        await using var socket = await Socket.ConnectAsync(_host, AliceKey);
+        await socket.SubscribeAsync(
+            $$"""subscription { runProgress(runId: "{{failed}}") { sequence state retriedAs } }"""
+        );
+        var events = await socket.ReadUntilCompleteAsync();
+
+        events.First().GetProperty("state").GetString().Should().Be("FAILED");
+        events.Last().GetProperty("retriedAs").GetString().Should().Be(retry);
+    }
+
+    [Test]
+    public async Task Another_callers_retry_is_not_named()
+    {
+        var failed = await RunAsync(AliceKey, fail: true);
+        var theirs = await RunAsync(BobKey, fail: false);
+        await OfOneManifestAsync(failed, theirs);
+
+        using var alice = await ReadAsync(failed, AliceKey);
+
+        Answer(alice).GetProperty("retriedAs").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    // Makes the runs occurrences of one manifest, in order, as the scheduler's retries are.
+    private async Task OfOneManifestAsync(params string[] runIds)
+    {
+        await using var db = await _host
+            .Services.GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(CancellationToken.None);
+        var group = new ManifestGroup
+        {
+            Name = $"progress-{Guid.NewGuid():N}",
+            IsEnabled = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        await db.Track(group);
+        await db.SaveChanges(default);
+        var manifest = Manifest.Create(new CreateManifest { Name = typeof(IProgressMarkerTrain) });
+        manifest.ManifestGroupId = group.Id;
+        await db.Track(manifest);
+        await db.SaveChanges(default);
+        foreach (var runId in runIds)
+            await db
+                .Metadatas.Where(m => m.ExternalId == runId)
+                .ExecuteUpdateAsync(u => u.SetProperty(m => m.ManifestId, manifest.Id));
+    }
+
+    #endregion
 
     #endregion
 

@@ -477,7 +477,7 @@ In `Trax.Samples.Recovery.Browser`:
 - `TopicMapBrowserTests`: `TheWizard_RunsEndToEnd_WithAdHocDocumentsRefusedAndGenericMutationsOff`, `TheBuildOutcome_ArrivesByPush_WithNoPollingRequest`, `TheReviewTimer_ExpiresByPush`, `AViewerRolesOperatorOnlyEvent_IsRefusedOnTheServer`, `TheDashboardAndGraphQL_ShowTheSameStateRevisionAndRuns`, `ReloadingTheTab_ResumesTheServerMintedInstance`, `TwoTabs_SeeEachOthersTransitionsInRevisionOrder`, `ADeployWithANewIR_ShowsClientOutdated`, `KillingTheHostMidBuild_RecoversThroughTheStuckRunPath_AndThePageFollows`, `StartingANewMapFromBuilt_ResetsTheDraft_AndLeavesNoneBehind`
 
 In `Trax.Samples.Recovery.E2E`:
-- `TopicMapAuthorizationTests`: `BuildTopicMapTrain_has_its_Operator_roles_back_and_the_host_starts`
+- `TopicMapAuthorizationTests`: `BuildTopicMapTrain_has_the_roles_its_entering_events_declare_and_the_host_starts`
 - `TopicMapDifferentialTests`: `TopicMapMachine_reproduces_its_committed_differential_corpus` (a guard, green today)
 - `TopicMapMachineTests`: `AHandFiredTimer_IsRefused`, `StartingANewMapFromBuilt_ResetsTheDraft_AndLeavesNothingThatCountsTowardTheCap`
 - `TriggerMetadataTests`: `The_topic_map_lists_each_trigger_with_its_kind_and_input_type`

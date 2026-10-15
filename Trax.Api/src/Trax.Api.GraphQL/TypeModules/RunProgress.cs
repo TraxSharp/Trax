@@ -57,13 +57,15 @@ internal enum RunProgressState
 /// <param name="Steps">The steps the run recorded so far, in order, at most 500.</param>
 /// <param name="Failure">Why the run failed, when a junction threw a <c>TrainException</c>; null otherwise.</param>
 /// <param name="Problem">Why the run cannot be read, or null.</param>
+/// <param name="RetriedAs">The id of the run that retries this failed one, once it is queued; null otherwise.</param>
 internal sealed record RunProgressAnswer(
     string RunId,
     string? Train,
     RunProgressState? State,
     IReadOnlyList<JunctionStep> Steps,
     string? Failure,
-    SnapshotProblem? Problem
+    SnapshotProblem? Problem,
+    string? RetriedAs = null
 );
 
 /// <summary>One event of a followed run: a step, a change of state, or the end of the stream.</summary>
@@ -73,13 +75,15 @@ internal sealed record RunProgressAnswer(
 /// <param name="Step">The step, on a step; else null.</param>
 /// <param name="Failure">Why the run failed, when a junction threw a <c>TrainException</c>.</param>
 /// <param name="Problem">Why the stream was refused, or null. The last event of the stream.</param>
+/// <param name="RetriedAs">The id of the run that retries this failed one, when it is queued. The last event of the stream.</param>
 internal sealed record RunProgressEvent(
     string RunId,
     long Sequence,
     RunProgressState? State,
     JunctionStep? Step,
     string? Failure,
-    SnapshotProblem? Problem
+    SnapshotProblem? Problem,
+    string? RetriedAs = null
 );
 
 /// <summary>
@@ -153,7 +157,9 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                 .Resolve(c => c.Parent<RunProgressAnswer>().RunId);
             d.Field("train")
                 .Type<StringType>()
-                .Description("The train's field, as the schema serves it.")
+                .Description(
+                    "The train's field, as the schema serves it; null for a train the schema does not expose."
+                )
                 .Resolve(c => c.Parent<RunProgressAnswer>().Train);
             d.Field("state")
                 .Type<EnumType<RunProgressState>>()
@@ -169,6 +175,12 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             d.Field("problem")
                 .Type<ObjectType<SnapshotProblem>>()
                 .Resolve(c => c.Parent<RunProgressAnswer>().Problem);
+            d.Field("retriedAs")
+                .Type<StringType>()
+                .Description(
+                    "The id of the run that retries this failed one, once it is queued: follow that run next."
+                )
+                .Resolve(c => c.Parent<RunProgressAnswer>().RetriedAs);
         });
 
     private static ObjectType EventType() =>
@@ -199,6 +211,12 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
             d.Field("problem")
                 .Type<ObjectType<SnapshotProblem>>()
                 .Resolve(c => c.Parent<RunProgressEvent>().Problem);
+            d.Field("retriedAs")
+                .Type<StringType>()
+                .Description(
+                    "The id of the run that retries this failed one: follow that run next. The last event of the stream."
+                )
+                .Resolve(c => c.Parent<RunProgressEvent>().RetriedAs);
         });
 
     private static async Task<RunProgressAnswer> ReadAsync(IResolverContext ctx)
@@ -228,7 +246,15 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                 if (run.Visibility.Present(Wrap(run, JunctionStep.From(row))) is { } shown)
                     steps.Add(shown.Junction);
         }
-        return new RunProgressAnswer(runId, run.Field, run.State, steps, run.Failure, null);
+        return new RunProgressAnswer(
+            runId,
+            run.Field,
+            run.State,
+            steps,
+            run.Failure,
+            null,
+            run.RetriedAs
+        );
     }
 
     private static async ValueTask<ISourceStream> SubscribeAsync(IResolverContext ctx)
@@ -309,7 +335,10 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
                         token
                     ),
                 lease
-            );
+            )
+            {
+                Access = access,
+            };
         }
         catch
         {
@@ -342,13 +371,23 @@ internal sealed class RunProgressTypeModule(ITrainDiscoveryService discovery) : 
 internal sealed record RunProgressRun(
     string RunId,
     string TrainName,
-    string Field,
+    string? Field,
     long? MetadataId,
     RunProgressState State,
     string? Failure,
     string Starter,
     LifecycleVisibility Visibility
-);
+)
+{
+    /// <summary>The manifest the run is one occurrence of, or null.</summary>
+    public long? ManifestId { get; init; }
+
+    /// <summary>When the run ended, or null.</summary>
+    public DateTime? EndedAt { get; init; }
+
+    /// <summary>The run that retries this failed one, once it is queued.</summary>
+    public string? RetriedAs { get; init; }
+}
 
 /// <summary>
 /// Finds a run the current caller started, of a train that lets its starter follow it: the latest run under the id, or
@@ -361,16 +400,26 @@ internal sealed class RunProgressAccess(
 )
 {
     private readonly Lazy<
-        IReadOnlyDictionary<string, (TrainRegistration Train, string Field)>
+        IReadOnlyDictionary<string, (TrainRegistration Train, string? Field)>
     > _trains = new(() =>
-        TrainTypeModule
-            .AssignTrainNames(discovery.DiscoverTrains())
-            .Where(t => t.Key.IsRunProgressEnabled)
+    {
+        // Every train that opts in, exposed or not: a scheduled or invoked train has no field of its own, but its
+        // starter follows its runs all the same.
+        var trains = discovery.DiscoverTrains();
+        var fields = TrainTypeModule.AssignTrainNames(trains);
+        return trains
+            .Where(t => t.IsRunProgressEnabled)
             .ToDictionary(
-                t => t.Key.ServiceType.FullName!,
-                t => (t.Key, TrainTypeModule.CamelCase(t.Value))
-            )
-    );
+                t => t.ServiceType.FullName!,
+                t =>
+                    (
+                        t,
+                        fields.TryGetValue(t, out var field)
+                            ? TrainTypeModule.CamelCase(field)
+                            : (string?)null
+                    )
+            );
+    });
 
     public async Task<RunProgressRun?> FindAsync(
         string runId,
@@ -401,11 +450,14 @@ internal sealed class RunProgressAccess(
                 m.FailureException,
                 m.FailureReason,
                 m.StarterHash,
+                m.ManifestId,
+                m.EndTime,
             })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
         if (ran is not null)
-            return Run(
+        {
+            var found = Run(
                 runId,
                 ran.Name,
                 ran.Id,
@@ -414,7 +466,18 @@ internal sealed class RunProgressAccess(
                     ? ran.FailureReason
                     : null,
                 ran.StarterHash!
-            );
+            ) with
+            {
+                ManifestId = ran.ManifestId,
+                EndedAt = ran.EndTime,
+            };
+            return found.State == RunProgressState.Failed && found.ManifestId is not null
+                ? found with
+                {
+                    RetriedAs = (await NextTryAsync(found, ct).ConfigureAwait(false)).RetriedAs,
+                }
+                : found;
+        }
 
         var queued = await db
             .WorkQueues.AsNoTracking()
@@ -438,6 +501,67 @@ internal sealed class RunProgressAccess(
                 null,
                 queued.StarterHash!
             );
+    }
+
+    /// <summary>
+    /// For a failed run of a manifest: the run that retries it, once queued, and whether no retry will come because
+    /// the manifest was dead-lettered after it. A retry is the manifest's next run or queued entry for the same starter.
+    /// </summary>
+    public async Task<(string? RetriedAs, bool NoRetry)> NextTryAsync(
+        RunProgressRun run,
+        CancellationToken ct
+    )
+    {
+        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+
+        // A run first seen while queued knows neither its metadata nor its manifest yet: its row has them now.
+        var ran = await db
+            .Metadatas.AsNoTracking()
+            .Where(m => m.ExternalId == run.RunId && m.StarterHash == run.Starter)
+            .OrderByDescending(m => m.Id)
+            .Select(m => new
+            {
+                m.Id,
+                m.ManifestId,
+                m.EndTime,
+            })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (ran?.ManifestId is not { } manifestId)
+            return (null, ran is not null);
+        var metadataId = ran.Id;
+        var next = await db
+            .Metadatas.AsNoTracking()
+            .Where(m =>
+                m.ManifestId == manifestId && m.Id > metadataId && m.StarterHash == run.Starter
+            )
+            .OrderBy(m => m.Id)
+            .Select(m => m.ExternalId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (next is not null)
+            return (next, false);
+
+        var queued = await db
+            .WorkQueues.AsNoTracking()
+            .Where(w =>
+                w.ManifestId == manifestId
+                && w.Status == WorkQueueStatus.Queued
+                && w.StarterHash == run.Starter
+            )
+            .OrderBy(w => w.Id)
+            .Select(w => w.ExternalId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (queued is not null)
+            return (queued, false);
+
+        var since = ran.EndTime ?? run.EndedAt ?? DateTime.MinValue;
+        var deadLettered = await db
+            .DeadLetters.AsNoTracking()
+            .AnyAsync(d => d.ManifestId == manifestId && d.DeadLetteredAt >= since, ct)
+            .ConfigureAwait(false);
+        return (null, deadLettered);
     }
 
     private RunProgressRun Run(
@@ -572,6 +696,15 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
     private readonly IDisposable? _lease;
     private readonly RunProgressEvent? _only;
     private readonly Func<CancellationToken, ValueTask<long>>? _stepsLastPublished;
+
+    /// <summary>Where a failed run's retry is looked up, after the run ends.</summary>
+    public RunProgressAccess? Access { get; init; }
+
+    /// <summary>How long a failed run of a manifest waits for its retry before the stream ends without one.</summary>
+    internal static TimeSpan RetryWait { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>How often the retry is looked for while the stream waits.</summary>
+    internal static TimeSpan RetryPoll { get; set; } = TimeSpan.FromSeconds(1);
     private int _disposed;
 
     public RunProgressStream(RunProgressEvent only) => _only = only;
@@ -658,7 +791,34 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                 (object)
                     new RunProgressEvent(run.RunId, sequence, run.State, null, run.Failure, null);
             if (IsEnd(run.State))
+            {
+                if (run.RetriedAs is { } known)
+                    yield return (TOut)
+                        (object)
+                            new RunProgressEvent(
+                                run.RunId,
+                                ++sequence,
+                                null,
+                                null,
+                                null,
+                                null,
+                                known
+                            );
+                else
+                    await foreach (var retry in RetryOf(run, stop.Token).ConfigureAwait(false))
+                        yield return (TOut)
+                            (object)
+                                new RunProgressEvent(
+                                    run.RunId,
+                                    ++sequence,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    retry
+                                );
                 yield break;
+            }
 
             RunProgressEvent? end = null;
             await foreach (var item in merged.Reader.ReadAllAsync(stop.Token).ConfigureAwait(false))
@@ -696,11 +856,54 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
                     yield return (TOut)(object)step;
 
             yield return (TOut)(object)(end with { Sequence = ++sequence });
+
+            await foreach (
+                var retry in RetryOf(run with { State = end.State!.Value }, stop.Token)
+                    .ConfigureAwait(false)
+            )
+                yield return (TOut)
+                    (object)
+                        new RunProgressEvent(run.RunId, ++sequence, null, null, null, null, retry);
         }
         finally
         {
             await stop.CancelAsync().ConfigureAwait(false);
             await DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    // A failed run of a manifest is retried by the scheduler after its delay: the id of the retry once it is queued,
+    // and nothing when the manifest is dead-lettered, when RetryWait passes, or when the run did not fail.
+    private async IAsyncEnumerable<string> RetryOf(
+        RunProgressRun run,
+        [EnumeratorCancellation] CancellationToken ct
+    )
+    {
+        if (run.State != RunProgressState.Failed || Access is null)
+            yield break;
+        var failed = run with { EndedAt = run.EndedAt ?? DateTime.UtcNow.AddSeconds(-5) };
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        waiting.CancelAfter(RetryWait);
+        while (true)
+        {
+            (string? RetriedAs, bool NoRetry) next;
+            try
+            {
+                next = await Access.NextTryAsync(failed, waiting.Token).ConfigureAwait(false);
+                if (next.RetriedAs is null && !next.NoRetry)
+                    await Task.Delay(RetryPoll, waiting.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                yield break;
+            }
+            if (next.RetriedAs is { } retry)
+            {
+                yield return retry;
+                yield break;
+            }
+            if (next.NoRetry)
+                yield break;
         }
     }
 

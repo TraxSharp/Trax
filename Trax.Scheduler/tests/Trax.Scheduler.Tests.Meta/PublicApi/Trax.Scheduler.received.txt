@@ -106,6 +106,7 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.ScheduleOptions Priority(int priority) { }
         public Trax.Scheduler.Configuration.ScheduleOptions PrunePrefix(string prefix) { }
         public Trax.Scheduler.Configuration.ScheduleOptions ReplayDecisionsOnRetry(bool replay) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions StartedBy(string? principalId) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Timeout(System.TimeSpan timeout) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Variance(System.TimeSpan variance) { }
     }

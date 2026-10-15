@@ -629,3 +629,13 @@ progress, built `CONCURRENTLY` on Postgres. SQLite `042` creates the same index.
 
 Nothing is backfilled. A host on the previous version writes no starter, so a run it starts during a rolling deploy
 cannot be followed, and is counted by the cap only through its instance.
+
+## Manifest starter (084, SQLite 043)
+
+`084_manifest_starter.sql` (SQLite `043`) adds a nullable `starter_hash` (`text`) to `trax.manifest`, the hash of a
+principal id in the form `082` uses. It is set when a manifest is scheduled with
+[`ScheduleOptions.StartedBy`](/docs/sdk-reference/scheduler-api/schedule), and the scheduler copies it onto every work
+queue entry it queues for the manifest, a retry, a trigger and a dead letter's requeue included, so the caller who
+scheduled a one-off manifest can follow each of its runs through
+[`runProgress`](/docs/sdk-reference/graphql-api/run-progress). Nothing is backfilled: every manifest from before, and
+every one scheduled without it, records nobody.

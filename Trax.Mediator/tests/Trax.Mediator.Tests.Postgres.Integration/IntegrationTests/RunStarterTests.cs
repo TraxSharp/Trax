@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Mediator.Services.Principal;
+using Trax.Mediator.Services.RunStarters;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
 
@@ -66,6 +67,32 @@ public class RunStarterTests : TestSetup
 
         (await RunStarterAsync(recorded.MetadataId)).Should().Be(Hash);
         (await RunStarterAsync(unrecorded.MetadataId)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task The_caller_is_told_only_of_the_runs_they_started()
+    {
+        var starters = Scope.ServiceProvider.GetRequiredService<IRunStarters>();
+        var queued = await Execution.QueueAsync(
+            Train,
+            null,
+            new QueueTrainOptions { RecordCaller = true }
+        );
+        var ran = await Execution.RunAsync(
+            Train,
+            "{}",
+            new RunTrainOptions { RecordCaller = true }
+        );
+        var nobodys = await Execution.RunAsync(Train, "{}");
+
+        (await starters.StartedByCurrentCallerAsync(queued.ExternalId)).Should().BeTrue();
+        (await starters.StartedByCurrentCallerAsync(ran.ExternalId)).Should().BeTrue();
+        (await starters.StartedByCurrentCallerAsync(nobodys.ExternalId))
+            .Should()
+            .BeFalse("a run nobody started is nobody's, per " + Adr);
+        (await starters.StartedByCurrentCallerAsync(Guid.NewGuid().ToString("N")))
+            .Should()
+            .BeFalse();
     }
 
     private async Task<string?> QueuedStarterAsync(long id)

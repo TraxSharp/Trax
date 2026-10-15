@@ -47,6 +47,7 @@ public class ScheduleOptions
     internal TimeSpan? _variance;
     internal TimeSpan? _failureWindow;
     internal bool? _replayDecisionsOnRetry;
+    internal string? _starterHash;
 
     // Group-level state
     internal string? _groupId;
@@ -239,6 +240,24 @@ public class ScheduleOptions
     public ScheduleOptions ReplayDecisionsOnRetry(bool replay)
     {
         _replayDecisionsOnRetry = replay;
+        return this;
+    }
+
+    /// <summary>
+    /// Records <paramref name="principalId"/> as the starter of every run of this manifest, retries included, so that
+    /// caller may follow each run through <c>runProgress</c>. Only a hash of it is stored. A schedule that leaves it
+    /// out records nobody, and nobody may follow its runs.
+    /// </summary>
+    /// <remarks>
+    /// For a one-off manifest a caller asked for, such as a mutation that schedules work for the person who sent it.
+    /// Pass the id the host's <c>ICurrentPrincipalProvider</c> gives for that caller, which is what the run-progress
+    /// lookup compares. Stated, it is written on every seed; left unstated, the manifest keeps the starter it has.
+    /// </remarks>
+    /// <param name="principalId">The caller's principal id. Null or blank records nobody.</param>
+    /// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-api/run-progress">Run progress</seealso>
+    public ScheduleOptions StartedBy(string? principalId)
+    {
+        _starterHash = Trax.Effect.Models.RunStarter.Hash(principalId);
         return this;
     }
 

@@ -37,6 +37,15 @@ started directly, gets the same `NOT_FOUND`.
   starts with the state found at subscribe time and ends after the run's end, holding the end until the steps
   published before it have arrived, for at most a second. A skipped number tells the client to read again.
 - **Bounded per caller.** A caller holds at most 10 streams on one run and 500 in all on one host.
+- **A manifest can be scheduled for a caller.** `ScheduleOptions.StartedBy` records the caller on the manifest
+  (migration 084, SQLite 043), and every entry the scheduler queues for it, a retry included, carries that starter.
+  A failed run of such a manifest names its retry, `retriedAs`, once queued, so the starter follows the chain run by
+  run; the stream stays open after the failure until then, the manifest is dead-lettered, or 30 minutes pass.
+- **A machine names the run its state queued.** On a machine that invokes a train, each answer carries
+  `invokedRun { runId }` for the instance's user owner while the instance sits in the invoking state, so the owner
+  can follow that run.
+- **A train can check the caller is the starter.** `IRunStarters.StartedByCurrentCallerAsync(runId)` answers it the
+  same way, for a train that reports on a run, such as a sample's decision journal.
 
 ## Considered options
 
@@ -57,3 +66,4 @@ Not covered: a remote runner records no starter, so a run it executes from a `RU
 ## Changelog
 
 - **2026-10-15**: Recorded.
+- **2026-10-15**: Amended: manifests scheduled `StartedBy` a caller, `retriedAs`, `invokedRun` and `IRunStarters`.

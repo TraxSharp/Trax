@@ -559,6 +559,7 @@ internal sealed class DbPersistedOperationStorage
                     && (
                         p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
                         || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
                     )
                 )
                 .ToListAsync(ct)
@@ -775,6 +776,7 @@ internal sealed class DbPersistedOperationStorage
                     && (
                         p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
                         || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
+                        || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
                     )
                 )
                 .Select(p => new

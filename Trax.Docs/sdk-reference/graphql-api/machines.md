@@ -54,6 +54,7 @@ Every operation but `discard` answers with the machine's `<Machine>MachineResult
 | `context` | `<Machine>MachineContext` | Every field any state's context record declares, by its JSON name, each nullable: a field the state the instance is in does not hold is null. Absent for a machine whose states declare no context record. |
 | `dueAt` | `DateTime` | When the timer of the state the instance is in fires, from the row's `due_at`, or null when that state has no timer or the server cleared it. Every answer carries it, `start` and `get` included, beside the snapshot and never inside it. |
 | `dueAtKnown` | `Boolean!` | False when the answer replays a request the instance has moved past since: the server records a request's result, not its due time, so `dueAt` is null and means nothing. Treat `dueAt` as absent then. True on every other answer. |
+| `invokedRun` | `MachineInvokedRun` | On a machine with a state that invokes a train: `{ runId }`, the external id of the run the instance's current state queued, while it sits in that state; null in any other state, on a refusal, and for anyone but the instance's user owner. The owner follows the run with [`runProgress`](/docs/sdk-reference/graphql-api/run-progress). Read from the row when the answer is resolved, so a replayed answer shows where the instance is now. |
 | `problem` | `SnapshotProblem` | `{ code message }` when the operation was refused, else null. When it is set, nothing was written. |
 
 A refusal is data. The codes are those of the [result codes](/docs/sdk-reference/statemachine-api/result-codes):

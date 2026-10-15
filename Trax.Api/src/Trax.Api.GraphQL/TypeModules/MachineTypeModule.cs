@@ -61,6 +61,8 @@ internal sealed class MachineTypeModule(
             NamespaceTypes.Field("RootQuery", MachineSurface.RootField, MachineSurface.QueriesType)
         );
         types.Add(DiscardResultType());
+        if (exposed.Any(MachineInvokedRun.Invokes))
+            types.Add(MachineInvokedRun.Type());
 
         foreach (var machine in exposed)
             AddMachine(types, machine);
@@ -270,6 +272,8 @@ internal sealed class MachineTypeModule(
                 .Type<ObjectType<SnapshotProblem>>()
                 .Description("Why the operation was refused, or null when it was not.")
                 .Resolve(ctx => ctx.Parent<MachineAnswer>().Problem);
+            if (MachineInvokedRun.Invokes(machine))
+                MachineInvokedRun.Add(d, machine);
         });
 
     private static ObjectType DiscardResultType() =>

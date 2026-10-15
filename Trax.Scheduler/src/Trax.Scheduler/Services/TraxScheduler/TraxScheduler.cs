@@ -99,6 +99,16 @@ public class TraxScheduler(
             manifest.Owner = owner;
     }
 
+    /// <summary>
+    /// Records who the manifest's runs are started for, when the options name one (<see cref="ScheduleOptions.StartedBy"/>).
+    /// Left alone otherwise, so a re-seed that does not name one keeps the starter the manifest has.
+    /// </summary>
+    private static void StampStarter(Manifest manifest, ResolvedOptions resolved)
+    {
+        if (resolved.StarterHash is { } starter)
+            manifest.StarterHash = starter;
+    }
+
     private void ValidateTrain(Type trainType, Type inputType) =>
         trainRegistry.ValidateTrainRegistration(trainDiscovery, trainType, inputType);
 
@@ -130,6 +140,7 @@ public class TraxScheduler(
         );
 
         StampOwner(manifest);
+        StampStarter(manifest, resolved);
 
         await context.SaveChanges(ct);
 
@@ -266,6 +277,7 @@ public class TraxScheduler(
         );
 
         StampOwner(manifest);
+        StampStarter(manifest, resolved);
 
         await context.SaveChanges(ct);
 
@@ -586,6 +598,7 @@ public class TraxScheduler(
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
+                StarterHash = manifest.StarterHash,
                 Priority = manifest.Priority,
                 ScheduledAt = scheduledAt,
                 ExplicitTrigger = true,
@@ -769,6 +782,7 @@ public class TraxScheduler(
         );
 
         StampOwner(manifest);
+        StampStarter(manifest, resolved);
 
         await context.SaveChanges(ct);
 
@@ -919,6 +933,7 @@ public class TraxScheduler(
         );
 
         StampOwner(manifest);
+        StampStarter(manifest, resolved);
 
         await context.SaveChanges(ct);
 
@@ -959,6 +974,7 @@ public class TraxScheduler(
         );
 
         StampOwner(manifest);
+        StampStarter(manifest, resolved);
 
         await context.SaveChanges(ct);
 
@@ -1010,6 +1026,7 @@ public class TraxScheduler(
         );
 
         StampOwner(manifest);
+        StampStarter(manifest, resolved);
 
         await context.SaveChanges(ct);
 
@@ -1797,6 +1814,7 @@ public class TraxScheduler(
                 Input = manifest.Properties,
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
+                StarterHash = manifest.StarterHash,
                 Priority = manifest.Priority,
                 DeadLetterId = deadLetter.Id,
                 // An operator asked for this run by name, so it runs while the manifest is disabled.
@@ -1885,7 +1903,8 @@ public class TraxScheduler(
                 PriorityIfNew: manifestOptions.Priority
             ),
             PrunePrefix: opts._prunePrefix,
-            BatchName: opts._batchName
+            BatchName: opts._batchName,
+            StarterHash: opts._starterHash
         );
     }
 
@@ -1973,6 +1992,7 @@ public class TraxScheduler(
         string? GroupId,
         ManifestGroupSeed Group,
         string? PrunePrefix,
-        string? BatchName
+        string? BatchName,
+        string? StarterHash
     );
 }

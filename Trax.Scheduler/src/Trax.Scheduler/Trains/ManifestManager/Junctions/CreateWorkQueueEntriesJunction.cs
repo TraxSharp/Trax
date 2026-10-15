@@ -142,6 +142,8 @@ internal class CreateWorkQueueEntriesJunction(
                         Input = view.Manifest.Properties,
                         InputTypeName = view.Manifest.PropertyTypeName,
                         ManifestId = view.Manifest.Id,
+                        // Every run of a manifest scheduled for a caller is that caller's to follow.
+                        StarterHash = view.Manifest.StarterHash,
                         Priority = effectivePriority,
                         ScheduledAt = scheduledAt,
                         ReplayDecisionsOf = replaySources.TryGetValue(

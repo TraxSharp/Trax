@@ -46,6 +46,7 @@ internal static class ClientManifests
           steps: [JunctionStep!]!
           failure: String
           problem: SnapshotProblem
+          retriedAs: String
         }
 
         type RunProgressEvent {
@@ -55,6 +56,7 @@ internal static class ClientManifests
           step: JunctionStep
           failure: String
           problem: SnapshotProblem
+          retriedAs: String
         }
 
         enum RunProgressState {
@@ -81,11 +83,11 @@ internal static class ClientManifests
 
     public const string ProgressQuery =
         "query RunProgress($runId: String!) { runProgress(runId: $runId) { runId train state steps { position kind "
-        + "name state } failure problem { code message } } }";
+        + "name state } failure problem { code message } retriedAs } }";
 
     public const string ProgressSubscription =
         "subscription RunProgressEvents($runId: String!) { runProgress(runId: $runId) { runId sequence state step { "
-        + "position kind name state } failure problem { code message } } }";
+        + "position kind name state } failure problem { code message } retriedAs } }";
 
     public const string StartRunDocument =
         "mutation StartRun($input: StartRunInput!, $mode: ExecutionMode, $priority: Int) { dispatch { "

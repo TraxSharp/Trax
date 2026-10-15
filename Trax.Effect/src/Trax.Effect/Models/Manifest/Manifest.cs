@@ -299,6 +299,14 @@ public class Manifest : IModel
     public string? Owner { get; set; }
 
     /// <summary>
+    /// Who every run of the manifest is started for, as the run rows record a starter: the hex SHA-256 of a principal
+    /// id, never the id. Set when the manifest is scheduled with <c>ScheduleOptions.StartedBy</c>; the scheduler copies
+    /// it onto each work queue entry it queues for the manifest, so that caller may follow every run and retry of it
+    /// (Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md). Internal and never serialized.
+    /// </summary>
+    internal string? StarterHash { get; set; }
+
+    /// <summary>
     /// Whether a retry of this manifest's failed run replays the decisions that run recorded.
     /// True by default.
     /// </summary>

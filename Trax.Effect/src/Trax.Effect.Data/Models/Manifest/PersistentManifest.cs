@@ -30,6 +30,9 @@ internal class PersistentManifest : Effect.Models.Manifest.Manifest
             entity.Property(e => e.Properties).HasColumnType("jsonb");
             entity.Property(e => e.Exclusions).HasColumnType("jsonb");
 
+            // Who every run of the manifest is started for (Postgres 084, SQLite 043), internal and mapped by name.
+            entity.Property(e => e.StarterHash).HasColumnName("starter_hash");
+
             entity
                 .HasOne(x => x.DependsOnManifest)
                 .WithMany()
