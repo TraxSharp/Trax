@@ -11,7 +11,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// registered, or, while the generic mutations are opted in, every user-owned machine. Each must declare a rule for
 /// every client and effect-bound event, for its <c>start</c>, <c>get</c>, the push (<c>&lt;machine&gt;Changed</c>) and <c>discard</c>; none of its events or
 /// its start may be <c>Anonymous()</c>, since a user's instance needs an owner; a read or the discard may not be looser
-/// than owner-only; and every
+/// than owner-only; the push may not admit a caller <c>get</c> refuses; and every
 /// policy a rule names must be registered. A marked machine must also have an IR (no raw delegates, no delegate
 /// guard or reducer beside declarative ones) and be user-owned. A machine nothing serves needs no rules. Every
 /// problem of every machine is listed in one refusal.
@@ -157,6 +157,15 @@ internal sealed class MachineRulesStartupValidator(
         return problems;
     }
 
+    // Whether every caller narrow admits, wide admits too: each role set of wide is met by holding any role of some
+    // set of narrow, and narrow requires every policy wide does. Both are owner-only rules.
+    private static bool Narrows(CallerRule narrow, CallerRule wide) =>
+        wide.RoleSets.All(wideSet =>
+            narrow.RoleSets.Any(narrowSet =>
+                narrowSet.All(role => wideSet.Contains(role, StringComparer.Ordinal))
+            )
+        ) && wide.Policies.All(policy => narrow.Policies.Contains(policy, StringComparer.Ordinal));
+
     // The nearest base type of a machine that carries the attribute itself, or null.
     private static Type? MarkedBase(Type machine)
     {
@@ -226,6 +235,19 @@ internal sealed class MachineRulesStartupValidator(
                         + "Owner-only is the floor for reading or discarding an instance: declare OwnerOnly(), and "
                         + "Requires(...) or RequiresPolicy(...) beside it to narrow it further."
                 );
+
+        // The push carries the whole instance, as get answers it, so a watch rule that admits a caller get refuses
+        // would stream what get withholds.
+        if (
+            rules.Get is { Kind: CallerRuleKind.OwnerOnly } get
+            && rules.Watch is { Kind: CallerRuleKind.OwnerOnly } watch
+            && !Narrows(watch, get)
+        )
+            problems.Add(
+                $"The machine '{name}' is {reach}, and its changed rule is {watch}, which admits callers its get "
+                    + $"rule ({get}) refuses. The push carries the whole instance, so it would stream what get "
+                    + "withholds. Give Watch(...) every requirement Get(...) has."
+            );
 
         foreach (
             var (where, policy) in rules

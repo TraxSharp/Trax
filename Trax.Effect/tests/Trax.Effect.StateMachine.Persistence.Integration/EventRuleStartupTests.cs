@@ -209,6 +209,32 @@ public class EventRuleStartupTests
     }
 
     [Test]
+    public async Task A_watch_rule_looser_than_get_is_refused_at_startup()
+    {
+        var refusal = await StartingHost.Start(_ => { }, Marked.Machine<LooseWatchMachine>());
+
+        refusal
+            .Should()
+            .BeOfType<InvalidOperationException>(
+                $"the push carries the whole instance, so it may admit no caller get refuses. See {Adr}"
+            )
+            .Which.Message.Should()
+            .Contain(LooseWatchMachine.Id)
+            .And.Contain("changed rule")
+            .And.Contain(ViewerReadMachine.Viewer);
+    }
+
+    [Test]
+    public async Task A_watch_rule_stricter_than_get_starts()
+    {
+        var refusal = await StartingHost.Start(_ => { }, Marked.Machine<StrictWatchMachine>());
+
+        refusal
+            .Should()
+            .BeNull($"a push no wider than get streams nothing get withholds. See {Adr}");
+    }
+
+    [Test]
     public void A_gated_event_into_the_start_state_refuses_to_build()
     {
         var m = new MachineBuilder<DeskState, DeskTrigger>();

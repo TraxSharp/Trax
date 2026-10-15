@@ -25,7 +25,7 @@ host code.
 A served machine has to be declarative (guards and reducers written as data, so it has an
 [IR](/docs/sdk-reference/statemachine-api/ir-format)) and user-owned, and it must declare who may do everything a
 client can do: a rule on every event and on its `Start`, and an owner-only or stricter rule on `Get`, `Watch` and
-`Discard`. The host refuses to start, listing every gap in one exception, until it does.
+`Discard`, with `Watch` at least as strict as `Get`, since the push carries what `get` answers. The host refuses to start, listing every gap in one exception, until it does.
 
 ```csharp compile=checkout
 using System.Text.Json.Nodes;

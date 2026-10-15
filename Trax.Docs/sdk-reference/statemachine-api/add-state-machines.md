@@ -164,6 +164,8 @@ listing every problem in one exception, when such a machine:
 - declares `Anonymous()` on an event or its start (a user's instance needs an owner);
 - declares a `get`, push or `discard` rule looser than owner-only (`AnyAuthenticated()` or
   `Anonymous()`);
+- declares a push rule that admits a caller its `get` rule refuses (`Get(r => r.OwnerOnly().Requires("Viewer"))`
+  beside `Watch(r => r.OwnerOnly())`): the push carries the whole instance, so `Watch` needs every requirement `Get` has;
 - names a policy the host does not register, checked through `ICallerAuthorization.IsPolicyRegistered`;
 - declares a start whose reduction copies its input into a field an invoked train's outcome, the effect or an event
   gated by `Requires` or `RequiresPolicy` writes.

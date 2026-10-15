@@ -496,14 +496,15 @@ internal static class RuledTurnstile
         bool declareReads = true,
         Action<IReadRuleBuilder>? get = null,
         Action<IReadRuleBuilder>? discard = null,
-        bool declareDiscard = true
+        bool declareDiscard = true,
+        Action<IReadRuleBuilder>? watch = null
     )
     {
         m.Id(id).Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
         if (declareReads)
             m.Start<DeskStart>(s => s.Reduce(Keep()).AnyAuthenticated())
                 .Get(get ?? (r => r.OwnerOnly()))
-                .Watch(r => r.OwnerOnly());
+                .Watch(watch ?? get ?? (r => r.OwnerOnly()));
         if (declareReads && declareDiscard)
             m.Discard(discard ?? (r => r.OwnerOnly()));
 
@@ -642,6 +643,42 @@ public class UndeclaredDiscardMachine : Machine<TurnstileState, TurnstileTrigger
             RuledTurnstile.AnyAuthenticated,
             RuledTurnstile.AnyAuthenticated,
             declareDiscard: false
+        );
+}
+
+/// <summary>
+/// The owner reads an instance only while holding <see cref="ViewerReadMachine.Viewer"/>, but watches it without,
+/// which would stream what <c>get</c> withholds.
+/// </summary>
+public class LooseWatchMachine : Machine<TurnstileState, TurnstileTrigger>
+{
+    public const string Id = "loose-watch";
+
+    protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m) =>
+        RuledTurnstile.Declare(
+            m,
+            Id,
+            RuledTurnstile.AnyAuthenticated,
+            RuledTurnstile.AnyAuthenticated,
+            get: r => r.OwnerOnly().Requires(ViewerReadMachine.Viewer),
+            watch: r => r.OwnerOnly()
+        );
+}
+
+/// <summary>Watches only with the role <c>get</c> needs, and one more: stricter than get, which is allowed.</summary>
+public class StrictWatchMachine : Machine<TurnstileState, TurnstileTrigger>
+{
+    public const string Id = "strict-watch";
+
+    protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m) =>
+        RuledTurnstile.Declare(
+            m,
+            Id,
+            RuledTurnstile.AnyAuthenticated,
+            RuledTurnstile.AnyAuthenticated,
+            get: r => r.OwnerOnly().Requires(ViewerReadMachine.Viewer, DeskRoles.Operator),
+            watch: r =>
+                r.OwnerOnly().Requires(ViewerReadMachine.Viewer).Requires(DeskRoles.Operator)
         );
 }
 
