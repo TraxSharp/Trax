@@ -46,7 +46,7 @@ internal sealed class RunStarters(
     )
     {
         ArgumentNullException.ThrowIfNull(runId);
-        if (RunStarter.Hash(principal.GetCurrentPrincipalId()) is not { } starter)
+        if (RunStarter.OfPrincipal(principal.GetCurrentPrincipalId()) is not { } starter)
             return null;
 
         using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
