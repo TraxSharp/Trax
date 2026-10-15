@@ -119,6 +119,8 @@ credential moves to it.
 - **A machine that invokes a train** answers its user owner `invokedRun { runId }` while the instance sits in the
   state that queued the run, and the run records the owner as its starter, so the owner follows it with
   `runProgress`. A committed client regenerates to pick up the field.
+- **A queued run that cannot be read ends its stream.** After ten failed reads in a row the subscription sends a
+  `problem` with `INTERNAL_ERROR` and completes; subscribe again to keep following the run.
 - **The invoked-run cap counts by starter.** A user's run still counts after its draft expired, until the run ends.
 - **Generated code.** `trax client` writes `progress.g.ts` (`readRunProgress`, `followRunProgress`,
   `useRunProgress`) when the manifest lists a train that carries the attribute. See

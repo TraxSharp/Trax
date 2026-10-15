@@ -1017,7 +1017,8 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
 
     // Reads a run first found queued every QueuedPoll until it is dispatched, whose lifecycle events then say the rest,
     // or until it is cancelled or gone, which publish none. Then it writes an empty item to wake the reader and answers
-    // the event to end on.
+    // the event to end on. A read that fails is tried again after a wait that doubles up to RetryPollMax, and after
+    // QueuedFailureBound failures in a row the stream ends with a problem, so the client is told and subscribes again.
     private async Task<RunProgressEvent?> WatchQueued(
         RunProgressRun run,
         ChannelWriter<(TrainLifecycleEvent?, JunctionEvent?, bool)> writer,
@@ -1028,25 +1029,41 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             return null;
         try
         {
+            var wait = QueuedPoll;
+            var failures = 0;
             while (true)
             {
-                await Delay(QueuedPoll, ct).ConfigureAwait(false);
+                await Delay(wait, ct).ConfigureAwait(false);
                 QueuedFate fate;
                 try
                 {
                     fate = await ReadQueued(run, ct).ConfigureAwait(false);
                 }
-                catch (Exception e) when (e is not OperationCanceledException)
+                catch (Exception e) when (!ct.IsCancellationRequested)
                 {
-                    // A dropped connection and the like: the run is read again at the next poll, so a cancel after it
-                    // still ends the stream and releases its place.
+                    // A dropped connection, a read that timed out and the like: the run is read again later, so a
+                    // cancel after it still ends the stream and releases its place.
+                    if (++failures >= QueuedFailureBound)
+                    {
+                        Logger?.LogWarning(
+                            e,
+                            "Reading queued run {RunId} failed {Failures} times in a row; ending its stream.",
+                            run.RunId,
+                            failures
+                        );
+                        await writer.WriteAsync((null, null, false), ct).ConfigureAwait(false);
+                        return new RunProgressEvent(run.RunId, 0, null, null, null, Unreadable());
+                    }
                     Logger?.LogWarning(
                         e,
                         "Reading queued run {RunId} failed; reading it again.",
                         run.RunId
                     );
+                    wait = wait * 2 < RetryPollMax ? wait * 2 : RetryPollMax;
                     continue;
                 }
+                failures = 0;
+                wait = QueuedPoll;
                 if (fate == QueuedFate.Dispatched)
                     return null;
                 if (fate == QueuedFate.Waiting)
@@ -1078,6 +1095,16 @@ internal sealed class RunProgressStream : ISourceStream<RunProgressEvent>
             return null;
         }
     }
+
+    /// <summary>How many reads of a queued run may fail in a row before its stream ends with a problem.</summary>
+    internal const int QueuedFailureBound = 10;
+
+    internal static SnapshotProblem Unreadable() =>
+        new()
+        {
+            Code = RefusalCode.InternalError,
+            Message = "The run could not be read. Subscribe again.",
+        };
 
     /// <summary>How long the end of a run waits for its last steps before reporting them lost.</summary>
     internal static readonly TimeSpan SettleBound = TimeSpan.FromSeconds(1);

@@ -122,7 +122,9 @@ read's copy of it. `useRunProgress` does both.
 
 A run followed while still queued is read again every few seconds until it is dispatched. One cancelled before
 dispatch publishes no state of its own, so the stream sends `CANCELLED` and completes; one whose entry is gone with no
-run recorded answers `NOT_FOUND` and completes.
+run recorded answers `NOT_FOUND` and completes. A read that fails is tried again, waiting twice as long each
+time up to 30 seconds; after ten failures in a row the stream sends `INTERNAL_ERROR` and completes: subscribe
+again to keep following the run.
 
 A failed run of a manifest stays open after its last state until the scheduler queues its retry, then sends one more
 event with `retriedAs` and completes. It looks for the retry after one second, then waits twice as long each time, up
@@ -136,6 +138,7 @@ with a `problem` and completes:
 | Code | When |
 |---|---|
 | `NOT_FOUND` | As for the query. |
+| `INTERNAL_ERROR` | A queued run could not be read ten times in a row. Subscribe again. |
 | `TOO_MANY_SUBSCRIPTIONS` | The caller already follows this run 10 times on this host, or 500 runs in all. A stream's place comes back when it completes or the client unsubscribes. |
 
 An anonymous subscription is refused with `TRAX_AUTHORIZATION`, as other subscriptions are.

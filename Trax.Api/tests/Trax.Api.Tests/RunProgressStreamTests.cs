@@ -4,13 +4,14 @@ using HotChocolate.Execution;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Effect.StateMachine;
 
 namespace Trax.Api.Tests;
 
 /// <summary>
 /// A runProgress stream on a failed run of a manifest waits for its retry: it looks less often the longer it waits, and
 /// stops looking once it is disposed, whether or not its reader was cancelled. A stream on a queued run keeps reading
-/// its fate after a failed read.
+/// its fate after a failed read, less often each time, and ends with a problem when the reads keep failing.
 /// </summary>
 [TestFixture]
 [Property("adr", Adr)]
@@ -122,6 +123,98 @@ public class RunProgressStreamTests
             .Equal(RunProgressState.Queued, RunProgressState.Cancelled);
         lease.Disposed.Should().Be(1, "the ended stream gives its place back");
     }
+
+    [Test]
+    public async Task A_queued_poll_that_keeps_failing_ends_with_a_problem()
+    {
+        var reads = 0;
+        var waits = new List<TimeSpan>();
+        var lease = new Counted();
+        await using var stream = Queued(
+            lease,
+            (_, _) =>
+            {
+                reads++;
+                return Task.FromException<QueuedFate>(new InvalidOperationException("no access"));
+            },
+            (wait, _) =>
+            {
+                waits.Add(wait);
+                return Task.CompletedTask;
+            }
+        );
+
+        var events = new List<RunProgressEvent>();
+        await foreach (
+            var e in stream
+                .ReadEventsAsync()
+                .WithCancellation(new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token)
+        )
+            events.Add(e);
+
+        reads.Should().Be(RunProgressStream.QueuedFailureBound);
+        waits
+            .Should()
+            .Equal(
+                new[] { 5, 10, 20, 30, 30, 30, 30, 30, 30, 30 }.Select(s =>
+                    TimeSpan.FromSeconds(s)
+                ),
+                "a read that keeps failing is tried less often"
+            );
+        events.Should().HaveCount(2);
+        events[1].Problem!.Code.Should().Be(RefusalCode.InternalError);
+        events[1].Sequence.Should().Be(2);
+        lease.Disposed.Should().Be(1, "the ended stream gives its place back");
+    }
+
+    [Test]
+    public async Task A_queued_poll_cancelled_by_its_own_timeout_keeps_watching()
+    {
+        var reads = 0;
+        var lease = new Counted();
+        await using var stream = Queued(
+            lease,
+            (_, _) =>
+                ++reads == 1
+                    ? Task.FromException<QueuedFate>(new OperationCanceledException("timed out"))
+                    : Task.FromResult(QueuedFate.Cancelled),
+            (_, _) => Task.CompletedTask
+        );
+
+        var events = new List<RunProgressEvent>();
+        await foreach (
+            var e in stream
+                .ReadEventsAsync()
+                .WithCancellation(new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token)
+        )
+            events.Add(e);
+
+        reads.Should().Be(2, "a read cancelled by something other than the stream is read again");
+        events
+            .Select(e => e.State)
+            .Should()
+            .Equal(RunProgressState.Queued, RunProgressState.Cancelled);
+        lease.Disposed.Should().Be(1);
+    }
+
+    private static RunProgressStream Queued(
+        IDisposable lease,
+        Func<RunProgressRun, CancellationToken, Task<QueuedFate>> read,
+        Func<TimeSpan, CancellationToken, Task> delay
+    ) =>
+        new(
+            Run(RunProgressState.Queued),
+            new Silent<TrainLifecycleEvent>(),
+            0,
+            new Silent<JunctionEvent>(),
+            0,
+            _ => ValueTask.FromResult(0L),
+            lease
+        )
+        {
+            ReadQueued = read,
+            Delay = delay,
+        };
 
     private static RunProgressRun Run(RunProgressState state) =>
         new(
