@@ -936,7 +936,7 @@ public class QueryPerformanceTests : TestSetup
     [Test]
     public async Task PruneOrphanedManifests_LargeExpectedSet_CompletesWithinTimeout()
     {
-        // Simulates the SuiteMirror production scenario: 450 expected manifests (large
+        // Simulates a production scenario: 450 expected manifests (large
         // expected set), 50 orphans to prune. The previous NOT IN('id1', ..., 'id450')
         // approach would generate a massive SQL statement. The server-side filter loads
         // all 500 ID pairs (~15KB) and computes the diff in C# with O(n) HashSet lookups.
@@ -1006,7 +1006,7 @@ public class QueryPerformanceTests : TestSetup
     [Test]
     public async Task PruneOrphanedManifests_5KOrphans_CompletesWithinTimeout()
     {
-        // Simulates the SuiteMirror production scenario at full scale: 5000 orphaned
+        // Simulates a production scenario at full scale: 5000 orphaned
         // manifests to prune with 500 expected manifests to keep. This is the exact
         // scenario that caused command timeouts — the old NOT IN(...) approach would
         // inline 500 string parameters into the query, which Postgres struggled to plan

@@ -17,9 +17,9 @@
  * Typical wiring:
  *
  *   const client  = createSnapshotClient(createHttpExecutor('/graphql'));
- *   const started = await startDraft({ client, machine: writeToCongress, requestId: crypto.randomUUID() });
+ *   const started = await startDraft({ client, machine: checkout, requestId: crypto.randomUUID() });
  *   if (started.ok) {
- *     const session = createDraftSession({ client, machine: writeToCongress, id: started.id });
+ *     const session = createDraftSession({ client, machine: checkout, id: started.id });
  *     await session.advance('Next', { requestId: crypto.randomUUID() });
  *   }
  */

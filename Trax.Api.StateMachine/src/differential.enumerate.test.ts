@@ -4,7 +4,7 @@ import { SnapshotMachine } from './machine';
 import type { MachineDefinition } from './types';
 
 // A tiny machine with a guarded edge, to prove the `contexts` cross-product probes states x contexts the
-// way a complex machine (e.g. write-to-congress) needs — including unreachable (state, context) pairs that
+// way a complex machine (e.g. a multi-step product wizard) needs — including unreachable (state, context) pairs that
 // BFS + seeds never visit, which is where invalid-context / guard-failed divergences hide.
 describe('differential enumerate: contexts cross-product', () => {
   const def: MachineDefinition<'A' | 'B', 'Go'> = {

@@ -79,15 +79,15 @@ this step, may I fire this, and where does it land?* `createFormView` derives th
 the only two things an app can supply:
 
 ```ts
-const wizard = createFormView(writeToCongress, {
-  steps:     { welcome: 'Welcome', topic: 'Topic', compose: 'Compose', confirmation: 'Sent' },
-  toContext: (values, options = {}) => ({ subject: values.compose.subject, /* … */ }),
+const wizard = createFormView(checkout, {
+  steps:     { cart: 'Cart', review: 'Review', receipt: 'Paid' },
+  toContext: (values, options = {}) => ({ items: values.cart.items, /* … */ }),
 });
 
-wizard.advance('topic', values, 'Next');   // → { ok: true, step: 'compose' }
-wizard.can('topic', values, 'Next');       // → false while the guard declines
-wizard.serialize('topic', values);         // → canonical JSON for an autosave
-wizard.resume(storedJson);                 // → { step, snapshot } | null
+wizard.advance('cart', values, 'Next');   // → { ok: true, step: 'review' }
+wizard.can('cart', values, 'Next');       // → false while the guard declines
+wizard.serialize('cart', values);         // → canonical JSON for an autosave
+wizard.resume(storedJson);                // → { step, snapshot } | null
 ```
 
 The step map is given in **one** direction; `stepFor` is derived, so the two can't drift (a many-to-one
@@ -113,7 +113,7 @@ one per machine:
 import { createSnapshotClient, createHttpExecutor, createDraftSession } from '@traxsharp/state-machine/client';
 
 const client  = createSnapshotClient(createHttpExecutor('/graphql'));
-const session = createDraftSession({ client, machine: writeToCongress, id: DRAFT_ID });
+const session = createDraftSession({ client, machine: checkout, id: DRAFT_ID });
 
 await session.save(machine.serialize(snapshot));   // soft autosave
 await session.advance('Next');                     // authoritative transition
@@ -166,8 +166,8 @@ revision, events are sent one at a time per instance, each under its own request
 ## Status
 
 Every machine is on the IR pipeline and proven in agreement by the differential: the `turnstile` proof machine,
-the richer `checkout` (multi-key context, count guards, an exactly-once effect), and the `write-to-congress`
-product machine (the first real consumer, in nwyc). The `trax machine` CLI that drives regeneration has
+the richer `checkout` (multi-key context, count guards, an exactly-once effect), and a product
+machine in a downstream application (the first real consumer). The `trax machine` CLI that drives regeneration has
 shipped. What is left: TypeScript is still the differential oracle, so the flip to a C# enumerator (Increment
 D) is the main remaining increment, and the derived `structure.json` golden still needs retiring. See
 [`docs/design/tier1-machine-codegen.md`](docs/design/tier1-machine-codegen.md) and

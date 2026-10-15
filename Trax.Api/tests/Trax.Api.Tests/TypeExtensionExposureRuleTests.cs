@@ -275,13 +275,13 @@ public class TypeExtensionExposureRuleTests
     {
         var message = TypeExtensionExposureRule.BuildMessage(
             "Issue.content",
-            "Nwyc.IssueContentExtension.GetContent",
+            "MyApp.IssueContentExtension.GetContent",
             "'Issue', which is [TraxAllowAnonymous]",
             ExposureViolation.MissingMarker
         );
 
         message.Should().Contain("Issue.content");
-        message.Should().Contain("Nwyc.IssueContentExtension.GetContent");
+        message.Should().Contain("MyApp.IssueContentExtension.GetContent");
         message.Should().Contain("[TraxAuthorize]");
         message.Should().Contain("[TraxAllowAnonymous]");
         message.Should().Contain("RequireAuthorization");

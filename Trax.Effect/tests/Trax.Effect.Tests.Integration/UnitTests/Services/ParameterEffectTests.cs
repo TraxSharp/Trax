@@ -549,7 +549,7 @@ public class ParameterEffectTests
         var effect = NewEffect(config);
         var meta = NewMetadata(
             output: new { Huge = "x" },
-            name: "NSync.Handlers.GetEntitiesQueryHandler+GetEntitiesQuery, NSync"
+            name: "MyApp.Handlers.GetEntitiesQueryHandler+GetEntitiesQuery, MyApp"
         );
 
         await effect.Track(meta);

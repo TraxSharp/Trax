@@ -2,7 +2,7 @@
 
 Status: RFC, revised 2026-09-11 (originally 2026-08-07, revised 2026-08-13). The architecture below is
 decided and, for its core, built: the C#-source + IR + interpret-at-runtime pipeline ships and has a real
-product consumer (write-to-congress in nwyc). This revision reconciles the draft with what actually landed.
+product consumer. This revision reconciles the draft with what actually landed.
 The per-section "Status" lines and §11 table are the source of truth for what is built vs. outstanding; the
 short version is that the source inversion, the declarative layer, the IR, full JCS, the migration golden and
 the `trax machine` CLI are built, while the oracle flip, probe generation, and the trust-boundary enforcement
@@ -11,7 +11,7 @@ are not.
 ## Why this exists
 
 The goal is to run large parts of a frontend off state machines wherever it makes sense, with
-write-to-congress as the proof of concept. That surfaces a tension:
+one product machine as the proof of concept. That surfaces a tension:
 
 1. **Parity by construction.** The C# (server) and every frontend runtime must stay in lockstep on
    structure, data types, and behavior. Drift should fail a build or a test, never ship silently.
@@ -21,7 +21,7 @@ write-to-congress as the proof of concept. That surfaces a tension:
 
 The original baseline sat at the fully hand-written extreme: two hand-written twins, hand-authored
 differential contexts, structure restated in `machine.json`. That maximized friction and drift surface. That
-baseline is now retired. `turnstile`, `checkout` and the product machine `write-to-congress` are all on the
+baseline is now retired. `turnstile`, `checkout` and the first product machine are all on the
 generated pipeline (declarative C# source, exported IR, an interpreted TypeScript twin generated from the IR),
 and `machine.json` is deleted everywhere (phase0-codegen-scope.md §5). This document describes the Tier-1
 architecture that resolves the tension:
@@ -29,7 +29,7 @@ generate everything that is data, interpret the declarative logic from that same
 rare genuinely-custom behavior, and make every category of drift a build failure or a test failure.
 
 This is a design/RFC, not an implementation plan for a single PR. phase0-codegen-scope.md is the grounded,
-increment-by-increment companion. This document ends with a phased rollout that used write-to-congress to
+increment-by-increment companion. This document ends with a phased rollout that used a product machine to
 prove the pipeline before generalizing it.
 
 ## Decisions at a glance
@@ -71,7 +71,7 @@ The single most important decision is *which machines get this stack at all*. Co
 state machine" with "persist a flow as a Trax snapshot machine" is what makes the whole thing feel heavy.
 
 - **Tier 1 — server-authoritative machines.** Persisted, resumable across devices, re-driven authoritatively
-  on the server, sometimes with exactly-once effects. Write-to-congress, checkout, onboarding, anything with
+  on the server, sometimes with exactly-once effects. Checkout, onboarding, anything with
   an irreversible action or a draft that must survive a reload. These cross the client/server boundary, so
   the runtimes must agree. **Only Tier 1 uses the machinery in this document.**
 - **Tier 2 — client-only UI machines.** A multi-step modal, a filter builder, async loading/error states, a
@@ -106,7 +106,7 @@ A Tier-1 machine has two layers with very different economics.
 - **Custom logic (the ~8%, twinned).** A guard or reducer too specific to express in the vocabulary (a
   formula reducer, an idiosyncratic branch) is bound by **name** in the IR and hand-written per runtime that
   runs it. This is the only twinned, hand-written surface, and it is what the differential (§7) exists to
-  keep honest. Write-to-congress has zero custom handlers, so this surface is currently unexercised.
+  keep honest. The first product machine has zero custom handlers, so this surface is currently unexercised.
 
 Two levers shrink the twinned surface, which matters a lot once there is more than one frontend language:
 
@@ -142,8 +142,8 @@ explicit, because getting it wrong is where the "byte-exact parity" claim quietl
   external system) cannot be run ahead by the client, because the client cannot fabricate that input. So the
   client does not advance its local machine for that edge; it invokes the mutation, the server runs the effect
   and returns the authoritative snapshot, and the client applies it. There is no client-side placeholder and
-  therefore no parity hole. Write-to-congress's `Send -> Sent` is the canonical case: it binds
-  `RunsOnce<IWriteToCongressLetterSend>("write-to-congress:send")`, the send runs first, its receipt flows in
+  therefore no parity hole. The first product machine's `Send -> Sent` is the canonical case: it binds
+  `RunsOnce<ISend>("<machine>:send")`, the send runs first, its receipt flows in
   as reducer input, and `Sent` is unreachable until the send completes (`checkout`'s `Pay -> Paid` is the same
   shape). Crash between the effect and the transition is safe: re-drive reuses the existing receipt (the
   exactly-once claim blocks a second send) and finishes the move. The server was always going to wait for
@@ -188,7 +188,7 @@ requirement, not just a parity mechanism, or someone will later "optimize" by tr
   reducer with no field-level filtering and no per-field metadata to filter on, so it requires the IR to carry
   which fields are `serverFilled` and the engine to consume that. And because it is a *security* control, not
   a parity one, it cannot degrade to a CI test that might not run: a missing strip is a forgery hole, not a
-  failed build. Write-to-congress avoids the whole path (its server-produced value, the receipt, arrives via
+  failed build. The first product machine avoids the whole path (its server-produced value, the receipt, arrives via
   the effect-bound `RunsOnce` mechanism, not an optimistic `serverFilled` field), so this control is both
   unbuilt and unexercised by the first consumer, which is exactly why it needs its own concrete design (§12).
 - **The generated mutation fan inherits user scoping.** Persistence is already per-user
@@ -220,7 +220,7 @@ machine) and the **oracle** (C# becomes the side the frontends must match).
   full IR (identity, states, triggers, transitions with declarative guards/reducers, per-state context and
   input schemas, per-state invariants, committed states, effect bindings, and the differential block).
   `SnapshotMachine.Describe()` (the original down payment that emitted only the *structural* third) is
-  subsumed. Proven on turnstile and, as a real product, write-to-congress.
+  subsumed. Proven on turnstile and on a real product machine.
 - **The oracle flip is not done.** TypeScript's `enumerate()` still produces the golden corpus; C# replays it
   (`DifferentialCorpus.Replay`) and must match. This is backwards for a server-authoritative design and is a
   scheduled increment (§7, §12), but it is not a shipped fact. Do not read "C# is source and oracle" as
@@ -247,7 +247,7 @@ Positives are above. The costs to design around:
   (authoritative) and in each frontend that runs it optimistically. With N frontend languages that is up to N
   hand-written implementations, differential-guarded. This is the dominant scaling cost, and it is why the
   vocabulary and the server-only escape hatch matter. Most machines should end up with few or zero
-  truly-custom client-side handlers; write-to-congress has zero.
+  truly-custom client-side handlers; the first product machine has zero.
 - **Frontend field changes couple to the C# build.** A frontend developer who wants a new field edits the C#
   source and regenerates; they cannot just edit TypeScript. For a C#-centric team this is fine and even
   desirable (one reviewed source). For a frontend-led org it is friction worth acknowledging.
@@ -315,7 +315,7 @@ already spec-compliant), so it is a note, not a task.
 
 The dominant *operational* cost is the cross-repo regen-and-ship loop, and the model is now decided by how the
 first product consumer ships. **The consuming repo vendors the TypeScript engine source at a pinned upstream
-commit and checks the generated artifacts into its own tree.** Concretely, in nwyc:
+commit and checks the generated artifacts into its own tree.** Concretely, in that consumer:
 
 - The engine `src/` is mirrored into `libs/shared/frontend/state-machine/` and imported through a path alias
   (`@traxsharp/state-machine` -> `libs/shared/frontend/state-machine/src/index.ts` in `tsconfig.base.json`). A
@@ -336,8 +336,8 @@ the IR version stamped by the exporter are the coherence anchors.
 ## 5. The IR
 
 One versioned, JSON-Schema'd document per machine, exported from the C# source. It captures everything that
-is data. The blocks the exporter emits today, on the write-to-congress IR
-(`libs/shared/statemachine/machines/write-to-congress/write-to-congress.ir.json`):
+is data. The blocks the exporter emits today, on a product machine's IR
+(`libs/shared/statemachine/machines/<machine>/<machine>.ir.json`):
 
 - Identity: `id`, `version`.
 - Structure: `initialState`, `states`, `triggers`, `transitions` (from/trigger/to, plus which guard/reducer
@@ -347,7 +347,7 @@ is data. The blocks the exporter emits today, on the write-to-congress IR
 - Input schema (`inputs`): per-trigger input field shapes.
 - Declarative validators and per-state invariants (`invariants`): the vocabulary policy checks (`.Requires`).
 - Named custom handlers: the *names* (not bodies) of any custom guards/reducers each edge binds, so every
-  runtime knows which functions it must provide by hand. Write-to-congress binds none.
+  runtime knows which functions it must provide by hand. The first product machine binds none.
 - `committedStates`: for the persistence layer.
 - `differential`: the samples/seeds/probe contexts authored in C# via `.Differential(...)`, off which the
   harness enumerates. Today these are hand-authored; generated probes will live here when they exist (§7).
@@ -404,7 +404,7 @@ through the thin `tools/generate-twin.mjs` entrypoint the CLI shells out to.
 ### Round-trip: how hand-written logic attaches to generated code
 
 For a fully-declarative machine there is **no** hand-written logic to attach: the guards and reducers are IR
-data, and the generated typed factory runs them. This is why write-to-congress's twin is a generated
+data, and the generated typed factory runs them. This is why the first product machine's twin is a generated
 `*.machine.g.ts` plus a hand-owned *bridge* file (`*.machine.ts`) that adds UI-facing types and
 state<->step mapping but **no guards or reducers**. The round-trip DX the draft agonized over does not bite
 until a machine needs a genuinely-custom named handler, and none do yet.
@@ -437,8 +437,8 @@ The generator writes many files across repos, so its failure and concurrency beh
   compiles is the worst case: it looks done and is wrong.
 - **Idempotent.** Running `generate` twice with no source change produces byte-identical output and no diff.
   This is what makes `--check` meaningful.
-- **The interim regen is a fragile chain of golden tests, and that is the argument for the CLI (§9).** Today,
-  nwyc regenerates via `scripts/regen-state-machine.sh`, which runs three env-var-gated golden tests in order
+- **The interim regen is a fragile chain of golden tests, and that is the argument for the CLI (§9).** Before the CLI,
+  the first consumer regenerated via `scripts/regen-state-machine.sh`, which ran three env-var-gated golden tests in order
   (`UPDATE_IR` writes the IR from a C# test, then `UPDATE_GEN` and `UPDATE_GOLDEN` write the twin and corpus
   from two Jest tests). It works but is brittle: driving generation through a test runner means an unrelated
   failing test can abort the regen under `set -e`, and the twin's three relative engine imports
@@ -471,7 +471,7 @@ The generator writes many files across repos, so its failure and concurrency beh
   diverge) and sparsest for custom guards (the whole reason the differential exists). A machine must hand-add
   adversarial probes seeded *per custom guard*, and the corpus is incomplete for any custom guard or reducer
   that has none. This needs to be a gate, not a convention (§11).
-- **The differential is currently unexercised for its core purpose.** Because write-to-congress has zero
+- **The differential is currently unexercised for its core purpose.** Because the first product machine has zero
   custom handlers, the corpus today only proves that the *interpreted* rules agree across runtimes, which is
   the part least likely to diverge (both runtimes run the same IR data). The first machine with a custom
   handler is what actually tests "hand-written logic agrees across languages." Until then, "parity is proven"
@@ -495,7 +495,7 @@ The generator writes many files across repos, so its failure and concurrency beh
 
 "At scale" has to mean the corpus, not just many machines. The enumerator builds a cross-product (contexts x
 reachable states, each fired against every trigger x input) plus the per-guard adversarial probes above. For
-the toy machines that is tens of cases; write-to-congress's committed `differential.json` is already ~640 KB.
+the toy machines that is tens of cases; the first product machine's committed `differential.json` is already ~640 KB.
 For a real machine it is combinatorial, committed to git as the golden, and replayed by every runtime on
 every push. Bound it deliberately: cap the probe set per guard, shard the golden per machine, budget CI
 replay time, and treat a large golden diff as a review artifact (a diff touching thousands of cases needs the
@@ -511,7 +511,7 @@ Adding or changing a persisted context field breaks existing stored drafts unles
   delegate-based forward migration (`Func<string, JsonObject, MigrationResult>` registered per source version
   on the fluent builder), applied on `Rehydrate`, pinned by a migration golden. What is deferred is *carrying
   migrations into the IR*: `IrExporter` emits no migrations block, so migrations do not cross to the generated
-  frontend, and the declarative product machines (turnstile, write-to-congress) are single-version. For those,
+  frontend, and the declarative product machines (turnstile, the first product machine) are single-version. For those,
   a stored snapshot whose version does not match is rejected as a typed `version-mismatch`
   (`RehydrationErrorCodes`) and the client starts fresh, which is the engine's fallback when no migration is
   registered. Accepted cost: a schema change invalidates in-flight drafts for the single-version machines,
@@ -588,7 +588,7 @@ and several guards are still unexercised or unbuilt. Read it as current-state, n
 
 | Drift | Guard | Failure mode | Status |
 |-------|-------|--------------|--------|
-| Structure (state/trigger in one runtime, not another) | generated from the IR + interpreted | build fails (`--check`) / compile error | built for every machine (turnstile, checkout, write-to-congress); no C# artifact (interpret-at-runtime) |
+| Structure (state/trigger in one runtime, not another) | generated from the IR + interpreted | build fails (`--check`) / compile error | built for every machine (turnstile, checkout, the first product machine); no C# artifact (interpret-at-runtime) |
 | Data type (field is `string` here, `int` there) | generated types + schema validators | compile error | built (context/spec types generated) |
 | Declarative guard (a boundary differs) | interpreted from the same IR data both sides | replay divergence, or compile error | built (one rule vocabulary, two interpreters) |
 | Custom guard/reducer logic | differential replay | test fails, names the case | replay + corpus built; TS is the oracle; **unexercised** (no custom handler exists yet) |
@@ -626,7 +626,7 @@ ahead of the oracle flip, which is now the next phase.
    product.* The engine-level `serverFilled` field-strip and the reachability check in `Rehydrate` are
    *security* controls, so they degrade to a vulnerability, not a failed build, and cannot rely on a test that
    might not run. They need a concrete design (per-field IR metadata + a reachability-from-initial check).
-   Write-to-congress dodges the `serverFilled` path (it uses effect-bound `RunsOnce`), so the gap is currently
+   The first product machine dodges the `serverFilled` path (it uses effect-bound `RunsOnce`), so the gap is currently
    latent, not exploited, but it must be closed before a machine ships an optimistic `serverFilled` field.
 
 The phases below are in execution order; the letters in parentheses are the matching increments in
@@ -638,7 +638,7 @@ oracle flip (phase0 Increment D).
   interpreter runs the declarative rules; and a one-line source change propagates with the differential green.
   The source-and-oracle *source* half is built; the oracle half is deferred to Phase 3 below.
 - **Phase 1 — machine #2, a real product (phase0 Increment E's checkout precursor). (Done.)**
-  write-to-congress, a genuine Tier-1 flow (8 states, an effect-bound send, a guided/unguided branch), was
+  A genuine Tier-1 product flow (8 states, an effect-bound send, a guided/unguided branch) was
   built through the generator end to end and is the first product consumer. It surfaced the deploy-topology and
   CLI requirements folded into §4 and §9.
 - **Phase 2: the `trax machine` CLI (phase0 Increment E) (§9). (Done.)** `regen-state-machine.sh` is replaced

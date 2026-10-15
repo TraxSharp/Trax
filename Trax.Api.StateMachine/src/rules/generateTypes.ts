@@ -290,8 +290,8 @@ const outcomeTypeName = (machine: string, outcome: string): string =>
 const union = (values: readonly string[]): string =>
   values.map((v) => `"${v}"`).join(" | ");
 
-// A machine id is kebab/snake (write-to-congress); its type prefix is PascalCase (WriteToCongress) and its
-// exported const is camelCase (writeToCongress). Splitting on - and _ is what makes a multi-word id emit valid
+// A machine id is kebab/snake (ship-to-store); its type prefix is PascalCase (ShipToStore) and its
+// exported const is camelCase (shipToStore). Splitting on - and _ is what makes a multi-word id emit valid
 // identifiers; a single-word id (turnstile) is unchanged.
 const pascal = (id: string): string =>
   id

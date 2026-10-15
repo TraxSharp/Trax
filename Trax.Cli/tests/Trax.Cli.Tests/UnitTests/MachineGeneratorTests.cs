@@ -70,7 +70,7 @@ public class MachineGeneratorTests
     [TestCase("a/b")]
     [TestCase("")]
     [TestCase("Checkout")]
-    [TestCase("write_to_congress")]
+    [TestCase("ship_to_store")]
     public void An_id_that_is_not_kebab_case_is_refused_and_nothing_is_written(string id)
     {
         var node = new FakeNodeRunner();
@@ -95,7 +95,7 @@ public class MachineGeneratorTests
     }
 
     [TestCase("checkout")]
-    [TestCase("write-to-congress")]
+    [TestCase("ship-to-store")]
     [TestCase("turnstile-2")]
     public void A_kebab_case_id_is_accepted(string id)
     {

@@ -248,7 +248,7 @@ internal sealed partial class MachineGenerator
         if (!IsMachineId(id))
             throw new InvalidOperationException(
                 $"The machine id '{id}' is not kebab-case (lowercase letters and digits in words joined by "
-                    + "'-', starting with a letter, e.g. 'write-to-congress'). It names the generated files, "
+                    + "'-', starting with a letter, e.g. 'ship-to-store'). It names the generated files, "
                     + "so change the machine's Id(...)."
             );
         var planned = new List<PlannedArtifact>();
@@ -454,7 +454,7 @@ internal sealed partial class MachineGenerator
 
     /// <summary>
     /// A machine id is kebab-case: lowercase ASCII words of letters and digits joined by single
-    /// hyphens, starting with a letter (<c>checkout</c>, <c>write-to-congress</c>). It names every
+    /// hyphens, starting with a letter (<c>checkout</c>, <c>ship-to-store</c>). It names every
     /// artifact file, so nothing else may reach a path.
     /// </summary>
     internal static bool IsMachineId(string id) => MachineId().IsMatch(id);

@@ -9,7 +9,7 @@ status: accepted
 A state machine's id (what `Id(...)` sets) names every artifact `trax machine generate` and
 `check` write: `<id>.ir.json`, `<id>.contexts.g.ts`, `<id>.machine.g.ts`. The CLI accepts only
 lowercase ASCII words of letters and digits joined by single hyphens, starting with a letter
-(`checkout`, `write-to-congress`), and refuses anything else before writing a file. That is the
+(`checkout`, `ship-to-store`), and refuses anything else before writing a file. That is the
 form `trax machine new` already produces.
 
 ## Status

@@ -28,7 +28,7 @@ public sealed record GuardResult(
     /// True when the check found work to do and no offenders in it.
     ///
     /// <para>
-    /// An empty corpus is a failure, not a pass. nwyc's equivalent fixture passed nine of
+    /// An empty corpus is a failure, not a pass. A downstream project's equivalent fixture passed nine of
     /// its thirteen assertions over an empty set until a discovery check was added, which
     /// is exactly the shape of bug this property exists to prevent: a renamed directory
     /// turns every "no violations" assertion vacuous at once, and nothing says so.

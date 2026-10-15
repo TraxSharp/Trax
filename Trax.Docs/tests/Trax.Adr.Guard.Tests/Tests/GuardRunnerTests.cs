@@ -16,7 +16,7 @@ public class GuardRunnerTests
     #region Discovery
 
     /// <summary>
-    /// The regression this whole design exists to prevent. nwyc's equivalent fixture
+    /// The regression this whole design exists to prevent. A downstream project's equivalent fixture
     /// passed nine of its thirteen assertions over an empty set until a discovery check
     /// was added: a renamed or emptied directory turns every "no violations" result
     /// vacuous at once, and nothing says so.

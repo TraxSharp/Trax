@@ -424,10 +424,10 @@ This includes a subscriber that only wants `[TraxAllowAnonymous]` trains. On a h
 using Trax.Api.Auth.Jwt;
 
 services.AddTraxJwtAuth("cognito", jwt => jwt.UseAuthority(cognitoAuthority, "mobile-client"));
-services.AddTraxJwtAuth("internal", jwt => jwt.UseSymmetricKey("nwyc-web", "trax", internalKey));
+services.AddTraxJwtAuth("internal", jwt => jwt.UseSymmetricKey("internal-web", "trax", internalKey));
 services.AddTraxJwtDispatcher(d => d
     .MapIssuer(cognitoAuthority, "cognito")
-    .MapIssuer("nwyc-web", "internal"));
+    .MapIssuer("internal-web", "internal"));
 ```
 
 ### Custom interceptor

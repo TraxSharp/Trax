@@ -10,9 +10,9 @@ neutral IR, generate the rest) into a concrete, code-grounded plan.
 **Update (2026-08-13).** Two things landed since. (1) The differential seeds are now authored in C# too:
 `.Differential(...)` on the machine builder records samples/seeds/probe contexts, `IrExporter` emits them as
 an IR `differential` block, and the harness enumerates off the IR. This supersedes part of Decision A (§6) —
-`machine.json` is no longer even the differential's home. (2) nwyc's **write-to-congress** adopted the whole
+`machine.json` is no longer even the differential's home. (2) A downstream **product machine** adopted the whole
 pipeline as the first *product* consumer (declarative machine, generated twin, C#-authored differential,
-`AddStateMachines` on Trax.Effect 1.49.0), and its `machine.json` is **deleted**. The concrete frictions nwyc
+`AddStateMachines` on Trax.Effect 1.49.0), and its `machine.json` is **deleted**. The concrete frictions it
 surfaced were folded into Increment E (§5).
 
 **Update (2026-09-11). Increment E has shipped.** The `trax machine` CLI is merged in Trax.Cli
@@ -268,7 +268,7 @@ E is generator/authoring work that is oracle-agnostic.
 
 This is the plan the CLI was built from, updated to the surface that actually shipped.
 
-**What it replaced.** nwyc regenerated every derived artifact with `scripts/regen-state-machine.sh` (invoked
+**What it replaced.** The first product consumer regenerated every derived artifact with `scripts/regen-state-machine.sh` (invoked
 as `pnpm regen:state-machine`), a three-step chain of env-var-gated golden tests run in strict order:
 
 ```
@@ -286,7 +286,7 @@ requirements, not incidental:
 |---|---|
 | Artifacts are split across two trees: the IR + corpus under a shared `machines/<name>/` dir, the twin (`*.contexts.g.ts` + `*.machine.g.ts`) next to the frontend that consumes it (`apps/web/src/app/<name>/`). | `generate` / `check` take an **output root per artifact** (`--ir-out`, `--twin-out`, `--corpus-out`), not one directory. |
 | The consumer **vendors** the engine `src` (pinned in `VENDORED.md`) and imports it via a `@traxsharp/state-machine` path alias, rather than depending on a published package. | The twin generator runs against an **arbitrary engine `src`** (`--engine-src <path>`); it must not hard-wire a package layout. |
-| `generateMachineFactory` emits imports relative to the engine's own `src` (`../../machine`, `../../rules/irMachine`, `../../typed`). nwyc's codegen test collapses the three into one `@traxsharp/state-machine` import with three hard-coded string `.replace()` calls (two deletions + one rewrite) because the generator has no option for it. | The twin generator takes an **import style** (`--import-style relative|specifier`, with the specifier configurable), so no consumer re-implements the rewrite. This is a change to `generateMachineFactory`'s signature (add an options arg), currently `(ir: IrDocument)`. |
+| `generateMachineFactory` emits imports relative to the engine's own `src` (`../../machine`, `../../rules/irMachine`, `../../typed`). The consumer's codegen test collapses the three into one `@traxsharp/state-machine` import with three hard-coded string `.replace()` calls (two deletions + one rewrite) because the generator has no option for it. | The twin generator takes an **import style** (`--import-style relative|specifier`, with the specifier configurable), so no consumer re-implements the rewrite. This is a change to `generateMachineFactory`'s signature (add an options arg), currently `(ir: IrDocument)`. |
 | Generation is driven through a test runner. Under nx, `nx test web --testPathPattern` does not filter, so it runs the whole web suite and one unrelated failing test aborts the regen under `set -e`. The script works around this by calling `npx jest` directly. | `generate` runs the exporter and generators **directly**, never through a test runner. This is the substantive argument for a CLI over "wrap the tests in a better script." |
 
 **Command surface** (mirrors the existing `trax` generator architecture, `GenerateCommand` / a code renderer):
@@ -321,7 +321,7 @@ C# **orchestrator** that crosses the runtime boundary explicitly:
   the engine repo (`tools/generate-twin.mjs`) that bundles the TS generators from `--engine-src` and writes the
   `.g.ts` files to `--twin-out` for the given `--ir` and `--import-style`; `tools/generate-corpus.mjs` does the
   same with `enumerate` / `serializeCorpus` for `--corpus-out`. This *is* the "run the generators directly, not
-  through a test runner" requirement: it replaced nwyc's `npx jest … .codegen.test` invocation with a direct
+  through a test runner" requirement: it replaced the consumer's `npx jest … .codegen.test` invocation with a direct
   `node tools/generate-twin.mjs …`, and it removed the `.replace()` import hack because the entrypoint passes
   `--import-style` into `generateMachineFactory`'s options arg. **Delivered:** the two `tools/*.mjs`
   entrypoints and the shared `tools/lib/`, plus the options arg on `generateMachineFactory`.
@@ -339,9 +339,9 @@ C# **orchestrator** that crosses the runtime boundary explicitly:
   Node dependency has cost only the two requirements in the consequence above.
 
 **Scope of the first pass.** Build and test the CLI in this workspace against `turnstile` and `checkout` (the
-personal-repo machines); their committed IR/twin/corpus are the byte-parity oracle. write-to-congress lives in
-the nwyc work repo, so validate against it separately (point the CLI at nwyc's vendored engine `src` and its
-committed artifacts via `--engine-src`) rather than depending on nwyc from here. And note that Increment E
+in-repo machines); their committed IR/twin/corpus are the byte-parity oracle. The product machine lives in
+another repository, so validate against it separately (point the CLI at its vendored engine `src` and its
+committed artifacts via `--engine-src`) rather than depending on it from here. And note that Increment E
 deliberately bundles two real sub-projects, not incidental to the CLI: the `checkout` declarative migration
 (test item 6) and the `machine.json` / `generate.mjs` retirement (cleanup below). Both landed.
 
@@ -354,7 +354,7 @@ oracle for what the CLI must reproduce, so the CLI is correct iff its output is 
 1. **Byte-parity with the existing pipeline.** `trax machine generate` on `turnstile` (then `checkout`)
    produces the exact committed `*.ir.json`, `*.contexts.g.ts`, `*.machine.g.ts` and `differential.json` the
    current pipeline produces. Assert byte-equality against the checked-in artifacts.
-   Then validate cross-repo: run it against nwyc's write-to-congress (`--engine-src` its vendored engine) and
+   Then validate cross-repo: run it against the product machine (`--engine-src` its vendored engine) and
    assert byte-parity with what `regen-state-machine.sh` produces there.
 2. **Idempotence.** A second `generate` with no source change yields no diff; `check` exits zero.
 3. **Drift detection.** Mutate the C# source (add a state), run `check`, assert non-zero exit and a message
@@ -391,7 +391,7 @@ against `describe()`, and retiring it (or regenerating it from the IR) is the on
 - **Decision C: round-trip attachment shape. SUBSUMED for declarative machines (2026-08-11).** Because the IR
   is interpreted at runtime (§0), a declarative machine has no hand-written logic to attach: the twin is a
   generated `*.machine.g.ts` plus a hand-owned *bridge* file with UI types and no guards/reducers (see
-  write-to-congress). The attachment shape (C# `partial` + generated interface; TS interface + registry +
+  the product machine). The attachment shape (C# `partial` + generated interface; TS interface + registry +
   separate hand-file) still stands for the first *custom* named handler, which is unexercised; confirm it then.
 - **Decision D: oracle flip timing. Now scheduled *after* Increment E.** Keep TS as the oracle through A, B,
   and E (the CLI + checkout). The flip is oracle-internal correctness that nobody is blocked on; the CLI is

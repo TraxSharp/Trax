@@ -30,12 +30,12 @@ public class MachineScaffolderTests
     }
 
     [TestCase("checkout", ExpectedResult = "Checkout")]
-    [TestCase("write-to-congress", ExpectedResult = "WriteToCongress")]
+    [TestCase("ship-to-store", ExpectedResult = "ShipToStore")]
     [TestCase("order_flow", ExpectedResult = "OrderFlow")]
     [TestCase("TURNSTILE", ExpectedResult = "Turnstile")]
     public string Pascal_capitalizes_each_word(string name) => MachineScaffolder.Pascal(name);
 
-    [TestCase("write-to-congress", ExpectedResult = "write-to-congress")]
+    [TestCase("ship-to-store", ExpectedResult = "ship-to-store")]
     [TestCase("OrderFlow", ExpectedResult = "orderflow")]
     [TestCase("check out", ExpectedResult = "check-out")]
     public string Kebab_lowercases_and_dashes(string name) => MachineScaffolder.Kebab(name);

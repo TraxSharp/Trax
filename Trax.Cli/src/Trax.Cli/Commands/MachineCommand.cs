@@ -24,7 +24,7 @@ internal static class MachineCommand
     {
         var nameArgument = new Argument<string>("name")
         {
-            Description = "Machine name (kebab-case id, e.g. 'checkout' or 'write-to-congress').",
+            Description = "Machine name (kebab-case id, e.g. 'checkout' or 'ship-to-store').",
         };
         var outputOption = new Option<DirectoryInfo?>("--output")
         {

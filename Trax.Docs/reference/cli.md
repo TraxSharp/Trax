@@ -329,7 +329,7 @@ assembly, not the source.
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<name>` | Yes | Machine name as a kebab-case id (`checkout`, `write-to-congress`). The type prefix is the PascalCase form. |
+| `<name>` | Yes | Machine name as a kebab-case id (`checkout`, `ship-to-store`). The type prefix is the PascalCase form. |
 | `--output` | No | Directory to write `<Name>Machine.cs` (default: current directory). |
 | `--namespace` | No | Namespace for the generated file (default: `Machines`). |
 | `--with-effect` | No | Include an exactly-once `ISnapshotEffect` stub and mark the terminal state committed. |
@@ -353,7 +353,7 @@ other types did not load.
 
 The machine's id (what its `Id(...)` sets) names every artifact, so it must be kebab-case: lowercase
 letters and digits in words joined by single hyphens, starting with a letter (`checkout`,
-`write-to-congress`), the form `trax machine new` produces. `generate` and `check` refuse any other id
+`ship-to-store`), the form `trax machine new` produces. `generate` and `check` refuse any other id
 before writing anything.
 
 | Option | Required | Description |

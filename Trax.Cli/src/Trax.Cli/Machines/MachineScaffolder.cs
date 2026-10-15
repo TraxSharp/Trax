@@ -52,7 +52,7 @@ internal static class MachineScaffolder
         if (!SchemaNames.IsIdentifier(pascal))
             throw new InvalidOperationException(
                 $"The machine name '{name}' does not make a C# identifier: use letters, digits, "
-                    + "'-', '_' or spaces, starting with a letter, e.g. 'write-to-congress'."
+                    + "'-', '_' or spaces, starting with a letter, e.g. 'ship-to-store'."
             );
         if (!SchemaNames.IsDottedIdentifier(@namespace))
             throw new InvalidOperationException(
@@ -71,7 +71,7 @@ internal static class MachineScaffolder
         return path;
     }
 
-    // A machine id is kebab-case (write-to-congress); the type prefix is PascalCase (WriteToCongress).
+    // A machine id is kebab-case (ship-to-store); the type prefix is PascalCase (ShipToStore).
     internal static string Kebab(string name) =>
         string.Join('-', SplitWords(name).Select(w => w.ToLowerInvariant()));
 

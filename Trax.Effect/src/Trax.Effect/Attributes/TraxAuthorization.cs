@@ -155,7 +155,7 @@ public static class TraxAuthorization
     /// <summary>
     /// The failure message for a surface that declared its posture with another framework's
     /// attribute. <paramref name="subject"/> describes what was decorated, for example
-    /// <c>"GraphQL field 'Issue.content' (Nwyc.IssueContentExtension.GetContent)"</c>.
+    /// <c>"GraphQL field 'Issue.content' (MyApp.IssueContentExtension.GetContent)"</c>.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static string ForeignAttributeMessage(

@@ -224,7 +224,7 @@ describe("generateContextTypes", () => {
   });
 });
 
-// The import-style option is what lets a vendoring consumer (nwyc's apps/web) collapse the three relative
+// The import-style option is what lets a vendoring consumer collapse the three relative
 // engine imports into one `@traxsharp/state-machine` import without the hard-coded string `.replace()` its codegen
 // test used to do. These pin both styles byte-exact so `trax machine generate --import-style` and any consumer
 // stay in lockstep with the generator.
@@ -250,7 +250,7 @@ describe("generateMachineFactory import styles", () => {
   });
 
   it("specifier style emits exactly the collapsed @traxsharp/state-machine import", () => {
-    // Byte-exact against nwyc's PACKAGE_IMPORT: symbol order and spacing must match, since this replaces the
+    // Byte-exact against the vendoring consumer's PACKAGE_IMPORT: symbol order and spacing must match, since this replaces the
     // three `.replace()` calls its codegen test did by hand.
     const out = generateMachineFactory(ir, { importStyle: "specifier" });
     expect(out).toContain(SPECIFIER_IMPORT);

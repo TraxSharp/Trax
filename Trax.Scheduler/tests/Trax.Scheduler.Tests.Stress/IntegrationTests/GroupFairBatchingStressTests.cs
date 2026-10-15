@@ -13,7 +13,7 @@ namespace Trax.Scheduler.Tests.Stress.IntegrationTests;
 /// <summary>
 /// Stress tests for group-fair batching in CreateWorkQueueEntriesJunction.
 /// Validates that the fairness algorithm works correctly and efficiently
-/// at scale, reproducing the SuiteMirror scenario where thousands of
+/// at scale, reproducing a production scenario where thousands of
 /// manifests in one group starved smaller groups from being queued.
 ///
 /// Run with: dotnet test --filter "TestCategory=Stress"
@@ -41,9 +41,9 @@ public class GroupFairBatchingStressTests : TestSetup
     }
 
     [Test]
-    public async Task GroupFairBatching_SuiteMirrorScenario_DeltasGetQueued()
+    public async Task GroupFairBatching_LargeGroupStarvesSmallGroup_DeltasGetQueued()
     {
-        // Arrange — reproduces the exact SuiteMirror bug: 4425 cache manifests
+        // Arrange — reproduces the production bug: 4425 cache manifests
         // in one group, 15 delta manifests in another. Without group-fair batching,
         // the delta group is perpetually starved by the flat Take(200).
         var cacheGroup = await SeedManifestGroup("cache-import");
