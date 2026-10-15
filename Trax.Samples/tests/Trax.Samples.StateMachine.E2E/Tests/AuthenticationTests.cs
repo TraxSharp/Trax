@@ -25,43 +25,47 @@ public class AuthenticationTests : StateMachineTestFixture
     private const string Adr =
         "see Trax.Docs/adr/0035-demo-credentials-exist-only-in-development.md";
 
+    // Each operation as the page sends it: its generated id and its variables.
     private static IEnumerable<TestCaseData> EveryOperation()
     {
         var id = Guid.NewGuid();
-        yield return new TestCaseData(
-            $$"""mutation { machines { turnstile { start(requestId: "start-anonymous") { id } } } }"""
-        ).SetArgDisplayNames("turnstile.start");
-        yield return new TestCaseData(
-            $$"""mutation { machines { turnstile { coin(id: "{{id}}", input: { coin: "quarter" }, requestId: "coin-anonymous") { id } } } }"""
-        ).SetArgDisplayNames("turnstile.coin");
-        yield return new TestCaseData(
-            $$"""mutation { machines { turnstile { push(id: "{{id}}", requestId: "push-anonymous") { id } } } }"""
-        ).SetArgDisplayNames("turnstile.push");
-        yield return new TestCaseData(
-            $$"""{ machines { turnstile { get(id: "{{id}}") { id } } } }"""
-        ).SetArgDisplayNames("turnstile.get");
-        yield return new TestCaseData(
-            $$"""mutation { machines { checkout { pay(id: "{{id}}", requestId: "pay-anonymous") { id } } } }"""
-        ).SetArgDisplayNames("checkout.pay");
-        yield return new TestCaseData(
-            $$"""mutation { machines { checkout { discard(id: "{{id}}", requestId: "discard-anonymous") { id } } } }"""
-        ).SetArgDisplayNames("checkout.discard");
+        yield return Case("turnstile", "start", new { requestId = "start-anonymous" });
+        yield return Case(
+            "turnstile",
+            "coin",
+            new
+            {
+                id,
+                input = new { coin = "quarter" },
+                requestId = "coin-anonymous",
+            }
+        );
+        yield return Case("turnstile", "push", new { id, requestId = "push-anonymous" });
+        yield return Case("turnstile", "get", new { id });
+        yield return Case("checkout", "pay", new { id, requestId = "pay-anonymous" });
+        yield return Case("checkout", "discard", new { id, requestId = "discard-anonymous" });
     }
 
+    private static TestCaseData Case(string machine, string operation, object variables) =>
+        new TestCaseData(
+            StateMachineClient.DocumentOf(machine, operation)!.Id,
+            variables
+        ).SetArgDisplayNames($"{machine}.{operation}");
+
     [TestCaseSource(nameof(EveryOperation))]
-    public async Task Anonymous_IsRefused(string document)
+    public async Task Anonymous_IsRefused(string id, object variables)
     {
-        var response = await Machines.RawAsync(Anonymous, document);
+        var response = await GraphQL.SendIdAsync(id, Anonymous, variables);
 
         response.IsRefused.Should().BeTrue(response.Raw);
     }
 
     [TestCaseSource(nameof(EveryOperation))]
-    public async Task AWrongKey_IsRefused(string document)
+    public async Task AWrongKey_IsRefused(string id, object variables)
     {
         var stranger = new Caller("stranger", "not-a-key-this-host-knows");
 
-        var response = await Machines.RawAsync(stranger, document);
+        var response = await GraphQL.SendIdAsync(id, stranger, variables);
 
         response.IsRefused.Should().BeTrue(response.Raw);
     }
@@ -70,9 +74,10 @@ public class AuthenticationTests : StateMachineTestFixture
     public async Task Anonymous_WritesNothing()
     {
         var requestId = $"start-{Guid.NewGuid():N}";
-        var response = await Machines.RawAsync(
+        var response = await GraphQL.SendIdAsync(
+            StateMachineClient.DocumentOf(Turnstile, "start")!.Id,
             Anonymous,
-            $$"""mutation { machines { turnstile { start(requestId: "{{requestId}}") { id } } } }"""
+            new { requestId }
         );
         response.IsRefused.Should().BeTrue(response.Raw);
 
@@ -105,16 +110,18 @@ public class AuthenticationTests : StateMachineTestFixture
     public async Task Production_RegistersNoApiKey_AndRefusesTheDemoKey()
     {
         await using var factory = new ProductionStateMachineApiFactory();
-        var machines = new StateMachineClient(new GraphQLClient(factory.CreateClient()));
+        var graphQL = new GraphQLClient(factory.CreateClient());
+        var machines = new StateMachineClient(graphQL);
 
         var schemes = await factory
             .Services.GetRequiredService<IAuthenticationSchemeProvider>()
             .GetAllSchemesAsync();
         schemes.Select(s => s.Name).Should().NotContain(ApiKeyDefaults.SchemeName, Adr);
 
-        var response = await machines.RawAsync(
+        var response = await graphQL.SendIdAsync(
+            StateMachineClient.DocumentOf(Turnstile, "start")!.Id,
             Alice,
-            """mutation { machines { turnstile { start(requestId: "start-production") { id } } } }"""
+            new { requestId = "start-production" }
         );
         response.IsRefused.Should().BeTrue($"{Adr}: {response.Raw}");
 

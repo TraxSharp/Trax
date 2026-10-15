@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Charge, TraxTransport } from "./traxTransport";
-import type { LastAction } from "./useMachine";
+import { paymentsListCharges, type ProviderCharge } from "./trax/index.g";
+import type { LastAction } from "./useMachineStage";
 
 // The binding as Machines.cs declares it, trimmed to the lines that matter here.
 const BINDING = [
@@ -15,8 +15,8 @@ const BINDING = [
  * The side effect, shown from both ends: the machine binds the charge to the Pay edge, so the page only
  * asks for the move, and the payment provider's own list of charges shows the server took it once.
  */
-export function SideEffect({ transport, last, draftId }: { transport: TraxTransport; last: LastAction | null; draftId: string }) {
-  const [charges, setCharges] = useState<Charge[] | null>(null);
+export function SideEffect({ last, draftId }: { last: LastAction | null; draftId: string }) {
+  const [charges, setCharges] = useState<ProviderCharge[] | null>(null);
   const known = useRef<Set<string> | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
 
@@ -24,9 +24,8 @@ export function SideEffect({ transport, last, draftId }: { transport: TraxTransp
   useEffect(() => {
     if (last && last.kind !== "send") return;
     let cancelled = false;
-    transport
-      .listCharges()
-      .then((list) => {
+    paymentsListCharges()
+      .then(({ charges: list }) => {
         if (cancelled) return;
         if (known.current) {
           const added = list.find((c) => !known.current!.has(c.receipt));
@@ -39,7 +38,7 @@ export function SideEffect({ transport, last, draftId }: { transport: TraxTransp
     return () => {
       cancelled = true;
     };
-  }, [transport, last]);
+  }, [last]);
 
   const repeated = last?.kind === "send" && last.replayed;
 
@@ -64,7 +63,7 @@ export function SideEffect({ transport, last, draftId }: { transport: TraxTransp
       <div className="sent">
         <span className="group-label">All the page sends to pay</span>
         <code className="sent-body">
-          machines {"{"} checkout {"{"} pay(id: "{draftId.slice(0, 8)}…", requestId) {"}"} {"}"}
+          {"{"} id: "trax_machine_checkout_pay_…", variables: {"{"} id: "{draftId.slice(0, 8)}…", requestId {"}"} {"}"}
         </code>
         <span className="sent-note">No amount, no card, no charge call: the server takes the total from its own copy.</span>
       </div>

@@ -1,28 +1,40 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
+using Trax.Effect.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
 
 /// <summary>
-/// The sample's machines through their typed operations, as the sample's web client sends them
-/// (<c>web/src/traxTransport.ts</c>): <c>mutation { machines { turnstile { start coin push discard } checkout { start
-/// addItem next back pay reset discard } } }</c> and <c>query { machines { &lt;machine&gt; { get } } }</c>. A refusal
-/// comes back as <c>problem</c> in the data rather than as a GraphQL error; a document the host does not serve (a
-/// generic mutation, a field a machine does not have) is answered <see cref="NotServed"/>.
+/// The sample's machines through their typed operations, as the sample's page sends them: each operation by the
+/// persisted id its generated client holds (<c>web/src/trax/manifest.json</c>), with its values as variables, never a
+/// document. A refusal comes back as <c>problem</c> in the data rather than as a GraphQL error. An operation the
+/// generated client does not have (a generic save, an input an event does not take, a machine the host does not
+/// expose) is answered <see cref="NotServed"/>: nothing could send it but a document, which the host refuses.
 /// </summary>
-public partial class StateMachineClient(GraphQLClient graphQL)
+public sealed class StateMachineClient(GraphQLClient graphQL)
 {
-    /// <summary>The problem a request is answered with when the schema refuses its document.</summary>
+    /// <summary>The problem a request is answered with when no generated operation serves it.</summary>
     public const string NotServed = "not-served";
 
-    // What each machine's answer selects of its context, and the version a snapshot of it carries.
-    private static readonly Dictionary<string, (string Field, string Context, int Version)> Known =
-        new(StringComparer.Ordinal)
-        {
-            ["turnstile"] = ("turnstile", "context { paidWith } ", 1),
-            ["checkout"] = ("checkout", "context { items receipt total } ", 2),
-        };
+    /// <summary>The client manifest the page is generated from, copied beside the tests.</summary>
+    public static ClientManifest Manifest { get; } =
+        ClientManifest.Read(
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "manifest.json"))
+        );
+
+    // The version a snapshot of each machine carries, from its IR.
+    private static int VersionOf(string machine) =>
+        Manifest.Machines.Single(m => m.Id == machine).Ir["version"]!.GetValue<int>();
+
+    /// <summary>The generated document of <paramref name="machine"/>'s <paramref name="operation"/>, or null.</summary>
+    public static ClientManifestDocument? DocumentOf(string machine, string operation) =>
+        Manifest
+            .Machines.SingleOrDefault(m => m.Id == machine)
+            ?.Documents.SingleOrDefault(d => d.Operation == operation);
+
+    /// <summary>The generated document of the train whose field is <paramref name="field"/>.</summary>
+    public static ClientManifestDocument TrainDocument(string field) =>
+        Manifest.Trains.Single(t => t.Field == field).Documents.Single();
 
     /// <summary>
     /// Starts an instance of <paramref name="machine"/> from its declared start, as the page does: the server mints
@@ -34,11 +46,14 @@ public partial class StateMachineClient(GraphQLClient graphQL)
         string? requestId = null
     )
     {
-        var result = await MutateAsync(
+        var result = await OperateAsync(
             caller,
             machine,
             "start",
-            $"requestId: {Literal(requestId ?? $"start-{Guid.NewGuid():N}")}"
+            new Dictionary<string, object?>
+            {
+                ["requestId"] = requestId ?? $"start-{Guid.NewGuid():N}",
+            }
         );
         return (result.Id, result);
     }
@@ -46,28 +61,23 @@ public partial class StateMachineClient(GraphQLClient graphQL)
     /// <summary>Discards one of the caller's instances; true when it is gone.</summary>
     public async Task<bool> DiscardAsync(Caller caller, string machine, Guid id)
     {
-        var response = await graphQL.SendAsync(
-            $"mutation {{ machines {{ {Known[machine].Field} {{ discard(id: {Literal(id.ToString())}, "
-                + $"requestId: {Literal($"discard-{Guid.NewGuid():N}")}) {{ discarded problem {{ code }} }} }} }} }}",
-            caller
+        var response = await graphQL.SendIdAsync(
+            DocumentOf(machine, "discard")!.Id,
+            caller,
+            new { id, requestId = $"discard-{Guid.NewGuid():N}" }
         );
         response
             .HasErrors.Should()
             .BeFalse($"discard as {caller} should not error: {response.Raw}");
-        return response
-            .GetData("machines", Known[machine].Field, "discard", "discarded")
-            .GetBoolean();
+        return response.GetData("machines", machine, "discard", "discarded").GetBoolean();
     }
 
     public Task<GraphQLResponse> ListMachinesAsync(Caller caller) =>
-        graphQL.SendAsync(
-            "{ discover { stateMachine { listMachines { machines { name hasEffect } } } } }",
-            caller
-        );
+        graphQL.SendIdAsync(TrainDocument("listMachines").Id, caller, new { });
 
     /// <summary>
-    /// Tries the generic save, as a client that writes its own snapshot would. The sample serves no generic
-    /// mutation, so the answer is <see cref="NotServed"/>.
+    /// Tries the generic save, as a client that writes its own snapshot would. The generated client has no such
+    /// operation, and the host refuses the document a client would have to write for it.
     /// </summary>
     public async Task<SnapshotResult> SaveAsync(
         Caller caller,
@@ -90,21 +100,16 @@ public partial class StateMachineClient(GraphQLClient graphQL)
                 },
             }
         );
-        return response.HasErrors
-            ? new SnapshotResult(null, NotServed, response.Raw)
-            : new SnapshotResult(
-                null,
-                response
-                    .GetData("dispatch", "stateMachine", "saveSnapshot", "output", "problem")
-                    .GetProperty("code")
-                    .GetString(),
-                response.Raw
-            );
+        response
+            .HasErrors.Should()
+            .BeTrue($"the host serves no document sent as text: {response.Raw}");
+        return new SnapshotResult(null, NotServed, response.Raw);
     }
 
     /// <summary>
-    /// Sends <paramref name="trigger"/> to the instance as its own field, with <paramref name="input"/> (JSON) as
-    /// its input. A field the machine does not have, or an argument it does not take, is <see cref="NotServed"/>.
+    /// Sends <paramref name="trigger"/> to the instance through its generated operation, with <paramref name="input"/>
+    /// (JSON) as its input. An event the machine does not have, or an input it does not take, is
+    /// <see cref="NotServed"/>.
     /// </summary>
     public Task<SnapshotResult> AdvanceAsync(
         Caller caller,
@@ -115,26 +120,30 @@ public partial class StateMachineClient(GraphQLClient graphQL)
         string? requestId = null
     )
     {
-        var args = $"id: {Literal(id.ToString())}";
+        var variables = new Dictionary<string, object?>
+        {
+            ["id"] = id,
+            ["requestId"] = requestId ?? $"req-{Guid.NewGuid():N}",
+        };
         if (input is not null)
-            args += $", input: {Literal(JsonNode.Parse(input))}";
-        args += $", requestId: {Literal(requestId ?? $"req-{Guid.NewGuid():N}")}";
-        return MutateAsync(caller, machine, JsonNamingPolicy.CamelCase.ConvertName(trigger), args);
+            variables["input"] = JsonNode.Parse(input);
+        return OperateAsync(
+            caller,
+            machine,
+            JsonNamingPolicy.CamelCase.ConvertName(trigger),
+            variables
+        );
     }
 
     /// <summary>The caller's instance, or the problem <c>NOT_FOUND</c> when the caller has none under the id.</summary>
     public async Task<SnapshotResult> LoadAsync(Caller caller, string machine, Guid id)
     {
-        if (!Known.TryGetValue(machine, out var known))
-            return await NotAMachineAsync(caller, machine, id);
+        if (DocumentOf(machine, "get") is not { } get)
+            return new SnapshotResult(null, NotServed, "");
 
-        var response = await graphQL.SendAsync(
-            $"{{ machines {{ {known.Field} {{ get(id: {Literal(id.ToString())}) {{ id revision state "
-                + $"{known.Context}problem {{ code message }} }} }} }} }}",
-            caller
-        );
+        var response = await graphQL.SendIdAsync(get.Id, caller, new { id });
         response.HasErrors.Should().BeFalse($"get as {caller} should not error: {response.Raw}");
-        var read = response.GetData("machines", known.Field, "get");
+        var read = response.GetData("machines", machine, "get");
         return read.ValueKind == JsonValueKind.Null
             ? new SnapshotResult(null, "NOT_FOUND", response.Raw)
             : Result(machine, read, response.Raw);
@@ -150,46 +159,41 @@ public partial class StateMachineClient(GraphQLClient graphQL)
         Guid id,
         string? requestId = null
     ) =>
-        MutateAsync(
+        OperateAsync(
             caller,
             machine,
             "pay",
-            $"id: {Literal(id.ToString())}, requestId: {Literal(requestId ?? $"pay-{Guid.NewGuid():N}")}"
+            new Dictionary<string, object?>
+            {
+                ["id"] = id,
+                ["requestId"] = requestId ?? $"pay-{Guid.NewGuid():N}",
+            }
         );
 
-    /// <summary>Sends <paramref name="query"/> as it is, for the tests about how the host answers a document.</summary>
+    /// <summary>Sends <paramref name="query"/> as text, for the tests about how the host answers a document.</summary>
     public Task<GraphQLResponse> RawAsync(Caller caller, string query) =>
         graphQL.SendAsync(query, caller);
 
-    private async Task<SnapshotResult> MutateAsync(
+    private async Task<SnapshotResult> OperateAsync(
         Caller caller,
         string machine,
-        string field,
-        string args
+        string operation,
+        Dictionary<string, object?> variables
     )
     {
-        if (!Known.TryGetValue(machine, out var known) || !GraphQLName().IsMatch(field))
+        if (
+            DocumentOf(machine, operation) is not { } document
+            || variables.Keys.Any(v =>
+                !document.Document.Contains($"${v}:", StringComparison.Ordinal)
+            )
+        )
             return new SnapshotResult(null, NotServed, "");
 
-        var response = await graphQL.SendAsync(
-            $"mutation {{ machines {{ {known.Field} {{ {field}({args}) {{ id revision state "
-                + $"{known.Context}problem {{ code message }} }} }} }} }}",
-            caller
-        );
-        return response.HasErrors
-            ? new SnapshotResult(null, NotServed, response.Raw)
-            : Result(machine, response.GetData("machines", known.Field, field), response.Raw);
-    }
-
-    // A machine the host does not serve has no field under machines: the schema refuses the read.
-    private async Task<SnapshotResult> NotAMachineAsync(Caller caller, string machine, Guid id)
-    {
-        var response = await graphQL.SendAsync(
-            $"{{ machines {{ {JsonNamingPolicy.CamelCase.ConvertName(machine)} {{ get(id: {Literal(id.ToString())}) {{ id }} }} }} }}",
-            caller
-        );
-        response.HasErrors.Should().BeTrue($"no field serves '{machine}': {response.Raw}");
-        return new SnapshotResult(null, NotServed, response.Raw);
+        var response = await graphQL.SendIdAsync(document.Id, caller, variables);
+        response
+            .HasErrors.Should()
+            .BeFalse($"{machine}.{operation} as {caller} should not error: {response.Raw}");
+        return Result(machine, response.GetData("machines", machine, operation), response.Raw);
     }
 
     // The typed answer as the snapshot the page holds: the context's null fields are the ones the state does not
@@ -208,7 +212,7 @@ public partial class StateMachineClient(GraphQLClient graphQL)
         var wire = new JsonObject
         {
             ["machine"] = machine,
-            ["version"] = Known[machine].Version,
+            ["version"] = VersionOf(machine),
             ["state"] = answer.GetProperty("state").GetString(),
             ["context"] = context,
         }.ToJsonString();
@@ -219,22 +223,6 @@ public partial class StateMachineClient(GraphQLClient graphQL)
                 : null,
         };
     }
-
-    [GeneratedRegex("^[_A-Za-z][_0-9A-Za-z]*$")]
-    private static partial Regex GraphQLName();
-
-    // A value as a GraphQL literal: objects with bare keys, everything else as JSON writes it.
-    private static string Literal(object? value) =>
-        value switch
-        {
-            null => "null",
-            JsonObject obj => "{ "
-                + string.Join(", ", obj.Select(p => $"{p.Key}: {Literal(p.Value)}"))
-                + " }",
-            JsonArray array => "[" + string.Join(", ", array.Select(Literal)) + "]",
-            JsonNode node => node.ToJsonString(),
-            _ => JsonSerializer.Serialize(value),
-        };
 }
 
 /// <summary>

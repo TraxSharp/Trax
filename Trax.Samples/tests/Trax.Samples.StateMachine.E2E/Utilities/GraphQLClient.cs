@@ -4,31 +4,38 @@ using System.Text.Json;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
 
-/// <summary>Posts GraphQL documents to the sample's <c>/trax/graphql</c> endpoint.</summary>
+/// <summary>
+/// Posts to the sample's <c>/trax/graphql</c> endpoint: a persisted id and its variables, as the page sends them, or a
+/// document as text, which the host refuses.
+/// </summary>
 public class GraphQLClient(HttpClient httpClient)
 {
-    public async Task<GraphQLResponse> SendAsync(
-        string query,
-        Caller caller,
-        object? variables = null
-    )
+    /// <summary>Sends <paramref name="query"/> as text.</summary>
+    public Task<GraphQLResponse> SendAsync(string query, Caller caller, object? variables = null) =>
+        PostAsync(new { query, variables }, caller);
+
+    /// <summary>Sends the persisted document <paramref name="id"/> with <paramref name="variables"/>.</summary>
+    public Task<GraphQLResponse> SendIdAsync(string id, Caller caller, object variables) =>
+        PostAsync(new { id, variables }, caller);
+
+    private async Task<GraphQLResponse> PostAsync(object body, Caller caller)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
-            Content = JsonContent.Create(new { query, variables }),
+            Content = JsonContent.Create(body),
         };
         caller.Apply(request);
 
         using var response = await httpClient.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
+        var text = await response.Content.ReadAsStringAsync();
 
-        if (string.IsNullOrWhiteSpace(body))
+        if (string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException(
                 $"Empty response body from the GraphQL endpoint (HTTP {(int)response.StatusCode})."
             );
 
         return new GraphQLResponse(
-            JsonSerializer.Deserialize<JsonElement>(body),
+            JsonSerializer.Deserialize<JsonElement>(text),
             response.StatusCode
         );
     }

@@ -69,75 +69,36 @@ request, in the order it makes them, and where it stopped (`GUARD_FAILED` for a 
 empty cart). On the checkout, **Fill the cart** sends `AddItem` with an item's name only, and the server prices
 the cart. **Side effect: the charge** shows the `RunsOnce<ICharge>` binding, the whole request the page sends to pay
 (only the draft's id), and the payment provider's own list of charges, which grows by one on Pay and not at all on
-a second Pay. **Show the raw requests** opens every GraphQL request the page sends.
+a second Pay. **Show the raw requests** opens every request the page sends: a persisted id and its variables, beside
+the document that id names, read from the manifest the client was generated from.
 
 ## Try it
 
-Send `X-Api-Key: alice-key-do-not-use-in-production` with each request (Nitro at
-<http://localhost:5280/trax/graphql>, or curl).
+The host serves persisted documents only: a request names the document the host registered by its id, with the
+values as variables, and a document sent as text is refused, introspection included. The page's generated client
+holds every id, and so does the manifest it was generated from, `web/src/trax/manifest.json`. With
+`X-Api-Key: alice-key-do-not-use-in-production`, start a checkout the way the page does:
 
-```graphql
-# What machines are there? (anonymous)
-{ discover { stateMachine { listMachines { machines { name hasEffect } } } } }
-
-# Start a checkout. The server mints its id and starts it as an empty cart. A retry with the same
-# requestId answers with the same checkout rather than a second one.
-mutation {
-  machines { checkout { start(requestId: "start-1") {
-    id revision state context { items total } problem { code } } } }
-}
+```bash
+cd samples/StateMachine/web
+id=$(jq -r '.machines[] | select(.id == "checkout") | .documents[] | select(.operation == "start") | .id' src/trax/manifest.json)
+curl -s http://localhost:5280/trax/graphql -H 'Content-Type: application/json' \
+  -H 'X-Api-Key: alice-key-do-not-use-in-production' \
+  -d "{\"id\": \"$id\", \"variables\": {\"requestId\": \"start-1\"}}"
 ```
 
-The answer carries the `id` the server minted; use it in place of `ID` below. Fill the cart with `addItem`, which
-names the item and nothing else, then review it and pay:
+The answer carries the `id` the server minted and the empty cart. The page then sends `addItem` with the item's name
+and nothing else, `next`, and `pay`. The `addItem` answer is the cart with `items: ["book"]` and `total: 999`: the
+server appends the item and computes the total, and no request can set it. `next` from an empty cart is
+`GUARD_FAILED`. The `pay` answer is `Paid` with a `receipt`, and the host logs
+`Charged 999 cents for checkout Review -> receipt rcpt_...`. Sent again with the same `requestId`, the same answer
+comes back with no second charge. `pay` takes no input: the charge produces the receipt the edge records, so a client
+cannot hand it one, and nothing else reaches `Paid`. The host serves no save, so no client writes a checkout at all.
+`reset` takes a paid checkout back to an empty cart, and `discard` deletes it.
 
-```graphql
-mutation {
-  machines { checkout { addItem(id: "ID", input: { item: "book" }, requestId: "add-1") {
-    revision state context { items total } problem { code } } } }
-}
-
-mutation {
-  machines { checkout { next(id: "ID", requestId: "next-1") { state problem { code } } } }
-}
-
-# Pay: runs the charge once and moves to Paid
-mutation {
-  machines { checkout { pay(id: "ID", requestId: "pay-1") {
-    state context { receipt total } problem { code } } } }
-}
-```
-
-The `addItem` answer is the cart with `items: ["book"]` and `total: 999`: the server appends the item and computes
-the total, and no request can set it. `next` from an empty cart is `GUARD_FAILED`. The `pay` answer is `Paid` with a
-`receipt`, and the host logs `Charged 999 cents for checkout Review -> receipt rcpt_...`. Send it again with the same
-`requestId` and the same answer comes back with no second charge. `pay` takes no input: the charge produces the
-receipt the edge records, so a client cannot hand it one, and nothing else reaches `Paid`. The host serves no save,
-so no client writes a checkout at all. `reset` takes a paid checkout back to an empty cart, and when you are done,
-discard it:
-
-```graphql
-mutation {
-  machines { checkout { discard(id: "ID", requestId: "discard-1") { discarded problem { code } } } }
-}
-```
-
-The turnstile shows a refused transition. Start one, then try a penny and a quarter with its id:
-
-```graphql
-mutation {
-  machines { turnstile { start(requestId: "turnstile-1") { id state problem { code } } } }
-}
-
-mutation {
-  machines { turnstile { coin(id: "ID", input: { coin: "penny" }, requestId: "coin-1") {
-    state context { paidWith } problem { code message } } } }
-}
-```
-
-The penny comes back as `problem { code: "guard-failed", message: "Only a quarter or a dollar is accepted." }`
-and the turnstile stays `Locked`. The same mutation with `"quarter"` and a new `requestId` answers `Unlocked` with
-`paidWith: "quarter"`. `{ machines { turnstile { get(id: "ID") { state context { paidWith } } } } }` reads it back.
+The turnstile shows a refused transition. A penny comes back as
+`problem { code: "GUARD_FAILED", message: "Only a quarter or a dollar is accepted." }` and the turnstile stays
+`Locked`; a quarter answers `Unlocked` with `paidWith: "quarter"`.
 
 Without the `X-Api-Key` header, each of these operations answers HTTP 200 with
 `errors: [{ message: "Not authorized.", extensions: { code: "TRAX_AUTHORIZATION" } }]`; only `listMachines` is
@@ -185,16 +146,15 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddSingleton<SimulatedPaymentProvider>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
 
-// Exposed machines are served as persisted documents, one per operation, whose ids carry the machine's version; the
-// node orders a machine's versions across a deploy through them, so exposing a machine requires them. This demo keeps
-// the ad-hoc queries above working (logged, not refused) and serves no document-management operations; a production
-// host refuses ad-hoc documents with RequirePersisted(true).
+// Exposed machines and trains are served as persisted documents the host generates and registers, one per operation,
+// whose ids carry the machine's version or the train's shape. The host serves nothing else: a document sent as text is
+// refused, introspection included, and no document-management operations are exposed.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
         persisted
             .SingleNode()
-            .RequirePersisted(false)
-            .LogNonPersistedRequests(true)
+            .RequirePersisted(true)
+            .DisableIntrospection()
             .ExposeOperationsNamespace(false)
     )
 );
@@ -205,8 +165,9 @@ machine operation runs through to the mediator scan, so it must come before `Add
 `[TraxMachine]`, so clients reach each through its own typed operations; an unmarked machine, and the generic
 mutations, are not served. Every event, the start and the reads declare who may send them, and the host refuses to
 start a marked machine that leaves one undeclared. Serving a machine requires persisted operations, because
-each machine's operations are served as persisted documents that carry its version; this demo logs the ad-hoc
-queries it is sent rather than refusing them, and serves no document-management operations. `TraxCallerSnapshotPrincipal`
+each machine's operations are served as persisted documents that carry its version; this host serves those and
+nothing else, so the page runs on the client `trax client` generated from the host's manifest
+([Frontend clients](/docs/reference/cli#frontend-clients-trax-client)). `TraxCallerSnapshotPrincipal`
 maps the authenticated Trax caller to the draft's owner, so Alice and Bob each see their own draft
 for the same id. See [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines).
 
@@ -342,8 +303,9 @@ the canonical wire, and the total check.
 
 `Trax.Samples.StateMachine.E2E` starts the real host with `WebApplicationFactory<Program>` against a Postgres
 database named `statemachine_e2e_tests` (`Host=localhost;Port=5432;Username=trax;Password=trax123`; set
-`TRAX_TEST_PG_PORT` when your Postgres listens elsewhere) and sends every request to `/trax/graphql`, as the web
-client does. Without the database the suite fails; it never skips. Three techniques carry over to testing any
+`TRAX_TEST_PG_PORT` when your Postgres listens elsewhere) and sends every request to `/trax/graphql` as the web
+client does: by the ids in the page's generated `manifest.json`, which the test project copies beside itself.
+`PersistedOnlyTests` shows the host refuses a document it did not register. Without the database the suite fails; it never skips. Three techniques carry over to testing any
 state machine host:
 
 - **Observe the effect by replacing it.** The factory binds a recording `ICharge` in place of the sample's

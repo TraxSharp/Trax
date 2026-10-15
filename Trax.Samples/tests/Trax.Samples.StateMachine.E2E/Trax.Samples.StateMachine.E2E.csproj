@@ -13,6 +13,15 @@
     <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
   </ItemGroup>
 
+  <!-- The client manifest the sample's page is generated from: the tests send its ids, as the page does. -->
+  <ItemGroup>
+    <None
+      Include="..\..\samples\StateMachine\web\src\trax\manifest.json"
+      Link="manifest.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />

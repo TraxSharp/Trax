@@ -15,24 +15,12 @@
 // Run it (from Trax.Samples/):
 //   1. docker compose up -d
 //   2. dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api
+//   3. cd samples/StateMachine/web && npm install && npm run dev
 //
-// Then open http://localhost:5280/trax/graphql (Nitro). Send X-Api-Key: alice-key-do-not-use-in-production and try:
-//
-//   # What machines are available?
-//   { discover { stateMachine { listMachines { machines { name hasEffect } } } } }
-//
-//   # Start a checkout: the answer carries the id the server minted. Use it as ID below.
-//   mutation { machines { checkout { start(requestId: "start-1") {
-//     id revision state context { items total } problem { code } } } } }
-//
-//   # Add an item, then review. The server prices the cart: 999 cents per item.
-//   mutation { machines { checkout { addItem(id: "ID", input: { item: "book" }, requestId: "add-1") {
-//     revision state context { items total } problem { code } } } } }
-//   mutation { machines { checkout { next(id: "ID", requestId: "next-1") { state problem { code } } } } }
-//
-//   # Charge exactly once (state-gated + idempotent). A retry with the same requestId does not re-charge.
-//   mutation { machines { checkout { pay(id: "ID", requestId: "pay-1") {
-//     state context { receipt total } problem { code } } } } }
+// The host serves persisted documents only: the page sends each operation by the id its generated client holds, and a
+// document sent as text is refused. To regenerate the client after changing a machine or a train:
+//   dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api -- --trax-export-client ../web/src/trax/manifest.json
+//   trax client --manifest samples/StateMachine/web/src/trax/manifest.json --out samples/StateMachine/web/src/trax
 //
 // Docs: https://traxsharp.net/docs/samples/state-machine
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,16 +84,15 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddSingleton<SimulatedPaymentProvider>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
 
-// Exposed machines are served as persisted documents, one per operation, whose ids carry the machine's version; the
-// node orders a machine's versions across a deploy through them, so exposing a machine requires them. This demo keeps
-// the ad-hoc queries above working (logged, not refused) and serves no document-management operations; a production
-// host refuses ad-hoc documents with RequirePersisted(true).
+// Exposed machines and trains are served as persisted documents the host generates and registers, one per operation,
+// whose ids carry the machine's version or the train's shape. The host serves nothing else: a document sent as text is
+// refused, introspection included, and no document-management operations are exposed.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
         persisted
             .SingleNode()
-            .RequirePersisted(false)
-            .LogNonPersistedRequests(true)
+            .RequirePersisted(true)
+            .DisableIntrospection()
             .ExposeOperationsNamespace(false)
     )
 );
@@ -127,7 +114,7 @@ app.UseAuthorization();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 
-app.Run();
+await app.RunTraxAsync(args);
 
 namespace Trax.Samples.StateMachine.Api
 {

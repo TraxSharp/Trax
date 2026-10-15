@@ -112,21 +112,15 @@ public class TurnstileTests : StateMachineTestFixture
     }
 
     [Test]
-    public async Task ATurnstile_HasNoEffectToSend()
+    public void ATurnstile_HasNoEffectToSend()
     {
-        // The turnstile binds no effect, so its typed operations are its start, its discard and its two events.
-        var response = await Machines.RawAsync(
-            Alice,
-            """{ __type(name: "TurnstileMachineMutations") { fields { name } } }"""
-        );
-
-        response.HasErrors.Should().BeFalse(response.Raw);
-        response
-            .GetData("__type", "fields")
-            .EnumerateArray()
-            .Select(f => f.GetProperty("name").GetString())
+        // The turnstile binds no effect, so its typed operations are its start, its read, its push, its discard and
+        // its two events. Every test here sends these ids, so a manifest out of step with the host fails them all.
+        StateMachineClient
+            .Manifest.Machines.Single(m => m.Id == Turnstile)
+            .Documents.Select(d => d.Operation)
             .Should()
-            .BeEquivalentTo(["start", "discard", "coin", "push"]);
+            .BeEquivalentTo(["start", "get", "changed", "discard", "coin", "push"]);
     }
 
     [Test]
@@ -134,7 +128,10 @@ public class TurnstileTests : StateMachineTestFixture
     {
         (await Machines.LoadAsync(Alice, "vending", Guid.NewGuid()))
             .ProblemCode.Should()
-            .Be(StateMachineClient.NotServed, "a machine the host does not expose has no field");
+            .Be(
+                StateMachineClient.NotServed,
+                "a machine the host does not expose has no operation"
+            );
     }
 
     [Test]

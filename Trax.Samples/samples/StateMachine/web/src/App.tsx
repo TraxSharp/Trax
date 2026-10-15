@@ -1,16 +1,14 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Avatar } from "./Avatar";
 import { Diagram } from "./Diagram";
 import { Inspector } from "./Inspector";
 import { SideEffect } from "./SideEffect";
 import { CHECKOUT, TURNSTILE, type MachineView } from "./machines";
-import { createTransport, type TraxTransport } from "./traxTransport";
-import { useMachine, type MachineHandle } from "./useMachine";
+import { signIn, type User } from "./connection";
+import { useMachineStage, type MachineStageHandle } from "./useMachineStage";
 import { Walkthrough } from "./Walkthrough";
 
-const ENDPOINT = "http://localhost:5280/trax/graphql";
-
-const USERS = [
+const USERS: User[] = [
   { label: "Alice", key: "alice-key-do-not-use-in-production" },
   { label: "Bob", key: "bob-key-do-not-use-in-production" },
 ];
@@ -26,10 +24,12 @@ const WORDS = [
 const MACHINES = [TURNSTILE, CHECKOUT];
 
 export function App() {
-  const [user, setUser] = useState(USERS[0]);
+  const [user, setUser] = useState(() => {
+    signIn(USERS[0]);
+    return USERS[0];
+  });
   const [active, setActive] = useState<MachineView>(TURNSTILE);
   const [inspecting, setInspecting] = useState(false);
-  const transport = useMemo(() => createTransport(ENDPOINT, () => user.key, user.label), [user]);
 
   return (
     <div className="app">
@@ -67,7 +67,10 @@ export function App() {
                 role="radio"
                 aria-checked={u.key === user.key}
                 className={u.key === user.key ? "active" : ""}
-                onClick={() => setUser(u)}
+                onClick={() => {
+                  signIn(u);
+                  setUser(u);
+                }}
               >
                 <Avatar name={u.label} size="sm" />
                 {u.label}
@@ -101,7 +104,7 @@ export function App() {
             </button>
           ))}
         </nav>
-        <MachineStage key={`${active.name}-${user.key}`} machine={active} transport={transport} user={user.label} />
+        <MachineStage key={`${active.name}-${user.key}`} machine={active} user={user.label} />
       </main>
 
       {inspecting && <Inspector onClose={() => setInspecting(false)} />}
@@ -109,8 +112,8 @@ export function App() {
   );
 }
 
-function MachineStage({ machine, transport, user }: { machine: MachineView; transport: TraxTransport; user: string }) {
-  const m = useMachine(transport, machine.name, user);
+function MachineStage({ machine, user }: { machine: MachineView; user: string }) {
+  const m = useMachineStage(machine.name, user);
 
   return (
     <div className="stage-body">
@@ -137,7 +140,7 @@ function MachineStage({ machine, transport, user }: { machine: MachineView; tran
                   key={`${t.trigger}-${t.caption}`}
                   className={`trigger ${available ? "avail" : ""} ${t.probe ? "probe" : ""}`}
                   disabled={m.busy}
-                  onClick={() => void (t.send ? m.send(`pay-${Date.now()}`) : m.advance(t.trigger, t.input))}
+                  onClick={() => void (t.send ? m.send() : m.advance(t.trigger, t.input))}
                 >
                   <span className="trigger-name">
                     {t.trigger}
@@ -168,14 +171,14 @@ function MachineStage({ machine, transport, user }: { machine: MachineView; tran
             <pre>{m.snapshot ? JSON.stringify(m.snapshot, null, 2) : "loading…"}</pre>
           </details>
         </section>
-        {machine.moves.some((mv) => mv.effect) && <SideEffect transport={transport} last={m.last} draftId={m.id ?? ""} />}
+        {machine.moves.some((mv) => mv.effect) && <SideEffect last={m.last} draftId={m.id ?? ""} />}
       </div>
     </div>
   );
 }
 
 /** The cart is filled with the AddItem event: the page names the item, and the server prices the cart. */
-function AddItem({ m }: { m: MachineHandle }) {
+function AddItem({ m }: { m: MachineStageHandle }) {
   const [item, setItem] = useState("");
 
   const add = () => {
@@ -207,7 +210,7 @@ function AddItem({ m }: { m: MachineHandle }) {
 }
 
 /** What the current state carries, in a line. */
-function Context({ m }: { m: MachineHandle }) {
+function Context({ m }: { m: MachineStageHandle }) {
   const entries = Object.entries(m.context);
   return (
     <div className="context">

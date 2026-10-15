@@ -1,4 +1,5 @@
 using Trax.Samples.StateMachine.E2E.Fixtures;
+using Trax.Samples.StateMachine.E2E.Utilities;
 
 namespace Trax.Samples.StateMachine.E2E.Tests;
 
@@ -10,13 +11,12 @@ namespace Trax.Samples.StateMachine.E2E.Tests;
 [TestFixture]
 public class PaymentsQueryTests : StateMachineTestFixture
 {
-    private const string Query =
-        "{ discover { payments { listCharges { charges { receipt amountCents items chargedAt } } } } }";
+    private static string Id => StateMachineClient.TrainDocument("listCharges").Id;
 
     [Test]
     public async Task An_anonymous_caller_cannot_list_charges()
     {
-        var result = await GraphQL.SendAsync(Query, Anonymous);
+        var result = await GraphQL.SendIdAsync(Id, Anonymous, new { });
 
         result.IsRefused.Should().BeTrue(result.Raw);
     }
@@ -24,7 +24,7 @@ public class PaymentsQueryTests : StateMachineTestFixture
     [Test]
     public async Task A_signed_in_caller_lists_their_charges()
     {
-        var result = await GraphQL.SendAsync(Query, Alice);
+        var result = await GraphQL.SendIdAsync(Id, Alice, new { });
 
         result.HasErrors.Should().BeFalse(result.Raw);
         result

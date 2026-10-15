@@ -1,5 +1,5 @@
 import type { MachineView } from "./machines";
-import type { LastAction } from "./useMachine";
+import type { LastAction } from "./useMachineStage";
 
 type Status = "ok" | "fail" | "skip";
 

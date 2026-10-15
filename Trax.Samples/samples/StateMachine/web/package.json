@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "graphql-ws": "^6.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
