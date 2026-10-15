@@ -144,11 +144,16 @@ public class StateMachinesPageTests
             WaitTimeout
         );
 
+        // The whole card number, not a fragment: Blazor writes random GUIDs into the markup, and a
+        // four-digit fragment turns up in one of them every few dozen runs.
         foreach (var markup in new[] { list.Markup, detail.Markup })
             markup
                 .Should()
                 .NotContain("cardNumber")
-                .And.NotContain("4111", "an operator never sees what an instance holds")
+                .And.NotContain(
+                    "4111-1111-1111-1111",
+                    "an operator never sees what an instance holds"
+                )
                 .And.NotContain(UserKey, "no operator view names the user behind a draft");
     }
 
