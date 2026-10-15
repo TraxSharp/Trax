@@ -332,6 +332,9 @@ public static class GraphQLServiceExtensions
                 {
                     var root = sp.GetRootServiceProvider();
                     schema.TryAddTypeInterceptor(new MachineEnumBindingInterceptor());
+                    schema.TryAddTypeInterceptor(
+                        new MachineEnumSharingInterceptor(config.MachineSpelledEnums)
+                    );
                     schema.TryAddTypeInterceptor(new MachinePushFieldCollisionInterceptor());
                     schema.TryAddTypeInterceptor(
                         new MachineJsonNamingInterceptor(

@@ -142,4 +142,91 @@ public class MachineEnumsTests
             .Contain(typeof(HostBound).FullName!)
             .And.Contain("Remove the host's type");
     }
+
+    [Test]
+    public async Task A_machine_holding_an_enum_a_trax_subscription_carries_is_refused()
+    {
+        var refusal = await MachineSchemaHost.RefusalAsync([typeof(TrainStateHoldingMachine)]);
+
+        refusal
+            .Should()
+            .NotBeNull(
+                "onTrainStateChanged's trainState would change from COMPLETED to Completed, per "
+                    + Adr
+            );
+        refusal!
+            .ToString()
+            .Should()
+            .Contain(typeof(Trax.Effect.Enums.TrainState).FullName!)
+            .And.Contain("'TrainLifecycleEvent.trainState'")
+            .And.Contain("ShareEnumWithMachines<TrainState>()");
+    }
+
+    [Test]
+    public async Task An_enum_a_host_type_extension_returns_is_refused()
+    {
+        var refusal = await MachineSchemaHost.RefusalAsync(
+            [typeof(ExtendedPriorityMachine)],
+            graphql => graphql.ConfigureSchema(s => s.AddTypeExtension<HostPriorityField>())
+        );
+
+        refusal.Should().NotBeNull("the host's field would change its spelling too, per " + Adr);
+        refusal!
+            .ToString()
+            .Should()
+            .Contain(typeof(ExtendedPriority).FullName!)
+            .And.Contain("'RootQuery.hostPriority'");
+    }
+
+    [Test]
+    public async Task An_enum_a_host_type_extension_returns_starts_when_the_host_accepts_it()
+    {
+        var (host, executor) = await MachineSchemaHost.StartWithSchemaAsync(
+            [typeof(ExtendedPriorityMachine)],
+            graphql =>
+                graphql
+                    .ShareEnumWithMachines<ExtendedPriority>()
+                    .ConfigureSchema(s => s.AddTypeExtension<HostPriorityField>())
+        );
+        using var _ = host;
+
+        executor
+            .Schema.Types.OfType<EnumType>()
+            .Single(t => t.RuntimeType == typeof(ExtendedPriority))
+            .Values.Select(v => v.Name)
+            .Should()
+            .Equal(["Low", "VeryHigh"], "the host accepted the machine's spelling, per " + Adr);
+    }
+
+    [Test]
+    public async Task An_enum_inside_a_list_subclass_is_reached()
+    {
+        var (host, executor) = await MachineSchemaHost.StartWithSchemaAsync([
+            typeof(ListedPriorityMachine),
+        ]);
+        using var _ = host;
+
+        executor
+            .Schema.Types.OfType<EnumType>()
+            .Single(t => t.RuntimeType == typeof(ListedPriority))
+            .Values.Select(v => v.Name)
+            .Should()
+            .Equal(
+                ["Low", "VeryHigh"],
+                "a class deriving from List<T> is a list of T, so its enum is spelled as the server stores it, "
+                    + "per "
+                    + Adr
+            );
+    }
+
+    [Test]
+    public void An_enum_inside_a_framework_generic_is_reached()
+    {
+        Trax.Api.GraphQL.TypeModules.MachineEnums.Reached(typeof(FrameworkGenerics))
+            .Should()
+            .BeEquivalentTo(
+                [typeof(PairedPriority), typeof(TupledPriority), typeof(ValueTupledPriority)],
+                "KeyValuePair, Tuple and ValueTuple hold what their arguments hold, per " + Adr
+            );
+    }
 }

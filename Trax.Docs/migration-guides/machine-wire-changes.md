@@ -49,9 +49,9 @@ context as its context type, `dueAtKnown` beside `dueAt`. See [The push](/docs/s
 
 An enum a machine's context, start input or event inputs hold is spelled in GraphQL by its C# member name
 (`HighPriority`), not HotChocolate's `HIGH_PRIORITY`, in inputs and answers alike. GraphQL has one type per enum, so
-a train or query model that reaches the same enum would change its spelling with it: the host refuses to start, naming
-the enum, the machine and the train. Give the train its own enum, or call `ShareEnumWithMachines<TEnum>()` on
-`AddTraxGraphQL` and update that train's clients to the new spelling. A member whose stored name is `true`, `false`,
+any other field that carries the same enum would change its spelling with it, a train's, a query model's, a type
+extension's or Trax's own: the host refuses to start, naming the enum and the field. Give one side its own enum, or
+call `ShareEnumWithMachines<TEnum>()` on `AddTraxGraphQL` and update that field's clients to the new spelling. A member whose stored name is `true`, `false`,
 `null` or starts with `__`, and a GraphQL enum type the host binds to such an enum itself, are refused at startup too.
 Before, a client that sent `HIGH_PRIORITY` with a `clientResult` was refused as client
 divergence, since the server stored `HighPriority`.

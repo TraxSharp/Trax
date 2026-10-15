@@ -80,12 +80,14 @@ duration a timer reads (`"PT5M"`), both in an input and in the context, so a tim
 armed from a typed event. An enum a machine's context, start input or event inputs hold is spelled as the server
 stores it, the C# member name (`HighPriority`), not HotChocolate's `HIGH_PRIORITY`: the twin applies an input as the
 client sends it, so it predicts what the server stores only when the two spellings are one. HotChocolate gives a CLR
-enum one GraphQL type, so a train or query model that reaches the same enum would see the same values: the host
-refuses to start, naming the enum, the machine and the train, unless it accepts the new spelling with
+enum one GraphQL type, so any field outside the `machines` root that carries the same enum would see the same values:
+a train's, a query model's, a type extension's, or Trax's own (`TrainLifecycleEvent.trainState` when a machine holds
+`TrainState`). The host refuses to start, naming the enum and the field, unless it accepts the new spelling with
 [`ShareEnumWithMachines<TEnum>()`](/docs/sdk-reference/graphql-api/add-trax-graphql). A GraphQL enum type the host binds
 to such an enum itself refuses the start too. So does a member whose stored name is not a GraphQL name, is `true`,
 `false` or `null`, or starts with `__`. Only `System` and the namespaces under it are treated as the framework's; a
-record in `Systematic.Orders` is walked like any other. The types the root generates carry the
+record in `Systematic.Orders` is walked like any other. An enum held inside a class deriving from a list, a dictionary or a tuple
+is reached too. The types the root generates carry the
 machine's name and the word `Machine` (`TopicMapMachineState`, `TopicMapMachineContext`, `TopicMapMachineResult`,
 `TopicMapMachineChange`, `TopicMapMachineMutations`, `TopicMapMachineQueries`), so a CLR type the schema already holds, such as a machine's
 own state enum a train returns, keeps its name.

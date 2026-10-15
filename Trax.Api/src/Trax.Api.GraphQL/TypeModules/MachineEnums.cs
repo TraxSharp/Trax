@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -12,9 +11,10 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// The GraphQL enums of the CLR enums a machine's context, start input or event inputs hold, each value named as the
 /// server stores it (<see cref="MachineSurface.Json"/>, the C# member name) rather than HotChocolate's upper snake
 /// case. The twin applies an input as the client sends it and the server stores what it serializes, so the two agree
-/// only when the wire spells an enum the way the store does. HotChocolate binds one GraphQL type to a CLR enum, so a
-/// train that shares the enum would see the same spelling: that is refused at startup unless the host accepts it with
-/// <c>ShareEnumWithMachines</c> (<see cref="SharingProblems"/>). See
+/// only when the wire spells an enum the way the store does. HotChocolate binds one GraphQL type to a CLR enum, so any
+/// other field that carries the enum would see the same spelling: that is refused at startup unless the host accepts
+/// it with <c>ShareEnumWithMachines</c> (<see cref="SharingProblems"/> for trains and query models,
+/// <see cref="MachineEnumSharingInterceptor"/> for every field of the built schema). See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
 /// </summary>
 internal static partial class MachineEnums
@@ -117,7 +117,16 @@ internal static partial class MachineEnums
             Walk(type.GetElementType()!, enums, seen);
             return;
         }
-        if (IsCollection(type))
+        // A collection is its elements, however it is declared: List<T>, a class deriving from it, a dictionary's
+        // KeyValuePair<K, V>.
+        if (type != typeof(string) && Elements(type) is { Count: > 0 } elements)
+        {
+            foreach (var element in elements)
+                Walk(element, enums, seen);
+            return;
+        }
+        // A framework generic (KeyValuePair, Tuple, ValueTuple) holds what its arguments hold.
+        if (type.IsGenericType && IsFramework(type))
         {
             foreach (var argument in type.GetGenericArguments())
                 Walk(argument, enums, seen);
@@ -131,8 +140,12 @@ internal static partial class MachineEnums
                 Walk(property.PropertyType, enums, seen);
     }
 
-    private static bool IsCollection(Type type) =>
-        type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type);
+    // The T of each IEnumerable<T> the type is or implements.
+    private static List<Type> Elements(Type type) =>
+        (type.IsInterface ? type.GetInterfaces().Append(type) : type.GetInterfaces())
+            .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+            .Select(i => i.GetGenericArguments()[0])
+            .ToList();
 
     private static ITypeSystemMember Create(Type enumType) =>
         (ITypeSystemMember)

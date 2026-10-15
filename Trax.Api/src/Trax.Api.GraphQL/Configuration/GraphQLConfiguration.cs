@@ -167,8 +167,8 @@ public class GraphQLConfiguration
     internal IReadOnlyList<string>? SocketAllowedOrigins { get; init; }
 
     /// <summary>
-    /// The enums <c>ShareEnumWithMachines</c> named: a train or query model may reach them although a served machine
-    /// spells them as the server stores them.
+    /// The enums <c>ShareEnumWithMachines</c> named: a field outside the machines root may carry them although a served
+    /// machine spells them as the server stores them.
     /// </summary>
     internal IReadOnlySet<Type> MachineSpelledEnums { get; init; } = new HashSet<Type>();
 

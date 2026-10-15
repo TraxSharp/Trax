@@ -103,6 +103,83 @@ namespace Trax.Api.Tests.Fakes.Machines
         public const string MachineId = "host-bound";
     }
 
+    /// <summary>A machine holding Trax's own <see cref="Trax.Effect.Enums.TrainState"/>, which Trax's subscription carries.</summary>
+    [TraxMachine]
+    public sealed class TrainStateHoldingMachine()
+        : HoldingMachine<Trax.Effect.Enums.TrainState>("train-state-holding")
+    {
+        public const string MachineId = "train-state-holding";
+    }
+
+    /// <summary>An enum a machine holds only through a class deriving from a list.</summary>
+    public enum ListedPriority
+    {
+        Low,
+        VeryHigh,
+    }
+
+    public sealed class ListedPriorities : List<ListedPriority>;
+
+    [TraxMachine]
+    public sealed class ListedPriorityMachine()
+        : HoldingMachine<ListedPriorities>("listed-priority")
+    {
+        public const string MachineId = "listed-priority";
+    }
+
+    /// <summary>An enum a machine holds and a host's own type extension returns.</summary>
+    public enum ExtendedPriority
+    {
+        Low,
+        VeryHigh,
+    }
+
+    [TraxMachine]
+    public sealed class ExtendedPriorityMachine()
+        : HoldingMachine<ExtendedPriority>("extended-priority")
+    {
+        public const string MachineId = "extended-priority";
+    }
+
+    /// <summary>A host's root query field returning <see cref="ExtendedPriority"/>.</summary>
+    public sealed class HostPriorityField : HotChocolate.Types.ObjectTypeExtension
+    {
+        protected override void Configure(HotChocolate.Types.IObjectTypeDescriptor descriptor)
+        {
+            descriptor.Name("RootQuery");
+            descriptor.Field<HostPriorityResolvers>(r => r.HostPriority());
+        }
+    }
+
+    public sealed class HostPriorityResolvers
+    {
+        [TraxAllowAnonymous]
+        public ExtendedPriority HostPriority() => ExtendedPriority.Low;
+    }
+
+    /// <summary>Enums a record holds only inside framework generics.</summary>
+    public enum PairedPriority
+    {
+        Low,
+    }
+
+    public enum TupledPriority
+    {
+        Low,
+    }
+
+    public enum ValueTupledPriority
+    {
+        Low,
+    }
+
+    public sealed record FrameworkGenerics
+    {
+        public Dictionary<string, PairedPriority> Pairs { get; init; } = [];
+        public Tuple<string, TupledPriority>? Tuple { get; init; }
+        public (int, ValueTupledPriority) ValueTuple { get; init; }
+    }
+
     /// <summary>A machine whose push field is <c>onTrainStateChanged</c>, which Trax's own subscription already is.</summary>
     [TraxMachine]
     public sealed class OnTrainStateMachine() : NamedStepMachine("on-train-state")
