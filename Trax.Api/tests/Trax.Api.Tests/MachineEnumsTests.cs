@@ -9,8 +9,8 @@ namespace Trax.Api.Tests;
 
 /// <summary>
 /// The enums a served machine holds are spelled on the wire as the server stores them. A member whose stored name
-/// GraphQL cannot carry, an enum a train also reaches, and an enum the host binds a type to itself are each refused at
-/// startup in Trax's words; only <c>System</c> and the namespaces under it count as the framework's.
+/// GraphQL cannot carry, an enum a train also reaches, an enum the host binds a type to itself, and an enum of Trax's
+/// own are each refused at startup in Trax's words; only <c>System</c> and the namespaces under it count as the framework's.
 /// <para>Enforces <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.</para>
 /// </summary>
 [Property(
@@ -144,22 +144,44 @@ public class MachineEnumsTests
     }
 
     [Test]
-    public async Task A_machine_holding_an_enum_a_trax_subscription_carries_is_refused()
+    public async Task Sharing_a_trax_enum_with_machines_is_refused()
     {
-        var refusal = await MachineSchemaHost.RefusalAsync([typeof(TrainStateHoldingMachine)]);
+        var unshared = await MachineSchemaHost.RefusalAsync([typeof(TrainStateHoldingMachine)]);
+        var shared = await MachineSchemaHost.RefusalAsync(
+            [typeof(TrainStateHoldingMachine)],
+            graphql => graphql.ShareEnumWithMachines<Trax.Effect.Enums.TrainState>()
+        );
 
-        refusal
+        foreach (var refusal in new[] { unshared, shared })
+        {
+            refusal
+                .Should()
+                .NotBeNull(
+                    "onTrainStateChanged's trainState and the operations filters would change from COMPLETED to "
+                        + "Completed, and the dashboard sends COMPLETED, so Trax never shares its enums, per "
+                        + Adr
+                );
+            refusal!
+                .ToString()
+                .Should()
+                .Contain(typeof(Trax.Effect.Enums.TrainState).FullName!)
+                .And.Contain("Trax's own")
+                .And.Contain("Give the machine its own enum")
+                .And.NotContain("to accept the new spelling");
+        }
+        unshared!.ToString().Should().Contain($"'{TrainStateHoldingMachine.MachineId}'");
+        shared!.ToString().Should().Contain("ShareEnumWithMachines<TrainState>()");
+    }
+
+    [Test]
+    public void A_sample_or_test_enum_is_not_trax_s_own()
+    {
+        Trax.Api.GraphQL.TypeModules.MachineEnums.IsTrax(typeof(Trax.Effect.Enums.TrainState))
             .Should()
-            .NotBeNull(
-                "onTrainStateChanged's trainState would change from COMPLETED to Completed, per "
-                    + Adr
-            );
-        refusal!
-            .ToString()
+            .BeTrue("Trax.Effect is a Trax assembly, per " + Adr);
+        Trax.Api.GraphQL.TypeModules.MachineEnums.IsTrax(typeof(SharedPriority))
             .Should()
-            .Contain(typeof(Trax.Effect.Enums.TrainState).FullName!)
-            .And.Contain("'TrainLifecycleEvent.trainState'")
-            .And.Contain("ShareEnumWithMachines<TrainState>()");
+            .BeFalse("a test project's enum is consumer code, per " + Adr);
     }
 
     [Test]

@@ -43,6 +43,7 @@ internal sealed class MachineTypeModule(
 
         var problems = MachineSurface
             .NameProblems(exposed)
+            .Concat(MachineEnums.TraxEnumProblems(exposed))
             .Concat(MachineEnums.SharingProblems(exposed, enumNeighbours))
             .ToList();
         if (problems.Count > 0)

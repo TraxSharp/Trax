@@ -14,7 +14,8 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// only when the wire spells an enum the way the store does. HotChocolate binds one GraphQL type to a CLR enum, so any
 /// other field that carries the enum would see the same spelling: that is refused at startup unless the host accepts
 /// it with <c>ShareEnumWithMachines</c> (<see cref="SharingProblems"/> for trains and query models,
-/// <see cref="MachineEnumSharingInterceptor"/> for every field of the built schema). See
+/// <see cref="MachineEnumSharingInterceptor"/> for every field of the built schema). An enum of Trax's own is refused
+/// whatever the host accepted (<see cref="TraxEnumProblems"/>). See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
 /// </summary>
 internal static partial class MachineEnums
@@ -91,6 +92,58 @@ internal static partial class MachineEnums
             );
         // A train that takes the enum in and gives it back is one problem, not two.
         return problems.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Every enum declared in a Trax assembly that a served machine holds, one sentence each. Trax's own fields carry
+    /// its enums (<c>TrainLifecycleEvent.trainState</c>, <c>operations { executions(trainState:) }</c>), and the
+    /// dashboard and every generated client send them in upper snake case, so a machine never shares one, whatever the
+    /// host accepted with <c>ShareEnumWithMachines</c>.
+    /// </summary>
+    public static IReadOnlyList<string> TraxEnumProblems(IReadOnlyList<IMachine> machines)
+    {
+        var held = new SortedDictionary<string, (Type Type, List<string> Machines)>(
+            StringComparer.Ordinal
+        );
+        foreach (var machine in machines)
+        foreach (var type in Reached(machine).Where(IsTrax))
+        {
+            var key = type.FullName ?? type.Name;
+            if (!held.TryGetValue(key, out var entry))
+                held[key] = entry = (type, []);
+            entry.Machines.Add(machine.Name);
+        }
+        return held
+            .Values.Select(e =>
+                $"The enum {e.Type.FullName} is Trax's own and is held by the machine "
+                + string.Join(" and ", e.Machines.Select(m => $"'{m}'"))
+                + ". "
+                + TraxEnumRemedy(e.Type)
+            )
+            .ToList();
+    }
+
+    /// <summary>Why a machine cannot share <paramref name="type"/>, a Trax enum, and what to do instead.</summary>
+    public static string TraxEnumRemedy(Type type) =>
+        "A machine spells its enums as the server stores them, GraphQL has one type per enum, and Trax's own fields "
+        + $"carry {type.Name} in upper snake case for the dashboard and every client, so Trax never shares its enums "
+        + "with machines. Give the machine its own enum and map it to and from "
+        + type.Name
+        + " where the machine needs it.";
+
+    /// <summary>
+    /// Whether <paramref name="type"/> is declared in one of Trax's own assemblies: one named <c>Trax</c> or
+    /// <c>Trax.*</c>, other than the samples (<c>Trax.Samples.*</c>) and the test projects (a <c>Tests</c> segment),
+    /// which are consumer code.
+    /// </summary>
+    public static bool IsTrax(Type type)
+    {
+        if (type.Assembly.GetName().Name is not { } name)
+            return false;
+        if (name != "Trax" && !name.StartsWith("Trax.", StringComparison.Ordinal))
+            return false;
+        var segments = name.Split('.');
+        return segments[1..] is not ["Samples", ..] && !segments.Contains("Tests");
     }
 
     /// <summary>

@@ -9,9 +9,10 @@ namespace Trax.Api.GraphQL.TypeModules;
 /// Refuses a schema where a field outside the machines root carries an enum a served machine spells as the server
 /// stores it, unless the host accepted that with <c>ShareEnumWithMachines</c>. HotChocolate binds one GraphQL type to
 /// a CLR enum, so the moment a machine holds one, every field that carries it changes from <c>UPPER_SNAKE</c> to the
-/// member names: Trax's own (<c>TrainLifecycleEvent.trainState</c>), a train's, a query model's, a host's type
-/// extension's. This reads the built schema, so it sees every one of them; <see cref="MachineEnums.SharingProblems"/>
-/// names the train or query model earlier, from their CLR types. See
+/// member names: a train's, a query model's, a host's type extension's. This reads the built schema, so it sees every
+/// one of them; <see cref="MachineEnums.SharingProblems"/> names the train or query model earlier, from their CLR
+/// types. An enum of Trax's own, which Trax's fields carry, is refused before either
+/// (<see cref="MachineEnums.TraxEnumProblems"/>). See
 /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
 /// </summary>
 internal sealed class MachineEnumSharingInterceptor(IReadOnlySet<Type> accepted) : TypeInterceptor
