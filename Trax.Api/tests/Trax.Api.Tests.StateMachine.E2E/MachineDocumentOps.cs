@@ -40,12 +40,10 @@ public static class MachineDocumentOps
 
     /// <summary>
     /// Persisted operations over the host's data context, on one node's cache, with inline documents still served
-    /// (logged), so a test can drive the inline operations and the persisted ones side by side.
-    /// <paramref name="operationsNamespace"/> exposes the management operations, which needs the operations gate
-    /// (<see cref="E2EHostOptions.ExposeOperations"/>).
+    /// (logged), so a test can drive the inline operations and the persisted ones side by side. The machine documents
+    /// manifest is served when the host exposes the operations queries (<see cref="E2EHostOptions.ExposeOperations"/>).
     /// </summary>
     public static Func<TraxGraphQLBuilder, TraxGraphQLBuilder> Persisted(
-        bool operationsNamespace = false,
         bool requirePersisted = false
     ) =>
         graphql =>
@@ -53,7 +51,6 @@ public static class MachineDocumentOps
                 po.SingleNode()
                     .RequirePersisted(requirePersisted)
                     .LogNonPersistedRequests(!requirePersisted)
-                    .ExposeOperationsNamespace(operationsNamespace)
             );
 
     /// <summary>One stored persisted document.</summary>

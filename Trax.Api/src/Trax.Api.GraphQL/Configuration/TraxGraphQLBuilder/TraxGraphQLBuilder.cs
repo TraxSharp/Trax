@@ -26,6 +26,13 @@ public partial class TraxGraphQLBuilder
     internal List<Action<IRequestExecutorBuilder>> SchemaConfigurations { get; } = [];
 
     /// <summary>
+    /// Set by a feature package that adds its own fields to both root types, the persisted-operation
+    /// management fields, so <c>RootQuery</c> and <c>RootMutation</c> are in the schema even when
+    /// nothing else fills them.
+    /// </summary>
+    internal bool FeatureRootFieldsAdded { get; set; }
+
+    /// <summary>
     /// Creates a builder over <paramref name="services"/>. <c>AddTraxGraphQL(graphql =&gt; ...)</c>
     /// creates one and hands it to your callback; a builder constructed on its own registers nothing.
     /// </summary>

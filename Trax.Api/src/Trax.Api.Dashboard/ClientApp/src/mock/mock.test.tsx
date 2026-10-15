@@ -50,7 +50,7 @@ test("the sidebar lists Persisted ops when the host exposes the namespace", asyn
   expect(await findByTestId("environment-badge")).toBeInTheDocument();
 });
 
-test("the sidebar hides Persisted ops on a host without UsePersistedOperations", async () => {
+test("the sidebar hides Persisted ops on a host that does not serve their management", async () => {
   const client = createMockClient({
     store: createMockStore(),
     fixtures: false,

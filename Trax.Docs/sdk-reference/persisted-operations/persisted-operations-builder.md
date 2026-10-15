@@ -1,6 +1,6 @@
 ---
 title: PersistedOperationsBuilder
-description: "Reference for PersistedOperationsBuilder: enforcement, the allowlist, single-node or RabbitMQ invalidation, cache options and machine document retention."
+description: "Reference for PersistedOperationsBuilder: enforcement, the allowlist, node invalidation, caching, the management gate and machine document retention."
 type: reference
 area: api
 parent: Persisted Operations
@@ -14,7 +14,7 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Allowlist.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Broadcasting.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Cache.cs
-  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Exposure.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Management.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.MachineDocuments.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Database.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Build.cs
@@ -38,7 +38,8 @@ public sealed partial class PersistedOperationsBuilder
     public PersistedOperationsBuilder WithCacheMaxAge(TimeSpan maxAge);
     public PersistedOperationsBuilder UseRabbitMqInvalidation(string connectionString);
     public PersistedOperationsBuilder SingleNode();
-    public PersistedOperationsBuilder ExposeOperationsNamespace(bool expose = true);
+    public PersistedOperationsBuilder GateManagement(string? policy = null, string? roles = null);
+    public PersistedOperationsBuilder GateManagementToAuthenticatedUsers();
     public PersistedOperationsBuilder KeepOlderMachineDocumentsFor(TimeSpan grace);
     public PersistedOperationsBuilder UseDatabase(string connectionString); // obsolete
 }
@@ -63,7 +64,8 @@ public sealed class CacheOptions
 | `WithCacheMaxAge(TimeSpan maxAge)` | 5 minutes | The longest any cache on a node keeps a persisted operation, counted from when its document was read from the database. The backstop for a change that did not reach the node: it serves what it cached for at most this long, then reads the store again. Must be positive. |
 | `UseRabbitMqInvalidation(string connectionString)` | none | Broadcast every change over a RabbitMQ fanout so every node empties its caches. Required when more than one node serves the endpoint. Works with or without `WithInMemoryCache()`. A publish the broker does not confirm is reported as `CHANGE_NOT_BROADCAST`. |
 | `SingleNode()` | none | Declare that one process serves the endpoint and writes the store, so no broadcast is needed. |
-| `ExposeOperationsNamespace(bool expose = true)` | `true` | Whether the `operations` namespace, and the management fields in it, is added to the schema. `false` keeps storage, enforcement, the cache and invalidation. |
+| `GateManagement(string? policy = null, string? roles = null)` | not served | Serve the [management fields](/docs/sdk-reference/persisted-operations/management-mutations), `persistedOperations { ... }` at the root, behind `@authorize` with this policy or these roles. A comma-separated `roles` list is any of; repeated calls are all of. A policy or roles is required. Without this call or the next, the fields are not in the schema. |
+| `GateManagementToAuthenticatedUsers()` | not served | Serve the management fields to any authenticated caller. On a host with public sign-up that is anyone, so prefer `GateManagement`. |
 | `KeepOlderMachineDocumentsFor(TimeSpan grace)` | 7 days | How long a version of the [generated documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) stays active once no node registers it, older or newer. Each node registers its own documents when it starts and again every hour (at most a quarter of this) while it runs, so a node still running another version keeps serving its documents; a version no node has registered for this long is deactivated. Must be positive. |
 
 `UseDatabase(string)` is obsolete, hidden from IntelliSense, and does nothing beyond throwing `ArgumentException` for a blank string: storage reads and writes `trax.persisted_operation` through the Trax data context that `AddEffects(e => e.UsePostgres(...))` registers.
@@ -77,6 +79,7 @@ public sealed class CacheOptions
 ## Behavior
 
 - Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required. See [One node or many](/docs/persisted-operations#one-node-or-many).
+- `GateManagement` throws `InvalidOperationException` with neither a policy nor roles, or with a role list that holds only separators. A policy it names that is not registered with `AddAuthorization` fails startup.
 - `UseRabbitMqInvalidation` throws `ArgumentException` for a blank connection string; `WithCacheMaxAge` and `KeepOlderMachineDocumentsFor` throw `ArgumentOutOfRangeException` for a value that is not positive; a second `WithInMemoryCache` throws `InvalidOperationException`.
 - The remaining checks run when `UsePersistedOperations` builds the options and throw `InvalidOperationException`; the [UsePersistedOperations validation table](/docs/sdk-reference/persisted-operations/use-persisted-operations#validation) lists them.
 - What the allowlist does and does not protect: [Allowlist and dev carve-outs](/docs/persisted-operations#allowlist-and-dev-carve-outs).
@@ -85,7 +88,6 @@ public sealed class CacheOptions
 
 ```csharp compile
 services.AddTraxGraphQL(graphql => graphql
-    .AllowAnonymousOperations()
     .UsePersistedOperations(opts => opts
         .RequirePersisted(true)
         .LogNonPersistedRequests(true)
@@ -94,6 +96,7 @@ services.AddTraxGraphQL(graphql => graphql
         .WithCacheMaxAge(TimeSpan.FromMinutes(5))
         .WithInMemoryCache(c => c.WithTtl(TimeSpan.FromMinutes(2)))
         .UseRabbitMqInvalidation(rabbitMqConnectionString)
+        .GateManagement(roles: "Deployer")
     )
 );
 ```

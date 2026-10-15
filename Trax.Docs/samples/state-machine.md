@@ -151,11 +151,7 @@ builder.Services.AddScoped<ICharge, LoggingCharge>();
 // refused, introspection included, and no document-management operations are exposed.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
-        persisted
-            .SingleNode()
-            .RequirePersisted(true)
-            .DisableIntrospection()
-            .ExposeOperationsNamespace(false)
+        persisted.SingleNode().RequirePersisted(true).DisableIntrospection()
     )
 );
 ```

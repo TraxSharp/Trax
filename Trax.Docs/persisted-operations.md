@@ -150,22 +150,36 @@ parses and every top-level selection is `__schema`, `__type` or `__typename`.
 
 ## The management surface
 
-Operations are uploaded, deactivated and restored through the `operations.persistedOperations`
-GraphQL fields, the dashboard, or `IPersistedOperationsService` in process. All three go through
+Operations are uploaded, deactivated and restored through the `persistedOperations` GraphQL
+fields at the root, the dashboard, or `IPersistedOperationsService` in process. All three go through
 the same service and the store's shape and schema checks, so they accept and refuse the same
 things with the same codes. Every change writes a row to `trax.persisted_operation_history`.
 
 The management fields bypass enforcement, since persisting them by id first would be circular. The
 bypass is decided from the document's structure, not its text: it applies only when every
-operation selects `operations` at the root and nothing but `persistedOperations` beneath it. A
-document that mixes in any other field, including another `operations` namespace such as
-`deadLetters`, is enforced normally, as is one that does not parse; an alias or a string argument
-that reads `persistedOperations` does not count.
+operation selects nothing at the root but `persistedOperations`. A document that mixes in any
+other field, `operations` included, is enforced normally, as is one that does not parse; an alias
+or a string argument that reads `persistedOperations` does not count.
 
-That bypass is not an authorization boundary either. What protects the management fields is the
-operations namespace's posture: `GateOperations(...)`, the builder's `RequireAuthorization()`, or an
-explicit `AllowAnonymousOperations()`. A host that exposes the namespace with none of the three
-refuses to start. Where Trax checks authorization is in
+That bypass is not an authorization boundary either. What protects the management fields is their
+own gate, which the host declares with `GateManagement(policy, roles)`:
+
+```csharp compile
+using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Extensions;
+
+services.AddTraxGraphQL(graphql => graphql
+    .UsePersistedOperations(po => po
+        .SingleNode()
+        .GateManagement(roles: "Deployer")
+    )
+);
+```
+
+Without it the fields are not in the schema, and documents are managed out of band. The gate is
+separate from the `operations` gate, so a deploy pipeline that uploads documents needs none of the
+operator's credential, and turning on persisted operations exposes nothing under `operations`.
+Where Trax checks authorization is in
 [Where Trax checks authorization](/docs/security/where-authorization-is-checked).
 
 A host without HotChocolate in process, such as a CI uploader or a dashboard running alone, uses

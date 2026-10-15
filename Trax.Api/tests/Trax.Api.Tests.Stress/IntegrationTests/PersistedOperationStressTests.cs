@@ -49,9 +49,7 @@ public class PersistedOperationStressTests : StressTestSetup
 
     protected override void ConfigureServices(IServiceCollection services)
     {
-        new TraxGraphQLBuilder(services).UsePersistedOperations(po =>
-            po.SingleNode().ExposeOperationsNamespace(false)
-        );
+        new TraxGraphQLBuilder(services).UsePersistedOperations(po => po.SingleNode());
         services.Replace(
             ServiceDescriptor.Singleton<IPersistedOperationValidator>(
                 new NoOpPersistedOperationValidator()
@@ -220,7 +218,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task List_FirstPage_WithinBudget()
     {
         await MeasureAsync(
-            "operations.persistedOperations.persistedOperations (first page)",
+            "persistedOperations.persistedOperations (first page)",
             ListBudget,
             async (sp, ct) =>
             {
@@ -239,7 +237,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task List_FilterByTenantAndActive_WithinBudget()
     {
         await MeasureAsync(
-            "operations.persistedOperations.persistedOperations (tenant, active)",
+            "persistedOperations.persistedOperations (tenant, active)",
             ListBudget,
             async (sp, ct) =>
             {
@@ -259,7 +257,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task List_FilterByIdPrefix_WithinBudget()
     {
         await MeasureAsync(
-            "operations.persistedOperations.persistedOperations (id prefix)",
+            "persistedOperations.persistedOperations (id prefix)",
             ListBudget,
             async (sp, ct) =>
             {
@@ -279,7 +277,7 @@ public class PersistedOperationStressTests : StressTestSetup
     {
         // The list pages by offset, so its last page reads past every row before it.
         await MeasureAsync(
-            "operations.persistedOperations.persistedOperations (last page)",
+            "persistedOperations.persistedOperations (last page)",
             ListBudget,
             async (sp, ct) =>
             {
@@ -298,7 +296,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task PointRead_WithinBudget()
     {
         await MeasureAsync(
-            "operations.persistedOperations.persistedOperation (by id)",
+            "persistedOperations.persistedOperation (by id)",
             ListBudget,
             async (sp, ct) =>
             {
@@ -316,7 +314,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task History_WithinBudget()
     {
         await MeasureAsync(
-            "operations.persistedOperations.persistedOperationHistory",
+            "persistedOperations.persistedOperationHistory",
             ListBudget,
             async (sp, ct) =>
             {
@@ -338,7 +336,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task Upload_NewOperation_WithinBudget()
     {
         await MeasureWriteAsync(
-            "operations.persistedOperations.uploadPersistedOperation",
+            "persistedOperations.uploadPersistedOperation",
             ListBudget,
             () =>
                 ExecSqlAsync(
@@ -366,7 +364,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task Deactivate_WithinBudget()
     {
         await MeasureWriteAsync(
-            "operations.persistedOperations.deactivatePersistedOperation",
+            "persistedOperations.deactivatePersistedOperation",
             ListBudget,
             ReactivateSeededOperation,
             async (sp, ct) =>
@@ -386,7 +384,7 @@ public class PersistedOperationStressTests : StressTestSetup
     public async Task Restore_WithinBudget()
     {
         await MeasureWriteAsync(
-            "operations.persistedOperations.restorePersistedOperation",
+            "persistedOperations.restorePersistedOperation",
             ListBudget,
             () =>
                 ExecSqlAsync(

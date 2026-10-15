@@ -361,7 +361,6 @@ public class MachineChangedStressTests
                                 .SingleNode()
                                 .RequirePersisted(false)
                                 .LogNonPersistedRequests(true)
-                                .ExposeOperationsNamespace(false)
                         )
                 );
                 if (counter is not null)

@@ -26,7 +26,7 @@ client plays the app and the operator through three stories:
 |---|---|
 | `RequirePersisted(true)`: every inline document refused with `PERSISTED_OPERATION_REQUIRED` | `Program.cs`, `EnforcementTests`, `HotFixFlowTests` |
 | `SingleNode()`: the declaration persisted operations refuse to start without | `Program.cs` |
-| The management mutations under `operations.persistedOperations`, gated to one role with `GateOperations` | `ProductionPostureTests`, `MutationFlowTests` |
+| The management mutations under `persistedOperations`, gated to one role with `GateManagement` | `ProductionPostureTests`, `MutationFlowTests` |
 | An upload that keeps the response shape served on the next call by the same id; one that changes it refused | the Client, `HotFixFlowTests` |
 | The demo key, the dashboard and the page only in Development | `Program.cs`, `ProductionPostureTests` |
 
@@ -95,8 +95,8 @@ curl -s $G -H 'Content-Type: application/json' \
 
 # An upload without the operator key is refused
 curl -s $G -H 'Content-Type: application/json' \
-  -d '{"query":"mutation Upload($input: UploadPersistedOperationInput!) { operations { persistedOperations { uploadPersistedOperation(input: $input) { success } } } }","variables":{"input":{"id":"x_v1","document":"{ __typename }"}}}'
-# {"errors":[{"message":"Not authorized.","path":["operations"],"extensions":{"code":"TRAX_AUTHORIZATION"}}],"data":{"operations":null}}
+  -d '{"query":"mutation Upload($input: UploadPersistedOperationInput!) { persistedOperations { uploadPersistedOperation(input: $input) { success } } }","variables":{"input":{"id":"x_v1","document":"{ __typename }"}}}'
+# {"errors":[{"message":"Not authorized.","path":["persistedOperations"],"extensions":{"code":"TRAX_AUTHORIZATION"}}],"data":{"persistedOperations":null}}
 ```
 
 The dashboard is at http://localhost:5240/trax, with the stored operations under
@@ -199,18 +199,17 @@ builder.Services.AddTrax(trax =>
 );
 
 builder.Services.AddTraxGraphQL(graphql =>
-    graphql
-        .UsePersistedOperations(opts =>
-            opts.RequirePersisted(true)
-                .LogNonPersistedRequests(true)
-                // One process serves this endpoint and writes the store, so an upload reaches
-                // every cached copy without a broadcast. A second node needs
-                // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
-                .SingleNode()
-        )
-        // The upload mutations live under `operations`. Gate that namespace to the operator;
-        // greet stays reachable to the app.
-        .GateOperations(roles: DemoKeys.OperatorRole)
+    graphql.UsePersistedOperations(opts =>
+        opts.RequirePersisted(true)
+            .LogNonPersistedRequests(true)
+            // One process serves this endpoint and writes the store, so an upload reaches
+            // every cached copy without a broadcast. A second node needs
+            // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
+            .SingleNode()
+            // The upload mutations live under `persistedOperations`, behind their own gate.
+            // Gate them to the operator; greet stays reachable to the app.
+            .GateManagement(roles: DemoKeys.OperatorRole)
+    )
 );
 
 // The dashboard shows the stored documents under Data > Persisted Operations. It refuses to start
@@ -265,11 +264,11 @@ What each piece is for:
   `UsePersistedOperations` sets up, so it covers HTTP and WebSocket alike.
   `UsePersistedOperationsEnforcement()` still compiles and adds nothing; earlier versions of this
   sample mapped it in a `UseWhen` branch, which is no longer needed.
-- **`GateOperations(roles: "Operator")`.** The management mutations live under `operations`, and a
-  host that exposes that namespace with no posture refuses to start. The gate covers the namespace
-  only, so `greet` stays reachable to the app, which carries no credential. The management
-  mutations always bypass enforcement (they cannot be persisted by id), and the gate is what
-  protects them.
+- **`GateManagement(roles: "Operator")`.** The management mutations live under
+  `persistedOperations` at the root, and they are in the schema only once a gate is declared for
+  them. The gate covers those fields only, so `greet` stays reachable to the app, which carries no
+  credential, and the host exposes nothing under `operations`. The management mutations always
+  bypass enforcement (they cannot be persisted by id), and the gate is what protects them.
 - **The demo key.** It is published in this repository, so `AddTraxApiKeyAuth` registers it only in
   Development. Anywhere else no credential exists until you register a real scheme, so every upload
   is refused.

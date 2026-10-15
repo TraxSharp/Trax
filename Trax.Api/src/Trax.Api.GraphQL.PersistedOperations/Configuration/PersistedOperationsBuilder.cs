@@ -1,3 +1,5 @@
+using Trax.Effect.Attributes;
+
 namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 
 /// <summary>
@@ -32,8 +34,8 @@ public sealed partial class PersistedOperationsBuilder
     private string? _rabbitMqConnectionString;
     private bool _singleNode;
 
-    // ----- schema exposure -----
-    private bool _exposeOperationsNamespace = true;
+    // ----- management -----
+    private readonly List<TraxAuthorizeAttribute> _managementGate = [];
 
     // ----- machine documents -----
     private TimeSpan _machineDocumentGracePeriod =

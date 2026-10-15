@@ -1039,7 +1039,7 @@ function poError(code: string, message: string, extra: Rec = {}): Rec {
 }
 
 function poPayload(path: string, operation: Rec | null, errors: Rec[]): Rec {
-  return wrap(`operations.persistedOperations.${path}`, {
+  return wrap(`persistedOperations.${path}`, {
     success: operation != null && errors.length === 0,
     operation,
     errors,
@@ -1173,7 +1173,7 @@ const readPersistedOperations: QueryOverlay = (data, store, variables) => {
   const patches = readDelta<Record<string, Rec>>(store, PO_PATCH_KEY, {});
   if (Object.keys(ops).length === 0 && Object.keys(patches).length === 0) return data;
   const filter = asRecord(variables.filter);
-  const base = "operations.persistedOperations.persistedOperations";
+  const base = "persistedOperations.persistedOperations";
   let added = 0;
   const out = updateItemsAtPath(data, `${base}.items`, (items) => {
     const seen = new Set<string>();
@@ -1194,7 +1194,7 @@ const readPersistedOperations: QueryOverlay = (data, store, variables) => {
     added = fresh.length - (items.length - merged.length);
     return [...fresh, ...merged];
   });
-  const root = asRecord(asRecord(asRecord(asRecord(out)?.operations)?.persistedOperations)?.persistedOperations);
+  const root = asRecord(asRecord(asRecord(out)?.persistedOperations)?.persistedOperations);
   return root ? patchObjectAtPath(out, base, { totalCount: Number(root.totalCount ?? 0) + added }) : out;
 };
 
@@ -1204,10 +1204,10 @@ const readPersistedOperationDetail: QueryOverlay = (data, store, variables) => {
   const patch = readDelta<Record<string, Rec>>(store, PO_PATCH_KEY, {})[key];
   const history = readDelta<Record<string, Rec[]>>(store, PO_HISTORY_KEY, {})[key] ?? [];
   if (!stored && !patch && history.length === 0) return data;
-  const ns = asRecord(asRecord(asRecord(data)?.operations)?.persistedOperations) ?? {};
+  const ns = asRecord(asRecord(data)?.persistedOperations) ?? {};
   const row = stored ?? (asRecord(ns.persistedOperation) && patch ? { ...asRecord(ns.persistedOperation), ...patch } : ns.persistedOperation);
   const baseHistory = Array.isArray(ns.persistedOperationHistory) ? ns.persistedOperationHistory : [];
-  return wrap("operations.persistedOperations", {
+  return wrap("persistedOperations", {
     ...ns,
     persistedOperation: row ?? null,
     persistedOperationHistory: [...history, ...baseHistory],

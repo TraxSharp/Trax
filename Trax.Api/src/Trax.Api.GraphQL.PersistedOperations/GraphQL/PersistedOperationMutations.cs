@@ -8,9 +8,10 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 
 /// <summary>
-/// Body of the <c>operations.persistedOperations</c> mutation namespace. Each mutation calls
-/// <see cref="IPersistedOperationsService"/>, which returns refusals as payload <c>errors[]</c>
-/// entries with stable <c>code</c> values; mutations never throw to the client.
+/// Body of the <c>persistedOperations</c> mutation namespace at the root, behind the management
+/// gate. Each mutation calls <see cref="IPersistedOperationsService"/>, which returns refusals as
+/// payload <c>errors[]</c> entries with stable <c>code</c> values; mutations never throw to the
+/// client.
 /// </summary>
 /// <remarks>
 /// The overloads taking <see cref="IPersistedOperationStore"/> are kept for callers built against

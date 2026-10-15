@@ -101,7 +101,6 @@ internal static class MachineSchemaHost
                                     po.SingleNode()
                                         .RequirePersisted(false)
                                         .LogNonPersistedRequests(true)
-                                        .ExposeOperationsNamespace(false)
                                 );
                         });
                     })

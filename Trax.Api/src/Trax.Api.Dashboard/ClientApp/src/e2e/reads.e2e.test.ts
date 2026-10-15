@@ -278,13 +278,13 @@ describe("reads (parity surface)", () => {
 
   test("persisted operations: the probe, the filtered list, and one operation with its history", async () => {
     expect(
-      pick(await gql(PERSISTED_OPERATIONS_AVAILABLE, {}), "operations.persistedOperations.__typename"),
+      pick(await gql(PERSISTED_OPERATIONS_AVAILABLE, {}), "persistedOperations.__typename"),
     ).toBe("PersistedOperationQueries");
     const ids = async (filter: Record<string, unknown> | null) =>
       (
         pick(
           await gql(PERSISTED_OPERATIONS, { filter, skip: 0, take: 50 }),
-          "operations.persistedOperations.persistedOperations.items",
+          "persistedOperations.persistedOperations.items",
         ) as { id: string }[]
       )
         .map((r) => r.id)
@@ -297,7 +297,7 @@ describe("reads (parity surface)", () => {
     expect(await ids({ idStartsWith: "e2e.greet" })).toEqual(["e2e.greet.v0", "e2e.greet.v1"]);
 
     const d = await gql(PERSISTED_OPERATION_DETAIL, { id: "e2e.orders", tenantKey: "acme", historyTake: 100 });
-    expect(pick(d, "operations.persistedOperations.persistedOperation")).toMatchObject({
+    expect(pick(d, "persistedOperations.persistedOperation")).toMatchObject({
       id: "e2e.orders",
       tenantKey: "acme",
       operationName: "Orders",
@@ -305,10 +305,10 @@ describe("reads (parity surface)", () => {
       isActive: true,
     });
     const missing = await gql(PERSISTED_OPERATION_DETAIL, { id: "e2e.orders", tenantKey: null, historyTake: 100 });
-    expect(pick(missing, "operations.persistedOperations.persistedOperation")).toBeNull();
+    expect(pick(missing, "persistedOperations.persistedOperation")).toBeNull();
     const history = pick(
       await gql(PERSISTED_OPERATION_DETAIL, { id: "e2e.greet.v0", tenantKey: null, historyTake: 100 }),
-      "operations.persistedOperations.persistedOperationHistory",
+      "persistedOperations.persistedOperationHistory",
     ) as { changeType: string; changedReason: string | null }[];
     expect(history[0]).toMatchObject({ changeType: "Deactivate", changedReason: "superseded" });
   });

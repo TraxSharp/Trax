@@ -308,12 +308,10 @@ public class HotChocolateCacheInvalidationTests
     {
         const string mutation = """
             mutation Upload($input: UploadPersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  uploadPersistedOperation(input: $input) {
-                    success
-                    errors { code message }
-                  }
+              persistedOperations {
+                uploadPersistedOperation(input: $input) {
+                  success
+                  errors { code message }
                 }
               }
             }
@@ -329,6 +327,7 @@ public class HotChocolateCacheInvalidationTests
             .New()
             .SetDocument(mutation)
             .SetVariableValues(new Dictionary<string, object?> { ["input"] = input })
+            .AsManager()
             .Build();
         var result = await executor.ExecuteAsync(request);
         var op = (OperationResult)result;

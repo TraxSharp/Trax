@@ -60,10 +60,13 @@ authenticated principal really is an operator says so with
 compiled against the old one still binds and meets the refusal at startup rather than a
 missing method.
 
-**Persisted operations no longer forces the namespace.** `UsePersistedOperations` grafted it on
-unconditionally, so taking enforcement meant taking a GraphQL-exposed scheduler console.
-`ExposeOperationsNamespace(false)` keeps storage, enforcement, cache and invalidation, and
-leaves the namespace out of the schema.
+**Persisted operations does not touch the namespace.** `UsePersistedOperations` used to graft it
+on, so taking enforcement meant taking a GraphQL-exposed scheduler console, and a deploy pipeline
+that uploads documents needed the operator's credential. The management fields now sit at the
+root, `persistedOperations { ... }` on both root types, behind a gate of their own that
+`GateManagement(policy, roles)` declares, with the same rules as `GateOperations`. With no gate
+declared they are not in the schema. Storage, enforcement, cache and invalidation are there either
+way.
 
 ## Exemplars
 
@@ -74,8 +77,11 @@ leaves the namespace out of the schema.
 - `AdminOperationsAuthorizationTests` drives all of it over HTTP, including the case the feature
   exists for: with the namespace gated, an anonymous caller is refused there and still served by
   a public field on the same endpoint.
-- `ExtensionMethodTests` covers declining the namespace from `UsePersistedOperations` while
+- `ExtensionMethodTests` covers `UsePersistedOperations` leaving the namespace off while
   enforcement and storage stay registered.
+- `PersistedOperationsManagementGateTests` pins the management gate over HTTP: the fields are
+  absent until it is declared, a caller with the management role uploads and is refused under
+  `operations`, an anonymous caller is refused, and an unregistered policy fails startup.
 
 Not covered: nothing checks that the policy or roles passed to `GateOperations` are registered
 with ASP.NET Core. An unknown policy name fails at request time, the same way it does for
@@ -83,6 +89,9 @@ with ASP.NET Core. An unknown policy name fails at request time, the same way it
 
 ## Changelog
 
+- **2026-10-15**: `UsePersistedOperations` no longer exposes the namespace. Persisted-operation
+  management moved to the root behind its own gate, `GateManagement`; `ExposeOperationsNamespace`
+  is removed.
 - **2026-09-27**: `GateOperations` requires a policy or roles; "any authenticated user" is
   `GateOperationsToAuthenticatedUsers()`.
 - **2026-09-15**: Recorded.

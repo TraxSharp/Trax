@@ -7,8 +7,8 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 
 /// <summary>
-/// Body of the <c>operations.persistedOperations</c> query namespace. Each field calls
-/// <see cref="IPersistedOperationsService"/>.
+/// Body of the <c>persistedOperations</c> query namespace at the root, behind the management gate.
+/// Each field calls <see cref="IPersistedOperationsService"/>.
 /// </summary>
 /// <remarks>
 /// The overloads taking <see cref="IDataContextProviderFactory"/> are kept for callers built

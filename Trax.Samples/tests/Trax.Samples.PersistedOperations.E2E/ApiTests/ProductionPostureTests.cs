@@ -18,10 +18,8 @@ public class ProductionPostureTests
 {
     private const string UploadMutation = """
         mutation Upload($input: UploadPersistedOperationInput!) {
-          operations {
-            persistedOperations {
-              uploadPersistedOperation(input: $input) { success }
-            }
+          persistedOperations {
+            uploadPersistedOperation(input: $input) { success }
           }
         }
         """;

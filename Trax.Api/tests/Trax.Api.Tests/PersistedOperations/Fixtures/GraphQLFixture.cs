@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Claims;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Types;
@@ -45,6 +46,22 @@ public static class GraphQLFixture
     /// <summary>A valid document with a different response shape (extra field).</summary>
     public const string ShapeChangingDocument = "query Greet { hello version }";
 
+    /// <summary>The role the fixture gates the management fields to.</summary>
+    public const string ManagerRole = "DocumentManager";
+
+    /// <summary>A signed-in caller holding <see cref="ManagerRole"/>.</summary>
+    public static ClaimsPrincipal Manager { get; } =
+        new(
+            new ClaimsIdentity(
+                [new Claim(ClaimTypes.Name, "manager"), new Claim(ClaimTypes.Role, ManagerRole)],
+                "Test"
+            )
+        );
+
+    /// <summary>Runs the request as <see cref="Manager"/>, who meets the management gate.</summary>
+    public static OperationRequestBuilder AsManager(this OperationRequestBuilder request) =>
+        request.SetGlobalState(nameof(ClaimsPrincipal), Manager);
+
     public static Task<ServiceProvider> BuildAsync() => BuildAsync(po => po.SingleNode());
 
     /// <summary>
@@ -89,11 +106,8 @@ public static class GraphQLFixture
             trax.AddEffects(effects => effects.UsePostgres(PostgresFixture.ConnectionString))
         );
         sc.AddTraxGraphQL(g =>
-            g.ExposeOperationQueries()
-                .ExposeOperationMutations()
-                .AllowAnonymousOperations()
-                .AddTypeExtension<HelloQuery>()
-                .UsePersistedOperations(po => topology(po))
+            g.AddTypeExtension<HelloQuery>()
+                .UsePersistedOperations(po => topology(po.GateManagement(roles: ManagerRole)))
         );
         services?.Invoke(sc);
         return sc.BuildServiceProvider();

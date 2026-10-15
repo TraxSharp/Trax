@@ -195,12 +195,10 @@ public class PersistedOperationQueryTests
         var json = await Execute(
             """
             query List($filter: PersistedOperationFilterInput, $take: Int! = 50, $skip: Int! = 0) {
-              operations {
-                persistedOperations {
-                  persistedOperations(filter: $filter, take: $take, skip: $skip) {
-                    totalCount
-                    items { id operationName isActive shapeFingerprint description document }
-                  }
+              persistedOperations {
+                persistedOperations(filter: $filter, take: $take, skip: $skip) {
+                  totalCount
+                  items { id operationName isActive shapeFingerprint description document }
                 }
               }
             }
@@ -210,7 +208,6 @@ public class PersistedOperationQueryTests
 
         return json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("persistedOperations");
     }
@@ -220,16 +217,14 @@ public class PersistedOperationQueryTests
         var json = await Execute(
             """
             query Single($id: String!) {
-              operations {
-                persistedOperations {
-                  persistedOperation(id: $id) {
-                    id
-                    operationName
-                    isActive
-                    document
-                    shapeFingerprint
-                    description
-                  }
+              persistedOperations {
+                persistedOperation(id: $id) {
+                  id
+                  operationName
+                  isActive
+                  document
+                  shapeFingerprint
+                  description
                 }
               }
             }
@@ -239,7 +234,6 @@ public class PersistedOperationQueryTests
 
         return json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("persistedOperation");
     }
@@ -249,14 +243,12 @@ public class PersistedOperationQueryTests
         var json = await Execute(
             """
             query History($id: String!) {
-              operations {
-                persistedOperations {
-                  persistedOperationHistory(id: $id) {
-                    historyId
-                    changeType
-                    changedReason
-                    shapeFingerprint
-                  }
+              persistedOperations {
+                persistedOperationHistory(id: $id) {
+                  historyId
+                  changeType
+                  changedReason
+                  shapeFingerprint
                 }
               }
             }
@@ -266,7 +258,6 @@ public class PersistedOperationQueryTests
 
         return json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("persistedOperationHistory");
     }
@@ -280,6 +271,7 @@ public class PersistedOperationQueryTests
             .New()
             .SetDocument(query)
             .SetVariableValues(variables.ToDictionary(p => p.Key, p => p.Value))
+            .AsManager()
             .Build();
         var result = await _executor.ExecuteAsync(request);
         var op = result as OperationResult;

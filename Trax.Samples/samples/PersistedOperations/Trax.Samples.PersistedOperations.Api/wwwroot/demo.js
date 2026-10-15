@@ -13,10 +13,10 @@ const RENAME = FIX.replace("{ greeting }", "{ message: greeting }");
 const INLINE = 'query { discover { greeting { greet(input: { name: "Eve", style: FORMAL }) { greeting } } } }';
 
 const UPLOAD = `mutation Upload($input: UploadPersistedOperationInput!) {
-  operations { persistedOperations { uploadPersistedOperation(input: $input) { success errors { code message } } } }
+  persistedOperations { uploadPersistedOperation(input: $input) { success errors { code message } } }
 }`;
 const READ = `query Stored($id: String!) {
-  operations { persistedOperations { persistedOperation(id: $id) { document } } }
+  persistedOperations { persistedOperation(id: $id) { document } }
 }`;
 
 /** When the first request goes out, the time between one answer and the next request, and the least a request shows as in flight. */
@@ -68,14 +68,14 @@ async function send(body, { operator = false } = {}) {
 async function readStored() {
   const { response } = await send({ query: READ, variables: { id: "greet_v1" } }, { operator: true });
   if (response.errors) throw new Error(response.errors[0].message);
-  return response.data?.operations?.persistedOperations?.persistedOperation?.document ?? null;
+  return response.data?.persistedOperations?.persistedOperation?.document ?? null;
 }
 
 /** What came back for a step, in a line. */
 function outcomeOf(step, { status, response }) {
   const error = response.errors?.[0]?.message;
   if (step.kind === "upload") {
-    const result = response.data?.operations?.persistedOperations?.uploadPersistedOperation;
+    const result = response.data?.persistedOperations?.uploadPersistedOperation;
     if (result?.success) return { outcome: "accepted", text: "Accepted" };
     return { outcome: "refused", text: result?.errors?.[0]?.message ?? error ?? `HTTP ${status}` };
   }

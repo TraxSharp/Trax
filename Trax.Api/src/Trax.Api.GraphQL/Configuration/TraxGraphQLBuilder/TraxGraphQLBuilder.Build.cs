@@ -88,6 +88,7 @@ public partial class TraxGraphQLBuilder
         )
         {
             GetRequestsAllowed = GetRequestsAllowed,
+            FeatureRootFieldsAdded = FeatureRootFieldsAdded,
             JunctionAnswersForBroadcastAllowed = JunctionAnswersForBroadcastAllowed,
             SocketAllowedOrigins = SocketAllowedOrigins,
             MachineSpelledEnums = MachineSpelledEnums,

@@ -79,32 +79,32 @@ one train field with two shapes keep both.
 | `IPersistedOperationsService` | Singleton (TryAdd) | The management surface the GraphQL fields and the dashboard call. |
 | `IOperationDocumentStorage` -> `DbPersistedOperationStorage` | Singleton | HotChocolate hot-path lookup. |
 | `IPersistedOperationValidator` -> `HotChocolateSchemaValidator` | Singleton (Replace) | Runs HotChocolate validation against the live schema before every upsert. Overrides the no-op default from `AddPersistedOperationStore`. |
-| `IPersistedOperationsCapability` | Singleton | Marker meaning this process serves the management GraphQL fields. The dashboard gates its pages on `IPersistedOperationsService` instead, so they also appear on a host that registers only `AddPersistedOperationStore`. |
+| `IPersistedOperationsCapability` | Singleton | Marker meaning this process runs `UsePersistedOperations`. The dashboard gates its pages on `IPersistedOperationsService` instead, so they also appear on a host that registers only `AddPersistedOperationStore`. |
 | `AllowlistMatcher` | Singleton | Used by the enforcement middleware. |
 | `PersistedOperationPolicy` | Singleton | The enforcement decision, asked once per operation by the request middleware `UsePersistedOperations` adds after HotChocolate's document parser. |
 | `MachineDocumentRegistration` | Hosted (lifecycle) | Generates every exposed machine's [persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) from the built schema and registers them in the store before the host serves anything, writing nothing for a document already stored as generated. A failure stops the host. |
 | `TimeProvider` | Singleton (TryAdd) | Default `TimeProvider.System`; override for tests. The caches' maximum age is measured on it. |
 | `IDocumentCache`, `IPreparedOperationCache` | Singleton (schema services) | Replacements for HotChocolate's caches, sized from the host's `ModifyOptions` (`OperationDocumentCacheSize`, `PreparedOperationCacheSize`). Each entry carries the generation it was written in and the time its document was read; it is served only while no change has been applied since and it is younger than `WithCacheMaxAge`. The executor refuses to build if anything else replaces them. |
 
-Also extends the GraphQL schema with the [management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations), and calls `ExposeOperationQueries()` / `ExposeOperationMutations()` on the builder so `RootQuery` and `RootMutation` are emitted even when the host has not registered any train-backed queries or mutations.
+It adds nothing to the `operations` namespace. A host that wants `operations` exposes it itself, with `ExposeOperationQueries()` or `ExposeOperationMutations()`, and answers for it there.
 
-Because this exposes the `operations` namespace (including the persisted-operation management mutations, which are admin operations), the host must answer for it, or `AddTraxGraphQL()` fails at startup: [`GateOperations(policy, roles)`](/docs/sdk-reference/graphql-api/add-trax-graphql) to gate the namespace while the rest of the endpoint stays open, `RequireAuthorization()` to gate the whole endpoint, or `AllowAnonymousOperations()` to opt into anonymous access.
+### The management fields
 
-### Declining the namespace
-
-`ExposeOperationsNamespace(false)` wires storage, enforcement, the cache and cross-node invalidation without touching the schema:
+The [management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations) sit at the root, `persistedOperations { ... }` on `RootQuery` and `RootMutation`, behind a gate of their own. They are served only once the host declares who may use them:
 
 ```csharp compile
 services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(po => po
         .RequirePersisted(true)
         .SingleNode()
-        .ExposeOperationsNamespace(false)
+        .GateManagement(roles: "Deployer")
     )
 );
 ```
 
-With the namespace declined there is nothing to gate and nothing to acknowledge. The management mutations are not in the schema either: they are `[ExtendObjectType(typeof(OperationsMutations))]` classes, and their target type is not there to extend.
+`GateManagement(policy, roles)` puts `@authorize` on both `persistedOperations` fields, with the same rules as [`GateOperations`](/docs/sdk-reference/graphql-api/add-trax-graphql): a policy or roles is required, a comma-separated role list is any of, and repeated calls are all of. `GateManagementToAuthenticatedUsers()` admits any signed-in caller. The gate is separate from the operations gate, so a deploy pipeline that uploads documents holds the management role and none of the operator's, and an operator at the dashboard who manages documents holds both.
+
+Without a management gate the fields are not in the schema. Storage, enforcement, the cache and cross-node invalidation are wired either way, and documents are managed out of band: a deploy step, a migration, or the Trax dashboard, which calls `IPersistedOperationsService` directly.
 
 ### Validation
 
@@ -119,6 +119,8 @@ Configuration errors throw `InvalidOperationException` when `UsePersistedOperati
 | `WithInMemoryCache` TTL longer than `WithCacheMaxAge` | Throws: the TTL would not take effect. |
 | `WithCacheMaxAge` not positive | Throws `ArgumentOutOfRangeException` when called. |
 | `AllowOperations` contains an empty entry | Throws. |
+| `GateManagement()` with neither a policy nor roles, or with a role list of only separators | Throws when called. |
+| A policy `GateManagement` names is not registered | The host fails at startup, naming the policy and the field. |
 
 ## Examples
 
@@ -126,7 +128,6 @@ One node:
 
 ```csharp compile
 services.AddTraxGraphQL(graphql => graphql
-    .AllowAnonymousOperations()
     .UsePersistedOperations(opts => opts
         .RequirePersisted(true)
         .SingleNode()
@@ -138,11 +139,11 @@ More than one node, with the optional Trax lookup cache:
 
 ```csharp compile
 services.AddTraxGraphQL(graphql => graphql
-    .GateOperations(policy: "TraxAdmin")
     .UsePersistedOperations(opts => opts
         .RequirePersisted(true)
         .WithInMemoryCache()
         .UseRabbitMqInvalidation(rabbitMqConnectionString)
+        .GateManagement(policy: "TraxAdmin")
     )
 );
 ```

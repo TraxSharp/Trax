@@ -70,7 +70,7 @@ const NOT_FOUND: Record<string, () => Rec> = {
     },
   }),
   PersistedOperationDetail: () => ({
-    operations: { persistedOperations: { persistedOperation: null, persistedOperationHistory: [] } },
+    persistedOperations: { persistedOperation: null, persistedOperationHistory: [] },
   }),
 };
 
@@ -139,7 +139,7 @@ function derivePersistedOperations(recordings: Recordings, vars: Rec): Rec | und
     hashVariables({ ...vars, skip: 0, filter: { ...filter, idStartsWith: null } })
   ];
   if (!data) return undefined;
-  const path = ["operations", "persistedOperations", "persistedOperations"];
+  const path = ["persistedOperations", "persistedOperations"];
   const page = getAt(data, path) as Rec;
   const items = (page.items as Rec[]).filter((i) => String(i.id).startsWith(String(prefix)));
   const skip = Number(vars.skip ?? 0);

@@ -255,9 +255,13 @@ public static class GraphQLServiceExtensions
             config.OperationQueriesExposed
             || hasTrainQueries
             || config.ModelRegistrations.Count > 0
-            || machinesExposed;
+            || machinesExposed
+            || config.FeatureRootFieldsAdded;
         var hasMutationRoot =
-            config.OperationMutationsExposed || hasTrainMutations || machinesExposed;
+            config.OperationMutationsExposed
+            || hasTrainMutations
+            || machinesExposed
+            || config.FeatureRootFieldsAdded;
 
         if (!hasQueryRoot)
             throw new InvalidOperationException(

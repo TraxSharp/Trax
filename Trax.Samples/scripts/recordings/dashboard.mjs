@@ -678,7 +678,7 @@ async function snapshot() {
           skip: 0,
           take: 25,
         });
-        for (const op of data.operations.persistedOperations.persistedOperations.items)
+        for (const op of data.persistedOperations.persistedOperations.items)
           listed.set(`${op.tenantKey}\u0000${op.id}`, op);
       }
   for (const op of listed.values())
@@ -788,8 +788,8 @@ async function recordMutations() {
   if (recoveryDone) await mutate("recovery", "RequeueExecution", { id: recoveryDone.id, askAfresh: true });
 
   const p = "persisted";
-  const stored = (await call(p, "PersistedOperationDetail", { id: "greet_v1", historyTake: 1 })).operations
-    .persistedOperations.persistedOperation;
+  const stored = (await call(p, "PersistedOperationDetail", { id: "greet_v1", historyTake: 1 })).persistedOperations
+    .persistedOperation;
   await mutate(p, "UploadPersistedOperation", { input: { id: "greet_v1", document: stored.document } });
   await mutate(p, "UploadPersistedOperation", { input: { id: "greet_v1", document: "query { nope" } });
   await mutate(p, "RestorePersistedOperation", { input: { id: "greet_v0" } });

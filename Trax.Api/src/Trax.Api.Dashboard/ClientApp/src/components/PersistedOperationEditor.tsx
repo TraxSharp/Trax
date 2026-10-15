@@ -66,7 +66,7 @@ export function PersistedOperationEditor({
     });
     setBusy(false);
     const payload: PersistedOperationPayload | undefined =
-      r.data?.operations?.persistedOperations?.uploadPersistedOperation;
+      r.data?.persistedOperations?.uploadPersistedOperation;
     if (r.error) setOtherError(r.error.message);
     else if (payload?.success) {
       onSaved();

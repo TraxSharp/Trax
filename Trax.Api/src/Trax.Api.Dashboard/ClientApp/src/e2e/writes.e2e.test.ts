@@ -300,7 +300,7 @@ describe("writes (real mutations, verified by re-query)", () => {
         input: { id, document, description: "written by the e2e", bypassShapeDiff, version: 1 },
       });
     const payload = (d: unknown, field: string) =>
-      pick(d, `operations.persistedOperations.${field}`) as {
+      pick(d, `persistedOperations.${field}`) as {
         success: boolean;
         errors: { code: string; oldFingerprint: string | null; newFingerprint: string | null; locations: unknown }[];
       };
@@ -308,7 +308,7 @@ describe("writes (real mutations, verified by re-query)", () => {
     expect(payload(await upload("query Status { operations { health { status } } }"), "uploadPersistedOperation").success).toBe(true);
     const listed = pick(
       await gql(PERSISTED_OPERATIONS, { filter: { idStartsWith: "w2e." }, skip: 0, take: 10 }),
-      "operations.persistedOperations.persistedOperations.items",
+      "persistedOperations.persistedOperations.items",
     ) as { id: string; description: string }[];
     expect(listed).toEqual([expect.objectContaining({ id, description: "written by the e2e" })]);
 
@@ -339,7 +339,7 @@ describe("writes (real mutations, verified by re-query)", () => {
         .success,
     ).toBe(true);
     let d = await gql(PERSISTED_OPERATION_DETAIL, { id, tenantKey: null, historyTake: 100 });
-    expect(pick(d, "operations.persistedOperations.persistedOperation")).toMatchObject({
+    expect(pick(d, "persistedOperations.persistedOperation")).toMatchObject({
       isActive: false,
       deprecationReason: "e2e retire",
     });
@@ -347,8 +347,8 @@ describe("writes (real mutations, verified by re-query)", () => {
       payload(await gql(RESTORE_PERSISTED_OPERATION, { input: { id } }), "restorePersistedOperation").success,
     ).toBe(true);
     d = await gql(PERSISTED_OPERATION_DETAIL, { id, tenantKey: null, historyTake: 100 });
-    expect(pick(d, "operations.persistedOperations.persistedOperation.isActive")).toBe(true);
-    const history = pick(d, "operations.persistedOperations.persistedOperationHistory") as { changeType: string }[];
+    expect(pick(d, "persistedOperations.persistedOperation.isActive")).toBe(true);
+    const history = pick(d, "persistedOperations.persistedOperationHistory") as { changeType: string }[];
     expect(history.length).toBeGreaterThanOrEqual(4); // upload, bypassed upload, deactivate, restore
   });
 

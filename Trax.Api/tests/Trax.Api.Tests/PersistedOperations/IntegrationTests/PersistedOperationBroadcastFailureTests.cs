@@ -155,25 +155,23 @@ public class PersistedOperationBroadcastFailureTests
                 .SetDocument(
                     $$"""
                     mutation Change($input: {{inputType}}!) {
-                      operations {
-                        persistedOperations {
-                          {{field}}(input: $input) {
-                            success
-                            operation { id isActive }
-                            errors { code message }
-                          }
+                      persistedOperations {
+                        {{field}}(input: $input) {
+                          success
+                          operation { id isActive }
+                          errors { code message }
                         }
                       }
                     }
                     """
                 )
                 .SetVariableValues(new Dictionary<string, object?> { ["input"] = input })
+                .AsManager()
                 .Build()
         );
         var json = JsonDocument.Parse(((OperationResult)result).ToJson());
         return json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty(field);
     }

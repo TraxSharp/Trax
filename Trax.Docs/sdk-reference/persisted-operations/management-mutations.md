@@ -1,6 +1,6 @@
 ---
 title: Management mutations and queries
-description: "Reference for the operations.persistedOperations GraphQL fields that upload, deactivate, restore, list and show history of persisted operations."
+description: "Reference for the persistedOperations GraphQL fields that upload, deactivate, restore and list persisted operations, and the gate in front of them."
 type: reference
 area: api
 surface: graphql
@@ -12,13 +12,42 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationMutations.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/PersistedOperationQueries.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/GraphQL/MachineDocumentQueries.cs
+  - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Configuration/PersistedOperationsBuilder.Management.cs
 ---
 
 # Management mutations and queries
 
-[UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) registers six fields on the schema for browsing and editing persisted operations, all under the `operations.persistedOperations` namespace, resolved by `PersistedOperationMutations` and `PersistedOperationQueries`. Every field calls [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service), the same service the Trax dashboard's persisted-operations pages call, so both accept and refuse the same things.
+[UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) registers six fields on the schema for browsing and editing persisted operations, all under a `persistedOperations` namespace at the root of the query and mutation types, resolved by `PersistedOperationQueries` and `PersistedOperationMutations`. Every field calls [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service), the same service the Trax dashboard's persisted-operations pages call, so both accept and refuse the same things.
 
-These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), since a client cannot send them by an id it has not uploaded yet. They are protected by the operations namespace's authorization posture: `GateOperations(...)`, the builder's `RequireAuthorization()`, or an explicit `AllowAnonymousOperations()`. A host that exposes the namespace with none of the three refuses to start.
+```graphql
+query { persistedOperations { persistedOperations(take: 10) { totalCount } } }
+mutation { persistedOperations { uploadPersistedOperation(input: { ... }) { success } } }
+```
+
+## The management gate
+
+The fields are served only once the host declares who may use them, and each `persistedOperations` field carries that gate as `@authorize`:
+
+```csharp compile
+services.AddTraxGraphQL(graphql => graphql
+    .UsePersistedOperations(po => po
+        .SingleNode()
+        .GateManagement(roles: "Deployer")
+    )
+);
+```
+
+| Call | Who gets in |
+|---|---|
+| `GateManagement(policy: "...")` | Callers the ASP.NET Core policy admits. The policy must be registered, or the host fails at startup. |
+| `GateManagement(roles: "A,B")` | Callers holding at least one of the roles. |
+| Repeated `GateManagement(...)` calls | Callers meeting every one of them. |
+| `GateManagementToAuthenticatedUsers()` | Any authenticated caller. On a host with public sign-up that is anyone. |
+| none | Nobody: the fields are not in the schema. |
+
+The gate is not the operations gate. `GateOperations` and `RequireAuthorization()` govern `operations`; `GateManagement` governs `persistedOperations`. A deploy pipeline that uploads documents holds the management role and reaches nothing under `operations`, and an operator who manages documents at the dashboard holds both. `RequireAuthorization()` on the builder still gates the whole endpoint, these fields included.
+
+These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), since a client cannot send them by an id it has not uploaded yet. A document is admitted inline only when every operation in it selects nothing at the root but `persistedOperations`; mixing in another field sends it through enforcement like any other document.
 
 ## Mutations
 
@@ -84,8 +113,9 @@ Audit history for an operation, most-recent first. Same `take` / `skip` defaults
 [machine documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) this node serves, one per
 operation of each exposed machine, with the IR hash of the machine it was generated for. A generated client reads
 it at build time and sends each operation by its id. It sits directly under `operations`, behind the gate the host
-declared for the namespace, and, like `persistedOperations`, it is admitted as an inline document when the host
-requires persisted operations, since a client cannot ask for its ids by an id it does not have yet.
+declared for the namespace, and is served only when the host exposes the operations queries itself. Like
+`persistedOperations`, it is admitted as an inline document when the host requires persisted operations, since a
+client cannot ask for its ids by an id it does not have yet.
 
 ## Reserved ids
 
@@ -115,18 +145,16 @@ See [PersistedOperationException](/docs/sdk-reference/persisted-operations/persi
 
 ```graphql
 mutation Upload($input: UploadPersistedOperationInput!) {
-  operations {
-    persistedOperations {
-      uploadPersistedOperation(input: $input) {
-        success
-        operation { id shapeFingerprint isActive }
-        errors {
-          code
-          message
-          locations { line column }
-          oldFingerprint
-          newFingerprint
-        }
+  persistedOperations {
+    uploadPersistedOperation(input: $input) {
+      success
+      operation { id shapeFingerprint isActive }
+      errors {
+        code
+        message
+        locations { line column }
+        oldFingerprint
+        newFingerprint
       }
     }
   }

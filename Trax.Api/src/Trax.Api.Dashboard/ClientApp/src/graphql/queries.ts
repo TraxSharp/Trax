@@ -803,15 +803,14 @@ export const LOG_LEVELS = gql`
 `;
 
 // ── Persisted operations ───────────────────────────────────────────────────
-// The operations.persistedOperations namespace exists only when the host calls
-// UsePersistedOperations(...). Selecting only __typename on it reads nothing, so this is a cheap
-// probe: it resolves when the namespace is there and fails validation when it is not.
+// The persistedOperations namespace exists only when the host calls UsePersistedOperations(...)
+// and declares GateManagement(...). Selecting only __typename on it reads nothing, so this is a
+// cheap probe: it resolves when the namespace is there and the caller meets its gate, and fails
+// otherwise.
 export const PERSISTED_OPERATIONS_AVAILABLE = gql`
   query PersistedOperationsAvailable {
-    operations {
-      persistedOperations {
-        __typename
-      }
+    persistedOperations {
+      __typename
     }
   }
 `;
@@ -820,20 +819,18 @@ export const PERSISTED_OPERATIONS_AVAILABLE = gql`
 // here); the filter's tenantKey is null for every tenant and "" for the default tenant.
 export const PERSISTED_OPERATIONS = gql`
   query PersistedOperations($filter: PersistedOperationFilterInput, $skip: Int!, $take: Int!) {
-    operations {
-      persistedOperations {
-        persistedOperations(filter: $filter, skip: $skip, take: $take) {
-          items {
-            id
-            tenantKey
-            operationName
-            version
-            isActive
-            description
-            updatedAt
-          }
-          totalCount
+    persistedOperations {
+      persistedOperations(filter: $filter, skip: $skip, take: $take) {
+        items {
+          id
+          tenantKey
+          operationName
+          version
+          isActive
+          description
+          updatedAt
         }
+        totalCount
       }
     }
   }
@@ -842,30 +839,28 @@ export const PERSISTED_OPERATIONS = gql`
 // One persisted operation (null when missing) and its audit history, most recent first.
 export const PERSISTED_OPERATION_DETAIL = gql`
   query PersistedOperationDetail($id: String!, $tenantKey: String, $historyTake: Int!) {
-    operations {
-      persistedOperations {
-        persistedOperation(id: $id, tenantKey: $tenantKey) {
-          id
-          tenantKey
-          operationName
-          version
-          document
-          shapeFingerprint
-          isActive
-          deprecationReason
-          description
-          createdAt
-          updatedAt
-        }
-        persistedOperationHistory(id: $id, tenantKey: $tenantKey, take: $historyTake) {
-          historyId
-          id
-          tenantKey
-          shapeFingerprint
-          changeType
-          changedAt
-          changedReason
-        }
+    persistedOperations {
+      persistedOperation(id: $id, tenantKey: $tenantKey) {
+        id
+        tenantKey
+        operationName
+        version
+        document
+        shapeFingerprint
+        isActive
+        deprecationReason
+        description
+        createdAt
+        updatedAt
+      }
+      persistedOperationHistory(id: $id, tenantKey: $tenantKey, take: $historyTake) {
+        historyId
+        id
+        tenantKey
+        shapeFingerprint
+        changeType
+        changedAt
+        changedReason
       }
     }
   }

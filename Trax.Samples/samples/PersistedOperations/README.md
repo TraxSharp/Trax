@@ -15,8 +15,8 @@ variables, and the server runs the document it stores for that id. The sample te
 
 - `UsePersistedOperations(...).RequirePersisted(true).SingleNode()` rejects every inline document
   with `PERSISTED_OPERATION_REQUIRED`.
-- The management mutations under `operations.persistedOperations` are gated to the `Operator` role
-  with `GateOperations(roles: "Operator")`; an anonymous upload is refused with `TRAX_AUTHORIZATION`.
+- The management mutations under `persistedOperations` are gated to the `Operator` role with
+  `GateManagement(roles: "Operator")`; an anonymous upload is refused with `TRAX_AUTHORIZATION`.
 - An upload that keeps the response shape takes effect on the next call by the same id; one that
   changes it is refused with `SHAPE_DIFF_VIOLATION`.
 - The demo operator key and the dashboard exist only in Development.

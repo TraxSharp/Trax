@@ -307,17 +307,17 @@ describe("persisted operations", () => {
         input: { id: "new.v1", document: "query New { operations { health { status } } }", description: "fresh" },
       })
       .toPromise();
-    expect(get(ack.data, "operations.persistedOperations.uploadPersistedOperation.success")).toBe(true);
+    expect(get(ack.data, "persistedOperations.uploadPersistedOperation.success")).toBe(true);
     const list = await c.query(PERSISTED_OPERATIONS, { skip: 0, take: 25 }, NET).toPromise();
-    const page = get(list.data, "operations.persistedOperations.persistedOperations") as {
+    const page = get(list.data, "persistedOperations.persistedOperations") as {
       items: { id: string }[];
       totalCount: number;
     };
     expect(page.items[0].id).toBe("new.v1");
     expect(page.totalCount).toBe(4);
     const d = await detail(c, "new.v1");
-    expect(get(d.data, "operations.persistedOperations.persistedOperation.operationName")).toBe("New");
-    expect(get(d.data, "operations.persistedOperations.persistedOperationHistory.0.changeType")).toBe("Upsert");
+    expect(get(d.data, "persistedOperations.persistedOperation.operationName")).toBe("New");
+    expect(get(d.data, "persistedOperations.persistedOperationHistory.0.changeType")).toBe("Upsert");
   });
 
   test("a shape-changing edit is refused with both fingerprints unless bypassed", async () => {
@@ -326,7 +326,7 @@ describe("persisted operations", () => {
       c.mutation(UPLOAD_PERSISTED_OPERATION, { input: { id: "s.v1", document, bypassShapeDiff } }).toPromise();
     await up("query S { operations { health { status } } }");
     const refused = await up("query S { operations { health { status queueDepth } } }");
-    const payload = get(refused.data, "operations.persistedOperations.uploadPersistedOperation") as {
+    const payload = get(refused.data, "persistedOperations.uploadPersistedOperation") as {
       success: boolean;
       errors: { code: string; oldFingerprint: string; newFingerprint: string }[];
     };
@@ -334,7 +334,7 @@ describe("persisted operations", () => {
     expect(payload.errors[0].code).toBe("SHAPE_DIFF_VIOLATION");
     expect(payload.errors[0].oldFingerprint).not.toBe(payload.errors[0].newFingerprint);
     const bypassed = await up("query S { operations { health { status queueDepth } } }", true);
-    expect(get(bypassed.data, "operations.persistedOperations.uploadPersistedOperation.success")).toBe(true);
+    expect(get(bypassed.data, "persistedOperations.uploadPersistedOperation.success")).toBe(true);
   });
 
   test("an unbalanced document is a parse error with its location", async () => {
@@ -342,8 +342,8 @@ describe("persisted operations", () => {
     const r = await c
       .mutation(UPLOAD_PERSISTED_OPERATION, { input: { id: "p.v1", document: "query P {" } })
       .toPromise();
-    expect(get(r.data, "operations.persistedOperations.uploadPersistedOperation.errors.0.code")).toBe("PARSE_FAILED");
-    expect(get(r.data, "operations.persistedOperations.uploadPersistedOperation.errors.0.locations.0.line")).toBe(1);
+    expect(get(r.data, "persistedOperations.uploadPersistedOperation.errors.0.code")).toBe("PARSE_FAILED");
+    expect(get(r.data, "persistedOperations.uploadPersistedOperation.errors.0.locations.0.line")).toBe(1);
   });
 
   test("deactivate needs a reason, then restore brings the operation back", async () => {
@@ -351,24 +351,24 @@ describe("persisted operations", () => {
     const blank = await c
       .mutation(DEACTIVATE_PERSISTED_OPERATION, { input: { id: "greet.v1", reason: "  " } })
       .toPromise();
-    expect(get(blank.data, "operations.persistedOperations.deactivatePersistedOperation.errors.0.code")).toBe(
+    expect(get(blank.data, "persistedOperations.deactivatePersistedOperation.errors.0.code")).toBe(
       "INVALID_INPUT",
     );
     await c
       .mutation(DEACTIVATE_PERSISTED_OPERATION, { input: { id: "greet.v1", reason: "retired" } })
       .toPromise();
     let d = await detail(c, "greet.v1");
-    expect(get(d.data, "operations.persistedOperations.persistedOperation.isActive")).toBe(false);
-    expect(get(d.data, "operations.persistedOperations.persistedOperation.deprecationReason")).toBe("retired");
+    expect(get(d.data, "persistedOperations.persistedOperation.isActive")).toBe(false);
+    expect(get(d.data, "persistedOperations.persistedOperation.deprecationReason")).toBe("retired");
     const list = await c.query(PERSISTED_OPERATIONS, { skip: 0, take: 25 }, NET).toPromise();
     const row = (
-      get(list.data, "operations.persistedOperations.persistedOperations.items") as { id: string; isActive: boolean }[]
+      get(list.data, "persistedOperations.persistedOperations.items") as { id: string; isActive: boolean }[]
     ).find((r) => r.id === "greet.v1");
     expect(row!.isActive).toBe(false);
     await c.mutation(RESTORE_PERSISTED_OPERATION, { input: { id: "greet.v1" } }).toPromise();
     d = await detail(c, "greet.v1");
-    expect(get(d.data, "operations.persistedOperations.persistedOperation.isActive")).toBe(true);
-    expect(get(d.data, "operations.persistedOperations.persistedOperationHistory.0.changeType")).toBe("Restore");
+    expect(get(d.data, "persistedOperations.persistedOperation.isActive")).toBe(true);
+    expect(get(d.data, "persistedOperations.persistedOperationHistory.0.changeType")).toBe("Restore");
   });
 });
 

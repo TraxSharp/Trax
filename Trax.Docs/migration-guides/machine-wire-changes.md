@@ -118,3 +118,25 @@ credential moves to it.
 - **Generated code.** `trax client` writes `progress.g.ts` (`readRunProgress`, `followRunProgress`,
   `useRunProgress`) when the manifest lists a train that carries the attribute. See
   [`trax client`](/docs/reference/cli#frontend-clients-trax-client).
+
+## Persisted-operation management moved out of operations
+
+The fields that upload, deactivate, restore, list and show the history of persisted operations moved from
+`operations { persistedOperations { ... } }` to the root, `persistedOperations { ... }` on the query and mutation
+types, behind a gate of their own. `UsePersistedOperations` no longer exposes the `operations` namespace.
+
+- **Declare who manages documents.** Without a management gate the fields are not in the schema. Add
+  `GateManagement(roles: "...")` or `GateManagement(policy: "...")` to the `UsePersistedOperations` options, with
+  the role your uploader or operator holds; `GateManagementToAuthenticatedUsers()` admits any signed-in caller. See
+  [The management gate](/docs/sdk-reference/persisted-operations/management-mutations#the-management-gate).
+- **Move the documents.** `operations { persistedOperations { uploadPersistedOperation(...) } }` becomes
+  `persistedOperations { uploadPersistedOperation(...) }`, and the answer loses its `operations` level. Uploaders,
+  deploy steps and admin tools change with it; the Trax dashboard already does.
+- **`ExposeOperationsNamespace(...)` is gone**, and so is `PersistedOperationsOptions.ExposeOperationsNamespace`.
+  Remove the call. `PersistedOperationsOptions.ManagementServed` says whether a gate was declared.
+- **A host that relied on `UsePersistedOperations` for `operations`** exposes it itself with
+  `ExposeOperationQueries()` or `ExposeOperationMutations()` and answers for it there, as before. A host whose only
+  `GateOperations(...)` call was there for the management fields drops it: with nothing under `operations` exposed,
+  a gate on it fails startup.
+- **The machine documents manifest**, `operations { machineDocuments }`, is served only when the host exposes the
+  operations queries.

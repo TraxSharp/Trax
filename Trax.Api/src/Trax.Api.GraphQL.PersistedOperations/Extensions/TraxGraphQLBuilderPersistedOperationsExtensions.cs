@@ -6,17 +6,20 @@ using HotChocolate.Execution.Configuration;
 using HotChocolate.Features;
 using HotChocolate.Language;
 using HotChocolate.PersistedOperations;
+using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Middleware;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
+using Trax.Api.GraphQL.Validation;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 
@@ -51,13 +54,11 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
     /// <c>trax.persisted_operation_history</c>) live in the same <c>trax</c>
     /// schema as the rest of the Trax tables.
     /// <para>
-    /// This exposes the operations namespace, including the persisted-operation management
-    /// mutations. Those are admin operations, so the host must gate them: <c>GateOperations(...)</c>
-    /// to gate the namespace while the rest of the endpoint stays open,
-    /// <c>RequireAuthorization()</c> to gate the whole endpoint, or
-    /// <c>AllowAnonymousOperations()</c> to explicitly opt into anonymous access. Otherwise
-    /// <c>AddTraxGraphQL()</c> fails at startup. A host that wants enforcement without the
-    /// namespace calls <c>ExposeOperationsNamespace(false)</c> and answers none of this.
+    /// It adds nothing to the <c>operations</c> namespace. The management fields
+    /// (<c>persistedOperations { ... }</c> at the root) are served only once the host declares who
+    /// may use them with <c>GateManagement(...)</c>; without it the endpoint enforces persisted
+    /// operations and documents are managed out of band (a deploy step, the dashboard's service,
+    /// a migration).
     /// </para>
     /// </remarks>
     public static TraxGraphQLBuilder UsePersistedOperations(
@@ -126,20 +127,43 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // that the full persisted-operations subsystem is wired in.
         services.AddSingleton<IPersistedOperationsCapability, PersistedOperationsCapability>();
 
-        // Management mutations + queries. Scanned via the existing
-        // TraxGraphQLBuilder.AddTypeExtensions helper. Also flip the
-        // operations-exposed flags so AddTraxGraphQL emits the OperationsQueries
-        // and OperationsMutations namespaces that our type extensions graft onto.
-        //
-        // Declinable: the type extensions are registered only alongside the namespace they
-        // extend, because an [ExtendObjectType(typeof(OperationsMutations))] class whose target
-        // type is not in the schema is a build error, not a no-op.
-        if (options.ExposeOperationsNamespace)
+        // The management fields live at the root, behind the gate the host declared for them, and
+        // never under operations: turning on persisted operations exposes nothing of the admin
+        // namespace, and a pipeline that uploads documents needs none of its credential. With no
+        // gate declared the fields are not served.
+        if (options.ManagementServed)
         {
-            builder.ExposeOperationQueries();
-            builder.ExposeOperationMutations();
-            builder.AddTypeExtensions(typeof(GraphQL.PersistedOperationMutations).Assembly);
+            builder.FeatureRootFieldsAdded = true;
+            builder.ConfigureSchema(schema =>
+            {
+                schema.AddType(new ObjectType<GraphQL.PersistedOperationQueries>());
+                schema.AddType(new ObjectType<GraphQL.PersistedOperationMutations>());
+                schema.AddTypeExtension(
+                    ManagementRoot<GraphQL.PersistedOperationQueries>(
+                        "RootQuery",
+                        "Persisted-operation management: the stored documents and their history. "
+                            + "Behind the management gate the host declared.",
+                        options
+                    )
+                );
+                schema.AddTypeExtension(
+                    ManagementRoot<GraphQL.PersistedOperationMutations>(
+                        "RootMutation",
+                        "Persisted-operation management: upload, deactivate and restore stored "
+                            + "documents. Behind the management gate the host declared.",
+                        options
+                    )
+                );
+            });
         }
+
+        // machineDocuments hangs off operations, which only the host exposes, so it is added only
+        // when the host did. Read when the schema is built, after the host's configuration ran.
+        builder.ConfigureSchema(schema =>
+        {
+            if (builder.OperationQueriesExposed)
+                schema.AddTypeExtension<GraphQL.OperationsQueriesMachineDocumentsExtension>();
+        });
 
         // HotChocolate cache invalidator. The schema name is captured below
         // inside ConfigureSchema so the invalidator can evict the right executor.
@@ -275,6 +299,25 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
 
         return builder;
     }
+
+    // persistedOperations on a root type: a namespace field carrying the management gate, so
+    // everything under it is unreachable without it.
+    private static ObjectTypeExtension ManagementRoot<TNamespace>(
+        string rootType,
+        string description,
+        PersistedOperationsOptions options
+    )
+        where TNamespace : class, new() =>
+        new(d =>
+        {
+            d.Name(rootType);
+            var field = NamespaceField
+                .Mark(d.Field("persistedOperations"))
+                .Description(description)
+                .Type<ObjectType<TNamespace>>()
+                .Resolve(_ => new TNamespace());
+            AuthorizeDirectives.Apply(field, options.ManagementGate);
+        });
 
     /// <summary>
     /// The schema options the host configured (<c>ModifyOptions</c>), read the way HotChocolate

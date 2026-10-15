@@ -525,11 +525,9 @@ const PERSISTED_OPERATION_PAYLOAD = `
 
 export const UPLOAD_PERSISTED_OPERATION = gql`
   mutation UploadPersistedOperation($input: UploadPersistedOperationInput!) {
-    operations {
-      persistedOperations {
-        uploadPersistedOperation(input: $input) {
-          ${PERSISTED_OPERATION_PAYLOAD}
-        }
+    persistedOperations {
+      uploadPersistedOperation(input: $input) {
+        ${PERSISTED_OPERATION_PAYLOAD}
       }
     }
   }
@@ -537,11 +535,9 @@ export const UPLOAD_PERSISTED_OPERATION = gql`
 
 export const DEACTIVATE_PERSISTED_OPERATION = gql`
   mutation DeactivatePersistedOperation($input: DeactivatePersistedOperationInput!) {
-    operations {
-      persistedOperations {
-        deactivatePersistedOperation(input: $input) {
-          ${PERSISTED_OPERATION_PAYLOAD}
-        }
+    persistedOperations {
+      deactivatePersistedOperation(input: $input) {
+        ${PERSISTED_OPERATION_PAYLOAD}
       }
     }
   }
@@ -549,11 +545,9 @@ export const DEACTIVATE_PERSISTED_OPERATION = gql`
 
 export const RESTORE_PERSISTED_OPERATION = gql`
   mutation RestorePersistedOperation($input: RestorePersistedOperationInput!) {
-    operations {
-      persistedOperations {
-        restorePersistedOperation(input: $input) {
-          ${PERSISTED_OPERATION_PAYLOAD}
-        }
+    persistedOperations {
+      restorePersistedOperation(input: $input) {
+        ${PERSISTED_OPERATION_PAYLOAD}
       }
     }
   }

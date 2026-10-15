@@ -221,10 +221,12 @@ builder.Services.AddTraxGraphQL(graphql =>
         .GateOperations(roles: RecoveryRoles.Operator)
         .UsePersistedOperations(persisted =>
         {
+            // The operator manages documents too: persistedOperations, behind its own gate.
             persisted
                 .SingleNode()
                 .RequirePersisted(requirePersisted)
-                .LogNonPersistedRequests(!requirePersisted);
+                .LogNonPersistedRequests(!requirePersisted)
+                .GateManagement(roles: RecoveryRoles.Operator);
             if (requirePersisted)
                 persisted.DisableIntrospection();
         })

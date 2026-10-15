@@ -76,10 +76,8 @@ public class MutationFlowTests : ApiTestBase
             {
                 query = """
                 mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-                  operations {
-                    persistedOperations {
-                      deactivatePersistedOperation(input: $input) { success }
-                    }
+                  persistedOperations {
+                    deactivatePersistedOperation(input: $input) { success }
                   }
                 }
                 """,
@@ -88,7 +86,6 @@ public class MutationFlowTests : ApiTestBase
         );
         deact
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("deactivatePersistedOperation")
             .GetProperty("success")

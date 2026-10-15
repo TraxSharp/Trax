@@ -34,4 +34,4 @@ out, see [Persisted Operations](/docs/persisted-operations).
 
 ## GraphQL
 
-- [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations): the `operations.persistedOperations` fields.
+- [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations): the root `persistedOperations` fields, and the management gate in front of them.

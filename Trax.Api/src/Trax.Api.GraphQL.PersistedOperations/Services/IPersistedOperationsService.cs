@@ -4,7 +4,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
 /// <summary>
 /// The persisted-operation management surface: reads and writes with the same checks, refusals
-/// and error codes wherever they are called from. The GraphQL <c>operations.persistedOperations</c>
+/// and error codes wherever they are called from. The GraphQL <c>persistedOperations</c>
 /// fields call it, and a dashboard or admin tool calls it to behave exactly as the API does.
 /// </summary>
 /// <remarks>

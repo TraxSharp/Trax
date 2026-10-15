@@ -105,7 +105,7 @@ export const UploadParseError: Story = {
   },
 };
 
-// A host without UsePersistedOperations: the page says how to enable it.
+// A host that does not serve management: the page says how to enable it.
 export const NotEnabled: Story = {
   parameters: { mock: persistedOperationsUnavailable },
   play: async ({ canvasElement }) => {

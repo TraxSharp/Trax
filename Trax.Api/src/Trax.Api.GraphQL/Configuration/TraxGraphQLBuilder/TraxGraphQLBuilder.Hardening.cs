@@ -40,7 +40,7 @@ public partial class TraxGraphQLBuilder
     /// reject deeply nested resource-exhaustion probes; loosen it (or keep
     /// the default) when consumers legitimately need deep model projections
     /// across several foreign-key hops or nested management namespaces like
-    /// <c>operations.persistedOperations</c>.
+    /// <c>operations.deadLetters</c>.
     /// </summary>
     public TraxGraphQLBuilder MaxExecutionDepth(int depth)
     {

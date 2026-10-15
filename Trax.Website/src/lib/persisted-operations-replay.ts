@@ -109,7 +109,7 @@ export function viewAt(story: Story | undefined, now: number): View {
 export function outcomeOf(step: Step): { outcome: Outcome; text: string } {
   const error = step.response.errors?.[0]?.message;
   if (step.kind === "upload") {
-    const result = (step.response.data as UploadData | undefined)?.operations?.persistedOperations?.uploadPersistedOperation;
+    const result = (step.response.data as UploadData | undefined)?.persistedOperations?.uploadPersistedOperation;
     if (result?.success) return { outcome: "accepted", text: "Accepted" };
     return { outcome: "refused", text: result?.errors?.[0]?.message ?? error ?? `HTTP ${step.status}` };
   }
@@ -125,5 +125,5 @@ function sentText(step: Step): string {
   return `greet_v1 = ${step.document ?? ""}`;
 }
 
-type UploadData = { operations?: { persistedOperations?: { uploadPersistedOperation?: { success: boolean; errors?: { message: string }[] } } } };
+type UploadData = { persistedOperations?: { uploadPersistedOperation?: { success: boolean; errors?: { message: string }[] } } };
 type GreetData = { discover?: { greeting?: { greet?: { greeting?: string } } } };

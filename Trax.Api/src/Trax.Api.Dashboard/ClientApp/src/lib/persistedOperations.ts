@@ -2,16 +2,17 @@ import { useMemo } from "react";
 import { useQuery } from "urql";
 import { PERSISTED_OPERATIONS_AVAILABLE } from "../graphql/queries";
 
-// Whether the host exposes operations.persistedOperations (it calls UsePersistedOperations). The
-// probe selects only the namespace's __typename, which reads nothing; a host without the namespace
-// fails it at validation. Its failure is the answer, not a broken refresh, so it opts out of the
+// Whether the host serves persistedOperations to this caller (it calls UsePersistedOperations and
+// GateManagement, and the caller meets the gate). The probe selects only the namespace's
+// __typename, which reads nothing; a host without the namespace fails it at validation, and a
+// caller outside the gate is refused. Its failure is the answer, not a broken refresh, so it opts out of the
 // header's "last refresh failed" mark. urql dedupes it across the sidebar and the pages.
 export function usePersistedOperationsAvailable(): { available: boolean; checking: boolean } {
   const context = useMemo(() => ({ ignoreRefreshStatus: true }), []);
   const [{ data, fetching, error }] = useQuery<{
-    operations: { persistedOperations: { __typename: string } | null } | null;
+    persistedOperations: { __typename: string } | null;
   }>({ query: PERSISTED_OPERATIONS_AVAILABLE, context });
-  const available = !error && Boolean(data?.operations?.persistedOperations);
+  const available = !error && Boolean(data?.persistedOperations);
   return { available, checking: fetching && !data && !error };
 }
 

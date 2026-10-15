@@ -24,7 +24,7 @@ namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
 /// <summary>
 /// The persisted-operations pages address a row by its tenant and its id, as the API's
-/// <c>operations.persistedOperations</c> fields do, and read and write through the
+/// <c>persistedOperations</c> fields do, and read and write through the
 /// <c>IPersistedOperationsService</c> those fields call (central ADR 0022). The primary key is
 /// <c>(tenant_key, id)</c>, so two rows may share an id; each must open, and change, only
 /// itself. The list is read one page at a time from the server rather than capped. The host here

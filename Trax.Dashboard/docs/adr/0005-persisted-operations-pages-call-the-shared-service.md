@@ -7,7 +7,7 @@ status: accepted
 # The persisted-operations pages call the shared persisted-operations service
 
 The persisted-operations pages read and write through `IPersistedOperationsService` from
-`Trax.Api.GraphQL.PersistedOperations`, the service the API's `operations.persistedOperations`
+`Trax.Api.GraphQL.PersistedOperations`, the service the API's `persistedOperations`
 fields call, resolved from the host's container. They do not construct the API's resolver classes,
 call `IPersistedOperationStore` directly, or query `trax.persisted_operation` themselves. That is
 how they meet central ADR 0022 (one shared path per action) for an action the Scheduler's

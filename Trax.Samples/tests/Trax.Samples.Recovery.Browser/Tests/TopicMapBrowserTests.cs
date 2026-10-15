@@ -92,7 +92,6 @@ public class TopicMapBrowserTests
         var refused = JsonDocument
             .Parse(upload)
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
         refused.GetProperty("success").GetBoolean().Should().BeFalse(upload);
@@ -704,7 +703,7 @@ public class TopicMapBrowserTests
         return root.GetProperty("data").GetProperty("operations").GetProperty("machineInstance");
     }
 
-    // Registers a document through operations.persistedOperations, which the operations gate admits to the operator;
+    // Registers a document through persistedOperations, whose management gate admits the operator;
     // returns the whole answer.
     private static async Task<string> UploadDocumentAsync(string id, string document)
     {
@@ -712,10 +711,8 @@ public class TopicMapBrowserTests
             .SendAsync(
                 """
                 mutation Upload($input: UploadPersistedOperationInput!) {
-                  operations {
-                    persistedOperations {
-                      uploadPersistedOperation(input: $input) { success errors { code message } }
-                    }
+                  persistedOperations {
+                    uploadPersistedOperation(input: $input) { success errors { code message } }
                   }
                 }
                 """,

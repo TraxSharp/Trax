@@ -38,11 +38,11 @@ const RENAME = FIX.replace("{ greeting }", "{ message: greeting }");
 const INLINE = 'query { discover { greeting { greet(input: { name: "Eve", style: FORMAL }) { greeting } } } }';
 
 const UPLOAD = `mutation Upload($input: UploadPersistedOperationInput!) {
-  operations { persistedOperations { uploadPersistedOperation(input: $input) { success errors { code message } } } }
+  persistedOperations { uploadPersistedOperation(input: $input) { success errors { code message } } }
 }`;
 
 const READ = `query Stored($id: String!) {
-  operations { persistedOperations { persistedOperation(id: $id) { document } } }
+  persistedOperations { persistedOperation(id: $id) { document } }
 }`;
 
 const SOURCES = [
@@ -73,11 +73,11 @@ const upload = (document) =>
 async function stored() {
   const { response } = await send({ query: READ, variables: { id: "greet_v1" } }, { operator: true });
   if (response.errors) throw new Error(`reading greet_v1: ${JSON.stringify(response.errors)}`);
-  return response.data.operations.persistedOperations.persistedOperation?.document ?? null;
+  return response.data.persistedOperations.persistedOperation?.document ?? null;
 }
 
 const accepted = (exchange) =>
-  exchange.response.data?.operations?.persistedOperations?.uploadPersistedOperation?.success === true;
+  exchange.response.data?.persistedOperations?.uploadPersistedOperation?.success === true;
 
 // Who sends each request, and what it is.
 const steps = {

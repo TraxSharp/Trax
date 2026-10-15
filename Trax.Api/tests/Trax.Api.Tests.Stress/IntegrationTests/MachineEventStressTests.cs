@@ -114,7 +114,6 @@ public class MachineEventStressTests
                                 .SingleNode()
                                 .RequirePersisted(false)
                                 .LogNonPersistedRequests(true)
-                                .ExposeOperationsNamespace(false)
                         )
                 );
             })

@@ -122,12 +122,10 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
 {
     const string mutation = """
         mutation Upload($input: UploadPersistedOperationInput!) {
-          operations {
-            persistedOperations {
-              uploadPersistedOperation(input: $input) {
-                success
-                errors { code message }
-              }
+          persistedOperations {
+            uploadPersistedOperation(input: $input) {
+              success
+              errors { code message }
             }
           }
         }
@@ -154,16 +152,14 @@ static async Task<string?> TryUploadAsync(HttpClient http, string id, string doc
     if (
         !root.TryGetProperty("data", out var data)
         || data.ValueKind != JsonValueKind.Object
-        || !data.TryGetProperty("operations", out var operations)
-        || operations.ValueKind != JsonValueKind.Object
+        || !data.TryGetProperty("persistedOperations", out var management)
+        || management.ValueKind != JsonValueKind.Object
     )
         return root.TryGetProperty("errors", out var topLevel) && topLevel.GetArrayLength() > 0
             ? DescribeError(topLevel[0])
             : $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}: {raw}";
 
-    var payload = operations
-        .GetProperty("persistedOperations")
-        .GetProperty("uploadPersistedOperation");
+    var payload = management.GetProperty("uploadPersistedOperation");
     if (payload.GetProperty("success").GetBoolean())
         return null;
 

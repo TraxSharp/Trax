@@ -1,3 +1,5 @@
+using Trax.Effect.Attributes;
+
 namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 
 /// <summary>
@@ -12,11 +14,17 @@ public sealed class PersistedOperationsOptions
     internal PersistedOperationsOptions() { }
 
     /// <summary>
-    /// When true (the default), <c>UsePersistedOperations</c> grafts the <c>operations</c>
-    /// namespace onto the schema, which is where the persisted-operation management mutations
-    /// live. When false, enforcement and storage are wired without it.
+    /// The requirements <c>GateManagement</c> declared for the <c>persistedOperations</c>
+    /// management fields, each one a requirement of its own. Empty when none was declared, and
+    /// then the fields are not served.
     /// </summary>
-    public bool ExposeOperationsNamespace { get; internal set; } = true;
+    internal IReadOnlyList<TraxAuthorizeAttribute> ManagementGate { get; init; } = [];
+
+    /// <summary>
+    /// Whether the <c>persistedOperations</c> management fields are served: true once the host
+    /// declared who may use them with <c>GateManagement</c>.
+    /// </summary>
+    public bool ManagementServed => ManagementGate.Count > 0;
 
     /// <summary>
     /// When true, requests carrying an inline <c>query</c> body (rather than

@@ -221,7 +221,8 @@ transport like any other.
   serving every machine still collects the older documents after the grace period; a registration that fails there
   is logged and tried again an interval later, and does not stop the host.
 - **The manifest** is `operations { machineDocuments { id machine operation irHash document } }`, behind the
-  operations gate: the documents this node serves, which a client reads at build time.
+  operations gate: the documents this node serves, which a client reads at build time. It is served when the host
+  exposes the operations queries (`ExposeOperationQueries()`); `UsePersistedOperations` does not expose them.
 
 The id carries the IR hash, so the typed surface needs no `schemaHash`: the optional handshake stays on the generic
 mutations only.

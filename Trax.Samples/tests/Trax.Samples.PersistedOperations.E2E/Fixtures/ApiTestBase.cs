@@ -74,12 +74,10 @@ public abstract class ApiTestBase
             {
                 query = """
                 mutation Upload($input: UploadPersistedOperationInput!) {
-                  operations {
-                    persistedOperations {
-                      uploadPersistedOperation(input: $input) {
-                        success
-                        errors { code message oldFingerprint newFingerprint }
-                      }
+                  persistedOperations {
+                    uploadPersistedOperation(input: $input) {
+                      success
+                      errors { code message oldFingerprint newFingerprint }
                     }
                   }
                 }
@@ -100,7 +98,6 @@ public abstract class ApiTestBase
     protected static JsonElement UploadPayload(JsonDocument json) =>
         json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
 

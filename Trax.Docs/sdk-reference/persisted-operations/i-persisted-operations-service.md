@@ -17,7 +17,7 @@ source:
 
 # IPersistedOperationsService
 
-The persisted-operation management surface. The `operations.persistedOperations` GraphQL fields call it, and the dashboard calls it, so an upload, deactivation or restore is accepted or refused the same way, with the same codes, from either.
+The persisted-operation management surface. The `persistedOperations` GraphQL fields call it, and the dashboard calls it, so an upload, deactivation or restore is accepted or refused the same way, with the same codes, from either.
 
 Registered as a singleton by [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) and by [AddPersistedOperationStore](/docs/sdk-reference/persisted-operations/add-persisted-operation-store).
 

@@ -18,17 +18,15 @@ type TenantScope = "all" | "default" | "named";
 type StatusScope = "all" | "active" | "inactive";
 
 interface ListData {
-  operations: {
-    persistedOperations: {
-      persistedOperations: { items: PersistedOperation[]; totalCount: number };
-    };
+  persistedOperations: {
+    persistedOperations: { items: PersistedOperation[]; totalCount: number };
   };
 }
 
-// Server-managed GraphQL operations resolved by stable id (operations.persistedOperations), as the
+// Server-managed GraphQL operations resolved by stable id (persistedOperations), as the
 // Blazor PersistedOperationsPage lists them: filter by tenant, status and id prefix, open one, or
-// upload a new one. The namespace exists only when the host calls UsePersistedOperations; without
-// it the page says how to enable it. The API pages this list by offset (it has no keyset cursor).
+// upload a new one. The namespace exists only when the host calls UsePersistedOperations and
+// GateManagement, and answers only a caller who meets the gate; otherwise the page says so. The API pages this list by offset (it has no keyset cursor).
 export function PersistedOperationsPage() {
   const { available, checking } = usePersistedOperationsAvailable();
 
@@ -54,9 +52,10 @@ export function PersistedOperationsPage() {
 export function NotEnabled() {
   return (
     <div className="bg-info-soft border border-info-line text-info-fg rounded-lg p-4 text-sm">
-      Persisted Operations is not enabled on this server. Call{" "}
-      <code className="font-mono">UsePersistedOperations(...)</code> on the Trax GraphQL builder to
-      enable management.
+      Persisted Operations is not enabled on this server, or you are outside its management gate. The
+      host serves management with{" "}
+      <code className="font-mono">UsePersistedOperations(po =&gt; po.GateManagement(...))</code> on the
+      Trax GraphQL builder, to the role or policy it names.
     </div>
   );
 }
@@ -84,7 +83,7 @@ function PersistedOperationsList() {
     query: PERSISTED_OPERATIONS,
     variables: { filter, skip, take: PAGE_SIZE },
   });
-  const page = result.data?.operations?.persistedOperations?.persistedOperations;
+  const page = result.data?.persistedOperations?.persistedOperations;
   const rows = page?.items ?? [];
   const total = page?.totalCount ?? 0;
 

@@ -92,10 +92,8 @@ public class PersistedOperationPolicyTests
                 Build(b => b.RequirePersisted(true)),
                 """
                 mutation {
-                  operations {
-                    persistedOperations {
-                      uploadPersistedOperation(input: { id: "x", document: "{ x }" }) { success }
-                    }
+                  persistedOperations {
+                    uploadPersistedOperation(input: { id: "x", document: "{ x }" }) { success }
                   }
                 }
                 """
@@ -109,10 +107,51 @@ public class PersistedOperationPolicyTests
     {
         Decide(
                 Build(b => b.RequirePersisted(true)),
-                "query { operations { persistedOperations { persistedOperations { totalCount } } } }"
+                "query { persistedOperations { persistedOperations { totalCount } } }"
             )
             .Should()
             .Be(PersistedOperationDecision.PassThrough);
+    }
+
+    [Test]
+    public void ManagementUnderTheOperationsNamespace_IsRejected()
+    {
+        Decide(
+                Build(b => b.RequirePersisted(true)),
+                "query { operations { persistedOperations { persistedOperations { totalCount } } } }"
+            )
+            .Should()
+            .Be(
+                PersistedOperationDecision.Reject,
+                "the management fields live at the root, and operations holds nothing of them"
+            );
+    }
+
+    [Test]
+    public void MachineDocumentsManifest_PassesThrough()
+    {
+        Decide(
+                Build(b => b.RequirePersisted(true)),
+                "query { operations { machineDocuments { id } } }"
+            )
+            .Should()
+            .Be(PersistedOperationDecision.PassThrough);
+    }
+
+    [Test]
+    public void ManagementMixedWithTheMachineDocumentsManifest_IsRejected()
+    {
+        Decide(
+                Build(b => b.RequirePersisted(true)),
+                """
+                query {
+                  persistedOperations { persistedOperations { totalCount } }
+                  operations { machineDocuments { id } }
+                }
+                """
+            )
+            .Should()
+            .Be(PersistedOperationDecision.Reject);
     }
 
     [Test]
@@ -141,18 +180,16 @@ public class PersistedOperationPolicyTests
     }
 
     [Test]
-    public void ManagementMixedWithAnotherNamespace_IsRejected()
+    public void ManagementMixedWithAnotherRootField_IsRejected()
     {
         Decide(
                 Build(b => b.RequirePersisted(true)),
                 """
                 mutation {
-                  operations {
-                    persistedOperations {
-                      uploadPersistedOperation(input: { id: "x", document: "{ x }" }) { success }
-                    }
-                    deadLetters { totalCount }
+                  persistedOperations {
+                    uploadPersistedOperation(input: { id: "x", document: "{ x }" }) { success }
                   }
+                  operations { deadLetters { totalCount } }
                 }
                 """
             )
@@ -163,7 +200,7 @@ public class PersistedOperationPolicyTests
     [Test]
     public void DocumentThatDoesNotParse_IsRejected()
     {
-        Decide(Build(b => b.RequirePersisted(true)), "query { operations { persistedOperations {")
+        Decide(Build(b => b.RequirePersisted(true)), "query { persistedOperations {")
             .Should()
             .Be(PersistedOperationDecision.Reject);
     }

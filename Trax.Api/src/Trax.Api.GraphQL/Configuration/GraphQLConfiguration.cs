@@ -140,6 +140,12 @@ public class GraphQLConfiguration
     internal bool GetRequestsAllowed { get; init; }
 
     /// <summary>
+    /// Whether a feature package adds fields of its own to both root types, the persisted-operation
+    /// management fields, so the root types are built for it.
+    /// </summary>
+    internal bool FeatureRootFieldsAdded { get; init; }
+
+    /// <summary>
     /// Whether broadcast subscribers see the answers on <c>onJunctionEvent</c>, set by
     /// <c>TraxGraphQLBuilder.AllowJunctionAnswersForBroadcastSubscribers()</c>. Off by default.
     /// </summary>

@@ -62,7 +62,7 @@ public sealed partial class PersistedOperationsBuilder
             CacheMaxAge = _cacheMaxAge,
             RabbitMqConnectionString = _rabbitMqConnectionString,
             SingleNode = _singleNode,
-            ExposeOperationsNamespace = _exposeOperationsNamespace,
+            ManagementGate = _managementGate.ToList(),
             MachineDocumentGracePeriod = _machineDocumentGracePeriod,
         };
     }

@@ -24,7 +24,7 @@ register it as a singleton. It has no public constructor and no public setters.
 ```csharp fragment
 public sealed class PersistedOperationsOptions
 {
-    public bool ExposeOperationsNamespace { get; }
+    public bool ManagementServed { get; }
     public bool RequirePersisted { get; }
     public bool LogNonPersistedRequests { get; }
     public IReadOnlySet<string> AllowedOperationNames { get; }
@@ -43,7 +43,7 @@ public sealed class PersistedOperationsOptions
 
 | Property | Default | Set by | Description |
 |----------|---------|--------|-------------|
-| `ExposeOperationsNamespace` | `true` | `ExposeOperationsNamespace` | Whether the `operations` namespace and the management fields are added to the schema |
+| `ManagementServed` | `false` | `GateManagement`, `GateManagementToAuthenticatedUsers` | Whether the `persistedOperations` management fields are in the schema: true once a management gate is declared |
 | `RequirePersisted` | `true` | `RequirePersisted` | Whether inline documents are refused with `PERSISTED_OPERATION_REQUIRED` |
 | `LogNonPersistedRequests` | `false` | `LogNonPersistedRequests` | Whether inline-document requests are logged at Information |
 | `AllowedOperationNames` | empty | `AllowOperations` | Operation names that bypass enforcement, compared ordinally |

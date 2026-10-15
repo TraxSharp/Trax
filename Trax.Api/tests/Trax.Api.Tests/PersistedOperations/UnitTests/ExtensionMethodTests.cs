@@ -518,36 +518,18 @@ public class ExtensionMethodTests
             NullLogger<HotChocolateOperationCacheInvalidator>.Instance
         );
 
-    // ── ExposeOperationsNamespace ───────────────────────────────────────
+    // ── The operations namespace and the management gate ────────────────
 
     /// <summary>
-    /// Persisted operations exposes the namespace by default, which is where its own management
-    /// mutations live, and the host still has to answer for it.
+    /// Persisted operations adds nothing to the operations namespace, so turning it on asks the
+    /// host to answer for no admin surface.
     /// </summary>
     [Test]
-    public void UsePersistedOperations_ByDefault_ExposesTheOperationsNamespace()
+    public void UsePersistedOperations_LeavesTheOperationsNamespaceOff()
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        builder.UsePersistedOperations(po => po.SingleNode());
-
-        var config = builder.AllowAnonymousOperations().Build();
-        config.OperationQueriesExposed.Should().BeTrue();
-        config.OperationMutationsExposed.Should().BeTrue();
-        config.AdditionalTypeExtensions.Should().NotBeEmpty();
-    }
-
-    /// <summary>
-    /// Declining it keeps enforcement and storage, and leaves the schema without a control plane.
-    /// A host that manages its operations out of band should not have to publish one to get
-    /// enforcement.
-    /// </summary>
-    [Test]
-    public void ExposeOperationsNamespaceFalse_LeavesTheNamespaceOff()
-    {
-        var builder = new TraxGraphQLBuilder(new ServiceCollection());
-
-        builder.UsePersistedOperations(po => po.SingleNode().ExposeOperationsNamespace(false));
+        builder.UsePersistedOperations(po => po.SingleNode().GateManagement(roles: "Deployer"));
 
         var config = builder.Build();
         config
@@ -557,63 +539,47 @@ public class ExtensionMethodTests
                     + "docs/adr/0004-the-operations-namespace-gates-independently-of-the-endpoint.md"
             );
         config.OperationMutationsExposed.Should().BeFalse();
-        config
-            .AdditionalTypeExtensions.Should()
-            .BeEmpty(
-                "the management type extensions target OperationsMutations, which is not in the "
-                    + "schema when the namespace is declined"
-            );
     }
 
     /// <summary>
-    /// The enforcement middleware and storage are registered either way: the two features are
-    /// separable, which is the point of the switch.
+    /// The enforcement middleware and storage are registered whether or not the management fields
+    /// are served.
     /// </summary>
     [Test]
-    public void ExposeOperationsNamespaceFalse_StillRegistersEnforcementAndStorage()
+    public void UsePersistedOperations_WithoutAManagementGate_StillRegistersEnforcementAndStorage()
     {
         var sc = new ServiceCollection();
         var builder = new TraxGraphQLBuilder(sc);
 
-        builder.UsePersistedOperations(po => po.SingleNode().ExposeOperationsNamespace(false));
-
-        sc.Any(d => d.ServiceType == typeof(IPersistedOperationStore)).Should().BeTrue();
-        sc.Any(d => d.ServiceType == typeof(PersistedOperationsOptions)).Should().BeTrue();
-    }
-
-    /// <summary>
-    /// Without the namespace there is nothing to acknowledge, so a host that declines it does not
-    /// have to call AllowAnonymousOperations() or gate anything.
-    /// </summary>
-    [Test]
-    public void ExposeOperationsNamespaceFalse_NeedsNoAcknowledgement()
-    {
-        var builder = new TraxGraphQLBuilder(new ServiceCollection());
-        builder.UsePersistedOperations(po => po.SingleNode().ExposeOperationsNamespace(false));
-
-        Action act = () => builder.Build();
-
-        act.Should().NotThrow();
-    }
-
-    [Test]
-    public void ExposeOperationsNamespaceTrue_IsTheDefaultAndStillRequiresAnAnswer()
-    {
-        var builder = new TraxGraphQLBuilder(new ServiceCollection());
         builder.UsePersistedOperations(po => po.SingleNode());
 
-        Action act = () => builder.Build();
-
-        act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*GateOperations(policy, roles)*");
+        sc.Any(d => d.ServiceType == typeof(IPersistedOperationStore)).Should().BeTrue();
+        Options(sc).ManagementServed.Should().BeFalse();
     }
 
     [Test]
-    public void ExposeOperationsNamespace_ReturnsSameBuilder()
+    public void GateManagement_ServesTheManagementFields()
+    {
+        var sc = new ServiceCollection();
+        new TraxGraphQLBuilder(sc).UsePersistedOperations(po =>
+            po.SingleNode().GateManagement(roles: "Deployer")
+        );
+
+        Options(sc).ManagementServed.Should().BeTrue();
+    }
+
+    [Test]
+    public void GateManagement_ReturnsSameBuilder()
     {
         var po = new PersistedOperationsBuilder();
 
-        po.ExposeOperationsNamespace(false).Should().BeSameAs(po);
+        po.GateManagement(roles: "Deployer").Should().BeSameAs(po);
+        po.GateManagementToAuthenticatedUsers().Should().BeSameAs(po);
     }
+
+    private static PersistedOperationsOptions Options(IServiceCollection sc) =>
+        (PersistedOperationsOptions)
+            sc.Single(d =>
+                d.ServiceType == typeof(PersistedOperationsOptions)
+            ).ImplementationInstance!;
 }

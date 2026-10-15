@@ -51,18 +51,17 @@ builder.Services.AddTrax(trax =>
 );
 
 builder.Services.AddTraxGraphQL(graphql =>
-    graphql
-        .UsePersistedOperations(opts =>
-            opts.RequirePersisted(true)
-                .LogNonPersistedRequests(true)
-                // One process serves this endpoint and writes the store, so an upload reaches
-                // every cached copy without a broadcast. A second node needs
-                // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
-                .SingleNode()
-        )
-        // The upload mutations live under `operations`. Gate that namespace to the operator;
-        // greet stays reachable to the app.
-        .GateOperations(roles: DemoKeys.OperatorRole)
+    graphql.UsePersistedOperations(opts =>
+        opts.RequirePersisted(true)
+            .LogNonPersistedRequests(true)
+            // One process serves this endpoint and writes the store, so an upload reaches
+            // every cached copy without a broadcast. A second node needs
+            // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
+            .SingleNode()
+            // The upload mutations live under `persistedOperations`, behind their own gate.
+            // Gate them to the operator; greet stays reachable to the app.
+            .GateManagement(roles: DemoKeys.OperatorRole)
+    )
 );
 
 // The dashboard shows the stored documents under Data > Persisted Operations. It refuses to start

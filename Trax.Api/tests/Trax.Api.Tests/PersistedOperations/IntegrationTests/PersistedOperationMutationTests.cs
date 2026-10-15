@@ -52,7 +52,6 @@ public class PersistedOperationMutationTests
         );
 
         json.RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation")
             .GetProperty("success")
@@ -73,7 +72,6 @@ public class PersistedOperationMutationTests
 
         var errors = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation")
             .GetProperty("errors");
@@ -93,7 +91,6 @@ public class PersistedOperationMutationTests
 
         var payload = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
         payload.GetProperty("success").GetBoolean().Should().BeFalse(json.RootElement.ToString());
@@ -112,7 +109,6 @@ public class PersistedOperationMutationTests
 
         var errors = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation")
             .GetProperty("errors");
@@ -138,7 +134,6 @@ public class PersistedOperationMutationTests
 
         var errors = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation")
             .GetProperty("errors");
@@ -176,7 +171,6 @@ public class PersistedOperationMutationTests
         );
 
         json.RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation")
             .GetProperty("success")
@@ -201,12 +195,10 @@ public class PersistedOperationMutationTests
         var json = await Execute(
             """
             mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  deactivatePersistedOperation(input: $input) {
-                    success
-                    errors { code }
-                  }
+              persistedOperations {
+                deactivatePersistedOperation(input: $input) {
+                  success
+                  errors { code }
                 }
               }
             }
@@ -222,7 +214,6 @@ public class PersistedOperationMutationTests
         );
 
         json.RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("deactivatePersistedOperation")
             .GetProperty("success")
@@ -241,12 +232,10 @@ public class PersistedOperationMutationTests
         var json = await Execute(
             """
             mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  deactivatePersistedOperation(input: $input) {
-                    success
-                    errors { code }
-                  }
+              persistedOperations {
+                deactivatePersistedOperation(input: $input) {
+                  success
+                  errors { code }
                 }
               }
             }
@@ -263,7 +252,6 @@ public class PersistedOperationMutationTests
 
         var errors = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("deactivatePersistedOperation")
             .GetProperty("errors");
@@ -285,12 +273,10 @@ public class PersistedOperationMutationTests
         var json = await Execute(
             """
             mutation Restore($input: RestorePersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  restorePersistedOperation(input: $input) {
-                    success
-                    errors { code }
-                  }
+              persistedOperations {
+                restorePersistedOperation(input: $input) {
+                  success
+                  errors { code }
                 }
               }
             }
@@ -302,7 +288,6 @@ public class PersistedOperationMutationTests
         );
 
         json.RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("restorePersistedOperation")
             .GetProperty("success")
@@ -325,7 +310,6 @@ public class PersistedOperationMutationTests
 
         var payload = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
@@ -345,7 +329,6 @@ public class PersistedOperationMutationTests
 
         var payload = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
@@ -381,12 +364,10 @@ public class PersistedOperationMutationTests
         var json = await Execute(
             """
             mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  deactivatePersistedOperation(input: $input) {
-                    success
-                    errors { code message }
-                  }
+              persistedOperations {
+                deactivatePersistedOperation(input: $input) {
+                  success
+                  errors { code message }
                 }
               }
             }
@@ -403,7 +384,6 @@ public class PersistedOperationMutationTests
 
         var payload = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("deactivatePersistedOperation");
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
@@ -425,12 +405,10 @@ public class PersistedOperationMutationTests
         var json = await Execute(
             """
             mutation Restore($input: RestorePersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  restorePersistedOperation(input: $input) {
-                    success
-                    errors { code }
-                  }
+              persistedOperations {
+                restorePersistedOperation(input: $input) {
+                  success
+                  errors { code }
                 }
               }
             }
@@ -443,7 +421,6 @@ public class PersistedOperationMutationTests
 
         var payload = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("restorePersistedOperation");
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
@@ -456,12 +433,10 @@ public class PersistedOperationMutationTests
         var json = await Execute(
             """
             mutation Restore($input: RestorePersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  restorePersistedOperation(input: $input) {
-                    success
-                    errors { code }
-                  }
+              persistedOperations {
+                restorePersistedOperation(input: $input) {
+                  success
+                  errors { code }
                 }
               }
             }
@@ -474,7 +449,6 @@ public class PersistedOperationMutationTests
 
         var payload = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("restorePersistedOperation");
         payload
@@ -491,12 +465,10 @@ public class PersistedOperationMutationTests
         var json = await Execute(
             """
             mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  deactivatePersistedOperation(input: $input) {
-                    success
-                    errors { code }
-                  }
+              persistedOperations {
+                deactivatePersistedOperation(input: $input) {
+                  success
+                  errors { code }
                 }
               }
             }
@@ -509,7 +481,6 @@ public class PersistedOperationMutationTests
 
         var payload = json
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("deactivatePersistedOperation");
         payload
@@ -537,7 +508,6 @@ public class PersistedOperationMutationTests
 
         var upload = (await ExecuteMutationAsync(uploaded, GraphQLFixture.ValidDocument))
             .RootElement.GetProperty("data")
-            .GetProperty("operations")
             .GetProperty("persistedOperations")
             .GetProperty("uploadPersistedOperation");
         upload.GetProperty("success").GetBoolean().Should().BeFalse(Because);
@@ -555,7 +525,7 @@ public class PersistedOperationMutationTests
             await Execute(
                 """
                 mutation Deactivate($input: DeactivatePersistedOperationInput!) {
-                  operations { persistedOperations { deactivatePersistedOperation(input: $input) { success } } }
+                  persistedOperations { deactivatePersistedOperation(input: $input) { success } }
                 }
                 """,
                 new Dictionary<string, object?>
@@ -567,7 +537,7 @@ public class PersistedOperationMutationTests
                     },
                 }
             )
-        ).RootElement.GetProperty("data").GetProperty("operations").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
+        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
         deactivate.GetProperty("success").GetBoolean().Should().BeFalse(Because);
         (await _store.GetAsync(stored, null, CancellationToken.None))
             .Should()
@@ -581,7 +551,7 @@ public class PersistedOperationMutationTests
             await Execute(
                 """
                 mutation Restore($input: RestorePersistedOperationInput!) {
-                  operations { persistedOperations { restorePersistedOperation(input: $input) { success } } }
+                  persistedOperations { restorePersistedOperation(input: $input) { success } }
                 }
                 """,
                 new Dictionary<string, object?>
@@ -589,7 +559,7 @@ public class PersistedOperationMutationTests
                     ["input"] = new Dictionary<string, object?> { ["id"] = stored },
                 }
             )
-        ).RootElement.GetProperty("data").GetProperty("operations").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
+        ).RootElement.GetProperty("data").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
         restore.GetProperty("success").GetBoolean().Should().BeFalse(Because);
         (await _store.GetAsync(stored, null, CancellationToken.None))
             .Should()
@@ -616,18 +586,16 @@ public class PersistedOperationMutationTests
     {
         const string query = """
             mutation Upload($input: UploadPersistedOperationInput!) {
-              operations {
-                persistedOperations {
-                  uploadPersistedOperation(input: $input) {
-                    success
-                    operation { id document shapeFingerprint isActive }
-                    errors {
-                      code
-                      message
-                      oldFingerprint
-                      newFingerprint
-                      locations { line column }
-                    }
+              persistedOperations {
+                uploadPersistedOperation(input: $input) {
+                  success
+                  operation { id document shapeFingerprint isActive }
+                  errors {
+                    code
+                    message
+                    oldFingerprint
+                    newFingerprint
+                    locations { line column }
                   }
                 }
               }
@@ -655,6 +623,7 @@ public class PersistedOperationMutationTests
             .New()
             .SetDocument(query)
             .SetVariableValues(variables.ToDictionary(p => p.Key, p => p.Value))
+            .AsManager()
             .Build();
         var result = await _executor.ExecuteAsync(request);
         var op = result as OperationResult;

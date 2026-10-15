@@ -24,11 +24,9 @@ import type {
 const HISTORY_TAKE = 100;
 
 interface DetailData {
-  operations: {
-    persistedOperations: {
-      persistedOperation: PersistedOperation | null;
-      persistedOperationHistory: PersistedOperationHistoryEntry[];
-    };
+  persistedOperations: {
+    persistedOperation: PersistedOperation | null;
+    persistedOperationHistory: PersistedOperationHistoryEntry[];
   };
 }
 
@@ -66,7 +64,7 @@ function Detail({ id, tenantKey }: { id: string; tenantKey: string | null }) {
   const [deactivating, setDeactivating] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const ns = result.data?.operations?.persistedOperations;
+  const ns = result.data?.persistedOperations;
   const op = ns?.persistedOperation;
   const history = ns?.persistedOperationHistory ?? [];
   const refetch = () => reexecute({ requestPolicy: "network-only" });
@@ -93,14 +91,14 @@ function Detail({ id, tenantKey }: { id: string; tenantKey: string | null }) {
     const r = await deactivate({ input: { id, reason, tenantKey } });
     setBusy(false);
     setDeactivating(false);
-    report("Deactivated", r.data?.operations?.persistedOperations?.deactivatePersistedOperation, r.error?.message);
+    report("Deactivated", r.data?.persistedOperations?.deactivatePersistedOperation, r.error?.message);
   }
 
   async function onRestore() {
     setBusy(true);
     const r = await restore({ input: { id, tenantKey } });
     setBusy(false);
-    report("Restored", r.data?.operations?.persistedOperations?.restorePersistedOperation, r.error?.message);
+    report("Restored", r.data?.persistedOperations?.restorePersistedOperation, r.error?.message);
   }
 
   return (

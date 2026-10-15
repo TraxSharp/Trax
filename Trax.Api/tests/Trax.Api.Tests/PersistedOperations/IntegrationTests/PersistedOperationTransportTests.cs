@@ -271,7 +271,7 @@ public class PersistedOperationTransportTests
                 .AddTypeExtension<GraphQLFixture.HelloQuery>()
                 .UsePersistedOperations(po =>
                 {
-                    po.SingleNode().ExposeOperationsNamespace(false);
+                    po.SingleNode();
                     configure(po);
                 })
         );

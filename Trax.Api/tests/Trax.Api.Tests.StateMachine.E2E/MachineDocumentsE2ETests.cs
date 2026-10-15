@@ -54,7 +54,7 @@ public class MachineDocumentsE2ETests
                 o.InvokeOutcomeSweepIntervalWhileListening = TimeSpan.FromHours(1);
             },
             ExposeOperations = true,
-            GraphQL = MachineDocumentOps.Persisted(operationsNamespace: true),
+            GraphQL = MachineDocumentOps.Persisted(),
             Services = services,
         };
 
