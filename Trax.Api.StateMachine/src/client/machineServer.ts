@@ -52,9 +52,11 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    */
   resubscribeDelays?: readonly number[];
   /**
-   * The codes of a socket error that ends the stream for good. An error whose `code` is one of them is not subscribed
-   * again: it reaches the controller as `ended`, which stops with that code and the error's message. A generated
-   * client's server lists `CONNECTION_CHANGED`, which it errors a stream with once configureTrax was called again.
+   * The codes of an error that ends the controller for good. A socket error whose `code` is one of them is not
+   * subscribed again: it reaches the controller as `ended`. A request rejected with one (its `headers` threw it, say)
+   * is not a transport failure that `retry` resends: `endedBy` names it. Either way the controller stops with that code
+   * and the error's message. A generated client's server lists `CONNECTION_CHANGED`, which it refuses every request
+   * and stream with once configureTrax was called again.
    */
   terminalStreamErrors?: readonly string[];
 }
@@ -128,7 +130,8 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  * The stream maps each push event onto the controller's messages: a snapshot (with its incarnation as
  * `rowId`), `gone` for a deleted or expired instance, `gone` with `notFound` for one the server will not let the caller
  * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload, and `ended` for a socket error whose code is one of
- * {@link MachineServerOptions.terminalStreamErrors}. A stream that ends any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
+ * {@link MachineServerOptions.terminalStreamErrors}; a request rejected with one of those codes is named by `endedBy`, so
+ * the controller stops on it as well. A stream that ends any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
  * event is the instance as it is then, so nothing written meanwhile is lost and nothing is read again.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
@@ -263,5 +266,5 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
     };
   };
 
-  return { start, event, get, discard, subscribe };
+  return { start, event, get, discard, subscribe, endedBy: terminalOf };
 }

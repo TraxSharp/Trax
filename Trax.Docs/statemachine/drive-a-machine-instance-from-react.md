@@ -52,8 +52,9 @@ function Wizard({ id }: { id?: string }) {
 - **Maps the stream:** a snapshot with its `rowId` and `revision`; `gone: true` as gone, and the `NOT_FOUND` a missing
   id is answered with as gone with `notFound`; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A socket error whose
   `code` is in `terminalStreamErrors` ends the stream for good: it reaches the controller as `ended`, and is not
-  subscribed again. The generated client lists `CONNECTION_CHANGED` there, which a server made before the last
-  `configureTrax` errors its stream with. A stream that ends any
+  subscribed again. A request rejected with one of those codes is not a transport failure either: the server's
+  `endedBy` names it, and the controller stops on it the same way. The generated client lists `CONNECTION_CHANGED`
+  there, which a server made before the last `configureTrax` refuses every request and stream with. A stream that ends any
   other way (its host stopped, the socket gave up, `TOO_MANY_SUBSCRIPTIONS`) is subscribed again after
   `resubscribeDelays` (1, 2, then every 5 seconds); the new stream's first event is the instance as it is then, so
   nothing is read again.
@@ -85,8 +86,9 @@ function Wizard({ id }: { id?: string }) {
   fails a check it can make stops the hook with `CLIENT_OUTDATED`.
 - **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included; it
   reads the instance again only after `reload`, an incarnation change or a `CLIENT_DIVERGENCE`.
-- **Stops for good** on `gone`, `CLIENT_OUTDATED` or `ended`: `status` is `stopped`, `error.code` says which (with
-  `ended`, the code the stream ended with, such as `CONNECTION_CHANGED`), and nothing more is sent. With `GONE`, `error.deleted` is true when the stream said the instance was deleted or expired, and false
+- **Stops for good** on `gone`, `CLIENT_OUTDATED`, `ended`, or a request the server's `endedBy` names: `status` is
+  `stopped`, `error.code` says which (with `ended` or `endedBy`, the code given, such as `CONNECTION_CHANGED`), nothing
+  more is sent, `retry()` answers `stopped`, and a start request id the hook kept is forgotten. With `GONE`, `error.deleted` is true when the stream said the instance was deleted or expired, and false
   when the server answered `NOT_FOUND`, which it answers alike for a missing instance and another caller's. `dueAt` is shown, never fired: the server runs a state's timer and pushes the move. It is taken from
   every answer and push the hook accepts, and null always clears it: the state has no timer, or the server gave up
   on it and cleared it. An answer that does not carry the field, or cannot know it (`dueAtKnown: false`, a replay

@@ -63,8 +63,9 @@ export type StreamMessage =
 
 /**
  * The seam to the server: the machine's own start / event / get operations and its change stream. A
- * rejected promise is a transport error; a refusal is a resolved {@link ServerProblem}.
- * `createMachineServer` builds one over a host's typed `machines` root and its push subscription.
+ * rejected promise is a transport error, unless `endedBy` says it ends the controller; a refusal is a resolved
+ * {@link ServerProblem}. `createMachineServer` builds one over a host's typed `machines` root and its push
+ * subscription.
  */
 export interface MachineServer {
   start(input: unknown, requestId: string): Promise<StartResponse>;
@@ -79,6 +80,12 @@ export interface MachineServer {
   get(id: string): Promise<GetResponse>;
   /** Registers a listener for the instance's changes; the returned function closes it. */
   subscribe(id: string, onMessage: (message: StreamMessage) => void): () => void;
+  /**
+   * The code and message a rejected request ends the controller with for good, as an `ended` stream message does
+   * (a generated client's `CONNECTION_CHANGED`), or null for a transport failure that `retry` may resend. Absent:
+   * every rejection is a transport failure.
+   */
+  endedBy?(error: unknown): { code: string; message: string } | null;
 }
 
 /**
@@ -194,7 +201,8 @@ const transportFailure = (error: unknown): Problem => ({
  *   the server replays it rather than applying it twice. A later event the server confirms supersedes it, and
  *   `retry` then has nothing to resend.
  * - **Stopping.** `gone` and `CLIENT_OUTDATED`, from the stream or an answer, stop the controller for good: the
- *   stream is closed and nothing more is sent.
+ *   stream is closed and nothing more is sent. So do an `ended` stream message and a request rejected with an error
+ *   the server's `endedBy` names; `retry` then sends nothing.
  * - **Timers** are the server's: `dueAt` is shown, never fired. Null means no timer, or one the server cleared; an
  *   answer that cannot know it leaves it out.
  *
@@ -375,6 +383,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
       answer = await this.server.start(this.startInput, requestId);
     } catch (error) {
       if (this.disposed) return;
+      if (this.endedBy(error)) {
+        this.settleStart({ outcome: 'stopped', error: this.error! });
+        return;
+      }
       this.problem = transportFailure(error);
       this.startFailed = true;
       this.emit();
@@ -482,6 +494,10 @@ export class ServerMachineController<Spec extends MachineSpec> {
       answer = await this.server.get(id);
     } catch (error) {
       if (this.disposed || this.error) return;
+      if (this.endedBy(error)) {
+        this.endRead();
+        return;
+      }
       this.problem = transportFailure(error);
       this.emit();
       this.later(attempt, () => void this.read(rowId, attempt + 1), () => this.endRead());
@@ -639,6 +655,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
       answer = await this.server.event(request);
     } catch (error) {
       if (this.disposed || this.error) return;
+      // Stopping settles this event, and everything queued after it, as stopped.
+      if (this.endedBy(error)) return;
       this.lastFailed = request;
       this.problem = transportFailure(error);
       this.finish(entry, { outcome: 'failed', problem: this.problem });
@@ -703,6 +721,19 @@ export class ServerMachineController<Spec extends MachineSpec> {
     const stranded = this.queue.splice(0);
     this.emit();
     for (const queued of stranded) queued.settle({ outcome: 'stopped', error });
+  }
+
+  // Stops for good when the server says a rejection ends the controller; returns whether it did.
+  private endedBy(error: unknown): boolean {
+    let end: { code: string; message: string } | null | undefined;
+    try {
+      end = this.server.endedBy?.(error);
+    } catch {
+      end = null;
+    }
+    if (!end) return false;
+    this.stop({ code: end.code, message: end.message });
+    return true;
   }
 
   // Runs `next` after the attempt's delay, or `exhausted` at once when there is none left.

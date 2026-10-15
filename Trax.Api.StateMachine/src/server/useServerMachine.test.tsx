@@ -265,6 +265,27 @@ describe('useServerMachine', () => {
     expect(server.starts.map((s) => s.request.requestId)).toEqual(['minted-1', 'minted-2']);
   });
 
+  it('forgets a start requestId a request ended for good, and retry sends nothing', async () => {
+    class EndingServer extends FakeMachineServer {
+      endedBy(error: unknown) {
+        return (error as { code?: string }).code === 'CONNECTION_CHANGED'
+          ? { code: 'CONNECTION_CHANGED', message: 'changed' }
+          : null;
+      }
+    }
+    const server = new EndingServer();
+    render(<Gate server={server} startInput={{}} newRequestId={() => 'minted-1'} />);
+    await settle();
+    expect(sessionStorage.length).toBe(1);
+    await settle(() => server.starts[0].fail(Object.assign(new Error('changed'), { code: 'CONNECTION_CHANGED' })));
+
+    expect(text('status')).toBe('stopped');
+    expect(text('error')).toBe('CONNECTION_CHANGED');
+    expect(sessionStorage.length).toBe(0);
+    await settle(() => screen.getByText('retry').click());
+    expect(server.starts).toHaveLength(1);
+  });
+
   it('starts when sessionStorage refuses every access, and with startStorageKey null keeps nothing', async () => {
     const server = new FakeMachineServer();
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {

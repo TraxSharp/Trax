@@ -416,4 +416,82 @@ describe('ServerMachineController over createMachineServer', () => {
     expect(socket.subscriptions).toHaveLength(1);
     expect(sent).toHaveLength(1);
   });
+
+  it('a request refused as CONNECTION_CHANGED stops the controller and retry sends nothing', async () => {
+    // A server made before configureTrax: its headers refuse every request, as a generated client's stale server does.
+    let stale = true;
+    let tries = 0;
+    const { sent, fetch } = http(
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+    );
+    const server = createMachineServer('/graphql', {
+      fetch,
+      machine: turnstile,
+      documents: DOCUMENTS,
+      socket: new FakeSocket(),
+      terminalStreamErrors: ['CONNECTION_CHANGED'],
+      headers: () => {
+        tries++;
+        if (stale) throw refusal('CONNECTION_CHANGED', 'configureTrax was called since this server was made.');
+        return {};
+      },
+    });
+
+    const starting = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      newRequestId: sequentialRequestIds(),
+    });
+    await starting.start();
+    expect(starting.get()).toMatchObject({
+      status: 'stopped',
+      id: null,
+      error: { code: 'CONNECTION_CHANGED', message: 'configureTrax was called since this server was made.' },
+    });
+    expect(await starting.retry()).toMatchObject({ outcome: 'stopped', error: { code: 'CONNECTION_CHANGED' } });
+    expect(tries).toBe(1);
+
+    // An event on an instance opened before the connection changed stops it the same way.
+    stale = false;
+    const opened = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+    await opened.start();
+    expect(opened.get().status).toBe('ready');
+    stale = true;
+    expect(await opened.send('Coin', { coin: 'dollar' })).toMatchObject({
+      outcome: 'stopped',
+      error: { code: 'CONNECTION_CHANGED' },
+    });
+    expect(opened.get()).toMatchObject({ status: 'stopped', error: { code: 'CONNECTION_CHANGED' } });
+    expect(await opened.retry()).toMatchObject({ outcome: 'stopped' });
+    expect(tries).toBe(3);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('a request rejected with a code not marked terminal is still a transport failure', async () => {
+    const { fetch } = http();
+    const server = createMachineServer('/graphql', {
+      fetch,
+      machine: turnstile,
+      documents: DOCUMENTS,
+      socket: new FakeSocket(),
+      terminalStreamErrors: ['CONNECTION_CHANGED'],
+      headers: () => {
+        throw refusal('SOMETHING_ELSE', 'dropped');
+      },
+    });
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      newRequestId: sequentialRequestIds(),
+    });
+
+    await controller.start();
+
+    expect(controller.get()).toMatchObject({ status: 'loading', error: null, problem: { kind: 'transport' } });
+  });
 });
