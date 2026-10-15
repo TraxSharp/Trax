@@ -576,7 +576,7 @@ public class DispatchFailureHandlingTests
         var row = await _dataContext
             .Metadatas.AsNoTracking()
             .FirstAsync(m => m.ManifestId == manifest.Id);
-        row.FailureReason.Should().Contain(typeof(SchedulerTestInput).AssemblyQualifiedName!);
+        row.FailureReason.Should().NotContain(nameof(SchedulerTestInput));
 
         _lifecycle.Failures.Should().NotBeEmpty();
         _lifecycle

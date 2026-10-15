@@ -86,7 +86,8 @@ public class UnreadableQueuedInputTests : TestSetup
             .Metadatas.AsNoTracking()
             .SingleAsync(m => m.Id == row.MetadataId);
         run.TrainState.Should().Be(TrainState.Failed);
-        run.FailureReason.Should().Contain(UnknownType);
+        run.FailureReason.Should().Be(DispatchJobsJunction.UnreadableInputMessage);
+        run.FailureReason.Should().NotContain(UnknownType, "the run's starter may read it");
     }
 
     [Test]

@@ -239,6 +239,38 @@ public class JobDispatcherTrainTests : TestSetup
     }
 
     [Test]
+    public async Task An_unreadable_input_records_no_type_name_in_the_failure()
+    {
+        // The run's starter reads a TrainException's message through runProgress, so the failure
+        // recorded for an input that cannot be read says only that, not the entry id, the CLR type
+        // or the serializer's text. The log carries those.
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(SchedulerTestTrain).FullName!,
+                Input = """{"value":{"not":"a string"}}""",
+                InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
+            }
+        );
+        await DataContext.Track(entry);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        await _train.Run(Unit.Default);
+
+        DataContext.Reset();
+        var dispatched = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
+        var run = await DataContext
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == dispatched.MetadataId);
+        run.TrainState.Should().Be(TrainState.Failed);
+        run.FailureException.Should().Be("TrainException");
+        run.FailureReason.Should().Be("The run's input could not be read.");
+        run.FailureReason.Should().NotContain(nameof(SchedulerTestInput));
+        run.FailureReason.Should().NotContain(entry.Id.ToString());
+    }
+
+    [Test]
     public async Task Run_CreatesMetadataWithCorrectTrainName()
     {
         // Arrange

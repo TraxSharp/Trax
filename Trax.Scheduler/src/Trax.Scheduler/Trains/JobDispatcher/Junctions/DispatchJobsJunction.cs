@@ -477,6 +477,8 @@ internal class DispatchJobsJunction(
     /// entry kept its manifest from scheduling and failed again every cycle. Settled, it is a
     /// failure of its manifest like any other, so retries and dead-lettering apply.
     /// </remarks>
+    internal const string UnreadableInputMessage = "The run's input could not be read.";
+
     private async Task RecordUnreadableInputAsync(
         IDataContext dataContext,
         WorkQueue claimed,
@@ -486,10 +488,9 @@ internal class DispatchJobsJunction(
         await DropReplayLinkIfManifestOptedOutAsync(dataContext, claimed);
         await DropReplayLinkIfAlreadyReplayedAsync(dataContext, claimed);
 
-        var failure = new TrainException(
-            $"The input of work queue entry {claimed.Id} could not be read as "
-                + $"'{claimed.InputTypeName}', so it was not dispatched: {exception.Message}"
-        );
+        // The run's starter may read this message through runProgress, so it names no type and carries no serializer
+        // text. The log below has both.
+        var failure = new TrainException(UnreadableInputMessage);
 
         var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
             new CreateMetadata
