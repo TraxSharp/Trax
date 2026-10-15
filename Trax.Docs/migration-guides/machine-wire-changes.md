@@ -95,7 +95,7 @@ documents a host registered.
   instance remembered under the old `trax.<machine id>` is not opened again. The hook throws when `configureTrax` was
   given no `user`. `use<Machine>()` keeps a start in flight per user too, under `trax-start:<machine id>.<user>`. A
   server `<machine>Server()` made before the last `configureTrax` rejects every request with a `TraxOperationError`
-  whose `code` is `CONNECTION_CHANGED`: call `<machine>Server()` again for the server over the new connection. `useRememberedMachine` no longer forgets an instance the server answers `NOT_FOUND` (it answers
+  whose `code` is `CONNECTION_CHANGED`, and a controller over it stops with that code instead of subscribing again: call `<machine>Server()` again for the server over the new connection. `useRememberedMachine` no longer forgets an instance the server answers `NOT_FOUND` (it answers
   another caller's instance the same way): the hook stops with `error.deleted` false, and `forget()` starts over.
   This is client format 2; the runtime still serves format 1.
 

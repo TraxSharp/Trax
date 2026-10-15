@@ -644,6 +644,10 @@ internal sealed class ClientGenerator
         sb.Append("      },\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
+        sb.Append(
+            "      // A stream refused below ends for good: the controller stops with it instead of subscribing again.\n"
+        );
+        sb.Append("      terminalStreamErrors: [\"CONNECTION_CHANGED\"],\n");
         sb.Append("      socket: {\n");
         sb.Append("        subscribe: (payload, sink) => {\n");
         sb.Append(

@@ -112,6 +112,8 @@ export function topicMapServer(): ReturnType<typeof createMachineServer> {
       },
       machine: topicMap,
       documents: topicMapDocuments,
+      // A stream refused below ends for good: the controller stops with it instead of subscribing again.
+      terminalStreamErrors: ["CONNECTION_CHANGED"],
       socket: {
         subscribe: (payload, sink) => {
           if (generation === traxGeneration()) return socket.subscribe(payload, sink);

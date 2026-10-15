@@ -98,6 +98,8 @@ export function checkoutServer(): ReturnType<typeof createMachineServer> {
       },
       machine: checkout,
       documents: checkoutDocuments,
+      // A stream refused below ends for good: the controller stops with it instead of subscribing again.
+      terminalStreamErrors: ["CONNECTION_CHANGED"],
       socket: {
         subscribe: (payload, sink) => {
           if (generation === traxGeneration()) return socket.subscribe(payload, sink);

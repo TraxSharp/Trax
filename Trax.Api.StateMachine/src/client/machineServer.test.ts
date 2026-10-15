@@ -75,7 +75,12 @@ class FakeSocket implements PersistedSubscriptionSocket {
   }
 }
 
-const serverOver = (fetch: typeof globalThis.fetch, socket = new FakeSocket(), resubscribeDelays?: number[]) => ({
+const serverOver = (
+  fetch: typeof globalThis.fetch,
+  socket = new FakeSocket(),
+  resubscribeDelays?: number[],
+  terminalStreamErrors?: string[],
+) => ({
   socket,
   server: createMachineServer('/graphql', {
     fetch,
@@ -83,8 +88,12 @@ const serverOver = (fetch: typeof globalThis.fetch, socket = new FakeSocket(), r
     documents: DOCUMENTS,
     socket,
     resubscribeDelays,
+    terminalStreamErrors,
   }),
 });
+
+// An error the way a generated client's stale server errors a stream: a TraxOperationError with a code.
+const refusal = (code: string, message: string) => Object.assign(new Error(message), { name: 'TraxOperationError', code });
 
 describe('createMachineServer operations', () => {
   it('starts by the start document, and answers the snapshot beside its revision and due time', async () => {
@@ -208,8 +217,8 @@ describe('createMachineServer operations', () => {
 });
 
 describe('createMachineServer change stream', () => {
-  const follow = (resubscribeDelays?: number[]) => {
-    const { server, socket } = serverOver(http().fetch, new FakeSocket(), resubscribeDelays);
+  const follow = (resubscribeDelays?: number[], terminalStreamErrors?: string[]) => {
+    const { server, socket } = serverOver(http().fetch, new FakeSocket(), resubscribeDelays, terminalStreamErrors);
     const messages: StreamMessage[] = [];
     const close = server.subscribe('i-1', (m) => messages.push(m));
     return { socket, messages, close };
@@ -308,6 +317,30 @@ describe('createMachineServer change stream', () => {
     expect(messages).toEqual([]);
     expect(socket.subscriptions).toHaveLength(2);
   });
+
+  it('a stream refused as CONNECTION_CHANGED is not subscribed again', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
+
+    socket.last.sink.error(refusal('CONNECTION_CHANGED', 'configureTrax was called since this server was made.'));
+    vi.advanceTimersByTime(10_000);
+
+    expect(messages).toEqual([
+      { type: 'ended', code: 'CONNECTION_CHANGED', message: 'configureTrax was called since this server was made.' },
+    ]);
+    expect(socket.subscriptions).toHaveLength(1);
+  });
+
+  it('subscribes again after an error whose code was not marked terminal', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);
+
+    socket.last.sink.error(refusal('SOMETHING_ELSE', 'dropped'));
+    vi.advanceTimersByTime(100);
+
+    expect(messages).toEqual([]);
+    expect(socket.subscriptions).toHaveLength(2);
+  });
 });
 
 describe('persistedMessageReplacer', () => {
@@ -356,5 +389,31 @@ describe('ServerMachineController over createMachineServer', () => {
     );
     controller.dispose();
     expect(socket.last.closed).toBe(true);
+  });
+
+  it('stops with the error of a stream refused as CONNECTION_CHANGED, and sends nothing more', async () => {
+    vi.useFakeTimers();
+    const { sent, fetch } = http(
+      answer('get', { id: 'i-1', revision: 1, state: 'Locked', context: {}, dueAt: null, problem: null }),
+    );
+    const { server, socket } = serverOver(fetch, new FakeSocket(), [100], ['CONNECTION_CHANGED']);
+    const controller = new ServerMachineController<TurnstileSpec>({
+      machine: turnstile,
+      server,
+      id: 'i-1',
+      newRequestId: sequentialRequestIds(),
+    });
+
+    await controller.start();
+    socket.last.sink.error(refusal('CONNECTION_CHANGED', 'configureTrax was called since this server was made.'));
+    vi.advanceTimersByTime(10_000);
+
+    expect(controller.get()).toMatchObject({
+      status: 'stopped',
+      error: { code: 'CONNECTION_CHANGED', message: 'configureTrax was called since this server was made.' },
+    });
+    expect(await controller.send('Coin', { coin: 'dollar' })).toMatchObject({ outcome: 'stopped' });
+    expect(socket.subscriptions).toHaveLength(1);
+    expect(sent).toHaveLength(1);
   });
 });

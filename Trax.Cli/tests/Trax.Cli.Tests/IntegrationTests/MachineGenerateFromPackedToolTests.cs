@@ -395,8 +395,13 @@ public class MachineGenerateFromPackedToolTests
 
           await expect(server.get("i-4")).rejects.toMatchObject({ name: "TraxOperationError", code: "CONNECTION_CHANGED" });
           expect(requests).toHaveLength(0);
-          const stop = server.subscribe("i-4", () => {});
-          await settle();
+          // The stream ends for good with the refusal: no timer is left to subscribe it again.
+          vi.useFakeTimers();
+          const messages: unknown[] = [];
+          const stop = server.subscribe("i-4", (m) => messages.push(m));
+          await vi.advanceTimersByTimeAsync(10_000);
+          expect(messages).toEqual([expect.objectContaining({ type: "ended", code: "CONNECTION_CHANGED" })]);
+          expect(vi.getTimerCount()).toBe(0);
           stop();
           expect(sockets.flatMap((s) => s.subscriptions).filter((s) => s.payload.variables.id === "i-4")).toHaveLength(0);
           expect(reminderServer()).not.toBe(server);

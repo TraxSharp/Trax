@@ -54,7 +54,12 @@ export type StreamMessage =
   /** The transport reconnected after a drop: anything may have been missed. */
   | { type: 'reconnected' }
   /** The stream ended because the server no longer serves this client's version of the machine. */
-  | { type: 'client-outdated' };
+  | { type: 'client-outdated' }
+  /**
+   * The transport ended the stream for good, for a reason of its own (a generated client's `CONNECTION_CHANGED`): it is
+   * not subscribed again, and the controller stops with this code and message.
+   */
+  | { type: 'ended'; code: string; message: string };
 
 /**
  * The seam to the server: the machine's own start / event / get operations and its change stream. A
@@ -76,9 +81,12 @@ export interface MachineServer {
   subscribe(id: string, onMessage: (message: StreamMessage) => void): () => void;
 }
 
-/** Why a controller stopped for good: the instance is gone, or this client is out of date and must reload. */
+/**
+ * Why a controller stopped for good: the instance is gone, this client is out of date and must reload, or the
+ * transport ended the stream with a code of its own (an `ended` message, such as `CONNECTION_CHANGED`).
+ */
 export interface ServerMachineError {
-  code: typeof ClientProblemCode.Gone | typeof RefusalCode.ClientOutdated;
+  code: typeof ClientProblemCode.Gone | typeof RefusalCode.ClientOutdated | (string & {});
   message: string;
   /**
    * With `GONE`: true when the stream said the instance was deleted or expired, false when the server answered
@@ -89,7 +97,7 @@ export interface ServerMachineError {
 
 /** What a controller holds, as one immutable value: a new object on every change, the same one otherwise. */
 export interface ServerMachineView<Spec extends MachineSpec> {
-  /** `loading` until the first server snapshot, `stopped` after `gone` or `CLIENT_OUTDATED`. */
+  /** `loading` until the first server snapshot, `stopped` after `gone`, `CLIENT_OUTDATED` or `ended`. */
   status: 'loading' | 'ready' | 'stopped';
   /** The instance id, once started or given. */
   id: string | null;
@@ -425,6 +433,9 @@ export class ServerMachineController<Spec extends MachineSpec> {
         return;
       case 'client-outdated':
         this.stop({ code: RefusalCode.ClientOutdated, message: 'The server no longer serves this version of the machine. Reload.' });
+        return;
+      case 'ended':
+        this.stop({ code: message.code, message: message.message });
         return;
       case 'reconnected':
         this.reload(null);

@@ -51,6 +51,12 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    * or the socket gave up). The last delay repeats for as long as the stream is wanted.
    */
   resubscribeDelays?: readonly number[];
+  /**
+   * The codes of a socket error that ends the stream for good. An error whose `code` is one of them is not subscribed
+   * again: it reaches the controller as `ended`, which stops with that code and the error's message. A generated
+   * client's server lists `CONNECTION_CHANGED`, which it errors a stream with once configureTrax was called again.
+   */
+  terminalStreamErrors?: readonly string[];
 }
 
 /** The answer to `discard`. A discard of an instance already gone, or never the caller's, is `discarded` too. */
@@ -121,8 +127,8 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  *
  * The stream maps each push event onto the controller's messages: a snapshot (with its incarnation as
  * `rowId`), `gone` for a deleted or expired instance, `gone` with `notFound` for one the server will not let the caller
- * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload. A stream that ends
- * any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
+ * watch (the answer it gives a missing id), `CLIENT_OUTDATED`, and `reconnected` when the server asks for a reload, and `ended` for a socket error whose code is one of
+ * {@link MachineServerOptions.terminalStreamErrors}. A stream that ends any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
  * event is the instance as it is then, so nothing written meanwhile is lost and nothing is read again.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
@@ -136,6 +142,14 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
   // The push is the machine's own subscription field: `topic-map` is `topicMapChanged`.
   const pushField = `${machineField(machine.id)}Changed`;
   const delays = options.resubscribeDelays?.length ? options.resubscribeDelays : DEFAULT_RESUBSCRIBE_DELAYS;
+  const terminal = new Set(options.terminalStreamErrors ?? []);
+  // The code and message of a socket error the caller marked terminal, or null for one to subscribe again after.
+  const terminalOf = (error: unknown): { code: string; message: string } | null => {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (typeof code !== 'string' || !terminal.has(code)) return null;
+    const message = (error as { message?: unknown }).message;
+    return { code, message: typeof message === 'string' && message !== '' ? message : code };
+  };
   const client = createSnapshotClient(
     createMachineExecutor(endpoint, {
       fetch: options.fetch,
@@ -184,7 +198,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
       let ended = false;
       const deliver = (message: StreamMessage) => {
         if (!wanted || ended) return;
-        if (message.type === 'gone' || message.type === 'client-outdated') ended = true;
+        if (message.type === 'gone' || message.type === 'client-outdated' || message.type === 'ended') ended = true;
         onMessage(message);
       };
       const again = () => {
@@ -231,7 +245,11 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
               },
             });
           },
-          error: again,
+          error: (error) => {
+            const end = terminalOf(error);
+            if (end) deliver({ type: 'ended', ...end });
+            else again();
+          },
           complete: again,
         },
       );
