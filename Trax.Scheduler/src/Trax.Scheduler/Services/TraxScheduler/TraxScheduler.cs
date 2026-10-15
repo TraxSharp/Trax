@@ -630,12 +630,14 @@ public class TraxScheduler(
                     scheduledAt
                 );
             }
-            catch (DbUpdateException ex)
-                when (attempt < MaxTriggerAttempts && RetryReplayLinks.IsQueuedManifestConflict(ex))
+            catch (DbUpdateException ex) when (RetryReplayLinks.IsQueuedManifestConflict(ex))
             {
-                // Untracked, so a later save on this context does not retry it. The entry it met is
-                // read on the next pass, or, if the dispatcher took it meanwhile, queued afresh.
+                // Untracked, so a later save on this context does not retry it, also when the
+                // trigger gives up here. The entry it met is read on the next pass, or, if the
+                // dispatcher took it meanwhile, queued afresh.
                 context.Reset();
+                if (attempt >= MaxTriggerAttempts)
+                    throw;
                 if (seams?.AfterCollision is { } afterCollision)
                     await afterCollision(attempt, ct);
             }

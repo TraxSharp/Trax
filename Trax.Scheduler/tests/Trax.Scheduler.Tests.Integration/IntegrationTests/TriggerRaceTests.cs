@@ -61,6 +61,83 @@ public class TriggerRaceTests : TestSetup
         queued.IsExplicitTrigger.Should().BeTrue();
     }
 
+    [Test]
+    public async Task A_trigger_colliding_on_every_attempt_throws_the_unique_violation()
+    {
+        var manifest = await ScheduleAsync("trigger-race-every");
+        var inserts = 0;
+        long collided = 0;
+        var seams = new TraxScheduler.TriggerSeams(
+            null,
+            async (_, ct) =>
+            {
+                inserts++;
+                collided = await QueueEntryAsync(manifest, ct);
+            },
+            (_, ct) => DispatchAsync(manifest, collided, ct)
+        );
+
+        var trigger = () =>
+            TraxScheduler.TriggerManifestAsync(
+                DataContext,
+                manifest,
+                DateTime.UtcNow,
+                askAfresh: false,
+                seams,
+                CancellationToken.None
+            );
+
+        await trigger.Should().ThrowAsync<DbUpdateException>();
+        inserts.Should().Be(3, "a trigger inserts a few times at most");
+        ((DbContext)DataContext)
+            .ChangeTracker.Entries<WorkQueue>()
+            .Should()
+            .BeEmpty(
+                "the entry that met the queued one is untracked, so a later save does not retry it"
+            );
+    }
+
+    [Test]
+    public async Task A_non_conflict_update_failure_is_not_retried()
+    {
+        var manifest = await ScheduleAsync("trigger-race-other");
+        var inserts = 0;
+        var seams = new TraxScheduler.TriggerSeams(
+            null,
+            (_, _) =>
+            {
+                inserts++;
+                throw new DbUpdateException("not a queued-manifest conflict");
+            },
+            null
+        );
+
+        var trigger = () =>
+            TraxScheduler.TriggerManifestAsync(
+                DataContext,
+                manifest,
+                DateTime.UtcNow,
+                askAfresh: false,
+                seams,
+                CancellationToken.None
+            );
+
+        await trigger
+            .Should()
+            .ThrowAsync<DbUpdateException>()
+            .WithMessage("not a queued-manifest conflict");
+        inserts.Should().Be(1, "only a conflict on the manifest's queued entry is tried again");
+    }
+
+    private async Task<Manifest> ScheduleAsync(string externalId) =>
+        await (
+            (TraxScheduler)Scope.ServiceProvider.GetRequiredService<ITraxScheduler>()
+        ).ScheduleAsync<ISchedulerTestTrain, SchedulerTestInput, Unit>(
+            externalId,
+            new SchedulerTestInput { Value = "race" },
+            Every.Minutes(5)
+        );
+
     private async Task<long> QueueEntryAsync(Manifest manifest, CancellationToken ct)
     {
         await using var db = await Scope
