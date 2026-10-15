@@ -103,6 +103,12 @@ public sealed record ClientManifestMachine
     /// <summary>The machine's IR, from which a twin is generated.</summary>
     public required JsonObject Ir { get; init; }
 
+    /// <summary>
+    /// The IR's text as the host exported it, canonical JSON: the bytes <see cref="IrHash"/> is the SHA-256 of, and
+    /// the bytes a twin generated from it hashes again, so the twin and the documents name one version.
+    /// </summary>
+    public string IrText() => CanonicalJson.Serialize(Ir);
+
     /// <summary>Null: each of the machine's operations is held to its own declared rule.</summary>
     public ClientManifestRequirement? Requires { get; init; }
 

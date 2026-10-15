@@ -17,6 +17,7 @@ internal static class TraxCommandLine
         {
             GenerateCommand.Create(),
             MachineCommand.Create(),
+            ClientCommand.Create(),
         };
 
     private static readonly ParserConfiguration Configuration = new()

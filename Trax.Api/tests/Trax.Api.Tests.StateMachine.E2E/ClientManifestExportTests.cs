@@ -107,6 +107,14 @@ public class ClientManifestExportTests
         var wizard = manifest.Machines.Single(m => m.Id == WizardMachine.MachineId);
 
         wizard.Ir["id"]!.GetValue<string>().Should().Be(WizardMachine.MachineId);
+        Convert
+            .ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(wizard.IrText())
+                )
+            )
+            .Should()
+            .Be(wizard.IrHash, "a twin generated from the manifest's IR names the hash the documents carry");
         wizard.Documents.Should().OnlyContain(d => d.Id.Contains(wizard.IrHash));
     }
 

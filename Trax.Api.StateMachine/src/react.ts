@@ -7,3 +7,9 @@ export {
   type UseServerMachineOptions,
   type UseServerMachineResult,
 } from './server/useServerMachine';
+
+export {
+  useRememberedMachine,
+  type UseRememberedMachineOptions,
+  type UseRememberedMachineResult,
+} from './server/useRememberedMachine';

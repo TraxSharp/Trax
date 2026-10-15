@@ -134,8 +134,11 @@ exports[`the published exports > match the committed baseline 1`] = `
     "startDraft",
   ],
   "@traxsharp/state-machine/react": [
+    "UseRememberedMachineOptions",
+    "UseRememberedMachineResult",
     "UseServerMachineOptions",
     "UseServerMachineResult",
+    "useRememberedMachine",
     "useServerMachine",
   ],
 }
