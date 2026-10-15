@@ -25,6 +25,8 @@ the other, on the `recovery_restart_e2e_tests` database, so it can kill the firs
 | `A_crash_in_NotifyCustomer_resumes_from_RefundOutcome_without_paying_again` | The failed run's graph offers `NotifyCustomer#0` and not `IssuePayment`; `resumeExecution` and the dashboard's resume each run only `NotifyCustomer`, return the same result and draw the steps before as `RESTORED`; a completed resume is not resumed again; `TraxInvariants` finds nothing new |
 | `RefundRun_OnOtherTracks_CrashesOnce_AndTheRetryReplaysTheDecisions` | Orders A-1002 (`TraceParcel`, review) and A-1003 (`CheckReturnWindow`, decline) crash once on their track, and the retry replays both answers |
 | `RunWithNoCrashArmed_CompletesInOneAttempt` | One attempt, and the once manifest disables itself |
+| `A_start_whose_first_run_is_not_seen_leaves_nothing_armed` | A start that schedules its manifest but never sees the first run queued fails and disarms the crash it armed |
+| `A_crash_armed_at_the_start_fires_when_no_step_waits` | With no step delay, the crash armed before the manifest is scheduled still fails attempt 1, and the retry completes |
 | `TriggerWithAskAfresh_DuringTheBackoff_RetryAsksTheModelAgain` | `triggerManifest(askAfresh: true)` makes a refund's retry ask both questions again |
 | `RequeueExecution_ReplaysByDefault_AndAsksAgainWithAskAfresh` | `requeueExecution` replays; with `askAfresh: true` it asks again |
 | `DataChangedDuringTheBackoff_RetryAsksAfresh_AndTakesTheTrackTheNewDataCallsFor` | The retry stays linked, refuses both answers for a changed state, asks afresh and takes `Unsure` to `QueueForReview` |

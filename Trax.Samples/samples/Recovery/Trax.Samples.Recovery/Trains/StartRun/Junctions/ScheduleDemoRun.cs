@@ -31,22 +31,11 @@ public class ScheduleDemoRun(
         var runId = Guid.NewGuid().ToString("N")[..12];
         var externalId = $"recovery-{runId}";
 
-        var manifest = input.Scenario switch
-        {
-            Scenario.Refund => await ScheduleRefund(runId, externalId, input.OrderId ?? "A-1001"),
-            Scenario.TopicMap => await ScheduleTopicMap(runId, externalId, input),
-            _ => throw new ArgumentOutOfRangeException(nameof(input), input.Scenario, null),
-        };
-
-        // The page follows the first run, so a start that never sees it queued fails here, before
-        // anything is armed.
-        var firstRunId = await FirstRunOf(manifest.Id);
-
         // The crash is armed beside the run, never in the manifest's input: a retry replays the
         // first attempt's decisions only when the input is byte-identical between attempts. It is
-        // armed only once the first run is known, so a refused or timed-out start leaves nothing
-        // armed. The run cannot reach a crash point first: each one comes after a step and a model
-        // call.
+        // armed before the manifest is scheduled, since the dispatcher may start the first run
+        // before the start below sees it queued, and disarmed if the start fails, so a refused or
+        // timed-out start leaves nothing armed.
         var crash = !input.CrashOnce
             ? CrashPoint.None
             : input.Scenario switch
@@ -57,6 +46,30 @@ public class ScheduleDemoRun(
                 _ => CrashPoint.CoCitation,
             };
         faults.Arm(runId, crash);
+
+        Trax.Effect.Models.Manifest.Manifest manifest;
+        string firstRunId;
+        try
+        {
+            manifest = input.Scenario switch
+            {
+                Scenario.Refund => await ScheduleRefund(
+                    runId,
+                    externalId,
+                    input.OrderId ?? "A-1001"
+                ),
+                Scenario.TopicMap => await ScheduleTopicMap(runId, externalId, input),
+                _ => throw new ArgumentOutOfRangeException(nameof(input), input.Scenario, null),
+            };
+
+            // The page follows the first run, so a start that never sees it queued fails here.
+            firstRunId = await FirstRunOf(manifest.Id);
+        }
+        catch
+        {
+            faults.Disarm(runId);
+            throw;
+        }
 
         return new StartRunOutput
         {
