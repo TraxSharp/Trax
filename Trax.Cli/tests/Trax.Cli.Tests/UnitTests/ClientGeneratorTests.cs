@@ -167,6 +167,7 @@ public partial class ClientGeneratorTests
     [TestCase("trax-socket")]
     [TestCase("use-server-machine")]
     [TestCase("ir")]
+    [TestCase("queue-microtask")]
     public void A_machine_named_as_a_name_its_client_module_uses_is_refused(string id)
     {
         var node = new FakeNodeRunner();
@@ -199,6 +200,49 @@ public partial class ClientGeneratorTests
             .Should()
             .Throw<InvalidOperationException>()
             .WithMessage($"*\"{name}\"*every JavaScript object has*");
+        node.Calls.Should().BeEmpty();
+    }
+
+    [TestCase("context", "__proto__", "states")]
+    [TestCase("context", "Nowhere", "states")]
+    [TestCase("invariants", "__proto__", "states")]
+    [TestCase("inputs", "__proto__", "triggers")]
+    [TestCase("inputs", "Cart", "triggers")]
+    public void An_ir_with_a_context_key_that_is_not_a_state_is_refused(
+        string map,
+        string key,
+        string list
+    )
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var ir = (JsonObject)checkout.Ir.DeepClone();
+        if (ir[map] is not JsonObject entries)
+            ir[map] = entries = new JsonObject();
+        entries[key] = new JsonObject { ["fields"] = new JsonArray() };
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
+
+        var render = () => Render(manifest, node);
+
+        render
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*{map} for \"{key}\", which is not one of its {list}*");
+        node.Calls.Should().BeEmpty();
+    }
+
+    [Test]
+    public void An_ir_with_a___proto___key_anywhere_is_refused()
+    {
+        var node = new FakeNodeRunner();
+        var checkout = ClientManifests.Sample().Machines[0];
+        var ir = (JsonObject)checkout.Ir.DeepClone();
+        ir["initialContext"] = new JsonObject { ["__proto__"] = new JsonObject { ["x"] = 1 } };
+        var manifest = ClientManifests.Sample() with { Machines = [checkout with { Ir = ir }] };
+
+        var render = () => Render(manifest, node);
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*\"__proto__\"*prototype*");
         node.Calls.Should().BeEmpty();
     }
 

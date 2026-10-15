@@ -340,7 +340,33 @@ function checkNames(ir: IrDocument): void {
         `The machine '${ir.id}' has the outcome ${JSON.stringify(outcome)}, which is not <State>.<kind>.`,
       );
   }
+  // A state's context and invariant, and a trigger's input, are looked up by name: a key that is none of them is not
+  // the host's.
+  const declared = { state: new Set<unknown>(ir.states), trigger: new Set<unknown>(ir.triggers) };
+  const maps: [string, Readonly<Record<string, unknown>> | undefined, keyof typeof declared][] = [
+    ["context", ir.context, "state"],
+    ["invariants", ir.invariants, "state"],
+    ["inputs", ir.inputs, "trigger"],
+  ];
+  for (const [key, map, what] of maps)
+    for (const name of Object.keys(map ?? {}))
+      if (!declared[what].has(name))
+        throw new Error(
+          `The machine '${ir.id}' has ${key} for ${JSON.stringify(name)}, which is not one of its ${what}s.`,
+        );
+  // JSON.parse keeps a "__proto__" key as data, but the twin's `const ir = {...}` literal would make it a prototype.
+  if (hasProtoKey(ir))
+    throw new Error(
+      `The machine '${ir.id}' has a key "__proto__", which the twin's object literal would read as its prototype.`,
+    );
 }
+
+const hasProtoKey = (value: unknown): boolean =>
+  Array.isArray(value)
+    ? value.some(hasProtoKey)
+    : typeof value === "object" && value !== null
+      ? Object.prototype.hasOwnProperty.call(value, "__proto__") || Object.values(value).some(hasProtoKey)
+      : false;
 
 // A machine id is kebab/snake (ship-to-store); its type prefix is PascalCase (ShipToStore) and its
 // exported const is camelCase (shipToStore). Splitting on - and _ is what makes a multi-word id emit valid

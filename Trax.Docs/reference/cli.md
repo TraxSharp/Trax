@@ -475,7 +475,8 @@ that generate one name (`map-2d` and `map2d`), two trains whose files differ onl
 runtime exports (`configureTrax`) or a machine's client module declares (`server`, `socket`) are refused; a string is
 written as a literal and a description cannot close its comment. Each machine's IR must name the machine, its states,
 triggers and outcomes must be identifiers and no state or trigger may be named after an `Object.prototype` member
-(`__proto__`, `constructor`), and it must hash to the `irHash` its documents carry, or nothing is generated. A malformed manifest is refused with a sentence
+(`__proto__`, `constructor`), its `context`, `invariants` and `inputs` must be keyed by its own states and triggers,
+no object in it may hold a `__proto__` key, and it must hash to the `irHash` its documents carry, or nothing is generated. A malformed manifest is refused with a sentence
 saying where. The app installs `graphql-ws` beside `@traxsharp/state-machine` (`npm install @traxsharp/state-machine
 graphql-ws`), and the generated code typechecks under the `tsconfig` a Vite React template writes
 (`erasableSyntaxOnly`, `verbatimModuleSyntax`, `noUnusedLocals`).

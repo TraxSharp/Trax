@@ -417,6 +417,7 @@ internal sealed class ClientGenerator
     {
         "server",
         "serverGeneration",
+        "queueMicrotask",
         "subscribeTrax",
         "traxConnection",
         "traxGeneration",
@@ -485,8 +486,10 @@ internal sealed class ClientGenerator
     /// <summary>
     /// Refuses an IR the twin generator must not read: one naming another machine than the manifest entry (its id
     /// names the twin's files), one whose state, trigger or outcome names are not identifiers (they are written into
-    /// the twin as code), and one whose SHA-256 is not the <see cref="ClientManifestMachine.IrHash"/> its documents
-    /// carry.
+    /// the twin as code), one whose context, invariants or inputs are keyed by something other than its states and
+    /// triggers, one holding a <c>__proto__</c> key (the twin's object literal would make it a prototype, so the twin's
+    /// IR would differ from the one hashed), and one whose SHA-256 is not the
+    /// <see cref="ClientManifestMachine.IrHash"/> its documents carry.
     /// </summary>
     private static void CheckIr(ClientManifestMachine machine)
     {
@@ -496,8 +499,10 @@ internal sealed class ClientGenerator
             throw new InvalidOperationException(
                 $"The IR of the machine '{machine.Id}' is the IR of '{id}'. Export the manifest again from the host."
             );
+        var declared = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var (key, what) in new[] { ("states", "state"), ("triggers", "trigger") })
         {
+            var names = declared[what] = new HashSet<string>(StringComparer.Ordinal);
             if (ir[key] is not JsonArray list)
                 throw new InvalidOperationException(
                     $"The IR of the machine '{machine.Id}' has no {key}. Export the manifest again from the host."
@@ -514,7 +519,37 @@ internal sealed class ClientGenerator
                         $"The machine '{machine.Id}' has the {what} {TypeScript.Literal(name)}, a name every "
                             + "JavaScript object has, so the twin would read it as something else. Rename it on the host."
                     );
+                else
+                    names.Add(name);
         }
+        // The twin looks a state's context and invariant, and a trigger's input, up by name: a key that is none of them
+        // is not the host's.
+        foreach (
+            var (key, what) in new[]
+            {
+                ("context", "state"),
+                ("invariants", "state"),
+                ("inputs", "trigger"),
+            }
+        )
+        {
+            if (ir[key] is not (null or JsonObject))
+                throw new InvalidOperationException(
+                    $"The IR of the machine '{machine.Id}' has {key} that are not an object. Export the manifest "
+                        + "again from the host."
+                );
+            foreach (var (name, _) in ir[key] as JsonObject ?? [])
+                if (!declared[what].Contains(name))
+                    throw new InvalidOperationException(
+                        $"The IR of the machine '{machine.Id}' has {key} for {TypeScript.Literal(name)}, which is not "
+                            + $"one of its {what}s. Export the manifest again from the host."
+                    );
+        }
+        if (HasProtoKey(ir))
+            throw new InvalidOperationException(
+                $"The IR of the machine '{machine.Id}' has a key \"__proto__\", which the twin's object literal would "
+                    + "read as its prototype. Rename the member it names on the host, or export the manifest again."
+            );
         if (ir["outcomes"] is not (null or JsonObject))
             throw new InvalidOperationException(
                 $"The IR of the machine '{machine.Id}' has outcomes that are not an object. Export the manifest "
@@ -538,6 +573,14 @@ internal sealed class ClientGenerator
                     + "its documents were registered for another IR. Export the manifest again from the host."
             );
     }
+
+    private static bool HasProtoKey(JsonNode? node) =>
+        node switch
+        {
+            JsonObject o => o.Any(p => p.Key == "__proto__" || HasProtoKey(p.Value)),
+            JsonArray a => a.Any(HasProtoKey),
+            _ => false,
+        };
 
     private static InvalidOperationException NotAnIdentifier(
         string machine,
