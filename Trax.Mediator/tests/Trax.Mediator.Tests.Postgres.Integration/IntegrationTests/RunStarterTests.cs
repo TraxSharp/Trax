@@ -95,6 +95,39 @@ public class RunStarterTests : TestSetup
             .BeFalse();
     }
 
+    [Test]
+    public async Task The_latest_execution_is_the_callers_own_under_a_shared_id()
+    {
+        var starters = Scope.ServiceProvider.GetRequiredService<IRunStarters>();
+        var mine = await Execution.RunAsync(
+            Train,
+            "{}",
+            new RunTrainOptions { RecordCaller = true }
+        );
+        var theirs = await Execution.RunAsync(Train, "{}");
+        await ExecuteAsync(
+            $"UPDATE trax.metadata SET external_id = '{mine.ExternalId}', starter_hash = 'someone-else' "
+                + $"WHERE id = {theirs.MetadataId}"
+        );
+
+        (await starters.LatestExecutionStartedByCurrentCallerAsync(mine.ExternalId))
+            .Should()
+            .Be(
+                mine.MetadataId,
+                "a newer execution another caller recorded under the same id is not the caller's, per "
+                    + Adr
+            );
+        (await starters.LatestExecutionStartedByCurrentCallerAsync(Guid.NewGuid().ToString("N")))
+            .Should()
+            .BeNull();
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        using var context = await ContextAsync();
+        await ((DbContext)context).Database.ExecuteSqlRawAsync(sql);
+    }
+
     private async Task<string?> QueuedStarterAsync(long id)
     {
         using var context = await ContextAsync();

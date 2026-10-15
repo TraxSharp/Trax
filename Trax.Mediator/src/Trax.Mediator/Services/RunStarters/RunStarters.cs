@@ -38,4 +38,24 @@ internal sealed class RunStarters(
                 )
                 .ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    public async Task<long?> LatestExecutionStartedByCurrentCallerAsync(
+        string runId,
+        CancellationToken ct = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(runId);
+        if (RunStarter.Hash(principal.GetCurrentPrincipalId()) is not { } starter)
+            return null;
+
+        using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await db
+            .Metadatas.AsNoTracking()
+            .Where(m => m.ExternalId == runId && m.StarterHash == starter)
+            .OrderByDescending(m => m.Id)
+            .Select(m => (long?)m.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
 }

@@ -161,6 +161,7 @@ namespace Trax.Mediator.Services.RunStarters
 {
     public interface IRunStarters
     {
+        System.Threading.Tasks.Task<long?> LatestExecutionStartedByCurrentCallerAsync(string runId, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task<bool> StartedByCurrentCallerAsync(string runId, System.Threading.CancellationToken ct = default);
     }
 }

@@ -152,11 +152,14 @@ A train that reports on a run, such as a decision journal, answers only the call
 public interface IRunStarters
 {
     Task<bool> StartedByCurrentCallerAsync(string runId, CancellationToken ct = default);
+    Task<long?> LatestExecutionStartedByCurrentCallerAsync(string runId, CancellationToken ct = default);
 }
 ```
 
 It compares the run's recorded starter with the current caller, as `runProgress` does, and answers false alike for a
-missing id, another caller's run and a run nobody started.
+missing id, another caller's run and a run nobody started. A train that then reads the execution's own rows takes the
+id `LatestExecutionStartedByCurrentCallerAsync` gives rather than the latest under the run id, which another caller's
+execution recorded under the same id could be; it is null in every case the first answers false.
 
 ## Persisted operations
 
