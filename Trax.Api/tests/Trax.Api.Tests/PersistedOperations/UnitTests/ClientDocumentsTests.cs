@@ -47,30 +47,30 @@ public class ClientDocumentsTests
     [Test]
     public void A_client_id_is_reserved_and_reads_back_to_its_slot()
     {
-        var id = ClientDocuments.IdOf("Alert_Card", "query Alert_Card { x }");
+        var id = ClientDocuments.IdOf("Order_Card", "query Order_Card { x }");
 
-        id.Should().StartWith("trax_client_Alert-Card_");
+        id.Should().StartWith("trax_client_Order-Card_");
         GeneratedDocuments.IsReserved(id).Should().BeTrue();
         GeneratedDocuments.PrefixOf(id).Should().Be(ClientDocuments.ReservedIdPrefix);
-        ClientDocuments.SlotOfId(id).Should().Be("trax_client_Alert-Card");
+        ClientDocuments.SlotOfId(id).Should().Be("trax_client_Order-Card");
         GeneratedDocuments
-            .SlotOf(id, ["trax_client_Alert-Card"])
+            .SlotOf(id, ["trax_client_Order-Card"])
             .Should()
-            .Be("trax_client_Alert-Card");
+            .Be("trax_client_Order-Card");
     }
 
     [Test]
     public void A_stored_row_whose_body_is_not_the_one_its_id_names_is_not_a_client_document()
     {
-        var id = ClientDocuments.IdOf("AlertCard", "query AlertCard { a }");
+        var id = ClientDocuments.IdOf("OrderCard", "query OrderCard { a }");
 
-        GeneratedDocuments.IsGenerated(id, "query AlertCard { a }").Should().BeTrue();
-        GeneratedDocuments.IsGenerated(id, "query AlertCard { b }").Should().BeFalse();
+        GeneratedDocuments.IsGenerated(id, "query OrderCard { a }").Should().BeTrue();
+        GeneratedDocuments.IsGenerated(id, "query OrderCard { b }").Should().BeFalse();
     }
 
     [TestCase("trax_client__" + Hash)]
-    [TestCase("trax_client_AlertCard")]
-    [TestCase("trax_client_Alert_Card_" + Hash)]
+    [TestCase("trax_client_OrderCard")]
+    [TestCase("trax_client_Order_Card_" + Hash)]
     public void An_id_that_is_not_a_client_document_names_no_slot(string id) =>
         ClientDocuments.SlotOfId(id).Should().BeNull();
 
@@ -88,16 +88,16 @@ public class ClientDocumentsTests
             """
             { "format": 1, "documents": [
               { "name": "Zed", "source": "src/zed.graphql", "text": "query Zed { a }" },
-              { "name": "AlertCard", "source": "src/alertCard.graphql", "text": "query AlertCard { a }" }
+              { "name": "OrderCard", "source": "src/orderCard.graphql", "text": "query OrderCard { a }" }
             ] }
             """
         );
 
         var documents = ClientDocuments.Load(path);
 
-        documents.Select(d => d.Name).Should().Equal("AlertCard", "Zed");
-        documents[0].Id.Should().Be(ClientDocuments.IdOf("AlertCard", "query AlertCard { a }"));
-        documents[0].Owner.Should().Be("client document 'AlertCard' (src/alertCard.graphql)");
+        documents.Select(d => d.Name).Should().Equal("OrderCard", "Zed");
+        documents[0].Id.Should().Be(ClientDocuments.IdOf("OrderCard", "query OrderCard { a }"));
+        documents[0].Owner.Should().Be("client document 'OrderCard' (src/orderCard.graphql)");
     }
 
     [Test]
@@ -141,84 +141,88 @@ public class ClientDocumentsTests
     #region What a document may hold
 
     [TestCase(
-        "query AlertCard($input: StartInput!) { discover { findAlert(input: $input) { name } } }"
+        "query OrderCard($input: StartInput!) { discover { findOrder(input: $input) { name } } }"
     )]
     [TestCase(
-        "query AlertCard($input: StartInput!) { discover { first: findAlert(input: $input) { name } "
-            + "second: findAlert(input: $input) { name } } }"
+        "query OrderCard($input: StartInput!) { discover { first: findOrder(input: $input) { name } "
+            + "second: findOrder(input: $input) { name } } }"
     )]
     [TestCase(
-        "query AlertCard($input: StartInput!) { discover { runs { findRun(input: $input) { name } } } }"
+        "query OrderCard($input: StartInput!) { discover { runs { findRun(input: $input) { name } } } }"
     )]
     [TestCase(
-        "mutation AlertCard($input: StartInput!) { dispatch { startRun(input: $input) { externalId } } }"
+        "mutation OrderCard($input: StartInput!) { dispatch { startRun(input: $input) { externalId } } }"
     )]
     [TestCase(
-        "query AlertCard($input: StartInput!) { discover { findAlert(input: $input) { ...Named } } } "
+        "query OrderCard($input: StartInput!) { discover { findOrder(input: $input) { ...Named } } } "
             + "fragment Named on Named { name }"
+    )]
+    [TestCase(
+        "query OrderCard($input: StartInput!) {\n  discover {\n    findOrder(input: $input) {\n      ...Named\n    }\n"
+            + "  }\n}\n\nfragment Named on Named {\n  name\n}\n"
     )]
     public async Task A_document_of_trains_is_accepted(string text)
     {
         var schema = await SchemaAsync();
 
-        ClientDocuments.Refusal(schema, "AlertCard", text).Should().BeNull();
+        ClientDocuments.Refusal(schema, "OrderCard", text).Should().BeNull();
     }
 
-    [TestCase("query AlertCard { _ping }", "*other than 'discover'*")]
-    [TestCase("query AlertCard { __schema { types { name } } }", "*other than 'discover'*")]
+    [TestCase("query OrderCard { _ping }", "*other than 'discover'*")]
+    [TestCase("query OrderCard { __schema { types { name } } }", "*other than 'discover'*")]
     [TestCase(
-        "query AlertCard { discover { __typename } }",
+        "query OrderCard { discover { __typename } }",
         "*'discover.__typename'*does not serve*"
     )]
     [TestCase(
-        "query AlertCard { d: discover { findAlert(input: { scenario: \"x\" }) { name } } }",
+        "query OrderCard { d: discover { findOrder(input: { scenario: \"x\" }) { name } } }",
         "*other than 'discover'*"
     )]
     [TestCase(
-        "query AlertCard { discover { ... on DiscoverQueries { findAlert(input: { scenario: \"x\" }) { name } } } }",
+        "query OrderCard { discover { ... on DiscoverQueries { findOrder(input: { scenario: \"x\" }) { name } } } }",
         "*fragment directly under 'discover'*"
     )]
     [TestCase(
-        "query AlertCard { discover { r: runs { findRun(input: { scenario: \"x\" }) { name } } } }",
+        "query OrderCard { discover { r: runs { findRun(input: { scenario: \"x\" }) { name } } } }",
         "*aliases the namespace 'runs'*"
     )]
     [TestCase(
-        "query AlertCard { discover { runs { __typename } } }",
+        "query OrderCard { discover { runs { __typename } } }",
         "*other than a train under the namespace 'runs'*"
     )]
-    [TestCase("query AlertCard { discover { runs } }", "*selects no train*")]
+    [TestCase("query OrderCard { discover { runs } }", "*selects no train*")]
     [TestCase(
-        "mutation AlertCard($input: StartInput!) { dispatch { startRun(input: $input) { externalId } "
+        "mutation OrderCard($input: StartInput!) { dispatch { startRun(input: $input) { externalId } "
             + "other(input: $input) { externalId } } }",
         "*runs 2 trains in one mutation*"
     )]
     [TestCase(
-        "subscription AlertCard { runProgress(runId: \"x\") { runId } }",
+        "subscription OrderCard { runProgress(runId: \"x\") { runId } }",
         "*is a subscription*"
     )]
     [TestCase(
-        "query AlertCard { discover { findAlert(input: { scenario: \"x\" }) { name @include(if: true) } } }",
+        "query OrderCard { discover { findOrder(input: { scenario: \"x\" }) { name @include(if: true) } } }",
         "*uses a directive*"
     )]
     [TestCase(
-        "query AlertCard @cached { discover { findAlert(input: { scenario: \"x\" }) { name } } }",
+        "query OrderCard @cached { discover { findOrder(input: { scenario: \"x\" }) { name } } }",
         "*uses a directive*"
     )]
     [TestCase(
-        "query AlertCard { discover { findAlert(input: { scenario: \"x\" }) { name } } } query Other { _ping }",
+        "query OrderCard { discover { findOrder(input: { scenario: \"x\" }) { name } } } query Other { _ping }",
         "*holds 2 operations*"
     )]
     [TestCase(
-        "{ discover { findAlert(input: { scenario: \"x\" }) { name } } }",
-        "*registered as 'AlertCard'*"
+        "{ discover { findOrder(input: { scenario: \"x\" }) { name } } }",
+        "*registered as 'OrderCard'*"
     )]
     [TestCase(
-        "query Other { discover { findAlert(input: { scenario: \"x\" }) { name } } }",
-        "*registered as 'AlertCard'*named 'Other'*"
+        "query Other { discover { findOrder(input: { scenario: \"x\" }) { name } } }",
+        "*registered as 'OrderCard'*named 'Other'*"
     )]
-    [TestCase("query AlertCard { discover { findAlert(", "*is not GraphQL*")]
+    [TestCase("query OrderCard { discover { findOrder(", "*is not GraphQL*")]
     [TestCase(
-        "type X { a: Int } query AlertCard { discover { findAlert(input: { scenario: \"x\" }) { name } } }",
+        "type X { a: Int } query OrderCard { discover { findOrder(input: { scenario: \"x\" }) { name } } }",
         "*neither an operation nor a fragment*"
     )]
     public async Task A_document_that_reaches_more_than_trains_is_refused(
@@ -228,7 +232,7 @@ public class ClientDocumentsTests
     {
         var schema = await SchemaAsync();
 
-        ClientDocuments.Refusal(schema, "AlertCard", text).Should().Match(message);
+        ClientDocuments.Refusal(schema, "OrderCard", text).Should().Match(message);
     }
 
     [Test]
@@ -319,7 +323,7 @@ public class ClientDocumentsTests
     {
         TrainRegistration[] registrations =
         [
-            Registration("FindAlert", typeof(Named), isQuery: true, graphqlNamespace: null),
+            Registration("FindOrder", typeof(Named), isQuery: true, graphqlNamespace: null),
             Registration("FindRun", typeof(Named), isQuery: true, graphqlNamespace: "runs"),
             Registration("StartRun", typeof(Named), isQuery: false, graphqlNamespace: null),
             Registration("Other", typeof(Named), isQuery: false, graphqlNamespace: null),

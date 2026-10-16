@@ -9,7 +9,10 @@ namespace Trax.Cli.Clients;
 /// <c>__typename</c>; a scalar or enum as <see cref="SdlTypes"/> writes it. A field the document does not select is
 /// not in the type, so a type never promises what the answer lacks.
 /// </summary>
-internal sealed class SelectionTypes(SdlTypes sdl)
+internal sealed class SelectionTypes(
+    SdlTypes sdl,
+    IReadOnlyDictionary<string, GraphQLFragmentDefinition>? fragments = null
+)
 {
     /// <summary>
     /// The type of a value of <paramref name="type"/> answered with <paramref name="selection"/>, written to start at
@@ -166,6 +169,14 @@ internal sealed class SelectionTypes(SdlTypes sdl)
                     when fragment.TypeCondition is null
                         || sdl.Applies(fragment.TypeCondition.Type.Name.StringValue, typeName):
                     Collect(fragment.SelectionSet, typeName, fields);
+                    break;
+                // A named fragment's fields are written out where it is spread: the type is the same shape as the
+                // fragment's own, so a value typed by either fits the other.
+                case GraphQLFragmentSpread spread
+                    when fragments?.GetValueOrDefault(spread.FragmentName.Name.StringValue)
+                        is { } definition
+                        && sdl.Applies(definition.TypeCondition.Type.Name.StringValue, typeName):
+                    Collect(definition.SelectionSet, typeName, fields);
                     break;
             }
     }

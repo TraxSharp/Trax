@@ -338,7 +338,7 @@ internal static class TrainDocuments
 /// <param name="Answer">The field's type as SDL writes it (<c>StartRunResponse!</c>).</param>
 /// <param name="LeftOut">
 /// The fields the document leaves out because they lead back to a type already on the path, each as the path that
-/// reaches it (<c>ActionAlert.campaign &gt; Campaign.alerts</c>).
+/// reaches it (<c>Order.customer &gt; Customer.orders</c>).
 /// </param>
 /// <param name="Registration">The train.</param>
 internal sealed record TrainDocument(

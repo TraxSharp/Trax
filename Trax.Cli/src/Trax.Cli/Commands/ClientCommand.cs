@@ -45,6 +45,14 @@ internal static class ClientCommand
             Description =
                 "The engine's tools/ directory, when this trax has no generators bundled (built from source).",
         };
+        var documents = new Option<string[]>("--documents")
+        {
+            Description =
+                "A glob of the .graphql documents the frontend wrote (src/**/*.graphql), relative to the current "
+                + "directory. Repeatable. Writes a typed function per operation and trax.documents.json, which the "
+                + "host names in ClientDocuments(path).",
+            AllowMultipleArgumentsPerToken = false,
+        };
         var node = new Option<string?>("--node")
         {
             Description =
@@ -62,6 +70,7 @@ internal static class ClientCommand
             check,
             specifier,
             toolsDir,
+            documents,
             node,
         };
         command.SetAction(parseResult =>
@@ -72,7 +81,8 @@ internal static class ClientCommand
                 parseResult.GetValue(check),
                 parseResult.GetValue(specifier),
                 parseResult.GetValue(toolsDir)?.FullName,
-                new NodeRunner(parseResult.GetValue(node) ?? "node")
+                new NodeRunner(parseResult.GetValue(node) ?? "node"),
+                parseResult.GetValue(documents) ?? []
             )
         );
         return command;
@@ -85,7 +95,8 @@ internal static class ClientCommand
         bool check,
         string? specifier,
         string? toolsDir,
-        INodeRunner node
+        INodeRunner node,
+        IReadOnlyList<string>? documentGlobs = null
     )
     {
         try
@@ -100,10 +111,41 @@ internal static class ClientCommand
                 );
             if (!File.Exists(manifestPath))
                 throw new InvalidOperationException($"No client manifest at {manifestPath}.");
+            IReadOnlyList<ClientDocumentFile>? documentFiles = null;
+            IReadOnlyList<string>? editorGlobs = null;
+            if (documentGlobs is { Count: > 0 })
+            {
+                var cwd = Directory.GetCurrentDirectory();
+                // The schema written for the editor is a .graphql file too: never read it as a document.
+                var editorSchema = Path.GetFullPath(
+                    Path.Combine(outDir, ClientGenerator.EditorSchemaFileName)
+                );
+                var found = new SortedSet<string>(StringComparer.Ordinal);
+                foreach (var glob in documentGlobs)
+                {
+                    var matches = Glob.Files(cwd, glob)
+                        .Where(f => !string.Equals(f, editorSchema, StringComparison.Ordinal))
+                        .ToList();
+                    if (matches.Count == 0)
+                        throw new InvalidOperationException(
+                            $"--documents '{glob}' matches no file under {cwd}."
+                        );
+                    found.UnionWith(matches);
+                }
+                documentFiles = found
+                    .Select(path => new ClientDocumentFile(
+                        Path.GetRelativePath(cwd, path).Replace('\\', '/'),
+                        File.ReadAllText(path)
+                    ))
+                    .ToList();
+                editorGlobs = documentGlobs.Select(g => Glob.RelativeTo(cwd, outDir, g)).ToList();
+            }
             var options = new ClientGenerateOptions(
                 ClientManifest.Read(File.ReadAllText(manifestPath)),
                 specifier ?? ClientGenerator.DefaultSpecifier,
-                toolsDir
+                toolsDir,
+                documentFiles,
+                editorGlobs
             );
             var generator = new ClientGenerator(node);
 

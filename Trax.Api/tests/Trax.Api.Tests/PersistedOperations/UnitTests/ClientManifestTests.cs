@@ -60,6 +60,34 @@ public class ClientManifestTests
         manifest.Trains.Select(t => t.Answer).Should().AllSatisfy(a => a.Should().NotBeNull());
     }
 
+    [Test]
+    public async Task The_manifest_sdl_holds_the_types_of_left_out_fields()
+    {
+        var (schema, trains) = await SchemaAsync();
+
+        var manifest = ClientManifestExport.Build(schema, [], trains);
+        var defined = Utf8GraphQLParser
+            .Parse(manifest.Types)
+            .Definitions.OfType<INamedSyntaxNode>()
+            .Select(d => d.Name.Value)
+            .ToList();
+
+        manifest
+            .Trains.Single(t => t.Field == "findChild")
+            .Documents[0]
+            .Document.Should()
+            .NotContain("edges", "the paged back-reference is left out of the generated document");
+        defined
+            .Should()
+            .Contain(
+                n => n.EndsWith("Connection", StringComparison.Ordinal),
+                "a client document may select the left-out paged field, so its connection type is listed"
+            )
+            .And.Contain(n => n.EndsWith("Edge", StringComparison.Ordinal))
+            .And.Contain("PageInfo")
+            .And.NotContain(DocumentTypes.Wrappers(schema));
+    }
+
     private static IEnumerable<string> Referenced(INamedSyntaxNode node) =>
         node switch
         {
@@ -85,6 +113,7 @@ public class ClientManifestTests
         [
             Registration("StartRun", isQuery: false),
             Registration("FindRun", isQuery: true),
+            Registration("FindChild", isQuery: true, typeof(PagedChild)),
         ];
         var services = new ServiceCollection();
         services.AddSingleton<ITrainDiscoveryService>(new StubDiscovery(registrations));
@@ -127,6 +156,20 @@ public class ClientManifestTests
         public string RunId { get; init; } = "";
     }
 
+    public record PagedParent
+    {
+        public string Name { get; init; } = "";
+
+        [UsePaging]
+        public PagedChild[] Children { get; init; } = [];
+    }
+
+    public record PagedChild
+    {
+        public string Name { get; init; } = "";
+        public PagedParent? Parent { get; init; }
+    }
+
     public record Order
     {
         public string Id { get; init; } = "";
@@ -137,18 +180,18 @@ public class ClientManifestTests
         public string? IdEquals { get; init; }
     }
 
-    private static TrainRegistration Registration(string name, bool isQuery) =>
+    private static TrainRegistration Registration(string name, bool isQuery, Type? output = null) =>
         new()
         {
             ServiceType = typeof(IStubTrain),
             ImplementationType = typeof(StubTrain),
             InputType = typeof(StartInput),
-            OutputType = typeof(RunOutput),
+            OutputType = output ?? typeof(RunOutput),
             Lifetime = ServiceLifetime.Scoped,
             ServiceTypeName = name,
             ImplementationTypeName = name,
             InputTypeName = nameof(StartInput),
-            OutputTypeName = nameof(RunOutput),
+            OutputTypeName = (output ?? typeof(RunOutput)).Name,
             RequiredPolicies = [],
             RequiredRoles = [],
             IsQuery = isQuery,

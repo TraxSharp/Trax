@@ -266,7 +266,7 @@ internal static class ClientDocuments
 /// <param name="Id">The persisted id.</param>
 /// <param name="Text">The GraphQL document text, exactly as the file holds it.</param>
 /// <param name="Name">The operation's name.</param>
-/// <param name="OwnerText">What it is, for a refusal or a log line (<c>client document 'AlertCard' (src/...)</c>).</param>
+/// <param name="OwnerText">What it is, for a refusal or a log line (<c>client document 'OrderCard' (src/...)</c>).</param>
 internal sealed record ClientDocument(string Id, string Text, string Name, string OwnerText)
     : GeneratedDocument(Id, Text)
 {

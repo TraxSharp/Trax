@@ -53,13 +53,20 @@ internal static partial class DocumentTypes
     /// The SDL of every type the documents reach but the <see cref="Wrappers"/>, in name order, so the fields a client
     /// cannot send, the operations namespace and every sibling train and query model among them, are never listed.
     /// </summary>
-    public static string Sdl(ISchemaDefinition schema, IEnumerable<string> documents)
+    public static string Sdl(
+        ISchemaDefinition schema,
+        IEnumerable<string> documents,
+        IEnumerable<string>? leftOut = null
+    )
     {
         var definitions = Definitions(schema);
         var wrappers = Wrappers(schema);
+        var reached = Reached(schema, documents);
+        foreach (var field in leftOut ?? [])
+            ReachField(schema, field, wrappers, reached);
         return string.Join(
                 "\n\n",
-                Reached(schema, documents)
+                reached
                     .Where(name => !wrappers.Contains(name) && definitions.ContainsKey(name))
                     .Select(name => definitions[name].ToString(indented: true))
             )
@@ -137,6 +144,55 @@ internal static partial class DocumentTypes
                     Select(schema, on, fragment.SelectionSet, reached);
                     break;
             }
+        }
+    }
+
+    // The type of a field a generated document left out (`Customer.orders`, the last segment of its path) and every
+    // type it reaches, so a client may write a document that selects it.
+    private static void ReachField(
+        ISchemaDefinition schema,
+        string path,
+        HashSet<string> wrappers,
+        SortedSet<string> reached
+    )
+    {
+        var segment = path.Split(" > ")[^1];
+        var dot = segment.IndexOf('.');
+        if (
+            dot < 0
+            || !schema.Types.TryGetType(segment[..dot], out var owner)
+            || owner is not IComplexTypeDefinition complex
+            || !complex.Fields.TryGetField(segment[(dot + 1)..], out var field)
+        )
+            return;
+        var pending = new Queue<ITypeDefinition>();
+        foreach (var argument in field.Arguments)
+            Reach(schema, argument.Type.NamedType().Name, reached);
+        pending.Enqueue(field.Type.NamedType());
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (pending.TryDequeue(out var type))
+        {
+            if (wrappers.Contains(type.Name) || !seen.Add(type.Name))
+                continue;
+            Reach(schema, type.Name, reached);
+            IEnumerable<ITypeDefinition> next = type switch
+            {
+                IComplexTypeDefinition c => c
+                    .Fields.Where(f => !f.Name.StartsWith("__", StringComparison.Ordinal))
+                    .SelectMany(f =>
+                        f.Arguments.Select(a => a.Type.NamedType()).Append(f.Type.NamedType())
+                    ),
+                IUnionTypeDefinition u => u.Types,
+                _ => [],
+            };
+            if (type is IInterfaceTypeDefinition @interface)
+                next = next.Concat(
+                    schema
+                        .Types.OfType<IObjectTypeDefinition>()
+                        .Where(o => o.Implements.Any(i => i.Name == @interface.Name))
+                );
+            foreach (var t in next)
+                pending.Enqueue(t);
         }
     }
 

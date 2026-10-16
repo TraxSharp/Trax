@@ -23,16 +23,16 @@ public class SelectionTypesTests
           id: Int!
         }
 
-        type Alert {
+        type Order {
           title: String!
           level: Level
-          campaign: Campaign!
+          customer: Customer!
         }
 
-        type Campaign {
-          "The campaign's name."
+        type Customer {
+          "The customer's name."
           name: String!
-          alerts: [Alert!]!
+          orders: [Order!]!
         }
 
         type Shapes {
@@ -47,7 +47,7 @@ public class SelectionTypesTests
           size: Int!
         }
 
-        union Found = Alert | Campaign
+        union Found = Order | Customer
 
         interface Named {
           name: String!
@@ -70,29 +70,29 @@ public class SelectionTypesTests
     [Test]
     public void A_trains_function_returns_exactly_what_its_document_selects()
     {
-        var train = Train("Alert!", "findAlert(input: $input) { title campaign { name } }");
+        var train = Train("Order!", "findOrder(input: $input) { title customer { name } }");
 
         train
             .Should()
-            .Contain("Promise<FindAlertResult>")
+            .Contain("Promise<FindOrderResult>")
             .And.Contain(
                 """
-                export type FindAlertResult = {
+                export type FindOrderResult = {
                   title: string;
-                  campaign: {
-                    /** The campaign's name. */
+                  customer: {
+                    /** The customer's name. */
                     name: string;
                   };
                 };
                 """
             )
-            .And.NotContain("alerts", "the document leaves the back-reference out");
+            .And.NotContain("orders", "the document leaves the back-reference out");
     }
 
     [Test]
     public void No_output_type_is_declared_per_model()
     {
-        var files = Render("Alert!", "findAlert(input: $input) { title }");
+        var files = Render("Order!", "findOrder(input: $input) { title }");
         var types = files.Single(f => f.Path == "types.g.ts").Text;
 
         types
@@ -100,7 +100,7 @@ public class SelectionTypesTests
             .Contain("export type Level = \"LOW\" | \"HIGH\";")
             .And.Contain("export interface FindInput {");
         foreach (
-            var output in new[] { "Alert", "Campaign", "Shapes", "Box", "Found", "Named", "Person" }
+            var output in new[] { "Order", "Customer", "Shapes", "Box", "Found", "Named", "Person" }
         )
             types
                 .Should()
@@ -115,7 +115,7 @@ public class SelectionTypesTests
     {
         var train = Train(
             "Shapes!",
-            "findAlert(input: $input) { strict loose maybe note box { size } }"
+            "findOrder(input: $input) { strict loose maybe note box { size } }"
         );
 
         train
@@ -136,11 +136,11 @@ public class SelectionTypesTests
     [Test]
     public void A_nullable_list_answer_keeps_both_nulls()
     {
-        Train("[Box]", "findAlert(input: $input) { size }")
+        Train("[Box]", "findOrder(input: $input) { size }")
             .Should()
             .Contain(
                 """
-                export type FindAlertResult = Array<{
+                export type FindOrderResult = Array<{
                   size: number;
                 } | null> | null;
                 """
@@ -152,20 +152,20 @@ public class SelectionTypesTests
     {
         var train = Train(
             "Found!",
-            "findAlert(input: $input) { __typename ... on Alert { title } ... on Campaign { name } }"
+            "findOrder(input: $input) { __typename ... on Order { title } ... on Customer { name } }"
         );
 
         train
             .Should()
             .Contain(
                 """
-                export type FindAlertResult = {
-                  __typename: "Alert";
-                  title: string;
-                } | {
-                  __typename: "Campaign";
-                  /** The campaign's name. */
+                export type FindOrderResult = {
+                  __typename: "Customer";
+                  /** The customer's name. */
                   name: string;
+                } | {
+                  __typename: "Order";
+                  title: string;
                 };
                 """
             );
@@ -174,13 +174,13 @@ public class SelectionTypesTests
     [Test]
     public void A_union_member_the_document_leaves_out_still_arrives_as_its_typename()
     {
-        Train("Found!", "findAlert(input: $input) { __typename ... on Alert { title } }")
+        Train("Found!", "findOrder(input: $input) { __typename ... on Order { title } }")
             .Should()
             .Contain(
                 """
+                export type FindOrderResult = {
+                  __typename: "Customer";
                 } | {
-                  __typename: "Campaign";
-                };
                 """,
                 "a value of a member with no fragment still arrives, with only its __typename"
             );
@@ -189,11 +189,11 @@ public class SelectionTypesTests
     [Test]
     public void An_interface_answer_is_one_object_per_implementation()
     {
-        Train("Named!", "findAlert(input: $input) { __typename name ... on Person { age } }")
+        Train("Named!", "findOrder(input: $input) { __typename name ... on Person { age } }")
             .Should()
             .Contain(
                 """
-                export type FindAlertResult = {
+                export type FindOrderResult = {
                   __typename: "Person";
                   name: string;
                   age: number;
@@ -208,11 +208,11 @@ public class SelectionTypesTests
     [Test]
     public void An_object_the_document_selects_only_by_typename_is_its_typename()
     {
-        Train("Empty!", "findAlert(input: $input) { __typename }")
+        Train("Empty!", "findOrder(input: $input) { __typename }")
             .Should()
             .Contain(
                 """
-                export type FindAlertResult = {
+                export type FindOrderResult = {
                   __typename: "Empty";
                 };
                 """
@@ -222,7 +222,7 @@ public class SelectionTypesTests
     [Test]
     public void An_enum_in_an_answer_is_imported_from_the_types_a_client_sends()
     {
-        var train = Train("Alert!", "findAlert(input: $input) { level }");
+        var train = Train("Order!", "findOrder(input: $input) { level }");
 
         train
             .Should()
@@ -233,7 +233,7 @@ public class SelectionTypesTests
     [Test]
     public void An_alias_names_its_key()
     {
-        Train("Alert!", "findAlert(input: $input) { heading: title }")
+        Train("Order!", "findOrder(input: $input) { heading: title }")
             .Should()
             .Contain("  heading: string;")
             .And.NotContain("  title:");
@@ -242,12 +242,12 @@ public class SelectionTypesTests
     [Test]
     public void A_document_selecting_a_field_the_types_do_not_hold_is_refused()
     {
-        var render = () => Render("Alert!", "findAlert(input: $input) { colour }");
+        var render = () => Render("Order!", "findOrder(input: $input) { colour }");
 
         render
             .Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*findAlert*Alert.colour*Export the manifest again*");
+            .WithMessage("*findOrder*Order.colour*Export the manifest again*");
     }
 
     [Test]
@@ -276,7 +276,7 @@ public class SelectionTypesTests
     }
 
     private static string Train(string answer, string selection) =>
-        Render(answer, selection).Single(f => f.Path == "trains/findAlert.g.ts").Text;
+        Render(answer, selection).Single(f => f.Path == "trains/findOrder.g.ts").Text;
 
     private static IReadOnlyList<ClientFile> Render(string answer, string selection) =>
         new ClientGenerator(new FakeNodeRunner()).Render(
@@ -287,7 +287,7 @@ public class SelectionTypesTests
                     [
                         new ClientManifestTrain
                         {
-                            Field = "findAlert",
+                            Field = "findOrder",
                             Root = "query",
                             Answer = answer,
                             Documents =
@@ -295,12 +295,12 @@ public class SelectionTypesTests
                                 new ClientManifestDocument
                                 {
                                     Id =
-                                        "trax_train_query__findAlert_"
+                                        "trax_train_query__findOrder_"
                                         + new string('a', 64)
                                         + new string('b', 16),
-                                    Operation = "findAlert",
+                                    Operation = "findOrder",
                                     Document =
-                                        "query FindAlert($input: FindInput!) { discover { "
+                                        "query FindOrder($input: FindInput!) { discover { "
                                         + selection
                                         + " } }",
                                 },

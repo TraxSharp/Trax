@@ -85,20 +85,20 @@ public class MachineDocumentRegistryTests
     [Test]
     public async Task A_stored_client_document_of_any_version_is_run_once_it_passes_and_a_collected_one_is_outdated()
     {
-        var own = ClientDocuments.IdOf("AlertCard", "query AlertCard { b }");
-        var older = ClientDocuments.IdOf("AlertCard", "query AlertCard { a }");
-        var collected = ClientDocuments.IdOf("AlertCard", "query AlertCard { c }");
+        var own = ClientDocuments.IdOf("OrderCard", "query OrderCard { b }");
+        var older = ClientDocuments.IdOf("OrderCard", "query OrderCard { a }");
+        var collected = ClientDocuments.IdOf("OrderCard", "query OrderCard { c }");
         var registry = Registry();
         registry.Publish(
             [
                 new ClientDocument(
                     own,
-                    "query AlertCard { b }",
-                    "AlertCard",
-                    "client document 'AlertCard'"
+                    "query OrderCard { b }",
+                    "OrderCard",
+                    "client document 'OrderCard'"
                 ),
             ],
-            new Dictionary<string, int> { ["trax_client_AlertCard"] = 3 },
+            new Dictionary<string, int> { ["trax_client_OrderCard"] = 3 },
             new Dictionary<string, StoredMachineDocument>
             {
                 [own] = new(3, true),

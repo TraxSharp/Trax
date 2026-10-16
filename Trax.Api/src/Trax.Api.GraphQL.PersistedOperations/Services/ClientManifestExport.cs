@@ -124,12 +124,15 @@ internal static class ClientManifestExport
                     Document = d.Text,
                 })
                 .ToList(),
+            // The types of the fields a train's document left out are listed too, so a client document may select
+            // them.
             Types = DocumentTypes.Sdl(
                 schema,
                 documents
                     .Select(d => d.Text)
                     .Concat(trainDocuments.Select(d => d.Text))
-                    .Concat(progressDocuments.Select(d => d.Text))
+                    .Concat(progressDocuments.Select(d => d.Text)),
+                trainDocuments.SelectMany(d => d.LeftOut)
             ),
         };
     }

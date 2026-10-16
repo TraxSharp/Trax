@@ -65,42 +65,42 @@ public class RecordNoteJunction : Junction<RecordNoteInput, RecordNoteOutput>
 }
 
 // A query train answering with an entity graph that refers back to itself, as an EF model with navigations both ways
-// does: the alert's campaign lists the campaign's alerts. Its generated document leaves the back-reference out, so a
+// does: the order's customer lists the customer's orders. Its generated document leaves the back-reference out, so a
 // host exposing it starts.
 
-public record FindAlertInput
+public record FindOrderInput
 {
     public int Id { get; init; }
 }
 
-public record AlertOutput
+public record OrderOutput
 {
     public string Title { get; init; } = "";
-    public CampaignOutput Campaign { get; init; } = new();
+    public CustomerOutput Customer { get; init; } = new();
 }
 
-public record CampaignOutput
+public record CustomerOutput
 {
     public string Name { get; init; } = "";
-    public AlertOutput[] Alerts { get; init; } = [];
+    public OrderOutput[] Orders { get; init; } = [];
 }
 
-public interface IFindAlert : IServiceTrain<FindAlertInput, AlertOutput> { }
+public interface IFindOrder : IServiceTrain<FindOrderInput, OrderOutput> { }
 
 [TraxAllowAnonymous]
-[TraxQuery(Description = "An alert and its campaign, whose alerts lead back to the alert.")]
-public class FindAlert : ServiceTrain<FindAlertInput, AlertOutput>, IFindAlert
+[TraxQuery(Description = "An order and its customer, whose orders lead back to the order.")]
+public class FindOrder : ServiceTrain<FindOrderInput, OrderOutput>, IFindOrder
 {
-    protected override Task<Either<Exception, AlertOutput>> Junctions() =>
-        Chain<FindAlertJunction>().Resolve();
+    protected override Task<Either<Exception, OrderOutput>> Junctions() =>
+        Chain<FindOrderJunction>().Resolve();
 }
 
-public class FindAlertJunction : Junction<FindAlertInput, AlertOutput>
+public class FindOrderJunction : Junction<FindOrderInput, OrderOutput>
 {
-    public override Task<AlertOutput> Run(FindAlertInput input)
+    public override Task<OrderOutput> Run(FindOrderInput input)
     {
-        var alert = new AlertOutput { Title = $"Alert {input.Id}" };
-        var campaign = new CampaignOutput { Name = "Housing", Alerts = [alert] };
-        return Task.FromResult(alert with { Campaign = campaign });
+        var order = new OrderOutput { Title = $"Order {input.Id}" };
+        var customer = new CustomerOutput { Name = "Ada", Orders = [order] };
+        return Task.FromResult(order with { Customer = customer });
     }
 }

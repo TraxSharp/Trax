@@ -122,24 +122,24 @@ public class TrainDocumentsE2ETests
     public async Task A_host_exposing_a_back_reference_starts_and_serves_the_train()
     {
         var id = (await TrainIdsAsync()).Single(i =>
-            i.StartsWith("trax_train_query__findAlert_", StringComparison.Ordinal)
+            i.StartsWith("trax_train_query__findOrder_", StringComparison.Ordinal)
         );
 
         using var answer = await _host.PostPersistedAsync(id, new { input = new { id = 7 } });
 
-        var alert = answer
+        var order = answer
             .RootElement.GetProperty("data")
             .GetProperty("discover")
-            .GetProperty("findAlert");
-        alert
+            .GetProperty("findOrder");
+        order
             .GetProperty("title")
             .GetString()
             .Should()
-            .Be("Alert 7", MachineDocumentOps.Show(answer));
-        var campaign = alert.GetProperty("campaign");
-        campaign.GetProperty("name").GetString().Should().Be("Housing");
-        campaign
-            .TryGetProperty("alerts", out _)
+            .Be("Order 7", MachineDocumentOps.Show(answer));
+        var customer = order.GetProperty("customer");
+        customer.GetProperty("name").GetString().Should().Be("Ada");
+        customer
+            .TryGetProperty("orders", out _)
             .Should()
             .BeFalse("the back-reference is left out of the generated document, per " + Adr);
     }
@@ -167,7 +167,7 @@ public class TrainDocumentsE2ETests
 
             await act.Should()
                 .ThrowAsync<InvalidOperationException>()
-                .WithMessage("*IFindAlert*refused by this host's own validation*");
+                .WithMessage("*IFindOrder*refused by this host's own validation*");
         }
         finally
         {

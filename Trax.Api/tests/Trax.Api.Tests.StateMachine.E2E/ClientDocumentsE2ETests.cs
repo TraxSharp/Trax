@@ -26,11 +26,14 @@ public class ClientDocumentsE2ETests
     private const string Adr =
         "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md";
 
-    private const string AlertCard =
-        "query AlertCard($input: FindAlertInput!) { discover { findAlert(input: $input) { title campaign { name } } } }";
+    // As trax client prints it: the operation, then each fragment it spreads.
+    private const string OrderCard =
+        "query OrderCard($input: FindOrderInput!) {\n  discover {\n    findOrder(input: $input) {\n      title\n"
+        + "      customer {\n        ...CustomerName\n      }\n    }\n  }\n}\n\n"
+        + "fragment CustomerName on CustomerOutput {\n  name\n}\n";
 
-    private const string AlertCardV2 =
-        "query AlertCard($input: FindAlertInput!) { discover { findAlert(input: $input) { title } } }";
+    private const string OrderCardV2 =
+        "query OrderCard($input: FindOrderInput!) { discover { findOrder(input: $input) { title } } }";
 
     private const string NoteIt =
         "mutation NoteIt($input: RecordNoteInput!) { dispatch { recordNote(input: $input) { output { text } } } }";
@@ -48,35 +51,35 @@ public class ClientDocumentsE2ETests
     [Test]
     public async Task A_client_document_registered_at_boot_runs_by_id()
     {
-        await using var host = await HostAsync("trax_sm_client_docs_run", [AlertCard, NoteIt]);
+        await using var host = await HostAsync("trax_sm_client_docs_run", [OrderCard, NoteIt]);
 
         using var answer = await host.Host.PostPersistedAsync(
-            ClientDocuments.IdOf("AlertCard", AlertCard),
+            ClientDocuments.IdOf("OrderCard", OrderCard),
             new { input = new { id = 7 } }
         );
 
-        var alert = answer
+        var order = answer
             .RootElement.GetProperty("data")
             .GetProperty("discover")
-            .GetProperty("findAlert");
-        alert
+            .GetProperty("findOrder");
+        order
             .GetProperty("title")
             .GetString()
             .Should()
-            .Be("Alert 7", MachineDocumentOps.Show(answer));
-        alert.GetProperty("campaign").GetProperty("name").GetString().Should().Be("Housing");
-        alert.EnumerateObject().Select(p => p.Name).Should().Equal("title", "campaign");
+            .Be("Order 7", MachineDocumentOps.Show(answer));
+        order.GetProperty("customer").GetProperty("name").GetString().Should().Be("Ada");
+        order.EnumerateObject().Select(p => p.Name).Should().Equal("title", "customer");
     }
 
     [Test]
     public async Task The_same_text_sent_raw_is_still_refused()
     {
-        await using var host = await HostAsync("trax_sm_client_docs_raw", [AlertCard]);
+        await using var host = await HostAsync("trax_sm_client_docs_raw", [OrderCard]);
 
         var client = host.Host.GetTestServer().CreateClient();
         var response = await client.PostAsJsonAsync(
             "/trax/graphql",
-            new { query = AlertCard, variables = new { input = new { id = 7 } } }
+            new { query = OrderCard, variables = new { input = new { id = 7 } } }
         );
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
@@ -133,7 +136,7 @@ public class ClientDocumentsE2ETests
         "*client document 'Two'*runs 2 trains*"
     )]
     [TestCase(
-        "query Gone($input: FindAlertInput!) { discover { findAlert(input: $input) { colour } } }",
+        "query Gone($input: FindOrderInput!) { discover { findOrder(input: $input) { colour } } }",
         "*client document 'Gone'*refused by this host's own validation*"
     )]
     public async Task A_document_the_host_cannot_serve_refuses_the_start_naming_it(
@@ -149,11 +152,11 @@ public class ClientDocumentsE2ETests
     [Test]
     public async Task A_document_past_the_hosts_depth_refuses_the_start()
     {
-        var act = () => HostAsync("trax_sm_client_docs_depth", [AlertCard], maxExecutionDepth: 3);
+        var act = () => HostAsync("trax_sm_client_docs_depth", [OrderCard], maxExecutionDepth: 3);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*client document 'AlertCard'*refused by this host's own validation*");
+            .WithMessage("*client document 'OrderCard'*refused by this host's own validation*");
     }
 
     [Test]
@@ -172,8 +175,8 @@ public class ClientDocumentsE2ETests
     public async Task A_version_another_node_registered_runs_on_this_one()
     {
         const string database = "trax_sm_client_docs_versions";
-        var v1 = DocumentsFile(("AlertCard", AlertCard));
-        var v2 = DocumentsFile(("AlertCard", AlertCardV2));
+        var v1 = DocumentsFile(("OrderCard", OrderCard));
+        var v2 = DocumentsFile(("OrderCard", OrderCardV2));
         await E2EHost.RecreateDatabaseAsync(database);
         var a = await E2EHost.StartAsync(database, new CountingCharge(), Options(v1, "a"));
         IHost? b = null;
@@ -182,19 +185,19 @@ public class ClientDocumentsE2ETests
             b = await E2EHost.StartAsync(database, new CountingCharge(), Options(v2, "b"));
             using (
                 var old = await b.PostPersistedAsync(
-                    ClientDocuments.IdOf("AlertCard", AlertCard),
+                    ClientDocuments.IdOf("OrderCard", OrderCard),
                     new { input = new { id = 1 } }
                 )
             )
                 old.RootElement.GetProperty("data")
                     .GetProperty("discover")
-                    .GetProperty("findAlert")
-                    .GetProperty("campaign")
+                    .GetProperty("findOrder")
+                    .GetProperty("customer")
                     .GetProperty("name")
                     .GetString()
                     .Should()
                     .Be(
-                        "Housing",
+                        "Ada",
                         "a page built before the frontend's deploy keeps working on a node with the new "
                             + "documents, per "
                             + Adr
@@ -202,7 +205,7 @@ public class ClientDocumentsE2ETests
 
             // Node A started before B registered v2: it answers SERVER_OUTDATED until its next read of the store,
             // then runs it.
-            var newer = ClientDocuments.IdOf("AlertCard", AlertCardV2);
+            var newer = ClientDocuments.IdOf("OrderCard", OrderCardV2);
             string? title = null;
             var ran = await E2EWait.UntilAsync(async () =>
             {
@@ -216,7 +219,7 @@ public class ClientDocumentsE2ETests
                 )
                 {
                     title = data.GetProperty("discover")
-                        .GetProperty("findAlert")
+                        .GetProperty("findOrder")
                         .GetProperty("title")
                         .GetString();
                     return true;
@@ -228,7 +231,7 @@ public class ClientDocumentsE2ETests
                 return false;
             });
             ran.Should().BeTrue("node A runs v2 once it has read the store again");
-            title.Should().Be("Alert 2");
+            title.Should().Be("Order 2");
         }
         finally
         {
@@ -241,8 +244,8 @@ public class ClientDocumentsE2ETests
     [Test]
     public async Task A_client_id_no_node_registered_is_outdated()
     {
-        await using var host = await HostAsync("trax_sm_client_docs_unknown", [AlertCard]);
-        var made = ClientDocuments.IdOf("AlertCard", AlertCard + " ");
+        await using var host = await HostAsync("trax_sm_client_docs_unknown", [OrderCard]);
+        var made = ClientDocuments.IdOf("OrderCard", OrderCard + " ");
 
         string[] codes = [];
         await E2EWait.UntilAsync(async () =>
