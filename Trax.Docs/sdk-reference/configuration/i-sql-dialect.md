@@ -1,6 +1,6 @@
 ---
 title: ISqlDialect
-description: Reference for ISqlDialect, which holds the SQL that differs between the Postgres and SQLite providers, including row-count estimates and transient errors.
+description: Reference for ISqlDialect, the SQL that differs between Postgres and SQLite, transient errors, and whether the database takes one writer.
 type: reference
 area: data
 parent: Configuration
@@ -24,6 +24,7 @@ namespace Trax.Effect.Data.Services.SqlDialect;
 public interface ISqlDialect
 {
     FormattableString TryAcquireLeaderLock(string lockName);
+    bool HasSingleWriter => false;
     string ClaimWorkQueueEntry();
     string LockSubject() => "SELECT {0}";
     string DequeueBackgroundJobs();
@@ -37,6 +38,18 @@ public interface ISqlDialect
 ## Behavior
 
 The SQL members return SQL for the caller to run, with EF-style `{0}` parameter placeholders. The dispatch members are what the scheduler's claim and load run. Both pass over an entry whose manifest is disabled unless the entry is an explicit trigger (`WorkQueue.IsExplicitTrigger`); see [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher#loadqueuedjobsjunction). `IsUniqueViolation` and `IsTransient` classify a failure instead of returning SQL. This page documents the members meant for other callers.
+
+### HasSingleWriter
+
+Whether the database takes one writer at a time across every connection. A transaction held open on such a database blocks every other connection's write until it ends, and a waiting writer fails after the busy timeout.
+
+| Provider | Value |
+|----------|-------|
+| Postgres | `false` |
+| SQLite | `true`: writes are serialized at the file |
+| A custom implementation that does not override it | `false` (the interface default) |
+
+The scheduler reads it twice. Its manifest manager runs with no outer transaction and no leader lock, since one process is the only writer anyway, and the [local worker pool](/docs/sdk-reference/scheduler-api/configure-local-workers) starts one worker unless `WorkerCount` is set.
 
 ### EstimateRowCount
 

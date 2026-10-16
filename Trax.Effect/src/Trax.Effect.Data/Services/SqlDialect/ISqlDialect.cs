@@ -22,6 +22,21 @@ public interface ISqlDialect
     FormattableString TryAcquireLeaderLock(string lockName);
 
     /// <summary>
+    /// Whether the database takes one writer at a time, across every connection, as SQLite does
+    /// at the file. Such a provider has no leader lock (<see cref="TryAcquireLeaderLock"/> always
+    /// succeeds) and nothing gains from concurrent writers.
+    /// </summary>
+    /// <remarks>
+    /// A caller that would hold a transaction open while other connections write, as the
+    /// scheduler's leader cycle does on Postgres, must not do so here: the other connections wait
+    /// for the busy timeout and fail. The scheduler reads this to run its manifest manager with no
+    /// outer transaction and to start one local worker by default.
+    ///
+    /// Defaults to <c>false</c>, which keeps this from breaking implementations outside this repo.
+    /// </remarks>
+    bool HasSingleWriter => false;
+
+    /// <summary>
     /// Returns SQL that selects a single work queue entry by ID with status 'queued',
     /// using provider-appropriate locking to prevent concurrent claims.
     /// Parameter <c>{0}</c> is the work queue entry ID.

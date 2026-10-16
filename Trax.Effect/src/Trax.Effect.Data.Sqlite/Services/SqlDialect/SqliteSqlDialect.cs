@@ -29,6 +29,12 @@ internal class SqliteSqlDialect : ISqlDialect
     public FormattableString TryAcquireLeaderLock(string lockName) => $"""SELECT 1 AS "Value" """;
 
     /// <summary>
+    /// SQLite serializes writes at the file, so a transaction held open blocks every other
+    /// connection's write until it ends.
+    /// </summary>
+    public bool HasSingleWriter => true;
+
+    /// <summary>
     /// <c>SQLITE_CONSTRAINT</c> with the <c>PRIMARYKEY</c> or <c>UNIQUE</c> extended code. The
     /// primary code alone is not enough: a <c>CHECK</c>, <c>NOT NULL</c> or foreign key failure
     /// shares it.

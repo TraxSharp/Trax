@@ -273,6 +273,7 @@ namespace Trax.Effect.Data.Services.SqlDialect
 {
     public interface ISqlDialect
     {
+        bool HasSingleWriter { get; }
         string ClaimWorkQueueEntry();
         string DequeueBackgroundJobs();
         string? EstimateRowCount();

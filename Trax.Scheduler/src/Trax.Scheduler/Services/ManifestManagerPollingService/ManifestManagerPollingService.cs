@@ -21,6 +21,10 @@ namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 /// only one server instance runs the manifest evaluation cycle at a time,
 /// preventing duplicate WorkQueue entries in multi-server deployments.
 ///
+/// With SQLite, which takes one writer at a time (<see cref="ISqlDialect.HasSingleWriter"/>), runs
+/// the train with no outer transaction. The train writes its own run through other connections, so
+/// a transaction held open here would make them wait for the busy timeout and fail.
+///
 /// With InMemory, runs the train directly without transactions or advisory locks.
 /// The resolved <see cref="IManifestManagerTrain"/> is <see cref="InMemoryManifestManagerTrain"/>
 /// which dispatches jobs inline via <see cref="Services.JobSubmitter.InMemoryJobSubmitter"/>.
@@ -57,7 +61,8 @@ internal class ManifestManagerPollingService(
 
     /// <summary>
     /// One polling cycle: takes the leader lock in a transaction, runs the ManifestManager inside
-    /// it, and commits. Internal so a test can drive the real leader path.
+    /// it, and commits. On a single-writer database it runs the train with no transaction instead.
+    /// Internal so a test can drive the real path.
     /// </summary>
     internal async Task RunManifestManager(CancellationToken cancellationToken)
     {
@@ -73,8 +78,9 @@ internal class ManifestManagerPollingService(
 
             // Advisory lock: single-leader election for manifest evaluation.
             // Prevents duplicate WorkQueue entries when multiple servers poll simultaneously.
-            // InMemory doesn't support transactions or advisory locks — run without lock.
-            if (configuration.HasDatabaseProvider)
+            // InMemory has no transactions or advisory locks, and a single-writer database (SQLite)
+            // has no leader to elect: both run without the lock.
+            if (configuration.HasDatabaseProvider && !sqlDialect!.HasSingleWriter)
             {
                 var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
 
@@ -82,7 +88,7 @@ internal class ManifestManagerPollingService(
 
                 var acquired = await ((DbContext)dataContext)
                     .Database.SqlQuery<bool>(
-                        sqlDialect!.TryAcquireLeaderLock("trax_manifest_manager")
+                        sqlDialect.TryAcquireLeaderLock("trax_manifest_manager")
                     )
                     .FirstAsync(cancellationToken);
 
@@ -113,6 +119,10 @@ internal class ManifestManagerPollingService(
                 logger.LogDebug("ManifestManager polling cycle starting");
                 await train.Run(Unit.Default, cancellationToken);
                 logger.LogDebug("ManifestManager polling cycle completed");
+
+                // Nothing is held with no transaction open, but flushing keeps the paths alike.
+                if (scope.ServiceProvider.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
+                    await outcomeEvents.FlushAsync();
             }
         }
         catch (Exception ex)

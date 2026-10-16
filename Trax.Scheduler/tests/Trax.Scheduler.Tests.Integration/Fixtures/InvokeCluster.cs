@@ -24,11 +24,9 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
-using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.JobRunner;
-using Trax.Scheduler.Trains.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Integration.Fixtures;
 
@@ -164,7 +162,7 @@ public sealed class InvokeCluster : IAsyncDisposable
         });
         configure?.Invoke(services);
 
-        var host = new ClusterHost(services.BuildServiceProvider(), held, Store);
+        var host = new ClusterHost(services.BuildServiceProvider(), held);
         _hosts.Add(host);
 
         // Read now, while the host is up: a test may dispose a host before the cluster's last check.
@@ -247,8 +245,7 @@ public sealed class HeldSubmitter(HeldJobs held) : IJobSubmitter
 }
 
 /// <summary>One host of an <see cref="InvokeCluster"/>.</summary>
-public sealed class ClusterHost(ServiceProvider services, HeldJobs held, ClusterStore store)
-    : IAsyncDisposable
+public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyncDisposable
 {
     public ServiceProvider Services => services;
 
@@ -346,22 +343,11 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held, Cluster
     }
 
     /// <summary>
-    /// One manifest manager cycle: the timeouts, the reapers, and their lifecycle events once it commits. On
-    /// Postgres through the polling service's leader path; on SQLite, which has no leader lock to take, the train
-    /// runs in a scope of its own and its deferred events are flushed after it, as the polling service does.
+    /// One manifest manager cycle through the polling service: the timeouts, the reapers, and their lifecycle
+    /// events once it commits.
     /// </summary>
     public async Task RunManifestManager()
     {
-        if (store == ClusterStore.Sqlite)
-        {
-            using var scope = services.CreateScope();
-            await scope
-                .ServiceProvider.GetRequiredService<IManifestManagerTrain>()
-                .Run(Unit.Default);
-            await scope.ServiceProvider.GetRequiredService<DeferredOutcomeEvents>().FlushAsync();
-            return;
-        }
-
         var polling = new ManifestManagerPollingService(
             services,
             services.GetRequiredService<SchedulerConfiguration>(),
