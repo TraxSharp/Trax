@@ -73,7 +73,7 @@ internal sealed partial class ClientGenerator
         var names = new Names();
         foreach (var name in RuntimeNames)
             names.Claim(name, "the client's runtime");
-        var types = new SdlTypes(ParseTypes(manifest.Types));
+        var types = new SdlTypes(ParseTypes(manifest.Types), manifest.FilterInputs);
 
         var index = new StringBuilder(Header).Append("import \"./format.g\";\n");
         index.Append(

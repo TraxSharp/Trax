@@ -10,11 +10,15 @@ namespace Trax.Cli.Clients;
 /// <summary>One <c>.graphql</c> file a frontend wrote, by the path it is named under and its text.</summary>
 internal sealed record ClientDocumentFile(string Source, string Text);
 
-/// <summary>A train a client document selects: its manifest entry, its field, and the path to its value.</summary>
+/// <summary>
+/// A train or query model a client document selects: its manifest entry (a query model's written as a train's, under
+/// the query root), its field, the path to its value, and whether it is a query model.
+/// </summary>
 internal sealed record ClientTrainUse(
     ClientManifestTrain Train,
     GraphQLField Field,
-    IReadOnlyList<string> Path
+    IReadOnlyList<string> Path,
+    bool QueryModel = false
 );
 
 /// <summary>One operation a frontend wrote, checked, with the text and id its host registers it under.</summary>
@@ -31,8 +35,9 @@ internal sealed record ClientOperation(
 /// <summary>
 /// The <c>.graphql</c> files a frontend wrote, read and checked against the host's client manifest the way the host
 /// checks them again at startup: one named query or mutation per file, its root <c>discover</c> or <c>dispatch</c>,
-/// under it only the manifest's trains and their namespaces, a mutation exactly one train, no directive; every field,
-/// argument, variable and fragment as the manifest's types allow. A file of fragments only holds named fragments any
+/// under it only the manifest's trains, its query models (in a query) and their namespaces, a mutation exactly one
+/// train, no directive, no variable of a filter or sort input; every field, argument, variable and fragment as the
+/// manifest's types allow. A file of fragments only holds named fragments any
 /// operation may spread. Each refusal names the file, line and column.
 /// </summary>
 internal sealed class ClientDocumentSet
@@ -277,10 +282,23 @@ internal sealed class ClientDocumentSet
             v => v,
             StringComparer.Ordinal
         );
+        foreach (var (variable, definition) in variables)
+            if (
+                types.NameOf(definition.Type) is { } typeName
+                && HoldsFilterInput(types, manifest.FilterInputs, typeName, [])
+            )
+                errors.Add(
+                    At(
+                        file,
+                        definition,
+                        $"'{name}' declares '${variable}' as {typeName}, which is or holds a filter or sort input; write "
+                            + "the filter in the document and pass only its values as variables."
+                    )
+                );
         var scope = new Scope(file, variables);
         checker.Begin(operation);
         var trains = new List<ClientTrainUse>();
-        var trainsOf = manifest.Trains.Where(t => t.Root == rootKind).ToList();
+        var trainsOf = Reachable(manifest, rootKind);
         foreach (var selection in top.SelectionSet?.Selections ?? [])
         {
             if (selection is not GraphQLField field)
@@ -296,21 +314,26 @@ internal sealed class ClientDocumentSet
             }
             var fieldName = field.Name.StringValue;
             if (
-                trainsOf.FirstOrDefault(t => t.Namespace is null && t.Field == fieldName) is
-                { } train
+                trainsOf.FirstOrDefault(t =>
+                    t.Train.Namespace is null && t.Train.Field == fieldName
+                )
+                    is var (train, queryModel)
+                && train is not null
             )
             {
-                trains.Add(checker.Train(scope, train, field, [root, Key(field)]));
+                trains.Add(checker.Train(scope, train, field, [root, Key(field)], queryModel));
                 continue;
             }
-            var inNamespace = trainsOf.Where(t => t.Namespace == fieldName).ToList();
+            var inNamespace = trainsOf.Where(t => t.Train.Namespace == fieldName).ToList();
             if (inNamespace.Count == 0)
             {
                 errors.Add(
                     At(
                         file,
                         field,
-                        $"'{root}.{fieldName}' is no train or namespace the host exposes."
+                        mutation && IsQueryModel(manifest, null, fieldName)
+                            ? $"'{root}.{fieldName}' is a query model; a mutation cannot hold one."
+                            : $"'{root}.{fieldName}' is no train, query model or namespace the host exposes."
                     )
                 );
                 continue;
@@ -330,27 +353,34 @@ internal sealed class ClientDocumentSet
             {
                 if (
                     inner is not GraphQLField trainField
-                    || inNamespace.FirstOrDefault(t => t.Field == trainField.Name.StringValue)
-                        is not { } nsTrain
+                    || inNamespace.FirstOrDefault(t => t.Train.Field == trainField.Name.StringValue)
+                        is not
+                        ({ } nsTrain, var nsQueryModel)
                 )
                 {
                     errors.Add(
                         At(
                             file,
                             inner,
-                            $"selects something other than a train under the namespace '{fieldName}'."
+                            $"selects something other than a train or query model under the namespace '{fieldName}'."
                         )
                     );
                     continue;
                 }
                 trains.Add(
-                    checker.Train(scope, nsTrain, trainField, [root, fieldName, Key(trainField)])
+                    checker.Train(
+                        scope,
+                        nsTrain,
+                        trainField,
+                        [root, fieldName, Key(trainField)],
+                        nsQueryModel
+                    )
                 );
             }
         }
         if (trains.Count == 0 && errors.Count == before)
-            errors.Add(At(file, operation, $"'{name}' selects no train."));
-        if (mutation && trains.Count > 1)
+            errors.Add(At(file, operation, $"'{name}' selects no train or query model."));
+        if (mutation && trains.Count(t => !t.QueryModel) > 1)
             errors.Add(
                 At(
                     file,
@@ -371,6 +401,54 @@ internal sealed class ClientDocumentSet
         return errors.Count == before
             ? new ClientOperation(name, file.Source, operation, root, trains, "", "")
             : null;
+    }
+
+    /// <summary>
+    /// What a document under <paramref name="rootKind"/> may select: the manifest's trains under that root and, in a
+    /// query, its query models, each written as a train's entry.
+    /// </summary>
+    internal static IReadOnlyList<(ClientManifestTrain Train, bool QueryModel)> Reachable(
+        ClientManifest manifest,
+        string rootKind
+    ) =>
+        [
+            .. manifest.Trains.Where(t => t.Root == rootKind).Select(t => (t, false)),
+            .. rootKind == "query"
+                ? manifest.QueryModels.Select(q =>
+                    (
+                        new ClientManifestTrain
+                        {
+                            Field = q.Field,
+                            Root = "query",
+                            Namespace = q.Namespace,
+                            Answer = q.Answer,
+                            Arguments = q.Arguments,
+                            Requires = q.Requires,
+                        },
+                        true
+                    )
+                )
+                : [],
+        ];
+
+    private static bool IsQueryModel(ClientManifest manifest, string? ns, string field) =>
+        manifest.QueryModels.Any(q => q.Namespace == ns && q.Field == field);
+
+    // Whether an input type is, or holds at any depth, one the manifest names as a filter or sort input.
+    private static bool HoldsFilterInput(
+        SdlTypes types,
+        IReadOnlyList<string> filterInputs,
+        string name,
+        HashSet<string> seen
+    )
+    {
+        if (filterInputs.Contains(name, StringComparer.Ordinal))
+            return true;
+        if (!seen.Add(name) || types.Definition(name) is not GraphQLInputObjectTypeDefinition input)
+            return false;
+        return (input.Fields?.Items ?? []).Any(f =>
+            types.NameOf(f.Type) is { } inner && HoldsFilterInput(types, filterInputs, inner, seen)
+        );
     }
 
     private static string Key(GraphQLField field) =>
@@ -474,9 +552,11 @@ internal sealed class ClientDocumentSet
             Scope scope,
             ClientManifestTrain train,
             GraphQLField field,
-            IReadOnlyList<string> path
+            IReadOnlyList<string> path,
+            bool queryModel = false
         )
         {
+            var kind = queryModel ? "query model" : "train";
             var arguments = TrainArguments(train);
             foreach (var argument in field.Arguments?.Items ?? [])
             {
@@ -487,7 +567,7 @@ internal sealed class ClientDocumentSet
                         At(
                             scope.File,
                             argument,
-                            $"the train '{train.Field}' takes no argument '{argName}'."
+                            $"the {kind} '{train.Field}' takes no argument '{argName}'."
                         )
                     );
                     continue;
@@ -509,18 +589,18 @@ internal sealed class ClientDocumentSet
                         At(
                             scope.File,
                             field,
-                            $"the train '{train.Field}' requires the argument '{argName}'."
+                            $"the {kind} '{train.Field}' requires the argument '{argName}'."
                         )
                     );
 
-            var answer = SdlTypes.ParseType(train.Answer, $"the train '{train.Field}'");
+            var answer = SdlTypes.ParseType(train.Answer, $"the {kind} '{train.Field}'");
             if (answer is null)
                 throw new InvalidOperationException(
-                    $"The manifest does not say what the train '{train.Field}' answers with. Export the manifest "
+                    $"The manifest does not say what the {kind} '{train.Field}' answers with. Export the manifest "
                         + "again from the host."
                 );
             Selection(scope, field, answer, train.Field, []);
-            return new ClientTrainUse(train, field, path);
+            return new ClientTrainUse(train, field, path, queryModel);
         }
     }
 
@@ -794,15 +874,105 @@ internal sealed class ClientDocumentSet
                         );
                     break;
                 case GraphQLObjectValue obj:
+                    if (
+                        _types.Definition(Named(expected))
+                        is not GraphQLInputObjectTypeDefinition input
+                    )
+                    {
+                        if (Named(expected) != "Unknown")
+                            Errors.Add(
+                                At(
+                                    scope.File,
+                                    obj,
+                                    $"{where} takes {Print(expected)}, not an object."
+                                )
+                            );
+                        foreach (var field in obj.Fields ?? [])
+                            Value(
+                                scope,
+                                field.Value,
+                                new GraphQLNamedType(new GraphQLName("Unknown")),
+                                where
+                            );
+                        break;
+                    }
+                    var declared = (input.Fields?.Items ?? []).ToDictionary(
+                        f => f.Name.StringValue,
+                        StringComparer.Ordinal
+                    );
                     foreach (var field in obj.Fields ?? [])
+                    {
+                        var fieldName = field.Name.StringValue;
+                        if (!declared.TryGetValue(fieldName, out var inputField))
+                        {
+                            Errors.Add(
+                                At(
+                                    scope.File,
+                                    field,
+                                    $"{where} has no field '{fieldName}' in {input.Name.StringValue}."
+                                )
+                            );
+                            continue;
+                        }
                         Value(
                             scope,
                             field.Value,
-                            new GraphQLNamedType(new GraphQLName("Unknown")),
-                            where
+                            inputField.Type,
+                            $"'{fieldName}' of {input.Name.StringValue}"
+                        );
+                    }
+                    foreach (var (fieldName, inputField) in declared)
+                        if (
+                            inputField.Type is GraphQLNonNullType
+                            && inputField.DefaultValue is null
+                            && obj.Fields?.Any(f => f.Name.StringValue == fieldName) != true
+                        )
+                            Errors.Add(
+                                At(
+                                    scope.File,
+                                    obj,
+                                    $"{where} requires '{fieldName}' of {input.Name.StringValue}."
+                                )
+                            );
+                    break;
+                case GraphQLNullValue:
+                    if (expected is GraphQLNonNullType)
+                        Errors.Add(
+                            At(scope.File, value, $"{where} takes {Print(expected)}, not null.")
                         );
                     break;
+                default:
+                    if (Literal(value, expected) is { } refusal)
+                        Errors.Add(At(scope.File, value, $"{where} {refusal}"));
+                    break;
             }
+        }
+
+        // Why a scalar or enum literal is not a value of `expected`, or null when it is one or the type is not one the
+        // check knows (a custom scalar takes what its parser takes, which only the host knows).
+        private string? Literal(GraphQLValue value, GraphQLType expected)
+        {
+            var name = Named(expected);
+            if (_types.Definition(name) is GraphQLEnumTypeDefinition @enum)
+                return
+                    value is GraphQLEnumValue e
+                    && (@enum.Values?.Items ?? []).Any(v =>
+                        v.Name.StringValue == e.Name.StringValue
+                    )
+                    ? null
+                    : $"takes one of {name}'s values, not {Print(value)}.";
+            var fits = name switch
+            {
+                "Int" => value is GraphQLIntValue,
+                "Float" => value is GraphQLIntValue or GraphQLFloatValue,
+                "String" => value is GraphQLStringValue,
+                "ID" => value is GraphQLStringValue or GraphQLIntValue,
+                "Boolean" => value is GraphQLBooleanValue,
+                _ => true,
+            };
+            if (expected is GraphQLNonNullType { Type: GraphQLListType } or GraphQLListType)
+                fits = true;
+            return fits ? null : $"takes {Print(expected)}, not {Print(value)}.";
         }
 
         // Whether a variable of `given` (with or without a default) may be passed where `expected` is taken.

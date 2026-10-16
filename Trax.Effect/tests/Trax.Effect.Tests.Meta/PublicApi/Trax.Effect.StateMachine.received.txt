@@ -29,9 +29,11 @@ namespace Trax.Effect.StateMachine
     {
         public const int CurrentFormat = 3;
         public ClientManifest() { }
+        public System.Collections.Generic.IReadOnlyList<string> FilterInputs { get; init; }
         public int Format { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestMachine> Machines { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestDocument> Progress { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestQueryModel> QueryModels { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestTrain> Trains { get; init; }
         public string Types { get; init; }
         public static Trax.Effect.StateMachine.ClientManifest Read(string text) { }
@@ -60,6 +62,15 @@ namespace Trax.Effect.StateMachine
         public required string IrHash { get; init; }
         public Trax.Effect.StateMachine.ClientManifestRequirement? Requires { get; init; }
         public string IrText() { }
+    }
+    public sealed class ClientManifestQueryModel : System.IEquatable<Trax.Effect.StateMachine.ClientManifestQueryModel>
+    {
+        public ClientManifestQueryModel() { }
+        public string? Answer { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestArgument> Arguments { get; init; }
+        public required string Field { get; init; }
+        public string? Namespace { get; init; }
+        public Trax.Effect.StateMachine.ClientManifestRequirement? Requires { get; init; }
     }
     public sealed class ClientManifestRequirement : System.IEquatable<Trax.Effect.StateMachine.ClientManifestRequirement>
     {

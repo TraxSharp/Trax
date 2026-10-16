@@ -9,7 +9,8 @@ namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
 /// <c>trax client --documents</c> reads the <c>.graphql</c> files a frontend wrote, refuses one the host would refuse
-/// (anything but trains, an unknown field, a variable out of place, a directive, a fragment that cannot apply), types
+/// (anything but trains and query models, a filter or sort passed as a variable, an unknown field, a variable out of
+/// place, a directive, a fragment that cannot apply), types
 /// each operation's result from what it selects, and writes the <c>trax.documents.json</c> the host registers, under
 /// the ids the host gives the same text.
 /// <para>Enforces <c>Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md</c>.</para>
@@ -17,6 +18,9 @@ namespace Trax.Cli.Tests.UnitTests;
 [Property("adr", "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md")]
 public class ClientDocumentsGeneratorTests
 {
+    private const string Adr =
+        "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md";
+
     private const string Types = """
         enum Level {
           LOW
@@ -69,6 +73,37 @@ public class ClientDocumentsGeneratorTests
         }
 
         union Found = Order | Customer
+
+        type OrdersConnection {
+          nodes: [Order!]
+          pageInfo: PageInfo!
+          totalCount: Int!
+        }
+
+        input OrderFilterInput {
+          and: [OrderFilterInput!]
+          or: [OrderFilterInput!]
+          title: StringOperationFilterInput
+          level: LevelOperationFilterInput
+        }
+
+        input StringOperationFilterInput {
+          eq: String
+          in: [String]
+        }
+
+        input LevelOperationFilterInput {
+          eq: Level
+        }
+
+        input OrderSortInput {
+          title: SortEnumType
+        }
+
+        enum SortEnumType {
+          ASC
+          DESC
+        }
         """;
 
     private static readonly ClientManifest Manifest = new()
@@ -111,6 +146,49 @@ public class ClientDocumentsGeneratorTests
                 "mutation Other($input: NoteInput!) { dispatch { other(input: $input) { externalId } } }"
             ),
         ],
+        QueryModels =
+        [
+            new ClientManifestQueryModel
+            {
+                Field = "orders",
+                Answer = "OrdersConnection",
+                Arguments =
+                [
+                    new ClientManifestArgument { Name = "first", Type = "Int" },
+                    new ClientManifestArgument { Name = "after", Type = "String" },
+                    new ClientManifestArgument { Name = "where", Type = "OrderFilterInput" },
+                    new ClientManifestArgument { Name = "order", Type = "[OrderSortInput!]" },
+                ],
+                Requires = new ClientManifestRequirement
+                {
+                    RoleSets =
+                    [
+                        ["clerk"],
+                    ],
+                },
+            },
+            // A plain list, in a namespace a train shares.
+            new ClientManifestQueryModel
+            {
+                Field = "ledger",
+                Namespace = "runs",
+                Answer = "[Order!]!",
+            },
+            // The only thing in its namespace.
+            new ClientManifestQueryModel
+            {
+                Field = "catalog",
+                Namespace = "shop",
+                Answer = "[Order!]!",
+            },
+        ],
+        FilterInputs =
+        [
+            "LevelOperationFilterInput",
+            "OrderFilterInput",
+            "OrderSortInput",
+            "StringOperationFilterInput",
+        ],
         Types = Types,
     };
 
@@ -126,6 +204,86 @@ public class ClientDocumentsGeneratorTests
         """;
 
     #region What it writes
+
+    [Test]
+    public void A_document_selecting_a_query_model_returns_exactly_that()
+    {
+        var files = Render(
+            (
+                "src/orderList.graphql",
+                "query OrderList($level: Level, $after: String) { discover { orders(first: 2, after: $after, "
+                    + "where: { level: { eq: $level } }, order: [{ title: ASC }]) { totalCount nodes { title } } } }"
+            )
+        );
+        var module = Text(files, "documents/orderList.g.ts");
+
+        module
+            .Should()
+            .Contain(
+                "export function orderList(options: { level?: Level | null; after?: string | null } = {}): Promise<OrderListResult>"
+            )
+            .And.Contain("totalCount: number;")
+            .And.Contain("nodes: Array<{\n    title: string;\n  }> | null;")
+            .And.Contain("[\"discover\", \"orders\"]")
+            .And.Contain("holding one of the roles clerk");
+        Text(files, "types.g.ts")
+            .Should()
+            .Contain("export type Level")
+            .And.NotContain(
+                "OrderFilterInput",
+                "a filter is written in the document, so no variable has its type"
+            );
+        Json(files)
+            .GetProperty("documents")[0]
+            .GetProperty("name")
+            .GetString()
+            .Should()
+            .Be("OrderList");
+    }
+
+    [Test]
+    public void A_query_with_a_train_and_a_query_model_answers_both()
+    {
+        var module = Text(
+            Render(
+                (
+                    "src/both.graphql",
+                    "query Both($input: FindInput!) { discover { findOrder(input: $input) { title } "
+                        + "orders { totalCount } runs { ledger { title } } } }"
+                )
+            ),
+            "documents/both.g.ts"
+        );
+
+        module
+            .Should()
+            .Contain("findOrder: {")
+            .And.Contain("orders: {")
+            .And.Contain("ledger: Array<{");
+    }
+
+    [Test]
+    public void A_namespace_holding_only_query_models_resolves()
+    {
+        var render = () =>
+            Render(("src/shop.graphql", "query Shop { discover { shop { catalog { title } } } }"));
+
+        render.Should().NotThrow("a namespace counts when a query model is in it");
+    }
+
+    [Test]
+    public void The_editor_schema_holds_the_query_models_under_their_namespaces()
+    {
+        var schema = Text(Render(("src/orderCard.graphql", OrderCard)), "schema.graphql");
+
+        schema
+            .Should()
+            .Contain(
+                "orders(first: Int, after: String, where: OrderFilterInput, order: [OrderSortInput!]): OrdersConnection"
+            )
+            .And.Contain("ledger: [Order!]!")
+            .And.Contain("catalog: [Order!]!");
+    }
 
     [Test]
     public void A_document_selecting_a_subset_returns_exactly_that()
@@ -477,11 +635,11 @@ public class ClientDocumentsGeneratorTests
     )]
     [TestCase(
         "query A { discover { nothing { title } } }",
-        "*'discover.nothing' is no train or namespace*"
+        "*'discover.nothing' is no train, query model or namespace*"
     )]
     [TestCase(
         "query A { discover { runs { nothing { title } } } }",
-        "*other than a train under the namespace 'runs'*"
+        "*other than a train or query model under the namespace 'runs'*"
     )]
     [TestCase(
         "query A { discover { r: runs { findRun(input: { id: 1 }) { title } } } }",
@@ -804,6 +962,47 @@ public class ClientDocumentsGeneratorTests
         {
             Directory.Delete(dir, recursive: true);
         }
+    }
+
+    #endregion
+
+    #region Query models refused
+
+    [TestCase(
+        "mutation M { dispatch { orders { totalCount } } }",
+        "*src/a.graphql:1:*'dispatch.orders' is a query model; a mutation cannot hold one*"
+    )]
+    [TestCase(
+        "query Q($where: OrderFilterInput) { discover { orders(where: $where) { totalCount } } }",
+        "*src/a.graphql:1:*'$where' as OrderFilterInput*filter or sort input*"
+    )]
+    [TestCase(
+        "query Q($order: [OrderSortInput!]) { discover { orders(order: $order) { totalCount } } }",
+        "*src/a.graphql:1:*'$order' as OrderSortInput*filter or sort input*"
+    )]
+    [TestCase(
+        "query Q($title: StringOperationFilterInput) { discover { orders(where: { title: $title }) { totalCount } } }",
+        "*src/a.graphql:1:*'$title'*filter or sort input*"
+    )]
+    [TestCase(
+        "query Q { discover { runs { ledger(first: 2) { title } } } }",
+        "*src/a.graphql:1:*the query model 'ledger' takes no argument 'first'*"
+    )]
+    public void A_query_model_document_the_host_would_refuse_is_refused(string text, string message)
+    {
+        var render = () => Render(("src/a.graphql", text));
+
+        render.Should().Throw<InvalidOperationException>().WithMessage(message, "per " + Adr);
+    }
+
+    [TestCase("query Q { discover { orders(where: { colour: { eq: \"x\" } }) { totalCount } } }")]
+    [TestCase("query Q { discover { orders(where: { title: { eq: 5 } }) { totalCount } } }")]
+    [TestCase("query Q { discover { orders(order: [{ colour: ASC }]) { totalCount } } }")]
+    public void An_inline_filter_or_sort_the_types_do_not_hold_is_refused(string text)
+    {
+        var render = () => Render(("src/a.graphql", text));
+
+        render.Should().Throw<InvalidOperationException>().WithMessage("*src/a.graphql:1:*");
     }
 
     #endregion

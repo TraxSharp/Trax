@@ -35,9 +35,10 @@ Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMach
 | `TraxClientExport.Requested`, `TraxClientExport.Path` | Whether, and where to, the process was started to export, read from its command line when first used. `UsePostgres` and `UseSqlite` skip their migration when it is set; a host skips its own seeding the same way. The argument without a path throws an `ArgumentException` that says so where it is read. |
 | `TraxClientExport.PathIn(IReadOnlyList<string> args)` | The path `args` name after the argument, or null. The argument without a path throws. |
 | `ITraxStartupCheck` | Marks a hosted service that only checks configuration and the host's own types at startup and refuses a host that is wrong. An export runs every one of these and no other hosted service. Trax's own startup validators carry it, except the two that read the database or call a remote schema. |
-| `ClientManifest` | The file's content: `Format`, `Machines`, `Trains`, `Progress` and `Types`. `Progress` holds the [`runProgress`](/docs/sdk-reference/graphql-api/run-progress) query's and subscription's documents, and is empty when no train lets its starter follow it. `ClientManifest.Write(manifest)` gives its text, `ClientManifest.Read(text)` reads it. `ClientManifest.CurrentFormat` is the format this version writes and reads. |
+| `ClientManifest` | The file's content: `Format`, `Machines`, `Trains`, `QueryModels`, `FilterInputs`, `Progress` and `Types`. `FilterInputs` names the types in `Types` that are filter or sort inputs, which a client document writes in its text rather than passing as a variable. `Progress` holds the [`runProgress`](/docs/sdk-reference/graphql-api/run-progress) query's and subscription's documents, and is empty when no train lets its starter follow it. `ClientManifest.Write(manifest)` gives its text, `ClientManifest.Read(text)` reads it. `ClientManifest.CurrentFormat` is the format this version writes and reads. |
 | `ClientManifestMachine` | One exposed machine: `Id`, `IrHash`, `Ir` and its `Documents`. `Requires` is null: each event's own rule applies. `IrText()` gives the IR as canonical JSON, the bytes `IrHash` is the SHA-256 of. |
 | `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Answer` (the field's type as SDL writes it), `Arguments`, `Requires`, and `Progress`, whether it carries `[TraxRunProgress]`. It carries no document: a frontend reaches a train through a [client document](/docs/api/fetch-only-what-a-component-needs) it writes. |
+| `ClientManifestQueryModel` | One query model, a field under `discover`: its `Field`, `Namespace`, `Answer` (a connection when the model is paged, a list otherwise), `Arguments` (`first`, `after`, `where`, `order`, as the model turns them on) and `Requires`, what its entity's attributes ask of a caller. |
 | `ClientManifestArgument` | One argument of a train's field: its `Name`, its `Type` as SDL writes it (`StartRunInput!`), and its `Default` as GraphQL writes it, or null. |
 | `ClientManifestDocument` | One persisted document: the `Id` a client sends, its `Operation` and its `Document` text. |
 | `ClientManifestRequirement` | What a caller needs, as the train's attributes declare it: `Anonymous` (`[TraxAllowAnonymous]`), `RoleSets` (one per attribute naming roles; the caller holds a role of every set) and `Policies` (each of them). The server enforces it either way. |
@@ -52,8 +53,9 @@ Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMach
   migration refuses to start if it serves anyway, because it calls `app.Run()` rather than `RunTraxAsync`: its
   database was not migrated. The refusal names `RunTraxAsync`.
 - **Only what a client sends.** The manifest lists the documents the host generates (each exposed machine's, and
-  `runProgress`'s), never one under `operations`, and each exposed train's field and arguments. `Types` holds the SDL
-  of the types those documents reach, and every type an exposed train's arguments and answer reach, so a
+  `runProgress`'s), never one under `operations`, and each exposed train's and query model's field and arguments.
+  `Types` holds the SDL of the types those documents reach, and every type an exposed train's or query model's
+  arguments and answer reach, its filter and sort inputs included, so a
   [client document](/docs/api/fetch-only-what-a-component-needs) may select any of it; nothing else. The root operation types
   and every type a namespace field reaches (`dispatch`, `discover`, `machines` and the namespaces under them) are
   left out, since each lists every sibling operation, so the rest of the schema stays on the server. A train's

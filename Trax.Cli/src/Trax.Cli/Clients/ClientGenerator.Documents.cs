@@ -198,8 +198,8 @@ internal sealed partial class ClientGenerator
             )
             .Replace("\r\n", "\n") + "\n";
 
-    // The manifest's types plus the root and namespace types that hold each exposed train, so an editor checks and
-    // completes a document against what the host serves.
+    // The manifest's types plus the root and namespace types that hold each exposed train and query model, so an editor
+    // checks and completes a document against what the host serves.
     private static string EditorSchema(ClientManifest manifest)
     {
         var sb = new StringBuilder(
@@ -214,7 +214,7 @@ internal sealed partial class ClientGenerator
             }
         )
         {
-            var trains = manifest.Trains.Where(t => t.Root == kind).ToList();
+            var trains = ClientDocumentSet.Reachable(manifest, kind).Select(t => t.Train).ToList();
             if (trains.Count == 0)
                 continue;
             roots.Add((kind, rootType));

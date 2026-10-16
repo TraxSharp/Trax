@@ -40,8 +40,12 @@ internal sealed class SdlTypes
 
     private readonly Dictionary<string, ASTNode> _definitions = new(StringComparer.Ordinal);
 
-    public SdlTypes(GraphQLDocument sdl)
+    // The filter and sort inputs: a document writes them in its text, so no variable has one and none is exported.
+    private readonly HashSet<string> _written;
+
+    public SdlTypes(GraphQLDocument sdl, IEnumerable<string>? filterInputs = null)
     {
+        _written = new HashSet<string>(filterInputs ?? [], StringComparer.Ordinal);
         foreach (var definition in sdl.Definitions)
             if (definition is GraphQLTypeDefinition type and not GraphQLScalarTypeDefinition)
                 _definitions[type.Name.StringValue] = definition;
@@ -50,7 +54,7 @@ internal sealed class SdlTypes
     /// <summary>The names <see cref="Render"/> exports, in name order: every enum and input.</summary>
     public IEnumerable<string> Declared =>
         _definitions
-            .Where(d => IsDeclared(d.Value))
+            .Where(d => IsDeclared(d.Value) && !_written.Contains(d.Key))
             .Select(d => d.Key)
             .Order(StringComparer.Ordinal);
 
@@ -153,8 +157,8 @@ internal sealed class SdlTypes
         type is GraphQLNonNullType nonNull ? Bare(nonNull.Type) : $"{Bare(type)} | null";
 
     /// <summary>
-    /// The file every train imports the types it sends from: each enum and input in name order, each name claimed once
-    /// among everything the client exports.
+    /// The file every document imports the types it sends from: each enum and input in name order but the filter and
+    /// sort inputs, each name claimed once among everything the client exports.
     /// </summary>
     public string Render()
     {
@@ -163,7 +167,7 @@ internal sealed class SdlTypes
         );
         foreach (
             var (name, definition) in _definitions
-                .Where(d => IsDeclared(d.Value))
+                .Where(d => IsDeclared(d.Value) && !_written.Contains(d.Key))
                 .OrderBy(d => d.Key, StringComparer.Ordinal)
         )
         {

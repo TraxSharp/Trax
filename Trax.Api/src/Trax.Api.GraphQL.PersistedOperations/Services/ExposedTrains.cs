@@ -44,7 +44,8 @@ internal static class ExposedTrains
             .ToList();
     }
 
-    private static (string Holder, IOutputFieldDefinition Definition)? FieldOf(
+    /// <summary>The field under <c>dispatch</c> or <c>discover</c>, inside <paramref name="ns"/> when it is set, and the type holding it.</summary>
+    internal static (string Holder, IOutputFieldDefinition Definition)? FieldOf(
         ISchemaDefinition schema,
         bool mutation,
         string? ns,

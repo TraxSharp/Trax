@@ -97,7 +97,9 @@ trax client --manifest src/trax/manifest.json --out src/trax --documents 'src/**
 ```
 
 It checks every document against the host's types, as the host will, and refuses with the file, line and column of
-each problem. For each operation it writes `documents/<operation>.g.ts`, exported from `index.g.ts`:
+each problem: an unknown field or argument, an inline filter or sort naming a field the model does not have or a
+value of the wrong type, a query model in a mutation, and a filter or sort passed as a variable. For each operation it
+writes `documents/<operation>.g.ts`, exported from `index.g.ts`:
 
 ```ts
 export type OrderCardResult = {
