@@ -100,8 +100,8 @@ internal static class MachineDocumentMiddleware
         }
     }
 
-    // Whether a stored client document another node registered passes this node's checks: the client-document rules
-    // and this node's own validation, decided once per id. Its text is read only when its body is the one its id names.
+    // Whether a stored client document another node registered passes this node's checks: the client-document rules,
+    // against what this node registered, and its own validation, decided once per id. Its text is read only when its body is the one its id names.
     private static async ValueTask<bool> PassesAsync(
         RequestContext context,
         MachineDocumentRegistry registry,
@@ -119,7 +119,7 @@ internal static class MachineDocumentMiddleware
         var name = id[ClientDocuments.ReservedIdPrefix.Length..id.LastIndexOf('_')]
             .Replace('-', '_');
         var passes =
-            ClientDocuments.Refusal(context.Schema, name, text) is null
+            ClientDocuments.Refusal(context.Schema, registry.ClientReach, name, text) is null
             && GeneratedDocumentValidation.Errors(context.Schema, id, text).Count == 0;
         registry.RecordStoredCheck(id, passes);
         return passes;

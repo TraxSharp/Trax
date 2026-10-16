@@ -14,15 +14,18 @@ using Path = System.IO.Path;
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
 /// <summary>
-/// A host reads the documents its frontend wrote from <c>trax.documents.json</c>, refuses a file it cannot trust and a
-/// document that reaches anything but trains, and stores each under an id carrying the hash of its text, the same id
-/// <c>trax client</c> gives it.
+/// A host reads the documents its frontend wrote from <c>trax.documents.json</c>, refuses a file it cannot trust, a
+/// document that reaches anything but the trains and query models it registered, and a filter or sort passed whole as
+/// a variable, and stores each under an id carrying the hash of its text, the same id <c>trax client</c> gives it.
 /// <para>Enforces <c>Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md</c>.</para>
 /// </summary>
 [TestFixture]
 [Property("adr", "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md")]
 public class ClientDocumentsTests
 {
+    private const string Adr =
+        "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md";
+
     private string _dir = null!;
 
     [SetUp]
@@ -163,9 +166,9 @@ public class ClientDocumentsTests
     )]
     public async Task A_document_of_trains_is_accepted(string text)
     {
-        var schema = await SchemaAsync();
+        var (schema, reach) = await SchemaAsync();
 
-        ClientDocuments.Refusal(schema, "OrderCard", text).Should().BeNull();
+        ClientDocuments.Refusal(schema, reach, "OrderCard", text).Should().BeNull();
     }
 
     [TestCase("query OrderCard { _ping }", "*other than 'discover'*")]
@@ -230,15 +233,96 @@ public class ClientDocumentsTests
         string message
     )
     {
-        var schema = await SchemaAsync();
+        var (schema, reach) = await SchemaAsync();
 
-        ClientDocuments.Refusal(schema, "OrderCard", text).Should().Match(message);
+        ClientDocuments.Refusal(schema, reach, "OrderCard", text).Should().Match(message);
+    }
+
+    [TestCase(
+        "query OrderCard($after: String) { discover { orders(first: 2, after: $after, where: { state: { eq: \"open\" } }, "
+            + "order: { title: ASC }) { totalCount nodes { title } } } }"
+    )]
+    [TestCase(
+        "query OrderCard($state: String, $states: [String]) { discover { orders(where: { state: { eq: $state }, "
+            + "or: [{ state: { in: $states } }] }) { nodes { title } } } }"
+    )]
+    [TestCase(
+        "query OrderCard($input: StartInput!) { discover { runs { ledger { title } findRun(input: $input) { name } } "
+            + "orders { nodes { state } } } }"
+    )]
+    public async Task A_document_reading_a_query_model_is_accepted(string text)
+    {
+        var (schema, reach) = await SchemaAsync();
+
+        ClientDocuments
+            .Refusal(schema, reach, "OrderCard", text)
+            .Should()
+            .BeNull("a query model is reached from a client document, per " + Adr);
+    }
+
+    [TestCase(
+        "query OrderCard { discover { notes } }",
+        "*'discover.notes'*neither a train nor a query model*"
+    )]
+    [TestCase(
+        "query OrderCard { discover { runs { memo } } }",
+        "*'discover.runs.memo'*neither a train nor a query model*"
+    )]
+    [TestCase(
+        "query OrderCard($where: OrderFilterInput) { discover { orders(where: $where) { nodes { title } } } }",
+        "*'$where'*OrderFilterInput*filter or sort input*"
+    )]
+    [TestCase(
+        "query OrderCard($order: [OrderSortInput!]) { discover { orders(order: $order) { nodes { title } } } }",
+        "*'$order'*OrderSortInput*filter or sort input*"
+    )]
+    [TestCase(
+        "mutation OrderCard { dispatch { orders { nodes { title } } } }",
+        "*'dispatch.orders'*does not serve*"
+    )]
+    public async Task A_field_or_variable_a_client_document_may_not_hold_is_refused(
+        string text,
+        string message
+    )
+    {
+        var (schema, reach) = await SchemaAsync();
+
+        ClientDocuments
+            .Refusal(schema, reach, "OrderCard", text)
+            .Should()
+            .Match(message, "the host resolves every field against what it registered, per " + Adr);
+    }
+
+    [Test]
+    public async Task A_query_model_the_host_did_not_register_is_refused()
+    {
+        var (schema, _) = await SchemaAsync();
+        var trainsOnly = ClientDocumentReach.Of([("query", null, "findOrder")], []);
+
+        ClientDocuments
+            .Refusal(
+                schema,
+                trainsOnly,
+                "OrderCard",
+                "query OrderCard { discover { orders { nodes { title } } } }"
+            )
+            .Should()
+            .Match("*'discover.orders'*neither a train nor a query model*");
+        ClientDocuments
+            .Refusal(
+                schema,
+                ClientDocumentReach.None,
+                "OrderCard",
+                "query OrderCard($input: StartInput!) { discover { findOrder(input: $input) { name } } }"
+            )
+            .Should()
+            .NotBeNull("a node that registered nothing reaches nothing");
     }
 
     [Test]
     public async Task Check_names_every_document_it_refuses()
     {
-        var schema = await SchemaAsync();
+        var (schema, reach) = await SchemaAsync();
         var documents = new[]
         {
             new ClientDocument(
@@ -255,7 +339,7 @@ public class ClientDocumentsTests
             ),
         };
 
-        var act = () => ClientDocuments.Check(schema, documents);
+        var act = () => ClientDocuments.Check(schema, reach, documents);
 
         act.Should()
             .Throw<InvalidOperationException>()
@@ -274,6 +358,12 @@ public class ClientDocumentsTests
     public record Named
     {
         public string Name { get; init; } = "";
+    }
+
+    public record Order
+    {
+        public string Title { get; init; } = "";
+        public string State { get; init; } = "";
     }
 
     private string Write(string json)
@@ -319,7 +409,10 @@ public class ClientDocumentsTests
         return [];
     }
 
-    private static async Task<ISchemaDefinition> SchemaAsync()
+    // The trains below, two query models (orders, paged with a filter and a sort, at the root; ledger, a plain list, in
+    // the runs namespace beside a train) and two hand-written fields the host did not register (notes at the root, memo
+    // under runs), which the schema serves but no client document may reach.
+    private static async Task<(ISchemaDefinition Schema, ClientDocumentReach Reach)> SchemaAsync()
     {
         TrainRegistration[] registrations =
         [
@@ -342,12 +435,46 @@ public class ClientDocumentsTests
                 new ObjectTypeExtension(d =>
                     d.Name("RootMutation").Field("_ping").Type<StringType>().Resolve("pong")
                 )
+            )
+            .AddFiltering()
+            .AddSorting()
+            .AddTypeExtension(
+                new ObjectTypeExtension(d =>
+                {
+                    d.Name("DiscoverQueries");
+                    d.Field("orders")
+                        .Type<ListType<NonNullType<ObjectType<Order>>>>()
+                        .UsePaging<ObjectType<Order>>(options: new() { IncludeTotalCount = true })
+                        .UseFiltering()
+                        .UseSorting()
+                        .Resolve(Array.Empty<Order>());
+                    d.Field("notes").Type<StringType>().Resolve("hand-written");
+                })
+            )
+            .AddTypeExtension(
+                new ObjectTypeExtension(d =>
+                {
+                    d.Name("RunsDiscoverQueries");
+                    d.Field("ledger")
+                        .Type<ListType<NonNullType<ObjectType<Order>>>>()
+                        .Resolve(Array.Empty<Order>());
+                    d.Field("memo").Type<StringType>().Resolve("hand-written");
+                })
             );
         var executor = await services
             .BuildServiceProvider()
             .GetRequiredService<IRequestExecutorProvider>()
             .GetExecutorAsync("trax");
-        return executor.Schema;
+        var reach = ClientDocumentReach.Of(
+            [
+                ("query", null, "findOrder"),
+                ("query", "runs", "findRun"),
+                ("mutation", null, "startRun"),
+                ("mutation", null, "other"),
+            ],
+            [(null, "orders"), ("runs", "ledger")]
+        );
+        return (executor.Schema, reach);
     }
 
     private static TrainRegistration Registration(

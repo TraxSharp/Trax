@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
@@ -95,7 +96,15 @@ internal sealed class MachineDocumentRegistration(
             .. ProgressDocuments.Generate(executor.Schema),
         ];
         var clientDocuments = LoadClientDocuments();
-        Services.ClientDocuments.Check(executor.Schema, clientDocuments);
+        // What a client document may reach, decided from what the host registered: the same reach judges the stored
+        // documents other nodes registered (MachineDocumentMiddleware).
+        var reach = ClientDocumentReach.Of(
+            executor.Schema,
+            trains,
+            services.GetService<GraphQLConfiguration>()?.ModelRegistrations ?? []
+        );
+        registry.ClientReach = reach;
+        Services.ClientDocuments.Check(executor.Schema, reach, clientDocuments);
         _documents = [.. _documents, .. clientDocuments];
         GeneratedDocumentValidation.Validate(executor.Schema, _documents);
         await RegisterAsync(cancellationToken).ConfigureAwait(false);

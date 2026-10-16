@@ -87,6 +87,12 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     /// <summary>The shortest time between two reads of the stored versions that requests can cause.</summary>
     internal TimeSpan RefreshInterval { get; init; } = MinRefreshInterval;
 
+    /// <summary>
+    /// What a client document may reach on this node, set when the node registers its documents. Until then no
+    /// stored client document passes.
+    /// </summary>
+    public ClientDocumentReach ClientReach { get; set; } = ClientDocumentReach.None;
+
     /// <summary>Whether this node has registered its documents.</summary>
     public bool IsReady => _state is not null;
 

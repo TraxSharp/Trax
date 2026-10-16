@@ -9,10 +9,12 @@ public sealed partial class PersistedOperationsBuilder
     /// <remarks>
     /// <para>
     /// <paramref name="path"/> is resolved against the host's content root. Each document is one named query or
-    /// mutation of the trains this host exposes, under <c>dispatch</c> or <c>discover</c>, using no directive. The host
-    /// checks every document itself and runs it through its own validation before it serves anything: a missing or
-    /// malformed file, a name used twice, a document reaching anything but trains, or one the host's validation refuses
-    /// (its depth limit, its operation cap, a field it no longer has) refuses the host's start, naming the document.
+    /// mutation of the trains this host exposes and, in a query, its query models, under <c>dispatch</c> or
+    /// <c>discover</c>, using no directive, with any filter or sort written in the document rather than passed whole as
+    /// a variable. The host checks every document itself and runs it through its own validation before it serves
+    /// anything: a missing or malformed file, a name used twice, a document reaching anything but those, a filter or
+    /// sort variable, or one the host's validation refuses (its depth limit, its operation cap, a field it no longer
+    /// has) refuses the host's start, naming the document.
     /// </para>
     /// <para>
     /// Each document is stored under <c>trax_client_&lt;name&gt;_&lt;hash of its text&gt;</c>, which the generated client

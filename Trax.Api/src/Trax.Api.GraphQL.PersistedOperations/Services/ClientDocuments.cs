@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using HotChocolate;
+using HotChocolate.Data.Filters;
+using HotChocolate.Data.Sorting;
 using HotChocolate.Language;
 using HotChocolate.Types;
 using HotChocolate.Utilities;
@@ -21,11 +23,14 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// row is a client document only when its body is the one its id names.
 /// </para>
 /// <para>
-/// A client document reaches trains only: one named <c>query</c> or <c>mutation</c>, whose root selects
-/// <c>dispatch</c> or <c>discover</c>, under it only trains and the namespaces holding them, a mutation exactly one
-/// train, and no directive anywhere. Everything else (the operations surface, persisted-operation management,
-/// machines, <c>runProgress</c>, introspection, a subscription) refuses the host's start, as does a document the
-/// host's own validation refuses. The decision is
+/// A client document reaches trains and query models only: one named <c>query</c> or <c>mutation</c>, whose root
+/// selects <c>dispatch</c> or <c>discover</c>, under it only the host's exposed trains, its query models (in a query)
+/// and the namespaces holding them, each resolved against what the host registered rather than what the schema
+/// happens to hold; a mutation runs exactly one train, and no directive appears anywhere. A filter or sort input is
+/// written in the document: a variable whose type is, or holds, one is refused, so a persisted id fixes which filter
+/// runs and only its values vary. Everything else (the operations surface, persisted-operation management, machines,
+/// <c>runProgress</c>, introspection, a subscription, a hand-written field) refuses the host's start, as does a
+/// document the host's own validation refuses. The decision is
 /// <c>Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md</c>.
 /// </para>
 /// </remarks>
@@ -135,28 +140,39 @@ internal static class ClientDocuments
     }
 
     /// <summary>
-    /// Refuses a document that is not one named operation reaching trains only, or whose name is not the one it is
-    /// registered under, naming the document and why.
+    /// Refuses a document that is not one named operation reaching only what <paramref name="reach"/> holds, or whose
+    /// name is not the one it is registered under, naming the document and why.
     /// </summary>
     /// <exception cref="InvalidOperationException">A document breaks a rule.</exception>
-    public static void Check(ISchemaDefinition schema, IEnumerable<ClientDocument> documents)
+    public static void Check(
+        ISchemaDefinition schema,
+        ClientDocumentReach reach,
+        IEnumerable<ClientDocument> documents
+    )
     {
         ArgumentNullException.ThrowIfNull(schema);
+        ArgumentNullException.ThrowIfNull(reach);
         ArgumentNullException.ThrowIfNull(documents);
 
         var refusals = new List<string>();
         foreach (var document in documents)
-            if (Refusal(schema, document.Name, document.Text) is { } reason)
+            if (Refusal(schema, reach, document.Name, document.Text) is { } reason)
                 refusals.Add($"The {document.Owner} {reason}");
         if (refusals.Count > 0)
             throw new InvalidOperationException(
                 string.Join("\n", refusals)
-                    + "\nA client document holds one named query or mutation of trains under dispatch or discover."
+                    + "\nA client document holds one named query or mutation of the host's trains and query models "
+                    + "under dispatch or discover."
             );
     }
 
     /// <summary>Why <paramref name="text"/> may not be a client document, or null when it may.</summary>
-    internal static string? Refusal(ISchemaDefinition schema, string name, string text)
+    internal static string? Refusal(
+        ISchemaDefinition schema,
+        ClientDocumentReach reach,
+        string name,
+        string text
+    )
     {
         DocumentNode parsed;
         try
@@ -185,8 +201,17 @@ internal static class ClientDocuments
         if (HasDirective(parsed))
             return "uses a directive; a client document uses none.";
 
+        foreach (var variable in operation.VariableDefinitions)
+            if (
+                schema.Types.TryGetType(variable.Type.NamedType().Name.Value, out var variableType)
+                && HoldsFilterOrSort(variableType, [])
+            )
+                return $"declares '${variable.Variable.Name.Value}' as {variableType.Name}, which is or holds a filter "
+                    + "or sort input; write the filter in the document and pass only its values as variables.";
+
         var mutation = operation.Operation == OperationType.Mutation;
         var rootName = mutation ? MutationRootField : QueryRootField;
+        var rootKind = mutation ? "mutation" : "query";
         var root = mutation ? schema.MutationType : schema.QueryType;
         if (
             root is null
@@ -202,6 +227,7 @@ internal static class ClientDocuments
             return $"selects something other than '{rootName}' at its root.";
 
         var trains = 0;
+        var reached = 0;
         foreach (var selection in top.SelectionSet?.Selections ?? [])
         {
             if (selection is not FieldNode field)
@@ -213,7 +239,9 @@ internal static class ClientDocuments
                 return $"selects '{rootName}.{field.Name.Value}', which this host does not serve.";
             if (!NamespaceField.IsNamespace(definition))
             {
-                trains++;
+                if (Reached(reach, rootKind, null, field.Name.Value, ref trains) is { } refusal)
+                    return $"selects '{rootName}.{field.Name.Value}', {refusal}";
+                reached++;
                 continue;
             }
             if (field.Alias is not null)
@@ -229,14 +257,52 @@ internal static class ClientDocuments
                     || NamespaceField.IsNamespace(trainDefinition)
                 )
                     return $"selects something other than a train under the namespace '{field.Name.Value}'.";
-                trains++;
+                if (
+                    Reached(reach, rootKind, field.Name.Value, train.Name.Value, ref trains) is
+                    { } refusal
+                )
+                    return $"selects '{rootName}.{field.Name.Value}.{train.Name.Value}', {refusal}";
+                reached++;
             }
         }
-        if (trains == 0)
-            return "selects no train.";
+        if (reached == 0)
+            return "selects no train or query model.";
         if (mutation && trains != 1)
             return $"runs {trains} trains in one mutation; a mutation runs one.";
         return null;
+    }
+
+    // Null when the field is a train or (in a query) a query model the host registered, counting a train; otherwise
+    // the rest of the refusal's sentence.
+    private static string? Reached(
+        ClientDocumentReach reach,
+        string root,
+        string? ns,
+        string field,
+        ref int trains
+    )
+    {
+        if (reach.IsTrain(root, ns, field))
+        {
+            trains++;
+            return null;
+        }
+        if (root == "query" && reach.IsQueryModel(ns, field))
+            return null;
+        return root == "mutation" && reach.IsQueryModel(ns, field)
+            ? "a query model, which a mutation cannot hold."
+            : "which is neither a train nor a query model this host exposes.";
+    }
+
+    // Whether an input holds a filter or sort input anywhere in it, so a variable of it would let a caller choose the
+    // filter a persisted id runs.
+    private static bool HoldsFilterOrSort(ITypeDefinition type, HashSet<string> seen)
+    {
+        if (type is IFilterInputType or ISortInputType)
+            return true;
+        if (type is not IInputObjectTypeDefinition input || !seen.Add(input.Name))
+            return false;
+        return input.Fields.Any(f => HoldsFilterOrSort(f.Type.NamedType(), seen));
     }
 
     private static bool HasDirective(ISyntaxNode node) =>

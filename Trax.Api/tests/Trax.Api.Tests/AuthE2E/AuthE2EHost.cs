@@ -13,6 +13,7 @@ using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
 using Trax.Api.Extensions;
+using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Tests.Fakes;
 using Trax.Effect.Data.Extensions;
@@ -112,7 +113,11 @@ public static class AuthE2EHost
         Jwt = 2,
     }
 
-    public static async Task<IHost> StartAsync(Schemes schemes, string database)
+    public static async Task<IHost> StartAsync(
+        Schemes schemes,
+        string database,
+        Func<TraxGraphQLBuilder, TraxGraphQLBuilder>? graphQL = null
+    )
     {
         EnsureDatabaseExists(database);
         var connectionString = ConnectionString(database);
@@ -177,7 +182,7 @@ public static class AuthE2EHost
                         );
 
                         services.AddTraxGraphQL(graphql =>
-                            graphql
+                            (graphQL ?? (g => g))(graphql)
                                 // Default is generous (15) and covers the
                                 // discover/namespace/entity/nodes/field chain
                                 // without needing an explicit override.

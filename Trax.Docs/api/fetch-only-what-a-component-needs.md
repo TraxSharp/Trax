@@ -20,7 +20,8 @@ that, and the generated function's type is exactly what comes back. These steps 
 ## 1. Write the document
 
 Put a `.graphql` file anywhere in the frontend's source. It holds one named `query` or `mutation`, rooted where the
-train sits: `discover` for a query train, `dispatch` for a mutation train, and the train's namespace if it has one.
+train sits: `discover` for a query train or a query model, `dispatch` for a mutation train, and the namespace if it
+has one.
 
 ```graphql
 # src/trax-documents/orderCard.graphql
@@ -36,6 +37,34 @@ query OrderCard($input: FindOrderInput!) {
 }
 ```
 
+A list of a query model is paged, filtered and sorted in the document; only the values vary:
+
+```graphql
+# src/trax-documents/openOrders.graphql
+query OpenOrders($customer: String, $after: String) {
+  discover {
+    orders(
+      first: 20
+      after: $after
+      where: { state: { eq: "open" }, customerName: { eq: $customer } }
+      order: { placedAt: DESC }
+    ) {
+      totalCount
+      nodes {
+        title
+        placedAt
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
+```
+
+The query model is projected, so the host reads only `title` and `placedAt` from the database.
+
 A shape several components share goes in a named fragment, in a file of its own or beside the operation:
 
 ```graphql
@@ -47,8 +76,13 @@ fragment CustomerBadge on Customer {
 
 What a document may hold:
 
-- **Trains only.** Under `discover` or `dispatch`, only trains and their namespaces. A query may hold several trains;
-  a mutation runs exactly one. The operations surface, machines and `runProgress` keep their own generated documents.
+- **Trains and query models.** Under `discover` or `dispatch`, only the trains and the
+  [query models](/docs/api/expose-an-entity-as-a-query-model) the host registered, and their namespaces. A query may
+  hold several, trains and query models together; a mutation runs exactly one train. A field someone added to
+  `discover` by hand is refused. The operations surface, machines and `runProgress` keep their own generated documents.
+- **Filters and sorts in the document.** Write a query model's `where` and `order` in the document and pass only
+  their values as variables (`where: { state: { eq: $state } }`, `order: { title: $direction }`). A variable whose
+  type is a filter or sort input (`$where: OrderFilterInput`) is refused, so the id fixes which filter runs.
 - **No directives.** `@include`, `@skip`, `@defer` and `@stream` are refused, so every field in the type is always
   there.
 - **Any depth the host allows.** A document may follow any field, an entity's reference back to its parent included;
@@ -112,8 +146,9 @@ builder.Services.AddTraxGraphQL(graphql =>
 ```
 
 The host checks every document again when it starts and runs it through its own validation. A document that reaches
-anything but trains, names a field the host no longer has, or is deeper than its `MaxExecutionDepth` refuses the
-start, naming the document and its file. Each train's own authorization still applies to every call.
+anything but its trains and query models, passes a filter or sort as a variable, names a field the host no longer
+has, or is deeper than its `MaxExecutionDepth` refuses the start, naming the document and its file. Each train's and
+query model's own authorization still applies to every call.
 
 ## 4. Deploy the host first
 
