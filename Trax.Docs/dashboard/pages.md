@@ -408,7 +408,7 @@ refusal keeps the dialog open. Settings are per process and not persisted.
 | **Retry Settings** | `DefaultMaxRetries`, **Failure Count Window**, retry delay, backoff multiplier, maximum delay |
 | **Job Settings** | `DefaultJobTimeout`, `StalePendingTimeout`, startup recovery |
 | **Dead Letter Settings** | Dead letter settings |
-| **Metadata Cleanup** | With [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) registered |
+| **Metadata Cleanup** | On a database provider, where [metadata cleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) always runs |
 
 **Save** sends only the changed fields through `IOperationsService.UpdateSchedulerConfigAsync`, the
 call behind [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations/config),

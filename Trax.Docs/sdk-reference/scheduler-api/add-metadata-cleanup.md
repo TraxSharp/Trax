@@ -15,7 +15,7 @@ source:
 
 # AddMetadataCleanup
 
-Turns on the periodic deletion of old metadata rows: always for the internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`), and for the trains the `configure` callback adds.
+Configures the periodic deletion of old metadata rows: always for the internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`), and for the trains the `configure` callback adds. A scheduler with a database provider (`UsePostgres()` or `UseSqlite()`) runs this cleanup on the defaults whether or not you call it; call it to change the settings or add trains.
 
 ## Signature
 
@@ -68,7 +68,7 @@ A train declared once under its interface name and again under its class name wi
 - A run is kept, whatever its age, while a `Queued` work queue entry or any metadata row names it in `replay_decisions_of`, so a [re-queue that replays its decisions](/docs/effect/decisions#a-requeue-of-a-requeue) can still read them. When the linking run has expired too, it is deleted first and the run it links to goes in a later batch or sweep. A batch is deleted all or nothing: the runs, and the work queue entries, logs, dead letter links and children's parent links they own, are cleared in one transaction whose delete repeats the keep test. When a run was linked after the cleanup selected it, the transaction rolls back, so the run keeps everything it owns, and the batch is rechecked and deleted without it. A batch linked for replay on three successive attempts is logged and skipped for the rest of the sweep.
 - The cleanup service runs as an `IHostedService` on the configured `CleanupInterval`.
 - Trains that share a retention are swept together, so the batched delete runs once per distinct retention.
-- The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always pruned while cleanup is enabled. You don't need to add them manually, and a consumer can never accidentally leave one out.
+- The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always pruned. You don't need to add them manually, and a consumer can never accidentally leave one out. The dispatcher and the manifest manager each record a run every poll, about 60,000 rows a day at the default intervals, so without the cleanup `trax.metadata` would grow without bound on an idle host.
 - A cleanup batch that hits an unexpected foreign-key reference or other error is bisected to isolate the offending row, which is logged and skipped, so one bad row can't abort the whole sweep.
 - Train type names are matched against the `name` column in the metadata table (which stores the interface FullName, the canonical train name).
 - **The persisted runtime override replaces `RetentionPeriod` only.** Editing the retention from the dashboard's Server Settings page, or through the `updateScheduler` mutation, moves the cutoff for every train on the default and leaves a retention passed to `AddTrainType` untouched. A per-train value is normally set because of what the row holds rather than as an operational preference, so shortening one is a code change. See [scheduler ADR 0003](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0003-a-runtime-retention-override-replaces-only-the-default.md).
@@ -90,7 +90,7 @@ services.AddTrax(trax => trax
         })));
 ```
 
-`AddMetadataCleanup()` with no callback cleans only the internal scheduler trains, on the defaults.
+`AddMetadataCleanup()` with no callback cleans only the internal scheduler trains, on the defaults, which is what a scheduler on a database does without it.
 [`ShouldSaveInputs`](/docs/sdk-reference/configuration/save-train-parameters) decides whose input is
 stored in the first place.
 

@@ -38,6 +38,12 @@ public partial class SchedulerConfigurationBuilder
     /// </summary>
     internal void Build()
     {
+        // The scheduler's own trains write a run every poll, the dispatcher above all, and nothing
+        // else removes them. On a database they are cleaned up whether or not the host asked;
+        // AddMetadataCleanup only changes how.
+        if (_parentBuilder.HasDatabaseProvider && _configuration.MetadataCleanup is null)
+            AddMetadataCleanup();
+
         ValidateNoCyclicGroupDependencies();
         ValidateSeedDeclarations();
         ValidateSubmitterRequirements();

@@ -25,7 +25,7 @@ created at runtime through `ITraxScheduler`. How the scheduler works is on
 | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/configure-local-workers) | The built-in local worker pool |
 | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Queued runs of chosen trains on a remote HTTP runner |
 | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | Synchronous runs on a remote HTTP runner |
-| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Periodic deletion of old metadata |
+| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Settings for the periodic deletion of old metadata, which runs by default on a database |
 | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | A runner process, with `UseTraxJobRunner` and `UseTraxRunEndpoint` |
 | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | A standalone worker that polls `background_job` |
 | [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness) | The health check that fails when dispatch stops |

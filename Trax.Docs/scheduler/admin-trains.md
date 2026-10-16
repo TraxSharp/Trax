@@ -21,7 +21,7 @@ only your own assemblies to `AddMediator()`.
 | [ManifestManager](/docs/scheduler/admin-trains/manifest-manager) | Cancels timed-out runs, fails stale ones, dead-letters manifests out of retries, and writes due manifests to the work queue |
 | [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) | Reads the work queue, applies the capacity limits, creates each run's metadata and hands it to a job submitter |
 | [JobRunner](/docs/scheduler/admin-trains/job-runner) | Runs your train on a worker and records its success on the manifest |
-| [MetadataCleanup](/docs/scheduler/admin-trains/metadata-cleanup) | Deletes old metadata rows, once `AddMetadataCleanup()` turns it on |
+| [MetadataCleanup](/docs/scheduler/admin-trains/metadata-cleanup) | Deletes old metadata rows; on by default with a database provider, tuned by `AddMetadataCleanup()` |
 | `DeadLetterCleanupTrain` | Deletes resolved dead letters past their retention; see [Dead letter auto-purge](/docs/scheduler/dead-letters-and-cleanup#dead-letter-auto-purge) |
 
 `AdminTrains.Types` lists them, interfaces and classes, including the InMemory variant of the
@@ -41,7 +41,7 @@ InMemory does not.
 | `JobDispatcherPollingService` | database provider | Runs the JobDispatcher every `JobDispatcherPollingInterval` (2 seconds by default), and sooner when woken |
 | `QueuedWorkListenerService` | database provider | Wakes the dispatcher when work is queued, so a queued run does not wait for the next poll |
 | `LocalWorkerService` | database provider, with the default submitter | The worker pool that runs jobs from `trax.background_job`; see [How jobs reach workers](/docs/scheduler/job-submission) |
-| `MetadataCleanupPollingService` | database provider, with `AddMetadataCleanup()` | Runs the MetadataCleanup train every `CleanupInterval`, and once at startup |
+| `MetadataCleanupPollingService` | database provider | Runs the MetadataCleanup train every `CleanupInterval`, and once at startup |
 | `DeadLetterCleanupPollingService` | database provider | Runs the dead-letter purge every `DeadLetterCleanupInterval` (1 hour by default). Always registered, because `AutoPurgeDeadLetters` can be turned on at runtime |
 
 The intervals and switches are options of [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler).

@@ -97,7 +97,7 @@ The methods of the builder `configure` receives.
 | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | Batch-schedules manifests from a collection |
 | [ScheduleOnce](/docs/scheduler/delayed-jobs#startup-configuration-builder-pattern) | Schedules a one-off that runs once after a delay from startup, then disables itself |
 | [ThenInclude / Include / ThenIncludeMany / IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Schedules dependent trains: `ThenInclude` parents from the previous call, `Include` from the last `Schedule`; `.Dormant()` makes one that runs only when its parent activates it |
-| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic metadata purging |
+| [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Changes the automatic metadata purging a database provider turns on |
 
 
 #### Extension points
@@ -151,6 +151,7 @@ The polling services never wait less than one second between cycles, whatever in
 - `AddScheduler` extends `TraxBuilderWithMediator`, the type `AddMediator()` returns, so it compiles only after `AddEffects()` and `AddMediator()`. Called on an earlier stage, it binds to an overload in `SchedulerBuilderOrderExtensions` that is obsolete as an error and says which call comes first.
 - `AddScheduler` requires a data provider (`UsePostgres()`, `UseSqlite()` or `UseInMemory()`). If none is configured, `AddScheduler` throws `InvalidOperationException` at build time: `AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()).`
 - Internal scheduler trains (`ManifestManager`, `InMemoryManifestManager`, `JobDispatcher`, `JobRunner`, `MetadataCleanup`, `DeadLetterCleanup`) are automatically excluded from `MaxActiveJobs`.
+- With `UsePostgres()` or `UseSqlite()`, the scheduler purges its own trains' old runs every minute, keeping the last 30 minutes, whether or not you call `AddMetadataCleanup`. The dispatcher and the manifest manager record a run every poll, so without it `trax.metadata` grows by about 60,000 rows a day on an idle host. `AddMetadataCleanup` changes the interval and retention and adds your own trains.
 - With `UseInMemory()`, `JobDispatcherPollingService` and `MetadataCleanupPollingService` are not registered. The `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that dispatches jobs inline through the in-memory job submitter.
 - The host refuses to start, with an `InvalidOperationException` naming the trains whose chains ask a decider, when it does not register `AddDecisionRecording()`. Such a host could not replay a requeue's recorded decisions, so a requeue that landed on it would fail, `Permanent`; Trax refuses at startup rather than leave that to be found by the first requeue. The check runs before any worker claims work. See [A host that does not record](/docs/effect/decisions#a-host-that-does-not-record).
 - Manifests declared via `Schedule`/`ScheduleMany` are not created immediately. They are seeded on application startup by the `SchedulerStartupService`.

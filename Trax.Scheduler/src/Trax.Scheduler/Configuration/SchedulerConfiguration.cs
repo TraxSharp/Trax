@@ -379,9 +379,10 @@ public class SchedulerConfiguration
     /// Configuration for automatic metadata cleanup, if enabled.
     /// </summary>
     /// <remarks>
-    /// When set (via <c>.AddMetadataCleanup()</c>), a background service will
-    /// periodically delete old metadata entries for the configured train types.
-    /// Null means metadata cleanup is disabled.
+    /// When set, a background service periodically deletes old metadata entries for the scheduler's
+    /// own trains and the configured train types. A scheduler with a database provider always sets
+    /// it, with the defaults unless <c>.AddMetadataCleanup()</c> changed them. Null means there is
+    /// no database to clean up.
     /// </remarks>
     public MetadataCleanupConfiguration? MetadataCleanup { get; internal set; }
 

@@ -6,14 +6,15 @@ namespace Trax.Scheduler.Configuration;
 public partial class SchedulerConfigurationBuilder
 {
     /// <summary>
-    /// Enables automatic cleanup of metadata for system and other noisy trains.
+    /// Configures the automatic cleanup of metadata for the scheduler's own trains and other noisy
+    /// trains.
     /// </summary>
     /// <remarks>
-    /// The internal scheduler trains (JobDispatcher, ManifestManager, MetadataCleanup,
-    /// DeadLetterCleanup, JobRunner) are always cleaned up while this is enabled: the
-    /// dispatcher alone persists a metadata row every poll, so leaving any of them out
-    /// lets <c>trax.metadata</c> grow without bound. Use the configure action to add your
-    /// own noisy trains on top.
+    /// A scheduler with a database provider cleans up its internal trains (JobDispatcher,
+    /// ManifestManager, MetadataCleanup, DeadLetterCleanup, JobRunner) with the default settings
+    /// whether or not this is called: the dispatcher alone persists a metadata row every poll, so
+    /// leaving any of them out lets <c>trax.metadata</c> grow without bound. Call this to change
+    /// the interval or retention, or to add your own noisy trains on top.
     ///
     /// <code>
     /// .AddScheduler(scheduler => scheduler

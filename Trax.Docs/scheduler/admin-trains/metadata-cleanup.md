@@ -10,7 +10,7 @@ nav_order: 6
 
 # MetadataCleanupTrain
 
-The MetadataCleanup train deletes old metadata rows for the internal scheduler trains. Every train execution persists a metadata row, so high-frequency internal trains like JobDispatcher (every 2 seconds by default) and ManifestManager (every 5 seconds) would otherwise generate hundreds of thousands of rows per day. Once cleanup is enabled, the internal scheduler trains are pruned unconditionally; see [Configuration](#configuration). Cancelled runs are terminal like completed and failed ones, so they are swept too.
+The MetadataCleanup train deletes old metadata rows for the internal scheduler trains. Every train execution persists a metadata row, so high-frequency internal trains like JobDispatcher (every 2 seconds by default) and ManifestManager (every 5 seconds) would otherwise generate hundreds of thousands of rows per day. On a database provider the cleanup always runs, and the internal scheduler trains are pruned unconditionally; see [Configuration](#configuration). Cancelled runs are terminal like completed and failed ones, so they are swept too.
 
 ## Chain
 
@@ -85,7 +85,7 @@ See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-s
 
 ## Configuration
 
-Enable cleanup with `.AddMetadataCleanup()`:
+A scheduler with `UsePostgres()` or `UseSqlite()` runs the cleanup on its defaults without being asked. `.AddMetadataCleanup()` changes them:
 
 ```csharp compile
 services.AddTrax(trax =>
@@ -97,7 +97,7 @@ services.AddTrax(trax =>
 );
 ```
 
-With no arguments, this cleans up metadata older than 30 minutes, checking every minute. The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always cleaned up while cleanup is enabled, you can't forget one, and the retention window still keeps the last 30 minutes for diagnostics. Use the configure action to add your own noisy trains on top.
+With no arguments, as with no call at all, this cleans up metadata older than 30 minutes, checking every minute. The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always cleaned up, you can't forget one, and the retention window still keeps the last 30 minutes for diagnostics. Use the configure action to add your own noisy trains on top.
 
 ### Your own trains, and a retention per train
 
