@@ -155,8 +155,29 @@ public class FieldNameCollisionTests
     }
 
     /// <summary>
+    /// A field the extension builds from a lambda has no member behind it, so the contribution
+    /// that refuses a member-backed shadow of a Trax field sees it as Trax's own and skips it:
+    /// HotChocolate merges the lambda into the entry field, keeping whichever it built last.
+    /// </summary>
+    [Test]
+    public async Task ATypeExtensionLambdaFieldOnAQueryModelsField_IsRefused()
+    {
+        var start = () =>
+            PostureHost.StartAsync(
+                g =>
+                    g.AddDbContext<TeamContext>()
+                        .ConfigureSchema(b => b.AddTypeExtension<LambdaTeamsOnDiscover>()),
+                s => s.AddInMemoryContext<TeamContext>()
+            );
+
+        var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
+        ex.Message.Should().Contain("DiscoverQueries.teams").And.Contain(typeof(Team).FullName!);
+    }
+
+    /// <summary>
     /// A field the extension ignores is an instruction to drop it, not a field of its own, so it
-    /// claims no name: ignoring <c>operations</c> does not collide with Trax's.
+    /// claims no name: ignoring <c>duplicated</c> does not collide with the other extension's
+    /// field of that name. (Ignoring one of Trax's own fields is refused; see the test below.)
     /// </summary>
     [Test]
     public async Task AnIgnoredExtensionField_ClaimsNoName()
@@ -169,6 +190,25 @@ public class FieldNameCollisionTests
             );
 
         await start.Should().NotThrowAsync();
+    }
+
+    /// <summary>
+    /// Ignoring one of Trax's own fields removes it from the schema without adding a field of
+    /// its own, so no contribution is recorded and the refusal cannot see it. The refusal has to
+    /// compare the completed schema's field set against what Trax declared, naming the extension.
+    /// </summary>
+    [Test]
+    public async Task AnExtensionIgnoringATraxOwnedField_IsRefused()
+    {
+        var start = () =>
+            PostureHost.StartAsync(g =>
+                g.ExposeOperationQueries()
+                    .AllowAnonymousOperations()
+                    .ConfigureSchema(b => b.AddTypeExtension<IgnoredMetricsOnOperations>())
+            );
+
+        var ex = (await start.Should().ThrowAsync<InvalidOperationException>(Adr)).Which;
+        ex.Message.Should().Contain("OperationsQueries.metrics");
     }
 
     [Test]
@@ -323,7 +363,7 @@ public class FieldNameCollisionTests
         protected override void Configure(IObjectTypeDescriptor descriptor)
         {
             descriptor.Name("RootQuery");
-            descriptor.Field<CollisionResolvers>(r => r.Operations()).Ignore();
+            descriptor.Field<CollisionResolvers>(r => r.Duplicated()).Ignore();
             descriptor.Field<OtherCollisionResolvers>(r => r.Duplicated());
         }
     }
@@ -352,6 +392,24 @@ public class FieldNameCollisionTests
         {
             descriptor.Name("RootQuery");
             descriptor.Field<CollisionResolvers>(r => r.Operations());
+        }
+    }
+
+    public sealed class IgnoredMetricsOnOperations : ObjectTypeExtension
+    {
+        protected override void Configure(IObjectTypeDescriptor descriptor)
+        {
+            descriptor.Name("OperationsQueries");
+            descriptor.Field("metrics").Ignore();
+        }
+    }
+
+    public sealed class LambdaTeamsOnDiscover : ObjectTypeExtension
+    {
+        protected override void Configure(IObjectTypeDescriptor descriptor)
+        {
+            descriptor.Name("DiscoverQueries");
+            descriptor.Field("teams").Resolve(_ => "lambda");
         }
     }
 

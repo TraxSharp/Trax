@@ -12,13 +12,21 @@ namespace Trax.Api.GraphQL.Configuration;
 /// surface already puts a field of that name there: Trax itself (a query model, a train, a
 /// namespace, an entry field) or another type extension. HotChocolate merges the two into one
 /// field whose resolver is whichever it built last, so one of them would silently answer for the
-/// other. See <c>docs/adr/0001-a-misconfigured-host-fails-at-startup.md</c>.
+/// other. A host's extension that builds a field in code under the name of one of Trax's own, or
+/// ignores a field of a Trax-owned type, is refused too: the first replaces Trax's field, the
+/// second removes it, and neither leaves a member behind for the name census to see. See
+/// <c>docs/adr/0001-a-misconfigured-host-fails-at-startup.md</c>.
 /// </summary>
 /// <remarks>
 /// Contributions are read per extension, after names are complete and before HotChocolate merges
 /// the extensions into their types, which is the last point at which two fields of one name are
 /// still two. Trax's own fields are named by <see cref="SchemaNameCensus"/>, which checked them
 /// against each other before the schema existed.
+/// <para>
+/// A host's extension is one whose class is the host's: Trax builds its own as inline
+/// <see cref="ObjectTypeExtension"/>s, so an extension a host also builds inline cannot be told
+/// from Trax's and is not checked for a code-built field or an ignore.
+/// </para>
 /// </remarks>
 internal sealed class SchemaFieldCollisionInterceptor(
     SchemaNameCensus census,
@@ -38,16 +46,29 @@ internal sealed class SchemaFieldCollisionInterceptor(
         List<SchemaNameOwner>
     > _contributions = [];
 
+    private readonly HashSet<string> _traxTypes = new(StringComparer.Ordinal);
+
+    private readonly List<(string Type, string Field, string Extension)> _ignored = [];
+
     public override void OnAfterCompleteName(
         ITypeCompletionContext completionContext,
         TypeSystemConfiguration configuration
     )
     {
-        if (
-            completionContext.Type is not ObjectTypeExtension
-            || configuration is not ObjectTypeConfiguration extension
-        )
+        if (configuration is not ObjectTypeConfiguration objectType)
             return;
+
+        if (completionContext.Type is not ObjectTypeExtension)
+        {
+            if (
+                Tracked(objectType.Name)
+                || objectType.RuntimeType is { } runtime && IsTrax(runtime.Assembly)
+            )
+                _traxTypes.Add(objectType.Name);
+            return;
+        }
+
+        var extension = objectType;
 
         // An extension that names its target by CLR type carries that type; its own name is not
         // the target's, so the type decides when there is one.
@@ -55,7 +76,22 @@ internal sealed class SchemaFieldCollisionInterceptor(
             ? TypeNames.GetValueOrDefault(extended)
             : extension.Name;
 
-        if (typeName is null || !Tracked(typeName))
+        if (typeName is null)
+            return;
+
+        var hostExtension = HostExtension(completionContext.Type);
+
+        // Field(name).Ignore() on an extension lands in FieldIgnores, not Fields.
+        if (hostExtension is not null)
+            foreach (
+                var ignored in extension
+                    .FieldIgnores.Select(b => b.Name)
+                    .Concat(extension.Fields.Where(f => f.Ignore).Select(f => f.Name))
+                    .Distinct()
+            )
+                _ignored.Add((typeName, ignored, hostExtension));
+
+        if (!Tracked(typeName))
             return;
 
         foreach (var field in extension.Fields)
@@ -63,7 +99,7 @@ internal sealed class SchemaFieldCollisionInterceptor(
             if (field.Ignore)
                 continue;
 
-            var owner = Owner(typeName, field);
+            var owner = Owner(typeName, field, hostExtension);
             if (owner is null)
                 continue;
 
@@ -76,6 +112,22 @@ internal sealed class SchemaFieldCollisionInterceptor(
 
     public override void OnBeforeMergeTypeExtensions()
     {
+        foreach (var (typeName, fieldName, extension) in _ignored)
+        {
+            if (!_traxTypes.Contains(typeName))
+                continue;
+
+            var path = $"{typeName}.{fieldName}";
+            report.Add(
+                new TypeExtensionExposureViolation(
+                    $"ignored:{path}",
+                    $"GraphQL field '{path}' is Trax's, and type extension '{extension}' removes it "
+                        + "with Ignore(). A host does not remove Trax's fields; leave it out of "
+                        + "the extension. See docs/adr/0001-a-misconfigured-host-fails-at-startup.md."
+                )
+            );
+        }
+
         foreach (var ((typeName, fieldName), owners) in _contributions)
         {
             var all = census.FieldOwner(typeName, fieldName) is { } trax
@@ -104,16 +156,26 @@ internal sealed class SchemaFieldCollisionInterceptor(
 
     /// <summary>
     /// Who contributed the field: the member it was built from, or, for a field built in code,
-    /// nobody Trax can name unless the census says the field is Trax's own, in which case it was
-    /// already checked and is skipped.
+    /// the host's extension class when there is one. A field built in code by Trax under a name the
+    /// census says is Trax's own was already checked, and is skipped.
     /// </summary>
-    private SchemaNameOwner? Owner(string typeName, ObjectFieldConfiguration field)
+    private SchemaNameOwner? Owner(
+        string typeName,
+        ObjectFieldConfiguration field,
+        string? hostExtension
+    )
     {
         if ((field.ResolverMember ?? field.Member) is { DeclaringType: { } declaring } member)
         {
             var described = $"{declaring.FullName}.{member.Name}";
             return new SchemaNameOwner($"member:{described}", $"'{described}'");
         }
+
+        if (hostExtension is not null)
+            return new SchemaNameOwner(
+                $"code:{typeName}.{field.Name}:{hostExtension}",
+                $"a field type extension '{hostExtension}' builds in code"
+            );
 
         return census.FieldOwner(typeName, field.Name) is null
             ? new SchemaNameOwner(
@@ -122,4 +184,19 @@ internal sealed class SchemaFieldCollisionInterceptor(
             )
             : null;
     }
+
+    /// <summary>
+    /// The class name of a type extension a host wrote, or null for one Trax built: Trax builds
+    /// its own inline, as HotChocolate's own <see cref="ObjectTypeExtension"/>, or in this assembly.
+    /// </summary>
+    private static string? HostExtension(object extension)
+    {
+        var type = extension.GetType();
+        return type.Assembly == typeof(ObjectTypeExtension).Assembly || IsTrax(type.Assembly)
+            ? null
+            : type.FullName;
+    }
+
+    private static bool IsTrax(System.Reflection.Assembly assembly) =>
+        assembly == typeof(SchemaFieldCollisionInterceptor).Assembly;
 }

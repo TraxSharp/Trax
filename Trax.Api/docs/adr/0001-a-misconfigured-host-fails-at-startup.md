@@ -91,8 +91,9 @@ design, so it is the one place Trax cannot control.
 
 Not covered:
 
-- A field a type extension builds from a lambda, with no member behind it, that takes the name
-  of one of Trax's own fields is indistinguishable from Trax's field and is not refused.
+- A host's type extension written inline (`new ObjectTypeExtension(d => ...)`) cannot be told
+  from one Trax builds, so a field it builds in code under one of Trax's names, or a Trax field
+  it ignores, is not refused. One written as a class is refused for both.
 - Nothing checks that a new piece of host configuration *has* a validator. Adding a surface
   that can be half-wired and forgetting the check is invisible to the build, and that is the
   failure mode this ADR is about.
@@ -107,6 +108,10 @@ Not covered:
   one.
 
 ## Changelog
+
+- **2026-10-16**: A host's type extension class that builds a field in code under the name of one
+  of Trax's own, or ignores a field of a Trax-owned type, is refused at startup
+  (`SchemaFieldCollisionInterceptor`). Only extensions written inline stay uncovered.
 
 - **2026-10-05**: A policy named by any `@authorize` directive in the built schema, or by a
   train's `[TraxAuthorize]`, must be registered: `SchemaAuthorizationPolicyValidator` and
