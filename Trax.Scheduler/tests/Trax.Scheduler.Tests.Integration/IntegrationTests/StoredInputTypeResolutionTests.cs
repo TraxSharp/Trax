@@ -148,7 +148,10 @@ public class StoredInputTypeResolutionTests : TestSetup
         NotATrainInput.Constructed.Should().Be(0);
         DataContext.Reset();
         var after = await DataContext.Metadatas.FirstAsync(m => m.Id == metadata.Id);
-        after.TrainState.Should().Be(TrainState.Pending);
+        after
+            .TrainState.Should()
+            .Be(TrainState.Failed, "the job is gone, so the worker fails the run it never started");
+        after.FailureReason.Should().NotContain(nameof(NotATrainInput));
     }
 
     private async Task<WorkQueue> SaveWorkQueueEntry(string inputTypeName)

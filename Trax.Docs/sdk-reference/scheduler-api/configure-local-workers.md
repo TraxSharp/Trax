@@ -56,6 +56,7 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 - `AddScheduler` refuses options outside their ranges when it is built (see [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges)); `VisibilityTimeout` must be between one second and ten years.
 - While a worker holds jobs, it refreshes the `fetched_at` of every job it has claimed and not yet finished, the running one and any waiting behind it in a batch, every third of `VisibilityTimeout`. If a worker crashes mid-execution, the refreshes stop, the timestamp becomes stale, and the job is reclaimed after `VisibilityTimeout`.
 - A job waiting in `trax.background_job` for a free worker is not failed by the stale-pending reaper, however long it waits.
+- A job that fails before its run starts (its input cannot be read, or the run's start cannot be written) is deleted like any other, and the worker fails the run itself, still `Pending`, with the reason "The job failed before its run started". The failure goes through the lifecycle hooks at once, so a machine that invoked the run reaches its `OnFailed` target without waiting for the stale-pending reaper. The worker's log has the error. A run that started records its own outcome.
 - With `UseRemoteWorkers()`, `UseSqsWorkers()` or `UseLambdaWorkers()` also configured, local workers still run every train those calls do not route.
 
 ### Registered services

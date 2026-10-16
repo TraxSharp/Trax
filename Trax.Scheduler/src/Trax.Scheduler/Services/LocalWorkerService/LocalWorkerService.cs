@@ -6,12 +6,15 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Effect.Enums;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Trains.JobRunner;
+using Trax.Scheduler.Trains.ManifestManager.Utilities;
 using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Services.LocalWorkerService;
@@ -299,6 +302,10 @@ internal class LocalWorkerService(
                 jobId,
                 metadataId
             );
+
+            // The job row goes below, so nothing would ever start a run still Pending: fail it
+            // here rather than leave it for the stale-pending reaper.
+            await FailUnstartedRunAsync(workerId, metadataId);
         }
 
         // Phase 3: Delete the job row (always, on both success and failure).
@@ -329,6 +336,51 @@ internal class LocalWorkerService(
                 "Worker {WorkerId} failed to delete job {JobId} — it will be reclaimed after visibility timeout",
                 workerId,
                 jobId
+            );
+        }
+    }
+
+    /// <summary>
+    /// Fails run <paramref name="metadataId"/> when its job failed before the run started, and
+    /// publishes the failure through the lifecycle hooks, so a machine that invoked it reaches its
+    /// <c>OnFailed</c> target now instead of after <see cref="SchedulerConfiguration.StalePendingTimeout"/>.
+    /// A run that started records its own outcome and is not Pending, so the write matches nothing.
+    /// </summary>
+    /// <remarks>
+    /// The row records a fixed reason rather than the exception: a lifecycle event reaches
+    /// subscribers who are not operators, and the worker's log keeps the detail. Runs on an
+    /// uncancellable token for the reason the job row's delete does. A failure here is logged and
+    /// leaves the run to the reaper.
+    /// </remarks>
+    private async Task FailUnstartedRunAsync(int workerId, long metadataId)
+    {
+        try
+        {
+            using var failScope = serviceProvider.CreateScope();
+            var failContext = failScope.ServiceProvider.GetRequiredService<IDataContext>();
+
+            var failed = await ReapedRuns.FailAsync(
+                failContext,
+                failContext.Metadatas.Where(m =>
+                    m.Id == metadataId && m.TrainState == TrainState.Pending
+                ),
+                [metadataId],
+                "The job failed before its run started. The worker's log has the error.",
+                "JobFailedBeforeRun",
+                nameof(LocalWorkerService),
+                CancellationToken.None
+            );
+
+            if (failed.Count > 0)
+                await OutOfTrainOutcomes.PublishFailedAsync(serviceProvider, failed, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Worker {WorkerId} could not fail run {MetadataId}, whose job failed before it started; the stale-pending reaper will",
+                workerId,
+                metadataId
             );
         }
     }
