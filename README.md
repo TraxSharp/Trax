@@ -2,13 +2,15 @@
 
 [![CI](https://github.com/TraxSharp/Trax/actions/workflows/ci.yml/badge.svg)](https://github.com/TraxSharp/Trax/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Trax.Effect)](https://www.nuget.org/packages?q=Trax)
+[![npm](https://img.shields.io/npm/v/@traxsharp/state-machine)](https://www.npmjs.com/package/@traxsharp/state-machine)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 A headless web framework for .NET. Build a more robust frontend: whatever goes wrong, the backend gets it right, and
 every run is recorded in your Postgres.
 [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) ·
-[Samples](Trax.Samples) · [NuGet](https://www.nuget.org/profiles/Theauxm)
+[Samples](Trax.Samples) · [NuGet](https://www.nuget.org/profiles/Theauxm) ·
+[npm](https://www.npmjs.com/package/@traxsharp/state-machine)
 
 ## Install
 

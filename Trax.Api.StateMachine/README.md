@@ -1,5 +1,9 @@
 # @traxsharp/state-machine
 
+[![npm](https://img.shields.io/npm/v/@traxsharp/state-machine)](https://www.npmjs.com/package/@traxsharp/state-machine)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/statemachine)
+
 The TypeScript half of the Trax portable snapshot state-machine: a small engine that represents a
 multi-step flow's state as language-neutral JSON so a browser client and a C# backend
 (`Trax.Effect.StateMachine`) agree on it. Illegal `(state, context)` pairs are unrepresentable and every
