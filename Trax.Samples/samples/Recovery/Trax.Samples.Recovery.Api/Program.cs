@@ -209,9 +209,10 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 
 // ── GraphQL ─────────────────────────────────────────────────────────────────
 // The host runs only persisted documents, as it would in production: an ad-hoc document is refused on every
-// transport, and so is introspection. Every document the page sends is generated and registered by Trax when the
-// host starts, one per machine operation, exposed train and runProgress operation, and the page holds them in its
-// generated client (src/trax, from the manifest --trax-export-client writes). The hand-written recovery_* documents
+// transport, and so is introspection. Trax generates and registers one document per machine operation and runProgress
+// operation when the host starts; each train the page calls is reached through a document the page wrote
+// (src/graphql/*.graphql), which trax client --documents writes into trax.documents.json and the host registers from
+// it. The page holds every id in its generated client (src/trax, from the manifest --trax-export-client writes). The hand-written recovery_* documents
 // an earlier version registered are deactivated (RetiredPageDocuments). Recovery:RequirePersistedOperations turns
 // the refusal off, for a suite that drives the API with hand-written documents, in Development only: anywhere else
 // the setting is ignored and only registered documents run.
@@ -232,7 +233,8 @@ builder.Services.AddTraxGraphQL(graphql =>
                 .SingleNode()
                 .RequirePersisted(requirePersisted)
                 .LogNonPersistedRequests(!requirePersisted)
-                .GateManagement(roles: RecoveryRoles.Operator);
+                .GateManagement(roles: RecoveryRoles.Operator)
+                .ClientDocuments(Path.Combine(AppContext.BaseDirectory, "trax.documents.json"));
             if (requirePersisted)
                 persisted.DisableIntrospection();
         })

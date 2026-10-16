@@ -8,9 +8,9 @@ using System.Text.Json.Serialization;
 namespace Trax.Effect.StateMachine;
 
 /// <summary>
-/// What a host exports for <c>trax client</c>: every persisted document a client may send, by id, each exposed
-/// machine's IR, each exposed train's operations, what each requires of its caller, and the GraphQL types those
-/// documents reach. A host writes it from the documents it registers, so its ids are the ones it serves; the CLI reads
+/// What a host exports for <c>trax client</c>: every persisted document the host generates, by id, each exposed
+/// machine's IR, each exposed train's field and arguments, what each requires of its caller, and the GraphQL types
+/// those documents and trains reach. A host writes it from the documents it registers, so its ids are the ones it serves; the CLI reads
 /// only this file, so a frontend is generated with no running server and no credential. It never lists an operation
 /// under <c>operations</c>.
 /// </summary>
@@ -20,9 +20,10 @@ public sealed record ClientManifest
     /// <summary>
     /// The format this version writes and reads. A reader refuses any other, so a manifest and the tool that reads it
     /// agree on its shape; it moves when a field is added, removed or changes meaning. Format 2 writes an output
-    /// schema several outcomes share once, under <c>$defs</c>.
+    /// schema several outcomes share once, under <c>$defs</c>. Format 3 lists each train's arguments in place of a
+    /// generated document: a frontend writes the documents that reach a train.
     /// </summary>
-    public const int CurrentFormat = 2;
+    public const int CurrentFormat = 3;
 
     /// <summary>The format the file was written in.</summary>
     public int Format { get; init; } = CurrentFormat;
@@ -40,8 +41,9 @@ public sealed record ClientManifest
     public IReadOnlyList<ClientManifestDocument> Progress { get; init; } = [];
 
     /// <summary>
-    /// The GraphQL type definitions the documents reach, as SDL, so a generator types every input and answer. Only
-    /// those types: the rest of the schema stays on the server.
+    /// The GraphQL type definitions the documents reach, and every type an exposed train's arguments and answer reach,
+    /// as SDL, so a generator checks and types every document a frontend writes. Only those types: the rest of the
+    /// schema stays on the server.
     /// </summary>
     public string Types { get; init; } = "";
 
@@ -193,8 +195,8 @@ public sealed record ClientManifest
         // A null in a list is not a nullable annotation's to refuse: it is found here.
         if (manifest.Machines.Any(m => m is null || m.Documents.Any(d => d is null)))
             throw Malformed("$.machines", "A machine or one of its documents is null.");
-        if (manifest.Trains.Any(t => t is null || t.Documents.Any(d => d is null)))
-            throw Malformed("$.trains", "A train or one of its documents is null.");
+        if (manifest.Trains.Any(t => t is null || t.Arguments.Any(a => a is null)))
+            throw Malformed("$.trains", "A train or one of its arguments is null.");
         if (manifest.Progress.Any(d => d is null))
             throw Malformed("$.progress", "A progress document is null.");
         var requirements = manifest
@@ -270,8 +272,8 @@ public sealed record ClientManifestTrain
     /// <summary>What a caller needs to run the train, as its attributes declare it.</summary>
     public ClientManifestRequirement? Requires { get; init; }
 
-    /// <summary>The train's persisted documents, ordered by operation.</summary>
-    public IReadOnlyList<ClientManifestDocument> Documents { get; init; } = [];
+    /// <summary>The arguments the train's field takes, in the order the schema declares them.</summary>
+    public IReadOnlyList<ClientManifestArgument> Arguments { get; init; } = [];
 
     /// <summary>
     /// Whether the caller who starts a run of the train may follow it, through the documents in
@@ -280,13 +282,26 @@ public sealed record ClientManifestTrain
     public bool Progress { get; init; }
 }
 
+/// <summary>One argument of a field in a <see cref="ClientManifest"/>.</summary>
+public sealed record ClientManifestArgument
+{
+    /// <summary>The argument's name (<c>input</c>).</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Its type as SDL writes it (<c>StartRunInput!</c>); the types it names are in <see cref="ClientManifest.Types"/>.</summary>
+    public required string Type { get; init; }
+
+    /// <summary>Its default value as GraphQL writes it, or null when it has none.</summary>
+    public string? Default { get; init; }
+}
+
 /// <summary>One persisted document a client sends by its id.</summary>
 public sealed record ClientManifestDocument
 {
     /// <summary>The id a client sends in place of the document.</summary>
     public required string Id { get; init; }
 
-    /// <summary>The operation: a machine's field (<c>start</c>, an event, <c>get</c>, <c>changed</c>) or a train's.</summary>
+    /// <summary>The operation: a machine's field (<c>start</c>, an event, <c>get</c>, <c>changed</c>) or runProgress's.</summary>
     public required string Operation { get; init; }
 
     /// <summary>The document's text, which the host runs for the id.</summary>

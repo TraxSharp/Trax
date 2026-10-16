@@ -11,7 +11,7 @@ namespace Trax.Samples.StateMachine.E2E.Tests;
 [TestFixture]
 public class PaymentsQueryTests : StateMachineTestFixture
 {
-    private static string Id => StateMachineClient.TrainDocument("listCharges").Id;
+    private static string Id => StateMachineClient.DocumentIdOf("paymentsListCharges");
 
     [Test]
     public async Task An_anonymous_caller_cannot_list_charges()

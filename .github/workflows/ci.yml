@@ -571,9 +571,11 @@ jobs:
           node Trax.Api.StateMachine/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
           (cd "$api" && ConnectionStrings__TraxDatabase="Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none" \
             dotnet run --no-restore -- --trax-export-client "$RUNNER_TEMP/manifest.json")
-          dotnet run --project Trax.Cli/src/Trax.Cli --no-restore -- client \
-            --manifest "$RUNNER_TEMP/manifest.json" --out "$CLIENT/src/trax" \
-            --tools-dir "$RUNNER_TEMP/engine" --check \
+          # From the page's folder, so the documents' sources are the paths trax.documents.json records.
+          cli="$PWD/Trax.Cli/src/Trax.Cli"
+          (cd "$CLIENT" && dotnet run --project "$cli" --no-restore -- client \
+            --manifest "$RUNNER_TEMP/manifest.json" --out src/trax \
+            --tools-dir "$RUNNER_TEMP/engine" --documents 'src/graphql/*.graphql' --check) \
             || { echo "::error::The Recovery page's generated client is out of date. Regenerate it with the commands in Trax.Samples/samples/Recovery/README.md and commit the result."; exit 1; }
 
   # The StateMachine sample's page (Trax.Samples/samples/StateMachine/web), its own npm project on
@@ -651,9 +653,10 @@ jobs:
           dotnet restore Trax.Cli/src/Trax.Cli --locked-mode
           node Trax.Api.StateMachine/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
           dotnet run --project "$api" --no-restore -- --trax-export-client "$RUNNER_TEMP/manifest.json"
-          dotnet run --project Trax.Cli/src/Trax.Cli --no-restore -- client \
-            --manifest "$RUNNER_TEMP/manifest.json" --out "$WEB/src/trax" \
-            --tools-dir "$RUNNER_TEMP/engine" --check \
+          cli="$PWD/Trax.Cli/src/Trax.Cli"
+          (cd "$WEB" && dotnet run --project "$cli" --no-restore -- client \
+            --manifest "$RUNNER_TEMP/manifest.json" --out src/trax \
+            --tools-dir "$RUNNER_TEMP/engine" --documents 'src/graphql/*.graphql' --check) \
             || { echo "::error::The StateMachine sample's generated client is out of date. Regenerate it with the commands at the top of $api/Program.cs and commit the result."; exit 1; }
 
   # The TypeScript twin of Trax.Effect.StateMachine. Its machines/ corpus is also read by the

@@ -18,9 +18,11 @@
 //   3. cd samples/StateMachine/web && npm install && npm run dev
 //
 // The host serves persisted documents only: the page sends each operation by the id its generated client holds, and a
-// document sent as text is refused. To regenerate the client after changing a machine or a train:
+// document sent as text is refused. The trains the page calls are reached through its own documents
+// (web/src/graphql/*.graphql). To regenerate the client after changing a machine, a train or a document:
 //   (cd samples/StateMachine/Trax.Samples.StateMachine.Api && dotnet run -- --trax-export-client ../web/src/trax/manifest.json)
-//   trax client --manifest samples/StateMachine/web/src/trax/manifest.json --out samples/StateMachine/web/src/trax
+//   trax client --manifest samples/StateMachine/web/src/trax/manifest.json --out samples/StateMachine/web/src/trax \
+//     --documents 'samples/StateMachine/web/src/graphql/*.graphql'
 //
 // Docs: https://traxsharp.net/docs/samples/state-machine
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,12 +86,17 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddSingleton<SimulatedPaymentProvider>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
 
-// Exposed machines and trains are served as persisted documents the host generates and registers, one per operation,
-// whose ids carry the machine's version or the train's shape. The host serves nothing else: a document sent as text is
-// refused, introspection included, and no document-management operations are exposed.
+// Exposed machines are served as persisted documents the host generates and registers, one per operation, whose ids
+// carry the machine's version; the trains the page calls are served as the documents the page wrote, which the host
+// registers from trax.documents.json. The host serves nothing else: a document sent as text is refused, introspection
+// included, and no document-management operations are exposed.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
-        persisted.SingleNode().RequirePersisted(true).DisableIntrospection()
+        persisted
+            .SingleNode()
+            .RequirePersisted(true)
+            .DisableIntrospection()
+            .ClientDocuments(Path.Combine(AppContext.BaseDirectory, "trax.documents.json"))
     )
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();

@@ -7,8 +7,8 @@ status: accepted
 
 # A client document is registered by the host at boot
 
-A frontend fetches what a component needs from a `.graphql` file it writes, rather than the select-everything document
-a host generates for each exposed train. `trax client --documents <glob>` checks each file against the client
+A frontend fetches what a component needs from a `.graphql` file it writes. (A host once also generated a
+select-everything document for each exposed train; it no longer does, see [0054](./0054-a-frontend-writes-every-document-that-reaches-a-train.md).) `trax client --documents <glob>` checks each file against the client
 manifest, types its result from what it selects, and writes `trax.documents.json`; the host names that file with
 `ClientDocuments(path)` and registers every document in it when it starts, under `trax_client_<name>_<hash of the
 text>`, which the generated function sends. A host with persisted operations required runs nothing else a client
@@ -34,7 +34,7 @@ writes.
   passes that node's checks, until no node has registered it for the grace period of the generated documents; then it
   answers `CLIENT_OUTDATED`. A page built before a frontend's deploy keeps working through it.
 - **Answers are typed per document.** Every output type the generated client declares is what some document selects:
-  a train's generated document, a client document, or a named fragment. Nothing declares a model's full shape, so no
+  a client document or a named fragment. Nothing declares a model's full shape, so no
   type promises a field the response lacks.
 
 ## Considered options
@@ -44,7 +44,7 @@ writes.
 - **The frontend's pipeline uploads its documents through the management surface.** Rejected: the documents would be
   checked only at upload, so a later host change could break them with nobody seeing it at boot, and the pipeline would
   need the management credential.
-- **Numbered per slot, like a train's generated documents.** Rejected: an older id would answer `CLIENT_OUTDATED`
+- **Numbered per slot, like a train's generated documents were.** Rejected: an older id would answer `CLIENT_OUTDATED`
   as soon as the host deploys, and the pages that reload would get the old frontend until it deploys too.
 - **Any operation the schema allows.** Rejected: the widest allow-list, for no use a frontend has.
 
@@ -65,4 +65,5 @@ the node's life; no test changes a node's schema while it runs.
 
 ## Changelog
 
+- **2026-10-16**: A client document is now the only way a frontend reaches a train (0054).
 - **2026-10-16**: Recorded.

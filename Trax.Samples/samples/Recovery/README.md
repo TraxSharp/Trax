@@ -220,17 +220,18 @@ dotnet run --project Trax.Cli/src/Trax.Cli -- machine generate \
 ```
 
 The host runs only persisted documents, as a production host would: an ad-hoc document, and introspection, are
-refused on every transport. Trax generates every document the page sends and registers them when the host starts:
-each machine operation (`trax_machine_<machine>_<operation>_<hash>`), each exposed train (`trax_train_...`) and
-`runProgress` (`trax_progress_...`). The page holds them in its generated client, `src/trax/`, written by
-`trax client` from the manifest the host exports. After changing a machine or a page train, write both again from
-the repository root:
+refused on every transport. Trax generates the machine operations' documents
+(`trax_machine_<machine>_<operation>_<hash>`) and `runProgress`'s (`trax_progress_...`) and registers them when the
+host starts. Each train the page calls is reached through the page's own document, in
+`Trax.Samples.Recovery.Client/src/graphql/`, which `trax client --documents` writes into `trax.documents.json`; the
+host's build copies that file beside it and registers every document in it at startup (`trax_client_...`). The page
+holds every id in its generated client, `src/trax/`, written by `trax client` from the manifest the host exports.
+After changing a machine, a train or a document, write both again from the repository root:
 
 ```bash
 (cd Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Api && dotnet run -- --trax-export-client ../Trax.Samples.Recovery.Client/src/trax/manifest.json)
-dotnet run --project Trax.Cli/src/Trax.Cli -- client \
-  --manifest Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/trax/manifest.json \
-  --out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/trax
+(cd Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client && dotnet run --project ../../../../Trax.Cli/src/Trax.Cli -- client \
+  --manifest src/trax/manifest.json --out src/trax --documents 'src/graphql/*.graphql')
 ```
 
 CI does the same and fails when the committed client differs. A page built before a deploy that changed the machine

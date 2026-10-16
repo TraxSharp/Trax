@@ -3,10 +3,10 @@ import "../format.g";
 import { sendDocument } from "../client.g";
 import type { ChangeCaseDataInput } from "../types.g";
 
-/** The persisted id of 'changeCaseData', which the host registered. */
-export const changeCaseDataDocumentId = "trax_train_mutation__changeCaseData_9383061c6cf0b8c2d7c19193f3fa40b2fc9b08eceb0373b2bfaea657a9d69612829806e58f44dbf9";
+/** The persisted id of the client document 'ChangeCaseData' (src/graphql/changeCaseData.graphql), which the host registers from trax.documents.json. */
+export const changeCaseDataDocumentId = "trax_client_ChangeCaseData_8679b4d9d484d8a9e31820919e4c8c10d8d8658554d03f5441292c55e31c1fbc995481a396c50ec3";
 
-/** What 'changeCaseData' answers: the fields its document selects. */
+/** What 'ChangeCaseData' answers: the fields it selects. */
 export type ChangeCaseDataResult = {
   externalId: string;
   metadataId: number | null;

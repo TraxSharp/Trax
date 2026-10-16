@@ -3,10 +3,10 @@ import "../format.g";
 import { sendDocument } from "../client.g";
 import type { OrderTrouble, OrderTroubleInput } from "../types.g";
 
-/** The persisted id of 'orderTrouble', which the host registered. */
-export const orderTroubleDocumentId = "trax_train_mutation__orderTrouble_f521c5f8817865a9bcc067d0fd281be332cf3c78b62513da371b6d7ba0b71eb3382547a8916dcff3";
+/** The persisted id of the client document 'OrderTrouble' (src/graphql/orderTrouble.graphql), which the host registers from trax.documents.json. */
+export const orderTroubleDocumentId = "trax_client_OrderTrouble_6118d9a0d9da758235452d23fe8b7057222f08f82873290efa2ef3f5fb6492e18339d61a8e51db43";
 
-/** What 'orderTrouble' answers: the fields its document selects. */
+/** What 'OrderTrouble' answers: the fields it selects. */
 export type OrderTroubleResult = {
   externalId: string;
   metadataId: number | null;

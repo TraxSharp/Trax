@@ -2,10 +2,10 @@
 import "../format.g";
 import { sendDocument } from "../client.g";
 
-/** The persisted id of 'listCharges', which the host registered. */
-export const paymentsListChargesDocumentId = "trax_train_query_payments_listCharges_583487affec107d7474ed21f05dbf4f815f7e2d0335c0c540b8ad8b6a8e9a9765d43ce065f608d21";
+/** The persisted id of the client document 'PaymentsListCharges' (src/graphql/paymentsListCharges.graphql), which the host registers from trax.documents.json. */
+export const paymentsListChargesDocumentId = "trax_client_PaymentsListCharges_d368fff39b659c73629b6c274a52b7297d5e04aa6d80c79790e033acb9d346c656783585286c9953";
 
-/** What 'listCharges' answers: the fields its document selects. */
+/** What 'PaymentsListCharges' answers: the fields it selects. */
 export type PaymentsListChargesResult = {
   charges: Array<{
     receipt: string;

@@ -11,7 +11,7 @@ namespace Trax.Samples.StateMachine.E2E.Utilities;
 /// generated client does not have (a generic save, an input an event does not take, a machine the host does not
 /// expose) is answered <see cref="NotServed"/>: nothing could send it but a document, which the host refuses.
 /// </summary>
-public sealed class StateMachineClient(GraphQLClient graphQL)
+public sealed partial class StateMachineClient(GraphQLClient graphQL)
 {
     /// <summary>The problem a request is answered with when no generated operation serves it.</summary>
     public const string NotServed = "not-served";
@@ -32,9 +32,22 @@ public sealed class StateMachineClient(GraphQLClient graphQL)
             .Machines.SingleOrDefault(m => m.Id == machine)
             ?.Documents.SingleOrDefault(d => d.Operation == operation);
 
-    /// <summary>The generated document of the train whose field is <paramref name="field"/>.</summary>
-    public static ClientManifestDocument TrainDocument(string field) =>
-        Manifest.Trains.Single(t => t.Field == field).Documents.Single();
+    /// <summary>
+    /// The id of the page's own document whose function is <paramref name="function"/>, as its generated module
+    /// (<c>web/src/trax/documents/&lt;function&gt;.g.ts</c>) holds it.
+    /// </summary>
+    public static string DocumentIdOf(string function) =>
+        DocumentId()
+            .Match(
+                File.ReadAllText(
+                    Path.Combine(AppContext.BaseDirectory, "documents", $"{function}.g.ts")
+                )
+            )
+            .Groups["id"]
+            .Value;
+
+    [System.Text.RegularExpressions.GeneratedRegex("DocumentId = \"(?<id>[^\"]+)\"")]
+    private static partial System.Text.RegularExpressions.Regex DocumentId();
 
     /// <summary>
     /// Starts an instance of <paramref name="machine"/> from its declared start, as the page does: the server mints
@@ -73,7 +86,7 @@ public sealed class StateMachineClient(GraphQLClient graphQL)
     }
 
     public Task<GraphQLResponse> ListMachinesAsync(Caller caller) =>
-        graphQL.SendIdAsync(TrainDocument("listMachines").Id, caller, new { });
+        graphQL.SendIdAsync(DocumentIdOf("stateMachineListMachines"), caller, new { });
 
     /// <summary>
     /// Tries the generic save, as a client that writes its own snapshot would. The generated client has no such

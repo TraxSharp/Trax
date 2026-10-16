@@ -115,17 +115,11 @@ internal static class ClientManifests
                             ["recovery-user"],
                         ],
                     },
-                    Documents =
+                    Arguments =
                     [
-                        new ClientManifestDocument
-                        {
-                            Id =
-                                "trax_train_mutation__startRun_"
-                                + new string('c', 64)
-                                + new string('d', 16),
-                            Operation = "startRun",
-                            Document = StartRunDocument,
-                        },
+                        new ClientManifestArgument { Name = "input", Type = "StartRunInput!" },
+                        new ClientManifestArgument { Name = "mode", Type = "ExecutionMode" },
+                        new ClientManifestArgument { Name = "priority", Type = "Int" },
                     ],
                 },
             ],

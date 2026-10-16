@@ -67,6 +67,9 @@ reads only that the edge is effect-bound, so the IR format version is unchanged,
 
 ## Every exposed train has a generated document
 
+Undone in Trax 1.67.0, which generates no train document: see
+[Reach trains through your own documents](/docs/migration-guides/reach-trains-through-your-own-documents).
+
 A host with persisted operations registers a document for every train it exposes, under `trax_train_`, with an id
 that changes when the train's input or output does
 ([Generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents)). A

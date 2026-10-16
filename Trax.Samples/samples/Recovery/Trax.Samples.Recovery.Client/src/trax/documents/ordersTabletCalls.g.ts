@@ -2,10 +2,10 @@
 import "../format.g";
 import { sendDocument } from "../client.g";
 
-/** The persisted id of 'tabletCalls', which the host registered. */
-export const ordersTabletCallsDocumentId = "trax_train_query_orders_tabletCalls_c572ce8374afa5fb9d4ac1b3aed6f4612faa6907dc91b9f8926951719d2a36161f9fe7cab9538f11";
+/** The persisted id of the client document 'OrdersTabletCalls' (src/graphql/ordersTabletCalls.graphql), which the host registers from trax.documents.json. */
+export const ordersTabletCallsDocumentId = "trax_client_OrdersTabletCalls_fb1087eb34da5eee53f5a2a3be2d943e99ed1533ed16f40dc03117decb3083080363d241ffaee6b9";
 
-/** What 'tabletCalls' answers: the fields its document selects. */
+/** What 'OrdersTabletCalls' answers: the fields it selects. */
 export type OrdersTabletCallsResult = {
   restaurant: string;
   calls: Array<{

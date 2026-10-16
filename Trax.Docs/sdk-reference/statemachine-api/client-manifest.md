@@ -37,7 +37,8 @@ Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMach
 | `ITraxStartupCheck` | Marks a hosted service that only checks configuration and the host's own types at startup and refuses a host that is wrong. An export runs every one of these and no other hosted service. Trax's own startup validators carry it, except the two that read the database or call a remote schema. |
 | `ClientManifest` | The file's content: `Format`, `Machines`, `Trains`, `Progress` and `Types`. `Progress` holds the [`runProgress`](/docs/sdk-reference/graphql-api/run-progress) query's and subscription's documents, and is empty when no train lets its starter follow it. `ClientManifest.Write(manifest)` gives its text, `ClientManifest.Read(text)` reads it. `ClientManifest.CurrentFormat` is the format this version writes and reads. |
 | `ClientManifestMachine` | One exposed machine: `Id`, `IrHash`, `Ir` and its `Documents`. `Requires` is null: each event's own rule applies. `IrText()` gives the IR as canonical JSON, the bytes `IrHash` is the SHA-256 of. |
-| `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Answer` (the field's type as SDL writes it), `Requires` and `Documents`, and `Progress`, whether it carries `[TraxRunProgress]`. |
+| `ClientManifestTrain` | One exposed train: its `Field`, `Root`, `Namespace`, `Answer` (the field's type as SDL writes it), `Arguments`, `Requires`, and `Progress`, whether it carries `[TraxRunProgress]`. It carries no document: a frontend reaches a train through a [client document](/docs/api/fetch-only-what-a-component-needs) it writes. |
+| `ClientManifestArgument` | One argument of a train's field: its `Name`, its `Type` as SDL writes it (`StartRunInput!`), and its `Default` as GraphQL writes it, or null. |
 | `ClientManifestDocument` | One persisted document: the `Id` a client sends, its `Operation` and its `Document` text. |
 | `ClientManifestRequirement` | What a caller needs, as the train's attributes declare it: `Anonymous` (`[TraxAllowAnonymous]`), `RoleSets` (one per attribute naming roles; the caller holds a role of every set) and `Policies` (each of them). The server enforces it either way. |
 
@@ -50,10 +51,10 @@ Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMach
 - **Started to export, never serves.** A host started with `--trax-export-client` whose provider skipped its
   migration refuses to start if it serves anyway, because it calls `app.Run()` rather than `RunTraxAsync`: its
   database was not migrated. The refusal names `RunTraxAsync`.
-- **Only what a client sends.** The manifest lists the documents of exposed machines and trains, never one under
-  `operations`. `Types` holds the SDL of the types those documents reach, and of the fields a train's document left out
-  because they lead back to a type already in its answer, so a [client document](/docs/api/fetch-only-what-a-component-needs)
-  may select them; nothing else. The root operation types
+- **Only what a client sends.** The manifest lists the documents the host generates (each exposed machine's, and
+  `runProgress`'s), never one under `operations`, and each exposed train's field and arguments. `Types` holds the SDL
+  of the types those documents reach, and every type an exposed train's arguments and answer reach, so a
+  [client document](/docs/api/fetch-only-what-a-component-needs) may select any of it; nothing else. The root operation types
   and every type a namespace field reaches (`dispatch`, `discover`, `machines` and the namespaces under them) are
   left out, since each lists every sibling operation, so the rest of the schema stays on the server. A train's
   answer type is in its `Answer` instead.
@@ -63,7 +64,10 @@ Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMach
   (invoking states whose trains answer with one type), `Write` puts it once under a top-level `$defs` and each
   outcome's `output` is `{"$ref": "#/$defs/<name>"}`. `Read` puts it back, so each machine's `Ir`, and the
   `IrHash` its documents carry, is the one the host exported. The generated twin likewise writes such a schema once,
-  as a const each outcome names. This is format 2; a format 1 file is exported again.
+  as a const each outcome names.
+- **Format 3.** A train lists its `Arguments` where format 2 listed a generated document, since the host generates no
+  document for a train any more. A format 2 file is exported again; a `trax client` of an earlier version refuses a
+  format 3 file rather than generating functions with no document.
 - **One format.** `Read` refuses a file in any format other than `CurrentFormat`, naming both, and anything that is
   not a manifest. A newer file needs a newer tool; an older one is exported again.
 - **Export the production configuration.** A machine's IR, and so every document id, can depend on configuration (a

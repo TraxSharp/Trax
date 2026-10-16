@@ -13,11 +13,17 @@
     <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
   </ItemGroup>
 
-  <!-- The client manifest the sample's page is generated from: the tests send its ids, as the page does. -->
+  <!-- The client manifest the sample's page is generated from, and the modules of the page's own documents: the tests
+       send their ids, as the page does. -->
   <ItemGroup>
     <None
       Include="..\..\samples\StateMachine\web\src\trax\manifest.json"
       Link="manifest.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <None
+      Include="..\..\samples\StateMachine\web\src\trax\documents\*.g.ts"
+      Link="documents\%(Filename)%(Extension)"
       CopyToOutputDirectory="PreserveNewest"
     />
   </ItemGroup>

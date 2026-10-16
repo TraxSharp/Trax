@@ -10,7 +10,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// </summary>
 /// <remarks>
 /// The id is <c>trax_progress_&lt;operation&gt;_&lt;shapeHash&gt;&lt;textHash&gt;</c>, the operation being
-/// <c>query</c> or <c>subscription</c>, and the hashes made as a train document's are. Each selects every field of the
+/// <c>query</c> or <c>subscription</c>, and the hashes made as every generated id's are (<see cref="TrainDocuments.TextHash"/>). Each selects every field of the
 /// answer, so a client built against one version of the answer is told <c>CLIENT_OUTDATED</c> once it changes.
 /// </remarks>
 internal static class ProgressDocuments
@@ -49,13 +49,13 @@ internal static class ProgressDocuments
                 continue;
             var text =
                 $"{operation} {name}($runId: String!) {{ {RunProgressTypeModule.Field}(runId: $runId)"
-                + TrainDocuments.Selection(
+                + DocumentSelection.Selection(
                     schema,
                     definition.Type,
                     new SelectionWalk($"The {Owner} {operation}")
                 )
                 + " }";
-            var shape = TrainDocuments.ShapeHash(schema, sdl, wrappers, definition, text);
+            var shape = DocumentSelection.ShapeHash(schema, sdl, wrappers, definition, text);
             documents.Add(
                 new ProgressDocument(
                     $"{SlotFor(operation)}_{shape}{TrainDocuments.TextHash(shape, text)}",

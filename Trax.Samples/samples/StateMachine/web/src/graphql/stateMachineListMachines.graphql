@@ -1,0 +1,12 @@
+query StateMachineListMachines {
+  discover {
+    stateMachine {
+      listMachines {
+        machines {
+          name
+          hasEffect
+        }
+      }
+    }
+  }
+}

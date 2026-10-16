@@ -110,8 +110,9 @@ Audit history for an operation, most-recent first. Same `take` / `skip` defaults
 
 ## Reserved ids
 
-Ids starting with `trax_machine_`, `trax_train_` or `trax_progress_` belong to the documents the host generates and
-registers itself ([generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents)). Upload,
+Ids starting with `trax_machine_`, `trax_progress_` or `trax_client_` belong to the documents the host registers
+itself ([generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents)),
+and `trax_train_` to the train documents an earlier version generated. Upload,
 deactivate and restore refuse them with the code `RESERVED_ID`, and `IPersistedOperationStore`'s `UpsertAsync`,
 `DeactivateAsync` and `RestoreAsync` throw `PersistedOperationInputException`.
 

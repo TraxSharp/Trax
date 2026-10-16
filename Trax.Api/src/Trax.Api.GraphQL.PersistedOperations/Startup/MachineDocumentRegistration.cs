@@ -92,21 +92,12 @@ internal sealed class MachineDocumentRegistration(
         _documents =
         [
             .. (exposed.Count == 0 ? [] : MachineDocuments.Generate(executor.Schema, exposed)),
-            .. TrainDocuments.Generate(executor.Schema, trains),
             .. ProgressDocuments.Generate(executor.Schema),
         ];
         var clientDocuments = LoadClientDocuments();
         Services.ClientDocuments.Check(executor.Schema, clientDocuments);
         _documents = [.. _documents, .. clientDocuments];
         GeneratedDocumentValidation.Validate(executor.Schema, _documents);
-        foreach (var train in _documents.OfType<TrainDocument>().Where(d => d.LeftOut.Count > 0))
-            _logger.LogWarning(
-                "The generated document of the {Train} leaves out {LeftOut}: each leads back to a type the answer "
-                    + "already holds, so selecting it would never end. A client that needs one sends a document of "
-                    + "its own.",
-                train.Owner,
-                string.Join(", ", train.LeftOut)
-            );
         await RegisterAsync(cancellationToken).ConfigureAwait(false);
     }
 

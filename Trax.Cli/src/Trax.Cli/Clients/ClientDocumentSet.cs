@@ -481,7 +481,7 @@ internal sealed class ClientDocumentSet
             foreach (var argument in field.Arguments?.Items ?? [])
             {
                 var argName = argument.Name.StringValue;
-                if (!arguments.TryGetValue(argName, out var argType))
+                if (!arguments.TryGetValue(argName, out var declared))
                 {
                     Errors.Add(
                         At(
@@ -495,13 +495,14 @@ internal sealed class ClientDocumentSet
                 Value(
                     scope,
                     argument.Value,
-                    argType,
+                    declared.Type,
                     $"the argument '{argName}' of '{train.Field}'"
                 );
             }
-            foreach (var (argName, argType) in arguments)
+            foreach (var (argName, (argType, hasDefault)) in arguments)
                 if (
                     argType is GraphQLNonNullType
+                    && !hasDefault
                     && field.Arguments?.Items.Any(a => a.Name.StringValue == argName) != true
                 )
                     Errors.Add(
@@ -513,41 +514,34 @@ internal sealed class ClientDocumentSet
                     );
 
             var answer = SdlTypes.ParseType(train.Answer, $"the train '{train.Field}'");
-            if (answer is not null)
-                Selection(scope, field, answer, train.Field, []);
+            if (answer is null)
+                throw new InvalidOperationException(
+                    $"The manifest does not say what the train '{train.Field}' answers with. Export the manifest "
+                        + "again from the host."
+                );
+            Selection(scope, field, answer, train.Field, []);
             return new ClientTrainUse(train, field, path);
         }
     }
 
-    /// <summary>The arguments of a train's field, as its generated document declares them: each variable's type.</summary>
-    internal static Dictionary<string, GraphQLType> TrainArguments(ClientManifestTrain train)
+    /// <summary>
+    /// The arguments of a train's field, as the manifest lists them: each one's type, and whether it has a default, so a
+    /// document may leave out a non-null argument that has one.
+    /// </summary>
+    internal static Dictionary<string, (GraphQLType Type, bool HasDefault)> TrainArguments(
+        ClientManifestTrain train
+    )
     {
-        var result = new Dictionary<string, GraphQLType>(StringComparer.Ordinal);
-        if (train.Documents.Count == 0)
-            return result;
-        var document = Parser.Parse(train.Documents[0].Document);
-        var operation = document.Definitions.OfType<GraphQLOperationDefinition>().First();
-        var variables = (operation.Variables?.Items ?? []).ToDictionary(
-            v => v.Variable.Name.StringValue,
-            v => v.Type
-        );
-        var set = operation.SelectionSet;
-        GraphQLField? trainField = null;
-        while (set?.Selections.OfType<GraphQLField>().FirstOrDefault() is { } f)
-        {
-            if (f.Name.StringValue == train.Field)
-            {
-                trainField = f;
-                break;
-            }
-            set = f.SelectionSet;
-        }
-        foreach (var argument in trainField?.Arguments?.Items ?? [])
+        var result = new Dictionary<string, (GraphQLType, bool)>(StringComparer.Ordinal);
+        foreach (var argument in train.Arguments)
             if (
-                argument.Value is GraphQLVariable v
-                && variables.TryGetValue(v.Name.StringValue, out var type)
+                SdlTypes.ParseType(
+                    argument.Type,
+                    $"the argument '{argument.Name}' of '{train.Field}'"
+                ) is
+                { } type
             )
-                result[argument.Name.StringValue] = type;
+                result[argument.Name] = (type, argument.Default is not null);
         return result;
     }
 

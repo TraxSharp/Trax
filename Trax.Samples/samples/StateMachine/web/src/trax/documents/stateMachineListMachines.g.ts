@@ -2,10 +2,10 @@
 import "../format.g";
 import { sendDocument } from "../client.g";
 
-/** The persisted id of 'listMachines', which the host registered. */
-export const stateMachineListMachinesDocumentId = "trax_train_query_stateMachine_listMachines_5cf95371b555b30e5beb977bd40dcf00d821cfff773205d23f1c6bb092f4eb5aa59b6deabb0a855d";
+/** The persisted id of the client document 'StateMachineListMachines' (src/graphql/stateMachineListMachines.graphql), which the host registers from trax.documents.json. */
+export const stateMachineListMachinesDocumentId = "trax_client_StateMachineListMachines_fd4020f0160df2c65cc3ef51d5a437acac7538afabdabccac12cc7978343945abb6a8ca20c3a6c31";
 
-/** What 'listMachines' answers: the fields its document selects. */
+/** What 'StateMachineListMachines' answers: the fields it selects. */
 export type StateMachineListMachinesResult = {
   machines: Array<{
     name: string;

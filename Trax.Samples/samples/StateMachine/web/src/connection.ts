@@ -1,10 +1,14 @@
 // Where the host is, who is signed in, and what the page sends. The generated client (./trax) holds every operation
 // by the persisted id the host registered, and sends only that id and its variables: the host refuses a document sent
 // as text. The "Under the hood" panel shows each request with the document its id names, read from the manifest the
-// client was generated from, so what the server runs is visible without the page ever sending it.
+// client was generated from and from the page's own documents, so what the server runs is visible without the page
+// ever sending it.
 
+import { paymentsListChargesDocumentId } from "./trax/documents/paymentsListCharges.g";
+import { stateMachineListMachinesDocumentId } from "./trax/documents/stateMachineListMachines.g";
 import { configureTrax } from "./trax/index.g";
 import manifest from "./trax/manifest.json";
+import pageDocuments from "./trax/trax.documents.json";
 import { record } from "./inspectorLog";
 
 export const ENDPOINT = "http://localhost:5280/trax/graphql";
@@ -42,8 +46,14 @@ interface Known {
 const known = new Map<string, Known>();
 for (const machine of manifest.machines)
   for (const d of machine.documents) known.set(d.id, { label: `${machine.id} · ${d.operation}`, document: d.document });
-for (const train of manifest.trains)
-  for (const d of train.documents) known.set(d.id, { label: `train · ${train.field}`, document: d.document });
+// The page's own documents, one per train it calls: the host registers them from trax.documents.json.
+for (const [id, name] of [
+  [paymentsListChargesDocumentId, "PaymentsListCharges"],
+  [stateMachineListMachinesDocumentId, "StateMachineListMachines"],
+] as const) {
+  const d = pageDocuments.documents.find((document) => document.name === name);
+  if (d) known.set(id, { label: `document · ${name}`, document: d.text });
+}
 
 // The first problem an answer carries, wherever it sits: a machine operation answers one beside its snapshot.
 function problemIn(value: unknown): { code: string; message: string } | null {

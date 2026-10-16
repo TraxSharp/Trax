@@ -25,4 +25,14 @@
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
     <ProjectReference Include="../../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>
+  <!-- The documents the page wrote, which the host registers when it starts (ClientDocuments in Program.cs). They ship
+       with the host, so the host is deployed with the frontend's documents before the frontend. -->
+  <ItemGroup>
+    <None
+      Include="..\Trax.Samples.Recovery.Client\src\trax\trax.documents.json"
+      Link="trax.documents.json"
+      CopyToOutputDirectory="PreserveNewest"
+      Condition="Exists('..\Trax.Samples.Recovery.Client\src\trax\trax.documents.json')"
+    />
+  </ItemGroup>
 </Project>

@@ -4,11 +4,9 @@ export { configureTrax, TraxOperationError, type TraxConnection } from "./client
 export { order, orderServer, useOrder, useRememberedOrder } from "./order/order.client.g";
 export { topicMap, topicMapServer, useTopicMap, useRememberedTopicMap } from "./topic-map/topic-map.client.g";
 export type * from "./types.g";
-export { changeCaseData, type ChangeCaseDataResult } from "./trains/changeCaseData.g";
-export { discoverPartitions, type DiscoverPartitionsResult } from "./trains/discoverPartitions.g";
-export { orderTrouble, type OrderTroubleResult } from "./trains/orderTrouble.g";
-export { partitionAction, type PartitionActionResult } from "./trains/partitionAction.g";
-export { startRun, type StartRunResult } from "./trains/startRun.g";
-export { decisionJournal, type DecisionJournalResult } from "./trains/decisionJournal.g";
-export { ordersTabletCalls, type OrdersTabletCallsResult } from "./trains/ordersTabletCalls.g";
+export { changeCaseData, type ChangeCaseDataResult } from "./documents/changeCaseData.g";
+export { decisionJournal, type DecisionJournalResult } from "./documents/decisionJournal.g";
+export { orderTrouble, type OrderTroubleResult } from "./documents/orderTrouble.g";
+export { ordersTabletCalls, type OrdersTabletCallsResult } from "./documents/ordersTabletCalls.g";
+export { startRun, type StartRunResult } from "./documents/startRun.g";
 export { readRunProgress, followRunProgress, useRunProgress, runProgressDocumentId, runProgressEventsDocumentId, type RunProgress, type RunProgressEvent, type RunProgressView } from "./progress.g";

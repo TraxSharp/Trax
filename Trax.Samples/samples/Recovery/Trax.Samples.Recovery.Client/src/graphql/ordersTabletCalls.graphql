@@ -1,0 +1,16 @@
+query OrdersTabletCalls {
+  discover {
+    orders {
+      tabletCalls {
+        restaurant
+        calls {
+          orderId
+          attempt
+          startedAt
+          endedAt
+          problem
+        }
+      }
+    }
+  }
+}

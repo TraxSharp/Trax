@@ -1,16 +1,15 @@
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
 /// <summary>
-/// A persisted document the host registers itself: a machine's (<see cref="MachineDocument"/>), a train's
-/// (<see cref="TrainDocument"/>) or runProgress's (<see cref="ProgressDocument"/>), which it generates, or one its
-/// frontend wrote (<see cref="ClientDocument"/>). Its versions are numbered per <see cref="Slot"/>, so an id stored with a
+/// A persisted document the host registers itself: a machine's (<see cref="MachineDocument"/>) or runProgress's
+/// (<see cref="ProgressDocument"/>), which it generates, or one its frontend wrote (<see cref="ClientDocument"/>). Its versions are numbered per <see cref="Slot"/>, so an id stored with a
 /// higher number than this node's answers <c>SERVER_OUTDATED</c> and one with a lower number <c>CLIENT_OUTDATED</c>.
 /// </summary>
 internal abstract record GeneratedDocument(string Id, string Text)
 {
     /// <summary>
     /// What the document's versions are numbered under: the machine's id for a machine document, the id without its
-    /// hash for a train's.
+    /// hash for the others.
     /// </summary>
     public abstract string Slot { get; }
 
@@ -62,7 +61,7 @@ internal static class GeneratedDocuments
 
     /// <summary>
     /// The slot out of <paramref name="slots"/> that <paramref name="id"/> belongs to, or null when it belongs to none
-    /// of them: a machine id's machine, or a train id's slot.
+    /// of them: a machine id's machine, or the slot of any other generated id.
     /// </summary>
     public static string? SlotOf(string id, IEnumerable<string> slots)
     {

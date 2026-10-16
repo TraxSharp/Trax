@@ -1,7 +1,7 @@
 ---
 authors: [Theauxm]
 areas: [graphql]
-status: accepted
+status: deprecated
 ---
 
 # Every exposed train is a persisted document the host registers
@@ -12,7 +12,11 @@ with an id that carries a hash of the train's shape. A client sends the id, neve
 
 ## Status
 
-**Accepted.**
+**Deprecated.** A host no longer generates a document for a train: a frontend writes every document that reaches
+one, per the central [ADR 0054](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0054-a-frontend-writes-every-document-that-reaches-a-train.md).
+A select-everything document grows with the number of paths through the answer, so an EF model whose entities
+reference each other either stopped the host at the parser's field limit or left the train refused for cost on
+every call. The `trax_train_` prefix stays reserved so earlier ids are answered as outdated.
 
 ## Why this is written down
 
@@ -53,20 +57,12 @@ frontend asks for one (the host cannot know, and the manifest would no longer li
 
 ## Exemplars
 
-- `TrainDocumentsE2ETests` pins that every exposed train is registered and runs by id, that an id of another shape is
-  answered as outdated with a 4xx, and that the manifest lists each train with what it requires.
-- `TrainDocumentsTests` pins the id grammar, that the shape hash moves with an input field and not with a description
-  or another train, the selection, a back-reference left out (directly, paged, a tree's children) while a type reached
-  from two parents is selected under both, and the refusal of a field with a required argument.
-- `TrainDocumentsE2ETests.A_host_exposing_a_back_reference_starts_and_serves_the_train` and
-  `A_generated_document_past_the_hosts_depth_refuses_the_start_naming_the_train` pin both at boot.
-- `PersistedOperationMutationTests.Upload_deactivate_and_restore_refuse_the_reserved_prefix` pins that the prefix
-  cannot be written through the management surface.
-
-Not covered: the overlap of the first rolling deploy, which no single-version test can run.
+**Unenforced:** the decision is withdrawn; nothing in the code follows it any more, and the guards that pinned it were
+removed with it. ADR 0054's exemplars pin what replaced it.
 
 ## Changelog
 
+- **2026-10-16**: Deprecated: generated train documents are removed (central ADR 0054).
 - **2026-10-16**: A field leading back to a type already on the path is left out instead of refusing the train, and
   every generated document is validated against the host's rules before it is registered.
 - **2026-10-14**: Recorded.

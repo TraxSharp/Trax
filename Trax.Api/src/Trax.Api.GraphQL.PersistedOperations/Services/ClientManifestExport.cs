@@ -67,12 +67,9 @@ internal static class ClientManifestExport
     )
     {
         var documents = exposed.Count == 0 ? [] : MachineDocuments.Generate(schema, exposed);
-        var trainDocuments = TrainDocuments.Generate(schema, trains);
+        var exposedTrains = ExposedTrains.Resolve(schema, trains);
         var progressDocuments = ProgressDocuments.Generate(schema);
-        GeneratedDocumentValidation.Validate(
-            schema,
-            [.. documents, .. trainDocuments, .. progressDocuments]
-        );
+        GeneratedDocumentValidation.Validate(schema, [.. documents, .. progressDocuments]);
         var machines = exposed
             .OrderBy(m => m.Name, StringComparer.Ordinal)
             .Select(machine => new ClientManifestMachine
@@ -96,24 +93,23 @@ internal static class ClientManifestExport
         return new ClientManifest
         {
             Machines = machines,
-            Trains = trainDocuments
-                .Select(d => new ClientManifestTrain
+            Trains = exposedTrains
+                .Select(t => new ClientManifestTrain
                 {
-                    Field = d.Field,
-                    Root = d.Root,
-                    Namespace = d.Namespace,
-                    Answer = d.Answer,
-                    Requires = RequirementOf(d.Registration),
-                    Progress = progressDocuments.Count > 0 && d.Registration.IsRunProgressEnabled,
-                    Documents =
-                    [
-                        new ClientManifestDocument
+                    Field = t.Field,
+                    Root = t.Root,
+                    Namespace = t.Namespace,
+                    Answer = Print(t.Definition.Type),
+                    Arguments = t
+                        .Definition.Arguments.Select(a => new ClientManifestArgument
                         {
-                            Id = d.Id,
-                            Operation = d.Field,
-                            Document = d.Text,
-                        },
-                    ],
+                            Name = a.Name,
+                            Type = Print(a.Type),
+                            Default = a.DefaultValue?.ToString(),
+                        })
+                        .ToList(),
+                    Requires = RequirementOf(t.Registration),
+                    Progress = progressDocuments.Count > 0 && t.Registration.IsRunProgressEnabled,
                 })
                 .ToList(),
             Progress = progressDocuments
@@ -124,18 +120,22 @@ internal static class ClientManifestExport
                     Document = d.Text,
                 })
                 .ToList(),
-            // The types of the fields a train's document left out are listed too, so a client document may select
-            // them.
+            // Every type a train's arguments and answer reach, in full, so a client document may select any of it.
             Types = DocumentTypes.Sdl(
                 schema,
-                documents
-                    .Select(d => d.Text)
-                    .Concat(trainDocuments.Select(d => d.Text))
-                    .Concat(progressDocuments.Select(d => d.Text)),
-                trainDocuments.SelectMany(d => d.LeftOut)
+                documents.Select(d => d.Text).Concat(progressDocuments.Select(d => d.Text)),
+                exposedTrains.Select(t => $"{t.Holder}.{t.Field}")
             ),
         };
     }
+
+    private static string Print(IType type) =>
+        type.Kind switch
+        {
+            TypeKind.NonNull => Print(type.InnerType()) + "!",
+            TypeKind.List => "[" + Print(type.InnerType()) + "]",
+            _ => type.NamedType().Name,
+        };
 
     private static ClientManifestRequirement RequirementOf(TrainRegistration train) =>
         new()

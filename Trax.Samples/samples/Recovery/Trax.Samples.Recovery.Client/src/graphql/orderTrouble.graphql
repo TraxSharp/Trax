@@ -1,0 +1,12 @@
+mutation OrderTrouble($input: OrderTroubleInput!) {
+  dispatch {
+    orderTrouble(input: $input) {
+      externalId
+      metadataId
+      workQueueId
+      output {
+        trouble
+      }
+    }
+  }
+}

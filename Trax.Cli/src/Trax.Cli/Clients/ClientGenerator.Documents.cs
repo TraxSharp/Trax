@@ -280,7 +280,15 @@ internal sealed partial class ClientGenerator
             arguments.Count == 0
                 ? ""
                 : "("
-                    + string.Join(", ", arguments.Select(a => $"{a.Key}: {PrintType(a.Value)}"))
+                    + string.Join(
+                        ", ",
+                        train
+                            .Arguments.Where(a => arguments.ContainsKey(a.Name))
+                            .Select(a =>
+                                $"{a.Name}: {PrintType(arguments[a.Name].Type)}"
+                                + (a.Default is null ? "" : $" = {a.Default}")
+                            )
+                    )
                     + ")";
         return $"{train.Field}{args}: {train.Answer}";
     }

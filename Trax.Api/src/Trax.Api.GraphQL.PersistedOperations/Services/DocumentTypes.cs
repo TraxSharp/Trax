@@ -50,19 +50,21 @@ internal static partial class DocumentTypes
     }
 
     /// <summary>
-    /// The SDL of every type the documents reach but the <see cref="Wrappers"/>, in name order, so the fields a client
-    /// cannot send, the operations namespace and every sibling train and query model among them, are never listed.
+    /// The SDL of every type the documents reach, and every type the arguments and type of each of
+    /// <paramref name="fields"/> (<c>Holder.field</c>) reach in full, but the <see cref="Wrappers"/>, in name order, so
+    /// the fields a client cannot send, the operations namespace and every sibling train and query model among them,
+    /// are never listed.
     /// </summary>
     public static string Sdl(
         ISchemaDefinition schema,
         IEnumerable<string> documents,
-        IEnumerable<string>? leftOut = null
+        IEnumerable<string>? fields = null
     )
     {
         var definitions = Definitions(schema);
         var wrappers = Wrappers(schema);
         var reached = Reached(schema, documents);
-        foreach (var field in leftOut ?? [])
+        foreach (var field in fields ?? [])
             ReachField(schema, field, wrappers, reached);
         return string.Join(
                 "\n\n",
@@ -147,8 +149,8 @@ internal static partial class DocumentTypes
         }
     }
 
-    // The type of a field a generated document left out (`Customer.orders`, the last segment of its path) and every
-    // type it reaches, so a client may write a document that selects it.
+    // The arguments and the type of a field (`DispatchMutations.startRun`, the last segment of a path) and every type
+    // they reach, so a client may write a document that selects any of it.
     private static void ReachField(
         ISchemaDefinition schema,
         string path,

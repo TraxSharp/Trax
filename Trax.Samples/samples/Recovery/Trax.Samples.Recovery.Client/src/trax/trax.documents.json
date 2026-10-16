@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "documents": [
+    {
+      "name": "ChangeCaseData",
+      "source": "src/graphql/changeCaseData.graphql",
+      "text": "mutation ChangeCaseData($input: ChangeCaseDataInput!) {\n  dispatch {\n    changeCaseData(input: $input) {\n      externalId\n      metadataId\n      workQueueId\n      output {\n        runId\n        change\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "DecisionJournal",
+      "source": "src/graphql/decisionJournal.graphql",
+      "text": "query DecisionJournal($input: DecisionJournalInput!) {\n  discover {\n    decisionJournal(input: $input) {\n      runId\n      replayDecisionsOf\n      replayAbandoned\n      decisions {\n        questionKey\n        occurrence\n        kind\n        replayed\n        replayRefused\n        model\n        decider\n        question\n        answer\n        stateHash\n        decidedAt\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "OrderTrouble",
+      "source": "src/graphql/orderTrouble.graphql",
+      "text": "mutation OrderTrouble($input: OrderTroubleInput!) {\n  dispatch {\n    orderTrouble(input: $input) {\n      externalId\n      metadataId\n      workQueueId\n      output {\n        trouble\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "OrdersTabletCalls",
+      "source": "src/graphql/ordersTabletCalls.graphql",
+      "text": "query OrdersTabletCalls {\n  discover {\n    orders {\n      tabletCalls {\n        restaurant\n        calls {\n          orderId\n          attempt\n          startedAt\n          endedAt\n          problem\n        }\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "StartRun",
+      "source": "src/graphql/startRun.graphql",
+      "text": "mutation StartRun($input: StartRunInput!) {\n  dispatch {\n    startRun(input: $input) {\n      externalId\n      metadataId\n      workQueueId\n      output {\n        runId\n        manifestId\n        manifestExternalId\n        trainName\n        armedCrash\n        maxRetries\n        firstRunId\n      }\n    }\n  }\n}\n"
+    }
+  ]
+}

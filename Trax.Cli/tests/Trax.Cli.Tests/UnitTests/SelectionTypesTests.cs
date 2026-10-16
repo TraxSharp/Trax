@@ -6,7 +6,7 @@ using Trax.Effect.StateMachine;
 namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
-/// A train's function answers the type of what its document selects, not the type its answer has in the schema: a
+/// A client document's function answers the type of what it selects, not the type the train's answer has in the schema: a
 /// field the document leaves out is not in it, nullability and lists follow the SDL, a union or interface is one
 /// object per possible type told apart by <c>__typename</c>, and an enum is the one <c>types.g.ts</c> declares, which
 /// holds only what a client sends.
@@ -247,7 +247,7 @@ public class SelectionTypesTests
         render
             .Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*findOrder*Order.colour*Export the manifest again*");
+            .WithMessage("*src/findOrder.graphql*Order has no field 'colour'*");
     }
 
     [Test]
@@ -276,7 +276,7 @@ public class SelectionTypesTests
     }
 
     private static string Train(string answer, string selection) =>
-        Render(answer, selection).Single(f => f.Path == "trains/findOrder.g.ts").Text;
+        Render(answer, selection).Single(f => f.Path == "documents/findOrder.g.ts").Text;
 
     private static IReadOnlyList<ClientFile> Render(string answer, string selection) =>
         new ClientGenerator(new FakeNodeRunner()).Render(
@@ -290,25 +290,21 @@ public class SelectionTypesTests
                             Field = "findOrder",
                             Root = "query",
                             Answer = answer,
-                            Documents =
+                            Arguments =
                             [
-                                new ClientManifestDocument
-                                {
-                                    Id =
-                                        "trax_train_query__findOrder_"
-                                        + new string('a', 64)
-                                        + new string('b', 16),
-                                    Operation = "findOrder",
-                                    Document =
-                                        "query FindOrder($input: FindInput!) { discover { "
-                                        + selection
-                                        + " } }",
-                                },
+                                new ClientManifestArgument { Name = "input", Type = "FindInput!" },
                             ],
                         },
                     ],
                     Types = Types,
-                }
+                },
+                Documents:
+                [
+                    new ClientDocumentFile(
+                        "src/findOrder.graphql",
+                        "query FindOrder($input: FindInput!) { discover { " + selection + " } }"
+                    ),
+                ]
             )
         );
 }

@@ -65,8 +65,7 @@ public class RecordNoteJunction : Junction<RecordNoteInput, RecordNoteOutput>
 }
 
 // A query train answering with an entity graph that refers back to itself, as an EF model with navigations both ways
-// does: the order's customer lists the customer's orders. Its generated document leaves the back-reference out, so a
-// host exposing it starts.
+// does: the order's customer lists the customer's orders.
 
 public record FindOrderInput
 {
@@ -103,4 +102,115 @@ public class FindOrderJunction : Junction<FindOrderInput, OrderOutput>
         var customer = new CustomerOutput { Name = "Ada", Orders = [order] };
         return Task.FromResult(order with { Customer = customer });
     }
+}
+
+// A query train answering seven types that each list all six others, as an EF model whose entities navigate to each
+// other does. Selecting everything such an answer reaches grows with the number of paths through it (7,828 fields for
+// these seven), so no host may try: every host in this suite exposes it, and a client document reaches it.
+
+public record ReadMeshInput
+{
+    public string Name { get; init; } = "";
+}
+
+public record Mesh0Output
+{
+    public string Name { get; init; } = "";
+    public Mesh1Output[] Mesh1s { get; init; } = [];
+    public Mesh2Output[] Mesh2s { get; init; } = [];
+    public Mesh3Output[] Mesh3s { get; init; } = [];
+    public Mesh4Output[] Mesh4s { get; init; } = [];
+    public Mesh5Output[] Mesh5s { get; init; } = [];
+    public Mesh6Output[] Mesh6s { get; init; } = [];
+}
+
+public record Mesh1Output
+{
+    public string Name { get; init; } = "";
+    public Mesh0Output[] Mesh0s { get; init; } = [];
+    public Mesh2Output[] Mesh2s { get; init; } = [];
+    public Mesh3Output[] Mesh3s { get; init; } = [];
+    public Mesh4Output[] Mesh4s { get; init; } = [];
+    public Mesh5Output[] Mesh5s { get; init; } = [];
+    public Mesh6Output[] Mesh6s { get; init; } = [];
+}
+
+public record Mesh2Output
+{
+    public string Name { get; init; } = "";
+    public Mesh0Output[] Mesh0s { get; init; } = [];
+    public Mesh1Output[] Mesh1s { get; init; } = [];
+    public Mesh3Output[] Mesh3s { get; init; } = [];
+    public Mesh4Output[] Mesh4s { get; init; } = [];
+    public Mesh5Output[] Mesh5s { get; init; } = [];
+    public Mesh6Output[] Mesh6s { get; init; } = [];
+}
+
+public record Mesh3Output
+{
+    public string Name { get; init; } = "";
+    public Mesh0Output[] Mesh0s { get; init; } = [];
+    public Mesh1Output[] Mesh1s { get; init; } = [];
+    public Mesh2Output[] Mesh2s { get; init; } = [];
+    public Mesh4Output[] Mesh4s { get; init; } = [];
+    public Mesh5Output[] Mesh5s { get; init; } = [];
+    public Mesh6Output[] Mesh6s { get; init; } = [];
+}
+
+public record Mesh4Output
+{
+    public string Name { get; init; } = "";
+    public Mesh0Output[] Mesh0s { get; init; } = [];
+    public Mesh1Output[] Mesh1s { get; init; } = [];
+    public Mesh2Output[] Mesh2s { get; init; } = [];
+    public Mesh3Output[] Mesh3s { get; init; } = [];
+    public Mesh5Output[] Mesh5s { get; init; } = [];
+    public Mesh6Output[] Mesh6s { get; init; } = [];
+}
+
+public record Mesh5Output
+{
+    public string Name { get; init; } = "";
+    public Mesh0Output[] Mesh0s { get; init; } = [];
+    public Mesh1Output[] Mesh1s { get; init; } = [];
+    public Mesh2Output[] Mesh2s { get; init; } = [];
+    public Mesh3Output[] Mesh3s { get; init; } = [];
+    public Mesh4Output[] Mesh4s { get; init; } = [];
+    public Mesh6Output[] Mesh6s { get; init; } = [];
+}
+
+public record Mesh6Output
+{
+    public string Name { get; init; } = "";
+    public Mesh0Output[] Mesh0s { get; init; } = [];
+    public Mesh1Output[] Mesh1s { get; init; } = [];
+    public Mesh2Output[] Mesh2s { get; init; } = [];
+    public Mesh3Output[] Mesh3s { get; init; } = [];
+    public Mesh4Output[] Mesh4s { get; init; } = [];
+    public Mesh5Output[] Mesh5s { get; init; } = [];
+}
+
+public interface IReadMesh : IServiceTrain<ReadMeshInput, Mesh0Output> { }
+
+[TraxAllowAnonymous]
+[TraxQuery(Description = "Seven types that each list the six others.")]
+public class ReadMesh : ServiceTrain<ReadMeshInput, Mesh0Output>, IReadMesh
+{
+    protected override Task<Either<Exception, Mesh0Output>> Junctions() =>
+        Chain<ReadMeshJunction>().Resolve();
+}
+
+public class ReadMeshJunction : Junction<ReadMeshInput, Mesh0Output>
+{
+    public override Task<Mesh0Output> Run(ReadMeshInput input) =>
+        Task.FromResult(
+            new Mesh0Output
+            {
+                Name = input.Name,
+                Mesh1s =
+                [
+                    new Mesh1Output { Name = "one", Mesh2s = [new Mesh2Output { Name = "two" }] },
+                ],
+            }
+        );
 }

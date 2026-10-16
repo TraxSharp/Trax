@@ -61,7 +61,7 @@ public class ClientManifestTests
     }
 
     [Test]
-    public async Task The_manifest_sdl_holds_the_types_of_left_out_fields()
+    public async Task The_manifest_sdl_holds_every_type_a_train_reaches_and_each_trains_arguments()
     {
         var (schema, trains) = await SchemaAsync();
 
@@ -74,14 +74,13 @@ public class ClientManifestTests
 
         manifest
             .Trains.Single(t => t.Field == "findChild")
-            .Documents[0]
-            .Document.Should()
-            .NotContain("edges", "the paged back-reference is left out of the generated document");
+            .Arguments.Should()
+            .ContainSingle(a => a.Name == "input");
         defined
             .Should()
             .Contain(
                 n => n.EndsWith("Connection", StringComparison.Ordinal),
-                "a client document may select the left-out paged field, so its connection type is listed"
+                "a client document may select the paged back-reference, so its connection type is listed"
             )
             .And.Contain(n => n.EndsWith("Edge", StringComparison.Ordinal))
             .And.Contain("PageInfo")

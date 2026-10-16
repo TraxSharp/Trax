@@ -1,6 +1,6 @@
 ---
 title: Fetch only what a component needs
-description: "Write a .graphql document that selects part of a train's answer, generate its typed function with trax client --documents, and register it on the host."
+description: "Write a .graphql document selecting what a component needs from a train, generate its typed function with trax client --documents, and register it."
 type: how-to
 area: api
 nav_order: 6
@@ -11,10 +11,10 @@ source:
 
 # Fetch only what a component needs
 
-Every exposed train already has a generated document and a typed function in the client `trax client` writes. That
-document selects the whole answer, short of a field that leads back to a type already in it. When a component needs
-less, write a document of your own: the host resolves only what it selects, and the generated function's type is
-exactly what comes back. These steps assume a host with
+A frontend reaches a train through a document it writes. The host generates none for a train, because only the
+component knows what it needs from an answer: an entity whose navigations lead to other entities has no finite
+"everything" worth fetching. Write a `.graphql` document selecting what the component needs: the host resolves only
+that, and the generated function's type is exactly what comes back. These steps assume a host with
 [persisted operations](/docs/api/turn-on-persisted-operations) and a client generated with `trax client`.
 
 ## 1. Write the document
@@ -51,8 +51,8 @@ What a document may hold:
   a mutation runs exactly one. The operations surface, machines and `runProgress` keep their own generated documents.
 - **No directives.** `@include`, `@skip`, `@defer` and `@stream` are refused, so every field in the type is always
   there.
-- **Any depth the host allows.** A document may follow a field the generated one leaves out, such as an entity's
-  reference back to its parent; the host's `MaxExecutionDepth` and operation cap still apply.
+- **Any depth the host allows.** A document may follow any field, an entity's reference back to its parent included;
+  the host's `MaxExecutionDepth`, cost limit and operation cap still apply.
 
 ## 2. Generate its function
 
@@ -77,7 +77,7 @@ export function orderCard(input: FindOrderInput): Promise<OrderCardResult>;
 ```
 
 Each named fragment becomes a type in `fragments.g.ts`. A component typed with it takes any answer that has those
-fields, the train's generated one included:
+fields, from any document:
 
 ```tsx
 import { orderCard, type CustomerBadge } from "./trax/index.g";

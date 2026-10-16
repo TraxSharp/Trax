@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "documents": [
+    {
+      "name": "PaymentsListCharges",
+      "source": "src/graphql/paymentsListCharges.graphql",
+      "text": "query PaymentsListCharges {\n  discover {\n    payments {\n      listCharges {\n        charges {\n          receipt\n          amountCents\n          items\n          chargedAt\n        }\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "StateMachineListMachines",
+      "source": "src/graphql/stateMachineListMachines.graphql",
+      "text": "query StateMachineListMachines {\n  discover {\n    stateMachine {\n      listMachines {\n        machines {\n          name\n          hasEffect\n        }\n      }\n    }\n  }\n}\n"
+    }
+  ]
+}

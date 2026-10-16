@@ -494,16 +494,14 @@ public class PersistedOperationMutationTests
     [TestCase("trax_machine_wizard_get_")]
     [TestCase("trax_train_mutation__startRun_")]
     [TestCase("trax_client_AlertCard_")]
-    [Property(
-        "adr",
-        "docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md"
-    )]
+    [Property("adr", "Trax.Docs/adr/0054-a-frontend-writes-every-document-that-reaches-a-train.md")]
     public async Task Upload_deactivate_and_restore_refuse_the_reserved_prefix(string prefix)
     {
         const string Because =
-            "ids under a reserved prefix belong to the host's generated machine and train documents, per "
+            "ids under a reserved prefix belong to the documents the host registers itself, and the train prefix an "
+            + "earlier version generated stays reserved, per "
             + "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md and "
-            + "docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md";
+            + "Trax.Docs/adr/0054-a-frontend-writes-every-document-that-reaches-a-train.md";
         var uploaded = $"{prefix}upload";
         var stored = $"{prefix}stored";
 

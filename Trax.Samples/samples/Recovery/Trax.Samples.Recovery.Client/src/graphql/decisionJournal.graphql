@@ -1,0 +1,22 @@
+query DecisionJournal($input: DecisionJournalInput!) {
+  discover {
+    decisionJournal(input: $input) {
+      runId
+      replayDecisionsOf
+      replayAbandoned
+      decisions {
+        questionKey
+        occurrence
+        kind
+        replayed
+        replayRefused
+        model
+        decider
+        question
+        answer
+        stateHash
+        decidedAt
+      }
+    }
+  }
+}

@@ -146,12 +146,17 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddSingleton<SimulatedPaymentProvider>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
 
-// Exposed machines and trains are served as persisted documents the host generates and registers, one per operation,
-// whose ids carry the machine's version or the train's shape. The host serves nothing else: a document sent as text is
-// refused, introspection included, and no document-management operations are exposed.
+// Exposed machines are served as persisted documents the host generates and registers, one per operation, whose ids
+// carry the machine's version; the trains the page calls are served as the documents the page wrote, which the host
+// registers from trax.documents.json. The host serves nothing else: a document sent as text is refused, introspection
+// included, and no document-management operations are exposed.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
-        persisted.SingleNode().RequirePersisted(true).DisableIntrospection()
+        persisted
+            .SingleNode()
+            .RequirePersisted(true)
+            .DisableIntrospection()
+            .ClientDocuments(Path.Combine(AppContext.BaseDirectory, "trax.documents.json"))
     )
 );
 ```
@@ -161,9 +166,10 @@ machine operation runs through to the mediator scan, so it must come before `Add
 `[TraxMachine]`, so clients reach each through its own typed operations; an unmarked machine, and the generic
 mutations, are not served. Every event, the start and the reads declare who may send them, and the host refuses to
 start a marked machine that leaves one undeclared. Serving a machine requires persisted operations, because
-each machine's operations are served as persisted documents that carry its version; this host serves those and
-nothing else, so the page runs on the client `trax client` generated from the host's manifest
-([Frontend clients](/docs/reference/cli#frontend-clients-trax-client)). `TraxCallerSnapshotPrincipal`
+each machine's operations are served as persisted documents that carry its version; this host serves those and the
+page's own documents for the two trains it calls (`web/src/graphql/`), registered from the `trax.documents.json` its
+build copies beside it, and nothing else. The page runs on the client `trax client` generated from the host's manifest
+and those documents ([Frontend clients](/docs/reference/cli#frontend-clients-trax-client)). `TraxCallerSnapshotPrincipal`
 maps the authenticated Trax caller to the draft's owner, so Alice and Bob each see their own draft
 for the same id. See [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines).
 

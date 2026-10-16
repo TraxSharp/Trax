@@ -45,27 +45,21 @@ Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required; se
 ### Generated documents
 
 With persisted operations on, the host registers a document for every exposed machine operation
-([Persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents)) and for every train it exposes
-with `[TraxMutation]` or `[TraxQuery]`, so a host that requires persisted operations serves them with no upload. A
-train's document is registered under `trax_train_<root>_<namespace>_<field>_<shapeHash><textHash>`: the root
-(`mutation` or `query`), the namespace's field (empty without one) and the train's field, each with a `_` written
-`-`, then the SHA-256 of the train's shape and 16 hex characters of a hash of the text. The shape is the field's
-signature and the SDL of every type the document reaches, without descriptions and without the root and namespace
-types, so adding a field to the input moves the id and editing a doc comment does not. The document takes `input`,
-`mode` and `priority` as variables where the field has them, and selects the whole answer, a union or interface
-through a fragment per possible type. A field that leads back to a type already on the path, such as an EF entity's
-reference to its parent (`Order.customer > Customer.orders`) or a tree's children, is left out (a paged one
-whole), and the host logs a warning naming each one, so a train can answer with entities whose navigations go both
-ways. A field with a required argument refuses the host's start. Every generated document is then validated as a
-request would be, so one past the host's `MaxExecutionDepth` or operation cap refuses the start, naming the train;
-cost is checked per request, as for any document.
+([Persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents)), so a host that requires
+persisted operations serves its machines with no upload. It generates none for a train: a frontend reaches a train
+through a document it wrote, which the host registers from
+[`ClientDocuments(path)`](/docs/sdk-reference/persisted-operations/persisted-operations-builder) when it starts
+([Fetch only what a component needs](/docs/api/fetch-only-what-a-component-needs)). A select-everything document of
+a train grows with the number of paths through its answer, so an EF model whose entities reference each other either
+passed the parser's limit or was refused for cost on every call; the decision is
+[ADR 0054](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0054-a-frontend-writes-every-document-that-reaches-a-train.md).
+The `trax_train_` prefix an earlier version registered train documents under stays reserved: such an id answers
+`SERVER_OUTDATED` while a node of that version may still serve it, then `CLIENT_OUTDATED`, so a page built against
+it reloads.
 
-A train's output is resolved from the object the train returned, not projected from a query, so every field its
+A train's output is resolved from the object the train returned, not projected from a query, so every field a
 document selects is read on every call. A navigation the train did not load comes back null or empty, and with EF's
-lazy-loading proxies on, each one runs a query. Load what the answer exposes, or answer with a type that holds only
-that. An id of another shape answers `CLIENT_OUTDATED` or `SERVER_OUTDATED` as a machine's does, and the
-[client manifest](/docs/sdk-reference/statemachine-api/client-manifest) lists every one. The decision is
-[Trax.Api ADR 0040](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md).
+lazy-loading proxies on, each one runs a query. Select what the component needs, and load what the answer exposes.
 
 A host where a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-api/run-progress) also registers the
 two documents of `runProgress`, under `trax_progress_query_<shapeHash><textHash>` and

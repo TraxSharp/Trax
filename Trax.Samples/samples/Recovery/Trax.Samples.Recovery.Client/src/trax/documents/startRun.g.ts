@@ -3,10 +3,10 @@ import "../format.g";
 import { sendDocument } from "../client.g";
 import type { CrashPoint, StartRunInput } from "../types.g";
 
-/** The persisted id of 'startRun', which the host registered. */
-export const startRunDocumentId = "trax_train_mutation__startRun_827c8c0a4db921a2b8dddfffde80ac2b76c18ecd7d8eda06f50771bd2f6888ccbb15cd0a5a8f23b1";
+/** The persisted id of the client document 'StartRun' (src/graphql/startRun.graphql), which the host registers from trax.documents.json. */
+export const startRunDocumentId = "trax_client_StartRun_bd25a547f544084a763336d08f286dfd403965180efceed985ed23b6db48f6e661d922cec8c78379";
 
-/** What 'startRun' answers: the fields its document selects. */
+/** What 'StartRun' answers: the fields it selects. */
 export type StartRunResult = {
   externalId: string;
   metadataId: number | null;

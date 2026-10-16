@@ -103,31 +103,17 @@ internal sealed partial class ClientGenerator
             names.Claim($"{camel}Server", machine.Id);
             machines.Add((machine, camel, pascal));
         }
-        var trains = new List<(string Function, string Result, string Text)>();
-        // A train's file is claimed by its path in lower case, so two that differ only in case are refused before a
-        // case-insensitive disk writes one over the other.
+        foreach (var train in manifest.Trains)
+            CheckTrain(train);
+        // A train's functions come only from the documents a frontend wrote, under documents/, claimed by their path in
+        // lower case, so two that differ only in case are refused before a case-insensitive disk writes one over the
+        // other.
         var paths = new Names(StringComparer.OrdinalIgnoreCase);
-        foreach (
-            var train in manifest
-                .Trains.Select(CheckTrain)
-                .OrderBy(t => t.Documents[0].Id, StringComparer.Ordinal)
-        )
-        {
-            var owner =
-                $"the {train.Root} train {(train.Namespace is null ? "" : train.Namespace + ".")}{train.Field}";
-            var function = TypeScript.Identifier(
-                train.Namespace is null
-                    ? train.Field
-                    : train.Namespace + TypeScript.Upper(train.Field),
-                "train field"
-            );
-            names.Claim(function, owner);
-            var result = names.Claim($"{TypeScript.Upper(function)}Result", owner);
-            paths.Claim($"trains/{function}.g.ts", owner);
-            trains.Add((function, result, Train(train, function, result, types)));
-        }
+        var progress = Progress(manifest);
         // types.g.ts is exported from the index beside everything else, so its names are claimed with them.
-        if (trains.Count > 0)
+        var typesText =
+            options.Documents is not null || progress is not null ? types.Render() : null;
+        if (typesText is not null)
             foreach (var type in types.Declared)
                 names.Claim(type, $"the GraphQL type {type}");
 
@@ -163,12 +149,9 @@ internal sealed partial class ClientGenerator
             }
         }
 
-        var progress = Progress(manifest);
         if (progress is not null)
             foreach (var name in ProgressNames.Concat(ProgressTypeNames))
                 names.Claim(name, "runProgress");
-
-        var typesText = trains.Count > 0 ? types.Render() : null;
 
         // The IR is checked before node reads it: its id names the twin's files, and its names are written as code.
         foreach (var (machine, _, _) in machines)
@@ -193,14 +176,6 @@ internal sealed partial class ClientGenerator
             files.Add(new("types.g.ts", typesText));
             index.Append("export type * from \"./types.g\";\n");
         }
-        foreach (var (function, result, text) in trains)
-        {
-            files.Add(new($"trains/{function}.g.ts", text));
-            index.Append(
-                $"export {{ {function}, type {result} }} from \"./trains/{function}.g\";\n"
-            );
-        }
-
         foreach (var (function, result, text) in documentModules)
         {
             files.Add(new($"documents/{function}.g.ts", text));
@@ -541,21 +516,25 @@ internal sealed partial class ClientGenerator
         }
     }
 
-    // A train the generator can write: a root it knows and one document, which names its operation.
-    private static ClientManifestTrain CheckTrain(ClientManifestTrain train)
+    // A train a client document may reach: under a root the generator knows, its field and namespace GraphQL names,
+    // since they are written into the editor's schema.
+    private static void CheckTrain(ClientManifestTrain train)
     {
         if (train.Root is not ("mutation" or "query"))
             throw new InvalidOperationException(
                 $"The train '{train.Field}' is under the root '{train.Root}', which is neither mutation nor query. "
                     + "Export the manifest again from the host."
             );
-        if (train.Documents.Count != 1)
-            throw new InvalidOperationException(
-                $"The train '{train.Field}' has {train.Documents.Count} documents where it has one. Export the "
-                    + "manifest again from the host."
-            );
-        return train;
+        foreach (var name in new[] { train.Field, train.Namespace }.OfType<string>())
+            if (!GraphQLName().IsMatch(name))
+                throw new InvalidOperationException(
+                    $"The train field or namespace {TypeScript.Literal(name)} is not a GraphQL name. Export the "
+                        + "manifest again from the host."
+                );
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\A[_A-Za-z][_0-9A-Za-z]*\z")]
+    private static partial System.Text.RegularExpressions.Regex GraphQLName();
 
     /// <summary>
     /// Refuses an IR the twin generator must not read: one naming another machine than the manifest entry (its id
@@ -959,76 +938,6 @@ internal sealed partial class ClientGenerator
         sb.Append(
             $"  return useRememberedMachine({camel}, {{ ...options, rememberKey: key, server: {camel}Server() }});\n}}\n"
         );
-        return sb.ToString();
-    }
-
-    private static string Train(
-        ClientManifestTrain train,
-        string function,
-        string result,
-        SdlTypes types
-    )
-    {
-        var document = train.Documents[0];
-        var operation = Operation(document, $"the train '{train.Field}'");
-        var root = train.Root == "mutation" ? "dispatch" : "discover";
-        var answer =
-            SdlTypes.ParseType(train.Answer, $"the train '{train.Field}'")
-            ?? throw new InvalidOperationException(
-                $"The manifest does not say what the train '{train.Field}' answers with. Export the manifest again "
-                    + "from the host."
-            );
-
-        var variables = operation.Variables?.Items ?? [];
-        var (parameters, values) = Signature(
-            variables,
-            types,
-            function,
-            $"The train '{train.Field}'",
-            "Rename it on the host."
-        );
-        var path = new List<string> { root };
-        if (train.Namespace is not null)
-            path.Add(train.Namespace);
-        path.Add(train.Field);
-
-        var owner = $"the train '{train.Field}'";
-        var answerTypes = new HashSet<string>(StringComparer.Ordinal);
-        var resultType = new SelectionTypes(types).Of(
-            answer,
-            SelectionTypes.SelectionAt(operation, path, owner),
-            owner,
-            answerTypes
-        );
-
-        var sb = new StringBuilder(Header);
-        sb.Append("import \"../format.g\";\n");
-        sb.Append("import { sendDocument } from \"../client.g\";\n");
-        var used = types
-            .NamesIn(variables.Select(v => v.Type))
-            .Concat(answerTypes)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToList();
-        if (used.Count > 0)
-            sb.Append($"import type {{ {string.Join(", ", used)} }} from \"../types.g\";\n");
-        sb.Append('\n');
-        sb.Append(
-            $"/** The persisted id of '{EscapeDocText(train.Field)}', which the host registered. */\n"
-        );
-        sb.Append($"export const {function}DocumentId = {TypeScript.Literal(document.Id)};\n\n");
-        sb.Append(
-            $"/** What '{EscapeDocText(train.Field)}' answers: the fields its document selects. */\n"
-        );
-        sb.Append($"export type {result} = {resultType};\n\n");
-        sb.Append(TypeScript.Doc(Requirement(train.Requires)));
-        sb.Append(
-            $"export function {function}({string.Join(", ", parameters)}): Promise<{result}> {{\n"
-        );
-        sb.Append(
-            $"  return sendDocument({function}DocumentId, {(values.Count == 0 ? "{}" : $"{{ {string.Join(", ", values)} }}")}, [{string.Join(", ", path.Select(TypeScript.Literal))}]);\n"
-        );
-        sb.Append("}\n");
         return sb.ToString();
     }
 

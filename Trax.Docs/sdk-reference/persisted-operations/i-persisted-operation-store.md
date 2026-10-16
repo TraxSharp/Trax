@@ -65,7 +65,7 @@ public interface IPersistedOperationStore
 - Validation throws one of the structured [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) subclasses. No row is written and no broadcast fires when validation rejects the document.
 - `DeactivateAsync` and `RestoreAsync` throw `InvalidOperationException` when the id does not exist. Both act on a row in either state, so repeating one sends the change again.
 - All mutations append a row to `trax.persisted_operation_history`.
-- `UpsertAsync`, `DeactivateAsync` and `RestoreAsync` refuse an id starting with `trax_machine_`, `trax_train_` or `trax_progress_` with `PersistedOperationInputException` (`INVALID_INPUT`): those ids are the [generated documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents) the host registers itself.
+- `UpsertAsync`, `DeactivateAsync` and `RestoreAsync` refuse an id starting with `trax_machine_`, `trax_train_`, `trax_progress_` or `trax_client_` with `PersistedOperationInputException` (`INVALID_INPUT`): those ids are the [documents](/docs/sdk-reference/persisted-operations/use-persisted-operations#generated-documents) the host registers itself, or registered in an earlier version (`trax_train_`).
 
 ## Examples
 

@@ -623,8 +623,6 @@ public class ClientDocumentsGeneratorTests
     }
 
     [TestCase("ConfigureTrax", "CustomerBadge", "*configureTrax*")]
-    [TestCase("FindOrder", "CustomerBadge", "*findOrder*")]
-    [TestCase("OrderCard", "FindOrderResult", "*FindOrderResult*")]
     [TestCase("OrderCard", "OrderCardResult", "*OrderCardResult*")]
     [TestCase("OrderCard", "StartRun", "*")]
     public void A_name_another_part_of_the_client_uses_is_refused(
@@ -812,6 +810,7 @@ public class ClientDocumentsGeneratorTests
 
     #region Helpers
 
+    // A train as the manifest lists it, its arguments read from the variables a document of it would declare.
     private static ClientManifestTrain Train(
         string root,
         string? ns,
@@ -825,18 +824,25 @@ public class ClientDocumentsGeneratorTests
             Root = root,
             Namespace = ns,
             Answer = answer,
-            Documents =
-            [
-                new ClientManifestDocument
+            Arguments = GraphQLParser
+                .Parser.Parse(document)
+                .Definitions.OfType<GraphQLParser.AST.GraphQLOperationDefinition>()
+                .Single()
+                .Variables!.Items.Select(v => new ClientManifestArgument
                 {
-                    Id =
-                        $"trax_train_{root}_{ns}_{field}_"
-                        + new string('a', 64)
-                        + new string('b', 16),
-                    Operation = field,
-                    Document = document,
-                },
-            ],
+                    Name = v.Variable.Name.StringValue,
+                    Type = PrintType(v.Type),
+                })
+                .ToList(),
+        };
+
+    private static string PrintType(GraphQLParser.AST.GraphQLType type) =>
+        type switch
+        {
+            GraphQLParser.AST.GraphQLNonNullType n => PrintType(n.Type) + "!",
+            GraphQLParser.AST.GraphQLListType l => "[" + PrintType(l.Type) + "]",
+            GraphQLParser.AST.GraphQLNamedType named => named.Name.StringValue,
+            _ => "",
         };
 
     private static IReadOnlyList<ClientFile> Render(

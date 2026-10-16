@@ -3,10 +3,10 @@ import "../format.g";
 import { sendDocument } from "../client.g";
 import type { DecisionJournalInput } from "../types.g";
 
-/** The persisted id of 'decisionJournal', which the host registered. */
-export const decisionJournalDocumentId = "trax_train_query__decisionJournal_4a14267e3fa2c83812ba5344de0c6c2da4541f0f1da4e433fe642fe1db49f1403ad2ecb0fa0fd1c8";
+/** The persisted id of the client document 'DecisionJournal' (src/graphql/decisionJournal.graphql), which the host registers from trax.documents.json. */
+export const decisionJournalDocumentId = "trax_client_DecisionJournal_d2c20d3052ae64a7ee56d29fb5a4e430e84c9ca397c8c68506dd826686878eddd619a6aa105e1fe6";
 
-/** What 'decisionJournal' answers: the fields its document selects. */
+/** What 'DecisionJournal' answers: the fields it selects. */
 export type DecisionJournalResult = {
   runId: string;
   replayDecisionsOf: number | null;

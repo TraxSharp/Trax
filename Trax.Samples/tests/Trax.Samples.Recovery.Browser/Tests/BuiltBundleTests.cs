@@ -34,28 +34,45 @@ public class BuiltBundleTests
     [Test]
     public void Built_bundle_holds_no_operator_only_document()
     {
-        var manifest = JsonNode.Parse(
-            File.ReadAllText(
-                Path.Combine(RecoveryClientBuild.ClientFolder, "src", "trax", "manifest.json")
-            )
-        )!;
-        var forbidden = manifest["trains"]!
+        var trax = Path.Combine(RecoveryClientBuild.ClientFolder, "src", "trax");
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(trax, "manifest.json")))!;
+        var pageDocuments = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(trax, "trax.documents.json"))
+        )!["documents"]!.AsArray();
+        var operatorTrains = manifest["trains"]!
             .AsArray()
             .Where(t => !UserMayRun(t!["requires"]!))
-            .SelectMany(t => t!["documents"]!.AsArray())
-            .Concat(Documents(manifest).Where(SelectsOperations))
-            .Select(d => d!["id"]!.GetValue<string>())
-            .Distinct()
+            .Select(t => t!["field"]!.GetValue<string>())
             .ToList();
         var bundle = Bundle();
 
         bundle.Should().NotBeEmpty("the page was built");
-        forbidden
+        operatorTrains
             .Should()
             .NotBeEmpty(
-                "the manifest holds the operator's trains, so the check has ids to look for"
+                "the manifest holds the operator's trains, so the check has names to look for"
             );
-        foreach (var id in forbidden)
+        foreach (var document in pageDocuments)
+        foreach (var train in operatorTrains)
+            document!["text"]!
+                .GetValue<string>()
+                .Should()
+                .NotMatchRegex(
+                    $@"\b{train}\b",
+                    $"the page is a user's, and '{train}' is a train only an operator may run"
+                );
+        foreach (
+            var id in manifest["machines"]!
+                .AsArray()
+                .SelectMany(m => m!["documents"]!.AsArray())
+                .Concat(manifest["progress"]!.AsArray())
+                .Where(d =>
+                    d!["document"]!
+                        .GetValue<string>()
+                        .Contains("operations", StringComparison.Ordinal)
+                )
+                .Select(d => d!["id"]!.GetValue<string>())
+        )
             bundle
                 .Should()
                 .NotContain(
@@ -76,14 +93,4 @@ public class BuiltBundleTests
         || requires["roleSets"]!
             .AsArray()
             .All(set => set!.AsArray().Any(r => r!.GetValue<string>() == RecoveryRoles.User));
-
-    private static IEnumerable<JsonNode?> Documents(JsonNode manifest) =>
-        manifest["trains"]!
-            .AsArray()
-            .SelectMany(t => t!["documents"]!.AsArray())
-            .Concat(manifest["machines"]!.AsArray().SelectMany(m => m!["documents"]!.AsArray()))
-            .Concat(manifest["progress"]!.AsArray());
-
-    private static bool SelectsOperations(JsonNode? document) =>
-        document!["document"]!.GetValue<string>().Contains("operations", StringComparison.Ordinal);
 }

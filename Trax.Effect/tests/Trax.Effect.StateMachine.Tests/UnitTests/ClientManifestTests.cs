@@ -162,12 +162,12 @@ public class ClientManifestTests
             .WithMessage("*malformed*irHash*Export it again*");
     }
 
-    [TestCase("""{ "format": 2, "machines": [null] }""")]
+    [TestCase("""{ "format": 3, "machines": [null] }""")]
     [TestCase(
-        """{ "format": 2, "trains": [{ "field": "a", "root": "mutation", "documents": [null] }] }"""
+        """{ "format": 3, "trains": [{ "field": "a", "root": "mutation", "arguments": [null] }] }"""
     )]
-    [TestCase("""{ "format": 2, "types": null }""")]
-    [TestCase("""{ "format": 2, "machines": [{ "id": "m", "irHash": "h", "ir": 3 }] }""")]
+    [TestCase("""{ "format": 3, "types": null }""")]
+    [TestCase("""{ "format": 3, "machines": [{ "id": "m", "irHash": "h", "ir": 3 }] }""")]
     public void A_null_or_a_value_of_another_kind_is_refused_with_a_message(string text)
     {
         var read = () => ClientManifest.Read(text);

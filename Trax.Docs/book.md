@@ -127,9 +127,11 @@ from GraphQL.
 ### 11. A generated client
 
 Export the client manifest from the host and generate a typed React client with `trax client`.
-Build the catalogue page and the order page with the generated functions.
+Write the documents the catalogue page and the order page send, and build both pages on the functions `trax client`
+generates from them.
 
-You learn: the client manifest, `trax client`, typed train functions, and `--check` in CI.
+You learn: the client manifest, `.graphql` documents and `trax client --documents`, typed functions, and `--check`
+in CI.
 
 ### 12. Checkout in the browser
 

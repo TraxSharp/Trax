@@ -760,6 +760,12 @@ public class MachineGenerateFromPackedToolTests
             Path.Combine(work, "manifest.json"),
             Trax.Effect.StateMachine.ClientManifest.Write(Fakes.ClientManifests.Sample())
         );
+        // The page's own document of the train, from which its function is generated.
+        Directory.CreateDirectory(Path.Combine(work, "documents"));
+        File.WriteAllText(
+            Path.Combine(work, "documents", "startRun.graphql"),
+            Fakes.ClientManifests.StartRunDocument
+        );
         string[] client =
         [
             Path.Combine(tool, "trax.dll"),
@@ -768,6 +774,8 @@ public class MachineGenerateFromPackedToolTests
             "manifest.json",
             "--out",
             "trax",
+            "--documents",
+            "documents/*.graphql",
         ];
         var (clientCode, clientOutput) = Run("dotnet", work, client);
         clientCode.Should().Be(0, clientOutput);

@@ -1,0 +1,13 @@
+mutation ChangeCaseData($input: ChangeCaseDataInput!) {
+  dispatch {
+    changeCaseData(input: $input) {
+      externalId
+      metadataId
+      workQueueId
+      output {
+        runId
+        change
+      }
+    }
+  }
+}

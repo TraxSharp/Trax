@@ -1,0 +1,14 @@
+query PaymentsListCharges {
+  discover {
+    payments {
+      listCharges {
+        charges {
+          receipt
+          amountCents
+          items
+          chargedAt
+        }
+      }
+    }
+  }
+}

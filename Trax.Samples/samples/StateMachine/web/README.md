@@ -38,15 +38,18 @@ Open http://localhost:5173.
 
 ## Regenerate the client
 
-After changing a machine or a train, export the host's manifest and regenerate (from `Trax.Samples/`; `trax` is the
-Trax.Cli tool):
+The page calls two trains, each through a document of its own in `src/graphql/`; the host registers them from
+`src/trax/trax.documents.json`, which its build copies beside it. After changing a machine, a train or a document,
+export the host's manifest and regenerate (`trax` is the Trax.Cli tool):
 
 ```bash
 (cd samples/StateMachine/Trax.Samples.StateMachine.Api && dotnet run -- --trax-export-client ../web/src/trax/manifest.json)
-trax client --manifest samples/StateMachine/web/src/trax/manifest.json --out samples/StateMachine/web/src/trax
+cd samples/StateMachine/web
+trax client --manifest src/trax/manifest.json --out src/trax --documents 'src/graphql/*.graphql'
 ```
 
-CI exports the manifest again and runs `trax client --check`, so a client out of step with the host fails the build.
+CI exports the manifest again and runs `trax client --check` with the same documents, so a client out of step with
+the host fails the build.
 
 ## What to try
 

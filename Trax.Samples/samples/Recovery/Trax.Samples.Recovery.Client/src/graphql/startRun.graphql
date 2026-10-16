@@ -1,0 +1,18 @@
+mutation StartRun($input: StartRunInput!) {
+  dispatch {
+    startRun(input: $input) {
+      externalId
+      metadataId
+      workQueueId
+      output {
+        runId
+        manifestId
+        manifestExternalId
+        trainName
+        armedCrash
+        maxRetries
+        firstRunId
+      }
+    }
+  }
+}

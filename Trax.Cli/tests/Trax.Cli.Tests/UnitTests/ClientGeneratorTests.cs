@@ -10,8 +10,8 @@ namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
 /// <c>trax client</c> renders a frontend's client from a host's manifest: every module checks the client format
-/// before anything else, a machine's documents and a train's id are sent by id, a train's input and answer are typed
-/// from the manifest's SDL, anything from the manifest is written as data (names checked, strings as literals,
+/// before anything else, a machine's documents are sent by id, a train gets a function only from a document the
+/// frontend wrote, its input and answer typed from the manifest's SDL, anything from the manifest is written as data (names checked, strings as literals,
 /// comments unable to close), the same manifest writes the same bytes, and <c>--check</c> reports what differs.
 /// </summary>
 public partial class ClientGeneratorTests
@@ -46,6 +46,19 @@ public partial class ClientGeneratorTests
 
     private static string Text(IReadOnlyList<ClientFile> files, string path) =>
         files.Single(f => f.Path == path).Text;
+
+    private static readonly ClientDocumentFile StartRunFile = new(
+        "src/startRun.graphql",
+        ClientManifests.StartRunDocument
+    );
+
+    private IReadOnlyList<ClientFile> RenderDocuments(
+        ClientManifest manifest,
+        params ClientDocumentFile[] documents
+    ) =>
+        new ClientGenerator(new FakeNodeRunner()).Render(
+            new ClientGenerateOptions(manifest, ToolsDir: _tools, Documents: documents)
+        );
 
     [Test]
     public void Every_generated_module_checks_the_client_format_before_anything_else()
@@ -97,10 +110,17 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
-    public void A_train_takes_its_input_and_options_and_answers_its_type()
+    public void A_train_gets_a_function_only_from_a_document_the_frontend_wrote()
     {
-        var files = Render();
-        var train = Text(files, "trains/startRun.g.ts");
+        Render()
+            .Should()
+            .NotContain(
+                f => f.Path.StartsWith("trains/", StringComparison.Ordinal),
+                "the host generates no document for a train, per Trax.Docs/adr/0054"
+            );
+
+        var files = RenderDocuments(ClientManifests.Sample(), StartRunFile);
+        var train = Text(files, "documents/startRun.g.ts");
         var types = Text(files, "types.g.ts");
 
         train
@@ -128,7 +148,7 @@ public partial class ClientGeneratorTests
         types.Should().NotContain("DispatchMutations", "a type that holds operations is not data");
         Text(files, "index.g.ts")
             .Should()
-            .Contain("export { startRun, type StartRunResult } from \"./trains/startRun.g\";");
+            .Contain("export { startRun, type StartRunResult } from \"./documents/startRun.g\";");
     }
 
     [Test]
@@ -154,7 +174,7 @@ public partial class ClientGeneratorTests
         var sample = ClientManifests.Sample();
         var manifest = sample with { Trains = [sample.Trains[0] with { Answer = null }] };
 
-        var render = () => Render(manifest);
+        var render = () => RenderDocuments(manifest, StartRunFile);
 
         render.Should().Throw<InvalidOperationException>().WithMessage("*startRun*answers with*");
     }
@@ -166,7 +186,7 @@ public partial class ClientGeneratorTests
         var sample = ClientManifests.Sample();
         var manifest = sample with { Trains = [sample.Trains[0] with { Answer = answer }] };
 
-        var render = () => Render(manifest);
+        var render = () => RenderDocuments(manifest, StartRunFile);
 
         render
             .Should()
@@ -376,7 +396,11 @@ public partial class ClientGeneratorTests
     public void Check_reports_a_changed_file_and_a_stale_one_and_ignores_line_endings()
     {
         var generator = new ClientGenerator(new FakeNodeRunner());
-        var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
+        var options = new ClientGenerateOptions(
+            ClientManifests.Sample(),
+            ToolsDir: _tools,
+            Documents: [StartRunFile]
+        );
         generator.Write(options, _out);
         generator.Check(options, _out).Should().BeEmpty();
 
@@ -384,15 +408,15 @@ public partial class ClientGeneratorTests
         File.WriteAllText(client, File.ReadAllText(client).Replace("\n", "\r\n"));
         generator.Check(options, _out).Should().BeEmpty("a checkout that writes CRLF is not drift");
 
-        File.AppendAllText(Path.Combine(_out, "trains", "startRun.g.ts"), "// edited\n");
-        File.WriteAllText(Path.Combine(_out, "trains", "gone.g.ts"), GeneratedText);
+        File.AppendAllText(Path.Combine(_out, "documents", "startRun.g.ts"), "// edited\n");
+        File.WriteAllText(Path.Combine(_out, "documents", "gone.g.ts"), GeneratedText);
         generator
             .Check(options, _out)
             .Select(d => (d.Path, d.Status))
             .Should()
             .BeEquivalentTo([
-                ("trains/startRun.g.ts", DriftStatus.Drifted),
-                ("trains/gone.g.ts", DriftStatus.Drifted),
+                ("documents/startRun.g.ts", DriftStatus.Drifted),
+                ("documents/gone.g.ts", DriftStatus.Drifted),
             ]);
     }
 
@@ -459,7 +483,7 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
-    public void An_identifier_with_a_trailing_newline_is_refused()
+    public void A_train_field_that_is_not_a_graphql_name_is_refused()
     {
         var train = ClientManifests.Sample().Trains[0];
         var manifest = ClientManifests.Sample() with
@@ -469,7 +493,7 @@ public partial class ClientGeneratorTests
 
         var render = () => Render(manifest);
 
-        render.Should().Throw<InvalidOperationException>().WithMessage("*not an identifier*");
+        render.Should().Throw<InvalidOperationException>().WithMessage("*not a GraphQL name*");
         TypeScript.IsIdentifier("startRun\n").Should().BeFalse();
     }
 
@@ -479,6 +503,9 @@ public partial class ClientGeneratorTests
         var generator = new ClientGenerator(new FakeNodeRunner());
         var options = new ClientGenerateOptions(ClientManifests.Sample(), ToolsDir: _tools);
         generator.Write(options, _out);
+        // What a version that generated a function per train left behind.
+        Directory.CreateDirectory(Path.Combine(_out, "trains"));
+        File.WriteAllText(Path.Combine(_out, "trains", "startRun.g.ts"), GeneratedText);
         File.WriteAllText(Path.Combine(_out, "notes.ts"), "// the app's own\n");
         Directory.CreateDirectory(Path.Combine(_out, "old"));
         File.WriteAllText(Path.Combine(_out, "old", "old.client.g.ts"), GeneratedText);
@@ -676,95 +703,30 @@ public partial class ClientGeneratorTests
 
     [TestCase("configureTrax")]
     [TestCase("TraxOperationError")]
-    public void A_train_or_type_that_takes_a_runtime_name_is_refused(string name)
+    public void A_type_that_takes_a_runtime_name_is_refused(string name)
     {
-        var train = ClientManifests.Sample().Trains[0] with { Field = name };
-        var trainManifest = ClientManifests.Sample() with { Trains = [train] };
         var typeManifest = ClientManifests.Sample() with
         {
             Types = ClientManifests.TrainTypes + $"\nenum {name} {{ X }}\n",
         };
 
-        ((Action)(() => Render(trainManifest)))
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage($"*runtime*{name}*");
         ((Action)(() => Render(typeManifest)))
             .Should()
             .Throw<InvalidOperationException>()
             .WithMessage($"*runtime*{name}*");
     }
 
-    [Test]
-    public void Two_trains_differing_only_in_case_are_refused()
-    {
-        var train = ClientManifests.Sample().Trains[0];
-        var manifest = ClientManifests.Sample() with
-        {
-            Trains =
-            [
-                train with
-                {
-                    Field = "fooBar",
-                },
-                train with
-                {
-                    Field = "foobar",
-                    Documents = [train.Documents[0] with { Id = train.Documents[0].Id + "2" }],
-                },
-            ],
-            Types = ClientManifests.TrainTypes.Replace(
-                "type DispatchMutations {",
-                "type DispatchMutations {\n  fooBar: Int\n  foobar: Int"
-            ),
-        };
-
-        var render = () => Render(manifest);
-
-        render.Should().Throw<InvalidOperationException>().WithMessage("*fooBar*foobar*");
-    }
-
-    [Test]
-    public void A_mutation_and_a_query_of_one_name_are_refused()
-    {
-        var train = ClientManifests.Sample().Trains[0];
-        var manifest = ClientManifests.Sample() with
-        {
-            Trains =
-            [
-                train,
-                train with
-                {
-                    Root = "query",
-                    Documents = [train.Documents[0] with { Id = train.Documents[0].Id + "2" }],
-                },
-            ],
-        };
-
-        var render = () => Render(manifest);
-
-        render
-            .Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*mutation train startRun*query train startRun*");
-    }
-
     [TestCase("options")]
     [TestCase("sendDocument")]
     [TestCase("startRunDocumentId")]
-    public void A_variable_named_as_a_local_of_the_train_function_is_refused(string name)
+    public void A_variable_named_as_a_local_of_the_function_is_refused(string name)
     {
-        var train = ClientManifests.Sample().Trains[0];
-        var document = train.Documents[0] with
+        var document = StartRunFile with
         {
-            Document = ClientManifests.StartRunDocument.Replace("$input", "$" + name),
-        };
-        var manifest = ClientManifests.Sample() with
-        {
-            Trains = [train with { Documents = [document] }],
+            Text = ClientManifests.StartRunDocument.Replace("$input", "$" + name),
         };
 
-        var render = () => Render(manifest);
+        var render = () => RenderDocuments(ClientManifests.Sample(), document);
 
         render.Should().Throw<InvalidOperationException>().WithMessage($"*'{name}'*");
     }
@@ -772,42 +734,21 @@ public partial class ClientGeneratorTests
     [Test]
     public void A_reserved_word_the_runtime_forbids_is_refused()
     {
-        foreach (var word in new[] { "eval", "arguments" })
+        foreach (var word in new[] { "Eval", "Arguments" })
         {
-            var train = ClientManifests.Sample().Trains[0] with { Field = word };
-            var render = () => Render(ClientManifests.Sample() with { Trains = [train] });
-            render.Should().Throw<InvalidOperationException>().WithMessage($"*'{word}'*reserves*");
+            var document = StartRunFile with
+            {
+                Text = ClientManifests.StartRunDocument.Replace(
+                    "mutation StartRun",
+                    $"mutation {word}"
+                ),
+            };
+            var render = () => RenderDocuments(ClientManifests.Sample(), document);
+            render
+                .Should()
+                .Throw<InvalidOperationException>()
+                .WithMessage($"*'{word.ToLowerInvariant()}'*reserves*");
         }
-    }
-
-    [Test]
-    public void A_document_that_is_not_graphql_is_refused_with_a_sentence()
-    {
-        var train = ClientManifests.Sample().Trains[0];
-        var manifest = ClientManifests.Sample() with
-        {
-            Trains =
-            [
-                train with
-                {
-                    Documents = [train.Documents[0] with { Document = "mutation {" }],
-                },
-            ],
-        };
-
-        var render = () => Render(manifest);
-
-        render.Should().Throw<InvalidOperationException>().WithMessage("*not GraphQL*Export*");
-    }
-
-    [Test]
-    public void A_train_with_no_document_is_refused()
-    {
-        var train = ClientManifests.Sample().Trains[0] with { Documents = [] };
-
-        var render = () => Render(ClientManifests.Sample() with { Trains = [train] });
-
-        render.Should().Throw<InvalidOperationException>().WithMessage("*0 documents*");
     }
 
     [Test]

@@ -12,9 +12,10 @@ nav_order: 2
 Part of the [Recovery](/docs/samples/recovery) sample tour.
 
 The page is React 19, Vite and `graphql-ws`, on the client [`trax client`](/docs/reference/cli#frontend-clients-trax-client)
-generates from the host's manifest (`src/trax/`). The host runs only persisted documents, and every document the
-page sends is one the host generates and registers itself: each machine operation, each exposed train and
-`runProgress`. The page signs in as the demo user (`recovery-user`, `src/connection.ts`), so it sees only its own
+generates from the host's manifest (`src/trax/`). The host runs only persisted documents: the machine operations and
+`runProgress`, which the host generates and registers itself, and the page's own document for each train it calls
+(`src/graphql/*.graphql`), which `trax client --documents` writes into `trax.documents.json` and the host registers
+when it starts. The page signs in as the demo user (`recovery-user`, `src/connection.ts`), so it sees only its own
 drafts and runs and sends nothing under `operations`; requeueing, resuming and asking afresh are an operator's, in the
 dashboard. Over the socket the key travels in the `connection_init` payload as `apiKey`, because a browser cannot set
 headers on a WebSocket upgrade. Both views keep their panels a fixed
