@@ -493,6 +493,7 @@ public class PersistedOperationMutationTests
 
     [TestCase("trax_machine_wizard_get_")]
     [TestCase("trax_train_mutation__startRun_")]
+    [TestCase("trax_client_AlertCard_")]
     [Property(
         "adr",
         "docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md"

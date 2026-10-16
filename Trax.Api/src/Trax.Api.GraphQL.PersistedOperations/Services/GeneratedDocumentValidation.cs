@@ -25,24 +25,13 @@ internal static class GeneratedDocumentValidation
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(documents);
 
-        var validator = schema.Services.GetRequiredService<DocumentValidator>();
         var refusals = new List<string>();
         foreach (var document in documents)
         {
-            var result = validator.Validate(
-                schema,
-                new OperationDocumentId(document.Id),
-                Utf8GraphQLParser.Parse(document.Text),
-                new FeatureCollection(),
-                onlyNonCacheable: false
-            );
-            var errors = result
-                .Errors.Where(e => e.Code?.StartsWith("AUTH_", StringComparison.Ordinal) != true)
-                .Select(e => e.Message)
-                .ToList();
+            var errors = Errors(schema, document.Id, document.Text);
             if (errors.Count > 0)
                 refusals.Add(
-                    $"The generated document of the {document.Owner} is refused by this host's own validation, so "
+                    $"The document of the {document.Owner} is refused by this host's own validation, so "
                         + $"every call to it would be: {string.Join(" ", errors)}"
                 );
         }
@@ -52,5 +41,24 @@ internal static class GeneratedDocumentValidation
                     + "\nRaise the limit (MaxExecutionDepth, MaxOperationsPerRequest), or give the answer a shallower "
                     + "shape."
             );
+    }
+
+    /// <summary>
+    /// What the host's validation says of <paramref name="text"/>, but authorization: nothing when it would run.
+    /// </summary>
+    public static IReadOnlyList<string> Errors(ISchemaDefinition schema, string id, string text)
+    {
+        var validator = schema.Services.GetRequiredService<DocumentValidator>();
+        var result = validator.Validate(
+            schema,
+            new OperationDocumentId(id),
+            Utf8GraphQLParser.Parse(text),
+            new FeatureCollection(),
+            onlyNonCacheable: false
+        );
+        return result
+            .Errors.Where(e => e.Code?.StartsWith("AUTH_", StringComparison.Ordinal) != true)
+            .Select(e => e.Message)
+            .ToList();
     }
 }

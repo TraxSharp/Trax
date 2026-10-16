@@ -100,6 +100,9 @@ public sealed class PersistedOperationsOptions
 
     internal static readonly TimeSpan DefaultMachineDocumentGracePeriod = TimeSpan.FromDays(7);
 
+    /// <summary>The <c>trax.documents.json</c> files named by <c>ClientDocuments</c>, in the order named.</summary>
+    internal IReadOnlyList<string> ClientDocumentFiles { get; set; } = [];
+
     /// <summary>
     /// How often a running node registers its generated documents again, which keeps its own registered and collects
     /// any other version no node has registered for the grace period. Defaults to an hour; a node registers at least

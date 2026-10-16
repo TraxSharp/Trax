@@ -83,6 +83,10 @@ internal static class MachineDocumentMiddleware
             case MachineDocumentVerdict.Own:
                 await next(context).ConfigureAwait(false);
                 return;
+            case MachineDocumentVerdict.Stored
+                when await PassesAsync(context, registry, storage).ConfigureAwait(false):
+                await next(context).ConfigureAwait(false);
+                return;
             case MachineDocumentVerdict.ServerOutdated:
                 context.Result = Refusal(
                     RefusalCode.ServerOutdated,
@@ -94,6 +98,31 @@ internal static class MachineDocumentMiddleware
                 context.Result = Refusal(RefusalCode.ClientOutdated, ClientOutdatedMessage, 400);
                 return;
         }
+    }
+
+    // Whether a stored client document another node registered passes this node's checks: the client-document rules
+    // and this node's own validation, decided once per id. Its text is read only when its body is the one its id names.
+    private static async ValueTask<bool> PassesAsync(
+        RequestContext context,
+        MachineDocumentRegistry registry,
+        DbPersistedOperationStorage storage
+    )
+    {
+        var id = context.Request.DocumentId.Value;
+        if (registry.StoredCheck(id) is { } known)
+            return known;
+        var text = await storage
+            .ReadGeneratedDocumentAsync(id, context.RequestAborted)
+            .ConfigureAwait(false);
+        if (text is null)
+            return false;
+        var name = id[ClientDocuments.ReservedIdPrefix.Length..id.LastIndexOf('_')]
+            .Replace('-', '_');
+        var passes =
+            ClientDocuments.Refusal(context.Schema, name, text) is null
+            && GeneratedDocumentValidation.Errors(context.Schema, id, text).Count == 0;
+        registry.RecordStoredCheck(id, passes);
+        return passes;
     }
 
     private static OperationResult Refusal(RefusalCode code, string message, int status) =>

@@ -41,6 +41,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
     {
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder AllowOperations(params string[] operationNames) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder AllowOperationsMatching(System.Func<string, bool> predicate) { }
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder ClientDocuments(string path) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder DisableIntrospection() { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder GateManagement(string? policy = null, string? roles = null) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder GateManagementToAuthenticatedUsers() { }

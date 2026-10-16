@@ -1,8 +1,9 @@
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
 /// <summary>
-/// A persisted document the host generates and registers itself: a machine's (<see cref="MachineDocument"/>), a
-/// train's (<see cref="TrainDocument"/>) or runProgress's (<see cref="ProgressDocument"/>). Its versions are numbered per <see cref="Slot"/>, so an id stored with a
+/// A persisted document the host registers itself: a machine's (<see cref="MachineDocument"/>), a train's
+/// (<see cref="TrainDocument"/>) or runProgress's (<see cref="ProgressDocument"/>), which it generates, or one its
+/// frontend wrote (<see cref="ClientDocument"/>). Its versions are numbered per <see cref="Slot"/>, so an id stored with a
 /// higher number than this node's answers <c>SERVER_OUTDATED</c> and one with a lower number <c>CLIENT_OUTDATED</c>.
 /// </summary>
 internal abstract record GeneratedDocument(string Id, string Text)
@@ -30,13 +31,15 @@ internal static class GeneratedDocuments
     public static bool IsReserved(string? id) =>
         MachineDocuments.IsReserved(id)
         || TrainDocuments.IsReserved(id)
-        || ProgressDocuments.IsReserved(id);
+        || ProgressDocuments.IsReserved(id)
+        || ClientDocuments.IsReserved(id);
 
     /// <summary>The reserved prefix <paramref name="id"/> is under, or null.</summary>
     public static string? PrefixOf(string id) =>
         MachineDocuments.IsReserved(id) ? MachineDocuments.ReservedIdPrefix
         : TrainDocuments.IsReserved(id) ? TrainDocuments.ReservedIdPrefix
         : ProgressDocuments.IsReserved(id) ? ProgressDocuments.ReservedIdPrefix
+        : ClientDocuments.IsReserved(id) ? ClientDocuments.ReservedIdPrefix
         : null;
 
     /// <summary>
@@ -72,6 +75,12 @@ internal static class GeneratedDocuments
         if (ProgressDocuments.IsReserved(id))
             return
                 ProgressDocuments.SlotOf(id) is { } slot
+                && slots.Contains(slot, StringComparer.Ordinal)
+                ? slot
+                : null;
+        if (ClientDocuments.IsReserved(id))
+            return
+                ClientDocuments.SlotOfId(id) is { } slot
                 && slots.Contains(slot, StringComparer.Ordinal)
                 ? slot
                 : null;

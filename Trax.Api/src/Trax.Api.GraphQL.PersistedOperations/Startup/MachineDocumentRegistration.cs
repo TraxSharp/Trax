@@ -60,7 +60,7 @@ internal sealed class MachineDocumentRegistration(
         var trains = services.GetService<ITrainDiscoveryService>() is { } discovery
             ? TrainTypeModule.AssignTrainNames(discovery.DiscoverTrains())
             : new Dictionary<TrainRegistration, string>();
-        if (exposed.Count == 0 && trains.Count == 0)
+        if (exposed.Count == 0 && trains.Count == 0 && options.ClientDocumentFiles.Count == 0)
         {
             // No document of this node's, but the registration still runs: it marks the documents of every machine no
             // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
@@ -95,6 +95,9 @@ internal sealed class MachineDocumentRegistration(
             .. TrainDocuments.Generate(executor.Schema, trains),
             .. ProgressDocuments.Generate(executor.Schema),
         ];
+        var clientDocuments = LoadClientDocuments();
+        Services.ClientDocuments.Check(executor.Schema, clientDocuments);
+        _documents = [.. _documents, .. clientDocuments];
         GeneratedDocumentValidation.Validate(executor.Schema, _documents);
         foreach (var train in _documents.OfType<TrainDocument>().Where(d => d.LeftOut.Count > 0))
             _logger.LogWarning(
@@ -105,6 +108,27 @@ internal sealed class MachineDocumentRegistration(
                 string.Join(", ", train.LeftOut)
             );
         await RegisterAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // Every client document the host names, each file resolved against the content root; a document's name used twice
+    // across files refuses the start.
+    private IReadOnlyList<ClientDocument> LoadClientDocuments()
+    {
+        var root =
+            services.GetService<IHostEnvironment>()?.ContentRootPath
+            ?? Directory.GetCurrentDirectory();
+        var documents = new List<ClientDocument>();
+        foreach (var file in options.ClientDocumentFiles)
+        foreach (var document in Services.ClientDocuments.Load(Path.GetFullPath(file, root)))
+        {
+            if (documents.Any(d => d.Name == document.Name))
+                throw new InvalidOperationException(
+                    $"The {document.Owner} is named in two client documents files. Operation names are unique "
+                        + "across a host's frontends."
+                );
+            documents.Add(document);
+        }
+        return documents;
     }
 
     public Task StartAsync(CancellationToken cancellationToken) =>

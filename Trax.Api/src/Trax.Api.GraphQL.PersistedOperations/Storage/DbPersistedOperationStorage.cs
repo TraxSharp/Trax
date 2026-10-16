@@ -148,11 +148,17 @@ internal sealed class DbPersistedOperationStorage
         // An id under the reserved prefix is a machine document: only this node's own are read, never one it did
         // not generate, and a miss is not remembered, so the ids a client invents cannot fill the miss cache.
         GeneratedDocument? own = null;
+        var storedClient = false;
         if (GeneratedDocuments.IsReserved(id))
         {
-            if (!_machineDocuments.TryGetOwn(id, out var generated))
+            if (_machineDocuments.TryGetOwn(id, out var generated))
+                own = generated;
+            // Another node's client document, which the middleware let through only once this node checked and
+            // validated it: read, and served only when its body is the one its id names.
+            else if (ClientDocuments.IsReserved(id) && _machineDocuments.IsRunnableStored(id))
+                storedClient = true;
+            else
                 return null;
-            own = generated;
         }
         else if (_misses.TryGet(id, out _))
             return null;
@@ -170,10 +176,13 @@ internal sealed class DbPersistedOperationStorage
 
             if (document is null)
             {
-                if (own is null)
+                if (own is null && !storedClient)
                     _misses.Add(id, id, generation, readAt);
                 return null;
             }
+
+            if (storedClient && !GeneratedDocuments.IsGenerated(id, document))
+                return null;
 
             if (own is not null && !own.Matches(document))
             {
@@ -581,6 +590,7 @@ internal sealed class DbPersistedOperationStorage
                             p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
+                            || p.Id.StartsWith(ClientDocuments.ReservedIdPrefix)
                         )
                     )
                     .ToListAsync(ct)
@@ -827,6 +837,31 @@ internal sealed class DbPersistedOperationStorage
     }
 
     /// <summary>
+    /// The stored body of the active generated document <paramref name="id"/>, or null when the store holds none or its
+    /// body is not the one its id names.
+    /// </summary>
+    internal async Task<string?> ReadGeneratedDocumentAsync(string id, CancellationToken ct)
+    {
+        var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var document = await ctx
+                .PersistedOperations.AsNoTracking()
+                .Where(p => p.TenantKey == NoTenantSentinel && p.Id == id && p.IsActive)
+                .Select(p => p.Document)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            return document is not null && GeneratedDocuments.IsGenerated(id, document)
+                ? document
+                : null;
+        }
+        finally
+        {
+            await DisposeContextAsync(ctx).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// The version and state of every stored generated document, active or not, by id. A row under a reserved prefix
     /// that no host generated is left out.
     /// </summary>
@@ -846,6 +881,7 @@ internal sealed class DbPersistedOperationStorage
                             p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
+                            || p.Id.StartsWith(ClientDocuments.ReservedIdPrefix)
                         )
                     )
                     .Select(p => new

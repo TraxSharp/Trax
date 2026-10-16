@@ -41,6 +41,7 @@ public sealed partial class PersistedOperationsBuilder
     public PersistedOperationsBuilder GateManagement(string? policy = null, string? roles = null);
     public PersistedOperationsBuilder GateManagementToAuthenticatedUsers();
     public PersistedOperationsBuilder KeepOlderMachineDocumentsFor(TimeSpan grace);
+    public PersistedOperationsBuilder ClientDocuments(string path);
     public PersistedOperationsBuilder UseDatabase(string connectionString); // obsolete
 }
 
@@ -66,7 +67,8 @@ public sealed class CacheOptions
 | `SingleNode()` | none | Declare that one process serves the endpoint and writes the store, so no broadcast is needed. |
 | `GateManagement(string? policy = null, string? roles = null)` | not served | Serve the [management fields](/docs/sdk-reference/persisted-operations/management-mutations), `persistedOperations { ... }` at the root, behind `@authorize` with this policy or these roles. A comma-separated `roles` list is any of; repeated calls are all of. A policy or roles is required. Without this call or the next, the fields are not in the schema. |
 | `GateManagementToAuthenticatedUsers()` | not served | Serve the management fields to any authenticated caller. On a host with public sign-up that is anyone, so prefer `GateManagement`. |
-| `KeepOlderMachineDocumentsFor(TimeSpan grace)` | 7 days | How long a version of the [generated documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) stays active once no node registers it, older or newer. Each node registers its own documents when it starts and again every hour (at most a quarter of this) while it runs, so a node still running another version keeps serving its documents; a version no node has registered for this long is deactivated. Must be positive. |
+| `KeepOlderMachineDocumentsFor(TimeSpan grace)` | 7 days | How long a version of the [generated documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) stays active once no node registers it, older or newer. Each node registers its own documents when it starts and again every hour (at most a quarter of this) while it runs, so a node still running another version keeps serving its documents; a version no node has registered for this long is deactivated. Must be positive. The same period applies to [client documents](/docs/api/fetch-only-what-a-component-needs). |
+| `ClientDocuments(string path)` | none | Register the documents a frontend wrote, from the `trax.documents.json` that `trax client --documents` writes, when the host starts. `path` resolves against the content root; repeated calls add files. Each document is one named query or mutation of exposed trains under `dispatch` or `discover`, with no directive, and must pass the host's own validation. A missing or malformed file, a name used twice, or a document breaking either rule refuses the start, naming it. Each is stored under `trax_client_<name>_<hash of its text>`; a version a frontend no longer holds keeps running while it validates, until no node has registered it for the grace period above. |
 
 `UseDatabase(string)` is obsolete, hidden from IntelliSense, and does nothing beyond throwing `ArgumentException` for a blank string: storage reads and writes `trax.persisted_operation` through the Trax data context that `AddEffects(e => e.UsePostgres(...))` registers.
 
@@ -80,6 +82,7 @@ public sealed class CacheOptions
 
 - Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required. See [One node or many](/docs/persisted-operations#one-node-or-many).
 - `GateManagement` throws `InvalidOperationException` with neither a policy nor roles, or with a role list that holds only separators. A policy it names that is not registered with `AddAuthorization` fails startup.
+- `ClientDocuments` throws `ArgumentException` for a blank path.
 - `UseRabbitMqInvalidation` throws `ArgumentException` for a blank connection string; `WithCacheMaxAge` and `KeepOlderMachineDocumentsFor` throw `ArgumentOutOfRangeException` for a value that is not positive; a second `WithInMemoryCache` throws `InvalidOperationException`.
 - The remaining checks run when `UsePersistedOperations` builds the options and throw `InvalidOperationException`; the [UsePersistedOperations validation table](/docs/sdk-reference/persisted-operations/use-persisted-operations#validation) lists them.
 - What the allowlist does and does not protect: [Allowlist and dev carve-outs](/docs/persisted-operations#allowlist-and-dev-carve-outs).

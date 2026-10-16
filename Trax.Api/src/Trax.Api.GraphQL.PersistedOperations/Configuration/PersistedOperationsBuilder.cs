@@ -40,4 +40,7 @@ public sealed partial class PersistedOperationsBuilder
     // ----- machine documents -----
     private TimeSpan _machineDocumentGracePeriod =
         PersistedOperationsOptions.DefaultMachineDocumentGracePeriod;
+
+    // ----- client documents -----
+    private readonly List<string> _clientDocumentFiles = [];
 }

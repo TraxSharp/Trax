@@ -64,6 +64,7 @@ public sealed partial class PersistedOperationsBuilder
             SingleNode = _singleNode,
             ManagementGate = _managementGate.ToList(),
             MachineDocumentGracePeriod = _machineDocumentGracePeriod,
+            ClientDocumentFiles = _clientDocumentFiles.ToList(),
         };
     }
 }

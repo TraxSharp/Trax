@@ -83,6 +83,54 @@ public class MachineDocumentRegistryTests
     }
 
     [Test]
+    public async Task A_stored_client_document_of_any_version_is_run_once_it_passes_and_a_collected_one_is_outdated()
+    {
+        var own = ClientDocuments.IdOf("AlertCard", "query AlertCard { b }");
+        var older = ClientDocuments.IdOf("AlertCard", "query AlertCard { a }");
+        var collected = ClientDocuments.IdOf("AlertCard", "query AlertCard { c }");
+        var registry = Registry();
+        registry.Publish(
+            [
+                new ClientDocument(
+                    own,
+                    "query AlertCard { b }",
+                    "AlertCard",
+                    "client document 'AlertCard'"
+                ),
+            ],
+            new Dictionary<string, int> { ["trax_client_AlertCard"] = 3 },
+            new Dictionary<string, StoredMachineDocument>
+            {
+                [own] = new(3, true),
+                [older] = new(2, true),
+                [collected] = new(1, false),
+            }
+        );
+
+        (await registry.ClassifyAsync(older, Store(Empty), CancellationToken.None))
+            .Should()
+            .Be(
+                MachineDocumentVerdict.Stored,
+                "an older client document keeps running through a frontend's deploy, per "
+                    + "Trax.Docs/adr/0053-a-client-document-is-registered-by-the-host-at-boot.md"
+            );
+        (await registry.ClassifyAsync(collected, Store(Empty), CancellationToken.None))
+            .Should()
+            .Be(MachineDocumentVerdict.ClientOutdated);
+
+        registry.IsRunnableStored(older).Should().BeFalse("nothing checked its text yet");
+        registry.RecordStoredCheck(older, passes: true);
+        registry.IsRunnableStored(older).Should().BeTrue();
+        registry.RecordStoredCheck(older, passes: false);
+        registry
+            .IsRunnableStored(older)
+            .Should()
+            .BeFalse("a stored text this node's checks refuse never runs here");
+        registry.RecordStoredCheck(collected, passes: true);
+        registry.IsRunnableStored(collected).Should().BeFalse("a collected document never runs");
+    }
+
+    [Test]
     public async Task A_collected_id_of_a_machine_this_node_does_not_serve_is_client_outdated()
     {
         var ledger = Id("ledger", "start", OldHash);

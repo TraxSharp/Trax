@@ -22,6 +22,12 @@ internal enum MachineDocumentVerdict
     /// that the store holds active: the client retries.
     /// </summary>
     ServerOutdated,
+
+    /// <summary>
+    /// A client document another node registered that the store holds active: it runs here if its stored text passes
+    /// this node's checks, and answers <see cref="ClientOutdated"/> if not.
+    /// </summary>
+    Stored,
 }
 
 /// <summary>
@@ -61,6 +67,10 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
     internal const int MissCapacity = 4096;
 
     private readonly ConcurrentDictionary<string, long> _misses = new(StringComparer.Ordinal);
+
+    // What this node decided about each stored client document it was asked for: whether its stored text passes this
+    // node's checks. Only ids the store holds active get here, so it holds no more than the store does.
+    private readonly ConcurrentDictionary<string, bool> _storedChecks = new(StringComparer.Ordinal);
 
     // Every id remembered in _misses, with the time it was first asked for, oldest first. An entry whose id was
     // answered since, or remembered again later, is left behind and skipped when it is dequeued; the queue is trimmed
@@ -150,6 +160,13 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         if (state.Stored.TryGetValue(id, out var stored))
         {
             _misses.TryRemove(id, out _);
+            // A client document runs on any node while the store holds it active, whatever its version: the text
+            // another node registered still names fields this node serves, or this node's checks refuse it. An older
+            // version keeps working through a frontend's deploy; a collected one is reloaded.
+            if (ClientDocuments.IsReserved(id))
+                return stored.IsActive
+                    ? MachineDocumentVerdict.Stored
+                    : MachineDocumentVerdict.ClientOutdated;
             // A machine this node does not serve: a node may serve the id while the store holds it active. A newer
             // deploy that stopped exposing the machine has it collected after the grace period, and then its clients
             // reload.
@@ -188,6 +205,26 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         while (_missOrder.Count > MissCapacity && _missOrder.TryDequeue(out var oldest))
             _misses.TryRemove(KeyValuePair.Create(oldest.Id, oldest.FirstAsked));
     }
+
+    /// <summary>
+    /// What this node decided about the stored client document <paramref name="id"/>: whether it passes this node's
+    /// checks, or null when it was not checked yet.
+    /// </summary>
+    public bool? StoredCheck(string id) =>
+        _storedChecks.TryGetValue(id, out var passes) ? passes : null;
+
+    /// <summary>Records whether the stored client document <paramref name="id"/> passes this node's checks.</summary>
+    public void RecordStoredCheck(string id, bool passes) => _storedChecks[id] = passes;
+
+    /// <summary>
+    /// Whether <paramref name="id"/> is a stored client document this node checked and may run: the store held it
+    /// active at the last read, and its text passed.
+    /// </summary>
+    public bool IsRunnableStored(string id) =>
+        _state is { } state
+        && state.Stored.TryGetValue(id, out var stored)
+        && stored.IsActive
+        && StoredCheck(id) == true;
 
     /// <summary>How many unseen ids are remembered now, for the tests of the bound.</summary>
     internal int RememberedMisses => _misses.Count;
