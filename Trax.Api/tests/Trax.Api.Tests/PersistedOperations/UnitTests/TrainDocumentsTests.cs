@@ -14,8 +14,8 @@ namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 /// <summary>
 /// Every exposed train gets a persisted document under <c>trax_train_</c>: an id that reads back to one slot whatever
 /// its names hold, a hash of the train's shape that moves when an input or output field does and not when a doc
-/// comment or another train does, a document that selects the whole answer, and a refusal of an answer no finite
-/// document selects.
+/// comment or another train does, a document that selects the whole answer short of a field leading back to a type
+/// already on the path, and a refusal of a field no document can select.
 /// <para>Enforces <c>docs/adr/0040-every-exposed-train-is-a-persisted-document-the-host-registers.md</c>.</para>
 /// </summary>
 [TestFixture]
@@ -111,13 +111,61 @@ public class TrainDocumentsTests
     }
 
     [Test]
-    public async Task An_output_that_holds_itself_refuses_naming_the_train_and_the_type()
+    public async Task An_answer_with_a_back_reference_generates_a_document_without_it()
     {
-        var act = () => OneAsync(Mutation<StartInput>("Tree", typeof(Node)));
+        var document = await OneAsync(Query<StartInput>("FindParent", typeof(Parent)));
+
+        document
+            .Text.Should()
+            .Contain("findParent(input: $input) { name children { name } }", "per " + Adr);
+        document.LeftOut.Should().Equal("Parent.children > Child.parent");
+    }
+
+    [Test]
+    public async Task A_paged_back_reference_is_left_out_whole()
+    {
+        var document = await OneAsync(Query<StartInput>("FindChild", typeof(PagedChild)));
+
+        document
+            .Text.Should()
+            .Contain("findChild(input: $input) { name parent { name } }")
+            .And.NotContain("edges")
+            .And.NotContain("nodes")
+            .And.NotContain("pageInfo");
+        document.LeftOut.Should().Equal("PagedChild.parent > PagedParent.children");
+    }
+
+    [Test]
+    public async Task A_self_recursive_answer_selects_its_own_fields_only()
+    {
+        var document = await OneAsync(Query<StartInput>("Tree", typeof(Node)));
+
+        document.Text.Should().Contain("tree(input: $input) { name }");
+        document.LeftOut.Should().Equal("Node.children");
+    }
+
+    [Test]
+    public async Task A_type_reached_from_two_parents_is_selected_under_both()
+    {
+        var document = await OneAsync(Query<StartInput>("FindOrder", typeof(Order)));
+
+        document
+            .Text.Should()
+            .Contain(
+                "findOrder(input: $input) { billing { city } shipping { city } }",
+                "two parents are not a cycle"
+            );
+        document.LeftOut.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_field_with_a_required_argument_refuses_naming_the_train_and_the_field()
+    {
+        var act = () => OneAsync(Query<StartInput>("Lookup", typeof(Lookup)));
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Node*holds itself*");
+            .WithMessage("*Lookup.find*required argument 'key'*");
     }
 
     #endregion
@@ -212,6 +260,50 @@ public class TrainDocumentsTests
     {
         public string Name { get; init; } = "";
         public Node[] Children { get; init; } = [];
+    }
+
+    public record Parent
+    {
+        public string Name { get; init; } = "";
+        public Child[] Children { get; init; } = [];
+    }
+
+    public record Child
+    {
+        public string Name { get; init; } = "";
+        public Parent? Parent { get; init; }
+    }
+
+    public record PagedParent
+    {
+        public string Name { get; init; } = "";
+
+        [UsePaging]
+        public PagedChild[] Children { get; init; } = [];
+    }
+
+    public record PagedChild
+    {
+        public string Name { get; init; } = "";
+        public PagedParent? Parent { get; init; }
+    }
+
+    public record Order
+    {
+        public Address Billing { get; init; } = new();
+        public Address Shipping { get; init; } = new();
+    }
+
+    public record Address
+    {
+        public string City { get; init; } = "";
+    }
+
+    public record Lookup
+    {
+        public string Name { get; init; } = "";
+
+        public int Find(int key) => key;
     }
 
     [GraphQLName("ShapeInput")]

@@ -49,7 +49,11 @@ internal static class ProgressDocuments
                 continue;
             var text =
                 $"{operation} {name}($runId: String!) {{ {RunProgressTypeModule.Field}(runId: $runId)"
-                + TrainDocuments.Selection(schema, definition.Type, [], $"The {Owner} {operation}")
+                + TrainDocuments.Selection(
+                    schema,
+                    definition.Type,
+                    new SelectionWalk($"The {Owner} {operation}")
+                )
                 + " }";
             var shape = TrainDocuments.ShapeHash(schema, sdl, wrappers, definition, text);
             documents.Add(

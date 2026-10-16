@@ -119,6 +119,63 @@ public class TrainDocumentsE2ETests
     }
 
     [Test]
+    public async Task A_host_exposing_a_back_reference_starts_and_serves_the_train()
+    {
+        var id = (await TrainIdsAsync()).Single(i =>
+            i.StartsWith("trax_train_query__findAlert_", StringComparison.Ordinal)
+        );
+
+        using var answer = await _host.PostPersistedAsync(id, new { input = new { id = 7 } });
+
+        var alert = answer
+            .RootElement.GetProperty("data")
+            .GetProperty("discover")
+            .GetProperty("findAlert");
+        alert
+            .GetProperty("title")
+            .GetString()
+            .Should()
+            .Be("Alert 7", MachineDocumentOps.Show(answer));
+        var campaign = alert.GetProperty("campaign");
+        campaign.GetProperty("name").GetString().Should().Be("Housing");
+        campaign
+            .TryGetProperty("alerts", out _)
+            .Should()
+            .BeFalse("the back-reference is left out of the generated document, per " + Adr);
+    }
+
+    [Test]
+    public async Task A_generated_document_past_the_hosts_depth_refuses_the_start_naming_the_train()
+    {
+        const string database = "trax_sm_train_documents_depth";
+        await E2EHost.RecreateDatabaseAsync(database);
+        try
+        {
+            var act = async () =>
+            {
+                using var host = await E2EHost.StartAsync(
+                    database,
+                    new CountingCharge(),
+                    new E2EHostOptions
+                    {
+                        Served = [typeof(WizardMachine)],
+                        GraphQL = graphql =>
+                            MachineDocumentOps.Persisted()(graphql).MaxExecutionDepth(3),
+                    }
+                );
+            };
+
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage("*IFindAlert*refused by this host's own validation*");
+        }
+        finally
+        {
+            await E2EHost.DropDatabaseAsync(database);
+        }
+    }
+
+    [Test]
     public async Task The_manifest_lists_each_train_with_what_it_requires()
     {
         var path = Path.Combine(Path.GetTempPath(), $"trax-trains-{Guid.NewGuid():N}.json");

@@ -69,6 +69,10 @@ internal static class ClientManifestExport
         var documents = exposed.Count == 0 ? [] : MachineDocuments.Generate(schema, exposed);
         var trainDocuments = TrainDocuments.Generate(schema, trains);
         var progressDocuments = ProgressDocuments.Generate(schema);
+        GeneratedDocumentValidation.Validate(
+            schema,
+            [.. documents, .. trainDocuments, .. progressDocuments]
+        );
         var machines = exposed
             .OrderBy(m => m.Name, StringComparer.Ordinal)
             .Select(machine => new ClientManifestMachine

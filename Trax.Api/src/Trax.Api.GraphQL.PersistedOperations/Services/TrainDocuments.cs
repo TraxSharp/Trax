@@ -3,6 +3,7 @@ using System.Text;
 using HotChocolate;
 using HotChocolate.Language;
 using HotChocolate.Types;
+using HotChocolate.Types.Pagination;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -26,8 +27,10 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 /// <para>
 /// A document takes one variable per argument, named like it (<c>input</c>, <c>mode</c>, <c>priority</c>), and selects
 /// every field of the answer at every depth, a union's or an interface's through an inline fragment per possible type.
-/// An answer that holds itself, or a field that takes a required argument, has no finite document, so it refuses the
-/// host's start, naming the train and the type.
+/// A field that leads back to a type already on the path (an entity's reference to its parent, a tree's children) is
+/// left out, so the document ends; a paged field counts as its node type. Each document lists the fields it left out.
+/// A field that takes a required argument has no value to select it with, so it refuses the host's start, naming the
+/// train and the field.
 /// </para>
 /// </remarks>
 internal static class TrainDocuments
@@ -46,7 +49,7 @@ internal static class TrainDocuments
     /// The documents of every train in <paramref name="names"/> that the schema serves, ordered by their id's slot.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// A train answers with a type that holds itself, or with a field that takes a required argument.
+    /// A train answers with a field that takes a required argument.
     /// </exception>
     public static IReadOnlyList<TrainDocument> Generate(
         ISchemaDefinition schema,
@@ -69,7 +72,8 @@ internal static class TrainDocuments
             if (FieldOf(schema, registration.IsMutation, ns, field) is not { } definition)
                 continue;
 
-            var text = Document(schema, root, ns, field, definition, registration);
+            var walk = new SelectionWalk($"The train '{registration.ServiceType.FullName}'");
+            var text = Document(schema, root, ns, field, definition, walk);
             var shape = ShapeHash(schema, sdl, wrappers, definition, text);
             documents.Add(
                 new TrainDocument(
@@ -80,6 +84,7 @@ internal static class TrainDocuments
                     text,
                     shape,
                     Print(definition.Type),
+                    walk.LeftOut,
                     registration
                 )
             );
@@ -161,7 +166,7 @@ internal static class TrainDocuments
         string? ns,
         string field,
         IOutputFieldDefinition definition,
-        TrainRegistration registration
+        SelectionWalk walk
     )
     {
         var name = Pascal(ns ?? "") + Pascal(field);
@@ -182,15 +187,7 @@ internal static class TrainDocuments
             text.Append('(')
                 .AppendJoin(", ", arguments.Select(a => $"{a.Name}: ${a.Name}"))
                 .Append(')');
-        text.Append(
-                Selection(
-                    schema,
-                    definition.Type,
-                    [],
-                    $"The train '{registration.ServiceType.FullName}'"
-                )
-            )
-            .Append(" }");
+        text.Append(Selection(schema, definition.Type, walk)).Append(" }");
         if (ns is not null)
             text.Append(" }");
         text.Append(" }");
@@ -198,60 +195,53 @@ internal static class TrainDocuments
     }
 
     // Every field of an object type at every depth, an inline fragment per possible type of a union or interface, and
-    // nothing for a leaf. A type met again below itself, or a field that takes a required argument, has no finite
-    // document, so it refuses the train.
-    internal static string Selection(
-        ISchemaDefinition schema,
-        IType type,
-        List<string> ancestors,
-        string owner
-    )
+    // nothing for a leaf. A field or a possible type that leads back to a type already on the path is left out and
+    // recorded in the walk, so the document ends. A field that takes a required argument refuses the train.
+    internal static string Selection(ISchemaDefinition schema, IType type, SelectionWalk walk)
     {
         switch (type.NamedType())
         {
             case IObjectTypeDefinition objectType:
-                return " { " + Fields(schema, objectType, ancestors, owner) + " }";
+                return " { " + Fields(schema, objectType, walk) + " }";
             case IUnionTypeDefinition union:
-                return " { __typename "
-                    + string.Join(
-                        " ",
-                        union
-                            .Types.OrderBy(t => t.Name, StringComparer.Ordinal)
-                            .Select(t =>
-                                $"... on {t.Name} {{ {Fields(schema, t, ancestors, owner)} }}"
-                            )
-                    )
-                    + " }";
+                return PossibleTypes(
+                    schema,
+                    union.Types.OrderBy(t => t.Name, StringComparer.Ordinal),
+                    walk
+                );
             case IInterfaceTypeDefinition @interface:
-                return " { __typename "
-                    + string.Join(
-                        " ",
-                        Implementations(schema, @interface)
-                            .Select(t =>
-                                $"... on {t.Name} {{ {Fields(schema, t, ancestors, owner)} }}"
-                            )
-                    )
-                    + " }";
+                return PossibleTypes(schema, Implementations(schema, @interface), walk);
             default:
                 return "";
         }
     }
 
+    private static string PossibleTypes(
+        ISchemaDefinition schema,
+        IEnumerable<IObjectTypeDefinition> types,
+        SelectionWalk walk
+    )
+    {
+        var fragments = new List<string>();
+        foreach (var possible in types)
+        {
+            if (walk.IsOnPath(possible.Name))
+            {
+                walk.Leave($"... on {possible.Name}");
+                continue;
+            }
+            fragments.Add($"... on {possible.Name} {{ {Fields(schema, possible, walk)} }}");
+        }
+        return " { __typename" + string.Concat(fragments.Select(f => " " + f)) + " }";
+    }
+
     private static string Fields(
         ISchemaDefinition schema,
         IObjectTypeDefinition objectType,
-        List<string> ancestors,
-        string owner
+        SelectionWalk walk
     )
     {
-        if (ancestors.Contains(objectType.Name, StringComparer.Ordinal))
-            throw new InvalidOperationException(
-                $"{owner} answers with the type {objectType.Name}, which holds "
-                    + $"itself ({string.Join(" > ", ancestors.Append(objectType.Name))}), so no finite document "
-                    + "selects it. An exposed train's answer needs a shape that ends: flatten it, or stop exposing "
-                    + "the train."
-            );
-        ancestors.Add(objectType.Name);
+        walk.Enter(objectType.Name);
         var fields = new List<string>();
         foreach (var field in objectType.Fields)
         {
@@ -264,15 +254,30 @@ internal static class TrainDocuments
                 { } required
             )
                 throw new InvalidOperationException(
-                    $"{owner} answers with {objectType.Name}.{field.Name}, which "
+                    $"{walk.Owner} answers with {objectType.Name}.{field.Name}, which "
                         + $"takes the required argument '{required.Name}', so its document cannot select it. Give the "
                         + "argument a default, or leave the field out of the train's output."
                 );
-            fields.Add(field.Name + Selection(schema, field.Type, ancestors, owner));
+            var segment = $"{objectType.Name}.{field.Name}";
+            if (walk.IsOnPath(ItemOf(field.Type).Name))
+            {
+                walk.Leave(segment);
+                continue;
+            }
+            walk.Take(segment);
+            fields.Add(field.Name + Selection(schema, field.Type, walk));
+            walk.Return();
         }
-        ancestors.RemoveAt(ancestors.Count - 1);
+        walk.Exit();
         return fields.Count == 0 ? "__typename" : string.Join(" ", fields);
     }
+
+    // The type a field holds, a connection's being its node type, so a paged back-reference is left out whole rather
+    // than leaving its paging wrapper behind.
+    private static ITypeDefinition ItemOf(IType type) =>
+        type.NamedType() is IConnectionType connection
+            ? ItemOf(connection.EdgeType.NodeType)
+            : type.NamedType();
 
     private static IEnumerable<IObjectTypeDefinition> Implementations(
         ISchemaDefinition schema,
@@ -331,6 +336,10 @@ internal static class TrainDocuments
 /// <param name="Text">The GraphQL document text.</param>
 /// <param name="ShapeHash">The hash of the train's shape the id carries.</param>
 /// <param name="Answer">The field's type as SDL writes it (<c>StartRunResponse!</c>).</param>
+/// <param name="LeftOut">
+/// The fields the document leaves out because they lead back to a type already on the path, each as the path that
+/// reaches it (<c>ActionAlert.campaign &gt; Campaign.alerts</c>).
+/// </param>
 /// <param name="Registration">The train.</param>
 internal sealed record TrainDocument(
     string Id,
@@ -340,6 +349,7 @@ internal sealed record TrainDocument(
     string Text,
     string ShapeHash,
     string Answer,
+    IReadOnlyList<string> LeftOut,
     TrainRegistration Registration
 ) : GeneratedDocument(Id, Text)
 {
@@ -360,4 +370,36 @@ internal sealed record TrainDocument(
             Id,
             StringComparison.Ordinal
         );
+}
+
+/// <summary>
+/// Where a walk through an answer is: the object types above the field being selected, the fields taken to reach it,
+/// and every field left out so far because it leads back to one of those types.
+/// </summary>
+/// <param name="owner">What the document is generated for, as a refusal names it (<c>The train 'X'</c>).</param>
+internal sealed class SelectionWalk(string owner)
+{
+    private readonly List<string> _types = [];
+    private readonly List<string> _trail = [];
+    private readonly List<string> _leftOut = [];
+
+    /// <summary>What the document is generated for, as a refusal names it.</summary>
+    public string Owner { get; } = owner;
+
+    /// <summary>Every field left out, as the path that reaches it, in the order the walk met them.</summary>
+    public IReadOnlyList<string> LeftOut => _leftOut;
+
+    /// <summary>Whether <paramref name="typeName"/> is one of the object types the walk is inside.</summary>
+    public bool IsOnPath(string typeName) => _types.Contains(typeName, StringComparer.Ordinal);
+
+    public void Enter(string typeName) => _types.Add(typeName);
+
+    public void Exit() => _types.RemoveAt(_types.Count - 1);
+
+    public void Take(string segment) => _trail.Add(segment);
+
+    public void Return() => _trail.RemoveAt(_trail.Count - 1);
+
+    /// <summary>Records <paramref name="segment"/>, reached by the fields taken so far, as left out.</summary>
+    public void Leave(string segment) => _leftOut.Add(string.Join(" > ", _trail.Append(segment)));
 }

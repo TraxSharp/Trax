@@ -32,9 +32,17 @@ reaches, without descriptions and without the root and namespace types that hold
 field moves the id, a doc comment or another exposed train does not. Versions are numbered per slot (the id without
 its hash), as a machine's are per machine.
 
-**What refuses.** A document selects the whole answer, a union or interface through a fragment per possible type. An
-answer that holds itself, or a field that takes a required argument, has no finite document, so it refuses the host's
-start, naming the train and the type.
+**What is left out, and what refuses.** A document selects the whole answer, a union or interface through a fragment
+per possible type, except a field that leads back to a type already on the path: an entity's reference to its parent,
+a tree's children. That field is left out, a paged one whole (a connection counts as its node type), and the host logs
+each one it left out at startup. The schema may hold the cycle; the document never follows it. Refusing the train
+instead, as this record first decided, stopped every host that exposes an EF model with navigations both ways, which
+is the ordinary shape of one, and the alternative of a type per train the consumer writes only to flatten the model
+was rejected. A field that takes a required argument still refuses the host's start, naming the train and the field:
+nothing gives the document a value for it. Every generated document, a machine's, a train's or the progress pair, then
+runs through the validation the host runs on a request (its depth limit, the operation cap, Trax's rules) before it is
+registered or exported, and a document it refuses refuses the start, naming its owner: a deep answer is a boot failure,
+not a document that fails every call. Cost is analysed per request, not in validation, so it stays a run-time check.
 
 **The first rolling deploy.** A node from before this decision does not treat `trax_train_` as reserved: given a new
 id it looks the id up in the store and runs the new document against its own schema, so a client may get one
@@ -48,7 +56,10 @@ frontend asks for one (the host cannot know, and the manifest would no longer li
 - `TrainDocumentsE2ETests` pins that every exposed train is registered and runs by id, that an id of another shape is
   answered as outdated with a 4xx, and that the manifest lists each train with what it requires.
 - `TrainDocumentsTests` pins the id grammar, that the shape hash moves with an input field and not with a description
-  or another train, the selection, and the refusal of an answer that holds itself.
+  or another train, the selection, a back-reference left out (directly, paged, a tree's children) while a type reached
+  from two parents is selected under both, and the refusal of a field with a required argument.
+- `TrainDocumentsE2ETests.A_host_exposing_a_back_reference_starts_and_serves_the_train` and
+  `A_generated_document_past_the_hosts_depth_refuses_the_start_naming_the_train` pin both at boot.
 - `PersistedOperationMutationTests.Upload_deactivate_and_restore_refuse_the_reserved_prefix` pins that the prefix
   cannot be written through the management surface.
 
@@ -57,3 +68,5 @@ Not covered: the overlap of the first rolling deploy, which no single-version te
 ## Changelog
 
 - **2026-10-14**: Recorded.
+- **2026-10-16**: A field leading back to a type already on the path is left out instead of refusing the train, and
+  every generated document is validated against the host's rules before it is registered.
