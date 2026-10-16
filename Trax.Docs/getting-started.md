@@ -1,13 +1,14 @@
 ---
-title: Build a greeter service
+title: Quick start
 description: "A tutorial building one Trax app from an empty folder: a train run in-process, recorded in Postgres, scheduled, shown in the dashboard and served over GraphQL."
 type: tutorial
 area: general
+section: none
 nav_order: 1
 snippet_context: none
 ---
 
-# Build a greeter service
+# Quick start: build a greeter service
 
 In this tutorial we build one application from an empty folder: a train that greets someone, run
 in-process first, then recorded in Postgres, scheduled, watched from the dashboard, and called over

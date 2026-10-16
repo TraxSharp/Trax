@@ -53,7 +53,7 @@ The postures are described in [Runner authorization posture](/docs/scheduler/run
 
 ## See also
 
-- [Schedule your first train](/docs/scheduler/setup)
+- [Schedule a train](/docs/scheduler/setup)
 - [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
 - [Scheduling sample](/docs/samples/scheduling), whose page lists the error each missing piece of
   its `Program.cs` produces

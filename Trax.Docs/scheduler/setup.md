@@ -1,21 +1,21 @@
 ---
-title: Schedule your first train
-description: "A tutorial: a host that runs a train every 30 seconds and another nightly from Postgres, reads what the scheduler recorded and runs a job on demand."
-type: tutorial
+title: Schedule a train
+description: "How to run a train on an interval and a cron schedule from Postgres, read what the scheduler recorded, trigger a job on demand and quiet its logs."
+type: how-to
 area: scheduling
 nav_order: 1
 snippet_context: none
 ---
 
-# Schedule your first train
+# Schedule a train
 
-We build a small host that runs a report train every 30 seconds and another every night, with
-both schedules stored in Postgres. Then we read what the scheduler recorded, run the nightly job on
-demand, and quiet the scheduler's own logs. Each step ends with something you can see.
+Run a train on a schedule stored in Postgres: one job every 30 seconds and one every night, then
+read what the scheduler recorded, trigger a job on demand and quiet the scheduler's own logs. The
+steps use a small report train in a new project; in an existing host, skip to step 3.
 
 Every C# block on this page is compiled in CI. You need the .NET 10 SDK and Docker.
 
-## 1. Create the project and start Postgres
+## 1. Create a project and start Postgres
 
 ```bash
 dotnet new web -n Reports
@@ -169,7 +169,7 @@ exception, and the scheduler retries it.
 
 ## 5. Add a nightly job with retries
 
-Add a second manifest for the same train, on a cron schedule, allowed five retries.
+Add a second manifest for the same train, on a cron schedule, with up to five retries.
 
 `Program.cs`:
 

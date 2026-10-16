@@ -28,6 +28,7 @@ test("a page's section: explicit, then samples/contributing area, then type, els
   assert.equal(sectionOf(page("a", { type: "reference", area: "contributing" })), "Contributing");
   assert.equal(sectionOf(page("a", { type: "explanation", area: "trains" })), "Explanation");
   assert.equal(sectionOf(page("a", { type: "landing" })), undefined);
+  assert.equal(sectionOf(page("a", { type: "tutorial", section: "none" })), undefined);
   assert.equal(sectionOf(page("a")), undefined);
 });
 

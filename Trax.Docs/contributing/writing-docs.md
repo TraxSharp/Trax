@@ -45,7 +45,7 @@ redirect_from:
 | `source` | on SDK reference pages | Files or directories the page documents, relative to the repository root. The site links each one to GitHub. |
 | `redirect_from` | no | Old `/docs/...` paths that now land on this page. |
 | `parent`, `grand_parent`, `has_children` | no | Nest the page under the page whose `title` is `parent`. |
-| `section` | no | The sidebar section, when it is not the one `type` implies. |
+| `section` | no | The sidebar section, when it is not the one `type` implies. `none` puts the page at the top of the sidebar, under Home, outside every section. |
 | `snippet_context` | no | `none` compiles the page's snippets without the shared context. |
 | `package`, `namespace`, `surface` | on SDK reference pages | See [SDK reference pages](#sdk-reference-pages). |
 

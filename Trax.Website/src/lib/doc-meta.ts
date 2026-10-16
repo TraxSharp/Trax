@@ -98,9 +98,11 @@ export function sectionRank(label: string): number {
 /**
  * The sidebar section of a top-level page: its explicit `section`, else Samples
  * or Contributing by area, else the one its type implies. Undefined means the
- * page stands alone at the top (Home, and any page with none of these).
+ * page stands alone at the top (Home, a page with `section: none`, and any page
+ * with none of these).
  */
 export function sectionOf(doc: DocPage): string | undefined {
+  if (doc.section === "none") return undefined;
   if (doc.section) return doc.section;
   if (doc.area === "samples") return "Samples";
   if (doc.area === "contributing") return "Contributing";
