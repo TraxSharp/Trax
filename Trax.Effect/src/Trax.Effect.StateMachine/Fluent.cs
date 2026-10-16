@@ -1748,16 +1748,13 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             as TimeSpan?;
     }
 
-    // How a computed duration reads the context: the camelCase names the schema reflects, and a TimeSpan written as an
-    // ISO-8601 duration, as a context carries it.
+    // How a computed duration reads the context: the camelCase names the schema reflects, an enum by its C# member
+    // name (the spelling the API stores; the read is case-insensitive, so a context that carries the older camelCase
+    // spelling still reads), and a TimeSpan written as an ISO-8601 duration, as a context carries it.
     private static readonly JsonSerializerOptions TimerContextJson = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters =
-        {
-            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
-            new IsoDurationJsonConverter(),
-        },
+        Converters = { new JsonStringEnumConverter(), new IsoDurationJsonConverter() },
     };
 
     // Each state has at most one timer, so following timers from any state either ends or comes round to a state it
@@ -2321,13 +2318,14 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     private sealed class DifferentialBuilder(MachineBuilder<TState, TTrigger> owner)
         : IDifferentialBuilder<TState, TTrigger>
     {
-        // camelCase to match the field names the guards/reducers read (SchemaReflection uses the same policy);
-        // nulls kept so a nullable field's null appears in a probe context exactly as the wire carries it. An
-        // empty input uses EmptySample, so all-null typed inputs are never how {} is authored.
+        // camelCase field names to match the names the guards/reducers read (SchemaReflection uses the same policy),
+        // but enums by their C# member name, the one spelling the API stores (MachineSurface.Json); nulls kept so a
+        // nullable field's null appears in a probe context exactly as the wire carries it. An empty input uses
+        // EmptySample, so all-null typed inputs are never how {} is authored.
         private static readonly JsonSerializerOptions Json = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+            Converters = { new JsonStringEnumConverter() },
         };
 
         public IDifferentialBuilder<TState, TTrigger> Sample<TInput>(
