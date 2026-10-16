@@ -1126,6 +1126,8 @@ namespace Trax.Effect.Models.SnapshotDraft
         public long RowId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("server_record")]
         public bool? ServerRecord { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("spawned_by")]
+        public string? SpawnedBy { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("start_fingerprint")]
         public string? StartFingerprint { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("start_request_id")]

@@ -277,15 +277,18 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     // The generic save serves only machines with no server-side behaviour: an event or a start gated by a role or a
     // policy, an invoked train, an effect or a timer each move the machine through a declared event, the start's rule
     // or the server, which the save would step around.
+    // A child machine ends its parent's wait, so a save, which could put it in its end state, is refused too.
     private bool HasServerBehaviour =>
         Built.Rules.AnyGated
         || Built.Invokes.Count > 0
         || Built.Effects.Count > 0
-        || Built.Timers.Count > 0;
+        || Built.Timers.Count > 0
+        || Built.Definition.Ends.Count > 0;
 
     IReadOnlyList<InvokedTrainDeclaration> IMachineInternals.InvokedTrains =>
         Built
-            .Invokes.Values.Select(i => new InvokedTrainDeclaration(
+            .Invokes.Values.Where(i => i.Spawn is null)
+            .Select(i => new InvokedTrainDeclaration(
                 Built.Definition.Id,
                 i.State.ToString(),
                 i.TrainType,
@@ -334,7 +337,42 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     EnteringInvoke? IMachineInternals.Entering(string state) =>
         Built.Invokes.Values.FirstOrDefault(i => i.State.ToString() == state) is { } invoke
             ? new EnteringInvoke(invoke.TrainType, invoke.CreateInput, Built.InvokedRunLimit)
+            {
+                Spawn = invoke.Spawn,
+            }
             : null;
+
+    IReadOnlyList<SpawnDeclaration> IMachineInternals.Spawns =>
+        Built
+            .Invokes.Values.Where(i => i.Spawn is not null)
+            .Select(i => new SpawnDeclaration(
+                Built.Definition.Id,
+                i.State.ToString(),
+                i.Spawn!.ChildMachine,
+                Built.SystemOwned
+            ))
+            .ToList();
+
+    IReadOnlyDictionary<string, InvokeOutcomeKind> IMachineInternals.Ends =>
+        Built.Definition.Ends.ToDictionary(
+            kv => kv.Key.ToString(),
+            kv => kv.Value,
+            StringComparer.Ordinal
+        );
+
+    JsonObject IMachineInternals.ChildOutput(string state, JsonObject childContext)
+    {
+        var fields =
+            Built
+                .Invokes.Values.FirstOrDefault(i => i.State.ToString() == state)
+                ?.OutputSchema.Fields
+            ?? [];
+        var output = new JsonObject();
+        foreach (var field in fields)
+            if (childContext.TryGetPropertyValue(field.Name, out var value))
+                output[field.Name] = value?.DeepClone();
+        return output;
+    }
 
     RehydrationResult IMachineInternals.Rehydrate(string json) => Built.Engine.Rehydrate(json);
 

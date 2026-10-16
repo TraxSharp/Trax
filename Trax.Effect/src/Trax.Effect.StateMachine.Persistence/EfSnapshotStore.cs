@@ -95,13 +95,24 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken
     ) => Read(Owned(owner).Where(x => x.Id == id && x.Machine == machine), cancellationToken);
 
-    private static async Task<StoredSnapshot?> Read(
+    private async Task<StoredSnapshot?> Read(
         IQueryable<SnapshotDraft> query,
         CancellationToken cancellationToken
     )
     {
         var record = await query.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        return record is null ? null : ToStored(record);
+        if (record is null)
+            return null;
+        var stored = ToStored(record);
+        return record.SpawnedBy is { } parentToken
+            ? stored with
+            {
+                ParentWaits = await db.SnapshotDrafts.AnyAsync(
+                    p => p.InvokeToken == parentToken,
+                    cancellationToken
+                ),
+            }
+            : stored;
     }
 
     private static StoredSnapshot ToStored(SnapshotDraft record)
@@ -318,13 +329,27 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             )
             .ExecuteDeleteAsync(cancellationToken) > 0;
 
+    /// <summary>
+    /// Inserts the child a parent's spawning state starts, for <paramref name="owner"/>, carrying the parent's token in
+    /// <c>spawned_by</c>. False when a row with the same id already exists for the owner.
+    /// </summary>
+    internal async Task<bool> InsertSpawned(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        string spawnedBy,
+        CancellationToken cancellationToken
+    ) =>
+        await InsertOwned(owner, id, snapshot, cancellationToken, spawnedBy: spawnedBy) is not null;
+
     private async Task<WrittenRow?> InsertOwned(
         DraftOwner owner,
         Guid id,
         Snapshot snapshot,
         CancellationToken cancellationToken,
         string? invokeToken = null,
-        StartRequest? start = null
+        StartRequest? start = null,
+        string? spawnedBy = null
     )
     {
         // The owner's unique index refuses a second row, and the dialect reads that as a lost race. A provider
@@ -346,6 +371,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             OwnerKind = owner.Kind,
             UserKey = owner.UserKey,
             InvokeToken = invokeToken,
+            SpawnedBy = spawnedBy,
             StartRequestId = start?.RequestId,
             StartFingerprint = start?.Fingerprint,
             DueAt = due.Resolve(null, null, snapshot.State, await DueValue(due, cancellationToken)),
@@ -1164,11 +1190,10 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     // one the earlier rule kept (see DraftExpiry.Kept). An armed timer, due or not, keeps an idle draft until it fires:
     // the state moves on by itself, and the fire is a write the TTL counts again from. A row written before its creation
     // time was recorded counts its age from its last write.
-    private static IQueryable<SnapshotDraft> Expired(
-        IQueryable<SnapshotDraft> drafts,
-        DraftExpiry expiry
-    )
+    private IQueryable<SnapshotDraft> Expired(IQueryable<SnapshotDraft> drafts, DraftExpiry expiry)
     {
+        // A child its parent still waits on is the parent's to remove, by leaving the state that spawned it.
+        var parents = db.SnapshotDrafts;
         var idleBefore = expiry.IdleBefore ?? DateTimeOffset.MinValue;
         var idle = expiry.IdleBefore is not null;
         var bornBefore = expiry.BornBefore ?? DateTimeOffset.MinValue;
@@ -1177,6 +1202,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         return drafts.Where(x =>
             x.OwnerKind == SnapshotOwnerKind.User
             && x.EffectToken == null
+            && (x.SpawnedBy == null || !parents.Any(p => p.InvokeToken == x.SpawnedBy))
             && (
                 x.ServerRecord == false
                 || (

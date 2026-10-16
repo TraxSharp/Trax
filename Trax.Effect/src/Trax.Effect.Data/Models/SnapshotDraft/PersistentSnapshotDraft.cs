@@ -26,6 +26,8 @@ internal class PersistentSnapshotDraft : BaseModel
                 .HasIndex(e => e.InvokeToken)
                 .IsUnique()
                 .HasDatabaseName("ux_snapshot_draft_invoke_token");
+            // A parent's child, found by the token they share. The migrations make it partial (spawned rows only).
+            entity.HasIndex(e => e.SpawnedBy).HasDatabaseName("ix_snapshot_draft_spawned_by");
             // The operator listing reads newest first by updated_at, under one machine and state or across
             // them all. Postgres's migration also includes owner_kind in the first, which the model cannot
             // say for every provider.

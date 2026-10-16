@@ -237,11 +237,15 @@ namespace Trax.Effect.StateMachine
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Committed();
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Context();
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Context<TContext>();
+        Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Ends();
+        Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Fails();
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Holds(System.Func<System.Text.Json.Nodes.JsonObject, string?> validator);
         Trax.Effect.StateMachine.IInvokeBuilder<TState, TTrigger> Invokes<TTrain, TInput, TOutput>(System.Func<System.Text.Json.Nodes.JsonObject, TInput> input)
             where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>;
         Trax.Effect.StateMachine.ITransitionBuilder<TState, TTrigger> On(TTrigger trigger);
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> Requires(Trax.Effect.StateMachine.Rule constraint);
+        Trax.Effect.StateMachine.IInvokeBuilder<TState, TTrigger> Spawns<TChild, TContext, TOutput>(System.Linq.Expressions.Expression<System.Func<TContext, System.Guid?>> childId, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonObject>? context = null)
+            where TChild :  class;
     }
     public interface ITimerBuilder<TState, TTrigger>
         where TState :  struct, System.Enum

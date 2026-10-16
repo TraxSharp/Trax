@@ -163,7 +163,7 @@ Checks a Trax Postgres or SQLite database once every host a test started has sto
 | `DispatchedWithoutRun` | `dispatched-without-run` | A `trax.work_queue` row `dispatched` whose run does not exist |
 | `CheckpointOfCompletedRun` | `checkpoint-of-completed-run` | A `trax.checkpoint` row of a run that completed |
 | `ResumeFromMissingRun` | `resume-from-missing-run` | A `trax.work_queue` or `trax.metadata` row whose `resume_from` names no run |
-| `InvokeTokenWithoutRun` | `invoke-token-without-run` | A `trax.snapshot_draft` row whose invoke token names no run the instance queued |
+| `InvokeTokenWithoutRun` | `invoke-token-without-run` | A `trax.snapshot_draft` row whose invoke token names no run the instance queued and no child it spawned |
 | `InvokingStateWithoutToken` | `invoking-state-without-token` | A `trax.snapshot_draft` row in an invoking state with no invoke token, unless `invoke_stranded_state` is its state |
 | `InvokeTokenOutsideInvokingState` | `invoke-token-outside-invoking-state` | A `trax.snapshot_draft` row holding an invoke token in a state that invokes nothing |
 | `RevisionBelowOne` | `revision-below-one` | A `trax.snapshot_draft` row whose revision is below 1 |

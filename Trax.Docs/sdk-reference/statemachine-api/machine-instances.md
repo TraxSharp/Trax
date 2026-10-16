@@ -38,6 +38,13 @@ public interface IMachineInstances
         JsonNode? input = null,
         CancellationToken cancellationToken = default
     ) where TMachine : IMachine;
+
+    Task<AdvanceOutcome> Advance<TMachine>(
+        Guid id,
+        string trigger,
+        JsonNode? input = null,
+        CancellationToken cancellationToken = default
+    ) where TMachine : IMachine;
 }
 
 public sealed record MachineInstance(Guid Id, string Machine, string State, bool Created);
@@ -56,6 +63,7 @@ public static class MachineInstanceId
 |--------|-------------|
 | `Start<TMachine>(key, context, cancellationToken)` | Creates the instance for `key`, or returns the one that exists. See [Start](#start). |
 | `Advance<TMachine>(key, trigger, input, cancellationToken)` | Fires one trigger on the instance for `key`, as the system. See [Advance](#advance). |
+| `Advance<TMachine>(id, trigger, input, cancellationToken)` | The same, on the instance `id` names: for an instance with no key, a child another system instance's state [spawned](/docs/statemachine/spawning-child-machines), whose id its parent's context holds. An advance that ends the child gives its parent the outcome. |
 | `MachineInstance` | `Id`, `Machine`, `State`, and `Created`: true when this call created the instance. |
 | `MachineKey.Of(params string[] parts)` | A key of one or more parts. A `string` converts to a one-part key. `Parts` lists them. |
 | `MachineInstanceId.For(machine, key)` | The instance id a key maps to. |

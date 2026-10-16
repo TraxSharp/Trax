@@ -37,6 +37,10 @@ internal sealed class InvokedRunCancellation(IDataContext context) : IInvokedRun
     {
         ArgumentException.ThrowIfNullOrEmpty(invokeToken);
 
+        // A token a spawning state holds names a child instead of a run: the child goes, and what it waits on with it.
+        if (await RemoveChildren(context, invokeToken, cancellationToken))
+            return true;
+
         var queued = context.WorkQueues.Where(w =>
             w.ExternalId == invokeToken && w.Status == WorkQueueStatus.Queued
         );
@@ -70,5 +74,32 @@ internal sealed class InvokedRunCancellation(IDataContext context) : IInvokedRun
             run.CancellationRequested = true;
         await context.SaveChanges(cancellationToken);
         return entries.Count + runs.Count > 0;
+    }
+
+    /// <summary>
+    /// Deletes the child a spawning state started under <paramref name="invokeToken"/>, after cancelling the run or
+    /// removing the child that the child's own state waits on, so nothing a removed child started is left running.
+    /// </summary>
+    /// <returns>True when a child was removed.</returns>
+    private static async Task<bool> RemoveChildren(
+        IDataContext context,
+        string invokeToken,
+        CancellationToken cancellationToken
+    )
+    {
+        // Spawning needs a relational provider (the startup check refuses InMemory), so no child exists elsewhere.
+        if (context is not DbContext db || !db.Database.IsRelational())
+            return false;
+
+        var waitingOn = await context
+            .SnapshotDrafts.Where(d => d.SpawnedBy == invokeToken && d.InvokeToken != null)
+            .Select(d => d.InvokeToken!)
+            .ToListAsync(cancellationToken);
+        foreach (var token in waitingOn)
+            await CancelIn(context, token, cancellationToken);
+
+        return await context
+                .SnapshotDrafts.Where(d => d.SpawnedBy == invokeToken)
+                .ExecuteDeleteAsync(cancellationToken) > 0;
     }
 }

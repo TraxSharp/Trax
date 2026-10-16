@@ -53,7 +53,8 @@ public static class TraxInvariants
 
     /// <summary>
     /// A <c>trax.snapshot_draft</c> row holds an invoke token that names no run the instance
-    /// queued: neither a queue entry nor a run with that id carries the instance as its invoker.
+    /// queued and no child it spawned: neither a queue entry nor a run with that id carries the
+    /// instance as its invoker, and no row carries the token as its <c>spawned_by</c>.
     /// </summary>
     public const string InvokeTokenWithoutRun = "invoke-token-without-run";
 
@@ -473,6 +474,9 @@ public static class TraxInvariants
                       WHERE trim(m.external_id) = s.invoke_token
                         AND m.invoking_machine = s.machine
                         AND m.invoking_instance_id = s.id)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM {dialect.Table("snapshot_draft")} c
+                      WHERE c.spawned_by = s.invoke_token)
                 ORDER BY s.row_id
                 """,
                 (id, what) =>

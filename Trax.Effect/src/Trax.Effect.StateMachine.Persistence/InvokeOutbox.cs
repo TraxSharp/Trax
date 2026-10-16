@@ -23,7 +23,14 @@ internal sealed record EnteringInvoke(
     Type TrainType,
     Func<JsonObject, object?> CreateInput,
     int Limit
-);
+)
+{
+    /// <summary>
+    /// The child machine the state starts instead of a train, or null when it invokes one. A spawn is not counted
+    /// against the owner's live-run cap.
+    /// </summary>
+    public SpawnDefinition? Spawn { get; init; }
+}
 
 /// <summary>How a write through the <see cref="InvokeOutbox"/> ended.</summary>
 internal abstract record InvokeWrite
@@ -132,7 +139,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             async (context, store) =>
             {
                 if (
-                    entering is not null
+                    entering is { Spawn: null }
                     && await OverLimit(
                         context,
                         owner,
@@ -148,7 +155,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 var launch = entering is null ? null : Prepare(entering, owner, next, id);
                 if (launch is InvokeWrite.Refused bad)
                     return bad;
-                var run = launch as PreparedLaunch;
+                var run = launch as Prepared;
 
                 // The snapshot first: it is the one write that can lose a race, and losing it writes nothing else.
                 var wrote = await store.Update(
@@ -157,7 +164,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     next,
                     expectedToken,
                     request,
-                    new InvokeTokenWrite(run?.Launch.ExternalId),
+                    new InvokeTokenWrite(run?.Token),
                     cancellationToken
                 );
                 if (!wrote)
@@ -167,11 +174,11 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     await InvokedRunCancellation.CancelIn(context, leavingToken, cancellationToken);
 
                 if (run is not null)
-                    await Launcher().Launch(run.Launch, context, cancellationToken);
+                    await LaunchIn(run, context, store, owner, cancellationToken);
 
                 // The update holds the row until the transaction commits, so this reads the due time it wrote.
                 var written = await store.Get(owner, next.Machine, id, cancellationToken);
-                return new InvokeWrite.Written(run?.Launch.ExternalId) { DueAt = written?.DueAt };
+                return new InvokeWrite.Written(run?.Token) { DueAt = written?.DueAt };
             },
             cancellationToken
         );
@@ -192,7 +199,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             async (context, store) =>
             {
                 if (
-                    entering is not null
+                    entering is { Spawn: null }
                     && await OverLimit(
                         context,
                         owner,
@@ -207,23 +214,15 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 var launch = entering is null ? null : Prepare(entering, owner, snapshot, id);
                 if (launch is InvokeWrite.Refused bad)
                     return bad;
-                var run = launch as PreparedLaunch;
+                var run = launch as Prepared;
 
-                if (
-                    !await store.Insert(
-                        owner,
-                        id,
-                        snapshot,
-                        run?.Launch.ExternalId,
-                        cancellationToken
-                    )
-                )
+                if (!await store.Insert(owner, id, snapshot, run?.Token, cancellationToken))
                     return new InvokeWrite.Conflict();
 
                 if (run is not null)
-                    await Launcher().Launch(run.Launch, context, cancellationToken);
+                    await LaunchIn(run, context, store, owner, cancellationToken);
 
-                return new InvokeWrite.Written(run?.Launch.ExternalId);
+                return new InvokeWrite.Written(run?.Token);
             },
             cancellationToken
         );
@@ -262,7 +261,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     );
 
                 if (
-                    entering is not null
+                    entering is { Spawn: null }
                     && await OverLimit(
                         context,
                         owner,
@@ -279,7 +278,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     : Prepare(entering, owner, next, id, fromOutcome: true);
                 if (launch is InvokeWrite.Refused bad)
                     return bad;
-                var run = launch as PreparedLaunch;
+                var run = launch as Prepared;
 
                 // The conditional update is the one write that can lose, to another host applying the same
                 // outcome or to the state being left; losing it writes nothing else.
@@ -287,7 +286,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     !await store.ApplyByInvokeToken(
                         invokeToken,
                         next,
-                        run?.Launch.ExternalId,
+                        run?.Token,
                         expectedToken,
                         cancellationToken
                     )
@@ -295,11 +294,11 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     return new InvokeWrite.Conflict();
 
                 if (run is not null)
-                    await Launcher().Launch(run.Launch, context, cancellationToken);
+                    await LaunchIn(run, context, store, owner, cancellationToken);
 
                 // The update holds the row until the transaction commits, so this reads the due time it wrote.
                 var written = await store.Get(owner, next.Machine, id, cancellationToken);
-                return new InvokeWrite.Written(run?.Launch.ExternalId) { DueAt = written?.DueAt };
+                return new InvokeWrite.Written(run?.Token) { DueAt = written?.DueAt };
             },
             cancellationToken
         );
@@ -466,7 +465,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         }
 
         if (
-            entering is not null
+            entering is { Spawn: null }
             && await OverLimit(
                 context,
                 owner,
@@ -481,7 +480,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         var launch = entering is null ? null : Prepare(entering, owner, snapshot, id);
         if (launch is InvokeWrite.Refused bad)
             return new CreateWrite.Refused(bad.Code, bad.Message, bad.Exception);
-        var run = launch as PreparedLaunch;
+        var run = launch as Prepared;
 
         var row = start is null
             ? await ((IRowReportingSnapshotStore)store).Insert(
@@ -490,26 +489,25 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 snapshot,
                 cancellationToken
             )
-            : await store.InsertStarted(
-                owner,
-                id,
-                snapshot,
-                run?.Launch.ExternalId,
-                start,
-                cancellationToken
-            );
+            : await store.InsertStarted(owner, id, snapshot, run?.Token, start, cancellationToken);
         if (row is not { } written)
             return new CreateWrite.Conflict();
 
         if (run is not null)
-            await Launcher().Launch(run.Launch, context, cancellationToken);
+            await LaunchIn(run, context, store, owner, cancellationToken);
 
         return new CreateWrite.Created(id, written);
     }
 
-    private sealed record PreparedLaunch(InvokedTrainLaunch Launch);
+    // What entering a state starts, prepared before anything is written, with the token the row will hold.
+    private abstract record Prepared(string Token);
 
-    private static object Prepare(
+    private sealed record PreparedLaunch(InvokedTrainLaunch Launch) : Prepared(Launch.ExternalId);
+
+    private sealed record PreparedSpawn(string Token, Guid ChildId, Snapshot Child)
+        : Prepared(Token);
+
+    private object Prepare(
         EnteringInvoke entering,
         DraftOwner owner,
         Snapshot snapshot,
@@ -517,6 +515,9 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         bool fromOutcome = false
     )
     {
+        if (entering.Spawn is { } spawn)
+            return PrepareSpawn(spawn, snapshot);
+
         object? input;
         try
         {
@@ -694,13 +695,13 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             : Prepare(entering, owner, next, due.Id, fromOutcome: true);
         if (launch is InvokeWrite.Refused bad)
             return bad;
-        var run = launch as PreparedLaunch;
+        var run = launch as Prepared;
 
         if (
             !await store.FireTimer(
                 due,
                 next,
-                leaving || run is not null ? new InvokeTokenWrite(run?.Launch.ExternalId) : null,
+                leaving || run is not null ? new InvokeTokenWrite(run?.Token) : null,
                 cancellationToken
             )
         )
@@ -710,9 +711,83 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             await InvokedRunCancellation.CancelIn(context, leavingToken, cancellationToken);
 
         if (run is not null)
-            await Launcher().Launch(run.Launch, context, cancellationToken);
+            await LaunchIn(run, context, store, owner, cancellationToken);
 
-        return new InvokeWrite.Written(run?.Launch.ExternalId);
+        return new InvokeWrite.Written(run?.Token);
+    }
+
+    // A child starts in its own initial state, with the context the spawn builds from the parent's (or its declared
+    // one), as a record the server made. Its id goes into the parent's context, in the snapshot about to be written,
+    // so the client that moved the parent reads where its child is; the token they share is minted here.
+    private object PrepareSpawn(SpawnDefinition spawn, Snapshot snapshot)
+    {
+        var child = services
+            .GetServices<IMachine>()
+            .OfType<IMachineInternals>()
+            .FirstOrDefault(m => m.GetType() == spawn.ChildMachine);
+        if (child is null)
+            return new InvokeWrite.Refused(
+                RefusalCode.InternalError,
+                "The step's work could not be started.",
+                new InvalidOperationException(
+                    $"'{snapshot.Machine}' state {snapshot.State} spawns {spawn.ChildMachine.Name}, which this host "
+                        + "does not register as a machine. The startup check refuses such a host."
+                )
+            );
+
+        Snapshot start;
+        try
+        {
+            var context = spawn.CreateChildContext?.Invoke(
+                (JsonObject)snapshot.Context.DeepClone()
+            );
+            start = child.InitialSnapshot(context) with { ServerRecord = true };
+        }
+        catch (Exception ex)
+        {
+            return new InvokeWrite.Refused(
+                RefusalCode.InternalError,
+                "The step's work could not be started.",
+                ex
+            );
+        }
+
+        var childId = Guid.NewGuid();
+        snapshot.Context[spawn.ChildIdField] = childId.ToString();
+        return new PreparedSpawn(Guid.NewGuid().ToString("N"), childId, start);
+    }
+
+    // Starts what Prepare prepared, inside the write's transaction: queues the run, or inserts the child for the same
+    // owner carrying the token the parent now holds.
+    private async Task LaunchIn(
+        Prepared prepared,
+        IDataContext context,
+        IMachineInstanceStore store,
+        DraftOwner owner,
+        CancellationToken cancellationToken
+    )
+    {
+        switch (prepared)
+        {
+            case PreparedLaunch launch:
+                await Launcher().Launch(launch.Launch, context, cancellationToken);
+                break;
+            case PreparedSpawn spawn:
+                if (
+                    !await ((EfSnapshotStore)store).InsertSpawned(
+                        owner,
+                        spawn.ChildId,
+                        spawn.Child,
+                        spawn.Token,
+                        cancellationToken
+                    )
+                )
+                    throw new InvalidOperationException(
+                        $"The child {spawn.ChildId} of '{spawn.Child.Machine}' could not be inserted: its owner already "
+                            + "holds a row with that id."
+                    );
+                break;
+        }
     }
 
     private IInvokedTrainLauncher Launcher() =>

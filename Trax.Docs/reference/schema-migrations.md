@@ -642,3 +642,18 @@ queue entry it queues for the manifest, a retry, a trigger and a dead letter's r
 scheduled a one-off manifest can follow each of its runs through
 [`runProgress`](/docs/sdk-reference/graphql-api/run-progress). Nothing is backfilled: every manifest from before, and
 every one scheduled without it, records nobody.
+
+## State-machine spawned child (085, SQLite 044)
+
+`085_snapshot_draft_spawned_by.sql` (SQLite `044`) adds a nullable, server-only `spawned_by` (`text`) to
+`trax.snapshot_draft`, `SnapshotDraft.SpawnedBy` on the model: on an instance another machine's state [spawned](/docs/statemachine/spawning-child-machines), the
+invoke token its parent holds while it waits; null on every other row. It is set when the child is inserted and never
+changed. The child's end is applied to the parent that still holds the token, leaving the spawning state deletes the
+child, and while the parent waits the child cannot be discarded or swept as an idle draft.
+
+A partial index, `ix_snapshot_draft_spawned_by` on `(spawned_by)` where it is set, serves the reads that find a
+parent's child and the reconciler's sweep of children that ended; on Postgres it is built `CONCURRENTLY`.
+
+Nothing is backfilled: no instance spawned another before this migration. A host on the previous version neither
+spawns nor reads the column, so during a rolling deploy a parent it moves out of a spawning state leaves the child,
+and a child's end is delivered only by an upgraded host. Finish the deploy before machines that spawn are entered.

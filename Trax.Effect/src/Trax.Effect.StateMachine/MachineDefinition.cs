@@ -79,6 +79,14 @@ public sealed class MachineDefinition<TState, TTrigger>
     internal IReadOnlyDictionary<TState, TimerDefinition<TState>> Timers { get; init; } =
         new Dictionary<TState, TimerDefinition<TState>>();
 
+    /// <summary>
+    /// The states this machine ends in when another machine's state spawned it, with how: <c>Done</c> for a state
+    /// declared with <c>Ends()</c>, <c>Failed</c> for one declared with <c>Fails()</c>. Empty for a machine nothing
+    /// spawns.
+    /// </summary>
+    internal IReadOnlyDictionary<TState, InvokeOutcomeKind> Ends { get; init; } =
+        new Dictionary<TState, InvokeOutcomeKind>();
+
     /// <summary>Builds the snapshot a brand-new instance begins with.</summary>
     public Snapshot CreateInitialSnapshot()
     {

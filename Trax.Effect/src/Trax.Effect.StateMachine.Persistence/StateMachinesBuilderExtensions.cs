@@ -237,6 +237,7 @@ public static class StateMachinesBuilderExtensions
         services.AddScoped<IMachineInstances, MachineInstances>();
         services.AddScoped<IInvokedRunCancellation, InvokedRunCancellation>();
         services.AddHostedService<InvokesStartupValidator>();
+        services.AddHostedService<SpawnsStartupValidator>();
         // A machine a client can reach (exposed, or every user-owned one while the generic mutations are opted in)
         // declares a rule for everything a client can do to it, or the host does not start.
         services.AddHostedService<MachineRulesStartupValidator>();

@@ -70,6 +70,13 @@ public sealed record StoredSnapshot(
     /// </summary>
     internal bool? ServerRecord { get; init; }
 
+    /// <summary>
+    /// True when another machine's state spawned this instance and still waits on it: the parent removes it, by
+    /// leaving that state, and its owner may not discard it. False for an instance nothing spawned, or whose parent
+    /// has moved on. Internal: never part of the snapshot.
+    /// </summary>
+    internal bool ParentWaits { get; init; }
+
     /// <summary>The last applied request as one value, or <c>null</c> when there is no request id.</summary>
     public AppliedRequest? LastRequest =>
         LastRequestId is { } requestId

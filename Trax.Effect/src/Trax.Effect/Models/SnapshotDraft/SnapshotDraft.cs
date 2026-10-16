@@ -130,6 +130,15 @@ public class SnapshotDraft
     public string? InvokeStrandedState { get; set; }
 
     /// <summary>
+    /// The invoke token of the parent whose state spawned this instance, or null for an instance nothing spawned. Set
+    /// when the parent enters its spawning state, which stores the same token as its own <see cref="InvokeToken"/>;
+    /// the child's end is applied to the parent that still holds it, and leaving that state deletes the child.
+    /// Server-only, and never changed after the row is inserted.
+    /// </summary>
+    [Column("spawned_by")]
+    public string? SpawnedBy { get; set; }
+
+    /// <summary>
     /// The instance's revision: 1 when the row is inserted, and one more on every update of it. The database bumps
     /// it in a <c>BEFORE UPDATE</c> trigger (an <c>AFTER UPDATE</c> one on SQLite), so a write that leaves it out,
     /// from a custom store or raw SQL, is numbered too. A deleted and re-created instance is a new row, with a new

@@ -99,10 +99,13 @@ override them.
 | `Committed()` | Marks the state as completed. A soft autosave can neither put a draft into it nor move a draft out of it (except a reset to the initial state); only the effect runner puts a draft there. See [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write). |
 | `On(TTrigger trigger)` | Starts a transition out of this state. Returns an `ITransitionBuilder`. |
 | `Invokes<TTrain, TInput, TOutput>(Func<JsonObject, TInput> input)` | Runs the train `TTrain` (its interface, an `IServiceTrain<TInput, TOutput>`) whenever the machine enters this state; `input` builds the run's input from the context, on the server only. Returns an [`IInvokeBuilder`](#iinvokebuilder). A state invokes at most one train. See [Invoking a train](/docs/statemachine/invoking-trains). |
+| `Spawns<TChild, TContext, TOutput>(Expression<Func<TContext, Guid?>> childId, Func<JsonObject, JsonObject>? context = null)` | Starts a child machine `TChild` whenever the machine enters this state, owned as this instance is, in the child's initial state with the context `context` builds (null: the child's own). The server writes the child's id into the `childId` field of this state's context. Returns an [`IInvokeBuilder`](#iinvokebuilder): the child's end is the outcome, with the fields of its context `TOutput` names as the `OnDone` input. A state invokes or spawns at most one thing. See [Spawn a child machine from a state](/docs/statemachine/spawning-child-machines). |
+| `Ends()` | Marks the state as where the machine ends when a parent spawned it: entering it gives the parent `OnDone`. A state ends or fails, not both, and invokes or spawns nothing. |
+| `Fails()` | Marks the state as where the machine fails when a parent spawned it: entering it gives the parent `OnFailed`. |
 
 ## IInvokeBuilder
 
-Says where an invoked train's outcome goes. It is also the state's
+Says where an invoked train's outcome, or a spawned child's end, goes. It is also the state's
 `IStateBuilder`, so the state's transitions follow it. Every target joins the machine's reserved states.
 
 | Method | Description |
@@ -112,9 +115,10 @@ Says where an invoked train's outcome goes. It is also the state's
 | `OnCancelled(TState target, Reduction? reduce = null)` | Where a cancelled run goes. Required, exactly once. The outcome carries no input. |
 
 `Build()` throws `InvalidOperationException`, naming the state, when an invoking state lacks `OnDone`, `OnFailed`
-or `OnCancelled`, declares either of the last two twice, invokes a second train, names the train by a class
+or `OnCancelled`, declares either of the last two twice, invokes or spawns a second thing, names the train by a class
 rather than its interface, or names a tuple as the output (its elements are fields, which no guard or reduction can
-read). It also throws when an outcome goes to the target of the `RunsOnce` effect, or to the state the machine
+read), or writes a spawned child's id into a field its declared context does not hold as a `Guid?`. It also throws
+when a state is declared with both `Ends()` and `Fails()`, or ends and also invokes or spawns, when an outcome goes to the target of the `RunsOnce` effect, or to the state the machine
 `StartsAt` (which would be reserved, so no draft could ever be created), or when an ordinary transition enters a
 state an outcome goes to (a self-loop is allowed). An invoked train does not count
 against the one `RunsOnce` effect.

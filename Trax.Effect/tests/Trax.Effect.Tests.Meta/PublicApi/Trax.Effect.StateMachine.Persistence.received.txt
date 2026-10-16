@@ -189,6 +189,8 @@ namespace Trax.Effect.StateMachine.Persistence
     }
     public interface IMachineInstances
     {
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance<TMachine>(System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input = null, System.Threading.CancellationToken cancellationToken = default)
+            where TMachine : Trax.Effect.StateMachine.Persistence.IMachine;
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance<TMachine>(Trax.Effect.StateMachine.Persistence.MachineKey key, string trigger, System.Text.Json.Nodes.JsonNode? input = null, System.Threading.CancellationToken cancellationToken = default)
             where TMachine : Trax.Effect.StateMachine.Persistence.IMachine;
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.MachineInstance> Start<TMachine>(Trax.Effect.StateMachine.Persistence.MachineKey key, System.Text.Json.Nodes.JsonObject? context = null, System.Threading.CancellationToken cancellationToken = default)

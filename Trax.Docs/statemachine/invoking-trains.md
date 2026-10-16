@@ -16,7 +16,8 @@ A state can run a train. Entering the state queues one run, and the run's outcom
 entry of the state can apply. The state is a durable checkpoint between stages of long-running work (fetch,
 normalise, resolve, embed), so a stage that fails is retried by entering its state again, not by rerunning
 everything before it. The full behaviour, every outcome and every refusal, is in
-[Invoked runs: outcomes and refusals](/docs/statemachine/invoked-runs).
+[Invoked runs: outcomes and refusals](/docs/statemachine/invoked-runs). To wait on another machine instead of a train, see
+[Spawn a child machine from a state](/docs/statemachine/spawning-child-machines).
 
 ## 1. Write the train to be invoked
 

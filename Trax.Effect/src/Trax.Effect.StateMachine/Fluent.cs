@@ -538,6 +538,53 @@ public interface IStateBuilder<TState, TTrigger>
         throw new NotSupportedException($"{GetType().Name} does not support Invokes.");
 
     /// <summary>
+    /// Start a child machine whenever the machine enters this state, and route how the child ends with the returned
+    /// builder's <c>OnDone</c>, <c>OnFailed</c> and <c>OnCancelled</c>, as for an invoked train. The child belongs to
+    /// the state: leaving the state removes it, and its end is applied only to the entry that started it. A state
+    /// spawns or invokes at most one thing.
+    ///
+    /// <para>The child starts in its own initial state, owned by whoever owns this instance, and moves through its
+    /// own events. It ends when it enters a state declared with <see cref="Ends"/> (this state's <c>OnDone</c>, with
+    /// the child's context as the outcome's input) or <see cref="Fails"/> (<c>OnFailed</c>). A child that disappears
+    /// before it ends takes <c>OnCancelled</c>.</para>
+    /// </summary>
+    /// <typeparam name="TChild">The child machine's class.</typeparam>
+    /// <typeparam name="TContext">This state's context record, which holds the child's id.</typeparam>
+    /// <typeparam name="TOutput">
+    /// The fields of the child's context the parent reads when it ends: the <c>OnDone</c> outcome's input. Fields the
+    /// child holds beyond these are not passed on.
+    /// </typeparam>
+    /// <param name="childId">
+    /// The field of this state's context the server writes the child's id into when it starts the child, so a client
+    /// finds the child. A <c>Guid?</c>; only the server writes it.
+    /// </param>
+    /// <param name="context">
+    /// Builds the child's initial context from the context this state was entered with; null starts it with its
+    /// declared one. It runs on the server only.
+    /// </param>
+    IInvokeBuilder<TState, TTrigger> Spawns<TChild, TContext, TOutput>(
+        Expression<Func<TContext, Guid?>> childId,
+        Func<JsonObject, JsonObject>? context = null
+    )
+        where TChild : class =>
+        throw new NotSupportedException($"{GetType().Name} does not support Spawns.");
+
+    /// <summary>
+    /// Mark this state as where the machine ends when another machine's state spawned it: entering it gives the
+    /// parent its <c>OnDone</c> outcome, with this instance's context. A state ends or fails, not both, and invokes or
+    /// spawns nothing. On an instance nothing spawned it means nothing.
+    /// </summary>
+    IStateBuilder<TState, TTrigger> Ends() =>
+        throw new NotSupportedException($"{GetType().Name} does not support Ends.");
+
+    /// <summary>
+    /// Mark this state as where the machine fails when another machine's state spawned it: entering it gives the
+    /// parent its <c>OnFailed</c> outcome. Otherwise as <see cref="Ends"/>.
+    /// </summary>
+    IStateBuilder<TState, TTrigger> Fails() =>
+        throw new NotSupportedException($"{GetType().Name} does not support Fails.");
+
+    /// <summary>
     /// Leave this state once it has been held for <paramref name="delay"/>: the timer starts on every entry (a
     /// self-transition included) and is cancelled on leaving. Finish it with
     /// <see cref="ITimerBuilder{TState,TTrigger}.GoTo"/>. Only the server fires it, when it is due: a client never sends
@@ -689,6 +736,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     private readonly List<EventWrite> _eventWrites = [];
     private int _invokedRunLimit = BuiltMachine<TState, TTrigger>.DefaultInvokedRunLimit;
     private readonly List<InvokeDraft> _invokes = [];
+    private readonly Dictionary<TState, InvokeOutcomeKind> _ends = [];
+    private readonly HashSet<TState> _endConflicts = [];
     private readonly List<TimerDraft> _timers = [];
     private readonly Dictionary<TState, List<JsonNode>> _diffOutcomeSamples = [];
     private readonly List<EdgeRule> _edgeRules = [];
@@ -986,6 +1035,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         RefuseEffectsOnInvokingStates();
 
         var invokes = BuildInvokes();
+        RefuseConflictingEnds(invokes);
         RefuseOtherEdgesIntoOutcomeTargets(invokes);
         var timers = BuildTimers(invokes);
 
@@ -1006,6 +1056,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             Invokes = invokes,
             InputSchemas = inputSchemas,
             Timers = timers,
+            Ends = new Dictionary<TState, InvokeOutcomeKind>(_ends),
         };
 
         var differential =
@@ -1074,6 +1125,15 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                                 )
                         )
                 )
+            )
+            // The child's id, which the server writes when it starts the child.
+            .Concat(
+                invokes
+                    .Values.Where(invoke => invoke.Spawn is not null)
+                    .Select(invoke => new ServerWrite(
+                        $"the start of {invoke.TrainType.Name} in {invoke.State}",
+                        [invoke.Spawn!.ChildIdField]
+                    ))
             )
             .ToList();
         // Only a machine that declares rules is reached event by event, so only there is an open event a caller's.
@@ -1388,16 +1448,22 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             var drafts = group.ToList();
             if (drafts.Count > 1)
                 problems.Add(
-                    $"the state {group.Key} invokes {drafts.Count} trains "
-                        + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes at "
-                        + "most one. Give each train a state of its own."
+                    drafts.All(d => d.Spawn is null)
+                        ? $"the state {group.Key} invokes {drafts.Count} trains "
+                            + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes at "
+                            + "most one. Give each train a state of its own."
+                        : $"the state {group.Key} invokes or spawns {drafts.Count} things "
+                            + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes "
+                            + "or spawns at most one. Give each its own state."
                 );
         }
         foreach (var draft in _invokes)
         {
             var state = draft.State;
             var train = draft.TrainType.Name;
-            if (!draft.TrainType.IsInterface)
+            if (draft.Spawn is { } spawn)
+                problems.AddRange(SpawnProblems(state, spawn));
+            else if (!draft.TrainType.IsInterface)
                 problems.Add(
                     $"the state {state} invokes {train}, which is a class. Name the train by its interface "
                         + "(Invokes<IMyTrain, TInput, TOutput>), which is the train's canonical name."
@@ -1413,14 +1479,14 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 );
             if (draft.Done.Count == 0)
                 problems.Add(
-                    $"the state {state} invokes {train} but declares no OnDone. Add `.OnDone({typeof(TState).Name}.X)` "
+                    $"the state {state} {draft.Doing} but declares no OnDone. Add `.OnDone({typeof(TState).Name}.X)` "
                         + "for where a successful run goes."
                 );
             problems.AddRange(
-                ExactlyOnce(draft.Failed.Count, state, train, "OnFailed", "a failed")
+                ExactlyOnce(draft.Failed.Count, state, draft.Doing, "OnFailed", "a failed")
             );
             problems.AddRange(
-                ExactlyOnce(draft.Cancelled.Count, state, train, "OnCancelled", "a cancelled")
+                ExactlyOnce(draft.Cancelled.Count, state, draft.Doing, "OnCancelled", "a cancelled")
             );
             foreach (var target in draft.Done.Concat(draft.Failed).Concat(draft.Cancelled))
             {
@@ -1485,8 +1551,58 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             )
             {
                 OutputSchema = outputSchemas[d],
+                Spawn = d.Spawn,
             }
         );
+    }
+
+    // The child's id goes into a field the state's declared context holds, so the snapshot a client reads names it. A
+    // state that declares no context leaves the record the selector names as the only description.
+    private IEnumerable<string> SpawnProblems(TState state, SpawnDefinition spawn)
+    {
+        if (!_contextSchemas.ContainsKey(state))
+            yield break;
+        var declared = _contextTypes.GetValueOrDefault(state);
+        var field = declared
+            ?.GetProperties(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance
+            )
+            .FirstOrDefault(p => MemberPath.JsonNameOf(p) == spawn.ChildIdField);
+        if (field is null)
+            yield return $"the state {state} spawns {spawn.ChildMachine.Name} and writes its id into "
+                + $"'{spawn.ChildIdField}', which is not a field of its context "
+                + $"({declared?.Name ?? "an empty context"}). Declare it on the state's context as a Guid?.";
+        else if (field.PropertyType != typeof(Guid?) && field.PropertyType != typeof(Guid))
+            yield return $"the state {state} spawns {spawn.ChildMachine.Name} and writes its id into "
+                + $"'{spawn.ChildIdField}', which {declared!.Name} declares as a {field.PropertyType.Name}. "
+                + "Declare it as a Guid?.";
+    }
+
+    // A state a child ends in ends it one way, and the child does not wait on anything there: an end that also
+    // queued a run or started a child would hand its parent an outcome while work it started is still going.
+    private void RefuseConflictingEnds(
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
+    )
+    {
+        var problems = _endConflicts
+            .Select(state =>
+                $"the state {state} is declared with both Ends() and Fails(). A child ends one way in a state; "
+                + "give each outcome a state of its own."
+            )
+            .Concat(
+                _ends
+                    .Keys.Where(invokes.ContainsKey)
+                    .Select(state =>
+                        $"the state {state} is an end ({_ends[state]}) and {(invokes[state].Spawn is null ? "invokes" : "spawns")} "
+                        + $"{invokes[state].TrainType.Name}. A state a child ends in waits on nothing."
+                    )
+            )
+            .ToList();
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                $"The machine '{_id}' cannot be built: "
+                    + string.Join(" ", problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+            );
     }
 
     private static bool IsValueTuple(Type type)
@@ -1499,13 +1615,13 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     private static IEnumerable<string> ExactlyOnce(
         int count,
         TState state,
-        string train,
+        string doing,
         string method,
         string run
     )
     {
         if (count == 0)
-            yield return $"the state {state} invokes {train} but declares no {method}. Every invoking state says "
+            yield return $"the state {state} {doing} but declares no {method}. Every invoking state says "
                 + $"where {run} run goes; add `.{method}({typeof(TState).Name}.X)`.";
         else if (count > 1)
             yield return $"the state {state} declares {method} {count} times. Declare it exactly once.";
@@ -2018,6 +2134,39 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             return new InvokeBuilder(owner, this, draft);
         }
 
+        public IInvokeBuilder<TState, TTrigger> Spawns<TChild, TContext, TOutput>(
+            Expression<Func<TContext, Guid?>> childId,
+            Func<JsonObject, JsonObject>? context = null
+        )
+            where TChild : class
+        {
+            ArgumentNullException.ThrowIfNull(childId);
+            var draft = new InvokeDraft(
+                state,
+                typeof(TChild),
+                typeof(JsonObject),
+                typeof(TOutput),
+                _ => null
+            )
+            {
+                Spawn = new SpawnDefinition(typeof(TChild), MemberPath.Of(childId), context),
+            };
+            owner._invokes.Add(draft);
+            return new InvokeBuilder(owner, this, draft);
+        }
+
+        public IStateBuilder<TState, TTrigger> Ends() => End(InvokeOutcomeKind.Done);
+
+        public IStateBuilder<TState, TTrigger> Fails() => End(InvokeOutcomeKind.Failed);
+
+        private IStateBuilder<TState, TTrigger> End(InvokeOutcomeKind kind)
+        {
+            if (owner._ends.TryGetValue(state, out var declared) && declared != kind)
+                owner._endConflicts.Add(state);
+            owner._ends[state] = kind;
+            return this;
+        }
+
         public ITimerBuilder<TState, TTrigger> After(TimeSpan delay)
         {
             var draft = new TimerDraft(state, delay, null, delay, delay);
@@ -2047,6 +2196,12 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         Func<JsonObject, object?> CreateInput
     )
     {
+        /// <summary>The child machine a spawning state starts; null for a state that invokes a train.</summary>
+        public SpawnDefinition? Spawn { get; init; }
+
+        /// <summary>What the state does, as a refusal names it: "invokes IMyTrain" or "spawns MyMachine".</summary>
+        public string Doing => $"{(Spawn is null ? "invokes" : "spawns")} {TrainType.Name}";
+
         public List<OutcomeEdge<TState>> Done { get; } = [];
         public List<OutcomeEdge<TState>> Failed { get; } = [];
         public List<OutcomeEdge<TState>> Cancelled { get; } = [];
@@ -2121,6 +2276,16 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         )
             where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput> =>
             state.Invokes<TTrain, TInput, TOutput>(input);
+
+        public IInvokeBuilder<TState, TTrigger> Spawns<TChild, TContext, TOutput>(
+            Expression<Func<TContext, Guid?>> childId,
+            Func<JsonObject, JsonObject>? context = null
+        )
+            where TChild : class => state.Spawns<TChild, TContext, TOutput>(childId, context);
+
+        public IStateBuilder<TState, TTrigger> Ends() => state.Ends();
+
+        public IStateBuilder<TState, TTrigger> Fails() => state.Fails();
 
         public ITimerBuilder<TState, TTrigger> After(TimeSpan delay) => state.After(delay);
 

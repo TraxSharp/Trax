@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -77,6 +78,26 @@ public interface IMachineInstances
         CancellationToken cancellationToken = default
     )
         where TMachine : IMachine;
+
+    /// <summary>
+    /// <see cref="Advance{TMachine}(MachineKey, string, JsonNode?, CancellationToken)"/> on the system-owned instance
+    /// <paramref name="id"/> names, for an instance that has no key: a child another system instance's state spawned,
+    /// whose id its parent's context holds. An advance that puts the child in a state it ends in gives its parent the
+    /// outcome. A service that does not implement it throws <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <typeparam name="TMachine">A system-owned machine registered through <c>AddStateMachines</c>.</typeparam>
+    /// <param name="id">The instance's id.</param>
+    /// <param name="trigger">The trigger to fire, by name.</param>
+    /// <param name="input">The trigger's input, when it takes one.</param>
+    /// <param name="cancellationToken">Cancels the database calls.</param>
+    Task<AdvanceOutcome> Advance<TMachine>(
+        Guid id,
+        string trigger,
+        JsonNode? input = null,
+        CancellationToken cancellationToken = default
+    )
+        where TMachine : IMachine =>
+        throw new NotSupportedException($"{GetType().Name} cannot advance an instance by its id.");
 }
 
 /// <summary>A system-owned machine instance, as <see cref="IMachineInstances.Start{TMachine}"/> returns it.</summary>
@@ -275,6 +296,25 @@ internal interface IMachineInternals
     /// <summary>Every state that invokes a train, as the startup check describes it to the launcher.</summary>
     IReadOnlyList<InvokedTrainDeclaration> InvokedTrains { get; }
 
+    /// <summary>Every state that spawns a child machine. Empty for a machine that spawns none.</summary>
+    IReadOnlyList<SpawnDeclaration> Spawns => [];
+
+    /// <summary>Whether the machine invokes a train or spawns a child in any state: its writes go through the outbox.</summary>
+    bool WaitsOnWork => InvokedTrains.Count > 0 || Spawns.Count > 0;
+
+    /// <summary>
+    /// The states this machine ends in when a parent spawned it, each with the outcome it gives the parent. Empty for
+    /// a machine that declares no <c>Ends()</c> or <c>Fails()</c>.
+    /// </summary>
+    IReadOnlyDictionary<string, InvokeOutcomeKind> Ends =>
+        new Dictionary<string, InvokeOutcomeKind>();
+
+    /// <summary>
+    /// What a child's context, ended in its <c>Ends()</c> state, gives this machine's spawning state
+    /// <paramref name="state"/>: the fields its declared output names, and nothing else.
+    /// </summary>
+    JsonObject ChildOutput(string state, JsonObject childContext) => childContext;
+
     /// <summary>
     /// Every outcome edge of an invoking state whose target invokes a train of its own: entering that target would
     /// queue the next run with no user present. Empty for a machine that chains no runs through outcomes.
@@ -391,6 +431,18 @@ internal interface IMachineInternals
 /// <param name="Target">The state the outcome enters, which invokes a train of its own.</param>
 internal sealed record ChainedOutcome(string State, string Outcome, string Target);
 
+/// <summary>A state that spawns a child machine, as the startup check reads it.</summary>
+/// <param name="Machine">The parent machine's id.</param>
+/// <param name="State">The spawning state.</param>
+/// <param name="ChildMachine">The child machine's class, resolved among the registered machines.</param>
+/// <param name="SystemOwned">Whether the parent is system-owned, which its child must be too.</param>
+internal sealed record SpawnDeclaration(
+    string Machine,
+    string State,
+    Type ChildMachine,
+    bool SystemOwned
+);
+
 /// <summary>
 /// What a draft service of a machine that invokes trains writes through: the owner-aware store over the request's
 /// data context, and the outbox that writes a snapshot together with the runs it queues or cancels.
@@ -405,7 +457,8 @@ internal sealed record InvokeRuntime(IMachineInstanceStore Store, InvokeOutbox O
 internal sealed class MachineInstances(
     IEnumerable<IMachine> machines,
     IMachineInstanceStore store,
-    InvokeOutbox outbox
+    InvokeOutbox outbox,
+    IServiceProvider services
 ) : IMachineInstances
 {
     public async Task<MachineInstance> Start<TMachine>(
@@ -465,9 +518,27 @@ internal sealed class MachineInstances(
         ArgumentNullException.ThrowIfNull(key);
         ArgumentException.ThrowIfNullOrWhiteSpace(trigger);
 
+        var (machine, _) = SystemMachine<TMachine>("advance");
+        return await Advance<TMachine>(
+            MachineInstanceId.For(machine.Name, key),
+            trigger,
+            input,
+            cancellationToken
+        );
+    }
+
+    public async Task<AdvanceOutcome> Advance<TMachine>(
+        Guid id,
+        string trigger,
+        JsonNode? input = null,
+        CancellationToken cancellationToken = default
+    )
+        where TMachine : IMachine
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(trigger);
+
         var (machine, internals) = SystemMachine<TMachine>("advance");
         var name = machine.Name;
-        var id = MachineInstanceId.For(name, key);
 
         // Host code is trusted for rules, never for input: an oversized input is refused before anything is read,
         // and the engine checks the rest against the trigger's declared schema.
@@ -548,6 +619,15 @@ internal sealed class MachineInstances(
             moved ? internals.Entering(next.State) : null,
             cancellationToken
         );
+        // A system instance another one spawned tells its parent when this advance ends it.
+        if (write is InvokeWrite.Written && internals.Ends.ContainsKey(next.State))
+            await SpawnedEnds.Notify(
+                services.GetRequiredService<IServiceScopeFactory>(),
+                DraftOwner.System,
+                machine.Name,
+                id,
+                cancellationToken
+            );
         return write switch
         {
             InvokeWrite.Written written => new AdvanceOutcome.Advanced(next)

@@ -114,6 +114,19 @@ internal sealed record OutcomeEdge<TState>(
     where TState : struct, Enum;
 
 /// <summary>
+/// The child machine a spawning state starts, as <see cref="IStateBuilder{TState,TTrigger}.Spawns{TChild,TContext,TOutput}"/>
+/// declares it. The persistence layer resolves <see cref="ChildMachine"/> among the machines the host registers.
+/// </summary>
+/// <param name="ChildMachine">The child machine's class.</param>
+/// <param name="ChildIdField">The parent context field the server writes the child's id into.</param>
+/// <param name="CreateChildContext">Builds the child's initial context from the parent's, or null for the child's own.</param>
+internal sealed record SpawnDefinition(
+    Type ChildMachine,
+    string ChildIdField,
+    Func<JsonObject, JsonObject>? CreateChildContext
+);
+
+/// <summary>
 /// A state's invoked train and where each outcome goes. The input mapping is server-only: the TypeScript twin
 /// never starts a train, so <see cref="CreateInput"/> is never exported.
 /// </summary>
@@ -137,6 +150,12 @@ internal sealed record InvokeDefinition<TState>(
     /// <c>OnDone</c> guard reads it. Reflected when the machine is built.
     /// </summary>
     public ContextSchema OutputSchema { get; init; } = ContextSchema.Empty;
+
+    /// <summary>
+    /// The child machine this state starts instead of a train, or null when it invokes one. For a spawning state
+    /// <see cref="TrainType"/> is the child machine's class and <see cref="CreateInput"/> is never called.
+    /// </summary>
+    public SpawnDefinition? Spawn { get; init; }
 
     /// <summary>The outcome trigger for <paramref name="kind"/>, e.g. <c>Fetching.done</c>.</summary>
     public string TriggerName(InvokeOutcomeKind kind) => OutcomeTriggers.Name(State, kind);

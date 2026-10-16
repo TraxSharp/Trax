@@ -73,9 +73,24 @@ internal sealed class InvokeOutcomeReconciler(
     private readonly Lazy<HashSet<string>> _invoking = new(() =>
         machines
             .OfType<IMachineInternals>()
-            .Where(m => m.InvokedTrains.Count > 0)
+            .Where(m => m.WaitsOnWork)
             .Select(m => ((IMachine)m).Name)
             .ToHashSet(StringComparer.Ordinal)
+    );
+
+    // The machines another machine's state may spawn, with the states each ends in: the children whose end the sweep
+    // delivers to a parent still waiting on it.
+    private readonly Lazy<IReadOnlyDictionary<string, IReadOnlyCollection<string>>> _ending = new(
+        () =>
+            machines
+                .OfType<IMachineInternals>()
+                .Where(m => m.Ends.Count > 0)
+                .GroupBy(m => ((IMachine)m).Name, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyCollection<string>)g.First().Ends.Keys.ToList(),
+                    StringComparer.Ordinal
+                )
     );
 
     // Every machine this host registers, by name: the ones whose due timers it fires, and whose stale due times (of a
@@ -193,6 +208,19 @@ internal sealed class InvokeOutcomeReconciler(
             await DeliverAll(page.Tokens, results, cancellationToken);
             after = page.Next;
         } while (after is not null);
+
+        // The children that ended while nothing delivered it: their write's own delivery failed, or was never made.
+        if (_ending.Value.Count > 0)
+            do
+            {
+                EndedPage page;
+                await using (var scope = scopes.CreateAsyncScope())
+                    page = await scope
+                        .ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>()
+                        .ChildrenEnded(_ending.Value, PageSize, after, cancellationToken);
+                await DeliverAll(page.Tokens, results, cancellationToken);
+                after = page.Next;
+            } while (after is not null);
 
         return results;
     }
@@ -387,6 +415,16 @@ internal sealed class InvokeOutcomeReconciler(
             }
 
             _timerErrors.TryRemove(row.RowId, out _);
+
+            // A timer may have ended a child: its parent is told now, rather than at the next sweep.
+            if (result.Outcome == TimerFireResult.Fired && _ending.Value.ContainsKey(row.Machine))
+                await SpawnedEnds.Notify(
+                    scopes,
+                    new DraftOwner(row.OwnerKind, row.UserKey),
+                    row.Machine,
+                    row.Id,
+                    cancellationToken
+                );
             return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

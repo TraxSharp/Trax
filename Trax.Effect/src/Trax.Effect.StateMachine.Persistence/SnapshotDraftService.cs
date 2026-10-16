@@ -463,6 +463,19 @@ internal interface IEffectRunnerSlot
 }
 
 /// <summary>
+/// A draft service of a machine another machine's state may spawn, which the registry hands what delivers the end of
+/// an instance to the parent waiting on it.
+/// </summary>
+internal interface IEndNotifierSlot
+{
+    /// <summary>The states the machine ends in; an advance into one of them calls <see cref="EndNotifier"/>.</summary>
+    IReadOnlySet<string>? EndStates { get; set; }
+
+    /// <summary>Delivers the end of the user's instance to its parent, when one waits on it. Never throws.</summary>
+    Func<string, Guid, CancellationToken, Task>? EndNotifier { get; set; }
+}
+
+/// <summary>
 /// A draft service that can tell a the push (<c>&lt;machine&gt;Changed</c>) subscription which row it may follow. Every service
 /// <see cref="ISnapshotMachineRegistry"/> builds implements it; a subscription to any other is refused.
 /// </summary>
@@ -489,7 +502,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     IEffectClaimStore? effectClaims = null,
     Func<string, Guid, IEnumerable<string>>? effectKeysOnReset = null,
     IReadOnlyList<EffectBinding<TState, TTrigger>>? effects = null
-) : ISnapshotDraftService, IEffectRunnerSlot, ISnapshotWatchAccess
+) : ISnapshotDraftService, IEffectRunnerSlot, ISnapshotWatchAccess, IEndNotifierSlot
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
@@ -580,6 +593,12 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     /// built this service. Null for a service built on its own, or a machine with no effect.
     /// </summary>
     public Func<ISnapshotEffectRunner?>? EffectRunner { get; set; }
+
+    /// <inheritdoc/>
+    public IReadOnlySet<string>? EndStates { get; set; }
+
+    /// <inheritdoc/>
+    public Func<string, Guid, CancellationToken, Task>? EndNotifier { get; set; }
 
     private static readonly HashSet<string> TriggerNames = new(
         Enum.GetNames<TTrigger>(),
@@ -1097,6 +1116,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 InvokeInput(initial.State),
                 InvokedRunLimit
             )
+            {
+                Spawn = Invoke(initial.State).Spawn,
+            }
             : null;
 
         var write = await creates.Create(
@@ -1215,6 +1237,12 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     RefusalCode.DiscardNotAllowed,
                     "An effect on this instance is running, so the instance is becoming the record of what the "
                         + "server did, and cannot be discarded."
+                );
+            if (stored.ParentWaits)
+                return new DiscardOutcome.Rejected(
+                    RefusalCode.DiscardNotAllowed,
+                    "This instance belongs to the step that started it, which is waiting for it to finish, so it "
+                        + "cannot be discarded."
                 );
             if (StoredState(stored.Json) is { } state && KeptRecord(stored, state))
                 return new DiscardOutcome.Rejected(
@@ -1667,7 +1695,46 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
 
     // actor is null only after the effect ran: the runner checked the event's rule before it claimed the effect, and
     // refusing now would leave an effect that happened unrecorded.
+    // Every advance ends here. One that leaves the instance in a state it ends in, when a parent spawned it, tells the
+    // parent at once; the reconciler's sweep delivers it otherwise.
     private async Task<AdvanceOutcome> AdvanceCore(
+        string userKey,
+        Guid id,
+        string trigger,
+        JsonNode? input,
+        string? requestId,
+        string? clientResult,
+        Actor? actor,
+        bool effectRan,
+        Guid? expectedToken,
+        CancellationToken cancellationToken,
+        Guid? effectOwner = null
+    )
+    {
+        var outcome = await AdvanceAndAnswer(
+            userKey,
+            id,
+            trigger,
+            input,
+            requestId,
+            clientResult,
+            actor,
+            effectRan,
+            expectedToken,
+            cancellationToken,
+            effectOwner
+        );
+        if (
+            outcome is AdvanceOutcome.Advanced advanced
+            && EndStates is { } ends
+            && ends.Contains(advanced.Snapshot.State)
+            && EndNotifier is { } notify
+        )
+            await notify(userKey, id, cancellationToken);
+        return outcome;
+    }
+
+    private async Task<AdvanceOutcome> AdvanceAndAnswer(
         string userKey,
         Guid id,
         string trigger,
@@ -1996,6 +2063,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     InvokeInput(next.State),
                     InvokedRunLimit
                 )
+                {
+                    Spawn = Invoke(next.State).Spawn,
+                }
                 : null,
             cancellationToken
         );

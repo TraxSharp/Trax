@@ -175,10 +175,6 @@ internal sealed class InvokeOutcomeDelivery(
             )
                 return new InvokeDelivery.NotHere(row.Machine);
 
-            var end = await ReadEnd(invokeToken, cancellationToken);
-            if (end is null)
-                return new InvokeDelivery.Running();
-
             Snapshot current;
             switch (machine.Rehydrate(row.Snapshot.Json))
             {
@@ -200,6 +196,24 @@ internal sealed class InvokeOutcomeDelivery(
                 default:
                     return new InvokeDelivery.NotHere(row.Machine);
             }
+
+            InvokedRunEnd? end;
+            if (machine.Spawns.Any(s => s.State == current.State))
+            {
+                var (childEnd, childHere) = await ReadChildEnd(
+                    machine,
+                    current.State,
+                    invokeToken,
+                    cancellationToken
+                );
+                if (childHere is not null)
+                    return new InvokeDelivery.NotHere(childHere);
+                end = childEnd;
+            }
+            else
+                end = await ReadEnd(invokeToken, cancellationToken);
+            if (end is null)
+                return new InvokeDelivery.Running();
 
             var result = await Apply(row, machine, current, invokeToken, end, cancellationToken);
             if (result is not null)
@@ -233,9 +247,16 @@ internal sealed class InvokeOutcomeDelivery(
             return new EndedPage([], null);
 
         var names = machines.ToList();
+        // A token a child carries is a spawn still waiting, which the sweep of child ends delivers; one whose child is
+        // gone reads like a run whose records were, and is delivered here, as the child's cancel.
+        var children = context.SnapshotDrafts;
         var drafts = context
             .SnapshotDrafts.AsNoTracking()
-            .Where(d => d.InvokeToken != null && names.Contains(d.Machine));
+            .Where(d =>
+                d.InvokeToken != null
+                && names.Contains(d.Machine)
+                && !children.Any(c => c.SpawnedBy == d.InvokeToken)
+            );
         if (among is not null)
         {
             var tokens = among.ToList();
@@ -310,6 +331,121 @@ internal sealed class InvokeOutcomeDelivery(
             .Select(r => r.Token)
             .ToList();
         return new EndedPage(ended, next);
+    }
+
+    /// <summary>
+    /// One page of the tokens of parents still waiting on a child that has entered one of its end states, in token
+    /// order after <paramref name="after"/>. <paramref name="ends"/> names, per child machine, the states it ends in.
+    /// The reconciler's sweep delivers these, so a child's end that the write which made it did not deliver still
+    /// reaches its parent.
+    /// </summary>
+    public async Task<EndedPage> ChildrenEnded(
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> ends,
+        int limit,
+        string? after = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+        var keys = ends.SelectMany(kv =>
+                kv.Value.Select(state => kv.Key + DraftExpiry.Separator + state)
+            )
+            .ToList();
+        if (keys.Count == 0)
+            return new EndedPage([], null);
+
+        var parents = context.SnapshotDrafts;
+        var children = context
+            .SnapshotDrafts.AsNoTracking()
+            .Where(c =>
+                c.SpawnedBy != null
+                && keys.Contains(c.Machine + DraftExpiry.Separator + c.State)
+                && parents.Any(p => p.InvokeToken == c.SpawnedBy)
+            );
+        if (after is not null)
+            children = children.Where(c => string.Compare(c.SpawnedBy, after) > 0);
+        var tokens = await children
+            .OrderBy(c => c.SpawnedBy)
+            .Select(c => c.SpawnedBy!)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        return new EndedPage(tokens, tokens.Count == limit ? tokens[^1] : null);
+    }
+
+    /// <summary>
+    /// Delivers the end of the instance <paramref name="id"/> of <paramref name="machine"/> to the parent that spawned
+    /// it, when it is in one of its end states and its parent still waits; otherwise does nothing. Called after a write
+    /// that may have ended a child, as the fast path the sweep backs.
+    /// </summary>
+    public async Task<InvokeDelivery?> DeliverEndOf(
+        DraftOwner owner,
+        string machine,
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (
+            !_machines.TryGetValue(machine, out var found)
+            || found is not IMachineInternals { Ends.Count: > 0 } child
+        )
+            return null;
+
+        var row = await context
+            .SnapshotDrafts.AsNoTracking()
+            .Where(d =>
+                d.Id == id
+                && d.Machine == machine
+                && d.OwnerKind == owner.Kind
+                && d.UserKey == owner.UserKey
+                && d.SpawnedBy != null
+            )
+            .Select(d => new { d.State, d.SpawnedBy })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row is { SpawnedBy: { } parentToken } && child.Ends.ContainsKey(row.State)
+            ? await Deliver(parentToken, cancellationToken)
+            : null;
+    }
+
+    // How the child the parent's spawning state started has ended, or null while it has not; the second value names
+    // the child's machine when this host does not register it and cannot tell. A child that is gone was cancelled.
+    private async Task<(InvokedRunEnd? End, string? NotHere)> ReadChildEnd(
+        IMachineInternals parent,
+        string state,
+        string invokeToken,
+        CancellationToken cancellationToken
+    )
+    {
+        var child = await context
+            .SnapshotDrafts.AsNoTracking()
+            .Where(d => d.SpawnedBy == invokeToken)
+            .Select(d => new
+            {
+                d.Machine,
+                d.State,
+                d.Context,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (child is null)
+            return (new InvokedRunEnd(InvokeOutcomeKind.Cancelled, null, false), null);
+        if (
+            !_machines.TryGetValue(child.Machine, out var found)
+            || found is not IMachineInternals childMachine
+        )
+            return (null, child.Machine);
+        if (!childMachine.Ends.TryGetValue(child.State, out var kind))
+            return (null, null);
+        if (kind != InvokeOutcomeKind.Done)
+            return (new InvokedRunEnd(kind, null, false), null);
+
+        var childContext = JsonNode.Parse(child.Context) as JsonObject ?? [];
+        return (
+            new InvokedRunEnd(
+                InvokeOutcomeKind.Done,
+                parent.ChildOutput(state, childContext).ToJsonString(),
+                false
+            ),
+            null
+        );
     }
 
     /// <summary>How the run <paramref name="invokeToken"/> names ended, or null while it has not.</summary>
@@ -469,6 +605,9 @@ internal sealed class InvokeOutcomeDelivery(
                                 reason,
                                 planned.State
                             );
+                        // The outcome may have ended this instance, when another machine spawned it.
+                        if (machine.Ends.ContainsKey(planned.State))
+                            await DeliverEndOf(row.Owner, row.Machine, row.Id, cancellationToken);
                         return moved;
                     case InvokeWrite.Refused refused:
                         if (refused.Exception is not null)

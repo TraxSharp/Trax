@@ -20,7 +20,8 @@ produce an unhandled exception.
 
 To build one, follow [Author and serve a machine](/docs/statemachine/authoring). Guards and reducers written as data
 are covered in [Write guards and reducers as data](/docs/statemachine/declarative-authoring), and a state that runs
-a train in [Invoke a train from a state](/docs/statemachine/invoking-trains).
+a train in [Invoke a train from a state](/docs/statemachine/invoking-trains). A state can also start another machine and wait for
+it to end: [Spawn a child machine from a state](/docs/statemachine/spawning-child-machines).
 
 ## The two-document model
 

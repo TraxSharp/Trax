@@ -115,13 +115,12 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
             // request's data context, and writes them through the outbox, on a context of its own, together with
             // the run's entry, so the snapshot and the run commit in one transaction whatever ISnapshotStore the
             // host registered.
-            var invokes =
-                internals.InvokedTrains.Count > 0
-                    ? new InvokeRuntime(
-                        _services.GetRequiredService<IMachineInstanceStore>(),
-                        _services.GetRequiredService<InvokeOutbox>()
-                    )
-                    : null;
+            var invokes = internals.WaitsOnWork
+                ? new InvokeRuntime(
+                    _services.GetRequiredService<IMachineInstanceStore>(),
+                    _services.GetRequiredService<InvokeOutbox>()
+                )
+                : null;
             var store = invokes?.Store as ISnapshotStore ?? _store;
 
             // Creating a draft under the cap, and starting one, write to the table through the outbox's own
@@ -140,6 +139,22 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
             service = found.CreateService(_store, _claims);
         if (service is IEffectRunnerSlot slot)
             slot.EffectRunner = () => EffectRunner(machine);
+        // A machine another machine's state may spawn tells its parent when an advance ends it.
+        if (
+            found is IMachineInternals { Ends.Count: > 0 } child
+            && service is IEndNotifierSlot endSlot
+        )
+        {
+            endSlot.EndStates = child.Ends.Keys.ToHashSet(StringComparer.Ordinal);
+            endSlot.EndNotifier = (userKey, id, cancellationToken) =>
+                SpawnedEnds.Notify(
+                    _services.GetRequiredService<IServiceScopeFactory>(),
+                    DraftOwner.User(userKey),
+                    machine,
+                    id,
+                    cancellationToken
+                );
+        }
         _serviceCache[machine] = service;
         return service;
     }
