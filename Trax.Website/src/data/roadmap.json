@@ -202,6 +202,21 @@
       }
     },
     {
+      "key": "client-documents",
+      "status": "building",
+      "title": "Fetch only what a page needs",
+      "points": [
+        "Write the query a page needs as a .graphql file",
+        "A typed function for each one, with exactly the fields it asks for",
+        "The server registers them when it starts, and checks them there",
+        "Answers that refer back to themselves no longer stop a server"
+      ],
+      "code": {
+        "caption": "Building",
+        "text": "query OrderCard($input: FindOrderInput!) {\n  discover {\n    findOrder(input: $input) { title customer { name } }\n  }\n}\n\n$ trax client --manifest web/src/trax/manifest.json --out web/src/trax \\\n    --documents 'web/src/**/*.graphql'"
+      }
+    },
+    {
       "key": "spec-to-app",
       "status": "later",
       "title": "From a spec to a running app",
