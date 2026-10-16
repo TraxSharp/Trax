@@ -56,6 +56,19 @@ regenerating keeps working until the format itself changes.
 | `generateContextTypes`, `generateMachineFactory` | The generators that emit a twin from an IR. `trax machine generate` and the drift check call them. |
 | `clientFormat`, `oldestClientFormatServed`, `requireClientFormat(n)` | The client format: the API code `trax client` generates calls. Generated code calls `requireClientFormat` with the format it was generated for when it loads, before any twin, and the runtime throws naming both formats and whether to upgrade the package or regenerate. |
 | `enumerate`, `serializeCorpus` | Enumerate a machine into the differential corpus the C# engine replays. |
+| `DifferentialSpec`, `DifferentialCorpus`, `DifferentialCase` | What `enumerate` takes and writes. `DifferentialSpec` is the machine's id, version, states, triggers, outcomes, timers and seeds, the contexts to start from where no trigger reaches a state. `DifferentialCorpus` is the committed file: `machine`, `version`, `generated` and its `cases`. A `DifferentialCase` is one `given` snapshot, `when` a trigger and its input, and the `expect`ed outcome: `transitioned` with the canonical `wire`, or `rejected` with the code. |
+| `MachineFactoryOptions` | How `generateMachineFactory` writes a twin: `importStyle` (`relative`, the engine's own source, or `specifier`, one import from `specifier`, `@traxsharp/state-machine` by default) and the IR hash the twin exports as `irHash`. |
+
+#### Snapshots and results
+
+| Export | What it is |
+| --- | --- |
+| `Snapshot` | The untyped snapshot, the only thing that crosses the wire or lands in a row: `machine`, `version`, `state` and `context`. The C# engine reads and writes the same shape ([canonical wire](/docs/statemachine/canonical-wire)). |
+| `TypedSnapshot<Spec>` | The snapshot as a union over the machine's states: on each `state`, `context` is that state's type. |
+| `TypedAdvanceResult<Spec>` | What a `TypedMachine`'s `advance` answers: `{ outcome: 'transitioned', snapshot }` or `{ outcome: 'rejected', reason, detail? }`, the reason a `RefusalCode`. |
+| `TypedRehydrationResult<Spec>` | What its `rehydrate` answers: `{ result: 'ok', snapshot }` or `{ result: 'error', code, message }`. |
+| `MigrationResult` | One step of a migration forward: the `state` and `context` of the next version ([migrations](/docs/sdk-reference/statemachine-api/migrations)). |
+| `InputArgs<Spec, Trigger>` | The arguments a trigger's input takes in `send`: none for a trigger without input, its input otherwise. |
 
 ### Driving a machine in memory
 
@@ -66,7 +79,12 @@ From `@traxsharp/state-machine`, for a machine no server holds (a preview, a tes
 | `MachineController` | A framework-free store held in memory: `send`, `can`, `available`, `reset`, `subscribe`, `getSnapshot`. It stores nothing, and a refused action still emits a view with its `problem`. A machine a server holds is driven through `ServerMachineController` instead. |
 | `createFormView(machine, { steps, toContext })` | For a UI that owns its data and asks the machine: maps each UI step to a state (one to one), and gives `advance`, `can`, `snapshotFor`, `serialize`, `resume` and `isCommitted` in the UI's own step names. |
 | `problemFromAdvance`, `problemFromRehydration`, `Problem` | A refusal shaped for display. |
-| `createDevLogger` | Logs transitions and refusals in development. |
+| `createDevLogger(options?)` | Logs transitions and refusals in development, as a `MachineObserver`. `DevLoggerOptions`: `strict`, which throws on an internal error (a guard or reducer that threw) instead of logging it, and the `console` to write to. |
+| `ControllerOptions<Spec>` | What a `MachineController` is built with: the `initial` snapshot, or a function that makes it, and an `observer`. |
+| `ControllerView<Spec>` | What it holds and emits: the `snapshot` and the `problem` of the last refused action, or null. |
+| `MachineObserver<Spec>` | Callbacks on a controller: `onTransition(from, trigger, to, snapshot)`, `onRejected(trigger, problem, snapshot)` and `onInternalError(trigger, detail, snapshot)`. |
+| `FormView`, `FormViewOptions` | What `createFormView` answers and takes: `stateFor`, `stepFor`, `snapshotFor`, `advance`, `can`, `serialize`, `resume`, `isCommitted`; and the `steps` map and `toContext` projection ([Drive a form from a machine](/docs/statemachine/drive-a-form-from-a-machine)). |
+| `StepAdvance<Step>`, `ResumedStep<Spec, Step>` | `advance`'s answer, `{ ok: true, step }` or `{ ok: false, reason, detail? }`; and `resume`'s, the `step` and the rehydrated `snapshot`. |
 
 ### Talking to a server
 
@@ -81,6 +99,39 @@ From `@traxsharp/state-machine/client` (`useServerMachine` from `@traxsharp/stat
 | `ServerMachineController` | The framework-free, server-authoritative store: the server applies every transition and the twin predicts. It reads every snapshot the server sends with `fromServer`, so a state that requires a custom rule opens without a handler in the twin. The twin does not predict into such a state: the event is sent without a prediction and the server's answer is shown. An effect-bound trigger is never predicted, and `can` for it reads only its guard's rules on the context. `start`, `send`, `retry` (which resends a start or event that failed in transport, or stayed `SERVER_OUTDATED` past every retry, under its first request id), `can`, `available`, `get`, `subscribe`, `dispose`. |
 | `DEFAULT_RETRY_DELAYS` | The controller's default delays between retries of a `SERVER_OUTDATED` answer or a failed read: 250, 500, 1,000, 2,000 and 4,000 ms. Override with `retryDelays`. |
 | `TRANSPORT_FAILED` | The problem code (`TRANSPORT_ERROR`) of a send or read the controller could not deliver. It is the same string as `TRANSPORT_ERROR`, the sessions' code, exported under both names. |
+
+#### What the clients take and answer
+
+From `@traxsharp/state-machine/client`:
+
+| Export | What it is |
+| --- | --- |
+| `MachineExecutorOptions`, `HttpExecutorOptions` | `createMachineExecutor`'s options: the `machines`, and the `headers` each request carries (called per request, so a rotating token stays fresh) and the `fetch` it is sent with. |
+| `TypedMachineOperations` | One machine the executor sends: the `machine` (a twin, or its `id` and `version`), its `documents` and its `effectEvent`, the trigger `sendSnapshot` fires. |
+| `SnapshotExecutor`, `SnapshotOperation` | What an executor is: a function from one of the six operations (`startSnapshot`, `saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot`, `discardSnapshot`) and its input to the `SnapshotOutput`. It may throw; the sessions above it turn a throw into `TRANSPORT_ERROR`. |
+| `SnapshotOutput`, `SnapshotProblem` | Each operation's output: the `snapshot` as JSON or a `problem` (`code`, `message`), and beside them `id` and `created` from a start, `discarded` from a discard, the `revision` and the timer's `dueAt`. |
+| `SnapshotClient`, `StartOptions`, `AdvanceOptions` | The operations over any machine, each taking the machine name and the draft id. `StartOptions` carries the start `input` and the `schemaHash`; `AdvanceOptions` the trigger `input`, a `requestId` that makes a retry replay, the `schemaHash` and the twin's `clientResult`, which the server compares with its own and refuses `CLIENT_DIVERGENCE` when they differ. |
+| `DraftSession`, `DraftSessionOptions` | What `createDraftSession` answers and takes: `save`, `advance`, `load`, `send` and `discard` over one draft; and the `executor`, the `machine` (a twin, whose id and schema hash it reads, or a name with `schemaHash`), the draft `id` and `messages`. |
+| `StartDraftOptions` | What `startDraft` takes: the `executor`, `machine`, a `requestId` to keep until the start answers, the start `input`, `schemaHash` and `messages`. |
+| `DraftResult`, `StartResult` | Their answers, never thrown: `{ ok: true, snapshot, revision? }` (with `id` and `created` from a start) or `{ ok: false, code, message }`. |
+| `DraftMessages` | The fallback text of each refusal and transport failure, used only when the server sends none: `saveRefused`, `saveUnavailable`, `advanceRefused`, and so on for load, send, start and discard. |
+| `MachineServerOptions` | `createMachineServer`'s options, `HttpExecutorOptions` with the `machine`, `documents`, `socket`, `resubscribeDelays` and `terminalStreamErrors`. |
+| `PersistedSubscriptionSocket`, `SubscriptionSink` | The part of a graphql-ws client the push needs: `subscribe(payload, sink)`, returning the function that closes it; and the sink it delivers to, `next`, `error`, `complete`. |
+| `TypedMachineServer` | The `MachineServer` `createMachineServer` answers: `start`, `event`, `get`, `subscribe` and `endedBy`, and `discard(id, requestId)`. |
+| `ServerSnapshot` | One snapshot as the server sends it: `state`, `context`, the `revision` every write bumps, the row's incarnation `rowId`, and `dueAt`. |
+| `StartResponse`, `EventResponse`, `GetResponse`, `DiscardResponse`, `ServerProblem` | A `MachineServer`'s answers: `started` with the `id` and snapshot, `ok` with the snapshot, `discarded`, or a `ServerProblem` (`kind: 'problem'`, `code`, `message`). |
+| `StreamMessage` | What an instance's push delivers: a `snapshot`, `gone` (with `notFound` when the server answered `NOT_FOUND`), `reconnected`, `client-outdated`, or `ended` with a code and message. |
+| `ServerMachineOptions<Spec>` | What a `ServerMachineController` is built with: the `machine`, the `server`, the instance `id` or the `startInput` and `startRequestId` to start one, `newRequestId` and `retryDelays`. |
+| `ServerMachineView<Spec>` | What it holds, a new object on every change: `status` (`loading`, `ready`, `stopped`), `id`, the `snapshot` shown (the prediction while one is pending), the `confirmed` one, `rowId`, `revision`, `dueAt`, `pending`, `problem` and `error`. |
+| `ServerMachineError` | Why a controller stopped for good: its `code` (`GONE`, `CLIENT_OUTDATED`, or an `ended` code such as `CONNECTION_CHANGED`), `message`, and with `GONE`, `deleted`. |
+| `SendOutcome` | What one `send` came to: `confirmed` with the snapshot, `refused` or `failed` with the problem, or `stopped` with the error. |
+
+From `@traxsharp/state-machine/react`:
+
+| Export | What it is |
+| --- | --- |
+| `UseServerMachineOptions`, `UseServerMachineResult<Spec>` | `useServerMachine`'s options and answer, below. |
+| `UseRememberedMachineOptions`, `UseRememberedMachineResult<Spec>` | `useRememberedMachine`'s: `UseServerMachineOptions` less the instance it chooses itself, with the `rememberKey`; and `UseServerMachineResult` with `forget()`. |
 
 `useServerMachine(machine, { server, id?, startInput?, startRequestId?, startStorageKey?, newRequestId?, retryDelays? })`, from
 `@traxsharp/state-machine/react`, is `ServerMachineController` as a hook. Its options, its answer and an example are under
