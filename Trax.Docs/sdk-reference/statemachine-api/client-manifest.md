@@ -51,8 +51,13 @@ a frontend's build needs no running server, no database and no credential, and T
   and every type a namespace field reaches (`dispatch`, `discover`, `machines` and the namespaces under them) are
   left out, since each lists every sibling operation, so the rest of the schema stays on the server. A train's
   answer type is in its `Answer` instead.
-- **The same bytes.** `Write` writes indented JSON with `\n` line ends and a final newline, the same bytes for the
-  same content, so a committed manifest can be compared in CI.
+- **The same bytes.** `Write` writes compact JSON and a final newline, the same bytes for the same content, so a
+  committed manifest can be compared in CI.
+- **Shared output schemas once.** When two or more outcomes, in any of the machines, carry the same output schema
+  (invoking states whose trains answer with one type), `Write` puts it once under a top-level `$defs` and each
+  outcome's `output` is `{"$ref": "#/$defs/<name>"}`. `Read` puts it back, so each machine's `Ir`, and the
+  `IrHash` its documents carry, is the one the host exported. The generated twin likewise writes such a schema once,
+  as a const each outcome names. This is format 2; a format 1 file is exported again.
 - **One format.** `Read` refuses a file in any format other than `CurrentFormat`, naming both, and anything that is
   not a manifest. A newer file needs a newer tool; an older one is exported again.
 - **Export the production configuration.** A machine's IR, and so every document id, can depend on configuration (a

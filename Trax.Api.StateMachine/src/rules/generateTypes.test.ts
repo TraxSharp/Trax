@@ -234,6 +234,36 @@ describe("generateContextTypes", () => {
   });
 });
 
+describe("generateMachineFactory shared output schemas", () => {
+  const output = {
+    fields: [{ name: "view", nullable: false, type: "string" }],
+  };
+  const outcome = (state: string) => ({
+    edges: [],
+    outcome: "done",
+    output,
+    state,
+  });
+  const ir = {
+    id: "game",
+    version: 1,
+    initial: "A",
+    states: ["A", "B"],
+    triggers: [],
+    context: {},
+    inputs: {},
+    transitions: [],
+    outcomes: { "A.done": outcome("A"), "B.done": outcome("B") },
+  } as unknown as IrDocument;
+
+  it("writes an output schema several outcomes share once", () => {
+    const text = generateMachineFactory(ir);
+    expect(text.split('"name": "view"').length - 1).toBe(1);
+    expect(text).toContain("const sharedOutput0 = {");
+    expect(text.split('"output": sharedOutput0').length - 1).toBe(2);
+  });
+});
+
 // The import-style option is what lets a vendoring consumer collapse the three relative
 // engine imports into one `@traxsharp/state-machine` import without the hard-coded string `.replace()` its codegen
 // test used to do. These pin both styles byte-exact so `trax machine generate --import-style` and any consumer

@@ -64,8 +64,67 @@ public class ClientManifestTests
 
         text.Should().Be(ClientManifest.Write(Sample()));
         text.Should().EndWith("}\n").And.NotContain("\r");
-        text.Should().StartWith("{\n  \"format\": " + ClientManifest.CurrentFormat + ",");
+        text.Should().StartWith("{\"format\":" + ClientManifest.CurrentFormat + ",");
     }
+
+    [Test]
+    public void Shared_output_schema_is_written_once()
+    {
+        // Eight invoking states whose trains answer with one output type, as a game's step trains do.
+        var output = new JsonObject
+        {
+            ["fields"] = new JsonArray(
+                new JsonObject
+                {
+                    ["name"] = "view",
+                    ["nullable"] = false,
+                    ["type"] = "string",
+                }
+            ),
+        };
+        var outcomes = new JsonObject();
+        for (var i = 0; i < 8; i++)
+            outcomes[$"Step{i}.done"] = new JsonObject
+            {
+                ["edges"] = new JsonArray(),
+                ["outcome"] = "done",
+                ["output"] = output.DeepClone(),
+                ["state"] = $"Step{i}",
+            };
+        var ir = new JsonObject
+        {
+            ["id"] = "game",
+            ["outcomes"] = outcomes,
+            ["version"] = 1,
+        };
+        var manifest = Sample() with
+        {
+            Machines =
+            [
+                Sample().Machines.Single() with
+                {
+                    Id = "game",
+                    Ir = (JsonObject)ir.DeepClone(),
+                },
+            ],
+        };
+
+        var text = ClientManifest.Write(manifest);
+
+        Occurrences(text, "\"name\":\"view\"").Should().Be(1, "the shared schema is written once");
+        JsonNode.Parse(text)!["$defs"]!.AsObject().Should().ContainSingle();
+        text.Should().NotContain("\n  ", "the manifest is written compact");
+        var read = ClientManifest.Read(text).Machines.Single();
+        read.IrText()
+            .Should()
+            .Be(
+                CanonicalJson.Serialize(ir),
+                "a reader gets the IR the host exported, byte for byte"
+            );
+    }
+
+    private static int Occurrences(string text, string part) =>
+        (text.Length - text.Replace(part, "").Length) / part.Length;
 
     [Test]
     public void A_newer_format_is_refused_naming_both()
@@ -103,12 +162,12 @@ public class ClientManifestTests
             .WithMessage("*malformed*irHash*Export it again*");
     }
 
-    [TestCase("""{ "format": 1, "machines": [null] }""")]
+    [TestCase("""{ "format": 2, "machines": [null] }""")]
     [TestCase(
-        """{ "format": 1, "trains": [{ "field": "a", "root": "mutation", "documents": [null] }] }"""
+        """{ "format": 2, "trains": [{ "field": "a", "root": "mutation", "documents": [null] }] }"""
     )]
-    [TestCase("""{ "format": 1, "types": null }""")]
-    [TestCase("""{ "format": 1, "machines": [{ "id": "m", "irHash": "h", "ir": 3 }] }""")]
+    [TestCase("""{ "format": 2, "types": null }""")]
+    [TestCase("""{ "format": 2, "machines": [{ "id": "m", "irHash": "h", "ir": 3 }] }""")]
     public void A_null_or_a_value_of_another_kind_is_refused_with_a_message(string text)
     {
         var read = () => ClientManifest.Read(text);

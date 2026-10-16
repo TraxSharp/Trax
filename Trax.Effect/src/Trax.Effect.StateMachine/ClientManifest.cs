@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -17,9 +19,10 @@ public sealed record ClientManifest
 {
     /// <summary>
     /// The format this version writes and reads. A reader refuses any other, so a manifest and the tool that reads it
-    /// agree on its shape; it moves when a field is added, removed or changes meaning.
+    /// agree on its shape; it moves when a field is added, removed or changes meaning. Format 2 writes an output
+    /// schema several outcomes share once, under <c>$defs</c>.
     /// </summary>
-    public const int CurrentFormat = 1;
+    public const int CurrentFormat = 2;
 
     /// <summary>The format the file was written in.</summary>
     public int Format { get; init; } = CurrentFormat;
@@ -47,10 +50,12 @@ public sealed record ClientManifest
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = true,
-        IndentSize = 2,
-        NewLine = "\n",
     };
+
+    // Where a shared output schema is written, and how an outcome points at it.
+    private const string Defs = "$defs";
+    private const string Ref = "$ref";
+    private const string RefPrefix = "#/$defs/";
 
     // Reading refuses a null where the type holds none, so a field a host never writes null is never read as one.
     private static readonly JsonSerializerOptions ReadJson = new(Json)
@@ -59,13 +64,80 @@ public sealed record ClientManifest
     };
 
     /// <summary>
-    /// The manifest as its file holds it: indented JSON with <c>\n</c> line ends and a final newline, the same bytes
-    /// for the same content, so a committed copy can be compared.
+    /// The manifest as its file holds it: compact JSON and a final newline, the same bytes for the same content, so a
+    /// committed copy can be compared. An output schema two or more outcomes share, across every machine, is written
+    /// once under <c>$defs</c> and each outcome points at it, so a machine whose invoked trains answer with one type
+    /// does not repeat it per state. <see cref="Read"/> puts it back, so each machine's IR, and its hash, is the one
+    /// the host exported.
     /// </summary>
     public static string Write(ClientManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
-        return JsonSerializer.Serialize(manifest, Json) + "\n";
+        var root = JsonSerializer.SerializeToNode(manifest, Json)!.AsObject();
+        ShareOutputSchemas(root);
+        return root.ToJsonString(Json) + "\n";
+    }
+
+    // Every outcome's output schema, across every machine's IR, with the outcome object holding it.
+    private static IEnumerable<JsonObject> OutcomesWithOutput(JsonObject root) =>
+        (root["machines"] as JsonArray ?? [])
+            .Select(m => m?["ir"]?["outcomes"] as JsonObject)
+            .OfType<JsonObject>()
+            .SelectMany(outcomes => outcomes.Select(o => o.Value as JsonObject))
+            .OfType<JsonObject>()
+            .Where(o => o["output"] is JsonObject);
+
+    private static void ShareOutputSchemas(JsonObject root)
+    {
+        var shared = OutcomesWithOutput(root)
+            .GroupBy(o => CanonicalJson.Serialize(o["output"]!.AsObject()))
+            .Where(g => g.Count() > 1)
+            .Select(g =>
+                (
+                    Name: "output-"
+                        + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(g.Key)))[
+                            ..16
+                        ],
+                    Outcomes: g.ToList()
+                )
+            )
+            .OrderBy(g => g.Name, StringComparer.Ordinal)
+            .ToList();
+        if (shared.Count == 0)
+            return;
+
+        var defs = new JsonObject();
+        foreach (var (name, outcomes) in shared)
+        {
+            defs[name] = outcomes[0]["output"]!.DeepClone();
+            foreach (var outcome in outcomes)
+                outcome["output"] = new JsonObject { [Ref] = RefPrefix + name };
+        }
+        root[Defs] = defs;
+    }
+
+    // Puts each shared output schema back where Write took it from. A pointer at nothing is malformed.
+    private static void RestoreOutputSchemas(JsonObject root)
+    {
+        if (root[Defs] is not JsonObject defs)
+            return;
+        root.Remove(Defs);
+
+        foreach (var outcome in OutcomesWithOutput(root))
+        {
+            if (outcome["output"]![Ref] is not JsonValue pointer)
+                continue;
+            var target =
+                pointer.TryGetValue<string>(out var text) && text.StartsWith(RefPrefix)
+                    ? defs[text[RefPrefix.Length..]]
+                    : null;
+            outcome["output"] =
+                target?.DeepClone()
+                ?? throw Malformed(
+                    "$.machines",
+                    $"An outcome points at {pointer.ToJsonString()}, which $defs does not hold."
+                );
+        }
     }
 
     /// <summary>
@@ -98,6 +170,8 @@ public sealed record ClientManifest
                             : "Export the manifest again from a host of this version."
                     )
             );
+
+        RestoreOutputSchemas(root);
 
         ClientManifest manifest;
         try

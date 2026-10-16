@@ -163,6 +163,7 @@ export function generateMachineFactory(
     : [];
   // The IR format rides in the IR rather than in a call, so an engine older than the check ignores it.
   const twinIr = specifierStyle ? { irFormat: irFormatVersion, ...runtimeIr } : runtimeIr;
+  const { text: irText, shared } = shareOutputSchemas(twinIr);
   return [
     `// AUTO-GENERATED from ${ir.id}.ir.json by generateMachineFactory. Do not edit by hand.`,
     ...importNote,
@@ -170,7 +171,8 @@ export function generateMachineFactory(
     ...engineImports,
     `import type { ${machine}Spec } from "./${ir.id}.contexts.g";`,
     "",
-    `const ir = ${JSON.stringify(twinIr, null, 2)} as IrDocument;`,
+    ...shared,
+    `const ir = ${irText} as IrDocument;`,
     "",
     `/** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */`,
     `export const irHash = ${JSON.stringify(irHash)};`,
@@ -179,6 +181,40 @@ export function generateMachineFactory(
     `export const ${camel(ir.id)} = typedMachineFromIr<${machine}Spec>(ir, irHash);`,
     "",
   ].join("\n");
+}
+
+// An output schema two or more outcomes share (invoking states whose trains answer with one type) is written once,
+// as a const each outcome names, rather than once per state: the IR's value is the same, and the page's bundle
+// carries the schema once. Placeholders stand in for the consts while the IR is stringified.
+function shareOutputSchemas(ir: object): { text: string; shared: string[] } {
+  const outcomes = (ir as { outcomes?: Record<string, { output?: unknown }> }).outcomes ?? {};
+  const byText = new Map<string, string[]>();
+  for (const [key, outcome] of Object.entries(outcomes)) {
+    if (outcome.output === undefined) continue;
+    const text = JSON.stringify(outcome.output);
+    byText.set(text, [...(byText.get(text) ?? []), key]);
+  }
+
+  const shared: string[] = [];
+  const replaced: Record<string, unknown> = {};
+  const placeholders: [string, string][] = [];
+  for (const [text, keys] of byText) {
+    if (keys.length < 2) continue;
+    const name = `sharedOutput${shared.length}`;
+    const placeholder = `\u0000${name}`;
+    shared.push(`const ${name} = ${JSON.stringify(JSON.parse(text), null, 2)};`, "");
+    placeholders.push([JSON.stringify(placeholder), name]);
+    for (const key of keys) replaced[key] = { ...outcomes[key], output: placeholder };
+  }
+  if (shared.length === 0) return { text: JSON.stringify(ir, null, 2), shared };
+
+  let text = JSON.stringify(
+    { ...ir, outcomes: { ...outcomes, ...replaced } },
+    null,
+    2,
+  );
+  for (const [quoted, name] of placeholders) text = text.split(quoted).join(name);
+  return { text, shared };
 }
 
 // `source` is where the schema's own constraints say its fields live: a context's read the context, an input's

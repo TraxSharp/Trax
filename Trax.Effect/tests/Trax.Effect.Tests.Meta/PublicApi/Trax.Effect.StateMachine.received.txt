@@ -27,7 +27,7 @@ namespace Trax.Effect.StateMachine
     }
     public sealed class ClientManifest : System.IEquatable<Trax.Effect.StateMachine.ClientManifest>
     {
-        public const int CurrentFormat = 1;
+        public const int CurrentFormat = 2;
         public ClientManifest() { }
         public int Format { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Effect.StateMachine.ClientManifestMachine> Machines { get; init; }
