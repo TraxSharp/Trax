@@ -54,7 +54,7 @@ signature and the SDL of every type the document reaches, without descriptions a
 types, so adding a field to the input moves the id and editing a doc comment does not. The document takes `input`,
 `mode` and `priority` as variables where the field has them, and selects the whole answer, a union or interface
 through a fragment per possible type. A field that leads back to a type already on the path, such as an EF entity's
-reference to its parent (`ActionAlert.campaign > Campaign.alerts`) or a tree's children, is left out (a paged one
+reference to its parent (`Order.customer > Customer.orders`) or a tree's children, is left out (a paged one
 whole), and the host logs a warning naming each one, so a train can answer with entities whose navigations go both
 ways. A field with a required argument refuses the host's start. Every generated document is then validated as a
 request would be, so one past the host's `MaxExecutionDepth` or operation cap refuses the start, naming the train;

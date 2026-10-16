@@ -51,7 +51,9 @@ Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMach
   migration refuses to start if it serves anyway, because it calls `app.Run()` rather than `RunTraxAsync`: its
   database was not migrated. The refusal names `RunTraxAsync`.
 - **Only what a client sends.** The manifest lists the documents of exposed machines and trains, never one under
-  `operations`. `Types` holds the SDL of the types those documents reach and nothing else. The root operation types
+  `operations`. `Types` holds the SDL of the types those documents reach, and of the fields a train's document left out
+  because they lead back to a type already in its answer, so a [client document](/docs/api/fetch-only-what-a-component-needs)
+  may select them; nothing else. The root operation types
   and every type a namespace field reaches (`dispatch`, `discover`, `machines` and the namespaces under them) are
   left out, since each lists every sibling operation, so the rest of the schema stays on the server. A train's
   answer type is in its `Answer` instead.
