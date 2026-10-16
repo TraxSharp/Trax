@@ -123,7 +123,7 @@ A transition or an outcome edge takes one reduction, so one that fills several f
 - A selector (`i => i.Coin`) is an expression tree, resolved to the member's JSON key: its `[JsonPropertyName]` when it has
   one, else its name in camelCase. A rename of the record's member renames the rule with it.
 - Every predicate is total: a missing or wrong-typed field is `false`, never an exception.
-- The vocabulary is fixed. Logic outside it is `Rule.Custom(name)` or `Reduction.Custom(name)` with a handler bound by
+- The vocabulary is fixed. Logic outside it is `new Rule.Custom(name)` or `new Reduction.Custom(name)`, records you construct, with a handler bound by
   `CustomGuard` or `CustomReducer`; see [Delegates and declarative rules](/docs/statemachine/delegates-and-declarative-rules).
 
 ## Examples

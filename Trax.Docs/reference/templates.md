@@ -20,11 +20,25 @@ until you choose one. Each also ships a README, a `.gitignore` and an NUnit test
 
 `trax generate` scaffolds `trax-hub` (see [CLI](/docs/reference/cli)).
 
+### Which one to start from
+
+A [state machine that invokes trains](/docs/statemachine/invoking-trains) needs a scheduler, `AddJunctionProgress()`
+and a database. Start it from `trax-hub`, which has the first two, and switch it from `UseInMemory()` to `UseSqlite()`
+or `UsePostgres()` ([Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres)). `trax-api` has
+no scheduler.
+
+Before writing your own trains, read [Organize trains in a project](/docs/core/organize-trains): one folder per train,
+its own input type, its junctions beside it. The templates' `HelloWorld` and `Lookup` trains follow it, so keep them as
+a reference until your first train is in.
+
 ## Installation
 
 ```bash
 dotnet new install Trax.Samples.Templates
 ```
+
+`dotnet new install` installs for your user, not for the project: the templates are available in every folder until
+you [uninstall](#uninstalling) them.
 
 ## Creating Projects
 
@@ -232,6 +246,7 @@ Each test project references the application and uses NUnit with
 
 ## Next steps
 
+- [Organize trains in a project](/docs/core/organize-trains): where each train, input and junction goes.
 - [Add your own trains to a template](/docs/reference/add-trains-to-a-template): a query train and a scheduled train.
 - [Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres): a database that survives a restart and lets `mode: QUEUE` run.
 - [Prepare a template for deployment](/docs/reference/prepare-a-template-for-deployment): the dashboard and the demo key exist only in Development.

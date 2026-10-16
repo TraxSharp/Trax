@@ -39,6 +39,8 @@ A train is a chain of junctions; each junction takes one input and produces one 
 train in its own folder under `Trains/`. `AddMediator(typeof(Program).Assembly)` registers every
 train in this project. A scheduled train's input implements `IManifestProperties`, so the
 scheduler can store it.
+[Organize trains in a project](https://traxsharp.net/docs/core/organize-trains) says where
+each file goes; `HelloWorld` follows it.
 
 ```csharp
 // Trains/Cleanup/CleanupInput.cs

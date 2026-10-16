@@ -37,7 +37,7 @@ without throwing.
 
 Logic that does not fit, a formula reducer or a multi-field invariant, has two homes:
 
-- `Rule.Custom(name)` and `Reduction.Custom(name)` keep it in the IR by name, with a handler bound in each runtime
+- `new Rule.Custom(name)` and `new Reduction.Custom(name)` (records you construct) keep it in the IR by name, with a handler bound in each runtime
   (`CustomGuard` and `CustomReducer` in C#, `customGuards` and `customReducers` in the twin). The IR stays
   exportable; the two handlers are what has to agree, and the differential corpus is what checks that they do.
 - A delegate, on a machine with no twin.

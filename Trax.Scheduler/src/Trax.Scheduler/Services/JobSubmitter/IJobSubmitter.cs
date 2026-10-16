@@ -8,8 +8,9 @@ namespace Trax.Scheduler.Services.JobSubmitter;
 /// <remarks>
 /// This interface provides a provider-agnostic way to submit jobs for execution.
 /// The built-in implementations are:
-/// - <see cref="PostgresJobSubmitter"/> — inserts into the <c>background_job</c> table for local workers
-/// - <see cref="InMemoryJobSubmitter"/> — executes inline for testing
+/// - <see cref="PostgresJobSubmitter"/>, which inserts into the <c>background_job</c> table for the local
+///   workers, on any database provider
+/// - <c>InMemoryJobSubmitter</c>, internal, which runs the job inline on a host with no database provider
 ///
 /// Custom implementations can submit jobs to external systems (AWS Lambda, Azure Functions, etc.).
 ///

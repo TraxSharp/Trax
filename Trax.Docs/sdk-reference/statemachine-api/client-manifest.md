@@ -24,6 +24,10 @@ a frontend's build needs no running server, no database and no credential, and T
 
 ## Members
 
+Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMachine`; `TraxClientExport` and
+`ITraxStartupCheck` in `Trax.Effect.Configuration.ClientExport`; `RunTraxAsync` in
+`Trax.Api.GraphQL.PersistedOperations.Extensions`.
+
 | Member | Description |
 | --- | --- |
 | `app.RunTraxAsync(string[]? args = null)` | Runs the host as `app.RunAsync()` does, unless the process was started with `--trax-export-client <path>`: then it runs the host's startup checks, writes the manifest to the path and returns without serving. `args` defaults to the process's command line. In `Trax.Api.GraphQL.PersistedOperations.Extensions`. |
@@ -66,6 +70,9 @@ a frontend's build needs no running server, no database and no credential, and T
 ## Example
 
 ```csharp fragment
+using Trax.Api.GraphQL.PersistedOperations.Extensions; // RunTraxAsync
+using Trax.Effect.Configuration.ClientExport; // TraxClientExport
+
 var app = builder.Build();
 
 if (!TraxClientExport.Requested)

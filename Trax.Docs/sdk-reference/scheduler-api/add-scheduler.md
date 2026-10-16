@@ -61,9 +61,9 @@ The methods of the builder `configure` receives.
 
 | Method | Parameter | Default | Description |
 |--------|-----------|---------|-------------|
-| `PollingInterval(TimeSpan)` | interval | see the two below | Shorthand that sets both `ManifestManagerPollingInterval` and `JobDispatcherPollingInterval` to the same value |
-| `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue |
-| `JobDispatcherPollingInterval(TimeSpan)` | interval | 2 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter |
+| `PollingInterval(TimeSpan)` | interval | see the two below | Shorthand that sets both `ManifestManagerPollingInterval` and `JobDispatcherPollingInterval` to the same value. 1 second to 30 days |
+| `ManifestManagerPollingInterval(TimeSpan)` | interval | 5 seconds | How often the ManifestManager evaluates manifests and writes to the work queue. 1 second to 30 days |
+| `JobDispatcherPollingInterval(TimeSpan)` | interval | 2 seconds | How often the JobDispatcher reads from the work queue and dispatches to the job submitter. 1 second to 30 days; a shorter value refuses to start |
 | `SchedulerLivenessThreshold(TimeSpan)` | threshold | max(JobDispatcherPollingInterval * 10, 30s) | How long the dispatcher may go without completing a cycle before [`AddTraxSchedulerLiveness()`](/docs/scheduler/health-and-liveness) reports unhealthy |
 | `MaxConcurrentDispatch(int)` | maxConcurrent | 1 | Max entries dispatched concurrently per polling cycle. Increase when using `UseRemoteWorkers` to avoid sequential HTTP blocking. See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dispatch) |
 | `MaxDispatchAttempts(int)` | maxAttempts | 5 | Max dispatch attempts before permanently failing a work queue entry. When a job was not delivered, the entry is requeued after a backoff (5 s, doubling, up to 5 min), and that attempt's run does not count toward `MaxRetries`; a job a runner already started is never requeued. Set to 0 to disable requeuing (fail immediately). See [Dispatch failures](/docs/scheduler/admin-trains/job-dispatcher#dispatch-failures) |

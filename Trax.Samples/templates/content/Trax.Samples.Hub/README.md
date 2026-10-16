@@ -62,6 +62,8 @@ the test that fails when `Program.cs` stops starting. See
 A train is a chain of junctions; each junction takes one input and produces one output. Put each
 train in its own folder under `Trains/`. `AddMediator(typeof(Program).Assembly)` registers every
 train in this project, so there is nothing to add to `Program.cs` for it to exist.
+[Organize trains in a project](https://traxsharp.net/docs/core/organize-trains) says where
+each file goes; `HelloWorld` and `Lookup` follow it.
 
 ```csharp
 // Trains/Shout/ShoutInput.cs and ShoutOutput.cs

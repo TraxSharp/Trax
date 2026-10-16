@@ -1,4 +1,4 @@
-import { getAllDocs, markdownUrl, type DocPage } from "./docs";
+import { getAllDocs, getDocBySlug, markdownUrl, type DocPage } from "./docs";
 import { getDocsSections as navSections, type DocsSection } from "./nav-tree";
 import { TYPE_LABELS } from "./doc-meta";
 import { SITE_DESCRIPTION, SITE_URL } from "./site";
@@ -113,6 +113,14 @@ function describeBundle(bundle: Bundle): string {
 }
 
 /** The /llms.txt index. */
+/** The "Start here" list, by docs slug, in reading order. */
+const START_HERE = [
+  "getting-started",
+  "reference/templates",
+  "core/organize-trains",
+  "statemachine/invoking-trains",
+];
+
 export function buildLlmsTxt(): string {
   const lines: string[] = [
     "# Trax .NET",
@@ -122,6 +130,16 @@ export function buildLlmsTxt(): string {
     `Every page below links to its raw Markdown: append \`.md\` to any docs URL (the docs home is ${markdownUrl("")}). The HTML pages are at the same path without \`.md\`. There is no single llms-full.txt, because the whole corpus is too large for most fetch limits; the full text is split into per-section bundles of at most ~90 KB, listed under "Full text".`,
     "",
   ];
+
+  // The pages to read before writing code, in order: a reader that goes straight to the feature it needs skips
+  // the project layout and the template choice.
+  lines.push("## Start here", "");
+  for (const slug of START_HERE) {
+    const doc = getDocBySlug(slug);
+    if (!doc) throw new Error(`llms.txt "Start here" names ${slug}, which is not a docs page.`);
+    lines.push(`- [${pageTitle(doc)}](${markdownUrl(doc.slug)}): ${doc.description}`);
+  }
+  lines.push("");
 
   for (const section of getDocsSections()) {
     lines.push(`## ${section.label}`, "");

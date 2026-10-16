@@ -37,7 +37,7 @@ dotnet tool install --global Trax.Cli
 ```
 
 Or, so CI runs the version the repository pins, as a local tool. Create the manifest once at the repository root and
-commit `.config/dotnet-tools.json`:
+commit the `dotnet-tools.json` it writes (`.config/dotnet-tools.json` or `./dotnet-tools.json`, depending on the SDK):
 
 ```bash
 dotnet new tool-manifest
@@ -478,7 +478,7 @@ It writes, under `--out`:
 | File | What it holds |
 | --- | --- |
 | `format.g.ts` | The client format the code was generated for, checked against the installed runtime (`requireClientFormat`) before any other generated module runs. |
-| `client.g.ts` | `configureTrax({ url, socketUrl, headers?, connectionParams?, user? })`, which the app calls at startup and again when another user signs in, the shared socket and `TraxOperationError`. `user` is the signed-in user's id, which the remembered machines are kept under. Calling it again closes the socket, a machine server made before refuses to send (`CONNECTION_CHANGED`: its requests reject with it, and a controller over it stops with it rather than subscribing again), and every mounted machine hook renders again onto a server over the new connection and the new user, showing nothing of the instance before until the new one answers. Headers are read per request. Nothing about the host is generated into it. |
+| `client.g.ts` | `configureTrax({ url, socketUrl, headers?, connectionParams?, user? })`, which the app calls at startup and again when another user signs in, the shared socket and `TraxOperationError`. `user` is the signed-in user's id, which the remembered machines are kept under. Calling it again closes the socket, a machine server made before refuses to send (`CONNECTION_CHANGED`: its requests reject with it, and a controller over it stops with it rather than subscribing again), and every mounted machine hook renders again onto a server over the new connection and the new user, showing nothing of the instance before until the new one answers. Headers are read per request. `socketUrl` is an absolute `ws://` or `wss://` URL: build it from `location` (`` `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/trax/graphql` ``) rather than passing a path. A credential such as an API key goes in both `headers`, for HTTP requests, and `connectionParams`, for the socket, since a browser's WebSocket carries no custom headers. Nothing about the host is generated into it. |
 | `<machine>/<machine>.machine.g.ts`, `<machine>.contexts.g.ts` | The machine's twin. |
 | `<machine>/<machine>.client.g.ts` | The machine's documents by id, `<machine>Server()`, `use<Machine>(options)` over `useServerMachine`, which keeps a start in flight under `trax-start:<machine id>.<user>`, and `useRemembered<Machine>(options)` over `useRememberedMachine`, which keeps the instance of the `user` given to `configureTrax` across visits under `trax.<machine id>.<user>` (`rememberKey` replaces the `trax.<machine id>`). |
 | `trains/<train>.g.ts` | `<train>(input, options?)`, which sends the train's persisted id with its input, `mode` and `priority`, and answers its typed response. Its doc comment names what the train requires of a caller. |

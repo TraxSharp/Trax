@@ -17,6 +17,13 @@ A junction fails by throwing. The chain catches the exception, skips the junctio
 hands the exception back to the caller with its type and message unchanged. Why it works that way
 is in [The Railway](/docs/core#the-railway); this page is what to write.
 
+That is what code in the same process sees. A GraphQL caller sees less, so nothing internal leaks:
+only a plain `TrainException`'s message reaches it, as `TRAX_TRAIN_ERROR`. A subclass of
+`TrainException` becomes "The train failed.", and any other exception, an
+`InvalidOperationException` included, becomes HotChocolate's masked "Unexpected Execution Error".
+Throw a plain `TrainException` for a message the caller should read. See
+[Error codes](/docs/sdk-reference/graphql-api/error-codes).
+
 ## Fail a junction
 
 Throw the exception you want the caller to see. To turn a dependency's exception into one of your

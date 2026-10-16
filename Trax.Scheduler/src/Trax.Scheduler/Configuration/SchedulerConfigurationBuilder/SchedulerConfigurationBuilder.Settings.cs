@@ -444,15 +444,9 @@ public partial class SchedulerConfigurationBuilder
         return this;
     }
 
-    /// <summary>
-    /// Uses the in-memory job submitter for testing and development.
-    /// </summary>
-    /// <remarks>
-    /// Overrides the default <see cref="PostgresJobSubmitter"/>.
-    /// The in-memory submitter executes jobs immediately and synchronously.
-    /// Useful for unit/integration testing without external infrastructure.
-    /// </remarks>
-    /// <returns>The builder for method chaining</returns>
+    // Runs every job inline through the in-memory submitter instead of the local worker pool. Internal,
+    // for Trax's own tests: a comment rather than XML docs, so the package's documentation does not
+    // describe a member no host can call.
     internal SchedulerConfigurationBuilder UseInMemoryWorkers()
     {
         _taskServerRegistration = services =>
@@ -609,7 +603,8 @@ public partial class SchedulerConfigurationBuilder
     /// Use this as an escape hatch when the built-in submitters don't fit your use case.
     /// Most users should use <see cref="UseRemoteWorkers"/> instead.
     /// When no override is configured, the scheduler defaults to <see cref="PostgresJobSubmitter"/>
-    /// (with <c>UsePostgres()</c> or <c>UseSqlite()</c>) or <see cref="InMemoryJobSubmitter"/> (without a database provider).
+    /// (with <c>UsePostgres()</c> or <c>UseSqlite()</c>) or an internal in-memory submitter that runs the job inline
+    /// (without a database provider).
     /// </remarks>
     /// <param name="registration">The action to register your custom <see cref="IJobSubmitter"/></param>
     /// <returns>The builder for method chaining</returns>

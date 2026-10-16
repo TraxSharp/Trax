@@ -130,6 +130,17 @@ public sealed class IngestMachine : Machine<Stage, IngestTrigger>
 to its effect's target. The builder's rules are listed under
 [IInvokeBuilder](/docs/sdk-reference/statemachine-api/machine#iinvokebuilder).
 
+Two more rules shape the rest of the machine, and `Build` refuses a machine that breaks either:
+
+- **An ordinary event may not enter a state an outcome enters.** Only the run's outcome puts an instance in its
+  target. Give each user action its own event into a working state that invokes the train for it, and let the
+  outcome bring the instance back.
+- **An event any caller may send (no rule, `AnyAuthenticated()` or `Anonymous()`) may not copy from its input a field
+  an outcome writes.** A custom reducer (`new Reduction.Custom(name)`) counts as copying every field, so an open event
+  with one is refused whenever the machine invokes a train. Copy each value the next run needs into its own field,
+  with [`SetAll`](/docs/sdk-reference/statemachine-api/rules) when there are several, and leave the fields outcomes
+  write alone.
+
 ## 3. Meet the host's requirements
 
 The host that registers the machine needs Postgres or SQLite (InMemory has no transactions to queue the run in),
