@@ -106,17 +106,29 @@ public partial class ClientGeneratorTests
         train
             .Should()
             .Contain(
-                "export function startRun(input: StartRunInput, options: { mode?: ExecutionMode | null; priority?: number | null } = {}): Promise<StartRunResponse>"
+                "export function startRun(input: StartRunInput, options: { mode?: ExecutionMode | null; priority?: number | null } = {}): Promise<StartRunResult>"
             )
             .And.Contain("[\"dispatch\", \"startRun\"]")
-            .And.Contain("holding one of the roles recovery-user");
+            .And.Contain("holding one of the roles recovery-user")
+            .And.Contain(
+                """
+                export type StartRunResult = {
+                  externalId: string;
+                  metadataId: number | null;
+                  workQueueId: number | null;
+                  output: {
+                    runId: string;
+                    steps: Array<string>;
+                  } | null;
+                };
+                """
+            );
         types.Should().Contain("export type ExecutionMode = \"RUN\" | \"QUEUE\";");
         types.Should().Contain("  scenario: string;").And.Contain("  crashOnce?: boolean | null;");
-        types
-            .Should()
-            .Contain("  metadataId: number | null;")
-            .And.Contain("  steps: Array<string>;");
         types.Should().NotContain("DispatchMutations", "a type that holds operations is not data");
+        Text(files, "index.g.ts")
+            .Should()
+            .Contain("export { startRun, type StartRunResult } from \"./trains/startRun.g\";");
     }
 
     [Test]
@@ -125,7 +137,7 @@ public partial class ClientGeneratorTests
         var sample = ClientManifests.Sample();
         var manifest = sample with
         {
-            Types = sample.Types + "\n\ntype OrderDispatchMutations {\n  id: String!\n}\n",
+            Types = sample.Types + "\n\ninput OrderDispatchMutations {\n  id: String!\n}\n",
         };
 
         Text(Render(manifest), "types.g.ts")
@@ -670,7 +682,7 @@ public partial class ClientGeneratorTests
         var trainManifest = ClientManifests.Sample() with { Trains = [train] };
         var typeManifest = ClientManifests.Sample() with
         {
-            Types = ClientManifests.TrainTypes + $"\ntype {name} {{ x: Int }}\n",
+            Types = ClientManifests.TrainTypes + $"\nenum {name} {{ X }}\n",
         };
 
         ((Action)(() => Render(trainManifest)))

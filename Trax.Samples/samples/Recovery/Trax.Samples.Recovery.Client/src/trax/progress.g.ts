@@ -2,7 +2,139 @@
 import "./format.g";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { sendDocument, subscribeTrax, traxConnection, traxGeneration, traxSocket, TraxOperationError } from "./client.g";
-import type { RunProgress, RunProgressEvent } from "./types.g";
+import type { FailureClass, JunctionRunKind, JunctionRunState, RefusalCode, RunProgressState } from "./types.g";
+
+/** A run as the runProgress query answers it: the fields its document selects. */
+export type RunProgress = {
+  runId: string;
+  /** The train's field, as the schema serves it; null for a train the schema does not expose. */
+  train: string | null;
+  state: RunProgressState | null;
+  /** The steps recorded so far, in order, at most 500. */
+  steps: Array<{
+    /** Where the step falls in the run, from 0. A junction's start and end share it. */
+    position: number;
+    /** What the step is. */
+    kind: JunctionRunKind;
+    /** The junction's class name without its namespace, or a question's key. */
+    name: string;
+    /** Where the step stands. */
+    state: JunctionRunState;
+    /** When the junction started, or when the question was answered or the track taken (UTC). */
+    startedAt: string;
+    /** When the junction returned (UTC), or null while it runs. */
+    endedAt: string | null;
+    /** Milliseconds from StartedAt to EndedAt, or null while it runs. */
+    durationMs: number | null;
+    /** How a failed junction's failure is classified; null unless it failed. */
+    failureClass: FailureClass | null;
+    /** The type name of the exception a junction failed or was cancelled with, never its message. */
+    failureException: string | null;
+    /** The question's key, for a question or a track. */
+    questionKey: string | null;
+    /** The answer the run acted on, or null for a junction, a refused answer and a withheld one. */
+    answer: string | null;
+    /** How sure the decider was, for a choice or a score; null when withheld. */
+    confidence: number | null;
+    /** True when the answer came from an earlier run rather than a decider. */
+    replayed: boolean;
+    /** The full name of the decider's type. Live events only; the recorded timeline does not keep it. */
+    decider: string | null;
+    /** True when the question is about a [TraxSensitive] type, so its answer and confidence are absent. */
+    answerWithheld: boolean;
+    /** Which attempt of its manifest the run is, or null for a run with no manifest. */
+    attempt: number | null;
+    /**
+     * True when Name is (withheld): the step is on a decision track, and its
+     * name would give away an answer this caller is not shown.
+     */
+    nameWithheld: boolean;
+    /**
+     * The position of the latest routing step before this one, or null before any. Every step
+     * after a route, a junction, a question or a further route, counts as on its track.
+     */
+    trackPosition: number | null;
+    /** The id of the declared node this step ran for, as operations.runGraph names it. Null for a step recorded before node ids were, and wherever the step's name is withheld, since the id names the track. */
+    nodeId: string | null;
+    /** The path of the Parallel branch the step ran in, such as Parallel#0/cocitation, or null outside any branch. Withheld wherever the step's name is. */
+    branchPath: string | null;
+  }>;
+  /** Why the run failed, when a junction threw a TrainException. */
+  failure: string | null;
+  problem: {
+    /** The code a client branches on, such as UnknownMachine or NoTransition. */
+    code: RefusalCode;
+    /** A human-readable explanation for logs or display. Its wording is not a contract; branch on Code. */
+    message: string;
+  } | null;
+  /** The id of the run that retries this failed one, once it is queued: follow that run next. */
+  retriedAs: string | null;
+};
+
+/** A change to a run as the runProgress subscription sends it: the fields its document selects. */
+export type RunProgressEvent = {
+  runId: string;
+  /** This event's number; a skipped number means events were lost, so read the run again. */
+  sequence: number;
+  state: RunProgressState | null;
+  step: {
+    /** Where the step falls in the run, from 0. A junction's start and end share it. */
+    position: number;
+    /** What the step is. */
+    kind: JunctionRunKind;
+    /** The junction's class name without its namespace, or a question's key. */
+    name: string;
+    /** Where the step stands. */
+    state: JunctionRunState;
+    /** When the junction started, or when the question was answered or the track taken (UTC). */
+    startedAt: string;
+    /** When the junction returned (UTC), or null while it runs. */
+    endedAt: string | null;
+    /** Milliseconds from StartedAt to EndedAt, or null while it runs. */
+    durationMs: number | null;
+    /** How a failed junction's failure is classified; null unless it failed. */
+    failureClass: FailureClass | null;
+    /** The type name of the exception a junction failed or was cancelled with, never its message. */
+    failureException: string | null;
+    /** The question's key, for a question or a track. */
+    questionKey: string | null;
+    /** The answer the run acted on, or null for a junction, a refused answer and a withheld one. */
+    answer: string | null;
+    /** How sure the decider was, for a choice or a score; null when withheld. */
+    confidence: number | null;
+    /** True when the answer came from an earlier run rather than a decider. */
+    replayed: boolean;
+    /** The full name of the decider's type. Live events only; the recorded timeline does not keep it. */
+    decider: string | null;
+    /** True when the question is about a [TraxSensitive] type, so its answer and confidence are absent. */
+    answerWithheld: boolean;
+    /** Which attempt of its manifest the run is, or null for a run with no manifest. */
+    attempt: number | null;
+    /**
+     * True when Name is (withheld): the step is on a decision track, and its
+     * name would give away an answer this caller is not shown.
+     */
+    nameWithheld: boolean;
+    /**
+     * The position of the latest routing step before this one, or null before any. Every step
+     * after a route, a junction, a question or a further route, counts as on its track.
+     */
+    trackPosition: number | null;
+    /** The id of the declared node this step ran for, as operations.runGraph names it. Null for a step recorded before node ids were, and wherever the step's name is withheld, since the id names the track. */
+    nodeId: string | null;
+    /** The path of the Parallel branch the step ran in, such as Parallel#0/cocitation, or null outside any branch. Withheld wherever the step's name is. */
+    branchPath: string | null;
+  } | null;
+  failure: string | null;
+  problem: {
+    /** The code a client branches on, such as UnknownMachine or NoTransition. */
+    code: RefusalCode;
+    /** A human-readable explanation for logs or display. Its wording is not a contract; branch on Code. */
+    message: string;
+  } | null;
+  /** The id of the run that retries this failed one: follow that run next. The last event of the stream. */
+  retriedAs: string | null;
+};
 
 /** The persisted id of the runProgress query, which the host registered. */
 export const runProgressDocumentId = "trax_progress_query_ef318a7ed13f500e13e6d36485da875d64d464f0cd1bc9a0b07b99189e400aeb8238ea103132136e";

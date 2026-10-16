@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { paymentsListCharges, type ProviderCharge } from "./trax/index.g";
+import { paymentsListCharges, type PaymentsListChargesResult } from "./trax/index.g";
 import type { LastAction } from "./useMachineStage";
+
+type ProviderCharge = PaymentsListChargesResult["charges"][number];
 
 // The binding as Machines.cs declares it, trimmed to the lines that matter here.
 const BINDING = [

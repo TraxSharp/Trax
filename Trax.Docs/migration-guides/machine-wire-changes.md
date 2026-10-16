@@ -86,6 +86,18 @@ client sends that id and gets `CLIENT_OUTDATED` after the train changes, not a v
 - **The first rolling deploy.** A node from before this release does not reserve `trax_train_`, so while old and new
   nodes overlap a client sending a new train id to an old node gets one validation error. It happens once.
 
+## A generated train answers the type of its document
+
+`trax client` no longer writes an interface per GraphQL object type into `types.g.ts`. Each train's function answers
+`<Train>Result`, the fields its document selects, declared in `trains/<train>.g.ts` and exported from `index.g.ts`;
+`types.g.ts` keeps the enums and inputs. The `runProgress` types (`RunProgress`, `RunProgressEvent`) moved to
+`progress.g.ts` under the same names.
+
+- **An import of an answer's type from the client breaks** (`import { type ProviderCharge } from "./trax/index.g"`).
+  Index the result instead: `type ProviderCharge = PaymentsListChargesResult["charges"][number];`.
+- **Regenerate the client** (`trax client`); the client format is unchanged, so the installed
+  `@traxsharp/state-machine` still serves it.
+
 ## The TypeScript client sends only registered documents
 
 `@traxsharp/state-machine` no longer ships the client-authoritative path, and its client sends only the persisted

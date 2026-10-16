@@ -4,10 +4,11 @@ using GraphQLParser.AST;
 namespace Trax.Cli.Clients;
 
 /// <summary>
-/// The GraphQL types a client manifest lists, written as TypeScript: an enum as a union of its values, an input as an
-/// interface whose nullable fields are optional, an object or interface as an interface whose nullable fields may be
-/// null, a union as a union of its members. A scalar is the TypeScript type its value arrives as; one this generator
-/// does not know is <c>unknown</c>, never a guess.
+/// The GraphQL types a client manifest lists. What a client sends is written once, as TypeScript: an enum as a union
+/// of its values, an input as an interface whose nullable fields are optional. What it is answered with is not: an
+/// object, interface or union is typed per document, from what the document selects (<see cref="SelectionTypes"/>),
+/// so this class only looks those up. A scalar is the TypeScript type its value arrives as; one this generator does
+/// not know is <c>unknown</c>, never a guess.
 /// </summary>
 internal sealed class SdlTypes
 {
@@ -46,8 +47,61 @@ internal sealed class SdlTypes
                 _definitions[type.Name.StringValue] = definition;
     }
 
-    /// <summary>The names <see cref="Render"/> exports, in name order.</summary>
-    public IEnumerable<string> Declared => _definitions.Keys.Order(StringComparer.Ordinal);
+    /// <summary>The names <see cref="Render"/> exports, in name order: every enum and input.</summary>
+    public IEnumerable<string> Declared =>
+        _definitions
+            .Where(d => IsDeclared(d.Value))
+            .Select(d => d.Key)
+            .Order(StringComparer.Ordinal);
+
+    private static bool IsDeclared(ASTNode definition) =>
+        definition is GraphQLEnumTypeDefinition or GraphQLInputObjectTypeDefinition;
+
+    /// <summary>The definition of the type <paramref name="name"/>, or null when the manifest holds none.</summary>
+    public ASTNode? Definition(string name) => _definitions.GetValueOrDefault(name);
+
+    /// <summary>
+    /// The object types a value of the union or interface <paramref name="name"/> can be, in name order: a union's
+    /// members, or every object type the manifest holds that implements the interface.
+    /// </summary>
+    public IEnumerable<string> PossibleTypes(string name) =>
+        (
+            Definition(name) switch
+            {
+                GraphQLUnionTypeDefinition union => (union.Types?.Items ?? [])
+                    .Select(t => t.Name.StringValue)
+                    .ToList(),
+                GraphQLInterfaceTypeDefinition => _definitions
+                    .Values.OfType<GraphQLObjectTypeDefinition>()
+                    .Where(o => Implements(o, name))
+                    .Select(o => o.Name.StringValue)
+                    .ToList(),
+                _ => [],
+            }
+        ).Order(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Whether a fragment on <paramref name="condition"/> applies to a value of the object type
+    /// <paramref name="objectType"/>: the same type, an interface it implements, or a union it is a member of.
+    /// </summary>
+    public bool Applies(string condition, string objectType) =>
+        condition == objectType
+        || Definition(condition) switch
+        {
+            GraphQLInterfaceTypeDefinition => Definition(objectType)
+                is GraphQLObjectTypeDefinition o
+                && Implements(o, condition),
+            GraphQLUnionTypeDefinition union => (union.Types?.Items ?? []).Any(t =>
+                t.Name.StringValue == objectType
+            ),
+            _ => false,
+        };
+
+    private static bool Implements(GraphQLObjectTypeDefinition objectType, string @interface) =>
+        (objectType.Interfaces?.Items ?? []).Any(i => i.Name.StringValue == @interface);
+
+    /// <summary>A scalar or enum named <paramref name="name"/>, as a value of it arrives.</summary>
+    public string Leaf(string name) => Scalar(name);
 
     /// <summary>
     /// A type written as SDL writes it (<c>[Order!]!</c>), or null when there is none. Text that is not one type is
@@ -96,26 +150,22 @@ internal sealed class SdlTypes
 
     /// <summary>A value sent as <paramref name="type"/>: null allowed where the type is nullable.</summary>
     public string InputType(GraphQLType type) =>
-        type is GraphQLNonNullType nonNull
-            ? Bare(nonNull.Type, input: true)
-            : $"{Bare(type, input: true)} | null";
-
-    /// <summary>A value answered as <paramref name="type"/>: null where the type is nullable.</summary>
-    public string OutputType(GraphQLType type) =>
-        type is GraphQLNonNullType nonNull
-            ? Bare(nonNull.Type, input: false)
-            : $"{Bare(type, input: false)} | null";
+        type is GraphQLNonNullType nonNull ? Bare(nonNull.Type) : $"{Bare(type)} | null";
 
     /// <summary>
-    /// The file every train imports its types from: each declared type in name order, each name claimed once among
-    /// everything the client exports.
+    /// The file every train imports the types it sends from: each enum and input in name order, each name claimed once
+    /// among everything the client exports.
     /// </summary>
     public string Render()
     {
         var sb = new StringBuilder(
             "// Generated by trax client from the host's client manifest. Do not edit.\n"
         );
-        foreach (var (name, definition) in _definitions.OrderBy(d => d.Key, StringComparer.Ordinal))
+        foreach (
+            var (name, definition) in _definitions
+                .Where(d => IsDeclared(d.Value))
+                .OrderBy(d => d.Key, StringComparer.Ordinal)
+        )
         {
             var identifier = TypeScript.Identifier(name, "GraphQL type");
             sb.Append('\n');
@@ -148,56 +198,20 @@ internal sealed class SdlTypes
                     }
                     sb.Append("}\n");
                     break;
-                case GraphQLObjectTypeDefinition obj:
-                    AppendObject(sb, identifier, obj.Description, obj.Fields);
-                    break;
-                case GraphQLInterfaceTypeDefinition @interface:
-                    AppendObject(sb, identifier, @interface.Description, @interface.Fields);
-                    break;
-                case GraphQLUnionTypeDefinition union:
-                    sb.Append(TypeScript.Doc(union.Description?.Value.ToString()));
-                    sb.Append($"export type {identifier} = ")
-                        .Append(
-                            string.Join(
-                                " | ",
-                                (union.Types?.Items ?? []).Select(t => t.Name.StringValue)
-                            )
-                        )
-                        .Append(";\n");
-                    break;
             }
         }
         return sb.ToString();
     }
 
-    private void AppendObject(
-        StringBuilder sb,
-        string identifier,
-        GraphQLDescription? description,
-        GraphQLFieldsDefinition? fields
-    )
-    {
-        sb.Append(TypeScript.Doc(description?.Value.ToString()));
-        sb.Append($"export interface {identifier} {{\n");
-        sb.Append("  __typename?: string;\n");
-        foreach (var field in fields?.Items ?? [])
-        {
-            sb.Append(TypeScript.Doc(field.Description?.Value.ToString(), "  "));
-            sb.Append($"  {Property(field.Name.StringValue)}: {OutputType(field.Type)};\n");
-        }
-        sb.Append("}\n");
-    }
-
     // A property name: an identifier as it is, anything else quoted.
-    private static string Property(string name) =>
+    internal static string Property(string name) =>
         TypeScript.IsIdentifier(name) ? name : TypeScript.Literal(name);
 
-    private string Bare(GraphQLType type, bool input) =>
+    private string Bare(GraphQLType type) =>
         type switch
         {
-            GraphQLNonNullType nonNull => Bare(nonNull.Type, input),
-            GraphQLListType list =>
-                $"Array<{(input ? InputType(list.Type) : OutputType(list.Type))}>",
+            GraphQLNonNullType nonNull => Bare(nonNull.Type),
+            GraphQLListType list => $"Array<{InputType(list.Type)}>",
             GraphQLNamedType named => Scalar(named.Name.StringValue),
             _ => "unknown",
         };

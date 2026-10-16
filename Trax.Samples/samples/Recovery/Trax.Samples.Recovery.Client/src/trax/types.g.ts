@@ -4,51 +4,14 @@ export interface ChangeCaseDataInput {
   runId: string;
 }
 
-export interface ChangeCaseDataOutput {
-  __typename?: string;
-  runId: string;
-  change: string;
-}
-
-export interface ChangeCaseDataResponse {
-  __typename?: string;
-  externalId: string;
-  metadataId: number | null;
-  workQueueId: number | null;
-  output: ChangeCaseDataOutput | null;
-}
-
 export type CrashPoint = "NONE" | "REFUND_TRACK" | "REFUND_EMAIL" | "CO_CITATION" | "INGEST" | "TABLET_TIMES_OUT" | "RESTAURANT_CLOSED";
 
 export interface DecisionJournalInput {
   runId: string;
 }
 
-export interface DecisionJournalOutput {
-  __typename?: string;
-  runId: string;
-  replayDecisionsOf: number | null;
-  replayAbandoned: boolean;
-  decisions: Array<RecordedDecisionView>;
-}
-
 export interface DiscoverPartitionsInput {
   source?: string | null;
-}
-
-export interface DiscoverPartitionsResponse {
-  __typename?: string;
-  externalId: string;
-  metadataId: number | null;
-  workQueueId: number | null;
-  output: DiscoveredPartitions | null;
-}
-
-export interface DiscoveredPartitions {
-  __typename?: string;
-  partitions: Array<SourcePartition>;
-  instancesStarted: number;
-  instancesSentToIngest: number;
 }
 
 /**
@@ -74,127 +37,8 @@ export type JunctionRunKind = "JUNCTION" | "CHOICE" | "SCORE" | "YES_NO" | "ROUT
  */
 export type JunctionRunState = "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED";
 
-/**
- * One step of a run: a junction that ran, a question a routing step asked, or the track it took.
- * The onJunctionEvent subscription carries one per event, and
- * operations.junctionRuns returns a run's steps as AddJunctionEvents() recorded them.
- */
-export interface JunctionStep {
-  __typename?: string;
-  /** Where the step falls in the run, from 0. A junction's start and end share it. */
-  position: number;
-  /** What the step is. */
-  kind: JunctionRunKind;
-  /** The junction's class name without its namespace, or a question's key. */
-  name: string;
-  /** Where the step stands. */
-  state: JunctionRunState;
-  /** When the junction started, or when the question was answered or the track taken (UTC). */
-  startedAt: string;
-  /** When the junction returned (UTC), or null while it runs. */
-  endedAt: string | null;
-  /** Milliseconds from StartedAt to EndedAt, or null while it runs. */
-  durationMs: number | null;
-  /** How a failed junction's failure is classified; null unless it failed. */
-  failureClass: FailureClass | null;
-  /** The type name of the exception a junction failed or was cancelled with, never its message. */
-  failureException: string | null;
-  /** The question's key, for a question or a track. */
-  questionKey: string | null;
-  /** The answer the run acted on, or null for a junction, a refused answer and a withheld one. */
-  answer: string | null;
-  /** How sure the decider was, for a choice or a score; null when withheld. */
-  confidence: number | null;
-  /** True when the answer came from an earlier run rather than a decider. */
-  replayed: boolean;
-  /** The full name of the decider's type. Live events only; the recorded timeline does not keep it. */
-  decider: string | null;
-  /** True when the question is about a [TraxSensitive] type, so its answer and confidence are absent. */
-  answerWithheld: boolean;
-  /** Which attempt of its manifest the run is, or null for a run with no manifest. */
-  attempt: number | null;
-  /**
-   * True when Name is (withheld): the step is on a decision track, and its
-   * name would give away an answer this caller is not shown.
-   */
-  nameWithheld: boolean;
-  /**
-   * The position of the latest routing step before this one, or null before any. Every step
-   * after a route, a junction, a question or a further route, counts as on its track.
-   */
-  trackPosition: number | null;
-  /** The id of the declared node this step ran for, as operations.runGraph names it. Null for a step recorded before node ids were, and wherever the step's name is withheld, since the id names the track. */
-  nodeId: string | null;
-  /** The path of the Parallel branch the step ran in, such as Parallel#0/cocitation, or null outside any branch. Withheld wherever the step's name is. */
-  branchPath: string | null;
-}
-
-/** What discarding a machine instance answers. */
-export interface MachineDiscardResult {
-  __typename?: string;
-  id: string;
-  discarded: boolean;
-  problem: SnapshotProblem | null;
-}
-
-/** The run a machine instance's current state queued. */
-export interface MachineInvokedRun {
-  __typename?: string;
-  /** The run's external id: follow it with runProgress. */
-  runId: string;
-}
-
 export interface NewItemInput {
   item: string;
-}
-
-/** One event of the push of 'order': the instance's whole snapshot with its revision, in the types its get answers, or the end of the stream. */
-export interface OrderMachineChange {
-  __typename?: string;
-  /** The incarnation of the instance the stream follows. */
-  rowId: number | null;
-  /** The snapshot's revision. Drop an event at or below the revision you hold: each is whole, so a skipped revision loses nothing. */
-  revision: number | null;
-  /** The state the instance is in, or null on an event that carries no snapshot. */
-  state: OrderMachineState | null;
-  /** The instance's context, as get answers it, or null on an event that carries no snapshot. */
-  context: OrderMachineContext | null;
-  /** When the timer of the state the instance is in fires, or null. */
-  dueAt: string | null;
-  /** Whether dueAt can be trusted. A push is the row as it is now, so it always can; the field is here so a push and a get decode with one type. */
-  dueAtKnown: boolean;
-  /** The instance was deleted or expired. The last event of the stream. */
-  gone: boolean;
-  /** Read the instance again: this event does not stand for it. A skipped revision never sets it. */
-  reload: boolean;
-  /** Why the stream was refused or ended, or null. The last event of the stream. */
-  problem: SnapshotProblem | null;
-}
-
-/** The context of an instance of 'order': every field any of its states declares, null where the state the instance is in does not hold it. */
-export interface OrderMachineContext {
-  __typename?: string;
-  items: Array<string | null> | null;
-  total: number | null;
-}
-
-/** An instance of 'order' as the server stored it, or the problem the operation was refused with. */
-export interface OrderMachineResult {
-  __typename?: string;
-  /** The instance's id. */
-  id: string | null;
-  /** The instance's revision, bumped by every write. It travels beside the snapshot, never in it. */
-  revision: number | null;
-  state: OrderMachineState | null;
-  context: OrderMachineContext | null;
-  /** When the timer of the state the instance is in fires, or null when that state has no timer or the server cleared it. Says nothing when dueAtKnown is false. */
-  dueAt: string | null;
-  /** False when the answer replays a request the instance has moved past since: the server cannot know that state's due time, so dueAt is null and means nothing. Treat dueAt as absent then. */
-  dueAtKnown: boolean;
-  /** Why the operation was refused, or null when it was not. */
-  problem: SnapshotProblem | null;
-  /** The run this instance's current state queued, while it sits in that state; null otherwise. Only the instance's owner sees it. */
-  invokedRun: MachineInvokedRun | null;
 }
 
 /** The states of 'order', named as the machine declares them. */
@@ -206,19 +50,6 @@ export interface OrderTroubleInput {
   trouble: OrderTrouble;
 }
 
-export interface OrderTroubleOutput {
-  __typename?: string;
-  trouble: OrderTrouble;
-}
-
-export interface OrderTroubleResponse {
-  __typename?: string;
-  externalId: string;
-  metadataId: number | null;
-  workQueueId: number | null;
-  output: OrderTroubleOutput | null;
-}
-
 export type PartitionAction = "RETRY" | "APPROVE";
 
 export interface PartitionActionInput {
@@ -227,38 +58,9 @@ export interface PartitionActionInput {
   action: PartitionAction;
 }
 
-export interface PartitionActionOutput {
-  __typename?: string;
-  state: string | null;
-  problem: string | null;
-}
-
-export interface PartitionActionResponse {
-  __typename?: string;
-  externalId: string;
-  metadataId: number | null;
-  workQueueId: number | null;
-  output: PartitionActionOutput | null;
-}
-
 export interface RangeChoiceInput {
   fromYear: number;
   toYear: number;
-}
-
-export interface RecordedDecisionView {
-  __typename?: string;
-  questionKey: string;
-  occurrence: number;
-  kind: string;
-  replayed: boolean;
-  replayRefused: string | null;
-  model: string | null;
-  decider: string | null;
-  question: string;
-  answer: string | null;
-  stateHash: string | null;
-  decidedAt: string;
 }
 
 export type RefundCrash = "PAYING" | "EMAILING";
@@ -271,56 +73,10 @@ export type RefundCrash = "PAYING" | "EMAILING";
  */
 export type RefusalCode = "NO_TRANSITION" | "GUARD_FAILED" | "INVALID_CONTEXT" | "INTERNAL_ERROR" | "INVALID_INPUT" | "OUTCOME_BOUND" | "TIMER_BOUND" | "TOO_LARGE" | "DISCARD_NOT_ALLOWED" | "EFFECT_IN_PROGRESS" | "MALFORMED" | "UNKNOWN_MACHINE" | "VERSION_MISMATCH" | "UNKNOWN_STATE" | "FORBIDDEN" | "REQUEST_ID_REUSED" | "EFFECT_BOUND" | "SAVE_NOT_ALLOWED" | "CLIENT_OUTDATED" | "SERVER_OUTDATED" | "TOO_MANY_DRAFTS" | "INVALID_REQUEST_ID" | "UNAUTHENTICATED" | "NO_START" | "SYSTEM_OWNED" | "NOT_FOUND" | "TOO_MANY_SUBSCRIPTIONS" | "SCHEMA_MISMATCH" | "CONFLICT" | "NO_EFFECT" | "DELIVERY_FAILED" | "CLIENT_DIVERGENCE" | "STATE_RESERVED" | "DRAFT_INVOKING" | "DRAFT_UNREADABLE" | "DRAFT_COMMITTED" | "DRAFT_CHANGED" | "INVOKE_LIMIT_REACHED" | "INVOKE_FORBIDDEN" | "INVOKE_CHAIN_USER_OWNED";
 
-/** A run as its starter reads it. */
-export interface RunProgress {
-  __typename?: string;
-  runId: string;
-  /** The train's field, as the schema serves it; null for a train the schema does not expose. */
-  train: string | null;
-  state: RunProgressState | null;
-  /** The steps recorded so far, in order, at most 500. */
-  steps: Array<JunctionStep>;
-  /** Why the run failed, when a junction threw a TrainException. */
-  failure: string | null;
-  problem: SnapshotProblem | null;
-  /** The id of the run that retries this failed one, once it is queued: follow that run next. */
-  retriedAs: string | null;
-}
-
-/** One event of a followed run: a step, a change of state, or the end of the stream. */
-export interface RunProgressEvent {
-  __typename?: string;
-  runId: string;
-  /** This event's number; a skipped number means events were lost, so read the run again. */
-  sequence: number;
-  state: RunProgressState | null;
-  step: JunctionStep | null;
-  failure: string | null;
-  problem: SnapshotProblem | null;
-  /** The id of the run that retries this failed one: follow that run next. The last event of the stream. */
-  retriedAs: string | null;
-}
-
 /** Where a followed run stands. */
 export type RunProgressState = "QUEUED" | "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED";
 
 export type Scenario = "REFUND" | "TOPIC_MAP";
-
-/** A typed problem returned as DATA from a mutation (never a thrown error across the API boundary). */
-export interface SnapshotProblem {
-  __typename?: string;
-  /** The code a client branches on, such as UnknownMachine or NoTransition. */
-  code: RefusalCode;
-  /** A human-readable explanation for logs or display. Its wording is not a contract; branch on Code. */
-  message: string;
-}
-
-export interface SourcePartition {
-  __typename?: string;
-  source: string;
-  month: string;
-  records: number;
-}
 
 export interface StartRunInput {
   scenario: Scenario;
@@ -330,94 +86,6 @@ export interface StartRunInput {
   toYear?: number | null;
   crashOnce: boolean;
   crashWhile?: RefundCrash | null;
-}
-
-export interface StartRunOutput {
-  __typename?: string;
-  runId: string;
-  manifestId: number;
-  manifestExternalId: string;
-  trainName: string;
-  armedCrash: CrashPoint;
-  maxRetries: number;
-  firstRunId: string;
-}
-
-export interface StartRunResponse {
-  __typename?: string;
-  externalId: string;
-  metadataId: number | null;
-  workQueueId: number | null;
-  output: StartRunOutput | null;
-}
-
-export interface TabletCall {
-  __typename?: string;
-  orderId: string;
-  attempt: number;
-  startedAt: string;
-  endedAt: string;
-  problem: string | null;
-}
-
-export interface TabletCallsOutput {
-  __typename?: string;
-  restaurant: string;
-  calls: Array<TabletCall>;
-}
-
-/** One event of the push of 'topic-map': the instance's whole snapshot with its revision, in the types its get answers, or the end of the stream. */
-export interface TopicMapMachineChange {
-  __typename?: string;
-  /** The incarnation of the instance the stream follows. */
-  rowId: number | null;
-  /** The snapshot's revision. Drop an event at or below the revision you hold: each is whole, so a skipped revision loses nothing. */
-  revision: number | null;
-  /** The state the instance is in, or null on an event that carries no snapshot. */
-  state: TopicMapMachineState | null;
-  /** The instance's context, as get answers it, or null on an event that carries no snapshot. */
-  context: TopicMapMachineContext | null;
-  /** When the timer of the state the instance is in fires, or null. */
-  dueAt: string | null;
-  /** Whether dueAt can be trusted. A push is the row as it is now, so it always can; the field is here so a push and a get decode with one type. */
-  dueAtKnown: boolean;
-  /** The instance was deleted or expired. The last event of the stream. */
-  gone: boolean;
-  /** Read the instance again: this event does not stand for it. A skipped revision never sets it. */
-  reload: boolean;
-  /** Why the stream was refused or ended, or null. The last event of the stream. */
-  problem: SnapshotProblem | null;
-}
-
-/** The context of an instance of 'topic-map': every field any of its states declares, null where the state the instance is in does not hold it. */
-export interface TopicMapMachineContext {
-  __typename?: string;
-  fields: Array<string | null> | null;
-  fromYear: number | null;
-  toYear: number | null;
-  mapId: string | null;
-  papers: number | null;
-  topicPairs: number | null;
-  coCitationTrack: string | null;
-}
-
-/** An instance of 'topic-map' as the server stored it, or the problem the operation was refused with. */
-export interface TopicMapMachineResult {
-  __typename?: string;
-  /** The instance's id. */
-  id: string | null;
-  /** The instance's revision, bumped by every write. It travels beside the snapshot, never in it. */
-  revision: number | null;
-  state: TopicMapMachineState | null;
-  context: TopicMapMachineContext | null;
-  /** When the timer of the state the instance is in fires, or null when that state has no timer or the server cleared it. Says nothing when dueAtKnown is false. */
-  dueAt: string | null;
-  /** False when the answer replays a request the instance has moved past since: the server cannot know that state's due time, so dueAt is null and means nothing. Treat dueAt as absent then. */
-  dueAtKnown: boolean;
-  /** Why the operation was refused, or null when it was not. */
-  problem: SnapshotProblem | null;
-  /** The run this instance's current state queued, while it sits in that state; null otherwise. Only the instance's owner sees it. */
-  invokedRun: MachineInvokedRun | null;
 }
 
 /** The states of 'topic-map', named as the machine declares them. */

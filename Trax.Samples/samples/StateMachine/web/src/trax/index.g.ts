@@ -4,5 +4,5 @@ export { configureTrax, TraxOperationError, type TraxConnection } from "./client
 export { checkout, checkoutServer, useCheckout, useRememberedCheckout } from "./checkout/checkout.client.g";
 export { turnstile, turnstileServer, useTurnstile, useRememberedTurnstile } from "./turnstile/turnstile.client.g";
 export type * from "./types.g";
-export { paymentsListCharges } from "./trains/paymentsListCharges.g";
-export { stateMachineListMachines } from "./trains/stateMachineListMachines.g";
+export { paymentsListCharges, type PaymentsListChargesResult } from "./trains/paymentsListCharges.g";
+export { stateMachineListMachines, type StateMachineListMachinesResult } from "./trains/stateMachineListMachines.g";
