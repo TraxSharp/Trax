@@ -76,7 +76,10 @@ public class MachineErrorMappingE2ETests
             .And.NotContain("snapshot_draft", "no table name")
             .And.NotContainEquivalentOf("relation")
             .And.NotContainEquivalentOf("localhost", "no host")
-            .And.NotContain(TestPostgres.Port.ToString(), "no port")
+            .And.NotMatchRegex(
+                $@"(?<![0-9A-Za-z-]){TestPostgres.Port}(?![0-9A-Za-z-])",
+                "no port; the error reference and ids are random hex and may contain the digits"
+            )
             .And.NotContainEquivalentOf("select ", "no SQL")
             .And.NotContainEquivalentOf("update ", "no SQL");
     }
