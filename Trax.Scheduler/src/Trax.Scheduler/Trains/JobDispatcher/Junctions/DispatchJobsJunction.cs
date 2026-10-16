@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata.DTOs;

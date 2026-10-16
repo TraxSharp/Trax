@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;

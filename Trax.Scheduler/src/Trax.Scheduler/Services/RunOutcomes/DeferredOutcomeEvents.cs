@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.RunOutcomes;
 
 namespace Trax.Scheduler.Services.RunOutcomes;
 

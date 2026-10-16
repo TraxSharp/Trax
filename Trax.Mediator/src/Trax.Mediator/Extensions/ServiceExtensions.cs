@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Services.EnqueueContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.WorkQueuePromotion;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
@@ -314,7 +315,11 @@ public static class ServiceExtensions
             .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
             .AddSingleton<Services.RunStarters.IRunStarters, Services.RunStarters.RunStarters>()
             .AddScoped<ITrainBus, TrainBus>()
-            .AddScoped<IRunExecutor, LocalRunExecutor>()
+            .AddScoped<IRunExecutor>(sp => new LocalRunExecutor(
+                sp.GetRequiredService<ITrainBus>(),
+                sp.GetRequiredService<IDataContextProviderFactory>(),
+                sp
+            ))
             // Singletons, because a singleton the host registers may inject either one and
             // ValidateScopes is on by default in Development, so scoped would fail such a host at
             // startup. (Trains themselves are never singletons: the mediator refuses that

@@ -1,9 +1,13 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Extensions;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -16,9 +20,36 @@ namespace Trax.Mediator.Services.RunExecutor;
 /// <summary>
 /// Default <see cref="IRunExecutor"/> that executes trains in-process via <see cref="ITrainBus"/>.
 /// </summary>
-public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory dataContextFactory)
-    : IRunExecutor
+public class LocalRunExecutor : IRunExecutor
 {
+    private readonly ITrainBus trainBus;
+    private readonly IDataContextProviderFactory dataContextFactory;
+
+    /// <summary>
+    /// Where the lifecycle hooks of a run this executor closes are built from. <c>null</c> when the
+    /// executor was constructed by hand rather than by <c>AddMediator</c>; such a run's outcome is
+    /// then recorded on its row but not published.
+    /// </summary>
+    private readonly IServiceProvider? services;
+
+    /// <summary>
+    /// Creates an executor that runs trains through <paramref name="trainBus"/> and records their
+    /// runs through <paramref name="dataContextFactory"/>.
+    /// </summary>
+    public LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory dataContextFactory)
+        : this(trainBus, dataContextFactory, services: null) { }
+
+    internal LocalRunExecutor(
+        ITrainBus trainBus,
+        IDataContextProviderFactory dataContextFactory,
+        IServiceProvider? services
+    )
+    {
+        this.trainBus = trainBus;
+        this.dataContextFactory = dataContextFactory;
+        this.services = services;
+    }
+
     /// <summary>
     /// <see cref="RunBoxedAsync{TOut}"/> closed over each output type. The output is read through
     /// this generic method rather than as <c>((dynamic)task).Result</c>: the runtime binder binds
@@ -187,7 +218,9 @@ public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory da
     /// <summary>
     /// Closes a record this executor wrote when the run failed before the train took it over, so
     /// it is not left <c>Pending</c> with nothing to move it on. A record the train already took
-    /// over is left alone: the train records its own outcome.
+    /// over is left alone: the train records its own outcome. When this closes it, the run's
+    /// <c>Failed</c> or <c>Cancelled</c> event goes to the lifecycle hooks, as a train's own outcome
+    /// would, so a subscriber following the run is not left waiting.
     /// </summary>
     /// <remarks>
     /// Best effort: the caller is about to rethrow <paramref name="failure"/>, and a store that
@@ -195,6 +228,7 @@ public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory da
     /// </remarks>
     private async Task CloseIfStillPendingAsync(long metadataId, Exception failure)
     {
+        TrainState closed;
         try
         {
             using var dataContext = await dataContextFactory.CreateDbContextAsync(
@@ -219,10 +253,25 @@ public class LocalRunExecutor(ITrainBus trainBus, IDataContextProviderFactory da
 
             metadata.EndTime = DateTime.UtcNow;
             await dataContext.SaveChanges(CancellationToken.None);
+            closed = metadata.TrainState;
         }
         catch (Exception)
         {
             // Left Pending; the original failure is what the caller needs to see.
+            return;
         }
+
+        if (services is null)
+            return;
+
+        // After the write has committed, and only for the run this executor moved. The helper
+        // reads the row back, so the hooks see what was recorded, and it never throws.
+        var logger =
+            services.GetService<ILogger<LocalRunExecutor>>()
+            ?? NullLogger<LocalRunExecutor>.Instance;
+        if (closed == TrainState.Cancelled)
+            await OutOfTrainOutcomes.PublishCancelledAsync(services, [metadataId], logger);
+        else
+            await OutOfTrainOutcomes.PublishFailedAsync(services, [metadataId], logger);
     }
 }

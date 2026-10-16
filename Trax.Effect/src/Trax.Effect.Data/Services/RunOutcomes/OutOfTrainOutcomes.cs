@@ -7,12 +7,13 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.LifecycleHookRunner;
 
-namespace Trax.Scheduler.Services.RunOutcomes;
+namespace Trax.Effect.Data.Services.RunOutcomes;
 
 /// <summary>
-/// Publishes the terminal lifecycle event of a run that the scheduler recorded <c>Failed</c> or
-/// <c>Cancelled</c> itself, with no train running to publish it: a run reaped as stale, failed at
-/// dispatch or at submit, failed on startup recovery, or cancelled before it started. The event
+/// Publishes the terminal lifecycle event of a run recorded <c>Failed</c> or <c>Cancelled</c> with
+/// no train running to publish it: by the scheduler (a run reaped as stale, failed at dispatch or
+/// at submit, failed on startup recovery, or cancelled before it started), or by the mediator's
+/// local executor (a run whose train could not be built or was cancelled before it started). The event
 /// goes through the same lifecycle hooks a train's own outcome goes through (<c>OnFailed</c> or
 /// <c>OnCancelled</c>, then <c>OnStateChanged</c>), so a subscriber following the run is told it
 /// ended rather than waiting forever.

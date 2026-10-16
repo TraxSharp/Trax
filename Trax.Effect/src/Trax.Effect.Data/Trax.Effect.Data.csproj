@@ -32,6 +32,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
   </ItemGroup>
+  <!-- A run closed outside a train publishes its outcome through the same helper wherever it was closed. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Mediator" />
+    <InternalsVisibleTo Include="Trax.Scheduler" />
+    <InternalsVisibleTo Include="Trax.Runner.Lambda" />
+  </ItemGroup>
   <!-- The change feed's startup check is tested against a notice source that reports a given switch. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
