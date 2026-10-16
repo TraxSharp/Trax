@@ -13,6 +13,8 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Services.TrainLifecycleHook;
+using Trax.Effect.Services.TrainLifecycleHookFactory;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainBus;
@@ -385,6 +387,137 @@ public class RunExecutorTests
         record
             .FailureReason.Should()
             .Contain(FailingRunTrain.Reason, "the train's own failure is what the record keeps");
+    }
+
+    [Test]
+    public async Task LocalRunExecutor_WithAReplacedBusThatCannotBuildTheTrain_PublishesFailedToTheHooks()
+    {
+        var bus = Substitute.For<ITrainBus>();
+        bus.RunByNameAsync<RunExecOutput>(
+                Arg.Any<string>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Metadata?>()
+            )
+            .Returns<Task<RunExecOutput>>(_ =>
+                throw new InvalidOperationException("Unable to resolve service for type 'IClock'")
+            );
+        var trainName = typeof(IRunExecTrain).FullName!;
+        var hook = new LifecycleEventRecorder();
+
+        await using var provider = (ServiceProvider)BuildWithBusAndHook(bus, hook);
+        using var scope = provider.CreateScope();
+        var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
+
+        var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        hook.FailedCount.Should()
+            .Be(
+                1,
+                "a lifecycle subscriber following the run must be told it failed rather than wait for ever"
+            );
+        hook.CancelledCount.Should().Be(0);
+    }
+
+    [Test]
+    public async Task LocalRunExecutor_WithAReplacedBusCancelledBeforeTheTrainStarts_PublishesCancelledToTheHooks()
+    {
+        var bus = Substitute.For<ITrainBus>();
+        bus.RunByNameAsync<RunExecOutput>(
+                Arg.Any<string>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Metadata?>()
+            )
+            .Returns<Task<RunExecOutput>>(_ => throw new OperationCanceledException());
+        var trainName = typeof(IRunExecTrain).FullName!;
+        var hook = new LifecycleEventRecorder();
+
+        await using var provider = (ServiceProvider)BuildWithBusAndHook(bus, hook);
+        using var scope = provider.CreateScope();
+        var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
+
+        var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        hook.CancelledCount.Should()
+            .Be(
+                1,
+                "a lifecycle subscriber following the run must be told it was cancelled rather than wait for ever"
+            );
+        hook.FailedCount.Should().Be(0);
+    }
+
+    /// <summary>Builds the same container as <c>BuildWithBus</c>, with one shared recording hook.</summary>
+    private static IServiceProvider BuildWithBusAndHook(ITrainBus bus, ITrainLifecycleHook hook)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                    effects
+                        .UseInMemory()
+                        .AddLifecycleHook<SharedHookFactory>(new SharedHookFactory(hook))
+                )
+                .AddMediator(assemblies: [typeof(RunExecutorTests).Assembly])
+        );
+        services.AddScoped(_ => bus);
+
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// Counts the terminal lifecycle events one run's hook received. Not <see cref="IDisposable"/>:
+    /// a factory that hands every run one shared instance must not return something disposable.
+    /// </summary>
+    private sealed class LifecycleEventRecorder : ITrainLifecycleHook
+    {
+        private readonly object _gate = new();
+        private int _failed;
+        private int _cancelled;
+
+        public int FailedCount
+        {
+            get
+            {
+                lock (_gate)
+                    return _failed;
+            }
+        }
+
+        public int CancelledCount
+        {
+            get
+            {
+                lock (_gate)
+                    return _cancelled;
+            }
+        }
+
+        public Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
+        {
+            lock (_gate)
+                _failed++;
+            return Task.CompletedTask;
+        }
+
+        public Task OnCancelled(Metadata metadata, CancellationToken ct)
+        {
+            lock (_gate)
+                _cancelled++;
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Hands every run the same shared hook instance, so a test can read what it recorded.</summary>
+    private sealed class SharedHookFactory(ITrainLifecycleHook hook) : ITrainLifecycleHookFactory
+    {
+        public ITrainLifecycleHook Create() => hook;
+
+        public ITrainLifecycleHook Create(IServiceProvider serviceProvider) => hook;
     }
 
     /// <summary>A bus written before by-name runs existed: it keeps the interface's default body.</summary>
