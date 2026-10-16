@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DeadLetterRequeue;
@@ -72,6 +73,10 @@ public partial class SchedulerConfigurationBuilder
         _parentBuilder.ServiceCollection.AddSingleton<ISchedulerLivenessMonitor>(sp =>
             sp.GetRequiredService<SchedulerLivenessMonitor>()
         );
+
+        // What a junction of an invoked train injects to learn its instance and owner, set by the
+        // job runner around the run.
+        InvokedRunScope.Register(_parentBuilder.ServiceCollection);
 
         // Register the cancellation registry (singleton — shared across all workers)
         _parentBuilder.ServiceCollection.Replace(

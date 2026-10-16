@@ -45,6 +45,13 @@ missing its gate.
 A junction that runs from the API and from the scheduler cannot take `TraxPrincipal` in its
 constructor: the scheduler path has no `HttpContext`. Use one of these instead.
 
+**A train a machine invokes: inject InvokedRun.** Its input is built from the machine's context,
+which the caller does not write, so it cannot carry the initiator. Its junctions inject
+[InvokedRun](/docs/sdk-reference/statemachine-api/invoked-run) instead, whose `UserKey` is the
+owner of the instance that queued the run, resolved by Trax from the instance's row. Do not put a
+token in the context for the train to check: a run's input is kept with the run, and anyone who
+reads it could use the token.
+
 **Carry the initiator in the input.** The API side fills it from the principal; the scheduler
 replays what was persisted with the work item:
 

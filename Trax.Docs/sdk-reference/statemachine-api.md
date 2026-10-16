@@ -30,6 +30,7 @@ Reference for authoring and hosting portable snapshot state machines. The concep
 - [ISnapshotEffect](/docs/sdk-reference/statemachine-api/i-snapshot-effect): the side effect a transition runs once, and its receipt.
 - [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports): `ISnapshotPrincipal`, `ISnapshotStore`, `ISnapshotDraftService` and the stores.
 - [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances): system-owned instances, created and advanced from code.
+- [InvokedRun](/docs/sdk-reference/statemachine-api/invoked-run): the instance and owner a train a machine invokes acts for.
 - [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity): the schema-hash handshake, divergence detection and the self-check.
 - [AddTraxStateMachineSelfCheck](/docs/sdk-reference/statemachine-api/add-trax-state-machine-self-check): the self-check as an ASP.NET Core health check.
 

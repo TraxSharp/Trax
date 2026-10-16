@@ -71,7 +71,6 @@ builder.Services.AddSingleton<CaseFiles>();
 // The food order's restaurant, simulated, and how long a cart waits for its order (30 minutes unless
 // Recovery:CartWait shortens it, as the recording does). Set before AddStateMachines builds the machine.
 builder.Services.AddSingleton<Restaurant>();
-builder.Services.AddSingleton<OrderOwners>();
 if (builder.Configuration.GetValue<TimeSpan?>("Recovery:CartWait") is { } cartWait)
     OrderMachine.CartWait = cartWait;
 

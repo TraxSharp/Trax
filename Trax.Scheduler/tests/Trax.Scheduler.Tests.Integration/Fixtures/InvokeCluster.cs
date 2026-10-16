@@ -366,6 +366,17 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held) : IAsyn
             .SingleOrDefaultAsync(x => x.Id == id && x.Machine == machine);
     }
 
+    /// <summary>Every owner's row of instance <paramref name="id"/> of <paramref name="machine"/>.</summary>
+    public async Task<List<SnapshotDraft>> Rows(Guid id, string machine)
+    {
+        using var scope = services.CreateScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .SnapshotDrafts.AsNoTracking()
+            .Where(x => x.Id == id && x.Machine == machine)
+            .ToListAsync();
+    }
+
     public async Task<WorkQueue?> Entry(string token)
     {
         using var scope = services.CreateScope();

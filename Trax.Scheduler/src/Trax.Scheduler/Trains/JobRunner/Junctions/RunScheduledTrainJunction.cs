@@ -5,6 +5,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Exceptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
@@ -50,6 +51,13 @@ internal class RunScheduledTrainJunction(
         // Uses AsyncLocal to flow across the DI scope boundary created by TrainBus.RunByNameAsync.
         if (metadata.ManifestId.HasValue)
             dormantDependentContext.Initialize(metadata.ManifestId.Value);
+
+        // The machine instance and owner a run a machine invoked acts for, which its junctions
+        // inject as InvokedRun. Set on this flow, since the bus runs the train in a scope of its
+        // own; a run no machine invoked clears it, so it cannot see another run's.
+        using var invokedRun = InvokedRunScope.Use(
+            await InvokedRunScope.Resolve(dataContext, metadata, CancellationToken)
+        );
 
         try
         {

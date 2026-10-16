@@ -177,6 +177,11 @@ are authorized.
   inside Trax's trusted execution scope, as a scheduled manifest run is, so the train may not declare
   `[TraxAuthorize]`. Only a system-owned machine chains runs through outcomes.
 
+The run itself has no caller: it executes on the scheduler, where `TraxPrincipal` cannot be injected. A junction that
+acts on the user's data injects [InvokedRun](/docs/sdk-reference/statemachine-api/invoked-run), whose `UserKey` is the
+owner of the instance that queued the run (null for a system-owned one), and checks the data against it. Resolving it
+outside a run a machine invoked throws.
+
 One user holds at most 10 live invoked runs across every machine; a machine sets its own limit with
 `InvokedRunLimit(n)`. Past it, entering the state is refused as `INVOKE_LIMIT_REACHED`. A run counts until it ends,
 even when its instance was discarded or swept in the meantime: each run records the user as its starter. System owners

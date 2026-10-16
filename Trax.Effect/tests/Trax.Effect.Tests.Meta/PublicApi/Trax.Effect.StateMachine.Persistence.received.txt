@@ -244,6 +244,14 @@ namespace Trax.Effect.StateMachine.Persistence
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, string? contentFingerprint, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
     }
+    public sealed class InvokedRun : System.IEquatable<Trax.Effect.StateMachine.Persistence.InvokedRun>
+    {
+        public InvokedRun(string Machine, System.Guid InstanceId, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, string? UserKey) { }
+        public System.Guid InstanceId { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public string? UserKey { get; init; }
+    }
     public abstract class LoadResult : System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult>
     {
         public sealed class Invalid : Trax.Effect.StateMachine.Persistence.LoadResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult.Invalid>

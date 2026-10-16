@@ -156,6 +156,9 @@ public static class StateMachinesBuilderExtensions
 
         services.AddSingleton(options);
 
+        // Resolves only inside a run a machine invoked, which the job runner starts.
+        InvokedRunScope.Register(services);
+
         var machineTypes = assemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type =>

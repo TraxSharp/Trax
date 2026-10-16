@@ -200,7 +200,7 @@ junction is not cancelled with its parent.
 | The dashboard's Cancel on an instance, [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance) | one service method, the same outcome and message. Cancels a system-owned instance's live run, and the instance then moves through `OnCancelled`. Refused for a user's draft, an instance whose state waits on no run, and one whose run has already ended. |
 | `cancelExecution`, `cancelWorkQueueEntry`, the dashboard's Cancel on a run's or an entry's page | refused, with one message on both surfaces, for a run or a queued entry a step of a user's draft started; their bulk forms skip such rows and say how many. A system-owned instance's run can be cancelled, and the instance moves through `OnCancelled`. |
 
-A run records the machine, the instance id and the owner kind that queued it, not the user. No Trax-provided
+A run records the machine, the instance id and the owner kind that queued it, not the user; a junction of the run learns the user through [InvokedRun](/docs/sdk-reference/statemachine-api/invoked-run), which reads the instance's owner. No Trax-provided
 operation creates or advances a system instance; a host can advance one from its own code through
 [`IMachineInstances.Advance`](/docs/sdk-reference/statemachine-api/machine-instances) under its own authorization, as
 the Recovery sample's `partitionAction` does. The dashboard pages are described in [Dashboard](/docs/dashboard).

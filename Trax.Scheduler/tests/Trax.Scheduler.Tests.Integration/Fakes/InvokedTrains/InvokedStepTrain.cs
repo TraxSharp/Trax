@@ -1,6 +1,8 @@
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 
@@ -9,7 +11,8 @@ namespace Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 /// with an output that routes to a state invoking a run of its own; <c>unaccepted</c> succeeds with an output no
 /// <c>OnDone</c> guard accepts; <c>fail</c> fails; <c>big</c> succeeds with an output past 64 KiB; <c>grow</c>
 /// succeeds with an output under the cap that grows the snapshot past it; <c>gate</c> waits at
-/// <see cref="InvokedStepGate"/> between its two junctions.
+/// <see cref="InvokedStepGate"/> between its two junctions; <c>owner</c> succeeds with the
+/// <see cref="InvokedRun"/>'s user key as its artifact.
 /// </summary>
 public static class InvokedStepModes
 {
@@ -20,6 +23,7 @@ public static class InvokedStepModes
     public const string Big = "big";
     public const string Grow = "grow";
     public const string Gate = "gate";
+    public const string Owner = "owner";
 
     /// <summary>Short-circuits, in <see cref="IInvokedShortCircuitTrain"/>.</summary>
     public const string Short = "short";
@@ -92,11 +96,19 @@ public sealed class InvokedStepEnter : EffectJunction<InvokedStepInput, InvokedS
     }
 }
 
-public sealed class InvokedStepFinish : EffectJunction<InvokedStepGated, InvokedStepOutput>
+public sealed class InvokedStepFinish(IServiceProvider services)
+    : EffectJunction<InvokedStepGated, InvokedStepOutput>
 {
     public override Task<InvokedStepOutput> Run(InvokedStepGated input) =>
         input.Mode switch
         {
+            InvokedStepModes.Owner => Task.FromResult(
+                new InvokedStepOutput
+                {
+                    Artifact = "owner:" + services.GetRequiredService<InvokedRun>().UserKey,
+                    Accepted = true,
+                }
+            ),
             InvokedStepModes.Fail => throw new InvalidOperationException("the invoked step failed"),
             InvokedStepModes.Chain => Task.FromResult(
                 new InvokedStepOutput { Artifact = "chain:" + input.Note, Chain = true }

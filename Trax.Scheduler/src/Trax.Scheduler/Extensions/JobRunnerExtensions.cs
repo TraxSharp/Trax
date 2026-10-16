@@ -9,6 +9,7 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DecisionRecording;
@@ -110,6 +111,9 @@ public static class JobRunnerExtensions
 
         // JobRunnerTrain (uses AddScopedTraxRoute for property injection)
         services.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
+
+        // What a junction of an invoked train injects to learn its instance and owner.
+        InvokedRunScope.Register(services);
 
         // A runner runs trains, so it refuses to start when the ones that ask a decider cannot
         // replay a requeue's recorded decisions. Added once, whether AddScheduler added it too or not.
