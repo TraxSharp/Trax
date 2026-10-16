@@ -67,6 +67,6 @@ Not covered: the overlap of the first rolling deploy, which no single-version te
 
 ## Changelog
 
-- **2026-10-14**: Recorded.
 - **2026-10-16**: A field leading back to a type already on the path is left out instead of refusing the train, and
   every generated document is validated against the host's rules before it is registered.
+- **2026-10-14**: Recorded.
