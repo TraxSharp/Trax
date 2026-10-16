@@ -1,18 +1,146 @@
 {
-  "today": [
-    { "label": "Trains: typed pipelines of small steps", "href": "/docs/core/trains-and-junctions" },
-    { "label": "Scheduling, retries and remote workers", "href": "/docs/scheduler" },
-    { "label": "GraphQL API with persisted operations", "href": "/docs/persisted-operations" },
-    { "label": "Subscriptions over WebSockets", "href": "/docs/sdk-reference/graphql-api/subscriptions" },
-    { "label": "State machines served as typed GraphQL APIs", "href": "/docs/sdk-reference/graphql-api/machines" },
-    { "label": "Parallel branches, checkpoints and resume", "href": "/docs/sdk-reference/train-methods/parallel" },
-    { "label": "A CLI that reads OpenAPI or GraphQL", "href": "/docs/reference/cli" },
-    { "label": "An operations dashboard", "href": "/docs/dashboard" }
-  ],
   "milestones": [
+    {
+      "key": "trains",
+      "status": "done",
+      "shipped": "February 2026 · 1.0",
+      "title": "Trains, and the first packages on NuGet",
+      "points": [
+        "Trains: typed chains of small steps",
+        "Every run recorded, in Postgres or in memory",
+        "A mediator that runs a train from its input type",
+        "A scheduler, an operations dashboard and project templates",
+        "Analyzers and a Rider plugin that check a chain as you write it"
+      ]
+    },
+    {
+      "key": "cli",
+      "status": "done",
+      "shipped": "March 2026 · 1.24",
+      "title": "The CLI",
+      "points": [
+        "A new project from a template",
+        "Trains generated from an OpenAPI or GraphQL schema"
+      ]
+    },
+    {
+      "key": "graphql",
+      "status": "done",
+      "shipped": "March 2026 · 1.27",
+      "title": "A GraphQL API for trains",
+      "points": [
+        "A typed mutation for each train, to run it or queue it",
+        "Lifecycle events as subscriptions",
+        "Entity queries with filtering, sorting and paging",
+        "Authorization on each train",
+        "One AddTrax builder, checked at startup"
+      ]
+    },
+    {
+      "key": "remote-workers",
+      "status": "done",
+      "shipped": "March 2026 · 1.28",
+      "title": "Workers anywhere",
+      "points": [
+        "Runs handed to remote HTTP workers",
+        "Jobs submitted through SQS and run on AWS Lambda",
+        "Dispatch retried with backoff, and requeued when it fails",
+        "Runs left behind by a dead worker are reaped"
+      ]
+    },
+    {
+      "key": "scheduling",
+      "status": "done",
+      "shipped": "March 2026 · 1.30",
+      "title": "Scheduling",
+      "points": [
+        "Six-field cron, misfire policies and jitter",
+        "Delayed one-off jobs and calendar exclusion windows",
+        "Cancellation and run timeouts",
+        "Per-train and global concurrency limits",
+        "Dead letters, requeue and retry backoff"
+      ]
+    },
+    {
+      "key": "auth",
+      "status": "done",
+      "shipped": "April 2026 · 1.32",
+      "title": "SQLite and authentication",
+      "points": [
+        "A SQLite data provider",
+        "API keys, JWT and OIDC",
+        "An audit trail of API calls",
+        "The caller passed to the steps of a train"
+      ]
+    },
+    {
+      "key": "persisted-operations",
+      "status": "done",
+      "shipped": "May 2026 · 1.38",
+      "title": "Persisted operations",
+      "points": [
+        "Asynchronous chains end to end",
+        "Persisted GraphQL operations, managed from the dashboard",
+        "One operations service behind the dashboard and GraphQL",
+        "Cognito, and several JWT schemes at once",
+        "Live updates over SignalR",
+        "A typed .NET GraphQL client"
+      ]
+    },
+    {
+      "key": "guards",
+      "status": "done",
+      "shipped": "June 2026 · 1.41",
+      "title": "Guards",
+      "points": [
+        "Test packages that fail the build when the architecture drifts",
+        "Every GraphQL surface must say who may call it",
+        "A hook that runs when a train is queued"
+      ]
+    },
+    {
+      "key": "state-machines",
+      "status": "done",
+      "shipped": "July to September 2026 · 1.52",
+      "title": "State machines",
+      "points": [
+        "Machines written in C#, with a TypeScript twin",
+        "Declarative rules exported as one portable description",
+        "The twin generated from it by the CLI",
+        "Both runtimes checked against each other on a shared corpus",
+        "A runtime self check at startup"
+      ]
+    },
+    {
+      "key": "hardening",
+      "status": "done",
+      "shipped": "September 2026 · 1.57",
+      "title": "Hardening",
+      "points": [
+        "Owner-scoped queries, checked at startup",
+        "Sensitive values masked in stored inputs and outputs",
+        "Signed requests between the scheduler and its runners",
+        "Retention set per train",
+        "Architecture decision records, and the docs served as llms.txt"
+      ]
+    },
+    {
+      "key": "recovery",
+      "status": "done",
+      "shipped": "October 2026 · 1.60",
+      "title": "Recorded decisions, and one repository",
+      "points": [
+        "The decisions a run makes are recorded",
+        "Requeues and retries replay them",
+        "A step-by-step timeline on every run",
+        "Every dashboard action also in GraphQL",
+        "One repository, one version for every package"
+      ]
+    },
     {
       "key": "composition",
       "status": "done",
+      "shipped": "October 2026 · 1.62",
       "title": "Composition",
       "points": [
         "Parallel branches in one run",
@@ -28,6 +156,7 @@
     {
       "key": "machines-api",
       "status": "done",
+      "shipped": "October 2026 · 1.63",
       "title": "Machines become the API",
       "points": [
         "A typed mutation for each machine event",
@@ -42,7 +171,8 @@
     },
     {
       "key": "clients",
-      "status": "next",
+      "status": "done",
+      "shipped": "October 2026 · 1.64",
       "title": "Generated clients",
       "points": [
         "A React client generated by the CLI",
@@ -52,8 +182,23 @@
         "Operation hashes on the wire, never query text"
       ],
       "code": {
-        "caption": "Sketch, not final",
-        "text": "$ trax client --target react --out ./web/src/trax\n\nconst checkout = useCheckout(id);\nif (checkout.state === \"Address\")\n  return <AddressForm onSubmit={checkout.submit} />;"
+        "caption": "Shipped",
+        "text": "$ trax client --target react --manifest web/src/trax/manifest.json --out web/src/trax\n\nconfigureTrax({ url, socketUrl, user });\nconst checkout = useRememberedCheckout();\ncheckout.send(\"Submit\", { address });"
+      }
+    },
+    {
+      "key": "child-machines",
+      "status": "done",
+      "shipped": "October 2026 · 1.65",
+      "title": "Child machines",
+      "points": [
+        "A state starts a child machine and waits for it to end",
+        "The child's outcome moves the parent on",
+        "Leaving the state removes the child"
+      ],
+      "code": {
+        "caption": "Shipped",
+        "text": "m.In(OrderState.Packing)\n    .Spawns<ParcelMachine, OrderContext, ParcelResult>(c => c.ParcelId)\n    .OnDone(OrderState.Sent)\n    .OnFailed(OrderState.Lost)\n    .OnCancelled(OrderState.Recalled);"
       }
     },
     {
