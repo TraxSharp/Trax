@@ -1,6 +1,6 @@
 ---
 title: Organize trains in a project
-description: "Lay out a project's trains one folder each: the input type, the train's interface and class, its junctions, and where shared junctions go."
+description: "Lay out a project's trains one folder each: the input and output, the interface and class, the junctions, the models, and where shared junctions go."
 type: how-to
 area: trains
 nav_order: 2
@@ -8,7 +8,9 @@ nav_order: 2
 
 # Organize trains in a project
 
-Give each train a folder holding its input, its interface, its class and its junctions:
+Give each train a folder. Its top level holds the train's contract and nothing else: the input,
+the output, the interface and the class. The junctions go in `Junctions/`, and every other type
+the train uses goes in `Models/`:
 
 ```text
 Trains/
@@ -20,12 +22,16 @@ Trains/
 │       ├── ValidateEmailJunction.cs
 │       └── CreateUserInDatabaseJunction.cs
 └── ProcessOrder/
-    ├── ProcessOrderRequest.cs
+    ├── ProcessOrderRequest.cs      # input
+    ├── ProcessOrderResult.cs       # output
     ├── IProcessOrderTrain.cs
     ├── ProcessOrderTrain.cs
-    └── Junctions/
-        ├── ValidateOrderJunction.cs
-        └── ChargePaymentJunction.cs
+    ├── Junctions/
+    │   ├── PriceOrderJunction.cs
+    │   └── ChargePaymentJunction.cs
+    └── Models/
+        ├── OrderLine.cs            # part of the input: public
+        └── PricedOrder.cs          # passed between junctions: internal
 ```
 
 ## 1. Give the train its own input type
@@ -109,7 +115,33 @@ public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUse
 }
 ```
 
-## 5. Share a junction only when it is generic
+## 5. Put the other types in Models, internal unless a caller needs them
+
+A type the input or output is made of is part of the contract, so callers build or read it. It goes
+in `Models/` and stays `public`:
+
+```csharp compile=processorder
+namespace YourApp.Trains.ProcessOrder.Models;
+
+public record OrderLine(string Sku, int Quantity);
+```
+
+A type only the junctions hand each other, through Memory, is part of how the train works. It goes
+in `Models/` too, and is `internal`, like the junctions that use it:
+
+```csharp compile=processorder
+namespace YourApp.Trains.ProcessOrder.Models;
+
+internal record PricedOrder(decimal Total);
+```
+
+Memory finds an `internal` type the same way it finds a public one, and the
+[startup chain check](/docs/core/startup-chain-check) checks it the same way. Keeping these
+types `internal` means the compiler, not the folder, stops the rest of the application from
+depending on a train's insides. A type that more than one train uses belongs to neither: give it a
+folder of its own outside `Trains/`.
+
+## 6. Share a junction only when it is generic
 
 When several trains need the same junction, put it in `Trains/Shared/Junctions/`:
 

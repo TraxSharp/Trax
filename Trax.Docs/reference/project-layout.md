@@ -23,8 +23,10 @@ MyCompany.Hub/
 │       ├── I<TrainName>Train.cs     the interface the train is registered and recorded under
 │       ├── <TrainName>Train.cs      the train: attributes and Junctions(), nothing else
 │       ├── <TrainName>Input.cs      its input (and Output, when it returns one)
-│       └── Junctions/
-│           └── <Step>Junction.cs    one class per step
+│       ├── Junctions/
+│       │   └── <Step>Junction.cs    one class per step
+│       └── Models/                  every other type the train uses, internal unless the
+│                                    input or output is made of it
 └── tests/
     └── MyCompany.Hub.Tests/    UnitTests/ for junctions, IntegrationTests/ for trains and the host
 ```
