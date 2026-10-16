@@ -24,6 +24,57 @@ public class RulesTests
         public string Coin { get; init; } = "";
     }
 
+    private sealed record Paid
+    {
+        public string Coin { get; init; } = "";
+        public int Amount { get; init; }
+    }
+
+    [Test]
+    public void SetAll_sets_every_field_in_one_reduction()
+    {
+        var reduction = SetAll(
+            Set((Ctx c) => c.Name).FromInput((Paid p) => p.Coin),
+            Set((Ctx c) => c.Total).FromInput((Paid p) => p.Amount),
+            Set((Ctx c) => c.Flag).ToValue(true)
+        );
+
+        reduction
+            .Should()
+            .BeOfType<Reduction.Set>()
+            .Which.Steps.Select(step => step.Field)
+            .Should()
+            .Equal("name", "total", "flag");
+        var after = ReductionEvaluator.Apply(
+            reduction,
+            new JsonObject
+            {
+                ["name"] = "",
+                ["total"] = 0,
+                ["flag"] = false,
+            },
+            new JsonObject { ["coin"] = "quarter", ["amount"] = 25 },
+            new JsonObject()
+        );
+        after["name"]!.GetValue<string>().Should().Be("quarter");
+        after["total"]!.GetValue<int>().Should().Be(25);
+        after["flag"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    [Test]
+    public void SetAll_refuses_a_field_set_twice_and_a_reduction_that_is_not_a_set()
+    {
+        var twice = () =>
+            SetAll(
+                Set((Ctx c) => c.Name).FromInput((Paid p) => p.Coin),
+                Set((Ctx c) => c.Name).ToValue("x")
+            );
+        var keep = () => SetAll(Set((Ctx c) => c.Name).ToValue("x"), Keep());
+
+        twice.Should().Throw<ArgumentException>().WithMessage("*'name'*more than once*");
+        keep.Should().Throw<ArgumentException>().WithMessage("*Keep*");
+    }
+
     [Test]
     public void Input_and_Field_resolve_source_and_camelCase_field()
     {

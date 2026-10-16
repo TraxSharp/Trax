@@ -121,7 +121,8 @@ public sealed class IngestMachine : Machine<Stage, IngestTrigger>
 - `OnDone`, one or more, tried in the order declared: the first whose guard holds for the output is taken, so an
   unguarded `OnDone` after the guarded ones is the fallback. The guard reads the output as the outcome's input, and
   the reduction copies what the next state needs into the context. A train that can be unsure says so in its output,
-  and a guarded `OnDone` routes it, as `NeedsReview` does here.
+  and a guarded `OnDone` routes it, as `NeedsReview` does here. A reduction that fills several fields combines its
+  `Set`s with [`SetAll`](/docs/sdk-reference/statemachine-api/rules).
 - `OnFailed`, exactly once. A run the scheduler reaps arrives here too.
 - `OnCancelled`, exactly once, and required.
 

@@ -40,6 +40,36 @@ public static class Rules
     /// <summary>Clone the context and set a field (complete with <c>.FromInput(...)</c> or <c>.ToValue(...)</c>).</summary>
     public static SetBuilder Set<TContext, TField>(Expression<Func<TContext, TField>> field) =>
         new(MemberPath.Of(field));
+
+    /// <summary>
+    /// Clone the context and set several fields in one reduction, each from its own <see cref="Set{TContext,TField}"/>:
+    /// <c>SetAll(Set(c =&gt; c.A).FromInput(...), Set(c =&gt; c.B).ToValue(...))</c>. A transition or outcome edge
+    /// takes one reduction, so this is how it fills several fields. The steps are applied in order.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// A reduction is not a <see cref="Reduction.Set"/>, or two of them set the same field.
+    /// </exception>
+    public static Reduction SetAll(params Reduction[] sets)
+    {
+        ArgumentNullException.ThrowIfNull(sets);
+        var steps = new List<SetStep>();
+        foreach (var reduction in sets)
+        {
+            if (reduction is not Reduction.Set set)
+                throw new ArgumentException(
+                    $"SetAll combines Set reductions; {reduction?.GetType().Name ?? "null"} is not one.",
+                    nameof(sets)
+                );
+            steps.AddRange(set.Steps);
+        }
+
+        if (steps.GroupBy(s => s.Field).FirstOrDefault(g => g.Count() > 1) is { } twice)
+            throw new ArgumentException(
+                $"SetAll sets '{twice.Key}' more than once; set each field once.",
+                nameof(sets)
+            );
+        return new Reduction.Set(steps);
+    }
 }
 
 /// <summary>

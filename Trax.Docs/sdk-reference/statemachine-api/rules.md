@@ -35,6 +35,7 @@ public static class Rules
     public static Reduction Clear();
     public static Reduction Reset();
     public static SetBuilder Set<TContext, TField>(Expression<Func<TContext, TField>> field);
+    public static Reduction SetAll(params Reduction[] sets);
 }
 ```
 
@@ -99,6 +100,7 @@ A reducer computes the destination context. Build one with these factories:
 | `Clear()` | an empty context |
 | `Reset()` | the machine's initial context |
 | `Set<TContext, TField>(Expression<Func<TContext, TField>> field)` | a `SetBuilder`; complete it below |
+| `SetAll(params Reduction[] sets)` | one reduction that applies every `Set` it is given, in order. Throws `ArgumentException` for a reduction that is not a `Set`, or a field set twice |
 
 `Set(...)` clones the context and assigns one field:
 
@@ -106,6 +108,15 @@ A reducer computes the destination context. Build one with these factories:
 | --- | --- |
 | `.FromInput<TInput, TField>(Expression<Func<TInput, TField>> selector)` | a field copied from the trigger input |
 | `.ToValue(JsonNode? value)` | a literal JSON value |
+
+A transition or an outcome edge takes one reduction, so one that fills several fields combines its `Set`s with
+`SetAll`:
+
+```csharp fragment
+.OnDone(Played.Turn, reduce: SetAll(
+    Set((TurnContext c) => c.Slot).FromInput((PlayResult r) => r.Slot),
+    Set((TurnContext c) => c.Target).FromInput((PlayResult r) => r.Target)))
+```
 
 ## Behavior
 

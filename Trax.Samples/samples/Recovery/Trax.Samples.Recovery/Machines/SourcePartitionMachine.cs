@@ -170,8 +170,4 @@ public sealed class SourcePartitionMachine : Machine<PartitionState, PartitionTr
             .On(PartitionTrigger.Retry)
             .To(PartitionState.Ingesting);
     }
-
-    // One reduction that sets several fields. Rules.Set sets one; the Set reduction holds a list of steps.
-    private static Reduction SetAll(params Reduction[] sets) =>
-        new Reduction.Set(sets.SelectMany(s => ((Reduction.Set)s).Steps).ToList());
 }

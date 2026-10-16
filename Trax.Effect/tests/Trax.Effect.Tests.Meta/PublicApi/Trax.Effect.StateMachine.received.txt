@@ -545,6 +545,7 @@ namespace Trax.Effect.StateMachine
         public static Trax.Effect.StateMachine.Reduction Keep() { }
         public static Trax.Effect.StateMachine.Reduction Reset() { }
         public static Trax.Effect.StateMachine.SetBuilder Set<TContext, TField>(System.Linq.Expressions.Expression<System.Func<TContext, TField>> field) { }
+        public static Trax.Effect.StateMachine.Reduction SetAll(params Trax.Effect.StateMachine.Reduction[] sets) { }
     }
     public sealed class SetBuilder
     {
