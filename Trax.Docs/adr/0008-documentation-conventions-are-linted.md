@@ -73,6 +73,9 @@ these lints the moment they touch a page.
   `GetRunGraph`, `NOT_REACHED` for `NotReached`). The dashboard's Blazor components and the EF
   mappings `PersistentX` follow their documented type; the API that predated the guard is listed in
   `tests/Trax.Docs.Tests/KnownUndocumentedPublicApi.txt`, which may only shrink.
+- `TypeScriptExportsAreDocumentedTests` holds `@traxsharp/state-machine` to the same rule: every name its
+  committed exports snapshot lists, from each entry point, is named in a code span on the TypeScript package
+  reference page.
 - `MigrationsAreDocumentedTests` requires every Postgres and SQLite migration to be named in the
   database migrations guide, or recorded in its `NotInTheGuide` set with the reason it changes
   nothing an upgrader sees.
@@ -87,6 +90,7 @@ exists in the checkout, not that the example behaves as the page says.
 
 ## Changelog
 
+- **2026-10-16**: The npm package's exports are held to the documented-API rule too.
 - **2026-10-13**: Snippets compile against the projects of the same checkout, not pinned packages,
   and every C# fence now carries a marker, recorded in 0050.
 - **2026-10-09**: Added the public API and migration guards. A milestone shipped a testing type
