@@ -609,7 +609,7 @@ public partial class SchedulerConfigurationBuilder
     /// Use this as an escape hatch when the built-in submitters don't fit your use case.
     /// Most users should use <see cref="UseRemoteWorkers"/> instead.
     /// When no override is configured, the scheduler defaults to <see cref="PostgresJobSubmitter"/>
-    /// (with <c>UsePostgres()</c>) or <see cref="InMemoryJobSubmitter"/> (without a database provider).
+    /// (with <c>UsePostgres()</c> or <c>UseSqlite()</c>) or <see cref="InMemoryJobSubmitter"/> (without a database provider).
     /// </remarks>
     /// <param name="registration">The action to register your custom <see cref="IJobSubmitter"/></param>
     /// <returns>The builder for method chaining</returns>

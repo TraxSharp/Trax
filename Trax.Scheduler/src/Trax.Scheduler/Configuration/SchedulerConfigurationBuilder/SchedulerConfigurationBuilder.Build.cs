@@ -172,21 +172,21 @@ public partial class SchedulerConfigurationBuilder
         >();
 
         // Register the job submitter and local workers.
-        // Priority: UseInMemoryWorkers/OverrideSubmitter > default (Postgres local workers or InMemory).
+        // Priority: UseInMemoryWorkers/OverrideSubmitter > default (local workers on a database, or InMemory).
         if (_taskServerRegistration is not null)
         {
             _taskServerRegistration.Invoke(_parentBuilder.ServiceCollection);
         }
         else if (_parentBuilder.HasDatabaseProvider)
         {
-            // Default: PostgresJobSubmitter + local worker threads
+            // Default: the database-backed submitter and the local worker pool
             if (
                 _parentBuilder.ServiceCollection.Any(d =>
                     d.ServiceType == typeof(LocalWorkerOptions)
                 )
             )
                 throw new InvalidOperationException(LocalWorkerOptions.RegisteredTwiceMessage);
-            _parentBuilder.ServiceCollection.AddSingleton(_localWorkerOptions);
+            LocalWorkerOptions.Register(_parentBuilder.ServiceCollection, _localWorkerOptions);
             _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, PostgresJobSubmitter>();
             _parentBuilder.ServiceCollection.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
             _parentBuilder.ServiceCollection.AddHostedService<Services.LocalWorkerService.LocalWorkerService>();

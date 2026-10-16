@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Scheduler.Configuration;
@@ -18,12 +20,40 @@ public class LocalWorkerOptions
         + "which would silently replace the other. Remove AddTraxWorker() and set the worker options "
         + "on the scheduler instead: AddScheduler(scheduler => scheduler.ConfigureLocalWorkers(o => ...)).";
 
+    private int? _workerCount;
+
     /// <summary>
     /// Number of concurrent worker tasks polling for and executing background jobs. Read when the
     /// worker pool starts, so a change made at runtime applies after a restart. Must be between 1
     /// and 256.
     /// </summary>
-    public int WorkerCount { get; set; } = Environment.ProcessorCount;
+    /// <remarks>
+    /// Defaults to <see cref="Environment.ProcessorCount"/>, or to 1 on a database that takes one
+    /// writer at a time (SQLite), where every claim takes the write lock and more workers only
+    /// wait on each other. A value set here wins on either.
+    /// </remarks>
+    public int WorkerCount
+    {
+        get => _workerCount ?? (SingleWriter ? 1 : Environment.ProcessorCount);
+        set => _workerCount = value;
+    }
+
+    /// <summary>
+    /// Set when the container resolves the options, from the database's dialect: whether it takes
+    /// one writer at a time, which lowers the default <see cref="WorkerCount"/> to 1.
+    /// </summary>
+    internal bool SingleWriter { get; set; }
+
+    /// <summary>
+    /// Registers <paramref name="options"/> so that the container, on resolving them, records
+    /// whether the database takes one writer at a time.
+    /// </summary>
+    internal static void Register(IServiceCollection services, LocalWorkerOptions options) =>
+        services.AddSingleton(sp =>
+        {
+            options.SingleWriter = sp.GetService<ISqlDialect>()?.HasSingleWriter == true;
+            return options;
+        });
 
     /// <summary>
     /// How often idle workers poll for new jobs. Must be greater than zero and at most 30 days.

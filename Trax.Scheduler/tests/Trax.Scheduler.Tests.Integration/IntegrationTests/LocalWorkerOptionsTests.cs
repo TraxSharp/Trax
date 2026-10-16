@@ -1,5 +1,11 @@
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Sqlite.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Extensions;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -14,6 +20,37 @@ public class LocalWorkerOptionsTests
     {
         var options = new LocalWorkerOptions();
         options.WorkerCount.Should().Be(Environment.ProcessorCount);
+    }
+
+    [Test]
+    public void Sqlite_defaults_to_one_worker()
+    {
+        using var provider = BuildSqliteHost(s => s);
+
+        provider.GetRequiredService<LocalWorkerOptions>().WorkerCount.Should().Be(1);
+    }
+
+    [Test]
+    public void Sqlite_keeps_an_explicit_worker_count()
+    {
+        using var provider = BuildSqliteHost(s => s.ConfigureLocalWorkers(o => o.WorkerCount = 3));
+
+        provider.GetRequiredService<LocalWorkerOptions>().WorkerCount.Should().Be(3);
+    }
+
+    private static ServiceProvider BuildSqliteHost(
+        Func<SchedulerConfigurationBuilder, SchedulerConfigurationBuilder> scheduler
+    )
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"trax_workers_{Guid.NewGuid():N}.db");
+        var services = new ServiceCollection();
+        services.AddLogging(x => x.SetMinimumLevel(LogLevel.Warning));
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseSqlite($"Data Source={file}"))
+                .AddMediator(typeof(AssemblyMarker).Assembly)
+                .AddScheduler(scheduler)
+        );
+        return services.BuildServiceProvider();
     }
 
     [Test]

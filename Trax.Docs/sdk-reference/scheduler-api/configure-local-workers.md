@@ -1,6 +1,6 @@
 ---
 title: ConfigureLocalWorkers
-description: Reference for ConfigureLocalWorkers, which tunes the built-in Postgres local worker pool that UsePostgres enables by default, with LocalWorkerOptions.
+description: Reference for ConfigureLocalWorkers, which tunes the built-in local worker pool that a database provider enables by default, with LocalWorkerOptions.
 type: reference
 area: scheduling
 parent: Scheduler API
@@ -17,7 +17,7 @@ redirect_from:
 
 # ConfigureLocalWorkers
 
-Configures the built-in local worker pool, which runs queued jobs in the scheduler's own process. The pool is registered whenever the scheduler uses `UsePostgres()`, whether or not this is called.
+Configures the built-in local worker pool, which runs queued jobs in the scheduler's own process. The pool is registered whenever the scheduler has a database provider, `UsePostgres()` or `UseSqlite()`, whether or not this is called.
 
 ## Signature
 
@@ -37,7 +37,7 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs. 1 to 256 |
+| `WorkerCount` | `int` | `Environment.ProcessorCount`, or `1` on SQLite | Number of concurrent worker tasks polling for jobs. 1 to 256. A value you set is used on either provider |
 | `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs. Greater than zero, up to 30 days |
 | `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible after its worker last refreshed its claim before another worker can reclaim it (crash recovery). A running job's claim is refreshed every third of this, so a long job is not reclaimed while it runs |
 | `BatchSize` | `int` | `1` | Number of jobs each worker claims per poll cycle. At least 1. Every job in the batch keeps its claim until the worker runs it, however long the jobs ahead of it take |
@@ -49,8 +49,9 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 
 ## Behavior
 
-- Local workers use the `IDataContext` `UsePostgres()` registers.
-- Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
+- Local workers use the `IDataContext` the database provider registers.
+- Jobs are queued to the `trax.background_job` table. On Postgres they are dequeued with `FOR UPDATE SKIP LOCKED`, so workers in any number of processes claim without blocking each other.
+- On SQLite each claim runs under `BEGIN IMMEDIATE`, which takes the file's write lock. Workers queue on that lock rather than running side by side, so the pool starts one worker unless you set `WorkerCount`, and more do not help.
 - Workers delete job rows after execution (both success and failure), including a job that finishes during shutdown: the delete does not take the host's stopping token. Trax.Core's Metadata and DeadLetter tables handle the audit trail.
 - `AddScheduler` refuses options outside their ranges when it is built (see [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges)); `VisibilityTimeout` must be between one second and ten years.
 - While a worker holds jobs, it refreshes the `fetched_at` of every job it has claimed and not yet finished, the running one and any waiting behind it in a batch, every third of `VisibilityTimeout`. If a worker crashes mid-execution, the refreshes stop, the timestamp becomes stale, and the job is reclaimed after `VisibilityTimeout`.
@@ -59,7 +60,7 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 
 ### Registered services
 
-With `UsePostgres()`, the scheduler registers:
+With a database provider, the scheduler registers:
 
 | Service | Lifetime | Description |
 |---------|----------|-------------|

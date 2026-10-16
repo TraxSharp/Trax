@@ -50,7 +50,7 @@ public static class WorkerExtensions
                 "The worker options have values the worker pool cannot run with. "
                     + string.Join(" ", problems)
             );
-        services.AddSingleton(options);
+        LocalWorkerOptions.Register(services, options);
 
         // Register the worker service that polls background_job
         services.AddHostedService<Services.LocalWorkerService.LocalWorkerService>();

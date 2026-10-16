@@ -21,8 +21,10 @@ namespace Trax.Scheduler.Services.LocalWorkerService;
 /// from the <c>trax.background_job</c> table.
 /// </summary>
 /// <remarks>
-/// Workers use PostgreSQL's <c>FOR UPDATE SKIP LOCKED</c> for atomic, lock-free dequeue
-/// across multiple workers and processes. Each worker:
+/// Runs on any database provider. On PostgreSQL workers claim with <c>FOR UPDATE SKIP LOCKED</c>,
+/// so many workers across processes dequeue without blocking each other. On SQLite a claim runs
+/// under <c>BEGIN IMMEDIATE</c>, which takes the file's write lock, so more workers do not help and
+/// the pool starts one by default (<see cref="LocalWorkerOptions.WorkerCount"/>). Each worker:
 /// 1. Claims up to <see cref="LocalWorkerOptions.BatchSize"/> jobs by setting <c>fetched_at</c> within a transaction
 /// 2. Executes each train via <see cref="IJobRunnerTrain"/>
 /// 3. Deletes each job row on completion (success or failure)
