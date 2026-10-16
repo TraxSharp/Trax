@@ -110,15 +110,3 @@ export type { MachineFactoryOptions } from './rules/generateTypes';
 
 export { enumerate, serializeCorpus } from './differential';
 export type { DifferentialSpec, DifferentialCorpus, DifferentialCase } from './differential';
-
-// ── 7. Sample machines ────────────────────────────────────────────────────────────────────────────
-// The two machines this repo ships as its own proofs. Product machines live in the product repo.
-
-export { turnstile, turnstileCore, turnstileDefinition } from './machines/turnstile/turnstile';
-export type {
-  TurnstileState,
-  TurnstileTrigger,
-  TurnstileSpec,
-} from './machines/turnstile/turnstile';
-export { checkout, checkoutCore, checkoutDefinition } from './machines/checkout/checkout';
-export type { CheckoutState, CheckoutTrigger, CheckoutSpec } from './machines/checkout/checkout';
