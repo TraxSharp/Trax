@@ -187,6 +187,87 @@ public class DataContextExtensionsCoverageTests : TestSetup
         updated.MisfireThresholdSeconds.Should().Be(60);
     }
 
+    [Test]
+    public async Task UpsertOnceManifestAsync_ReseedingAnUnrunOneOff_KeepsTheFirstScheduledAt()
+    {
+        var externalId = $"once-keep-{Guid.NewGuid():N}";
+        var firstAt = DateTime.UtcNow.AddMinutes(5);
+
+        await DataContext.UpsertOnceManifestAsync(
+            typeof(SchedulerTestTrain),
+            externalId,
+            new SchedulerTestInput { Value = "first" },
+            firstAt,
+            new ManifestOptions { Priority = 1 },
+            groupId: "once-keep-group",
+            group: new ManifestGroupSeed(PriorityIfNew: 0)
+        );
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        // A host that restarts before the one-off runs re-seeds the same externalId at its own
+        // start plus the delay, so the stated time moves forward on every start.
+        var secondAt = firstAt.AddMinutes(3);
+        var updated = await DataContext.UpsertOnceManifestAsync(
+            typeof(SchedulerTestTrain),
+            externalId,
+            new SchedulerTestInput { Value = "first" },
+            secondAt,
+            new ManifestOptions { Priority = 1 },
+            groupId: "once-keep-group",
+            group: new ManifestGroupSeed(PriorityIfNew: 0)
+        );
+        await DataContext.SaveChanges(CancellationToken.None);
+
+        updated.LastSuccessfulRun.Should().BeNull("the one-off has not run yet");
+        updated
+            .ScheduledAt.Should()
+            .BeCloseTo(
+                firstAt,
+                TimeSpan.FromSeconds(1),
+                "re-seeding a one-off that has not run yet keeps its first scheduled time"
+            );
+    }
+
+    [Test]
+    public async Task UpsertOnceManifestAsync_ReseedingAnUnrunOneOffWithANewInput_SchedulesItFromTheNewSeed()
+    {
+        var externalId = $"once-new-input-{Guid.NewGuid():N}";
+        var firstAt = DateTime.UtcNow.AddMinutes(5);
+
+        await DataContext.UpsertOnceManifestAsync(
+            typeof(SchedulerTestTrain),
+            externalId,
+            new SchedulerTestInput { Value = "first" },
+            firstAt,
+            new ManifestOptions { Priority = 1 },
+            groupId: "once-keep-group",
+            group: new ManifestGroupSeed(PriorityIfNew: 0)
+        );
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var secondAt = firstAt.AddMinutes(3);
+        var updated = await DataContext.UpsertOnceManifestAsync(
+            typeof(SchedulerTestTrain),
+            externalId,
+            new SchedulerTestInput { Value = "second" },
+            secondAt,
+            new ManifestOptions { Priority = 1 },
+            groupId: "once-keep-group",
+            group: new ManifestGroupSeed(PriorityIfNew: 0)
+        );
+        await DataContext.SaveChanges(CancellationToken.None);
+
+        updated
+            .ScheduledAt.Should()
+            .BeCloseTo(
+                secondAt,
+                TimeSpan.FromSeconds(1),
+                "a one-off given a different input is a different job, scheduled from this seed"
+            );
+    }
+
     #endregion
 
     #region Re-seeding an existing dependent or one-off manifest's enabled state

@@ -26,7 +26,7 @@ up in [Schedule manifests in bulk](/docs/scheduler/bulk-scheduling).
 |---|---|---|
 | `Schedule(..., Every.X(n))` | On the first ManifestManager poll after it is seeded | `n` after its last success (or cancel). A failed run does not move that point |
 | `Schedule(..., Cron.X(...))` | At its first occurrence after it is seeded, in UTC, never at startup | The next occurrence after its last success |
-| `ScheduleOnce(..., delay)` | Once `delay` has passed since the host started (every start moves a one-off that has not run yet) | Never: it disables itself after its first success |
+| `ScheduleOnce(..., delay)` | Once `delay` has passed since the host first seeded it (a restart before it runs keeps that time, unless its input changed) | Never: it disables itself after its first success |
 | `ThenInclude` / `Include` | After its parent's next success | After each parent success since its own latest run started |
 | `Include(..., o => o.Dormant())` | Only when its parent activates it through `IDormantDependentContext` | The same |
 | No schedule (`ScheduleType.None`) | Only when triggered | Only when triggered |

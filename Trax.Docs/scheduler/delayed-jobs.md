@@ -71,11 +71,13 @@ services.AddTrax(trax =>
 
 Like `Schedule`, the builder captures the manifest and seeds it on startup with upsert semantics. If a manifest with the same `externalId` already exists, it is updated rather than duplicated, so restarting the application doesn't create duplicate jobs.
 
-Every start re-seeds the one-off, and the seed sets `ScheduledAt` to that start plus the delay:
+Every start re-seeds the one-off. The first seed sets `ScheduledAt` to that start plus the delay; later seeds
+leave it alone until the one-off has run, unless its input changed:
 
 | State at restart | After the restart |
 |---|---|
-| Not run yet | Its time moves to the new start plus the delay. A host that restarts more often than the delay never reaches it, so keep the delay short or schedule it at runtime with `ScheduleOnceAsync` |
+| Not run yet, same input | It keeps the time it was first given, so a host that restarts more often than the delay still runs it. A changed delay alone does not move it: the delay is not stored, only the time |
+| Not run yet, new input | It is a different job: its time moves to the new start plus the delay |
 | Succeeded | It stays disabled and has a `LastSuccessfulRun`, so it does not run again. Only the stored `ScheduledAt` changes |
 | Failed and dead-lettered | It waits for the dead letter to be resolved, as before |
 

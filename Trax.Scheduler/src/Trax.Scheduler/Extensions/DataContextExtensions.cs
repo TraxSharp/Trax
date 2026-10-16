@@ -321,6 +321,17 @@ internal static class DataContextExtensions
 
         if (existing != null)
         {
+            // A one-off that has not run keeps the time it was first given while its input is the
+            // same: a host seeds it at every start with "now plus the delay", and one that restarts
+            // more often than the delay would otherwise push it back for ever. A changed input
+            // schedules it from this seed. The delay itself is not stored, so a changed delay alone
+            // does not move it.
+            var unrun =
+                existing.ScheduleType == ScheduleType.Once
+                && existing.LastSuccessfulRun is null
+                && existing.ScheduledAt is not null;
+            var previousProperties = existing.Properties;
+
             existing.Name = trainType.FullName!;
             existing.SetProperties(input);
             if (options._isEnabled is { } isEnabled)
@@ -328,7 +339,8 @@ internal static class DataContextExtensions
             ApplyStatedSettings(existing, options);
             existing.ManifestGroupId = manifestGroupId;
             existing.ScheduleType = ScheduleType.Once;
-            existing.ScheduledAt = scheduledAt;
+            if (!(unrun && SameProperties(previousProperties, existing.Properties)))
+                existing.ScheduledAt = scheduledAt;
             existing.CronExpression = null;
             existing.IntervalSeconds = null;
             ApplyMisfireOptions(existing, options);
@@ -494,6 +506,27 @@ internal static class DataContextExtensions
     private static void ApplyExclusions(Manifest manifest, ManifestOptions options)
     {
         manifest.SetExclusions(options.Exclusions);
+    }
+
+    /// <summary>
+    /// Whether two stored manifest inputs hold the same values. Compared as JSON trees: a
+    /// <c>jsonb</c> column hands an input back with its own whitespace and key order.
+    /// </summary>
+    private static bool SameProperties(string? stored, string? written)
+    {
+        if (stored is null || written is null)
+            return stored == written;
+        try
+        {
+            return System.Text.Json.Nodes.JsonNode.DeepEquals(
+                System.Text.Json.Nodes.JsonNode.Parse(stored),
+                System.Text.Json.Nodes.JsonNode.Parse(written)
+            );
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 }
 
