@@ -10,6 +10,7 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Utils;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -18,11 +19,11 @@ using Trax.Mediator.Services.TrainExecution;
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.IntegrationTests;
 
 /// <summary>
-/// A caller's input is read with the host's train parameter options, so a host that raised
-/// <c>MaxDepth</c> accepts an input the default depth would refuse. An enqueue then stores that
-/// input with <c>TraxJsonSerializationOptions.ManifestProperties</c>, whose depth is 8, and a
-/// worker reads the stored form back with the same options: the reader accepts more nesting than
-/// the storage writes, so a run of such an input succeeds while queuing the same input fails.
+/// A caller's input is read with the host's train parameter options, and an enqueue stores it with
+/// <c>TraxJsonSerializationOptions.ManifestProperties</c>, which a worker reads it back with. Both
+/// allow 64 levels, so an input a host at depth 64 runs also queues. A host that reads deeper than
+/// that can still run such an input, but queuing it is refused as invalid input, not thrown as an
+/// unexpected <see cref="JsonException"/>.
 /// </summary>
 [TestFixture]
 public class QueueInputDepthTests
@@ -70,12 +71,12 @@ public class QueueInputDepthTests
             .Single(r => r.ServiceType == typeof(TTrain));
 
     /// <summary>The caller's input: an object nested <see cref="Nesting"/> deep.</summary>
-    private static string NestedInputJson()
+    private static string NestedInputJson(int nesting = Nesting)
     {
         var json = "{\"root\"";
-        for (var i = 0; i < Nesting; i++)
+        for (var i = 0; i < nesting; i++)
             json += ":{\"next\"";
-        json += ":{" + new string('}', Nesting + 2);
+        json += ":{" + new string('}', nesting + 2);
         return json;
     }
 
@@ -120,8 +121,38 @@ public class QueueInputDepthTests
             .Should()
             .BeEquivalentTo(
                 NestedInput(),
+                o => o.AllowingInfiniteRecursion(),
                 "the stored entry reads back as the input the caller gave"
             );
+    }
+
+    [Test]
+    public async Task QueueAsync_InputDeeperThanStorageOnAHostThatReadsDeeper_IsRefusedAsInvalidInput()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                    effects
+                        .UseInMemory()
+                        .SaveTrainParameters(
+                            new JsonSerializerOptions(TraxJsonSerializationOptions.Default)
+                            {
+                                MaxDepth = 128,
+                            }
+                        )
+                )
+                .AddMediator(assemblies: [typeof(QueueInputDepthTests).Assembly])
+        );
+        await using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
+
+        var act = () => execution.QueueAsync(typeof(IDepthTrain).FullName!, NestedInputJson(70));
+
+        (await act.Should().ThrowAsync<TrainInputValidationException>())
+            .Which.InnerException.Should()
+            .BeOfType<JsonException>("the stored form is deeper than storage writes");
     }
 
     public record DeepInput

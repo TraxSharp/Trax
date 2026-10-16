@@ -19,7 +19,7 @@ public class TrainInputValidationException : InvalidOperationException
 
     /// <summary>
     /// The UTF-8 byte length of the input JSON the caller sent, or of the stored form when that
-    /// is what was refused.
+    /// is what was refused; 0 for a refusal that is not about size.
     /// </summary>
     public int ObservedBytes { get; }
 
@@ -43,5 +43,16 @@ public class TrainInputValidationException : InvalidOperationException
         TrainName = trainName;
         ObservedBytes = observedBytes;
         MaxBytes = maxBytes;
+    }
+
+    /// <summary>
+    /// A refusal that is not about size: the input could be read but its stored form could not be
+    /// written, such as an input nested deeper than storage allows. <see cref="ObservedBytes"/>
+    /// and <see cref="MaxBytes"/> are 0; <paramref name="cause"/> is the inner exception.
+    /// </summary>
+    internal TrainInputValidationException(string trainName, Exception cause)
+        : base("The train input failed validation.", cause)
+    {
+        TrainName = trainName;
     }
 }

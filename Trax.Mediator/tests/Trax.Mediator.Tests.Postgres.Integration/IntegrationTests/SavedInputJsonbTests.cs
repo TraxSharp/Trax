@@ -1,10 +1,15 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
@@ -12,8 +17,9 @@ using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
 namespace Trax.Mediator.Tests.Postgres.Integration.IntegrationTests;
 
 /// <summary>
-/// A run's input, saved by <c>SaveTrainParameters()</c> into the <c>jsonb</c> input column and
-/// read back from it, resolves to the input the run was given. <c>jsonb</c> does not keep
+/// A run's input saved with reference metadata, as <c>SaveTrainParameters()</c> saved every input
+/// until the default options stopped preserving references, read back from the <c>jsonb</c> input
+/// column, resolves to the input the run was given. <c>jsonb</c> does not keep
 /// property order: it hands an object back with its shorter names first, so an input with an
 /// <c>Id</c> property comes back as <c>{"id": .., "$id": ..}</c>, with the reference metadata
 /// no longer the first property.
@@ -34,16 +40,34 @@ public class SavedInputJsonbTests : TestSetup
             Stops = [new Spot { Id = 1, City = "Paris" }, shared],
         };
 
-        await TrainBus.RunAsync(original);
+        // Saved the way SaveTrainParameters() saved every input until TraxJsonSerializationOptions
+        // stopped preserving references: those rows stay in the column and must still resolve.
+        var legacy = new JsonSerializerOptions(TraxJsonSerializationOptions.Default)
+        {
+            ReferenceHandler = ReferenceHandler.Preserve,
+        };
+        var row = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(ISpotsTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        row.Input = JsonSerializer.Serialize(original, legacy);
 
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        using (var context = (IDataContext)factory.Create())
+        {
+            await context.Track(row);
+            await context.SaveChanges(CancellationToken.None);
+        }
+
         string saved;
         using (var context = (IDataContext)factory.Create())
         {
             saved = (
-                await context
-                    .Metadatas.AsNoTracking()
-                    .SingleAsync(m => m.Name == typeof(ISpotsTrain).FullName)
+                await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == row.Id)
             ).Input!;
         }
 

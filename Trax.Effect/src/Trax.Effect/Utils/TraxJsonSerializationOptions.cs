@@ -29,7 +29,9 @@ namespace Trax.Effect.Utils;
 public static class TraxJsonSerializationOptions
 {
     /// <summary>
-    /// Gets or sets the default JSON serializer options for the Trax.Effect system.
+    /// The default JSON serializer options for the Trax.Effect system, and what
+    /// <c>SaveTrainParameters()</c> writes a run's input and output with. Read-only: copy it
+    /// (<c>new JsonSerializerOptions(Default) { … }</c>) to change a setting.
     /// </summary>
     /// <remarks>
     /// These options are used by default throughout the system for JSON serialization
@@ -40,54 +42,70 @@ public static class TraxJsonSerializationOptions
     /// - WriteIndented: true - Produces formatted, indented JSON for better readability
     /// - IncludeFields: true - Includes fields (not just properties) in serialization
     /// - DefaultIgnoreCondition: WhenWritingNull - Omits null values from the output
+    /// - MaxDepth: 64 - System.Text.Json's own default, deep enough for nested inputs
+    /// - No reference preservation: a stored input is a plain tree, with no $id or $values.
+    ///   Rows written by versions that preserved references still read back (see
+    ///   <c>StoredJson</c>)
     /// - Converters:
     ///   - JsonStringEnumConverter - Serializes enums as strings instead of numbers
     ///   - ValueTupleConverter - Handles serialization of ValueTuple types
     ///   - SystemTypeConverter - Handles serialization of System.Type objects
-    ///
-    /// These options can be modified if needed, but changing them may affect the
-    /// behavior of components that rely on the default configuration.
     /// </remarks>
     public static JsonSerializerOptions Default { get; internal set; } =
-        new()
-        {
-            WriteIndented = true,
-            IncludeFields = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            ReferenceHandler = ReferenceHandler.Preserve,
-            MaxDepth = 8,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
-            Converters =
+        Frozen(
+            new()
             {
-                new JsonStringEnumConverter(),
-                new ValueTupleConverter(),
-                new SystemTypeConverter(),
-            },
-        };
+                WriteIndented = true,
+                IncludeFields = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                MaxDepth = StoredDepth,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+                Converters =
+                {
+                    new JsonStringEnumConverter(),
+                    new ValueTupleConverter(),
+                    new SystemTypeConverter(),
+                },
+            }
+        );
 
     /// <summary>
-    /// JSON serializer options for Manifest property serialization.
-    /// Identical to <see cref="Default"/> but without <see cref="ReferenceHandler.Preserve"/>,
-    /// producing clean JSON without $id/$ref/$values noise.
+    /// JSON serializer options for manifest properties and for a queued input's stored form: the
+    /// same as <see cref="Default"/> with relaxed escaping. Read-only.
     /// </summary>
     public static JsonSerializerOptions ManifestProperties { get; internal set; } =
-        new()
-        {
-            WriteIndented = true,
-            IncludeFields = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            MaxDepth = 8,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
-            Converters =
+        Frozen(
+            new()
             {
-                new JsonStringEnumConverter(),
-                new ValueTupleConverter(),
-                new SystemTypeConverter(),
-            },
-        };
+                WriteIndented = true,
+                IncludeFields = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                MaxDepth = StoredDepth,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+                Converters =
+                {
+                    new JsonStringEnumConverter(),
+                    new ValueTupleConverter(),
+                    new SystemTypeConverter(),
+                },
+            }
+        );
+
+    /// <summary>
+    /// How deep a stored input or output may nest: System.Text.Json's own default. A host that
+    /// reads its inputs deeper (its train parameter options' <c>MaxDepth</c>) can run such an
+    /// input, but cannot queue it: the stored form is refused.
+    /// </summary>
+    internal const int StoredDepth = 64;
+
+    private static JsonSerializerOptions Frozen(JsonSerializerOptions options)
+    {
+        options.MakeReadOnly(populateMissingResolver: true);
+        return options;
+    }
 
     /// <summary>
     /// The options the junction logger uses to serialize a junction's output into <c>JunctionMetadata.OutputJson</c>

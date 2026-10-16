@@ -28,12 +28,10 @@ public class LifecycleHookOutputCopyTests
         var output = await RunAndCapture(rows: 3, effects => effects);
 
         output.Should().NotBeNull();
-        JsonDocument
-            .Parse(output!)
-            .RootElement.GetProperty("$values")
-            .GetArrayLength()
+        output
             .Should()
-            .Be(3);
+            .NotContain("$id", "a hook forwards the output; it carries no serializer metadata");
+        JsonDocument.Parse(output!).RootElement.GetArrayLength().Should().Be(3);
     }
 
     [Test]

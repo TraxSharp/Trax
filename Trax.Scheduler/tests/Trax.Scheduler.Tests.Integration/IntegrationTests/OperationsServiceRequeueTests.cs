@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,7 +10,6 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.RecordedDecision;
-using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 using Trax.Effect.Utils;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -292,17 +292,21 @@ public class OperationsServiceRequeueTests : TestSetup
     }
 
     /// <summary>The input as SaveTrainParameters() saves it on a run, through the host's own effect.</summary>
-    private async Task<string> SavedFormOfAsync(object input)
-    {
-        using var effect = Scope
-            .ServiceProvider.GetRequiredService<ParameterEffectProviderFactory>()
-            .Create();
-        var metadata = new Metadata { Name = "saved-input" };
-        metadata.SetInputObject(input);
-        await effect.Track(metadata);
-        await effect.SaveChanges(CancellationToken.None);
-        return metadata.Input!;
-    }
+    /// <summary>
+    /// The input as it was saved while the default options preserved references: every row saved
+    /// then carries $id, $values and $ref, and must still requeue.
+    /// </summary>
+    private static Task<string> SavedFormOfAsync(object input) =>
+        Task.FromResult(
+            JsonSerializer.Serialize(
+                input,
+                input.GetType(),
+                new JsonSerializerOptions(TraxJsonSerializationOptions.Default)
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                }
+            )
+        );
 
     [Test]
     public async Task A_run_is_requeued_with_the_input_it_saved_lists_and_shared_objects_included()

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -10,6 +11,7 @@ using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Services.Operations;
@@ -20,10 +22,12 @@ namespace Trax.Api.Tests;
 /// <summary>
 /// A train mutation whose input holds lists and arrays hands the execution service JSON that
 /// <see cref="TrainInputReader.Read"/> reads back as the input the caller sent. The host's train
-/// parameter options preserve references, which writes a list as an object of <c>$values</c>;
+/// parameter options preserve references here, which writes a list as an object of <c>$values</c>;
 /// the reader refuses that, so a mutation written with those options failed before its train ran.
+/// The default options no longer preserve references, but a host may still choose to.
 /// </summary>
 [TestFixture]
+[NonParallelizable]
 public class DispatchListInputTests
 {
     private const int MaxBytes = 262_144;
@@ -35,10 +39,18 @@ public class DispatchListInputTests
     private ITrainExecutionService _execution = null!;
     private ServiceProvider? _services;
     private string? _sent;
+    private JsonSerializerOptions _hostOptions = null!;
 
     [SetUp]
     public void SetUp()
     {
+        _hostOptions = TraxEffectConfiguration.StaticSystemJsonSerializerOptions;
+        TraxEffectConfiguration.StaticSystemJsonSerializerOptions = new JsonSerializerOptions(
+            TraxJsonSerializationOptions.Default
+        )
+        {
+            ReferenceHandler = ReferenceHandler.Preserve,
+        };
         _sent = null;
         _services = null;
         _execution = Substitute.For<ITrainExecutionService>();
@@ -63,6 +75,7 @@ public class DispatchListInputTests
     [TearDown]
     public async Task TearDown()
     {
+        TraxEffectConfiguration.StaticSystemJsonSerializerOptions = _hostOptions;
         if (_services is not null)
             await _services.DisposeAsync();
     }

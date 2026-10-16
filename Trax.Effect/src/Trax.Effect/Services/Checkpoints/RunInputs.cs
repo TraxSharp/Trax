@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Services.Checkpoints;
 
@@ -60,7 +61,10 @@ internal static class RunInputs
 
         try
         {
-            var read = new JsonSerializerOptions(system) { PropertyNameCaseInsensitive = true };
+            var read = new JsonSerializerOptions(StoredJson.ReadOptions(stored, system))
+            {
+                PropertyNameCaseInsensitive = true,
+            };
             var plain = new JsonSerializerOptions(system) { ReferenceHandler = null };
             var earlier = JsonSerializer.Deserialize(stored, inputType, read);
 

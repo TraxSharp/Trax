@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +13,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.Utils;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
@@ -41,7 +43,19 @@ public class SavedInputRoundTripTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddTrax(trax =>
-            trax.AddEffects(effects => effects.UseInMemory().SaveTrainParameters())
+            // A host whose options preserve references, as TraxJsonSerializationOptions.Default
+            // did until it stopped: its rows, and every row saved before then, carry $id and
+            // $values, and must still resolve.
+            trax.AddEffects(effects =>
+                    effects
+                        .UseInMemory()
+                        .SaveTrainParameters(
+                            new JsonSerializerOptions(TraxJsonSerializationOptions.Default)
+                            {
+                                ReferenceHandler = ReferenceHandler.Preserve,
+                            }
+                        )
+                )
                 .AddMediator(assemblies: [typeof(SavedInputRoundTripTests).Assembly])
         );
         _serviceProvider = services.BuildServiceProvider();
@@ -60,7 +74,7 @@ public class SavedInputRoundTripTests
             .DiscoverTrains()
             .Single(r => r.ServiceType == typeof(TTrain));
 
-    /// <summary>The input as the parameter effect a host with SaveTrainParameters() saves it.</summary>
+    /// <summary>The input as the parameter effect of a host that preserves references saves it.</summary>
     private async Task<string> SaveAsync(object input)
     {
         var factory = _serviceProvider.GetRequiredService<ParameterEffectProviderFactory>();

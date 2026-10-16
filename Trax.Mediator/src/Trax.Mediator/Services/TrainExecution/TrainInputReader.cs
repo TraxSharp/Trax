@@ -92,7 +92,7 @@ public static class TrainInputReader
     /// <remarks>
     /// It writes with the options <see cref="Read"/> reads with, so it follows the host's
     /// naming policy and converters but never writes reference metadata, which the host's
-    /// options (<c>TraxJsonSerializationOptions.Default</c> unless the host gives others) do.
+    /// options may (<c>TraxJsonSerializationOptions.Default</c> no longer does).
     /// A surface that builds an input object and hands it to <c>ITrainExecutionService</c> as
     /// JSON writes it here: written with the host's options instead, every list in it is
     /// refused.
@@ -121,8 +121,8 @@ public static class TrainInputReader
     /// </returns>
     /// <remarks>
     /// <para>
-    /// <c>SaveTrainParameters()</c> writes with <c>TraxJsonSerializationOptions.Default</c>, which
-    /// preserves references: every object carries an <c>$id</c>, a list is written as
+    /// Before reference preservation was dropped from <c>TraxJsonSerializationOptions.Default</c>,
+    /// <c>SaveTrainParameters()</c> wrote with it on, and those rows remain: every object carries an <c>$id</c>, a list is written as
     /// <c>{"$id":"2","$values":[...]}</c>, and a second occurrence of the same object as
     /// <c>{"$ref":"3"}</c>. <see cref="Read"/> does not honour that metadata in a caller's
     /// input, so read directly a saved list is refused and a <c>$ref</c> reads back as an object
@@ -190,7 +190,9 @@ public static class TrainInputReader
     /// </remarks>
     /// <exception cref="TrainInputValidationException">
     /// The stored form is over its cap; <c>MaxBytes</c> is that cap and <c>ObservedBytes</c> how
-    /// much had been written when writing stopped, which is more than the cap.
+    /// much had been written when writing stopped, which is more than the cap. Or the input nests
+    /// deeper than storage writes (a host whose train parameter options read deeper than
+    /// <c>TraxJsonSerializationOptions.StoredDepth</c>); both counts are then 0.
     /// </exception>
     internal static string WriteForStorage(
         object input,
@@ -220,6 +222,12 @@ public static class TrainInputReader
                 tooLarge.Written,
                 storedCap
             );
+        }
+        catch (JsonException unwritable)
+        {
+            // Read at the host's depth, but deeper than storage writes: refused like any other
+            // invalid input rather than surfacing as an unexpected error.
+            throw new TrainInputValidationException(registration.ServiceTypeName, unwritable);
         }
 
         return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
