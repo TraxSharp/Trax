@@ -894,10 +894,9 @@ public partial class OpenApiSchemaParser : ISchemaParser
 
         foreach (var (propName, propSchema) in propertiesToProcess)
         {
+            // Kept as the schema named it, even when that is the type's own name: SchemaNames.Validate
+            // refuses a property named like its enclosing type (CS0542) instead of renaming it (cli/0002).
             var fieldName = NamingConventions.ToPascalCase(propName);
-            // Avoid C# error CS0542: member name cannot match enclosing type name
-            if (fieldName == pascalName)
-                fieldName += "Value";
 
             fields.Add(
                 new ApiField

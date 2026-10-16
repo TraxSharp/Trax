@@ -278,6 +278,9 @@ a member share its type's name.
 A `null` entry in a nullable string enum (`enum: [active, banned, null]`) is not a member; the property's
 nullability carries it. Any other value in a string enum that is not a string is refused.
 
+A schema with a property of its own name (`Notification` with a `notification` property) is refused, as it is
+for GraphQL, naming both. The property is not renamed, because that would change the generated contract.
+
 ### Model names and framework types
 
 A model may share its name with a .NET type: a schema with `Task`, `File` or `Exception` types

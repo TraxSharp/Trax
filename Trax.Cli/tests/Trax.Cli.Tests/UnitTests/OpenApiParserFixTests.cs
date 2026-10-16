@@ -8,7 +8,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// Tests for OpenAPI parser fixes:
 /// - Non-fatal validation errors no longer crash the parser
 /// - Inline enums get named from context (property/parameter name) instead of "UnnamedEnum"
-/// - Property names that collide with enclosing type names get suffixed
+/// - Property names that collide with enclosing type names are kept as named, so the name check refuses them
 /// - Array-type component schemas produce wrapper types with Items field
 /// - Duplicate synthesized operation names get numeric suffixes
 /// </summary>
@@ -17,6 +17,11 @@ public class OpenApiParserFixTests
 {
     private static string FixturePath(string name) =>
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
+
+    // Refused by SchemaNames.Validate, so kept out of Fixtures/Schemas, which other tests
+    // generate every file of.
+    private static string InvalidFixturePath(string name) =>
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "InvalidSchemas", name);
 
     #region NonFatalErrors
 
@@ -195,16 +200,16 @@ public class OpenApiParserFixTests
     #region PropertyNameCollision
 
     [Test]
-    public void Parse_PropertyNameMatchesTypeName_GetsSuffixed()
+    public void Parse_PropertyNameMatchesTypeName_KeptAsNamed()
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("property-collision.json"));
+        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
         var notificationType = schema.Types.Single(t => t.Name == "Notification");
-        // "notification" property on Notification type → PascalCase "Notification" → collides → suffixed
-        notificationType.Fields.Should().NotContain(f => f.Name == "Notification");
-        notificationType.Fields.Should().Contain(f => f.Name == "NotificationValue");
+        // "notification" on Notification converts to the type's own name and is kept, not renamed:
+        // renaming it would rewrite the generated contract, which the refusal in SchemaNames.Validate exists to avoid
+        notificationType.Fields.Should().Contain(f => f.Name == "Notification");
     }
 
     [Test]
@@ -212,11 +217,10 @@ public class OpenApiParserFixTests
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("property-collision.json"));
+        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
         var testimonialType = schema.Types.Single(t => t.Name == "Testimonial");
-        testimonialType.Fields.Should().NotContain(f => f.Name == "Testimonial");
-        testimonialType.Fields.Should().Contain(f => f.Name == "TestimonialValue");
+        testimonialType.Fields.Should().Contain(f => f.Name == "Testimonial");
     }
 
     [Test]
@@ -224,7 +228,7 @@ public class OpenApiParserFixTests
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("property-collision.json"));
+        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
         var notificationType = schema.Types.Single(t => t.Name == "Notification");
         // "title" does not collide with "Notification" — should remain "Title"
@@ -238,7 +242,7 @@ public class OpenApiParserFixTests
     {
         var parser = new OpenApiSchemaParser();
 
-        var schema = parser.Parse(FixturePath("property-collision.json"));
+        var schema = parser.Parse(InvalidFixturePath("property-collision.json"));
 
         var testimonialType = schema.Types.Single(t => t.Name == "Testimonial");
         testimonialType.Fields.Should().Contain(f => f.Name == "Id");

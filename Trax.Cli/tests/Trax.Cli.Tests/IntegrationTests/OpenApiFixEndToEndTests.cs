@@ -34,6 +34,11 @@ public class OpenApiFixEndToEndTests
     private static string FixturePath(string name) =>
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
 
+    // Refused by SchemaNames.Validate, so kept out of Fixtures/Schemas, which other tests
+    // generate every file of.
+    private static string InvalidFixturePath(string name) =>
+        Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "InvalidSchemas", name);
+
     #region NonFatalErrors
 
     [Test]
@@ -164,47 +169,41 @@ public class OpenApiFixEndToEndTests
     #region PropertyCollision
 
     [Test]
-    public void GenerateTrainsLibrary_PropertyCollision_NotificationModelCompilable()
+    public void GenerateTrainsLibrary_PropertyCollision_PropertyNamedLikeTypeRefused()
     {
-        var schema = _parser.Parse(FixturePath("property-collision.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = _parser.Parse(InvalidFixturePath("property-collision.json"));
 
-        var notificationFile = Path.Combine(_outputDir, "Models", "Notification.cs");
-        File.Exists(notificationFile).Should().BeTrue();
+        var act = () => _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
 
-        var content = File.ReadAllText(notificationFile);
-        // Property should be suffixed to avoid CS0542
-        content.Should().Contain("NotificationValue");
-        content.Should().Contain("public record Notification");
-        // Other properties should be normal
-        content.Should().Contain("Title");
-        content.Should().Contain("Id");
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*property 'Notification' of 'Notification'*cannot have its type's name*");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_PropertyCollision_TestimonialModelCompilable()
+    public void GenerateTrainsLibrary_PropertyCollision_RefusalNamesBothCollidingTypes()
     {
-        var schema = _parser.Parse(FixturePath("property-collision.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = _parser.Parse(InvalidFixturePath("property-collision.json"));
 
-        var testimonialFile = Path.Combine(_outputDir, "Models", "Testimonial.cs");
-        File.Exists(testimonialFile).Should().BeTrue();
+        var act = () => _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
 
-        var content = File.ReadAllText(testimonialFile);
-        content.Should().Contain("TestimonialValue");
-        content.Should().Contain("public record Testimonial");
-        content.Should().Contain("Author");
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*property 'Testimonial' of 'Testimonial'*cannot have its type's name*");
     }
 
     [Test]
-    public void GenerateTrainsLibrary_PropertyCollision_TrainFilesStillGenerated()
+    public void GenerateTrainsLibrary_PropertyCollision_RefusedSchemaWritesNothing()
     {
-        var schema = _parser.Parse(FixturePath("property-collision.json"));
-        _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+        var schema = _parser.Parse(InvalidFixturePath("property-collision.json"));
 
-        var listDir = Path.Combine(_outputDir, "Trains", "Notifications", "ListNotifications");
-        File.Exists(Path.Combine(listDir, "IListNotificationsTrain.cs")).Should().BeTrue();
-        File.Exists(Path.Combine(listDir, "ListNotificationsTrain.cs")).Should().BeTrue();
+        var act = () => _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
+
+        act.Should().Throw<InvalidOperationException>();
+        Directory
+            .Exists(_outputDir)
+            .Should()
+            .BeFalse("a refused schema is refused before anything is written");
     }
 
     #endregion
@@ -360,7 +359,7 @@ public class OpenApiFixEndToEndTests
     public void GenerateTrainsLibrary_EmptyInputOperation_JunctionUsesTypedInputName()
     {
         // listNotifications has no parameters → generates an empty input record
-        var schema = _parser.Parse(FixturePath("property-collision.json"));
+        var schema = _parser.Parse(FixturePath("empty-input.json"));
         _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
 
         var junctionPath = Path.Combine(
@@ -384,7 +383,7 @@ public class OpenApiFixEndToEndTests
     [Test]
     public void GenerateTrainsLibrary_EmptyInputOperation_InputFileGenerated()
     {
-        var schema = _parser.Parse(FixturePath("property-collision.json"));
+        var schema = _parser.Parse(FixturePath("empty-input.json"));
         _generator.GenerateTrainsLibrary(schema, _outputDir, "TestProject");
 
         var inputPath = Path.Combine(

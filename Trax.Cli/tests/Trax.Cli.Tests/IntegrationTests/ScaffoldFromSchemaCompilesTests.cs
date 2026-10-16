@@ -97,6 +97,41 @@ public class ScaffoldFromSchemaCompilesTests
     }
 
     [Test]
+    public void An_OpenApi_property_named_like_its_type_is_refused_naming_both()
+    {
+        var schema = ParseOpenApi(
+            """
+            openapi: 3.0.1
+            info: { title: t, version: "1" }
+            paths:
+              /notifications:
+                get:
+                  operationId: listNotifications
+                  responses:
+                    "200":
+                      description: ok
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+                            items: { $ref: '#/components/schemas/Notification' }
+            components:
+              schemas:
+                Notification:
+                  type: object
+                  properties:
+                    notification: { type: string }
+            """
+        );
+
+        var act = () => SchemaNames.Validate(schema, "Api");
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*property 'Notification' of 'Notification'*cannot have its type's name*");
+    }
+
+    [Test]
     public void An_OpenApi_map_of_an_empty_component_generates_a_library_that_compiles()
     {
         // Player is declared before the empty Score it maps to, and before the empty Tag a nested list holds.
