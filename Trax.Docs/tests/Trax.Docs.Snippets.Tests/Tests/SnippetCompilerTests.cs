@@ -273,4 +273,112 @@ public class SnippetCompilerTests
     [TestCase("# No front matter\n", null)]
     public void Follows_IsReadFromTheFrontMatterOnly(string markdown, string? page) =>
         SnippetCompiler.FollowedPageIn(markdown).Should().Be(page);
+
+    [Test]
+    public void TestsGroup_CompilesWithTheAppAndTheTestFrameworks()
+    {
+        var units = SnippetUnit
+            .WithTheAppInTheTests(
+                SnippetUnit
+                    .Own(
+                        Fences.In(
+                            "page.md",
+                            "```csharp compile=app file=Greeting.cs\npublic record Greeting(string Text);\n```\n\n"
+                                + "```csharp compile=tests file=tests/GreetingTests.cs\n"
+                                + "using AwesomeAssertions;\nusing NUnit.Framework;\n\n"
+                                + "public class GreetingTests\n{\n    [Test]\n    public void Text_IsKept() =>\n"
+                                + "        new Greeting(\"hi\").Text.Should().Be(\"hi\");\n}\n```\n"
+                        )
+                    )
+                    .ToList()
+            )
+            .ToList();
+
+        var tests = units.Single(u => u.IsTests);
+        tests.App.Should().ContainSingle();
+        SnippetCompiler.Diagnose(tests).Should().BeEmpty();
+    }
+
+    [Test]
+    public void TestsGroup_HasThePlainSdksImplicitUsings_NotTheWebSdks()
+    {
+        // A test project is a Microsoft.NET.Sdk project: ServiceCollection needs its using.
+        var units = SnippetUnit
+            .WithTheAppInTheTests(
+                SnippetUnit
+                    .Own(
+                        Fences.In(
+                            "page.md",
+                            "```csharp compile=app\npublic record Greeting(string Text);\n```\n\n"
+                                + "```csharp compile=tests\npublic class T\n{\n"
+                                + "    public object S() => new ServiceCollection();\n}\n```\n"
+                        )
+                    )
+                    .ToList()
+            )
+            .ToList();
+
+        SnippetCompiler
+            .Diagnose(units.Single(u => u.IsTests))
+            .Should()
+            .Contain(d => d.Contains("CS0246") && d.Contains("ServiceCollection"));
+    }
+
+    [Test]
+    public void TestsGroup_SeesTheAppsInternals()
+    {
+        var units = SnippetUnit
+            .WithTheAppInTheTests(
+                SnippetUnit
+                    .Own(
+                        Fences.In(
+                            "page.md",
+                            "```csharp compile=app\ninternal record Secret(int Value);\n```\n\n"
+                                + "```csharp compile=tests\npublic class T\n{\n"
+                                + "    internal int S() => new Secret(1).Value;\n}\n```\n"
+                        )
+                    )
+                    .ToList()
+            )
+            .ToList();
+
+        SnippetCompiler.Diagnose(units.Single(u => u.IsTests)).Should().BeEmpty();
+    }
+
+    [Test]
+    public void AppGroup_DoesNotSeeTheTestFrameworks()
+    {
+        var unit = Only("```csharp compile=app\nusing NUnit.Framework;\n\npublic class X;\n```\n");
+
+        SnippetCompiler.Diagnose(unit).Should().Contain(d => d.Contains("CS0246"));
+    }
+
+    [Test]
+    public void TestsGroup_OnAPageWithNoApp_TestsTheAppOfThePageItFollows()
+    {
+        var units = SnippetUnit
+            .WithTheAppInTheTests(
+                SnippetUnit
+                    .Own(
+                        Fences
+                            .In(
+                                "one.md",
+                                "```csharp compile=app file=A.cs\npublic record A;\n```\n"
+                            )
+                            .Concat(
+                                Fences.In(
+                                    "two.md",
+                                    "```csharp compile=tests file=T.cs\npublic class T { public A? Value; }\n```\n"
+                                )
+                            )
+                    )
+                    .ToList(),
+                page => Chapters.GetValueOrDefault(page)
+            )
+            .ToList();
+
+        var tests = units.Single(u => u.IsTests);
+        tests.App.Should().ContainSingle();
+        SnippetCompiler.Diagnose(tests).Should().BeEmpty();
+    }
 }

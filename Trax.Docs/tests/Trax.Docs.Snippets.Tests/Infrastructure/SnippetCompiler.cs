@@ -16,14 +16,62 @@ namespace Trax.Docs.Snippets.Tests.Infrastructure;
 /// it that names the same file, so a chapter shows only the files it adds or changes and still
 /// compiles as the whole project.
 /// </para>
+/// <para>
+/// A group named <c>tests</c> is the project's test project. It compiles as an assembly of its own,
+/// with the implicit usings of a plain <c>Microsoft.NET.Sdk</c> project and the test frameworks a
+/// test project has (<see cref="SnippetCompiler.TestFrameworkAssemblyPrefixes"/>), against the
+/// page's <c>app</c> group compiled as the project it references, whose internals it sees
+/// (<see cref="App"/>).
+/// </para>
 /// </summary>
 public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence> Fences)
 {
+    /// <summary>
+    /// For a <see cref="TestsGroup"/> unit, the fences of the project it tests, which it references;
+    /// empty otherwise.
+    /// </summary>
+    public IReadOnlyList<Fence> App { get; init; } = [];
+
+    /// <summary>The group a page's test project is in.</summary>
+    public const string TestsGroup = "tests";
+
+    /// <summary>The group a <see cref="TestsGroup"/> compiles against.</summary>
+    public const string AppGroup = "app";
+
     public override string ToString() => $"{Page} [{Group}]";
+
+    /// <summary>Whether this unit is a test project, compiled with the test frameworks.</summary>
+    public bool IsTests => Group == TestsGroup;
 
     /// <summary>The compiled fences of every page, one unit per page and group.</summary>
     public static IEnumerable<SnippetUnit> InDocs() =>
-        Following(Own(Infrastructure.Fences.InDocs()).ToList(), SnippetCompiler.FollowedPageOf);
+        WithTheAppInTheTests(
+            Following(Own(Infrastructure.Fences.InDocs()).ToList(), SnippetCompiler.FollowedPageOf)
+                .ToList(),
+            SnippetCompiler.FollowedPageOf
+        );
+
+    /// <summary>
+    /// Each <see cref="TestsGroup"/> unit with the <see cref="AppGroup"/> fences of its page, or of
+    /// the nearest page before it in its chain that has them, as the project it tests; every other
+    /// unit as it is.
+    /// </summary>
+    public static IEnumerable<SnippetUnit> WithTheAppInTheTests(
+        IReadOnlyList<SnippetUnit> units,
+        Func<string, string?>? followedPageOf = null
+    )
+    {
+        var apps = units.Where(u => u.Group == AppGroup).ToDictionary(u => u.Page);
+        return units.Select(u =>
+        {
+            if (!u.IsTests)
+                return u;
+            var page = (string?)u.Page;
+            while (page is not null && !apps.ContainsKey(page))
+                page = followedPageOf?.Invoke(page);
+            return page is null ? u : u with { App = apps[page].Fences };
+        });
+    }
 
     /// <summary>The units the fences make on their own pages, before any page follows another.</summary>
     public static IEnumerable<SnippetUnit> Own(IEnumerable<Fence> fences) =>
@@ -161,11 +209,25 @@ public static class SnippetCompiler
         "nunit.",
         "NUnit3.",
         "AwesomeAssertions",
+        "Microsoft.AspNetCore.Mvc.Testing",
+        "Microsoft.AspNetCore.TestHost",
         "Microsoft.CodeAnalysis",
         "Microsoft.TestPlatform",
         "Microsoft.VisualStudio.TestPlatform",
         "Microsoft.VisualStudio.CodeCoverage",
         "testhost",
+    ];
+
+    /// <summary>
+    /// The test frameworks a reader's test project references, which a <c>tests</c> group compiles
+    /// with and every other group does not.
+    /// </summary>
+    public static readonly IReadOnlyList<string> TestFrameworkAssemblyPrefixes =
+    [
+        "nunit.",
+        "AwesomeAssertions",
+        "Microsoft.AspNetCore.Mvc.Testing",
+        "Microsoft.AspNetCore.TestHost",
     ];
 
     /// <summary>
@@ -183,7 +245,13 @@ public static class SnippetCompiler
 
     private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
 
-    private static readonly Lazy<IReadOnlyList<MetadataReference>> References = new(LoadReferences);
+    private static readonly Lazy<IReadOnlyList<MetadataReference>> References = new(() =>
+        LoadReferences(tests: false)
+    );
+
+    private static readonly Lazy<IReadOnlyList<MetadataReference>> TestReferences = new(() =>
+        LoadReferences(tests: true)
+    );
 
     /// <summary>The context file every page's compilations get, unless the page opts out.</summary>
     public const string SharedFile = "_shared.cs";
@@ -273,16 +341,78 @@ public static class SnippetCompiler
     /// </summary>
     public static IReadOnlyList<string> Diagnose(SnippetUnit unit)
     {
+        if (unit.IsTests && unit.App.Count > 0)
+        {
+            // The project under test: its own diagnostics belong to the app unit, which reports
+            // them. It grants the tests its internals, as InternalsVisibleTo does.
+            var app = Compile(
+                AppAssemblyName,
+                unit.Page,
+                unit.App,
+                ImplicitUsings,
+                References.Value,
+                $"[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"{TestsAssemblyName}\")]"
+            );
+            return Report(
+                Compile(
+                    TestsAssemblyName,
+                    unit.Page,
+                    unit.Fences,
+                    TestImplicitUsings,
+                    [.. TestReferences.Value, app.ToMetadataReference()],
+                    withContext: false
+                )
+            );
+        }
+
+        return Report(
+            Compile(
+                AppAssemblyName,
+                unit.Page,
+                unit.Fences,
+                ImplicitUsings,
+                unit.IsTests ? TestReferences.Value : References.Value
+            )
+        );
+    }
+
+    private const string AppAssemblyName = "Snippet";
+
+    private const string TestsAssemblyName = "Snippet.Tests";
+
+    /// <summary>The usings a plain <c>Microsoft.NET.Sdk</c> project, as a test project is, gets.</summary>
+    public static readonly IReadOnlyList<string> TestImplicitUsings =
+    [
+        "System",
+        "System.Collections.Generic",
+        "System.IO",
+        "System.Linq",
+        "System.Net.Http",
+        "System.Threading",
+        "System.Threading.Tasks",
+    ];
+
+    private static CSharpCompilation Compile(
+        string assemblyName,
+        string page,
+        IEnumerable<Fence> fences,
+        IReadOnlyList<string> implicitUsings,
+        IEnumerable<MetadataReference> references,
+        string? extraSource = null,
+        bool withContext = true
+    )
+    {
         var trees = new List<SyntaxTree>
         {
             CSharpSyntaxTree.ParseText(
-                string.Concat(ImplicitUsings.Select(u => $"global using global::{u};\n")),
+                string.Concat(implicitUsings.Select(u => $"global using global::{u};\n"))
+                    + (extraSource is null ? "" : extraSource + "\n"),
                 ParseOptions,
                 path: "ImplicitUsings.g.cs"
             ),
         };
 
-        foreach (var fence in unit.Fences)
+        foreach (var fence in fences)
             trees.Add(
                 CSharpSyntaxTree.ParseText(
                     $"#line {fence.FirstCodeLine} \"{fence.Page}\"\n{fence.Code}\n",
@@ -291,7 +421,8 @@ public static class SnippetCompiler
                 )
             );
 
-        foreach (var context in ContextFilesFor(unit.Page))
+        // The context files join the project; a test project sees them through its reference.
+        foreach (var context in withContext ? ContextFilesFor(page) : [])
             trees.Add(
                 CSharpSyntaxTree.ParseText(
                     File.ReadAllText(context),
@@ -304,18 +435,20 @@ public static class SnippetCompiler
             t.GetCompilationUnitRoot().Members.OfType<GlobalStatementSyntax>().Any()
         );
 
-        var compilation = CSharpCompilation.Create(
-            "Snippet",
+        return CSharpCompilation.Create(
+            assemblyName,
             trees,
-            References.Value,
+            references,
             new CSharpCompilationOptions(
                 executable ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable,
                 specificDiagnosticOptions: MSBuildNoWarn
             )
         );
+    }
 
-        return compilation
+    private static IReadOnlyList<string> Report(CSharpCompilation compilation) =>
+        compilation
             .GetDiagnostics()
             .Where(d =>
                 !d.IsSuppressed
@@ -325,7 +458,9 @@ public static class SnippetCompiler
             .ThenBy(d => d.Location.GetMappedLineSpan().StartLinePosition.Line)
             .Select(Format)
             .ToList();
-    }
+
+    private static bool StartsWith(string path, string prefix) =>
+        Path.GetFileName(path).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
 
     private static string Format(Diagnostic diagnostic)
     {
@@ -337,7 +472,7 @@ public static class SnippetCompiler
         return $"{where}: {severity} {diagnostic.Id}: {diagnostic.GetMessage()}";
     }
 
-    private static IReadOnlyList<MetadataReference> LoadReferences()
+    private static IReadOnlyList<MetadataReference> LoadReferences(bool tests)
     {
         var list = Path.Combine(AppContext.BaseDirectory, "snippet-references.txt");
         if (!File.Exists(list))
@@ -349,9 +484,8 @@ public static class SnippetCompiler
         return File.ReadAllLines(list)
             .Where(line => line.Length > 0)
             .Where(path =>
-                !TestOnlyAssemblyPrefixes.Any(prefix =>
-                    Path.GetFileName(path).StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                )
+                !TestOnlyAssemblyPrefixes.Any(prefix => StartsWith(path, prefix))
+                || (tests && TestFrameworkAssemblyPrefixes.Any(prefix => StartsWith(path, prefix)))
             )
             .Distinct(StringComparer.Ordinal)
             .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
