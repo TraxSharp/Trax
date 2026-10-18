@@ -130,6 +130,10 @@
       "text": "query MachineInstances($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $skip: Int!, $take: Int!) {\n  operations {\n    machineInstances(\n      machine: $machine\n      state: $state\n      ownerKind: $ownerKind\n      skip: $skip\n      take: $take\n    ) {\n      items {\n        machine\n        ownerKind\n        id\n        rowId\n        state\n        version\n        createdAt\n        updatedAt\n        hasLiveInvokedRun\n        __typename\n      }\n      totalCount\n      isCountCapped\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "Machines",
+      "text": "query Machines {\n  operations {\n    machines {\n      name\n      version\n      systemOwned\n      schemaHash\n      initialState\n      graphUnavailableReason\n      states {\n        name\n        isInitial\n        isFinal\n        isCommitted\n        invokesTrain\n        spawnsMachine\n        __typename\n      }\n      transitions {\n        from\n        command\n        to\n        kind\n        guard\n        effect\n        after\n        __typename\n      }\n      timers {\n        state\n        command\n        target\n        after\n        field\n        min\n        max\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "ManifestDetail",
       "text": "query ManifestDetail($id: Long!) {\n  operations {\n    manifestDetail(id: $id) {\n      id\n      externalId\n      name\n      isEnabled\n      scheduleType\n      cronExpression\n      intervalSeconds\n      maxRetries\n      timeoutSeconds\n      lastSuccessfulRun\n      manifestGroupId\n      manifestGroupName\n      dependsOnManifestId\n      priority\n      propertyTypeName\n      properties\n      misfirePolicy\n      misfireThresholdSeconds\n      scheduledAt\n      nextScheduledRun\n      varianceSeconds\n      replayDecisionsOnRetry\n      __typename\n    }\n    __typename\n  }\n}"
     },

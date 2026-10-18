@@ -1,6 +1,6 @@
 ---
-title: "operations: machine instance queries"
-description: "Reference for the operations queries over persisted state machine instances: the paged list, one instance with its invoked runs, and counts by state."
+title: "operations: machine queries"
+description: "Reference for the operations queries over state machines: registered machines and their graphs, instances, one instance with its runs, and counts by state."
 type: reference
 area: api
 surface: graphql
@@ -10,11 +10,53 @@ grand_parent: GraphQL API
 nav_order: 5
 source:
   - Trax.Api/src/Trax.Api.GraphQL/Queries/OperationsQueries.MachineInstances.cs
+  - Trax.Api/src/Trax.Api.GraphQL/Queries/OperationsQueries.Machines.cs
 ---
 
-# operations: machine instance queries
+# operations: machine queries
 
-Fields of `OperationsQueries` that read the instances of persisted state machines.
+Fields of `OperationsQueries` that read persisted state machines: the machines a host registers,
+and their instances.
+
+## machines
+
+Every machine the host registers, ordered by name, whether or not it has any instances, with its
+graph. It reads through `IOperationsService.GetMachinesAsync`, which reads each machine's IR by the
+same reading [`trax machine show`](/docs/reference/cli) draws it from, so the two list the same
+states and edges in the same order.
+
+```graphql
+query {
+  operations {
+    machines {
+      name
+      version
+      systemOwned
+      initialState
+      states { name isInitial isFinal isCommitted invokesTrain spawnsMachine }
+      transitions { from command to kind guard effect after }
+      timers { state command target after field min max }
+    }
+  }
+}
+```
+
+**Returns**: `[MachineDefinition!]!`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `String!` | The machine's id |
+| `version` | `Int!` | The definition version it declares |
+| `systemOwned` | `Boolean!` | True when only the system holds its instances |
+| `schemaHash` | `String` | The hash of its IR, which each instance row records as the definition that last wrote it |
+| `initialState` | `String` | The state an instance starts in |
+| `states` | `[MachineDefinitionState!]!` | Every state in IR order: `name`, `isInitial`, `isFinal` (no transition leaves it), `isCommitted`, `invokesTrain` (the invoked train's interface full name) and `spawnsMachine` (the spawned machine's id) |
+| `transitions` | `[MachineDefinitionTransition!]!` | Every edge: `from`, `command`, `to`, `kind` (`COMMAND`, `TIMER` or `OUTCOME`), `guard` (its message, or its rule's name), `effect` (the key prefix of the effect it runs once) and, for a timer, `after`. Commands come first, then timers, then each invoking state's outcomes (`Building.done`, `.failed`, `.cancelled`) in the order they are tried |
+| `timers` | `[MachineDefinitionTimer!]!` | Every timed state's timer: `state`, `command`, `target`, and a fixed `after` or the context `field` with its `min` and `max`, all ISO-8601 durations |
+| `graphUnavailableReason` | `String` | Why the machine has no graph: it was declared with C# delegates, which its IR cannot carry. Its states and transitions are then empty |
+
+It carries what a machine declares and nothing about any instance: the counts and the instances are
+the fields below.
 
 ## machineInstances
 

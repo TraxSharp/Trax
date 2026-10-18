@@ -1,5 +1,5 @@
 using System.Text;
-using System.Text.Json.Nodes;
+using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
 
@@ -18,6 +18,8 @@ internal enum MachineFormat
 /// 2-D graph, which stays readable and diffs cleanly however many states there are. A state's timer is drawn as an
 /// edge of its own, under its trigger (<c>Review.after</c>) and marked with how long the state is held, since only
 /// the server fires it. An invoked train's outcome is drawn the same way, under its trigger (<c>Dealing.done</c>).
+/// The IR is read by <see cref="MachineGraph"/>, the same reading the operations surface serves a machine's graph
+/// from, so the console and this command never disagree on what a machine is.
 /// </summary>
 internal static class MachineRenderer
 {
@@ -28,7 +30,7 @@ internal static class MachineRenderer
         bool color = false
     )
     {
-        var ir = Ir.Parse(irJson);
+        var ir = MachineGraph.Parse(irJson);
         return format switch
         {
             // The diagram sources are printed too; their only control character of their own is the newline.
@@ -38,7 +40,7 @@ internal static class MachineRenderer
         };
     }
 
-    private static string Text(Ir ir, Glyphs g, bool color)
+    private static string Text(MachineGraph ir, Glyphs g, bool color)
     {
         string Paint(string text, string code) => color ? $"\u001b[{code}m{text}\u001b[0m" : text;
 
@@ -124,7 +126,7 @@ internal static class MachineRenderer
         return string.Concat(text.Select(c => Unsafe(c) ? '?' : c));
     }
 
-    private static string Mermaid(Ir ir)
+    private static string Mermaid(MachineGraph ir)
     {
         var sb = new StringBuilder("stateDiagram-v2\n");
         sb.Append($"    [*] --> {ir.Initial}\n");
@@ -142,7 +144,7 @@ internal static class MachineRenderer
         return sb.ToString();
     }
 
-    private static string Dot(Ir ir)
+    private static string Dot(MachineGraph ir)
     {
         var sb = new StringBuilder($"digraph \"{DotText(ir.Id)}\" {{\n");
         sb.Append("    rankdir=LR;\n");
@@ -163,7 +165,7 @@ internal static class MachineRenderer
         return sb.ToString();
     }
 
-    private static string Label(Transition edge, string separator)
+    private static string Label(MachineEdge edge, string separator)
     {
         var parts = new List<string> { edge.Trigger };
         if (edge.Guard is not null)
@@ -200,122 +202,5 @@ internal static class MachineRenderer
     {
         public static readonly Glyphs Unicode = new("◀", "■", "──", '─', "▶", "⚡", "⏱");
         public static readonly Glyphs Ascii = new("<-", "[x]", "--", '-', ">", "!", "@");
-    }
-
-    private sealed record Transition(
-        string From,
-        string Trigger,
-        string To,
-        string? Guard,
-        string? Reduce,
-        string? Effect
-    )
-    {
-        /// <summary>How long a timer edge's state is held (<c>PT10M</c>, or a context field with its bounds); null for an event.</summary>
-        public string? Timer { get; init; }
-    }
-
-    private sealed record Ir(
-        string Id,
-        string Version,
-        string Initial,
-        IReadOnlyList<string> States,
-        IReadOnlySet<string> Committed,
-        IReadOnlyList<Transition> Transitions
-    )
-    {
-        public static Ir Parse(string json)
-        {
-            var root =
-                JsonNode.Parse(json) as JsonObject
-                ?? throw new InvalidOperationException("The machine's IR is not a JSON object.");
-
-            string Required(JsonObject o, string name) =>
-                o[name]?.ToString()
-                ?? throw new InvalidOperationException($"The machine's IR has no '{name}'.");
-
-            var transitions = (root["transitions"] as JsonArray ?? [])
-                .OfType<JsonObject>()
-                .Select(t => new Transition(
-                    Required(t, "from"),
-                    Required(t, "trigger"),
-                    Required(t, "to"),
-                    t["guardMessage"]?.ToString()
-                        ?? (t["guard"] as JsonObject)?["rule"]?.ToString(),
-                    (t["reduce"] as JsonObject)?["reduce"]?.ToString(),
-                    (t["effect"] as JsonObject)?["keyPrefix"]?.ToString()
-                ))
-                .ToList();
-
-            // A timer is an edge the server takes once its state has been held long enough: fixed (`after`), or for
-            // the duration a context field holds within its bounds.
-            transitions.AddRange(
-                (root["timers"] as JsonArray ?? [])
-                    .OfType<JsonObject>()
-                    .Select(t => new Transition(
-                        Required(t, "state"),
-                        Required(t, "trigger"),
-                        Required(t, "target"),
-                        null,
-                        null,
-                        null
-                    )
-                    {
-                        Timer =
-                            t["after"]?.ToString()
-                            ?? (
-                                t["field"] is JsonObject field
-                                    ? $"{field["name"]} ({field["min"]} to {field["max"]})"
-                                    : "?"
-                            ),
-                    })
-            );
-
-            // A state that invokes a train is left by the train's outcome (Dealing.done, .failed, .cancelled), whose
-            // edges are tried in order. They are edges like any other: a state reached only through one is reachable.
-            foreach (var (trigger, node) in root["outcomes"] as JsonObject ?? [])
-            {
-                if (node is not JsonObject outcome)
-                    continue;
-                var from = Required(outcome, "state");
-                transitions.AddRange(
-                    (outcome["edges"] as JsonArray ?? [])
-                        .OfType<JsonObject>()
-                        .Select(e => new Transition(
-                            from,
-                            trigger,
-                            Required(e, "to"),
-                            (e["guard"] as JsonObject)?["rule"]?.ToString(),
-                            (e["reduce"] as JsonObject)?["reduce"]?.ToString(),
-                            null
-                        ))
-                );
-            }
-
-            return new Ir(
-                Required(root, "id"),
-                root["version"]?.ToString() ?? "?",
-                Required(root, "initialState"),
-                (root["states"] as JsonArray ?? []).Select(s => s!.ToString()).ToList(),
-                (root["committedStates"] as JsonArray ?? [])
-                    .Select(s => s!.ToString())
-                    .ToHashSet(StringComparer.Ordinal),
-                transitions
-            );
-        }
-
-        public HashSet<string> Reachable()
-        {
-            var seen = new HashSet<string>(StringComparer.Ordinal) { Initial };
-            var queue = new Queue<string>([Initial]);
-            while (queue.Count > 0)
-            {
-                var state = queue.Dequeue();
-                foreach (var edge in Transitions.Where(t => t.From == state))
-                    if (seen.Add(edge.To))
-                        queue.Enqueue(edge.To);
-            }
-            return seen;
-        }
     }
 }

@@ -716,6 +716,18 @@ public interface IOperationsService
     Task<IReadOnlyList<LookupMatch>> LookupAsync(string text, CancellationToken ct) =>
         throw NotImplementedBy(nameof(LookupAsync));
 
+    /// <summary>
+    /// Every state machine this host registers, ordered by name, whether or not it has any
+    /// instances: its version and its graph (states, transitions with what takes each and its
+    /// guard, timers, the train each state invokes and the machine each spawns), read from its IR
+    /// by the same reading <c>trax machine show</c> draws it from. A machine declared with C#
+    /// delegates has no IR; it is listed with why it has no graph. The console's Machines page and
+    /// the API's <c>operations.machines</c> both read it here.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<MachineDescription>> GetMachinesAsync(CancellationToken ct) =>
+        throw NotImplementedBy(nameof(GetMachinesAsync));
+
     private NotSupportedException NotImplementedBy(string member) =>
         new(
             $"{GetType().Name} does not implement {member}. It was added to IOperationsService "

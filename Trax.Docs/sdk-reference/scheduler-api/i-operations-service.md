@@ -57,6 +57,7 @@ public interface IOperationsService
     Task<MachineInstanceRuns?> GetMachineInstanceRunsAsync(MachineInstanceKey key, CancellationToken ct);
     Task<MachineInstanceCancelResult> CancelMachineInstanceAsync(MachineInstanceKey key, CancellationToken ct);
     IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstancesAsync(string? machine, CancellationToken ct);
+    Task<IReadOnlyList<MachineDescription>> GetMachinesAsync(CancellationToken ct);
     Task<DashboardMetrics> GetDashboardMetricsAsync(MetricsRange range, bool hideAdminTrains, CancellationToken ct);
     Task<ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, CancellationToken ct);
     Task<ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(CancellationToken ct);
@@ -75,6 +76,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | [Settings](#settings) | `UpdateManifestGroupAsync`, `GetSchedulerConfig`, `UpdateSchedulerConfigAsync` |
 | [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
 | [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `CancelMachineInstanceAsync` |
+| [State-machine definitions](#state-machine-definitions) | `GetMachinesAsync` |
 
 ## Queueing and running
 
@@ -692,6 +694,69 @@ The messages are public members of `OperationsService`, and both surfaces show t
 
 A requeue of a run a machine invoked is refused with `InvokedRunRequeueRefusal(metadataId, machine)`,
 and an operator's cancel of a run a user's draft started with `UserOwnedRunCancelRefusal`.
+
+## State-machine definitions
+
+The machines the host registers, described from what each declares rather than from its instances,
+so a machine with none is listed. The console's Machines page and the API's
+[`operations.machines`](/docs/sdk-reference/graphql-api/queries/machine-instances#machines) read
+through this method.
+
+```csharp fragment
+public record MachineDescription(string Name, int Version, bool SystemOwned)
+{
+    public string? SchemaHash { get; init; }
+    public string? InitialState { get; init; }
+    public IReadOnlyList<MachineStateDescription> States { get; init; }
+    public IReadOnlyList<MachineTransitionDescription> Transitions { get; init; }
+    public IReadOnlyList<MachineTimerDescription> Timers { get; init; }
+    public string? GraphUnavailableReason { get; init; }
+}
+
+public record MachineStateDescription(string Name)
+{
+    public bool IsInitial { get; init; }
+    public bool IsFinal { get; init; }
+    public bool IsCommitted { get; init; }
+    public string? InvokesTrain { get; init; }
+    public string? SpawnsMachine { get; init; }
+}
+
+public enum MachineTransitionKind { Command, Timer, Outcome }
+
+public record MachineTransitionDescription(string From, string Command, string To, MachineTransitionKind Kind)
+{
+    public string? Guard { get; init; }
+    public string? Effect { get; init; }
+    public string? After { get; init; }
+}
+
+public record MachineTimerDescription(string State, string Command, string Target)
+{
+    public string? After { get; init; }
+    public string? Field { get; init; }
+    public string? Min { get; init; }
+    public string? Max { get; init; }
+}
+```
+
+| Method | Returns |
+|--------|---------|
+| [`GetMachinesAsync(ct)`](#getmachinesasync) | every registered machine, ordered by name |
+
+### GetMachinesAsync
+
+Every machine registered in the container, each type once, ordered by name. The graph is read from
+the machine's IR (`IMachine.ExportIr()`) by the same reading
+[`trax machine show`](/docs/reference/cli) draws it from, so the two list the same states and edges
+in the same order: the commands, then the timers, then each invoking state's outcomes in the order
+they are tried. `IsFinal` is true for a state no transition leaves. `InvokesTrain` is the invoked
+train's interface full name and `SpawnsMachine` the spawned machine's id. A timer appears twice: as
+a `Timer` transition, whose `After` is the duration on one line, and in `Timers` with the fixed
+duration (`After`) or the context field and its bounds (`Field`, `Min`, `Max`), all ISO-8601. A
+machine declared with C# delegates has no IR: it is listed with its name, version and
+`GraphUnavailableReason`, and no states. Each description is built once per machine and kept,
+since a machine's definition does not change while the host runs. It reads no table.
 
 ## Behavior
 

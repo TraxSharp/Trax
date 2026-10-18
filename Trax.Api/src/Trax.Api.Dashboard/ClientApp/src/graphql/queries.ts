@@ -1003,6 +1003,49 @@ export const LOOKUP = gql`
 // ── State machines ─────────────────────────────────────────────────────────
 // Operators see instances read-only and never their context: none of these selects it.
 
+// Every machine the host registers, with or without instances, and its graph as `trax machine show`
+// draws it: states, transitions (what takes each: a command, a timer or an outcome) and timers.
+export const MACHINES = gql`
+  query Machines {
+    operations {
+      machines {
+        name
+        version
+        systemOwned
+        schemaHash
+        initialState
+        graphUnavailableReason
+        states {
+          name
+          isInitial
+          isFinal
+          isCommitted
+          invokesTrain
+          spawnsMachine
+        }
+        transitions {
+          from
+          command
+          to
+          kind
+          guard
+          effect
+          after
+        }
+        timers {
+          state
+          command
+          target
+          after
+          field
+          min
+          max
+        }
+      }
+    }
+  }
+`;
+
 // How many instances each machine has in each state, by owner kind. Exact, where the list's total
 // stops at 10,000.
 export const MACHINE_INSTANCE_COUNTS = gql`

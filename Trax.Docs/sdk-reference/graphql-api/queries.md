@@ -106,17 +106,21 @@ One run drawn on its train's declared chain. [operations: execution queries](/do
 
 One run's recorded decisions. [operations: execution queries](/docs/sdk-reference/graphql-api/queries/executions#decisions)
 
+### machines
+
+Every registered machine with its graph, with or without instances. [operations: machine queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machines)
+
 ### machineInstances
 
-The paged list of persisted state machine instances. [operations: machine instance queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances)
+The paged list of persisted state machine instances. [operations: machine queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances)
 
 ### machineInstance
 
-One instance with the runs it invoked. [operations: machine instance queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstance)
+One instance with the runs it invoked. [operations: machine queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstance)
 
 ### machineInstanceCounts
 
-Instance counts by machine, state and owner kind. [operations: machine instance queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstancecounts)
+Instance counts by machine, state and owner kind. [operations: machine queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstancecounts)
 
 ## deadLetters (nested under operations)
 

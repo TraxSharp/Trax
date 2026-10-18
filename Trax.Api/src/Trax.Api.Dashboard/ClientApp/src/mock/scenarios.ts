@@ -1106,12 +1106,87 @@ function machineInstancesPage(args: Args, capped = false) {
   };
 }
 
+// The machines the host registers, as operations.machines describes them: the two the instances
+// above belong to, and one with no instance at all, which only this read lists.
+function state(name: string, marks: Partial<Record<"isInitial" | "isFinal" | "isCommitted", boolean>> = {}, invokesTrain: string | null = null) {
+  return { name, isInitial: false, isFinal: false, isCommitted: false, invokesTrain, spawnsMachine: null, ...marks };
+}
+
+function edge(from: string, command: string, to: string, kind: "COMMAND" | "TIMER" | "OUTCOME", extra: { guard?: string; effect?: string; after?: string } = {}) {
+  return { from, command, to, kind, guard: extra.guard ?? null, effect: extra.effect ?? null, after: extra.after ?? null };
+}
+
+export const MACHINE_DEFINITIONS = [
+  {
+    name: "retention-sweep",
+    version: 1,
+    systemOwned: true,
+    schemaHash: "c0ffee".repeat(10) + "beef",
+    initialState: "Idle",
+    graphUnavailableReason: null,
+    states: [state("Idle", { isInitial: true }), state("Sweeping", {}, "Trax.Samples.Recovery.ISweepRetentionTrain")],
+    transitions: [
+      edge("Idle", "Idle.after", "Sweeping", "TIMER", { after: "PT1H" }),
+      edge("Sweeping", "Sweeping.done", "Idle", "OUTCOME"),
+      edge("Sweeping", "Sweeping.failed", "Idle", "OUTCOME"),
+      edge("Sweeping", "Sweeping.cancelled", "Idle", "OUTCOME"),
+    ],
+    timers: [{ state: "Idle", command: "Idle.after", target: "Sweeping", after: "PT1H", field: null, min: null, max: null }],
+  },
+  {
+    name: "source-partition",
+    version: 1,
+    systemOwned: true,
+    schemaHash: "a1b2c3d4".repeat(8),
+    initialState: "Pending",
+    graphUnavailableReason: null,
+    states: [
+      state("Failed"),
+      state("Ingested", { isFinal: true, isCommitted: true }),
+      state("Ingesting", {}, "Trax.Samples.Recovery.IIngestPartitionTrain"),
+      state("Pending", { isInitial: true }),
+    ],
+    transitions: [
+      edge("Failed", "Retry", "Ingesting", "COMMAND"),
+      edge("Pending", "Ingest", "Ingesting", "COMMAND"),
+      edge("Ingesting", "Ingesting.done", "Ingested", "OUTCOME"),
+      edge("Ingesting", "Ingesting.failed", "Failed", "OUTCOME"),
+      edge("Ingesting", "Ingesting.cancelled", "Failed", "OUTCOME"),
+    ],
+    timers: [],
+  },
+  {
+    name: "topic-map",
+    version: 2,
+    systemOwned: false,
+    schemaHash: "0f1e2d3c".repeat(8),
+    initialState: "ChoosingRange",
+    graphUnavailableReason: null,
+    states: [
+      state("Building", {}, "Trax.Samples.Recovery.IBuildTopicMapTrain"),
+      state("Built", { isCommitted: true }),
+      state("ChoosingRange", { isInitial: true }),
+      state("Expired", { isFinal: true }),
+    ],
+    transitions: [
+      edge("Built", "Rebuild", "ChoosingRange", "COMMAND"),
+      edge("ChoosingRange", "Build", "Building", "COMMAND", { guard: "Choose a range of at least one day" }),
+      edge("ChoosingRange", "ChoosingRange.after", "Expired", "TIMER", { after: "PT24H" }),
+      edge("Building", "Building.done", "Built", "OUTCOME"),
+      edge("Building", "Building.failed", "ChoosingRange", "OUTCOME"),
+      edge("Building", "Building.cancelled", "ChoosingRange", "OUTCOME"),
+    ],
+    timers: [{ state: "ChoosingRange", command: "ChoosingRange.after", target: "Expired", after: "PT24H", field: null, min: null, max: null }],
+  },
+];
+
 /** The OperationsQueries resolvers of {@link machineScenario}. */
 export const machineQueryResolvers = {
   machineInstanceCounts: (_root: unknown, args: Args) =>
     machineCounts(args.machine != null ? MACHINE_ROWS.filter((r) => r.machine === args.machine) : MACHINE_ROWS),
   machineInstances: (_root: unknown, args: Args) => machineInstancesPage(args),
   machineInstance: (_root: unknown, args: Args) => machineInstanceDetail(args),
+  machines: () => MACHINE_DEFINITIONS,
 };
 
 export const machineScenario: MockSchemaOverrides = {

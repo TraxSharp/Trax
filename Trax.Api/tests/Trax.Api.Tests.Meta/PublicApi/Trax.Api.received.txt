@@ -353,6 +353,51 @@ namespace Trax.Api.DTOs
         public string Category { get; init; }
         public Microsoft.Extensions.Logging.LogLevel Level { get; init; }
     }
+    public class MachineDefinition : System.IEquatable<Trax.Api.DTOs.MachineDefinition>
+    {
+        public MachineDefinition(string Name, int Version, bool SystemOwned) { }
+        public string? GraphUnavailableReason { get; init; }
+        public string? InitialState { get; init; }
+        public string Name { get; init; }
+        public string? SchemaHash { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineDefinitionState> States { get; init; }
+        public bool SystemOwned { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineDefinitionTimer> Timers { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineDefinitionTransition> Transitions { get; init; }
+        public int Version { get; init; }
+    }
+    public class MachineDefinitionState : System.IEquatable<Trax.Api.DTOs.MachineDefinitionState>
+    {
+        public MachineDefinitionState(string Name) { }
+        public string? InvokesTrain { get; init; }
+        public bool IsCommitted { get; init; }
+        public bool IsFinal { get; init; }
+        public bool IsInitial { get; init; }
+        public string Name { get; init; }
+        public string? SpawnsMachine { get; init; }
+    }
+    public class MachineDefinitionTimer : System.IEquatable<Trax.Api.DTOs.MachineDefinitionTimer>
+    {
+        public MachineDefinitionTimer(string State, string Command, string Target) { }
+        public string? After { get; init; }
+        public string Command { get; init; }
+        public string? Field { get; init; }
+        public string? Max { get; init; }
+        public string? Min { get; init; }
+        public string State { get; init; }
+        public string Target { get; init; }
+    }
+    public class MachineDefinitionTransition : System.IEquatable<Trax.Api.DTOs.MachineDefinitionTransition>
+    {
+        public MachineDefinitionTransition(string From, string Command, string To, Trax.Scheduler.Services.Operations.MachineTransitionKind Kind) { }
+        public string? After { get; init; }
+        public string Command { get; init; }
+        public string? Effect { get; init; }
+        public string From { get; init; }
+        public string? Guard { get; init; }
+        public Trax.Scheduler.Services.Operations.MachineTransitionKind Kind { get; init; }
+        public string To { get; init; }
+    }
     public class MachineInstance : System.IEquatable<Trax.Api.DTOs.MachineInstance>
     {
         public MachineInstance(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun) { }

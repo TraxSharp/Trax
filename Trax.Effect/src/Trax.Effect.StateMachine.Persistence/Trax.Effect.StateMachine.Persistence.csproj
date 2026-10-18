@@ -41,6 +41,9 @@
     <InternalsVisibleTo Include="Trax.Samples.Recovery.E2E" />
     <!-- The change feed: machineChanged and the operator feed read SnapshotWatchHub, which a host neither implements
          nor calls. Their tests count its watches and drive its listener. -->
+    <!-- The IR read into states and edges (MachineGraph): `trax machine show` draws it and the operations surface
+         serves it, so there is one reading of the IR. The CLI's assembly is named `trax`. -->
+    <InternalsVisibleTo Include="trax" />
     <InternalsVisibleTo Include="Trax.Api" />
     <InternalsVisibleTo Include="Trax.Api.GraphQL" />
     <InternalsVisibleTo Include="Trax.Api.Tests" />
