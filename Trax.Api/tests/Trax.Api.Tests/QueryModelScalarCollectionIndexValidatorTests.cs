@@ -1,11 +1,23 @@
 using AwesomeAssertions;
+using HotChocolate;
+using HotChocolate.Data.Filters;
+using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.TypeModules;
+using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Attributes;
+using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Services.EffectRegistry;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Api.Tests;
 
@@ -33,6 +45,20 @@ public class QueryModelScalarCollectionIndexValidatorTests
         warning.Should().Contain("Loose");
         warning.Should().Contain("gin");
         warning.Should().Contain("= ANY");
+    }
+
+    [Test]
+    public async Task IgnoredScalarCollection_LogsNothing()
+    {
+        // The filter input is the source of truth for what a caller can filter on. When a
+        // registered AddFilterType override removes a scalar collection from the input,
+        // there is no `some: { eq: }` filter left for it to slow down, so the
+        // missing-index warning is wrong for it and must not fire.
+        var warnings = await RunValidatorAsync<IndexProbeDbContext>(b =>
+            b.AddFilterType<UnindexedRow, UnindexedRowFilterInputType>()
+        );
+
+        warnings.Should().NotContain(w => w.Contains("Loose"));
     }
 
     [Test]
@@ -114,7 +140,53 @@ public class QueryModelScalarCollectionIndexValidatorTests
 
     #region Harness
 
-    private static async Task<List<string>> RunValidatorAsync<TContext>()
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    public async Task ThroughTheRealWiring_AnExposedCollectionIsReported_AndAnIgnoredOneIsNot(
+        bool ignored,
+        bool reported
+    )
+    {
+        // AddTraxGraphQL builds the schema the validator reads, so a change in how it names the
+        // discover field or the where argument shows up here, where the hand-built harness above
+        // would still pass.
+        var recorder = new RecordingLoggerProvider();
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddProvider(recorder).SetMinimumLevel(LogLevel.Warning));
+        services.AddSingleton<TraxMarker>();
+        services.AddSingleton(Substitute.For<ITrainDiscoveryService>());
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+        services.AddSingleton(Substitute.For<ITraxScheduler>());
+        services.AddSingleton(Substitute.For<ITraxHealthService>());
+        services.AddDbContext<IndexProbeDbContext>();
+        services.AddTraxGraphQL(g =>
+        {
+            g.AddDbContext<IndexProbeDbContext>();
+            if (ignored)
+                g.AddFilterType<UnindexedRow, UnindexedRowFilterInputType>();
+            return g;
+        });
+
+        await using var provider = services.BuildServiceProvider();
+        var validator = provider
+            .GetServices<IHostedService>()
+            .Single(h => h.GetType().Name == "QueryModelScalarCollectionIndexValidator");
+        await validator.StartAsync(CancellationToken.None);
+
+        recorder
+            .Messages.Any(w => w.Contains("Loose"))
+            .Should()
+            .Be(
+                reported,
+                ignored
+                    ? "the filter input has no Loose field"
+                    : "Loose is filterable and has no GIN index"
+            );
+    }
+
+    private static async Task<List<string>> RunValidatorAsync<TContext>(
+        Action<TraxGraphQLBuilder>? customize = null
+    )
         where TContext : DbContext
     {
         var recorder = new RecordingLoggerProvider();
@@ -125,8 +197,24 @@ public class QueryModelScalarCollectionIndexValidatorTests
 
         var builder = new TraxGraphQLBuilder(services);
         builder.AddDbContext<TContext>();
+        customize?.Invoke(builder);
         var config = builder.Build();
         services.AddSingleton(config);
+
+        // The validator checks the EF model against what the built schema exposes, so the
+        // harness registers a minimal "trax" server the way the real wiring does: a root
+        // query with `discover`, the query-model fields, and the stock conventions that
+        // build the `where` argument.
+        services.AddSingleton<QueryModelTypeModule>();
+        services
+            .AddGraphQLServer("trax")
+            .AddQueryType<ValidatorRootQuery>()
+            .AddType(new ObjectType<DiscoverQueries>())
+            .AddTypeModule<QueryModelTypeModule>()
+            .AddFiltering()
+            .AddSorting()
+            .AddProjections();
+
         services.AddHostedService<QueryModelScalarCollectionIndexValidatorAccessor<TContext>>();
 
         await using var provider = services.BuildServiceProvider();
@@ -160,6 +248,15 @@ public class QueryModelScalarCollectionIndexValidatorTests
         }
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The minimal RootQuery of the harness server: a <c>discover</c> field resolving the
+    /// base type the query-model fields extend, the way the real wiring does.
+    /// </summary>
+    public class ValidatorRootQuery
+    {
+        public DiscoverQueries Discover() => new();
     }
 
     private sealed class RecordingLoggerProvider : ILoggerProvider
@@ -214,6 +311,14 @@ public class UnindexedRow
 {
     public int Id { get; set; }
     public string[] Loose { get; set; } = [];
+}
+
+public class UnindexedRowFilterInputType : FilterInputType<UnindexedRow>
+{
+    protected override void Configure(IFilterInputTypeDescriptor<UnindexedRow> descriptor)
+    {
+        descriptor.Ignore(x => x.Loose);
+    }
 }
 
 [TraxAllowAnonymous]
