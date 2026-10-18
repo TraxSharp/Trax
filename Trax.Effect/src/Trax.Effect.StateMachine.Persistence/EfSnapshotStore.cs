@@ -48,6 +48,18 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// </summary>
     internal Func<string, string, JsonObject, SnapshotTimer?>? Timers { get; init; }
 
+    /// <summary>Wakes this host's change listener after a write commits; null when nothing listens.</summary>
+    internal SnapshotWriteSignal? Writes { get; init; }
+
+    // A write that committed on its own wakes the listener now. One inside a caller's transaction does not: the
+    // caller wakes it after its commit, since a poll that ran first would read the old revision.
+    private T Wrote<T>(T written, bool changed)
+    {
+        if (changed && ((DbContext)db).Database.CurrentTransaction is null)
+            Writes?.Written();
+        return written;
+    }
+
     // The rows one owner holds. Every owner-scoped query of the table starts here, so none of them can forget the
     // owner kind. A user's key never matches a system row (whose key is null) anyway, but the kind is named so the
     // rule does not rest on that.
@@ -152,21 +164,27 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     }
 
     /// <inheritdoc/>
-    public Task Delete(string userKey, Guid id, CancellationToken cancellationToken = default) =>
-        Owned(DraftOwner.User(userKey))
+    public async Task Delete(string userKey, Guid id, CancellationToken cancellationToken = default)
+    {
+        var deleted = await Owned(DraftOwner.User(userKey))
             .Where(x => x.Id == id)
             .ExecuteDeleteAsync(cancellationToken);
+        Wrote(deleted, deleted > 0);
+    }
 
     /// <inheritdoc/>
-    public Task Delete(
+    public async Task Delete(
         string userKey,
         string machine,
         Guid id,
         CancellationToken cancellationToken = default
-    ) =>
-        Owned(DraftOwner.User(userKey))
+    )
+    {
+        var deleted = await Owned(DraftOwner.User(userKey))
             .Where(x => x.Id == id && x.Machine == machine)
             .ExecuteDeleteAsync(cancellationToken);
+        Wrote(deleted, deleted > 0);
+    }
 
     /// <inheritdoc/>
     async Task<bool> IConditionalDraftDelete.DeleteAsRead(
@@ -223,7 +241,10 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         }
         await afterDelete();
         if (transaction is not null)
+        {
             await transaction.Commit();
+            Writes?.Written();
+        }
         return true;
     }
 
@@ -327,7 +348,9 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 && x.InvokeToken == invokeToken
                 && x.EffectToken == null
             )
-            .ExecuteDeleteAsync(cancellationToken) > 0;
+            .ExecuteDeleteAsync(cancellationToken)
+            is var n
+        && Wrote(n > 0, n > 0);
 
     /// <summary>
     /// Inserts the child a parent's spawning state starts, for <paramref name="owner"/>, carrying the parent's token in
@@ -408,7 +431,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         try
         {
             await ((DbContext)db).SaveChangesAsync(cancellationToken);
-            return true;
+            return Wrote(true, true);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -884,10 +907,12 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
 
         try
         {
-            return await target.ExecuteUpdateAsync(
+            var updated =
+                await target.ExecuteUpdateAsync(
                     setters => Setters(setters, write),
                     cancellationToken
                 ) == 1;
+            return Wrote(updated, updated);
         }
         catch (Exception ex) when (IsUniqueViolation(ex))
         {

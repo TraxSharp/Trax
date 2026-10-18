@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
@@ -478,6 +479,105 @@ public class SnapshotChangeListenerTests
         }
 
         hub.ActiveWatches.Should().Be(0, "every watch is released when it is disposed");
+    }
+
+    [Test]
+    public async Task A_write_in_this_process_reaches_its_watcher_before_the_next_poll()
+    {
+        // On SQLite there are no notices: only the listener's poll can see a write, and this test names its
+        // interval, ten seconds. A change the poll alone sees arrives ten seconds late.
+        using var host = InstanceHost.Create(StoreProvider.Sqlite);
+        var listener = host.Services.GetRequiredService<SnapshotChangeListener>();
+        var pollInterval = TimeSpan.FromSeconds(10);
+        listener.PollInterval = pollInterval;
+
+        var id = Guid.NewGuid();
+        using (var scope = host.Scope())
+            await scope
+                .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                .Insert(
+                    User,
+                    id,
+                    new Snapshot
+                    {
+                        Machine = "declarative-turnstile",
+                        Version = 1,
+                        State = "Locked",
+                        Context = new JsonObject(),
+                    }
+                );
+        var row = (await host.Rows(id)).Single().RowId;
+
+        var hub = host.Services.GetRequiredService<SnapshotWatchHub>();
+        await using var watch = hub.Watch(row);
+        (await Next(watch)).Revision.Should().Be(1);
+
+        // The baseline poll has read the row, so the write below is compared against revision 1.
+        (await Polled(listener, row))
+            .Should()
+            .BeTrue($"the listener's first poll reads the watched row. See {Adr}");
+
+        // A turn the host takes on the draft, in this process; the answer is the committed write.
+        var sinceWrite = Stopwatch.StartNew();
+        using (var scope = host.Scope())
+        {
+            (
+                await host.Service(scope, "declarative-turnstile")
+                    .Advance(User, id, "Coin", new JsonObject { ["coin"] = "quarter" })
+            )
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>(
+                    $"a quarter advances the turnstile to revision 2. See {Adr}"
+                );
+        }
+
+        var next = await Next(watch);
+        sinceWrite.Stop();
+        next.Revision.Should().Be(2);
+        sinceWrite
+            .Elapsed.Should()
+            .BeLessThan(
+                TimeSpan.FromSeconds(2),
+                $"a write committed in this process reaches its watcher before the next poll, {pollInterval} after the "
+                    + $"baseline, but it arrived {sinceWrite.Elapsed} after the write. See {Adr}"
+            );
+    }
+
+    [Test]
+    public void The_poll_interval_is_a_host_option_with_a_floor()
+    {
+        var options = new StateMachineOptions();
+
+        var tooShort = () => options.ChangeFeedPollInterval = TimeSpan.FromMilliseconds(50);
+
+        tooShort
+            .Should()
+            .Throw<ArgumentOutOfRangeException>(
+                "a poll shorter than the floor would read the table near-continuously"
+            );
+        options.ChangeFeedPollInterval.Should().Be(TimeSpan.FromSeconds(1));
+
+        using var host = InstanceHost.Create(
+            StoreProvider.Sqlite,
+            options: o => o.ChangeFeedPollInterval = TimeSpan.FromMilliseconds(250)
+        );
+        host.Services.GetRequiredService<SnapshotChangeListener>()
+            .PollInterval.Should()
+            .Be(TimeSpan.FromMilliseconds(250), "the host's option is the listener's interval");
+    }
+
+    // Whether the listener's last poll has read <paramref name="rowId"/> before <see cref="HearWithin"/> passes.
+    private static async Task<bool> Polled(SnapshotChangeListener listener, long rowId)
+    {
+        var deadline = DateTime.UtcNow + HearWithin;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (listener.LastPolled.Contains(rowId))
+                return true;
+            // allowed-delay: polls the listener's last poll until it has read the row.
+            await Task.Delay(20);
+        }
+        return false;
     }
 
     /// <summary>One reader of the listener's changes, buffered so a test can wait for a given one.</summary>

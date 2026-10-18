@@ -396,6 +396,7 @@ internal sealed class InvokeOutcomeReconciler(
                     ? await FireOne(context, store, outbox, row, cancellationToken)
                     : new TimerFireResult(row.Id, TimerFireResult.Lost);
                 await transaction.Commit();
+                services.GetService<SnapshotWriteSignal>()?.Written();
             }
             catch
             {

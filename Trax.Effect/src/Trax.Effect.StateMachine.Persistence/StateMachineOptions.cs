@@ -100,6 +100,25 @@ public sealed class StateMachineOptions
         }
     } = TimeSpan.FromSeconds(5);
 
+    /// <summary>The shortest <see cref="ChangeFeedPollInterval"/> a host may set.</summary>
+    public static readonly TimeSpan MinimumChangeFeedPollInterval = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// How often the change feed polls for writes where it cannot be told of them: on SQLite and InMemory, and on
+    /// Postgres with <see cref="StateMachineChangeFeed.Poll"/>. A write committed in this host reaches its watchers at
+    /// once whatever this is; the poll finds the writes other hosts make. The default is 1 second; it may not be
+    /// shorter than <see cref="MinimumChangeFeedPollInterval"/>.
+    /// </summary>
+    public TimeSpan ChangeFeedPollInterval
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, MinimumChangeFeedPollInterval);
+            field = value;
+        }
+    } = TimeSpan.FromSeconds(1);
+
     /// <summary>
     /// How often this host's outcome reconciler sweeps while it hears the provider's notification of invoked runs
     /// ending (Postgres): each notification delivers its run at once, and the reconciler sweeps in full whenever it

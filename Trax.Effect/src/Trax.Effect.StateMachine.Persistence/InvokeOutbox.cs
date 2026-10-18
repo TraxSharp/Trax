@@ -361,6 +361,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             {
                 await transaction.Commit();
                 transaction.Dispose();
+                services.GetService<SnapshotWriteSignal>()?.Written();
             }
             else
                 await RollbackQuietly(transaction);
@@ -659,6 +660,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         {
             IrHashes = services.GetService<MachineIrHashes>() is { } hashes ? hashes.Of : null,
             Timers = services.GetService<MachineTimerLookup>() is { } timers ? timers.Of : null,
+            Writes = services.GetService<SnapshotWriteSignal>(),
         };
 
     /// <summary>
@@ -828,6 +830,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
             {
                 await transaction.Commit();
                 transaction.Dispose();
+                services.GetService<SnapshotWriteSignal>()?.Written();
             }
             else
                 await RollbackQuietly(transaction);

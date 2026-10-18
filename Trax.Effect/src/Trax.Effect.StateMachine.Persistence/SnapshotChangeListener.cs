@@ -17,7 +17,8 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// each notice out to every reader; on SQLite and InMemory, which have no notifications, and on Postgres with
 /// <see cref="StateMachineChangeFeed.Poll"/>, it polls the <c>(row_id, revision)</c> pairs of the rows its readers
 /// watch (and every row of the machines a reader watches in full, or of every machine when one does not name its
-/// machine) and reports each new revision, delete and re-created row.
+/// machine) and reports each new revision, delete and re-created row. A poll runs every <see cref="PollInterval"/>,
+/// and at once after a write this host committed (<see cref="SnapshotWriteSignal"/>).
 /// </summary>
 /// <remarks>
 /// <para>Started by the first reader, not by the host: a host nothing watches opens no session and polls nothing.
@@ -36,7 +37,8 @@ namespace Trax.Effect.StateMachine.Persistence;
 internal sealed class SnapshotChangeListener(
     IDataContextProviderFactory contexts,
     ILogger<SnapshotChangeListener>? logger = null,
-    ISnapshotNoticeSource? notices = null
+    ISnapshotNoticeSource? notices = null,
+    SnapshotWriteSignal? writes = null
 ) : ISnapshotChangeListener, IHostedService, IAsyncDisposable, IDisposable
 {
     /// <summary>How many changes a reader's buffer holds before it is told to reload instead.</summary>
@@ -58,6 +60,9 @@ internal sealed class SnapshotChangeListener(
 
     /// <summary>How often a polling listener polls the table. Settable for tests.</summary>
     internal TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
+
+    // Woken by a write committed in this host, so a poll does not wait out its interval for it.
+    private readonly SnapshotWriteSignal _writes = writes ?? new SnapshotWriteSignal();
 
     /// <summary>The rows the last poll read, for tests that check what a poll reads.</summary>
     internal IReadOnlyCollection<long> LastPolled => Volatile.Read(ref _lastPolled);
@@ -288,7 +293,7 @@ internal sealed class SnapshotChangeListener(
                 known = current;
                 knew = scope;
                 delay = ReconnectDelay;
-                if (!await Wait(PollInterval, stoppingToken))
+                if (!await _writes.WaitAsync(PollInterval, stoppingToken))
                     break;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

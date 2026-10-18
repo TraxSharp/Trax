@@ -408,8 +408,10 @@ namespace Trax.Effect.StateMachine.Persistence
         public const int DefaultMaxDraftsPerUser = 50;
         public static readonly System.TimeSpan DefaultDraftTtl;
         public static readonly System.TimeSpan DefaultMaxDraftLifetime;
+        public static readonly System.TimeSpan MinimumChangeFeedPollInterval;
         public StateMachineOptions() { }
         public Trax.Effect.StateMachine.Persistence.StateMachineChangeFeed ChangeFeed { get; set; }
+        public System.TimeSpan ChangeFeedPollInterval { get; set; }
         public System.TimeSpan? DraftTtl { get; set; }
         public System.TimeSpan InvokeOutcomeSweepInterval { get; set; }
         public System.TimeSpan InvokeOutcomeSweepIntervalWhileListening { get; set; }

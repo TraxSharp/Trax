@@ -60,7 +60,8 @@ committed states and effect targets.
 
 The enqueue goes through the mediator: the train is found by its canonical name, authorized, its input capped and
 its subject key stamped. On Postgres the entry's insert wakes the dispatchers on every host when the transaction
-commits; on SQLite a dispatcher in the same process is woken.
+commits; on SQLite a dispatcher in the same process is woken, and the workers pick the run up at their polling
+interval (see [Latency](#latency)).
 
 The entry and the run record which machine, instance and owner kind queued them:
 
@@ -114,6 +115,19 @@ which a host may redact, bound or not keep. The copy is never shown on an operat
 
 When an outcome's target invokes a train, applying the outcome queues that run in the same transaction, under the new
 token. Only a system-owned machine may declare such an edge.
+
+## Latency
+
+A turn that invokes a train waits on three things, and each is woken or polled:
+
+| Step | On Postgres | On SQLite or InMemory |
+| --- | --- | --- |
+| The queued run reaches a worker | the work queue's insert wakes the dispatchers on every host when it commits | a dispatcher in the same process is woken; the local workers then pick it up at `LocalWorkerOptions.PollingInterval` (1 second by default) |
+| The finished run's outcome reaches the instance | at once on the host that ran it; any other host hears the run-end notification | at once on the host that ran it; any other host at its reconciler's sweep, `InvokeOutcomeSweepInterval` |
+| The changed instance reaches its watchers | the change notice, at once | at once when the write was committed in this host; a write another host made at the next poll, `ChangeFeedPollInterval` (1 second by default) |
+
+So on a single SQLite host the wait that remains is the local workers' polling interval. A host that wants a turn
+in well under a second sets `ConfigureLocalWorkers(w => w.PollingInterval = ...)` on the scheduler.
 
 ## OnFailed reasons
 

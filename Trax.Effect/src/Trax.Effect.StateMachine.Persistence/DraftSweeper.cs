@@ -101,7 +101,10 @@ internal sealed class DraftSweeper(
         await using var scope = scopes.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var context = services.GetRequiredService<IDataContext>();
-        var store = new EfSnapshotStore(context, services.GetService<ISqlDialect>());
+        var store = new EfSnapshotStore(context, services.GetService<ISqlDialect>())
+        {
+            Writes = services.GetService<SnapshotWriteSignal>(),
+        };
 
         var expired = await store.ReadExpired(
             _machines.Value.Keys.ToList(),

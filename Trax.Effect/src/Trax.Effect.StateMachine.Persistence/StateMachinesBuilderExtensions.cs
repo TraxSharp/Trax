@@ -204,6 +204,7 @@ public static class StateMachinesBuilderExtensions
         // computed refuses the host's start rather than failing every write.
         services.AddSingleton<MachineIrHashes>();
         services.AddSingleton<MachineTimerLookup>();
+        services.AddSingleton<SnapshotWriteSignal>();
         services.AddHostedService<MachineSchemaStartupValidator>();
         services.AddScoped<ISnapshotStore>(sp => new EfSnapshotStore(
             sp.GetRequiredService<IDataContext>(),
@@ -212,6 +213,7 @@ public static class StateMachinesBuilderExtensions
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
             Timers = sp.GetRequiredService<MachineTimerLookup>().Of,
+            Writes = sp.GetRequiredService<SnapshotWriteSignal>(),
         });
         services.AddScoped<IEffectClaimStore>(sp => new EfEffectClaimStore(
             sp.GetRequiredService<IDataContext>(),
@@ -232,6 +234,7 @@ public static class StateMachinesBuilderExtensions
         {
             IrHashes = sp.GetRequiredService<MachineIrHashes>().Of,
             Timers = sp.GetRequiredService<MachineTimerLookup>().Of,
+            Writes = sp.GetRequiredService<SnapshotWriteSignal>(),
         });
         services.AddScoped<InvokeOutbox>();
         services.AddScoped<IMachineInstances, MachineInstances>();
@@ -272,8 +275,12 @@ public static class StateMachinesBuilderExtensions
             sp.GetService<ILogger<SnapshotChangeListener>>(),
             options.ChangeFeed == StateMachineChangeFeed.Poll
                 ? null
-                : sp.GetService<ISnapshotNoticeSource>()
-        ));
+                : sp.GetService<ISnapshotNoticeSource>(),
+            sp.GetRequiredService<SnapshotWriteSignal>()
+        )
+        {
+            PollInterval = options.ChangeFeedPollInterval,
+        });
         services.AddHostedService(sp => new ChangeFeedStartupValidator(
             options,
             sp.GetService<ISnapshotNoticeSource>(),
