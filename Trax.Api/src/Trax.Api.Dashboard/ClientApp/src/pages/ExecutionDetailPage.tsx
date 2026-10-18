@@ -25,6 +25,7 @@ import { toast } from "../lib/toast";
 import { useAnswers } from "../lib/answerable";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { ExecutionDetail, RunGraph } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 const ACTIVE_STATES = new Set(["PENDING", "IN_PROGRESS"]);
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
@@ -83,7 +84,14 @@ export function ExecutionDetailPage() {
   const hasInput = Boolean(e?.input?.trim());
 
   async function onCancel() {
-    if (!confirm(`Request cancellation of execution #${id}?`)) return;
+    if (
+      !(await confirmAction({
+        title: "Cancel run",
+        message: `Request cancellation of run #${id}? A running run stops at its next junction.`,
+        danger: true,
+      }))
+    )
+      return;
     setBusy(true);
     const r = await cancelExecution({ id });
     setBusy(false);
@@ -101,9 +109,9 @@ export function ExecutionDetailPage() {
   // decisions.
   async function onRequeue(askAfresh: boolean) {
     const what = askAfresh
-      ? `Re-queue execution #${id}, asking afresh? The new run asks the model again instead of replaying this run's decisions.`
-      : `Re-queue execution #${id}? A fresh run will be enqueued.`;
-    if (!confirm(what)) return;
+      ? `Requeue run #${id}, asking afresh? The new run asks its decider again instead of replaying this run's decisions.`
+      : `Requeue run #${id}? A new run of the same input is queued.`;
+    if (!(await confirmAction({ title: askAfresh ? "Requeue, asking afresh" : "Requeue run", message: what }))) return;
     setBusy(true);
     const r = await requeueExecution({ id, askAfresh });
     setBusy(false);
@@ -122,9 +130,9 @@ export function ExecutionDetailPage() {
   async function onResume(from: string | null) {
     if (busy) return;
     const what = from
-      ? `Resume execution #${id} from ${from}? A run is queued that skips to this step, on what the checkpoint before it restores.`
-      : `Resume execution #${id}? A run is queued that skips to the step after its latest checkpoint.`;
-    if (!confirm(what)) return;
+      ? `Resume run #${id} from ${from}? A run is queued that skips to this step, on what the checkpoint before it restores.`
+      : `Resume run #${id}? A run is queued that skips to the step after its latest checkpoint.`;
+    if (!(await confirmAction({ title: "Resume run", message: what }))) return;
     setBusy(true);
     setResuming(from ?? "");
     const r = await resumeExecution({ id, from });

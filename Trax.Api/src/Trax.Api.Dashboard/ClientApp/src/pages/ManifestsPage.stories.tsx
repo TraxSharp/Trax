@@ -3,6 +3,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { ManifestsPage } from "./ManifestsPage";
 import { emptyPage, errorOverride, manifestScenario, manifestScenarioWithRetired } from "../mock/scenarios";
 import type { StatefulOverlay } from "../mock/store/overlays";
+import { setAutoConfirm } from "../lib/confirm";
 
 const meta = {
   title: "Pages/Manifests",
@@ -16,10 +17,9 @@ type Story = StoryObj<typeof meta>;
 const badge = { selector: "span" } as const;
 
 function acceptConfirm() {
-  const original = window.confirm;
-  window.confirm = () => true;
+  setAutoConfirm(true);
   return () => {
-    window.confirm = original;
+    setAutoConfirm(null);
   };
 }
 
@@ -269,8 +269,7 @@ export const TriggerSelectedAskAfresh: Story = {
 export const TriggerSelectedDeclined: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    const original = window.confirm;
-    window.confirm = () => false;
+    setAutoConfirm(false);
     try {
       await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #801"));
@@ -278,7 +277,7 @@ export const TriggerSelectedDeclined: Story = {
       expect(c.getByText("1 selected")).toBeInTheDocument();
       expect(c.queryByText(/queued across/)).not.toBeInTheDocument();
     } finally {
-      window.confirm = original;
+      setAutoConfirm(null);
     }
   },
 };

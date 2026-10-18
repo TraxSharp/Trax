@@ -21,6 +21,7 @@ import { useSelection } from "../lib/useSelection";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { ManifestSummary, PagedResult, ScheduleType } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 const PAGE_SIZE = 25;
 const SCHEDULES: (ScheduleType | "")[] = [
@@ -81,9 +82,9 @@ export function ManifestsPage() {
     externalId: string,
     confirmMsg?: string,
   ) {
-    if (confirmMsg && !confirm(confirmMsg)) return;
+    if (confirmMsg && !(await confirmAction({ title: "Confirm", message: confirmMsg }))) return;
     const r = await action({ externalId });
-    if (r.error) alert(r.error.message);
+    if (r.error) toast(r.error.message, "error");
     refetch();
   }
 
@@ -111,9 +112,9 @@ export function ManifestsPage() {
   // can be changed and sent again; an accepted batch clears it and shows each id it noted.
   async function triggerSelected(askAfresh: boolean) {
     const what = askAfresh
-      ? `Trigger ${selectedIds.length} manifest(s), asking afresh? A queued retry each releases asks the model again instead of replaying the failed run's decisions.`
-      : `Trigger ${selectedIds.length} manifest(s)?`;
-    if (!confirm(what)) return;
+      ? `Queue ${selectedIds.length} manifest(s), asking afresh? A queued retry each releases asks its decider again instead of replaying the failed run's decisions.`
+      : `Queue ${selectedIds.length} manifest(s) now?`;
+    if (!(await confirmAction({ title: askAfresh ? "Queue, asking afresh" : "Queue manifests", message: what }))) return;
     setBusy(true);
     setBatchReport(null);
     setBatchError(null);

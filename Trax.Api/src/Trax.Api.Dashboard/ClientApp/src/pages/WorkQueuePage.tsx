@@ -14,6 +14,7 @@ import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
 import type { PagedResult, WorkQueueStatus, WorkQueueSummary } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 const PAGE_SIZE = 25;
 const STATUSES: (WorkQueueStatus | "")[] = ["", "QUEUED", "DISPATCHED", "CANCELLED"];
@@ -69,7 +70,7 @@ export function WorkQueuePage() {
   const allSelected = queued.length > 0 && queued.every((w) => selected.has(w.id));
 
   async function onCancel(id: number) {
-    if (!confirm(`Cancel queued entry #${id}?`)) return;
+    if (!(await confirmAction({ title: "Cancel queued entry", message: `Cancel queued entry #${id}? Its run never starts.`, danger: true }))) return;
     const r = await cancelEntry({ id });
     const res = r.data?.operations?.workQueue?.cancelWorkQueueEntry;
     if (r.error) toast(r.error.message, "error");
@@ -81,7 +82,7 @@ export function WorkQueuePage() {
 
   async function onBulkCancel() {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Cancel ${selectedIds.length} queued entr(ies)?`)) return;
+    if (!(await confirmAction({ title: "Cancel queued entries", message: `Cancel ${selectedIds.length} queued entr(ies)? Their runs never start.`, danger: true }))) return;
     setBusy(true);
     const r = await cancelMany({ ids: selectedIds });
     setBusy(false);

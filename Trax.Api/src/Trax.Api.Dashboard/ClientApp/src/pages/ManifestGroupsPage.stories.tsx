@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { ManifestGroupsPage } from "./ManifestGroupsPage";
 import { emptyPage, errorOverride, groupScenario, groupScenarioWithRetired } from "../mock/scenarios";
+import { setAutoConfirm } from "../lib/confirm";
 
 const meta = {
   title: "Pages/Manifest groups",
@@ -59,10 +60,9 @@ export const LoadError: Story = {
 };
 
 function acceptConfirm() {
-  const original = window.confirm;
-  window.confirm = () => true;
+  setAutoConfirm(true);
   return () => {
-    window.confirm = original;
+    setAutoConfirm(null);
   };
 }
 const badge = { selector: "span" } as const;
@@ -122,14 +122,13 @@ export const DisableAllDeclined: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const table = () => within(c.getByRole("table"));
-    const original = window.confirm;
-    window.confirm = () => false;
+    setAutoConfirm(false);
     try {
       await waitFor(() => expect(table().getByText("alpha-group")).toBeInTheDocument());
       await userEvent.click(c.getByRole("button", { name: "Disable all" }));
       expect(table().getAllByText("Enabled", badge)).toHaveLength(1);
     } finally {
-      window.confirm = original;
+      setAutoConfirm(null);
     }
   },
 };
@@ -208,8 +207,7 @@ export const CancelRunning: Story = {
 export const CancelRunningDeclined: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    const original = window.confirm;
-    window.confirm = () => false;
+    setAutoConfirm(false);
     try {
       await waitFor(() => expect(c.getByLabelText("Select #2")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #2"));
@@ -217,7 +215,7 @@ export const CancelRunningDeclined: Story = {
       expect(c.getByText("1 selected")).toBeInTheDocument();
       expect(c.queryByText(/Cancellation requested/)).not.toBeInTheDocument();
     } finally {
-      window.confirm = original;
+      setAutoConfirm(null);
     }
   },
 };

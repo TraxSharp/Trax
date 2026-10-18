@@ -7,17 +7,17 @@ import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { executionDetailScenario, machineScenario, MACHINE_IDS } from "../mock/scenarios";
 import type { MockSchemaOverrides } from "../mock/build-mock-schema";
+import { setAutoConfirm } from "../lib/confirm";
 
 // What the action buttons send, and where they leave the operator: the variables of each mutation
 // and the reads that follow it, counted at the client.
 
 afterEach(cleanup);
 
-let confirmSpy: ReturnType<typeof vi.spyOn>;
-beforeEach(() => {
-  confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-});
-afterEach(() => confirmSpy.mockRestore());
+// Most tests here are about what an action sends, so the confirmation answers itself; the ones
+// about the dialog turn that off and press its buttons.
+beforeEach(() => setAutoConfirm(true));
+afterEach(() => setAutoConfirm(null));
 
 function Where() {
   return <span data-testid="where">{useLocation().pathname}</span>;
@@ -59,12 +59,23 @@ test("Cancel on a system instance sends that instance, and reads it again to sho
   await waitFor(() => expect(runs.getByText("Cancellation requested")).toBeInTheDocument());
 });
 
-test("Cancel declined at the prompt sends nothing", async () => {
-  confirmSpy.mockReturnValue(false);
+test("Cancel declined in the dialog sends nothing", async () => {
+  setAutoConfirm(null);
   const { named } = renderAt(`/machines/source-partition/system/${MACHINE_IDS.dispatched}`, machineScenario);
   fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
-  await new Promise((r) => setTimeout(r, 50));
+  const dialog = await screen.findByRole("heading", { name: "Cancel the run it waits on" });
+  expect(dialog).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+  await waitFor(() => expect(screen.queryByRole("heading", { name: "Cancel the run it waits on" })).toBeNull());
   expect(named("mutation", "CancelMachineInstance")).toHaveLength(0);
+});
+
+test("Cancel confirmed in the dialog sends one cancel", async () => {
+  setAutoConfirm(null);
+  const { named } = renderAt(`/machines/source-partition/system/${MACHINE_IDS.dispatched}`, machineScenario);
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel the run it waits on" }));
+  await waitFor(() => expect(named("mutation", "CancelMachineInstance")).toHaveLength(1));
 });
 
 test("Resume sends no node, and opens the queued entry", async () => {

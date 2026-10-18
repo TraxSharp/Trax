@@ -3,6 +3,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { WorkQueuePage } from "./WorkQueuePage";
 import { emptyPage, errorOverride, workQueueScenario } from "../mock/scenarios";
 import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
+import { setAutoConfirm } from "../lib/confirm";
 
 const meta = {
   title: "Pages/WorkQueue",
@@ -16,12 +17,11 @@ type Story = StoryObj<typeof meta>;
 // A status badge is a <span>; scope to it so the filter dropdown's <option> isn't counted.
 const badge = { selector: "span" } as const;
 
-// The cancel flows call window.confirm; auto-accept it for the duration of a play.
+// The cancel flows ask for confirmation; answer yes for the duration of a play.
 function acceptConfirm() {
-  const original = window.confirm;
-  window.confirm = () => true;
+  setAutoConfirm(true);
   return () => {
-    window.confirm = original;
+    setAutoConfirm(null);
   };
 }
 

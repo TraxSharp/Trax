@@ -15,6 +15,7 @@ import {
   type StatefulOverlay,
 } from "../src/mock";
 import { ToastHost } from "../src/components/ToastHost";
+import { ConfirmHost } from "../src/components/ConfirmHost";
 import { createDemoClient } from "../src/demo/client";
 import { storyRecordings } from "../src/demo/story-source";
 
@@ -99,6 +100,7 @@ function StoryProviders({
           {body}
         </div>
         <ToastHost />
+        <ConfirmHost />
       </MemoryRouter>
     </Provider>
   );

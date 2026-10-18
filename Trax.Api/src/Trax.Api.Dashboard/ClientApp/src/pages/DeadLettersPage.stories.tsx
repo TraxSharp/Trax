@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { DeadLettersPage } from "./DeadLettersPage";
 import { deadLetterScenario, emptyPage, errorOverride } from "../mock/scenarios";
+import { setAutoConfirm } from "../lib/confirm";
 
 const meta = {
   title: "Pages/Dead letters",
@@ -15,10 +16,9 @@ type Story = StoryObj<typeof meta>;
 const badge = { selector: "span" } as const;
 
 function acceptConfirm() {
-  const original = window.confirm;
-  window.confirm = () => true;
+  setAutoConfirm(true);
   return () => {
-    window.confirm = original;
+    setAutoConfirm(null);
   };
 }
 

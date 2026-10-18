@@ -11,6 +11,7 @@ import { usePoll } from "../lib/poll";
 import { toast } from "../lib/toast";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { MachineInstanceCancelResponse, MachineInstanceDetail } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 interface InstanceData {
   operations: { machineInstance: MachineInstanceDetail | null };
@@ -66,9 +67,11 @@ export function StateMachineInstancePage() {
   async function onCancel() {
     if (!instance || ownerKind == null || cancelling) return;
     if (
-      !confirm(
-        `Cancel the train run ${instance.machine}'s '${instance.state}' state waits on? A queued run never starts; a running one stops at its next junction. The instance then moves through the state's OnCancelled edge.`,
-      )
+      !(await confirmAction({
+        title: "Cancel the run it waits on",
+        message: `Cancel the train run ${instance.machine}'s '${instance.state}' state waits on? A queued run never starts; a running one stops at its next junction. The instance then moves through the state's OnCancelled edge.`,
+        danger: true,
+      }))
     )
       return;
     setActionError(null);

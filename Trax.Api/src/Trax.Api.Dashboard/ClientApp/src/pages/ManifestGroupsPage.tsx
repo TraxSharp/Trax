@@ -30,6 +30,7 @@ import type {
   ManifestGroupSummary,
   PagedResult,
 } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 const PAGE_SIZE = 25;
 
@@ -64,7 +65,17 @@ export function ManifestGroupsPage() {
   // Both go through the operations service the Blazor page calls. "All" acts on every group, not
   // just this page, and leaves the selection alone; "selected" clears it.
   async function onSetAll(enabled: boolean) {
-    if (!confirm(`${enabled ? "Enable" : "Disable"} every manifest group?`)) return;
+    if (
+      !(await confirmAction({
+        title: enabled ? "Enable all groups" : "Disable all groups",
+        message: enabled
+          ? "Enable every manifest group? Their manifests start running on schedule again."
+          : "Disable every manifest group? No manifest in any group runs until a group is enabled again.",
+        danger: !enabled,
+        typeToConfirm: enabled ? undefined : "all",
+      }))
+    )
+      return;
     setBusy(true);
     const r = await setAllGroupsEnabled({ enabled });
     setBusy(false);
@@ -85,7 +96,13 @@ export function ManifestGroupsPage() {
   // the Blazor page's buttons do. A trigger counts manifests: a member that already had a queued
   // entry is counted apart from the ones queued, and a group that no longer exists is noted.
   async function onTriggerSelected() {
-    if (!confirm(`Trigger every manifest in ${selectedIds.length} group(s)?`)) return;
+    if (
+      !(await confirmAction({
+        title: "Queue groups",
+        message: `Queue every manifest in ${selectedIds.length} group(s) now?`,
+      }))
+    )
+      return;
     setBusy(true);
     setBatchReport(null);
     setBatchError(null);
@@ -106,9 +123,11 @@ export function ManifestGroupsPage() {
 
   async function onCancelSelected() {
     if (
-      !confirm(
-        `Request cancellation of every pending and running execution in ${selectedIds.length} group(s)?`,
-      )
+      !(await confirmAction({
+        title: "Cancel running work",
+        message: `Request cancellation of every pending and running run in ${selectedIds.length} group(s)?`,
+        danger: true,
+      }))
     )
       return;
     setBusy(true);

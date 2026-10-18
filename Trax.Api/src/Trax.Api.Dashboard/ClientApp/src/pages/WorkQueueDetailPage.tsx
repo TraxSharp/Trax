@@ -16,6 +16,7 @@ import { enumLabel, formatTime, shortName } from "../lib/format";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
 import type { WorkQueueDetail } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 interface WqData {
   operations: { workQueue: { detail: WorkQueueDetail | null } };
@@ -46,7 +47,7 @@ export function WorkQueueDetailPage() {
   if (!w) return <NotFound what="work queue entry" />;
 
   async function onCancel() {
-    if (!confirm(`Cancel queued entry #${id}?`)) return;
+    if (!(await confirmAction({ title: "Cancel queued entry", message: `Cancel queued entry #${id}? Its run never starts.`, danger: true }))) return;
     setBusy(true);
     const r = await cancelEntry({ id });
     setBusy(false);

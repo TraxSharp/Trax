@@ -34,6 +34,8 @@ import type {
   ManifestExecutionStats,
   PagedResult,
 } from "../types";
+import { confirmAction } from "../lib/confirm";
+import { Modal } from "../components/Modal";
 
 interface ManData {
   operations: { manifestDetail: ManifestDetail | null };
@@ -53,6 +55,7 @@ export function ManifestDetailPage() {
   const [, setReplay] = useMutation(SET_MANIFESTS_REPLAY_DECISIONS_ON_RETRY);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [later, setLater] = useState(false);
   const m = result.data?.operations?.manifestDetail;
 
   if (result.error && !m)
@@ -67,7 +70,7 @@ export function ManifestDetailPage() {
 
   const refetch = () => reexecute({ requestPolicy: "network-only" });
   async function run(fn: typeof trigger, confirmMsg?: string) {
-    if (confirmMsg && !confirm(confirmMsg)) return;
+    if (confirmMsg && !(await confirmAction({ title: "Confirm", message: confirmMsg }))) return;
     const r = await fn({ externalId: m!.externalId });
     if (r.error) toast(r.error.message, "error");
     refetch();
@@ -77,9 +80,9 @@ export function ManifestDetailPage() {
   // replaying the failed run's decisions.
   async function onTrigger(askAfresh: boolean) {
     const what = askAfresh
-      ? `Run "${shortName(m!.name)}" now, asking afresh?`
-      : `Trigger "${shortName(m!.name)}" now?`;
-    if (!confirm(what)) return;
+      ? `Queue "${shortName(m!.name)}" now, asking afresh?`
+      : `Queue "${shortName(m!.name)}" now?`;
+    if (!(await confirmAction({ title: askAfresh ? "Queue now, asking afresh" : "Queue now", message: what }))) return;
     setBusy(true);
     const r = await trigger({ externalId: m!.externalId, askAfresh });
     setBusy(false);
@@ -104,18 +107,12 @@ export function ManifestDetailPage() {
     refetch();
   }
 
-  async function onTriggerLater() {
-    const mins = prompt("Trigger in how many minutes?", "5");
-    if (mins == null) return;
-    const n = Number(mins);
-    if (!Number.isFinite(n) || n <= 0) {
-      toast("Enter a positive number of minutes.", "error");
-      return;
-    }
-    const delay = `PT${Math.floor(n)}M`; // ISO 8601 duration
+  async function onQueueLater(minutes: number) {
+    setLater(false);
+    const delay = `PT${minutes}M`; // ISO 8601 duration
     const r = await triggerDelayed({ externalId: m!.externalId, delay });
     if (r.error) toast(r.error.message, "error");
-    else toast(`Scheduled in ${Math.floor(n)}m.`, "success");
+    else toast(`Queued to run in ${minutes} min.`, "success");
   }
 
   return (
@@ -220,11 +217,12 @@ export function ManifestDetailPage() {
             Trigger, ask afresh
           </button>
           <button
-            onClick={onTriggerLater}
+            onClick={() => setLater(true)}
             className="text-sm text-accent-fg hover:underline"
           >
-            Trigger later
+            Queue later
           </button>
+          {later && <QueueLaterDialog onQueue={onQueueLater} onClose={() => setLater(false)} />}
           <button
             onClick={() => setEditing(true)}
             className="text-sm text-accent-fg hover:underline"
@@ -398,4 +396,45 @@ function ExecutionHistory({ manifestId }: { manifestId: number }) {
 function shortName(fullName: string): string {
   const parts = fullName.split(".");
   return parts[parts.length - 1] || fullName;
+}
+
+/** Asks how many minutes from now the manifest should be queued. */
+function QueueLaterDialog({ onQueue, onClose }: { onQueue: (minutes: number) => void; onClose: () => void }) {
+  const [text, setText] = useState("5");
+  const minutes = Math.floor(Number(text));
+  const valid = Number.isFinite(minutes) && minutes > 0;
+  return (
+    <Modal title="Queue later" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) onQueue(minutes);
+        }}
+      >
+        <label className="block text-sm text-fg-2">
+          Minutes from now
+          <input
+            autoFocus
+            type="number"
+            min={1}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-field px-3 py-1.5 text-sm text-fg"
+          />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-fg-2 hover:bg-hover">
+            Keep it
+          </button>
+          <button
+            type="submit"
+            disabled={!valid}
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover disabled:opacity-50"
+          >
+            Queue later
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
 }

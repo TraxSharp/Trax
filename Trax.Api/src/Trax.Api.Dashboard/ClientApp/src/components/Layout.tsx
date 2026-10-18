@@ -37,6 +37,7 @@ import { GlobalProgressBar } from "./GlobalProgressBar";
 import { NotificationBridge } from "./NotificationBridge";
 import { ThemeToggle } from "./ThemeToggle";
 import { ToastHost } from "./ToastHost";
+import { ConfirmHost } from "./ConfirmHost";
 
 interface NavItem {
   path: string;
@@ -200,6 +201,7 @@ export function Layout() {
         </main>
 
         <ToastHost />
+        <ConfirmHost />
         <NotificationBridge />
       </div>
     </div>

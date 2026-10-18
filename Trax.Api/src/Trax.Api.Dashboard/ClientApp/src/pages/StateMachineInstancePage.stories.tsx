@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { StateMachineInstancePage } from "./StateMachineInstancePage";
 import { MACHINE_IDS, machineScenario } from "../mock/scenarios";
+import { setAutoConfirm } from "../lib/confirm";
 
 const system = (id: string) => `/machines/source-partition/system/${id}`;
 
@@ -19,10 +20,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 function acceptConfirm() {
-  const original = window.confirm;
-  window.confirm = () => true;
+  setAutoConfirm(true);
   return () => {
-    window.confirm = original;
+    setAutoConfirm(null);
   };
 }
 

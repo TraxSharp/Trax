@@ -18,6 +18,7 @@ import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
 import type { DeadLetterStatus, DeadLetterSummary, PagedResult } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 const PAGE_SIZE = 25;
 const STATUSES: (DeadLetterStatus | "")[] = [
@@ -93,7 +94,12 @@ export function DeadLettersPage() {
     actionable.length > 0 && actionable.every((d) => selected.has(d.id));
 
   async function onRequeue(id: number) {
-    if (!confirm(`Requeue dead letter #${id}? A new execution will be enqueued.`))
+    if (
+      !(await confirmAction({
+        title: "Requeue dead letter",
+        message: `Requeue dead letter #${id}? A new run of its manifest is queued.`,
+      }))
+    )
       return;
     const r = await requeue({ id });
     const res = r.data?.operations?.deadLetters?.requeueDeadLetter;
@@ -107,11 +113,12 @@ export function DeadLettersPage() {
   async function onBulkRequeue(askAfresh: boolean) {
     if (selectedIds.length === 0) return;
     if (
-      !confirm(
-        askAfresh
+      !(await confirmAction({
+        title: askAfresh ? "Requeue, asking afresh" : "Requeue dead letters",
+        message: askAfresh
           ? `Requeue ${selectedIds.length} dead letter(s), asking afresh?`
           : `Requeue ${selectedIds.length} dead letter(s)?`,
-      )
+      }))
     )
       return;
     setBusy(true);
@@ -130,11 +137,14 @@ export function DeadLettersPage() {
 
   async function onRequeueAll(askAfresh: boolean) {
     if (
-      !confirm(
-        askAfresh
-          ? "Requeue every unresolved dead letter, asking afresh? Each new run asks the model again instead of replaying the failed run's decisions."
-          : "Requeue every unresolved dead letter? A new execution is enqueued for each.",
-      )
+      !(await confirmAction({
+        title: askAfresh ? "Requeue all, asking afresh" : "Requeue all dead letters",
+        message: askAfresh
+          ? "Requeue every unresolved dead letter, asking afresh? Each new run asks its decider again instead of replaying the failed run's decisions."
+          : "Requeue every unresolved dead letter? A new run is queued for each.",
+        danger: true,
+        typeToConfirm: "all",
+      }))
     )
       return;
     setBusy(true);

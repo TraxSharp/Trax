@@ -30,6 +30,7 @@ import type {
   ManifestDetail,
   PagedResult,
 } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 const FAILED_PAGE_SIZE = 10;
 
@@ -78,7 +79,12 @@ export function DeadLetterDetailPage() {
   // A re-queue opens the new work queue entry, as the Blazor page does. askAfresh: the run asks
   // the model afresh instead of replaying the failed run's decisions.
   async function onRequeue(askAfresh: boolean) {
-    if (!confirm(askAfresh ? `Requeue dead letter #${id}, asking afresh?` : `Requeue dead letter #${id}?`))
+    if (
+      !(await confirmAction({
+        title: askAfresh ? "Requeue, asking afresh" : "Requeue dead letter",
+        message: askAfresh ? `Requeue dead letter #${id}, asking afresh?` : `Requeue dead letter #${id}?`,
+      }))
+    )
       return;
     setBusy(true);
     const r = await requeue({ id, askAfresh });

@@ -19,6 +19,7 @@ import {
   settle,
   type Ledger,
 } from "./harness";
+import { setAutoConfirm } from "../lib/confirm";
 
 // The demo's strict check: a visitor who opens every page, picks every option of every filter and
 // sort, pages every list to its end and opens every row is answered from a recording every time,
@@ -205,15 +206,14 @@ describe("writes", () => {
     const page = pageOf(container);
     const badges = () => within(page).queryAllByText("Cancelled", { selector: "span" }).length;
     const before = badges();
-    const original = window.confirm;
-    window.confirm = () => true;
+    setAutoConfirm(true);
     try {
       const cancel = within(page).getAllByRole("button", { name: /^Cancel$/ })[0];
       fireEvent.click(cancel);
       await settle();
       expect(badges()).toBe(before + 1);
     } finally {
-      window.confirm = original;
+      setAutoConfirm(null);
     }
     expectAllRecorded(ledger);
   });

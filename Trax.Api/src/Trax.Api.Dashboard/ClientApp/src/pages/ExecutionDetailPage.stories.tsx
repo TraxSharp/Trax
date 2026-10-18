@@ -5,6 +5,7 @@ import { executionDetailScenario } from "../mock/scenarios";
 import { getGlobalMockStore } from "../mock/global-store";
 import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
 import type { MockSchemaOverrides } from "../mock/build-mock-schema";
+import { setAutoConfirm } from "../lib/confirm";
 
 const meta = {
   title: "Pages/Execution detail",
@@ -20,10 +21,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 function acceptConfirm() {
-  const original = window.confirm;
-  window.confirm = () => true;
+  setAutoConfirm(true);
   return () => {
-    window.confirm = original;
+    setAutoConfirm(null);
   };
 }
 
@@ -320,15 +320,14 @@ export const RequeueDeclined: Story = {
   parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    const original = window.confirm;
-    window.confirm = () => false;
+    setAutoConfirm(false);
     try {
       await waitFor(() => expect(c.getByRole("button", { name: "Re-queue" })).toBeInTheDocument());
       await userEvent.click(c.getByRole("button", { name: "Re-queue" }));
       expect(c.queryByText(/Execution re-queued/)).not.toBeInTheDocument();
       expect(c.getByRole("heading", { name: "DeltaJob" })).toBeInTheDocument();
     } finally {
-      window.confirm = original;
+      setAutoConfirm(null);
     }
   },
 };

@@ -18,6 +18,7 @@ import type {
   TrainLifecycleEvent,
   TrainState,
 } from "../types";
+import { confirmAction } from "../lib/confirm";
 
 const ACTIVE_STATES = new Set<TrainState>(["PENDING", "IN_PROGRESS"]);
 
@@ -167,7 +168,14 @@ export function ExecutionsPage() {
 
   async function onBulkCancel() {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Request cancellation of ${selectedIds.length} execution(s)?`)) return;
+    if (
+      !(await confirmAction({
+        title: "Cancel runs",
+        message: `Request cancellation of ${selectedIds.length} run(s)? A queued run never starts; a running one stops at its next junction.`,
+        danger: true,
+      }))
+    )
+      return;
     const r = await cancelExecutions({ ids: selectedIds });
     const res = r.data?.operations?.cancelExecutions;
     if (r.error) toast(r.error.message, "error");

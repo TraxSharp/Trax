@@ -23,6 +23,8 @@ import type {
   ManifestSummary,
   PagedResult,
 } from "../types";
+import { confirmAction } from "../lib/confirm";
+import { toast } from "../lib/toast";
 
 interface DetailData {
   operations: {
@@ -52,13 +54,13 @@ export function ManifestGroupDetailPage() {
 
   async function save(input: Record<string, unknown>) {
     const r = await update({ id, input });
-    if (r.error) alert(r.error.message);
+    if (r.error) toast(r.error.message, "error");
     refetch();
   }
   async function act(fn: typeof triggerGroup, msg: string) {
-    if (!confirm(msg)) return;
+    if (!(await confirmAction({ title: "Confirm", message: msg }))) return;
     const r = await fn({ groupId: id });
-    if (r.error) alert(r.error.message);
+    if (r.error) toast(r.error.message, "error");
     refetch();
   }
 
