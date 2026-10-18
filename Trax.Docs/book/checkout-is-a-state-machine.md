@@ -429,7 +429,9 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 From the top:
 
 - **`Id("checkout")`** names the machine. It names the GraphQL field, the stored instances and every
-  file generated from it. **`Version(1)`** is bumped when the machine changes shape.
+  file generated from it. **`Version(1)`** is stamped on every stored instance. A change that leaves
+  stored instances unreadable, such as a context field renamed, bumps it, and says with
+  `MigrateFrom` how to read the old ones.
 - **`Start<CheckoutStart>`** says who may start a checkout: a customer. A started checkout belongs to
   whoever started it.
 - **`Get`, `Watch` and `Discard`** say who may read it, follow it and throw it away: its owner and
