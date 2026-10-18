@@ -43,7 +43,7 @@ junction did.
 You learn: trains, junctions, Memory, `TrainException`, cancellation, and the check that refuses to
 start an application whose chain cannot run.
 
-### 2. Testing PlaceOrder
+### [2. Testing PlaceOrder](/docs/book/testing-place-order)
 
 Add a test project. Test each junction on its own, the whole train through the train bus, and the
 host as a client calls it.
