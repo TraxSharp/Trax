@@ -60,7 +60,7 @@ back when it does, and read the failed runs back.
 You learn: the effect system, metadata, junction logging, failure classes, and keeping a secret
 out of the record with `[TraxSensitive]`.
 
-### 4. The shop's own data
+### [4. The shop's own data](/docs/book/the-shops-own-data)
 
 Give Shopfront a database of its own beside Trax's: products with their stock, and the orders
 placed against them. Reserve stock in a transaction, and store each confirmed order.
