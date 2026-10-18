@@ -149,10 +149,10 @@ charges, and spawning a child machine.
 
 ## Part 5: Composition
 
-### 14. Checks in parallel, and resuming
+### [14. Checks in parallel, and resuming](/docs/book/checks-in-parallel-and-resuming)
 
-Run fulfilment's address check, carrier quote and packing estimate side by side. Put a checkpoint
-after the label is bought, so a fulfilment that fails later resumes there.
+Choose fulfilment's box and ask the courier's rates side by side, then buy the label. Put a
+checkpoint after the label is bought, so a fulfilment that fails later resumes there.
 
 You learn: `Parallel` and its branches, checkpoints, and resuming a run from the console and from
 GraphQL.
