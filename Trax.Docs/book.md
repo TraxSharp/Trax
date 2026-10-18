@@ -159,7 +159,7 @@ GraphQL.
 
 ## Part 6: The storefront
 
-### 15. A generated client
+### [15. A generated client](/docs/book/a-generated-client)
 
 Write the storefront's GraphQL documents, export the client manifest from the host and generate a
 typed React client with `trax client`. Build the catalogue page and the order page.
