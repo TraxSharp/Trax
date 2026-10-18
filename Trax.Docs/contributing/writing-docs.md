@@ -302,6 +302,21 @@ comes back on itself, on a fence in a chain that names no file or names one twic
 on `file=` on a C# fence that is not compiled. A fence in another language may name its file too
 (`xml file=Shopfront.csproj`), so the page records every file of the project, not only the C# ones.
 
+A page that moves files lists them under `moves:` in its front matter, each a path prefix of the
+files the pages before it showed and the prefix they move to, as a chapter that splits one project
+into several does:
+
+```yaml
+moves:
+  - Trains/ -> Shopfront.Core/Trains/
+  - Program.cs -> Shopfront.Hub/Program.cs
+```
+
+A moved file keeps its fence; a fence on this page or a later one that names the new path replaces
+it. On a page in a chain, a group other than `app` is a project of its own that references the
+`app` group, as a worker references the library its trains are in, and compiles as an assembly of
+its own against it.
+
 A group named `tests` is the project's test project. It compiles as an assembly of its own against
 the same page's `app` group, as a test project compiles against the project it references, and
 sees that group's `internal` types as `InternalsVisibleTo` would let it. It gets the implicit
