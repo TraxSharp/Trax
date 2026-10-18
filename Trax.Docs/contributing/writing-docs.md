@@ -302,6 +302,13 @@ comes back on itself, on a fence in a chain that names no file or names one twic
 on `file=` on a C# fence that is not compiled. A fence in another language may name its file too
 (`xml file=Shopfront.csproj`), so the page records every file of the project, not only the C# ones.
 
+A group named `tests` is the project's test project. It compiles as an assembly of its own against
+the same page's `app` group, as a test project compiles against the project it references, and
+sees that group's `internal` types as `InternalsVisibleTo` would let it. It gets the implicit
+usings of a plain `Microsoft.NET.Sdk` project, not the Web SDK's, and it is the only group that
+sees the test frameworks a reader's test project has: NUnit, AwesomeAssertions and
+`Microsoft.AspNetCore.Mvc.Testing`.
+
 A snippet that declares its own `builder` or `services`, as a `Program.cs` does, hides the shared
 one. A page whose front matter says `snippet_context: none` gets only its own file, so it compiles
 as a reader's empty project would; `getting-started.md` does, because it is the page a reader
