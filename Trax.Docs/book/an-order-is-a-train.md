@@ -303,8 +303,9 @@ internal class PriceCartJunction(Catalogue catalogue, ILogger<PriceCartJunction>
 Each junction says what it takes and what it makes in its type: `PriceCartJunction` takes a
 `PlaceOrderInput` and makes a `PricedCart`. A junction that throws stops the order there, and
 nothing after it runs. It throws a `TrainException` when the message is meant for the customer:
-Trax passes a `TrainException`'s message on to whoever ran the train, and from chapter 9 on it
-hides the message of any other exception, which may say more than a customer should read.
+Trax passes a `TrainException`'s message on to whoever ran the train, and once Shopfront serves
+GraphQL it hides the message of any other exception, which may say more than a customer should
+read.
 
 `Trains/PlaceOrder/Junctions/ReserveStockJunction.cs`:
 
