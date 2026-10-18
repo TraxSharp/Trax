@@ -13,6 +13,7 @@ using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Services.HostHeartbeatRoles;
 using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Trains.JobRunner;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
@@ -44,7 +45,8 @@ internal class LocalWorkerService(
     LocalWorkerOptions options,
     ICancellationRegistry cancellationRegistry,
     ILogger<LocalWorkerService> logger,
-    ISqlDialect? sqlDialect = null
+    ISqlDialect? sqlDialect = null,
+    LocalWorkerSlots? slots = null
 ) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -165,6 +167,7 @@ internal class LocalWorkerService(
                 }
 
                 var job = claimedJobs[i];
+                using var slot = slots?.Take();
                 await ExecuteAndCleanupAsync(
                     workerId,
                     job.Id,

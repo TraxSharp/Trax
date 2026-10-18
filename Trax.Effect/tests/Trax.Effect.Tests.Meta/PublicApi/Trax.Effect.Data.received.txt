@@ -108,6 +108,7 @@ namespace Trax.Effect.Data.Services.DataContext
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.HostHeartbeat.HostHeartbeat> HostHeartbeats { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; set; }
@@ -140,6 +141,7 @@ namespace Trax.Effect.Data.Services.DataContext
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.HostHeartbeat.HostHeartbeat> HostHeartbeats { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; }

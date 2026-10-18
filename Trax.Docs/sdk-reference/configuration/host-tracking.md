@@ -10,9 +10,11 @@ package: Trax.Effect
 namespace:
   - Trax.Effect.Configuration.TraxBuilder
   - Trax.Effect.Models.Host
+  - Trax.Effect.Models.HostHeartbeat
 source:
   - Trax.Effect/src/Trax.Effect/Configuration/TraxBuilder/TraxBuilder.Host.cs
   - Trax.Effect/src/Trax.Effect/Models/Host/TraxHostInfo.cs
+  - Trax.Effect/src/Trax.Effect/Models/HostHeartbeat/HostHeartbeat.cs
 ---
 
 # Host Tracking
@@ -72,6 +74,28 @@ Each throws `ArgumentNullException` for a null argument, and returns the builder
 auto-detects, applies the overrides, and merges the labels. A label key added twice keeps the last value. Every
 run in the process is stamped with it when it starts, so a run executed by a remote worker carries the worker's
 identity, not the dispatcher's.
+
+## Heartbeat
+
+A host with a data provider also writes that identity to `trax.host_heartbeat` when it starts and every 15 seconds
+after, whether or not it has work, so an idle host can be told from a dead one. The row is the model
+`HostHeartbeat`, read through `IDataContext.HostHeartbeats`:
+
+| Member | Description |
+|--------|-------------|
+| `InstanceId` | `HostInstanceId`, the primary key: one row per process |
+| `HostName`, `HostEnvironment` | As above |
+| `TraxVersion` | The Trax version the process runs |
+| `StartedAt` | When the process began beating |
+| `LastHeartbeatAt` | When the process last wrote the row |
+| `RunsDispatcher` | Whether the process runs the scheduler's job dispatcher, switched on |
+| `RunsManifestManager` | Whether the process runs the scheduler's manifest manager, switched on |
+| `WorkerSlots` | How many local workers the process runs, or `null` with none |
+| `WorkerSlotsInUse` | How many of them were running a job at the last beat, or `null` with none |
+
+A host is offline once its last beat is 45 seconds old, three missed beats, and any host's beat deletes the rows whose
+last beat is a day old. [`operations.hosts`](/docs/sdk-reference/graphql-api/queries/operations#hosts) reads the
+table. The migration is described in [Schema migrations](/docs/reference/schema-migrations).
 
 ## Example
 

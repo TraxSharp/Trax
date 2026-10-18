@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Trax.Effect.Data.Services.HostHeartbeats;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.StateMachine.Persistence;
@@ -12,6 +13,7 @@ using Trax.Scheduler.Services.DeadLetterRequeue;
 using Trax.Scheduler.Services.DecisionRecording;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.Effects;
+using Trax.Scheduler.Services.HostHeartbeatRoles;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.LogLevels;
@@ -230,6 +232,13 @@ public partial class SchedulerConfigurationBuilder
         // IManifestManagerTrain uses advisory locks and creates WorkQueue entries. With InMemory,
         // the resolved InMemoryManifestManagerTrain dispatches jobs inline — no JobDispatcher needed.
         _parentBuilder.ServiceCollection.AddHostedService<ManifestManagerPollingService>();
+
+        // This host's heartbeat row says whether it runs the manifest manager and the dispatcher,
+        // read from the configuration at every beat so a runtime switch shows on the next one.
+        var runsDispatcher = _parentBuilder.HasDatabaseProvider;
+        _parentBuilder.ServiceCollection.AddSingleton<IHostHeartbeatRole>(
+            new SchedulerHostRole(_configuration, runsDispatcher)
+        );
 
         // JobDispatcher and MetadataCleanup use PostgreSQL-specific operations
         // (FOR UPDATE SKIP LOCKED, ExecuteUpdateAsync, ExecuteDeleteAsync) that are not

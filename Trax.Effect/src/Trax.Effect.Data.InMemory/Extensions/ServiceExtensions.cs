@@ -75,6 +75,11 @@ public static class ServiceExtensions
             Trax.Effect.Data.Checkpoints.CheckpointRows
         >();
 
+        // The row this host rewrites every 15 seconds, so an idle host can be told from a dead one.
+        Trax.Effect.Data.Services.HostHeartbeats.HostHeartbeatService.Register(
+            configurationBuilder.ServiceCollection
+        );
+
         // Register IDataContext as scoped so services that resolve it directly from DI
         // (e.g. SchedulerStartupService, ManifestManagerPollingService) work the same
         // as with UsePostgres(). All scopes share the same underlying in-memory database

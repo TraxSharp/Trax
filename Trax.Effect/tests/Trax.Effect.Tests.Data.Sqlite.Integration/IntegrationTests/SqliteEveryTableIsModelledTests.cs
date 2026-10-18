@@ -163,6 +163,27 @@ public class SqliteEveryTableIsModelledTests : TestSetup
             );
     }
 
+    [Test]
+    public async Task HostHeartbeat_is_mapped_column_for_column()
+    {
+        using var context = NewContext();
+        var migrated = await MigratedColumns(context);
+        var mapped = MappedColumns(context);
+
+        mapped
+            .Should()
+            .ContainKey(
+                "host_heartbeat",
+                $"each host writes its heartbeat through IDataContext.HostHeartbeats. See {Adr}."
+            );
+        mapped["host_heartbeat"]
+            .Should()
+            .BeEquivalentTo(
+                migrated["host_heartbeat"],
+                $"the HostHeartbeat model maps exactly the columns its migration creates. See {Adr}."
+            );
+    }
+
     [TestCase("snapshot_draft")]
     [TestCase("effect_claim")]
     public async Task State_machine_tables_are_mapped_column_for_column(string table)

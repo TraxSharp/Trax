@@ -665,3 +665,20 @@ instance can be found by its id alone, across machines and owners. The operator'
 ([`lookup`](/docs/sdk-reference/graphql-api/queries/operations#lookup)) reads it; the other keys on the table lead with
 the machine or the user. On Postgres it is built `CONCURRENTLY`, so drafts keep being saved while it builds. Nothing
 changes for a host on the previous version.
+
+## Host heartbeat (087, SQLite 046)
+
+`087_host_heartbeat.sql` (SQLite `046`) creates `trax.host_heartbeat`, `HostHeartbeat` on the model and
+`IDataContext.HostHeartbeats`: one row per running host process, keyed by `instance_id`, the
+`TraxHostInfo.HostInstanceId` stamped on each run. Its columns are `host_name`, `host_environment`, `trax_version`,
+`started_at`, `last_heartbeat_at`, `runs_dispatcher`, `runs_manifest_manager`, `worker_slots` and
+`worker_slots_in_use`, with an index, `ix_host_heartbeat_last_heartbeat_at`, on the last beat.
+
+Every host with a data provider (`UsePostgres`, `UseSqlite` or `UseInMemory`) now runs a background service that
+rewrites its row when it starts and every 15 seconds after, whether or not it has work, and deletes every row whose
+last beat is a day old. A failed beat is logged and retried at the next one; it never stops the host. A host started
+with `SkipMigrations()` against a database without the table logs one warning and shows as offline.
+
+[`operations.hosts`](/docs/sdk-reference/graphql-api/queries/operations#hosts) reads this table instead of grouping
+the run history, and calls a host offline once its last beat is 45 seconds old. A host on the previous version
+writes no row, so during a rolling deploy it is not listed until it is upgraded. Nothing is backfilled.

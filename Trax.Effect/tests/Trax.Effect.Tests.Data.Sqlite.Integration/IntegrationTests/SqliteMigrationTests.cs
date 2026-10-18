@@ -12,6 +12,7 @@ public class SqliteMigrationTests
         "background_job",
         "dead_letter",
         "decision",
+        "host_heartbeat",
         "junction_run",
         "log",
         "manifest",
@@ -61,6 +62,7 @@ public class SqliteMigrationTests
         "ix_metadata_replay_decisions_of",
         "ix_metadata_manifest_id_id",
         "ix_decision_metadata_id_id",
+        "ix_host_heartbeat_last_heartbeat_at",
     ];
 
     private static string CreateTempDbPath() =>

@@ -482,6 +482,33 @@ namespace Trax.Effect.Models.Host
         public static Trax.Effect.Models.Host.TraxHostInfo AutoDetect() { }
     }
 }
+namespace Trax.Effect.Models.HostHeartbeat
+{
+    public class HostHeartbeat
+    {
+        public HostHeartbeat() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("host_environment")]
+        public string HostEnvironment { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("host_name")]
+        public string HostName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("instance_id")]
+        public string InstanceId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_heartbeat_at")]
+        public System.DateTime LastHeartbeatAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("runs_dispatcher")]
+        public bool RunsDispatcher { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("runs_manifest_manager")]
+        public bool RunsManifestManager { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("started_at")]
+        public System.DateTime StartedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("trax_version")]
+        public string TraxVersion { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("worker_slots")]
+        public int? WorkerSlots { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("worker_slots_in_use")]
+        public int? WorkerSlotsInUse { get; set; }
+    }
+}
 namespace Trax.Effect.Models
 {
     public interface IModel

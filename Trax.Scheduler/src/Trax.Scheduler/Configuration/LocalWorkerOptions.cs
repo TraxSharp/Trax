@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.HostHeartbeats;
 using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Scheduler.Services.HostHeartbeatRoles;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Scheduler.Configuration;
@@ -48,12 +50,18 @@ public class LocalWorkerOptions
     /// Registers <paramref name="options"/> so that the container, on resolving them, records
     /// whether the database takes one writer at a time.
     /// </summary>
-    internal static void Register(IServiceCollection services, LocalWorkerOptions options) =>
+    internal static void Register(IServiceCollection services, LocalWorkerOptions options)
+    {
         services.AddSingleton(sp =>
         {
             options.SingleWriter = sp.GetService<ISqlDialect>()?.HasSingleWriter == true;
             return options;
         });
+
+        // The pool's size and busy workers, reported on this host's heartbeat row.
+        services.AddSingleton<LocalWorkerSlots>();
+        services.AddSingleton<IHostHeartbeatRole>(sp => sp.GetRequiredService<LocalWorkerSlots>());
+    }
 
     /// <summary>
     /// How often idle workers poll for new jobs. Must be greater than zero and at most 30 days.

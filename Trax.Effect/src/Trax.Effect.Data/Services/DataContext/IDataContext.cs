@@ -195,6 +195,17 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     DbSet<Effect.Models.Checkpoint.Checkpoint> Checkpoints =>
         ((DbContext)this).Set<Effect.Models.Checkpoint.Checkpoint>();
 
+    /// <summary>
+    /// The <c>trax.host_heartbeat</c> table: one row per running host, rewritten by the host every 15
+    /// seconds whether or not it has work, and deleted a day after its last beat.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default keeps an implementation
+    /// written before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    DbSet<Effect.Models.HostHeartbeat.HostHeartbeat> HostHeartbeats =>
+        ((DbContext)this).Set<Effect.Models.HostHeartbeat.HostHeartbeat>();
+
     #endregion
 
     /// <summary>
