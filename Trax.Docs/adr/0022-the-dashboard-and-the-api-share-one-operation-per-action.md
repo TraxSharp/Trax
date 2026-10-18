@@ -47,7 +47,8 @@ for everything but a train's own execution lives in `IOperationsService`.
 ## Consequences
 
 **A new action lands in three places together**: the operations method, the GraphQL field that
-calls it, and the dashboard control that calls it. A new API field is also measured at scale in
+calls it, and the console control that calls the field. Since [0055](./0055-the-react-console-is-the-operator-dashboard-and-the-blazor-one-is-removed.md)
+that control is the React console's; the Blazor dashboard takes fixes only until it is removed. A new API field is also measured at scale in
 `Trax.Api.Tests.Stress`, at millions of rows, because another frontend will page and poll it
 the way the dashboard does.
 
@@ -103,6 +104,8 @@ field. Parity is held by review and by the audit list, not by a guard.
 
 ## Changelog
 
+- **2026-10-18**: A new action's control lands in the React console only; the Blazor dashboard is frozen and
+  removed ([0055](./0055-the-react-console-is-the-operator-dashboard-and-the-blazor-one-is-removed.md)).
 - **2026-10-08**: Listed the state-machine instance reads and the instance cancel as met
   ([0046](./0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md)).
 - **2026-10-01**: The dashboard switched its run, run cancels, batch work queue cancel, batch

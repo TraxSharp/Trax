@@ -43,7 +43,7 @@ Trax.Effect/            Effect system, data providers, state machine
 Trax.Mediator/          Mediator pattern, train bus, train authorization
 Trax.Scheduler/         Job scheduling, manifests, remote runners
 Trax.Api/               GraphQL API layer, and the React operations dashboard it ships
-Trax.Dashboard/         Blazor Server dashboard UI
+Trax.Dashboard/         Blazor Server dashboard UI: frozen, fixes only, being removed (Trax.Docs/adr/0055)
 Trax.Cli/               The `trax` tool
 Trax.Samples/           Sample applications and the dotnet new templates
 Trax.Api.StateMachine/  @traxsharp/state-machine, the TypeScript twin of the state-machine engine
@@ -93,7 +93,7 @@ title, the body below it. A security change or an open hotspot uses GitHub's `> 
 | 🟩 | Trains (`trains`) | `Train` (Core), `ServiceTrain` (Effect), junctions, chains, Memory, decisions, `Parallel` |
 | 🟪 | Machines (`machines`) | `Trax.Effect.StateMachine*` and `@traxsharp/state-machine`, its TypeScript twin |
 | 🟧 | Dispatch (`dispatch`) | Mediator (train bus, authorization), Scheduler (jobs, manifests, recovery), remote runners, Lambda |
-| 🟦 | Surface (`surface`) | Api (GraphQL, auth, persisted operations, generated clients) and Dashboard, which mirrors it action for action |
+| 🟦 | Surface (`surface`) | Api (GraphQL, auth, persisted operations, generated clients, the React operations console) and the frozen Blazor Dashboard |
 | ⬛ | Tooling (`tooling`) | CLI, analyzers, architecture and ADR guards, CI, release, docs |
 | 🟥 | Security (`security`) | Not a layer: a flag on anything that changes authentication, authorization or exposure |
 

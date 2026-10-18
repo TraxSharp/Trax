@@ -4,6 +4,11 @@ A Blazor Server monitoring UI that mounts into an existing application rather th
 as its own. Trains, runs, manifests and the dead-letter queue, rendered with Radzen. It sits
 above `Trax.Api` and below `Trax.Samples`.
 
+**Frozen.** This folder takes fixes only: no new page, dialog or action. The React console in
+`Trax.Api.Dashboard` is the operator dashboard, and this folder is removed in the release that
+ships its redesign (central [`0055`](../Trax.Docs/adr/0055-the-react-console-is-the-operator-dashboard-and-the-blazor-one-is-removed.md)).
+A new operator action goes in the console only.
+
 This file is the entry point. It routes; it does not restate the rules.
 
 ## Architecture decisions

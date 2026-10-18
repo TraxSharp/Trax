@@ -48,7 +48,7 @@ Each layer depends on the one before it, and installing a package brings the lay
 | Dispatch by input type, startup chain checks | add `Trax.Mediator` |
 | Cron and interval schedules, retries, dead letters | add `Trax.Scheduler` (needs a data provider; Postgres when several servers share the work) |
 | A GraphQL API over your trains | add `Trax.Api.GraphQL`, plus an auth package such as `Trax.Api.Auth.ApiKey` or `Trax.Api.Auth.Jwt` |
-| The monitoring UI | add `Trax.Dashboard` (Blazor, in the host's process), or `Trax.Api.Dashboard` (a React app the host serves over its GraphQL API) |
+| The operations console | add `Trax.Api.Dashboard` (a React app the host serves over its GraphQL API). `Trax.Dashboard`, the Blazor dashboard, takes fixes only and is being removed |
 
 A typical API host with a scheduler and the dashboard:
 
