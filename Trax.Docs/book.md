@@ -87,7 +87,7 @@ of staff reads all of them.
 You learn: authentication, `[TraxAuthorize]`, taking the caller from the principal rather than the
 input, owner-scoped rows, and the startup checks that refuse an unguarded train.
 
-### 7. Serve it over GraphQL
+### [7. Serve it over GraphQL](/docs/book/serve-it-over-graphql)
 
 Expose the catalogue to everyone, `PlaceOrder` to customers, and the orders to their owners.
 Follow an order's progress while it runs.
