@@ -104,7 +104,7 @@ You learn: the operations namespace, gating it to a role, and the console.
 
 ## Part 3: Running it for real
 
-### 9. Scheduled work
+### [9. Scheduled work](/docs/book/scheduled-work)
 
 Add the nightly stock report and a low-stock check that runs after it. Watch both in the console,
 then skip the report on public holidays.
