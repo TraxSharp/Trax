@@ -717,6 +717,28 @@ export interface RunGraph {
   unmatchedSteps: Pick<JunctionStep, "position" | "name" | "nameWithheld" | "state">[];
 }
 
+// One node of a train's declared chain (operations.trains { chain }): the run graph's node with no
+// run, so every one is NOT_REACHED and has no steps.
+export interface TrainChainNode {
+  id: string;
+  kind: ChainStepKind;
+  junction: string | null;
+  opaque: boolean;
+  state: RunNodeState;
+  parentId: string | null;
+  track: string | null;
+  depth: number;
+  tracks: RunGraphTrackHead[];
+}
+
+// A train's declared chain and whether it asks a decider (TRAIN_CHAINS). hasGraph is false when the
+// host cannot read the train's chain.
+export interface TrainChain {
+  fullName: string;
+  asksDecisions: boolean;
+  chain: { train: string; hasGraph: boolean; allNodes: TrainChainNode[] };
+}
+
 // ── State machines ─────────────────────────────────────────────────────────
 // An instance as operators see it: never its context, never whose a user's draft is.
 export type SnapshotOwnerKind = "SYSTEM" | "USER";

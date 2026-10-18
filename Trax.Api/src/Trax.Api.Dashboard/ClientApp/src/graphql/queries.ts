@@ -923,6 +923,37 @@ export const RUN_GRAPH = gql`
   }
 `;
 
+// Each train's declared chain, drawn the way runGraph draws a run of it but with no run (every node
+// NOT_REACHED, metadataId 0), and whether it asks a decider, so the train page can show what a train
+// does before it has run and offer Ask Afresh only where a run has decisions to ask again.
+export const TRAIN_CHAINS = gql`
+  query TrainChains($hideAdmin: Boolean!) {
+    operations {
+      trains(hideAdminTrains: $hideAdmin) {
+        fullName
+        asksDecisions
+        chain {
+          train
+          hasGraph
+          allNodes {
+            id
+            kind
+            junction
+            opaque
+            state
+            parentId
+            track
+            depth
+            tracks {
+              ${RUN_GRAPH_TRACK}
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 // ── State machines ─────────────────────────────────────────────────────────
 // Operators see instances read-only and never their context: none of these selects it.
 

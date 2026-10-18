@@ -97,6 +97,8 @@ query {
 | `graphQLName` | `String` | The `Name` set on `[TraxQuery]` or `[TraxMutation]`; null when the field name is derived |
 | `isBroadcastEnabled` | `Boolean!` | Whether the train carries [`[TraxBroadcast]`](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) |
 | `hasQueueSubjectKey` | `Boolean!` | Whether the train overrides [`QueueSubjectKey`](/docs/mediator/queued-work#two-mutations-for-one-record), so its queued runs for one subject run one at a time (an override may still return no key for a given input). A run started with [`runTrain`](/docs/sdk-reference/graphql-api/mutations/work-queue#runtrain) bypasses that serialization and may run alongside queued or in-flight work for the same subject; the dashboard's Run dialog warns about it, and a client offering Run should too |
+| `chain` | `RunGraph!` | The train's declared chain, read without a run: the same nodes, in the same order and places, that [`runGraph`](/docs/sdk-reference/graphql-api/queries/executions#rungraph) draws a run of it on, every one `NOT_REACHED`, with no steps and `metadataId` 0. `hasGraph` is false when the host cannot read the train's chain. Read only when selected, from the chain the host reads once per train |
+| `asksDecisions` | `Boolean!` | True when the train declares a step that asks a decider and records the decision: a `Decide`, or a `Switch`, `Gate` or `Scale` that asks its own question. Only such a train's runs have decisions a requeue can [replay or ask afresh](/docs/sdk-reference/graphql-api/mutations/executions). False when the host cannot read the train's chain |
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|

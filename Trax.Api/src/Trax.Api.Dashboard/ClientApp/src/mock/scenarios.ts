@@ -790,9 +790,44 @@ const TRAIN_ROWS = [
   { fullName: "Trax.Trains.MangoTrain", serviceTypeName: "Trax.Trains.MangoTrain", implementationTypeName: "Trax.Trains.MangoTrainImpl", inputTypeName: "Unit", outputTypeName: "Unit", lifetime: "Transient", isQuery: false, isMutation: true, graphQLName: "mango", isBroadcastEnabled: false, hasQueueSubjectKey: false, requiredRoles: [], requiredPolicies: [], inputSchema: [] },
 ];
 
+// A registered train's declared chain, as operations.trains { chain } serves it: the graph its runs
+// are drawn on with no run, every node NOT_REACHED. Zebra and Alpha declare 902's chain (a Decide
+// among it, so they ask decisions); Mango's chain cannot be read on this host.
+const notReached = (node: RunGraphNode): RunGraphNode => ({
+  ...node,
+  state: "NOT_REACHED",
+  replayed: false,
+  checkpointed: false,
+  canResume: false,
+  steps: [],
+  tracks: node.tracks.map((t) => ({ ...t, taken: false, nodes: t.nodes.map(notReached) })),
+});
+
+const hasDecide = (nodes: RunGraphNode[]): boolean =>
+  nodes.some((n) => n.kind === "DECIDE" || n.tracks.some((t) => hasDecide(t.nodes)));
+
+/** A train's declared chain with no run, keyed by its full name. */
+export function trainChain(fullName: string) {
+  const declared = fullName === "Trax.Trains.MangoTrain" ? { ...NO_GRAPH, metadataId: 0 } : declaredRunGraph(902);
+  return {
+    ...servedRunGraph({ ...declared, metadataId: 0, canResume: false, nodes: declared.nodes.map(notReached) }),
+    train: fullName,
+    hash: null,
+  };
+}
+
+/** The TrainInfo resolvers: each train's declared chain and whether it asks a decider. */
+export const trainChainResolvers = {
+  TrainInfo: {
+    chain: (train: { fullName: string }) => trainChain(train.fullName),
+    asksDecisions: (train: { fullName: string }) => hasDecide(trainChain(train.fullName).nodes),
+  },
+};
+
 export const trainsScenario: MockSchemaOverrides = {
   resolvers: () => ({
     OperationsQueries: { trains: () => TRAIN_ROWS },
+    ...trainChainResolvers,
   }),
 };
 

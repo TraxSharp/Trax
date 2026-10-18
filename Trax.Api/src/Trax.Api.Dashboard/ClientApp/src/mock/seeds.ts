@@ -1,6 +1,6 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import { operationFixtures } from "./fixtures";
-import { machineQueryResolvers, runGraph, servedRunGraph, type ServedRunGraph } from "./scenarios";
+import { machineQueryResolvers, runGraph, servedRunGraph, trainChainResolvers, type ServedRunGraph } from "./scenarios";
 import { hashVariables } from "./variables-hash";
 import type { RunGraphNode } from "../types";
 
@@ -120,5 +120,6 @@ export const devMockSeed: MockSchemaOverrides = {
       ...machineQueryResolvers,
       runGraph: (_root: unknown, args: Record<string, unknown>) => devRunGraph(args.metadataId as number),
     },
+    ...trainChainResolvers,
   }),
 };

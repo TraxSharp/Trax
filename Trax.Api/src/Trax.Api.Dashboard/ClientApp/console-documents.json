@@ -238,6 +238,10 @@
       "text": "mutation SetManifestsReplayDecisionsOnRetry($ids: [Long!]!, $replay: Boolean!) {\n  operations {\n    setManifestsReplayDecisionsOnRetry(ids: $ids, replay: $replay) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "TrainChains",
+      "text": "query TrainChains($hideAdmin: Boolean!) {\n  operations {\n    trains(hideAdminTrains: $hideAdmin) {\n      fullName\n      asksDecisions\n      chain {\n        train\n        hasGraph\n        allNodes {\n          id\n          kind\n          junction\n          opaque\n          state\n          parentId\n          track\n          depth\n          tracks {\n            name\n            description\n            isFallback\n            taken\n            __typename\n          }\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "TrainStats",
       "text": "query TrainStats($trainName: String!) {\n  operations {\n    trainStats(trainName: $trainName) {\n      trainName\n      total\n      completed\n      failed\n      inProgress\n      pending\n      cancelled\n      lastRun\n      lastSuccessfulRun\n      averageMilliseconds\n      __typename\n    }\n    __typename\n  }\n}"
     },
