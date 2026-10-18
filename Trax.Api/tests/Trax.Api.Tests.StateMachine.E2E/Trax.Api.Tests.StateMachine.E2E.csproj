@@ -25,6 +25,7 @@
     <ProjectReference Include="../../src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <ProjectReference Include="../../src/Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
     <ProjectReference Include="../../src/Trax.Api.Auth.Jwt.Testing/Trax.Api.Auth.Jwt.Testing.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Dashboard/Trax.Api.Dashboard.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <!-- The machine documents are persisted operations; the generator is internal to this package. -->
     <ProjectReference Include="../../src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />

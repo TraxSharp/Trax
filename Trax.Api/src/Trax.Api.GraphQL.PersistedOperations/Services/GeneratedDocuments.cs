@@ -2,7 +2,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.Services;
 
 /// <summary>
 /// A persisted document the host registers itself: a machine's (<see cref="MachineDocument"/>) or runProgress's
-/// (<see cref="ProgressDocument"/>), which it generates, or one its frontend wrote (<see cref="ClientDocument"/>). Its versions are numbered per <see cref="Slot"/>, so an id stored with a
+/// (<see cref="ProgressDocument"/>), which it generates, one its frontend wrote (<see cref="ClientDocument"/>), or one the
+/// operations console sends (<see cref="ConsoleDocument"/>). Its versions are numbered per <see cref="Slot"/>, so an id stored with a
 /// higher number than this node's answers <c>SERVER_OUTDATED</c> and one with a lower number <c>CLIENT_OUTDATED</c>.
 /// </summary>
 internal abstract record GeneratedDocument(string Id, string Text)
@@ -31,7 +32,16 @@ internal static class GeneratedDocuments
         MachineDocuments.IsReserved(id)
         || TrainDocuments.IsReserved(id)
         || ProgressDocuments.IsReserved(id)
-        || ClientDocuments.IsReserved(id);
+        || ClientDocuments.IsReserved(id)
+        || ConsoleDocuments.IsReserved(id);
+
+    /// <summary>
+    /// Whether <paramref name="id"/> is a document named by the hash of its text, a client's or the console's: such a
+    /// document runs on any node while the store holds it active, whatever its version, once this node's own checks
+    /// accept its text.
+    /// </summary>
+    public static bool IsContentAddressed(string? id) =>
+        ClientDocuments.IsReserved(id) || ConsoleDocuments.IsReserved(id);
 
     /// <summary>The reserved prefix <paramref name="id"/> is under, or null.</summary>
     public static string? PrefixOf(string id) =>
@@ -39,6 +49,7 @@ internal static class GeneratedDocuments
         : TrainDocuments.IsReserved(id) ? TrainDocuments.ReservedIdPrefix
         : ProgressDocuments.IsReserved(id) ? ProgressDocuments.ReservedIdPrefix
         : ClientDocuments.IsReserved(id) ? ClientDocuments.ReservedIdPrefix
+        : ConsoleDocuments.IsReserved(id) ? ConsoleDocuments.ReservedIdPrefix
         : null;
 
     /// <summary>
@@ -80,6 +91,12 @@ internal static class GeneratedDocuments
         if (ClientDocuments.IsReserved(id))
             return
                 ClientDocuments.SlotOfId(id) is { } slot
+                && slots.Contains(slot, StringComparer.Ordinal)
+                ? slot
+                : null;
+        if (ConsoleDocuments.IsReserved(id))
+            return
+                ConsoleDocuments.SlotOfId(id) is { } slot
                 && slots.Contains(slot, StringComparer.Ordinal)
                 ? slot
                 : null;

@@ -485,11 +485,44 @@ public partial class ApiDashboardHostTests
         var html = DashboardEndpoint.RenderIndex(
             IndexTemplate,
             new Microsoft.AspNetCore.Http.PathString("/a\"><script>x</script>"),
-            "/trax/graphql"
+            "/trax/graphql",
+            new Dictionary<string, string>()
         );
 
         html.Should().NotContain("<script>x</script>");
         html.Should().NotContain("\"><script");
+    }
+
+    [Test]
+    public void The_runtime_config_names_each_documents_id_only_when_the_host_registered_them()
+    {
+        var path = new Microsoft.AspNetCore.Http.PathString("/trax/dashboard");
+
+        var without = DashboardEndpoint.RenderIndex(
+            IndexTemplate,
+            path,
+            "/trax/graphql",
+            new Dictionary<string, string>()
+        );
+        var with = DashboardEndpoint.RenderIndex(
+            IndexTemplate,
+            path,
+            "/trax/graphql",
+            new Dictionary<string, string> { ["Overview"] = "trax_console_Overview_abc" }
+        );
+
+        without.Should().NotContain("documents");
+        with.Should().Contain("documents").And.Contain("trax_console_Overview_abc");
+    }
+
+    [Test]
+    public void The_package_carries_the_documents_the_app_sends()
+    {
+        ConsoleDocumentsResource
+            .Documents.Select(d => d.Name)
+            .Should()
+            .Contain(["Overview", "OnJunctionEvent", "RequeueDeadLetter"])
+            .And.NotContain("PersistedOperations", "management runs as text behind its own gate");
     }
 
     // ---- What it needs ----------------------------------------------------------------------

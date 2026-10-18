@@ -47,6 +47,7 @@ internal sealed class MachineDocumentRegistration(
     private readonly ILogger _logger = logger ?? NullLogger<MachineDocumentRegistration>.Instance;
     private readonly CancellationTokenSource _stopping = new();
     private bool _registered;
+    private bool _consoleIncluded;
     private IReadOnlyList<GeneratedDocument> _documents = [];
     private Task? _collecting;
 
@@ -61,7 +62,14 @@ internal sealed class MachineDocumentRegistration(
         var trains = services.GetService<ITrainDiscoveryService>() is { } discovery
             ? TrainTypeModule.AssignTrainNames(discovery.DiscoverTrains())
             : new Dictionary<TrainRegistration, string>();
-        if (exposed.Count == 0 && trains.Count == 0 && options.ClientDocumentFiles.Count == 0)
+        var graphQL = services.GetService<GraphQLConfiguration>();
+        var console = graphQL?.ConsoleDocuments ?? [];
+        if (
+            exposed.Count == 0
+            && trains.Count == 0
+            && options.ClientDocumentFiles.Count == 0
+            && console.Count == 0
+        )
         {
             // No document of this node's, but the registration still runs: it marks the documents of every machine no
             // node serves, and collects them after the grace period, so an earlier deploy's clients reload.
@@ -101,13 +109,45 @@ internal sealed class MachineDocumentRegistration(
         var reach = ClientDocumentReach.Of(
             executor.Schema,
             trains,
-            services.GetService<GraphQLConfiguration>()?.ModelRegistrations ?? []
+            graphQL?.ModelRegistrations ?? []
         );
         registry.ClientReach = reach;
         Services.ClientDocuments.Check(executor.Schema, reach, clientDocuments);
         _documents = [.. _documents, .. clientDocuments];
         GeneratedDocumentValidation.Validate(executor.Schema, _documents);
+
+        IncludeConsoleDocuments(executor.Schema, console);
         await RegisterAsync(cancellationToken).ConfigureAwait(false);
+        PublishConsoleDocumentIds();
+    }
+
+    // The operations console's documents, when the host serves it. The console reaches optional parts of the schema
+    // (the operations mutations, junction events, machines), so a document this host cannot serve is left out, and
+    // the console sends it as text, which persisted operations then refuse, rather than refusing the start.
+    private void IncludeConsoleDocuments(
+        HotChocolate.ISchemaDefinition schema,
+        IReadOnlyList<Trax.Api.GraphQL.Configuration.ConsoleDocumentText> console
+    )
+    {
+        if (console.Count == 0)
+            return;
+        var (served, skipped) = ConsoleDocuments.Select(schema, console);
+        foreach (var reason in skipped)
+            _logger.LogInformation(
+                "The operations console's document {Reason} The console cannot use it on this host.",
+                reason
+            );
+        _documents = [.. _documents, .. served];
+        _consoleIncluded = true;
+    }
+
+    // Tells the console's page the id of each of its documents this node registered.
+    private void PublishConsoleDocumentIds()
+    {
+        if (services.GetService<GraphQLConfiguration>() is { } graphQL)
+            graphQL.ConsoleDocumentIds = _documents
+                .OfType<ConsoleDocument>()
+                .ToDictionary(d => d.Name, d => d.Id, StringComparer.Ordinal);
     }
 
     // Every client document the host names, each file resolved against the content root; a document's name used twice
@@ -134,11 +174,26 @@ internal sealed class MachineDocumentRegistration(
     public Task StartAsync(CancellationToken cancellationToken) =>
         _registered ? Task.CompletedTask : StartingAsync(cancellationToken);
 
-    public Task StartedAsync(CancellationToken cancellationToken)
+    public async Task StartedAsync(CancellationToken cancellationToken)
     {
+        // A host that maps the console in a Startup's Configure, which runs while the web host starts, hands over the
+        // console's documents only after StartingAsync. They are registered now, once every endpoint is mapped.
+        if (
+            !_consoleIncluded
+            && services.GetService<GraphQLConfiguration>()?.ConsoleDocuments
+                is { Count: > 0 } console
+        )
+        {
+            var executor = await services
+                .GetRequiredService<IRequestExecutorProvider>()
+                .GetExecutorAsync(TraxSchemaName, cancellationToken)
+                .ConfigureAwait(false);
+            IncludeConsoleDocuments(executor.Schema, console);
+            await RegisterAsync(cancellationToken).ConfigureAwait(false);
+            PublishConsoleDocumentIds();
+        }
         if (_collecting is null)
             _collecting = Task.Run(() => CollectAsync(_stopping.Token));
-        return Task.CompletedTask;
     }
 
     public async Task StoppingAsync(CancellationToken cancellationToken)

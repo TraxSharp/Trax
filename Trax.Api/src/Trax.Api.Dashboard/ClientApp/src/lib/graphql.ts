@@ -9,6 +9,7 @@ import { authConnectionParams, authHttpHeaders, onAuthChange } from "./auth";
 import { activityExchange } from "./activity-exchange";
 import { connection, setConnectionStatus, type ConnectionStatus } from "./connection";
 import { shouldRetryWs } from "./wsRetry";
+import { persistedFetch, persistedMessageReplacer, persistedSubscription } from "./persistedDocuments";
 import { graphqlUrls, readRuntimeConfig } from "./runtimeConfig";
 
 // Re-exported for existing importers (useConnection, ConnectionIndicator).
@@ -18,7 +19,12 @@ export type { ConnectionStatus };
 // The endpoint is always on this page's origin: the host that serves the app names its path in
 // index.html (lib/runtimeConfig), and in development Vite proxies /trax (HTTP + WebSocket) to the
 // API host. Same-origin, so CORS is never involved.
-const { http: HTTP_URL, ws: WS_URL } = graphqlUrls(readRuntimeConfig().graphqlPath);
+const config = readRuntimeConfig();
+const { http: HTTP_URL, ws: WS_URL } = graphqlUrls(config.graphqlPath);
+
+// A host that requires persisted operations names the id of each console document, and every
+// request for one is sent by that id (lib/persistedDocuments).
+const DOCUMENT_IDS = config.documents;
 
 // Browsers cannot set headers on a WebSocket upgrade, so the API reads the credential from the
 // graphql-ws connection_init payload — `apiKey` for API-key mode, `authToken` for Bearer/JWT mode
@@ -35,6 +41,7 @@ const wsClient = createWsClient({
   connectionParams: () => authConnectionParams(),
   retryAttempts: Infinity,
   shouldRetry: shouldRetryWs,
+  jsonMessageReplacer: persistedMessageReplacer,
   on: {
     connecting: () => setConnectionStatus("connecting"),
     connected: () => setConnectionStatus("connected"),
@@ -62,7 +69,7 @@ export const client = new Client({
     fetchExchange,
     subscriptionExchange({
       forwardSubscription(request) {
-        const input = { ...request, query: request.query ?? "" };
+        const input = persistedSubscription({ ...request, query: request.query ?? "" }, DOCUMENT_IDS);
         return {
           subscribe(sink) {
             const unsubscribe = wsClient.subscribe(input, sink);
@@ -72,6 +79,7 @@ export const client = new Client({
       },
     }),
   ],
+  fetch: persistedFetch(DOCUMENT_IDS),
   // Read the credential per request so it stays current after ConnectionGate updates it.
   fetchOptions: () => ({ headers: authHttpHeaders() }),
 });

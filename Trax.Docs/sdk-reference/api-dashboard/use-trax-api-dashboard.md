@@ -111,6 +111,31 @@ sign-in, authorizes its GraphQL requests; **Change credential** forgets it at on
 Earlier versions stored the credential in `localStorage`. The app deletes whatever they left there
 when it loads, without using it.
 
+## It needs the operations namespace
+
+Every page of the app reads `operations`, so `UseTraxApiDashboard` throws at startup unless the
+GraphQL builder exposes it with `ExposeOperationQueries()`, and `ExposeOperationMutations()` for
+the app's actions, each behind the gate the builder then asks for. Exposing them needs the
+operations services `AddScheduler` registers.
+
+## With persisted operations
+
+A host that runs [persisted operations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
+registers the app's own documents when it starts, under `trax_console_<name>_<hash>`, and names
+each document's id in the runtime config it writes into the app's page. The app then sends every
+request by its id, so it keeps working on a host that requires persisted operations and refuses
+document text. The persisted-operation pages still send text: they are reached through
+`persistedOperations`, which runs as text behind `GateManagement`.
+
+| What the host serves | What the app does |
+|---|---|
+| No persisted operations | Sends document text, as before. |
+| Persisted operations, required or not | Sends each registered document by its id. |
+| A document this host cannot serve, such as an operations mutation on a host that exposes only the queries | Leaves it out and logs which and why when it starts. The app sends that one as text, which a host that requires persisted operations refuses, so only the pages that use it fail. |
+
+Registering a document changes which documents may run, not who may run them: every request still
+passes the operations gate. The decision is `Trax.Api/docs/adr/0042`.
+
 ## What it serves
 
 | Request | Answer |
@@ -124,7 +149,8 @@ when it loads, without using it.
 method is answered `405` with `Allow: GET, HEAD`.
 
 The page is written for the path it is served at: a `<base href>` at the app's base path, which
-the app's relative asset URLs resolve against, and the runtime config it reads at startup, both
+the app's relative asset URLs resolve against, and the runtime config it reads at startup (the
+GraphQL path, and with persisted operations the id of each of the app's documents), both
 inserted first in its `<head>`. So one build works under any path, a route group, or a
 `UsePathBase` prefix.
 

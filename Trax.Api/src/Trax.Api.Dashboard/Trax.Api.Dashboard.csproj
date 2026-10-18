@@ -27,6 +27,19 @@
     <ProjectReference Include="../Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
   </ItemGroup>
 
+  <!-- The documents the app sends, which a host running persisted operations registers so the app
+       keeps working there (ConsoleDocumentsResource). ClientApp's `npm run documents` writes the
+       file from its source and its tests fail while it is out of date, so it is committed and
+       embedded without node, beside the app rather than under it, where nothing serves it. -->
+  <ItemGroup>
+    <EmbeddedResource
+      Include="ClientApp/console-documents.json"
+      LogicalName="TraxApiDashboardDocuments/console-documents.json"
+      WithCulture="false"
+      Type="Non-Resx"
+    />
+  </ItemGroup>
+
   <!-- The app (ClientApp/, Vite and React) is built with node and embedded in this assembly, from
        where UseTraxApiDashboard() serves it (DashboardAssets). A build compiles and embeds it when
        ClientApp has its npm packages installed, and otherwise builds without it, so a plain

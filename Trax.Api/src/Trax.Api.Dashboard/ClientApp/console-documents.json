@@ -1,0 +1,289 @@
+{
+  "format": 1,
+  "documents": [
+    {
+      "name": "AcknowledgeAllDeadLetters",
+      "text": "mutation AcknowledgeAllDeadLetters($note: String!) {\n  operations {\n    deadLetters {\n      acknowledgeAllDeadLetters(note: $note) {\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "AcknowledgeDeadLetter",
+      "text": "mutation AcknowledgeDeadLetter($id: Long!, $note: String!) {\n  operations {\n    deadLetters {\n      acknowledgeDeadLetter(id: $id, note: $note) {\n        success\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "AcknowledgeDeadLetters",
+      "text": "mutation AcknowledgeDeadLetters($ids: [Long!]!, $note: String!) {\n  operations {\n    deadLetters {\n      acknowledgeDeadLetters(ids: $ids, note: $note) {\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "AdminTrainNames",
+      "text": "query AdminTrainNames {\n  operations {\n    adminTrainNames\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelExecution",
+      "text": "mutation CancelExecution($id: Long!) {\n  operations {\n    cancelExecution(id: $id) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelExecutions",
+      "text": "mutation CancelExecutions($ids: [Long!]!) {\n  operations {\n    cancelExecutions(ids: $ids) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelGroup",
+      "text": "mutation CancelGroup($groupId: Long!) {\n  operations {\n    cancelGroup(groupId: $groupId) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelGroups",
+      "text": "mutation CancelGroups($ids: [Long!]!) {\n  operations {\n    cancelGroups(ids: $ids) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelMachineInstance",
+      "text": "mutation CancelMachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!) {\n  operations {\n    cancelMachineInstance(machine: $machine, ownerKind: $ownerKind, id: $id) {\n      success\n      outcome\n      message\n      state\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelManifest",
+      "text": "mutation CancelManifest($externalId: String!) {\n  operations {\n    cancelManifest(externalId: $externalId) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelWorkQueueEntries",
+      "text": "mutation CancelWorkQueueEntries($ids: [Long!]!) {\n  operations {\n    workQueue {\n      cancelWorkQueueEntries(ids: $ids) {\n        success\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "CancelWorkQueueEntry",
+      "text": "mutation CancelWorkQueueEntry($id: Long!) {\n  operations {\n    workQueue {\n      cancelWorkQueueEntry(id: $id) {\n        success\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ConfigureEffect",
+      "text": "mutation ConfigureEffect($fullName: String!, $values: [EffectSettingValueInput!]!) {\n  operations {\n    configureEffect(fullName: $fullName, values: $values) {\n      success\n      count\n      message\n      errors {\n        field\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "DeadLetterDetail",
+      "text": "query DeadLetterDetail($id: Long!) {\n  operations {\n    deadLetters {\n      deadLetter(id: $id) {\n        id\n        manifestId\n        manifestName\n        status\n        deadLetteredAt\n        reason\n        retryCountAtDeadLetter\n        resolvedAt\n        resolutionNote\n        retryMetadataId\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "DeadLetters",
+      "text": "query DeadLetters($take: Int!, $afterId: Long, $status: DeadLetterStatus, $manifestId: Long) {\n  operations {\n    deadLetters {\n      deadLetters(\n        take: $take\n        afterId: $afterId\n        status: $status\n        manifestId: $manifestId\n      ) {\n        items {\n          id\n          manifestId\n          manifestName\n          status\n          deadLetteredAt\n          reason\n          retryCountAtDeadLetter\n          resolvedAt\n          resolutionNote\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Decisions",
+      "text": "query Decisions($metadataId: Long!, $afterId: Long, $take: Int!) {\n  operations {\n    decisions(metadataId: $metadataId, afterId: $afterId, take: $take) {\n      items {\n        id\n        metadataId\n        questionKey\n        occurrence\n        kind\n        question\n        answer\n        refused\n        isRefused\n        fingerprint\n        model\n        decider\n        replayed\n        shadows\n        routes\n        stateHash\n        decidedAt\n        answerWithheld\n        trackWithheld\n        replayRefused\n        __typename\n      }\n      take\n      nextCursor\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "DisableManifest",
+      "text": "mutation DisableManifest($externalId: String!) {\n  operations {\n    disableManifest(externalId: $externalId) {\n      success\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Effects",
+      "text": "query Effects {\n  operations {\n    effects {\n      name\n      fullName\n      enabled\n      toggleable\n      isConfigurable\n      configurationTypeName\n      configuration\n      fields {\n        name\n        typeName\n        kind\n        nullable\n        enumValues\n        sensitive\n        hasValue\n        value\n        hint\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "EnableManifest",
+      "text": "mutation EnableManifest($externalId: String!) {\n  operations {\n    enableManifest(externalId: $externalId) {\n      success\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "EnvironmentName",
+      "text": "query EnvironmentName {\n  operations {\n    config {\n      environmentName\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ExecutionChildren",
+      "text": "query ExecutionChildren($parentId: Long!, $take: Int!, $afterId: Long) {\n  operations {\n    executionChildren(parentId: $parentId, take: $take, afterId: $afterId) {\n      items {\n        id\n        name\n        trainState\n        startTime\n        endTime\n        __typename\n      }\n      totalCount\n      nextCursor\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ExecutionDetail",
+      "text": "query ExecutionDetail($id: Long!) {\n  operations {\n    executionDetail(id: $id) {\n      id\n      externalId\n      name\n      trainState\n      startTime\n      endTime\n      failureJunction\n      failureReason\n      failureException\n      stackTrace\n      input\n      output\n      manifestId\n      cancellationRequested\n      currentlyRunningJunction\n      junctionStartedAt\n      hostName\n      hostEnvironment\n      hostInstanceId\n      childCount\n      failureClass\n      parentId\n      scheduledTime\n      executor\n      hostLabels\n      replayDecisionsOf\n      replayAbandoned\n      resumeFrom\n      resumeAt\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Executions",
+      "text": "query Executions($take: Int!, $afterId: Long, $trainState: TrainState, $trainName: String, $startedAfter: DateTime, $startedBefore: DateTime, $order: SortOrder, $manifestId: Long, $manifestGroupId: Long, $hideAdminTrains: Boolean, $failureClass: FailureClass, $externalId: String, $parentId: Long, $hostName: String) {\n  operations {\n    executions(\n      take: $take\n      afterId: $afterId\n      trainState: $trainState\n      trainName: $trainName\n      startedAfter: $startedAfter\n      startedBefore: $startedBefore\n      order: $order\n      manifestId: $manifestId\n      manifestGroupId: $manifestGroupId\n      hideAdminTrains: $hideAdminTrains\n      failureClass: $failureClass\n      externalId: $externalId\n      parentId: $parentId\n      hostName: $hostName\n    ) {\n      items {\n        id\n        externalId\n        name\n        trainState\n        startTime\n        endTime\n        failureJunction\n        failureReason\n        manifestId\n        hostName\n        failureClass\n        cancellationRequested\n        parentId\n        currentlyRunningJunction\n        __typename\n      }\n      totalCount\n      isEstimatedCount\n      nextCursor\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "GroupDependencyGraph",
+      "text": "query GroupDependencyGraph {\n  operations {\n    manifestGroups {\n      dependencyGraph {\n        nodes {\n          id\n          name\n          isHighlighted\n          __typename\n        }\n        edges {\n          fromId\n          toId\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Hosts",
+      "text": "query Hosts {\n  operations {\n    hosts {\n      instanceId\n      name\n      environment\n      lastSeen\n      totalExecutions\n      currentlyRunning\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "JunctionRuns",
+      "text": "query JunctionRuns($metadataId: Long!, $afterPosition: Int, $take: Int!) {\n  operations {\n    junctionRuns(\n      metadataId: $metadataId\n      afterPosition: $afterPosition\n      take: $take\n    ) {\n      position\n      kind\n      name\n      state\n      startedAt\n      endedAt\n      durationMs\n      failureClass\n      failureException\n      questionKey\n      answer\n      confidence\n      replayed\n      decider\n      answerWithheld\n      attempt\n      nameWithheld\n      trackPosition\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "LogLevels",
+      "text": "query LogLevels {\n  operations {\n    config {\n      logLevels {\n        category\n        level\n        configuredLevel\n        overridden\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Logs",
+      "text": "query Logs($take: Int!, $afterId: Long, $metadataId: Long, $minimumLevel: LogLevel, $messageContains: String, $categoryContains: String, $order: SortOrder! = NEWEST) {\n  operations {\n    logs {\n      logs(\n        take: $take\n        afterId: $afterId\n        metadataId: $metadataId\n        minimumLevel: $minimumLevel\n        messageContains: $messageContains\n        categoryContains: $categoryContains\n        order: $order\n      ) {\n        items {\n          id\n          metadataId\n          eventId\n          level\n          category\n          message\n          exception\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        isCountCapped\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "MachineInstance",
+      "text": "query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {\n  operations {\n    machineInstance(\n      machine: $machine\n      ownerKind: $ownerKind\n      id: $id\n      rowId: $rowId\n    ) {\n      machine\n      ownerKind\n      id\n      rowId\n      state\n      version\n      createdAt\n      updatedAt\n      hasLiveInvokedRun\n      queuedInvokedRunEntryId\n      isInvokedRunsCapped\n      invokedRuns {\n        id\n        externalId\n        name\n        trainState\n        startTime\n        endTime\n        failureClass\n        cancellationRequested\n        isLive\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "MachineInstanceCounts",
+      "text": "query MachineInstanceCounts {\n  operations {\n    machineInstanceCounts {\n      machine\n      state\n      ownerKind\n      count\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "MachineInstances",
+      "text": "query MachineInstances($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $skip: Int!, $take: Int!) {\n  operations {\n    machineInstances(\n      machine: $machine\n      state: $state\n      ownerKind: $ownerKind\n      skip: $skip\n      take: $take\n    ) {\n      items {\n        machine\n        ownerKind\n        id\n        rowId\n        state\n        version\n        createdAt\n        updatedAt\n        hasLiveInvokedRun\n        __typename\n      }\n      totalCount\n      isCountCapped\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ManifestDetail",
+      "text": "query ManifestDetail($id: Long!) {\n  operations {\n    manifestDetail(id: $id) {\n      id\n      externalId\n      name\n      isEnabled\n      scheduleType\n      cronExpression\n      intervalSeconds\n      maxRetries\n      timeoutSeconds\n      lastSuccessfulRun\n      manifestGroupId\n      manifestGroupName\n      dependsOnManifestId\n      priority\n      propertyTypeName\n      properties\n      misfirePolicy\n      misfireThresholdSeconds\n      scheduledAt\n      nextScheduledRun\n      varianceSeconds\n      replayDecisionsOnRetry\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ManifestExclusions",
+      "text": "query ManifestExclusions($manifestId: Long!) {\n  operations {\n    manifestExclusions(manifestId: $manifestId) {\n      type\n      daysOfWeek\n      dates\n      startDate\n      endDate\n      startTime\n      endTime\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ManifestGroupDetail",
+      "text": "query ManifestGroupDetail($id: Long!) {\n  operations {\n    manifestGroups {\n      group(id: $id) {\n        id\n        name\n        maxActiveJobs\n        priority\n        isEnabled\n        __typename\n      }\n      graph(groupId: $id) {\n        nodes {\n          id\n          name\n          isHighlighted\n          __typename\n        }\n        edges {\n          fromId\n          toId\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ManifestGroupStats",
+      "text": "query ManifestGroupStats($groupIds: [Long!]!) {\n  operations {\n    manifestGroups {\n      stats(groupIds: $groupIds) {\n        groupId\n        manifestCount\n        totalExecutions\n        completed\n        failed\n        inProgress\n        lastRun\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ManifestGroups",
+      "text": "query ManifestGroups($take: Int!, $afterId: Long, $nameContains: String) {\n  operations {\n    manifestGroups {\n      groups(take: $take, afterId: $afterId, nameContains: $nameContains) {\n        items {\n          id\n          name\n          maxActiveJobs\n          priority\n          isEnabled\n          createdAt\n          updatedAt\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ManifestStats",
+      "text": "query ManifestStats($manifestId: Long!) {\n  operations {\n    manifestStats(manifestId: $manifestId) {\n      manifestId\n      total\n      completed\n      failed\n      inProgress\n      pending\n      cancelled\n      lastRun\n      lastSuccessfulRun\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Manifests",
+      "text": "query Manifests($take: Int!, $afterId: Long, $isEnabled: Boolean, $scheduleType: ScheduleType, $nameContains: String, $manifestGroupId: Long, $hideAdminTrains: Boolean! = false) {\n  operations {\n    manifests(\n      take: $take\n      afterId: $afterId\n      isEnabled: $isEnabled\n      scheduleType: $scheduleType\n      nameContains: $nameContains\n      manifestGroupId: $manifestGroupId\n      hideAdminTrains: $hideAdminTrains\n    ) {\n      items {\n        id\n        externalId\n        name\n        isEnabled\n        scheduleType\n        cronExpression\n        intervalSeconds\n        maxRetries\n        lastSuccessfulRun\n        manifestGroupId\n        priority\n        replayDecisionsOnRetry\n        __typename\n      }\n      totalCount\n      isEstimatedCount\n      nextCursor\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "OnDataChanged",
+      "text": "subscription OnDataChanged {\n  onDataChanged {\n    domain\n    timestamp\n    __typename\n  }\n}"
+    },
+    {
+      "name": "OnJunctionEvent",
+      "text": "subscription OnJunctionEvent($metadataId: Long!) {\n  onJunctionEvent(metadataId: $metadataId) {\n    metadataId\n    eventType\n    timestamp\n    sequence\n    junction {\n      position\n      kind\n      name\n      state\n      startedAt\n      endedAt\n      durationMs\n      failureClass\n      failureException\n      questionKey\n      answer\n      confidence\n      replayed\n      decider\n      answerWithheld\n      attempt\n      nameWithheld\n      trackPosition\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "OnTrainStateChanged",
+      "text": "subscription OnTrainStateChanged {\n  onTrainStateChanged {\n    metadataId\n    externalId\n    trainName\n    trainState\n    timestamp\n    failureJunction\n    failureReason\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Overview",
+      "text": "query Overview($range: MetricsRange!, $hideAdmin: Boolean!) {\n  operations {\n    health {\n      status\n      description\n      queueDepth\n      inProgress\n      failedLastHour\n      deadLetters\n      __typename\n    }\n    metrics {\n      server {\n        uptimeSeconds\n        workingSetBytes\n        gcHeapBytes\n        __typename\n      }\n      serverCpuPercent\n      dashboard(range: $range, hideAdminTrains: $hideAdmin) {\n        kpis {\n          executionsToday\n          successRate\n          currentlyRunning\n          unresolvedDeadLetters\n          __typename\n        }\n        executionsOverTime {\n          timestamp\n          completed\n          failed\n          cancelled\n          __typename\n        }\n        topFailures {\n          trainName\n          count\n          __typename\n        }\n        topAverageDurations {\n          trainName\n          averageMilliseconds\n          __typename\n        }\n        throughputSeries {\n          trainName\n          buckets {\n            timestamp\n            count\n            __typename\n          }\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "QueueTrain",
+      "text": "mutation QueueTrain($input: QueueTrainInput!) {\n  operations {\n    workQueue {\n      queueTrain(input: $input) {\n        success\n        message\n        id\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "RequeueAllDeadLetters",
+      "text": "mutation RequeueAllDeadLetters($askAfresh: Boolean! = false) {\n  operations {\n    deadLetters {\n      requeueAllDeadLetters(askAfresh: $askAfresh) {\n        id\n        status\n        started\n        awaitingAtStart\n        startedAt\n        finishedAt\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "RequeueAllJob",
+      "text": "query RequeueAllJob($id: UUID!) {\n  operations {\n    deadLetters {\n      requeueAllJob(id: $id) {\n        id\n        status\n        awaitingAtStart\n        startedAt\n        finishedAt\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "RequeueDeadLetter",
+      "text": "mutation RequeueDeadLetter($id: Long!, $askAfresh: Boolean! = false) {\n  operations {\n    deadLetters {\n      requeueDeadLetter(id: $id, askAfresh: $askAfresh) {\n        success\n        workQueueId\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "RequeueDeadLetters",
+      "text": "mutation RequeueDeadLetters($ids: [Long!]!, $askAfresh: Boolean! = false) {\n  operations {\n    deadLetters {\n      requeueDeadLetters(ids: $ids, askAfresh: $askAfresh) {\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "RequeueExecution",
+      "text": "mutation RequeueExecution($id: Long!, $askAfresh: Boolean! = false) {\n  operations {\n    requeueExecution(id: $id, askAfresh: $askAfresh) {\n      success\n      message\n      id\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ResumeExecution",
+      "text": "mutation ResumeExecution($id: Long!, $from: String) {\n  operations {\n    resumeExecution(id: $id, from: $from) {\n      success\n      message\n      id\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "RunGraph",
+      "text": "query RunGraph($metadataId: Long!) {\n  operations {\n    runGraph(metadataId: $metadataId) {\n      metadataId\n      hasGraph\n      moreSteps\n      canResume\n      unmatchedSteps {\n        position\n        name\n        nameWithheld\n        state\n        __typename\n      }\n      allNodes {\n        id\n        kind\n        opaque\n        replayed\n        checkpointed\n        canResume\n        state\n        steps {\n          state\n          failureClass\n          failureException\n          __typename\n        }\n        parentId\n        track\n        depth\n        tracks {\n          name\n          description\n          isFallback\n          taken\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "RunTrain",
+      "text": "mutation RunTrain($input: RunTrainInput!) {\n  operations {\n    workQueue {\n      runTrain(input: $input) {\n        success\n        message\n        id\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "SchedulerConfig",
+      "text": "query SchedulerConfig {\n  operations {\n    config {\n      scheduler {\n        manifestManagerEnabled\n        jobDispatcherEnabled\n        manifestManagerPollingInterval\n        jobDispatcherPollingInterval\n        maxActiveJobs\n        defaultMaxRetries\n        defaultRetryDelay\n        retryBackoffMultiplier\n        maxRetryDelay\n        defaultJobTimeout\n        stalePendingTimeout\n        recoverStuckJobsOnStartup\n        deadLetterRetentionPeriod\n        autoPurgeDeadLetters\n        localWorkerCount\n        metadataCleanupInterval\n        metadataCleanupRetention\n        failureCountWindow\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "ServerVersion",
+      "text": "query ServerVersion {\n  operations {\n    config {\n      version\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "SetAllManifestGroupsEnabled",
+      "text": "mutation SetAllManifestGroupsEnabled($enabled: Boolean!) {\n  operations {\n    manifestGroups {\n      setAllManifestGroupsEnabled(enabled: $enabled) {\n        success\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "SetEffectEnabled",
+      "text": "mutation SetEffectEnabled($fullName: String!, $enabled: Boolean!) {\n  operations {\n    setEffectEnabled(fullName: $fullName, enabled: $enabled) {\n      success\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "SetLogLevels",
+      "text": "mutation SetLogLevels($levels: [LogLevelSettingInput!]!) {\n  operations {\n    config {\n      setLogLevels(levels: $levels) {\n        success\n        count\n        notApplied\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "SetManifestGroupsEnabled",
+      "text": "mutation SetManifestGroupsEnabled($ids: [Long!]!, $enabled: Boolean!) {\n  operations {\n    manifestGroups {\n      setManifestGroupsEnabled(ids: $ids, enabled: $enabled) {\n        success\n        count\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "SetManifestsEnabled",
+      "text": "mutation SetManifestsEnabled($ids: [Long!]!, $enabled: Boolean!) {\n  operations {\n    setManifestsEnabled(ids: $ids, enabled: $enabled) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "SetManifestsReplayDecisionsOnRetry",
+      "text": "mutation SetManifestsReplayDecisionsOnRetry($ids: [Long!]!, $replay: Boolean!) {\n  operations {\n    setManifestsReplayDecisionsOnRetry(ids: $ids, replay: $replay) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "TrainStats",
+      "text": "query TrainStats($trainName: String!) {\n  operations {\n    trainStats(trainName: $trainName) {\n      trainName\n      total\n      completed\n      failed\n      inProgress\n      pending\n      cancelled\n      lastRun\n      lastSuccessfulRun\n      averageMilliseconds\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "Trains",
+      "text": "query Trains($hideAdmin: Boolean!) {\n  operations {\n    trains(hideAdminTrains: $hideAdmin) {\n      fullName\n      serviceTypeName\n      implementationTypeName\n      inputTypeName\n      outputTypeName\n      lifetime\n      isQuery\n      isMutation\n      graphQLName\n      isBroadcastEnabled\n      requiredRoles\n      requiredPolicies\n      inputSchema {\n        name\n        typeName\n        isNullable\n        enumValues\n        __typename\n      }\n      hasQueueSubjectKey\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "TriggerGroup",
+      "text": "mutation TriggerGroup($groupId: Long!) {\n  operations {\n    triggerGroup(groupId: $groupId) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "TriggerGroups",
+      "text": "mutation TriggerGroups($ids: [Long!]!) {\n  operations {\n    triggerGroups(ids: $ids) {\n      success\n      matched\n      queued\n      alreadyQueued\n      tooLateToAskAfresh\n      skipped\n      message\n      notes {\n        id\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "TriggerManifest",
+      "text": "mutation TriggerManifest($externalId: String!, $askAfresh: Boolean! = false) {\n  operations {\n    triggerManifest(externalId: $externalId, askAfresh: $askAfresh) {\n      success\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "TriggerManifestDelayed",
+      "text": "mutation TriggerManifestDelayed($externalId: String!, $delay: Duration!) {\n  operations {\n    triggerManifestDelayed(externalId: $externalId, delay: $delay) {\n      success\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "TriggerManifests",
+      "text": "mutation TriggerManifests($ids: [Long!]!, $askAfresh: Boolean! = false) {\n  operations {\n    triggerManifests(ids: $ids, askAfresh: $askAfresh) {\n      success\n      matched\n      queued\n      alreadyQueued\n      tooLateToAskAfresh\n      skipped\n      message\n      notes {\n        id\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "UpdateManifest",
+      "text": "mutation UpdateManifest($id: Long!, $input: UpdateManifestInput!) {\n  operations {\n    updateManifest(id: $id, input: $input) {\n      success\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "UpdateManifestGroup",
+      "text": "mutation UpdateManifestGroup($id: Long!, $input: UpdateManifestGroupInput!) {\n  operations {\n    manifestGroups {\n      updateManifestGroup(id: $id, input: $input) {\n        success\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "UpdateScheduler",
+      "text": "mutation UpdateScheduler($input: UpdateSchedulerConfigInput!) {\n  operations {\n    config {\n      updateScheduler(input: $input) {\n        success\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "WorkQueue",
+      "text": "query WorkQueue($take: Int!, $afterId: Long, $status: WorkQueueStatus, $trainName: String, $subjectKey: String, $manifestId: Long) {\n  operations {\n    workQueue {\n      workQueues(\n        take: $take\n        afterId: $afterId\n        status: $status\n        trainName: $trainName\n        subjectKey: $subjectKey\n        manifestId: $manifestId\n      ) {\n        items {\n          id\n          externalId\n          trainName\n          status\n          createdAt\n          dispatchedAt\n          priority\n          dispatchAttempts\n          manifestId\n          subjectKey\n          confirmedAt\n          replayDecisionsOf\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "WorkQueueDetail",
+      "text": "query WorkQueueDetail($id: Long!) {\n  operations {\n    workQueue {\n      detail(id: $id) {\n        id\n        externalId\n        trainName\n        status\n        createdAt\n        dispatchedAt\n        scheduledAt\n        priority\n        dispatchAttempts\n        manifestId\n        metadataId\n        deadLetterId\n        inputTypeName\n        confirmedAt\n        subjectKey\n        replayDecisionsOf\n        input\n        subjectHeldBy\n        subjectQueuedBehind\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    }
+  ]
+}

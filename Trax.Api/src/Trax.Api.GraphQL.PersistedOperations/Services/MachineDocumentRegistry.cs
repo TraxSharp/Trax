@@ -166,10 +166,10 @@ internal sealed class MachineDocumentRegistry : IMachineIrOrder
         if (state.Stored.TryGetValue(id, out var stored))
         {
             _misses.TryRemove(id, out _);
-            // A client document runs on any node while the store holds it active, whatever its version: the text
-            // another node registered still names fields this node serves, or this node's checks refuse it. An older
-            // version keeps working through a frontend's deploy; a collected one is reloaded.
-            if (ClientDocuments.IsReserved(id))
+            // A client or console document runs on any node while the store holds it active, whatever its version:
+            // the text another node registered still names fields this node serves, or this node's checks refuse it.
+            // An older version keeps working through a frontend's deploy; a collected one is reloaded.
+            if (GeneratedDocuments.IsContentAddressed(id))
                 return stored.IsActive
                     ? MachineDocumentVerdict.Stored
                     : MachineDocumentVerdict.ClientOutdated;

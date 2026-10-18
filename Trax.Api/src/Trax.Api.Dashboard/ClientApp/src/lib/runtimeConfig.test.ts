@@ -14,29 +14,29 @@ afterEach(() => setConfigMeta(null));
 
 describe("the runtime config the host writes into index.html", () => {
   test("without it (vite dev, the tests), the app is at the root and GraphQL at /trax/graphql", () => {
-    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql" });
+    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql", documents: {} });
   });
 
   test("reads the base path and the GraphQL path the host serves", () => {
     setConfigMeta(JSON.stringify({ basePath: "/ops/dashboard/", graphqlPath: "/ops/graphql" }));
-    expect(readRuntimeConfig()).toEqual({ basePath: "/ops/dashboard/", graphqlPath: "/ops/graphql" });
+    expect(readRuntimeConfig()).toEqual({ basePath: "/ops/dashboard/", graphqlPath: "/ops/graphql", documents: {} });
   });
 
   test("a field an older host wrote, such as principal, is ignored", () => {
     setConfigMeta(JSON.stringify({ basePath: "/", graphqlPath: "/trax/graphql", principal: "ab12" }));
-    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql" });
+    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql", documents: {} });
   });
 
   test("ignores anything that is not a same-origin path, so the app never talks to another host", () => {
     setConfigMeta(
       JSON.stringify({ basePath: "https://evil.example/", graphqlPath: "//evil.example/graphql" }),
     );
-    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql" });
+    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql", documents: {} });
   });
 
   test("ignores a config that is not JSON", () => {
     setConfigMeta("{not json");
-    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql" });
+    expect(readRuntimeConfig()).toEqual({ basePath: "/", graphqlPath: "/trax/graphql", documents: {} });
   });
 });
 

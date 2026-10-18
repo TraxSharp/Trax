@@ -47,6 +47,22 @@ public class GraphQLConfiguration
     internal string? MappedRoutePrefix { get; set; }
 
     /// <summary>
+    /// The documents the operations console sends, as Trax.Api.Dashboard reads them from the app
+    /// it serves; empty until <c>UseTraxApiDashboard</c> maps it. A host that runs persisted
+    /// operations registers them when it starts, so the console keeps working where document
+    /// text is refused.
+    /// </summary>
+    internal IReadOnlyList<ConsoleDocumentText> ConsoleDocuments { get; set; } = [];
+
+    /// <summary>
+    /// The persisted id this node registered each console document under, by operation name;
+    /// empty when the host runs no persisted operations. The dashboard hands it to the app, which
+    /// then sends each document by its id.
+    /// </summary>
+    internal IReadOnlyDictionary<string, string> ConsoleDocumentIds { get; set; } =
+        new Dictionary<string, string>();
+
+    /// <summary>
     /// Max GraphQL execution depth (default 15). Queries deeper than this are rejected
     /// during validation.
     /// </summary>

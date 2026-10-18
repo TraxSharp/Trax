@@ -4,6 +4,7 @@ using System.Text.Json;
 using HotChocolate.AspNetCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -195,8 +196,10 @@ public static class E2EHost
                         app.UseAuthentication();
                         app.UseAuthorization();
                         app.UseEndpoints(endpoints =>
-                            endpoints.MapGraphQL("/trax/graphql", "trax")
-                        );
+                        {
+                            endpoints.MapGraphQL("/trax/graphql", "trax");
+                            options.Endpoints?.Invoke(endpoints);
+                        });
                     })
             )
             .Build();
@@ -301,6 +304,9 @@ public sealed record E2EHostOptions
 
     /// <summary>Registrations made after Trax's, so the last one wins.</summary>
     public Action<IServiceCollection>? Services { get; init; }
+
+    /// <summary>Endpoints mapped beside the GraphQL endpoint, such as the operations console.</summary>
+    public Action<IEndpointRouteBuilder>? Endpoints { get; init; }
 
     /// <summary>Stores every run's input and output on its row (<c>SaveTrainParameters</c>), as most hosts do.</summary>
     public bool SaveTrainParameters { get; init; }

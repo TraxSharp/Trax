@@ -320,12 +320,13 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
     /// <summary>The code an upload, deactivation or restore of a generated document's id is refused with.</summary>
     internal const string ReservedIdCode = "RESERVED_ID";
 
-    // Ids under a reserved prefix are the machine and train documents the host generates and registers itself.
+    // Ids under a reserved prefix are the documents the host registers itself: a machine's, runProgress's, a client's
+    // and the console's.
     private static PersistedOperationError Reserved(string id) =>
         new(
             ReservedIdCode,
-            $"The id '{id}' is under '{GeneratedDocuments.PrefixOf(id)}', which is reserved for the machine and train "
-                + "documents the host generates and registers itself when it starts. Choose another id.",
+            $"The id '{id}' is under '{GeneratedDocuments.PrefixOf(id)}', which is reserved for the documents the host "
+                + "registers itself when it starts. Choose another id.",
             null,
             null,
             null,

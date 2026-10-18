@@ -153,9 +153,11 @@ internal sealed class DbPersistedOperationStorage
         {
             if (_machineDocuments.TryGetOwn(id, out var generated))
                 own = generated;
-            // Another node's client document, which the middleware let through only once this node checked and
-            // validated it: read, and served only when its body is the one its id names.
-            else if (ClientDocuments.IsReserved(id) && _machineDocuments.IsRunnableStored(id))
+            // Another node's client or console document, which the middleware let through only once this node checked
+            // and validated it: read, and served only when its body is the one its id names.
+            else if (
+                GeneratedDocuments.IsContentAddressed(id) && _machineDocuments.IsRunnableStored(id)
+            )
                 storedClient = true;
             else
                 return null;
@@ -591,6 +593,7 @@ internal sealed class DbPersistedOperationStorage
                             || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(ClientDocuments.ReservedIdPrefix)
+                            || p.Id.StartsWith(ConsoleDocuments.ReservedIdPrefix)
                         )
                     )
                     .ToListAsync(ct)
@@ -882,6 +885,7 @@ internal sealed class DbPersistedOperationStorage
                             || p.Id.StartsWith(TrainDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(ProgressDocuments.ReservedIdPrefix)
                             || p.Id.StartsWith(ClientDocuments.ReservedIdPrefix)
+                            || p.Id.StartsWith(ConsoleDocuments.ReservedIdPrefix)
                         )
                     )
                     .Select(p => new
@@ -922,15 +926,15 @@ internal sealed class DbPersistedOperationStorage
         );
 
     /// <summary>
-    /// Refuses a write to an id under the reserved prefix: those are the machine documents the host generates and
-    /// registers itself, when it starts.
+    /// Refuses a write to an id under a reserved prefix: those are the documents the host registers itself, when it
+    /// starts.
     /// </summary>
     private static void RefuseReserved(string id)
     {
         if (GeneratedDocuments.PrefixOf(id) is { } prefix)
             throw new PersistedOperationInputException(
-                $"The id '{id}' is under '{prefix}', which is reserved for the machine and train documents the host "
-                    + "generates and registers itself. Choose another id."
+                $"The id '{id}' is under '{prefix}', which is reserved for the documents the host "
+                    + "registers itself. Choose another id."
             );
     }
 

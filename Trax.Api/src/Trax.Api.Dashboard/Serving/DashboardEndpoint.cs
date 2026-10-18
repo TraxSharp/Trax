@@ -34,6 +34,7 @@ namespace Trax.Api.Dashboard.Serving;
 internal sealed partial class DashboardEndpoint(
     DashboardAssets assets,
     Func<string> graphQLPath,
+    Func<IReadOnlyDictionary<string, string>> documentIds,
     bool anonymousShell
 )
 {
@@ -136,13 +137,27 @@ internal sealed partial class DashboardEndpoint(
     /// relative URLs resolve against, and the runtime config the app reads at startup
     /// (<c>src/lib/runtimeConfig.ts</c>), both written first in its <c>&lt;head&gt;</c>. The config
     /// names no one: the app holds the operator's credential in memory only, so it has nothing to
-    /// bind to who loaded the page.
+    /// bind to who loaded the page. On a host that runs persisted operations it also names the id
+    /// each of the app's documents is registered under, which the app then sends instead of text.
     /// </summary>
-    internal static string RenderIndex(string template, PathString basePath, string graphQLPath)
+    internal static string RenderIndex(
+        string template,
+        PathString basePath,
+        string graphQLPath,
+        IReadOnlyDictionary<string, string> documentIds
+    )
     {
         var baseHref = basePath.Add(new PathString("/")).ToUriComponent();
         var config = JsonSerializer.Serialize(
-            new { basePath = baseHref, graphqlPath = graphQLPath },
+            documentIds.Count == 0
+                ? new { basePath = baseHref, graphqlPath = graphQLPath }
+                : (object)
+                    new
+                    {
+                        basePath = baseHref,
+                        graphqlPath = graphQLPath,
+                        documents = documentIds,
+                    },
             ConfigJson
         );
         var head =
@@ -160,7 +175,9 @@ internal sealed partial class DashboardEndpoint(
     private async Task WriteIndexAsync(HttpContext context, PathString basePath)
     {
         var graphQL = context.Request.PathBase.Add(new PathString(graphQLPath())).ToUriComponent();
-        var html = Encoding.UTF8.GetBytes(RenderIndex(assets.IndexTemplate!, basePath, graphQL));
+        var html = Encoding.UTF8.GetBytes(
+            RenderIndex(assets.IndexTemplate!, basePath, graphQL, documentIds())
+        );
         await WriteAsync(
             context,
             html,

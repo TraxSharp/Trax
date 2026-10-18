@@ -226,6 +226,10 @@ builder.Services.AddPersistedOperationStore(store =>
 The dashboard's own setup, including the posture it refuses to start without, is in
 [Add the dashboard to a host](/docs/dashboard).
 
+The React operations console keeps working on a host that requires persisted operations: the
+host registers the console's own documents when it starts and the console sends them by id. See
+[UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard#with-persisted-operations).
+
 ## SDK Reference
 
 > [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service) | [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)

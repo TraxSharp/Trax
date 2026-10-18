@@ -8,15 +8,26 @@
 //
 // Both values must be paths on this origin. Anything else is ignored rather than followed, so a
 // page can never be pointed at another host's API with the credential an operator entered.
+//
+// A host that runs persisted operations also names the id it registered each console document
+// under (src/graphql/documents.ts), and the console then sends those ids instead of text. Only an
+// id under the console's prefix is kept.
 
 export interface RuntimeConfig {
   /** The path the app is served under, with a trailing slash. */
   basePath: string;
   /** The path of the Trax GraphQL endpoint, on this origin. */
   graphqlPath: string;
+  /** The persisted id of each console document, by operation name; empty when the host sends none. */
+  documents: Readonly<Record<string, string>>;
 }
 
-const DEFAULTS: RuntimeConfig = { basePath: "/", graphqlPath: "/trax/graphql" };
+const DEFAULTS: RuntimeConfig = { basePath: "/", graphqlPath: "/trax/graphql", documents: {} };
+
+/** The prefix every console document's id is under. */
+export const CONSOLE_DOCUMENT_PREFIX = "trax_console_";
+
+const OPERATION_NAME = /^[_A-Za-z][_0-9A-Za-z]*$/;
 
 const isLocalPath = (value: unknown): value is string =>
   typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.includes("\\");
@@ -37,7 +48,17 @@ export function readRuntimeConfig(doc: Document = document): RuntimeConfig {
   return {
     basePath: isLocalPath(raw.basePath) ? withTrailingSlash(raw.basePath) : DEFAULTS.basePath,
     graphqlPath: isLocalPath(raw.graphqlPath) ? raw.graphqlPath : DEFAULTS.graphqlPath,
+    documents: documentIds(raw.documents),
   };
+}
+
+function documentIds(value: unknown): Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const ids: Record<string, string> = {};
+  for (const [name, id] of Object.entries(value))
+    if (OPERATION_NAME.test(name) && typeof id === "string" && id.startsWith(CONSOLE_DOCUMENT_PREFIX))
+      ids[name] = id;
+  return ids;
 }
 
 /** The router's basename: the base path without its trailing slash ("" at the root). */

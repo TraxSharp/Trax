@@ -129,6 +129,12 @@ cannot answer, other than a scenario's own row id and a filter the play types.
   again. Browsers cannot set headers on a WebSocket upgrade, so subscriptions send the key in the
   `graphql-ws` `connection_init` payload, which the API's `TraxApiKeySocketInterceptor` reads.
   At startup the app deletes any credential an earlier version stored in `localStorage`.
+- **Persisted operations**: `console-documents.json` holds every document the app sends but the
+  persisted-operation pages, as urql puts them on the wire (`src/graphql/documents.ts`). The
+  package embeds it, a host that runs persisted operations registers each under a
+  `trax_console_` id and names the ids in the runtime config, and the app then sends those
+  documents by id (`src/lib/persistedDocuments.ts`). Run `npm run documents` after changing any
+  document under `src/graphql`; `npm run test` fails while the file is out of date.
 
 ## GraphQL mock (offline dev)
 

@@ -65,6 +65,12 @@ A host where a train carries [`[TraxRunProgress]`](/docs/sdk-reference/graphql-a
 two documents of `runProgress`, under `trax_progress_query_<shapeHash><textHash>` and
 `trax_progress_subscription_<shapeHash><textHash>`, hashed the same way. One pair serves every such train.
 
+A host that serves the operations console ([UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard#with-persisted-operations))
+registers the console's own documents too, under `trax_console_<name>_<hash>`, hashed as a client
+document is, and tells the console their ids. Each reaches only `operations` or one of the
+operator's subscriptions; one the host cannot serve is left out and logged rather than refusing
+the start.
+
 A version of a train's or the progress documents is kept for as long as any node registers it, and collected once no
 node has for the grace period, the way a machine's is
 ([collection](/docs/sdk-reference/graphql-api/machines#persisted-documents)): two hosts on one database that expose

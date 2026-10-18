@@ -109,13 +109,23 @@ public static class ApiDashboardEndpointExtensions
                     + "`npm ci --ignore-scripts` there and build again."
             );
         // Fails here, at startup, rather than on the first request.
-        DashboardEndpoint.RenderIndex(assets.IndexTemplate, routePrefix, DefaultGraphQLPath);
+        DashboardEndpoint.RenderIndex(
+            assets.IndexTemplate,
+            routePrefix,
+            DefaultGraphQLPath,
+            new Dictionary<string, string>()
+        );
+
+        // The documents the app sends, for a host that runs persisted operations to register when it starts; it hands
+        // back the id of each, which the app is told in its runtime config.
+        graphQL.ConsoleDocuments = ConsoleDocumentsResource.Documents;
 
         VerifyAuthorizationPosture(services, options);
 
         var endpoint = new DashboardEndpoint(
             assets,
             () => options.GraphQLPath ?? graphQL.MappedRoutePrefix ?? DefaultGraphQLPath,
+            () => graphQL.ConsoleDocumentIds,
             options.AnonymousShellAllowed
         );
         var marker = new DashboardEndpointMetadata(options.AnonymousShellAllowed);
