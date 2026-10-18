@@ -179,4 +179,98 @@ public class SnippetCompilerTests
     [TestCase("# No front matter\n", false)]
     public void SnippetContextNone_IsReadFromTheFrontMatterOnly(string markdown, bool optsOut) =>
         SnippetCompiler.OptsOutOfSharedContextIn(markdown).Should().Be(optsOut);
+
+    private static readonly Dictionary<string, string> Chapters = new()
+    {
+        ["two.md"] = "one.md",
+        ["three.md"] = "two.md",
+    };
+
+    private static List<SnippetUnit> Book(params (string Page, string Markdown)[] pages) =>
+        SnippetUnit
+            .Following(
+                SnippetUnit.Own(pages.SelectMany(p => Fences.In(p.Page, p.Markdown))).ToList(),
+                page => Chapters.GetValueOrDefault(page)
+            )
+            .ToList();
+
+    [Test]
+    public void FollowingPage_CompilesWithTheFencesOfThePagesBeforeIt()
+    {
+        var units = Book(
+            (
+                "one.md",
+                "```csharp compile=app file=Greeting.cs\npublic record Greeting(string Text);\n```\n"
+            ),
+            (
+                "two.md",
+                "```csharp compile=app file=Program.cs\nConsole.WriteLine(new Greeting(\"hi\").Text);\n```\n"
+            )
+        );
+
+        var two = units.Single(u => u.Page == "two.md");
+        two.Fences.Select(f => f.Page).Should().Equal("one.md", "two.md");
+        SnippetCompiler.Diagnose(two).Should().BeEmpty();
+    }
+
+    [Test]
+    public void FenceNamingAFile_ReplacesTheEarlierFenceForThatFile()
+    {
+        var units = Book(
+            (
+                "one.md",
+                "```csharp compile=app file=Greeting.cs\npublic record Greeting(string Text);\n```\n"
+            ),
+            (
+                "two.md",
+                "```csharp compile=app file=Greeting.cs\npublic record Greeting(string Text, int Times);\n```\n"
+            ),
+            (
+                "three.md",
+                "```csharp compile=app file=Program.cs\nConsole.WriteLine(new Greeting(\"hi\", 2).Times);\n```\n"
+            )
+        );
+
+        var three = units.Single(u => u.Page == "three.md");
+        three.Fences.Select(f => f.Page).Should().Equal("two.md", "three.md");
+        SnippetCompiler.Diagnose(three).Should().BeEmpty();
+    }
+
+    [Test]
+    public void FollowedPage_KeepsOnlyItsOwnFences()
+    {
+        var units = Book(
+            ("one.md", "```csharp compile=app file=A.cs\npublic record A;\n```\n"),
+            ("two.md", "```csharp compile=app file=B.cs\npublic record B;\n```\n")
+        );
+
+        units.Single(u => u.Page == "one.md").Fences.Should().ContainSingle();
+    }
+
+    [Test]
+    public void ChainThatComesBack_Throws()
+    {
+        var act = () => SnippetUnit.ChainOf("a.md", page => page == "a.md" ? "b.md" : "a.md");
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*comes back to a.md*");
+    }
+
+    [Test]
+    public void FileWord_IsReadFromTheInfoString()
+    {
+        var fence = Fences.In("page.md", "```csharp compile=app file=Trains/X.cs\n```\n").Single();
+
+        fence.File.Should().Be("Trains/X.cs");
+        fence.Markers.Should().Equal(Fences.Marker);
+    }
+
+    [TestCase(
+        "---\ntitle: X\nfollows: book/an-order-is-a-train\n---\n",
+        "book/an-order-is-a-train.md"
+    )]
+    [TestCase("---\nfollows: /book/one/  \n---\n", "book/one.md")]
+    [TestCase("---\ntitle: X\n---\nfollows: book/one\n", null)]
+    [TestCase("# No front matter\n", null)]
+    public void Follows_IsReadFromTheFrontMatterOnly(string markdown, string? page) =>
+        SnippetCompiler.FollowedPageIn(markdown).Should().Be(page);
 }
