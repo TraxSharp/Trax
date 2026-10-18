@@ -167,7 +167,7 @@ typed React client with `trax client`. Build the catalogue page and the order pa
 You learn: client documents, the client manifest, `trax client`, typed functions, following a run
 from the browser, and `--check` in CI.
 
-### 16. Checkout in the browser
+### [16. Checkout in the browser](/docs/book/checkout-in-the-browser)
 
 Drive checkout from React with the generated hooks. The browser predicts each move with the
 machine's twin and the server confirms it.
