@@ -7,7 +7,7 @@ export function LogsPage() {
     <div>
       <h1 className="text-2xl font-bold text-fg mb-2">Logs</h1>
       <p className="text-sm text-muted mb-6">
-        Log entries captured during train execution, including messages, exceptions, and diagnostic information.
+        Log entries captured while trains run, including messages, exceptions, and diagnostic information.
       </p>
       <LogsGrid poll />
     </div>

@@ -66,9 +66,9 @@ export function RunTrainDialog({
             data-testid="run-subject-bypass-warning"
             className="text-sm rounded-lg border border-warn-line bg-warn-soft text-warn-fg p-3 mb-4"
           >
-            Run bypasses subject serialization. This train overrides <code>QueueSubjectKey</code>, so this run may
-            execute concurrently with queued or in-flight work for the same subject. Use <strong>Queue</strong>{" "}
-            instead to wait for the subject to be free.
+            Run skips the queue. This train runs one piece of queued work per subject at a time, and a run started
+            here does not wait its turn: it may run alongside queued or running work for the same subject. Use{" "}
+            <strong>Queue</strong> instead to wait for the subject to be free.
           </div>
         )}
 

@@ -90,7 +90,7 @@ export function LogsGrid({
       <div className="flex flex-wrap items-end gap-3 mb-2 text-sm">
         {!fixedRun && (
           <label className="flex flex-col gap-1 text-xs text-muted">
-            Run (execution id)
+            Run id
             <input
               aria-label="Run"
               value={runId}

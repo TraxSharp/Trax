@@ -53,9 +53,9 @@ export const SortOldest: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("AlphaJob")).toBeInTheDocument());
-    expect(c.getAllByRole("link")[0]).toHaveTextContent("AlphaJob"); // newest first
+    expect(c.getAllByRole("link").filter((l) => !l.getAttribute("href")?.startsWith("http"))[0]).toHaveTextContent("AlphaJob"); // newest first
     await userEvent.selectOptions(c.getAllByRole("combobox")[1], "OLDEST");
-    await waitFor(() => expect(c.getAllByRole("link")[0]).toHaveTextContent("GammaJob"));
+    await waitFor(() => expect(c.getAllByRole("link").filter((l) => !l.getAttribute("href")?.startsWith("http"))[0]).toHaveTextContent("GammaJob"));
   },
 };
 
@@ -118,7 +118,7 @@ export const FilterYieldsEmpty: Story = {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("AlphaJob")).toBeInTheDocument());
     await userEvent.selectOptions(c.getAllByRole("combobox")[0], "PENDING");
-    await waitFor(() => expect(c.getByText("No executions.")).toBeInTheDocument());
+    await waitFor(() => expect(c.getByText("No runs.")).toBeInTheDocument());
   },
 };
 
@@ -209,7 +209,7 @@ export const Empty: Story = {
   parameters: { mock: emptyPage("OperationsQueries", "executions") },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByText("No executions.")).toBeInTheDocument());
+    await waitFor(() => expect(c.getByText("No runs.")).toBeInTheDocument());
   },
 };
 
@@ -238,7 +238,7 @@ export const FailureClassYieldsEmpty: Story = {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("AlphaJob")).toBeInTheDocument());
     await userEvent.selectOptions(c.getByLabelText("Failure class"), "PERMANENT");
-    await waitFor(() => expect(c.getByText("No executions.")).toBeInTheDocument());
+    await waitFor(() => expect(c.getByText("No runs.")).toBeInTheDocument());
   },
 };
 
@@ -292,7 +292,7 @@ export const ExactFilterYieldsEmpty: Story = {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("AlphaJob")).toBeInTheDocument());
     await userEvent.type(c.getByLabelText("Host name"), "no-such-host");
-    await waitFor(() => expect(c.getByText("No executions.")).toBeInTheDocument());
+    await waitFor(() => expect(c.getByText("No runs.")).toBeInTheDocument());
   },
 };
 

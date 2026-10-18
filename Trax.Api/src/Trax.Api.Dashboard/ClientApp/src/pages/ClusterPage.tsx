@@ -53,7 +53,7 @@ export function ClusterPage() {
       </div>
 
       <p className="text-sm text-muted mb-4">
-        Processes that have executed trains, rolled up by host instance from the execution history.
+        Processes that have executed trains, rolled up by host instance from the run history.
         Freshness is derived from each host's most recent run, not a heartbeat.
       </p>
 

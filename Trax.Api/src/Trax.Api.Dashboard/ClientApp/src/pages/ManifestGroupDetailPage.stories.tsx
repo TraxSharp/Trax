@@ -89,7 +89,7 @@ export const TriggerGroup: Story = {
     const restore = acceptConfirm();
     try {
       await waitFor(() => expect(c.getByRole("heading", { name: "alpha-group" })).toBeInTheDocument());
-      await userEvent.click(c.getByRole("button", { name: "Trigger group" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue group" }));
       await waitFor(() => expect(c.getByRole("heading", { name: "alpha-group" })).toBeInTheDocument());
     } finally {
       restore();

@@ -7,7 +7,7 @@ import { TrainInputForm } from "./TrainInputForm";
 import { useTrainInputForm } from "../lib/useTrainInputForm";
 import type { OperationResponse } from "../types";
 
-// Modal form to queue a train for background execution (operations.workQueue.queueTrain),
+// Modal form to queue a train in the background (operations.workQueue.queueTrain),
 // mirroring the Blazor QueueTrainDialog: on success it closes and opens the new work queue entry.
 export function QueueTrainDialog({
   onClose,
@@ -72,8 +72,8 @@ export function QueueTrainDialog({
             data-testid="queue-subject-note"
             className="text-xs rounded-lg border border-info-line bg-info-soft text-info-fg p-3 mb-4"
           >
-            This train overrides <code>QueueSubjectKey</code>: its queued runs for one subject run one at a time, so
-            this entry waits while another for the same subject is queued ahead of it or running.
+            This train runs one piece of queued work per subject at a time, so this entry waits while another for the
+            same subject is queued ahead of it or running.
           </p>
         )}
 

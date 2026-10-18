@@ -58,7 +58,7 @@ export const CancelUserDraftRunRefused: Story = {
       await userEvent.click(c.getByRole("button", { name: "Cancel" }));
       expect(await c.findByText(USER_OWNED_RUN_CANCEL_REFUSAL)).toBeInTheDocument();
       expect(c.queryByText("Cancellation requested")).not.toBeInTheDocument();
-      expect(c.queryByText("Execution is no longer cancellable.")).not.toBeInTheDocument();
+      expect(c.queryByText("Run is no longer cancellable.")).not.toBeInTheDocument();
     } finally {
       restore();
     }
@@ -66,7 +66,7 @@ export const CancelUserDraftRunRefused: Story = {
 };
 
 // After cancellation is requested the Cancel button disappears (no double-cancel) and the
-// "Cancellation requested" badge shows; the row is still active so Re-queue never appears.
+// "Cancellation requested" badge shows; the row is still active so Requeue never appears.
 export const CancelHidesCancelButton: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
@@ -74,7 +74,7 @@ export const CancelHidesCancelButton: Story = {
     try {
       await waitFor(() => expect(c.getByRole("heading", { name: "AlphaJob" })).toBeInTheDocument());
       expect(c.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-      expect(c.queryByRole("button", { name: "Re-queue" })).not.toBeInTheDocument();
+      expect(c.queryByRole("button", { name: "Requeue" })).not.toBeInTheDocument();
       await userEvent.click(c.getByRole("button", { name: "Cancel" }));
       await waitFor(() => expect(c.getByText("Cancellation requested")).toBeInTheDocument());
       expect(c.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
@@ -84,37 +84,37 @@ export const CancelHidesCancelButton: Story = {
   },
 };
 
-// An active execution offers Cancel but not Re-queue.
+// An active execution offers Cancel but not Requeue.
 export const ActiveHasNoRequeue: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "AlphaJob" })).toBeInTheDocument());
     expect(c.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-    expect(c.queryByRole("button", { name: "Re-queue" })).not.toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Requeue" })).not.toBeInTheDocument();
   },
 };
 
-// A terminal execution offers Re-queue but not Cancel, and shows no cancellation badge.
+// A terminal execution offers Requeue but not Cancel, and shows no cancellation badge.
 export const TerminalHasNoCancel: Story = {
   parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByRole("button", { name: "Re-queue" })).toBeInTheDocument());
+    await waitFor(() => expect(c.getByRole("button", { name: "Requeue" })).toBeInTheDocument());
     expect(c.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(c.queryByText("Cancellation requested")).not.toBeInTheDocument();
   },
 };
 
-// A terminal execution: Re-queue enqueues a fresh run and toasts.
+// A terminal execution: Requeue enqueues a fresh run and toasts.
 export const RequeueTerminal: Story = {
   parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const restore = acceptConfirm();
     try {
-      await waitFor(() => expect(c.getByRole("button", { name: "Re-queue" })).toBeInTheDocument());
-      await userEvent.click(c.getByRole("button", { name: "Re-queue" }));
-      expect(await c.findByText(/Execution re-queued/)).toBeInTheDocument();
+      await waitFor(() => expect(c.getByRole("button", { name: "Requeue" })).toBeInTheDocument());
+      await userEvent.click(c.getByRole("button", { name: "Requeue" }));
+      expect(await c.findByText(/Run requeued/)).toBeInTheDocument();
     } finally {
       restore();
     }
@@ -126,7 +126,7 @@ export const ChildTree: Story = {
   parameters: { route: "/runs/800" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByText("Child executions (3)")).toBeInTheDocument());
+    await waitFor(() => expect(c.getByText("Child runs (3)")).toBeInTheDocument());
     // the child rows come from a separate async query.
     await waitFor(() => expect(c.getByText("ChildOne")).toBeInTheDocument());
   },
@@ -299,15 +299,15 @@ export const JunctionTimelineError: Story = {
   },
 };
 
-// Re-queue, ask afresh: the new run asks the model again instead of replaying.
+// Requeue, ask afresh: the new run asks the model again instead of replaying.
 export const RequeueAskAfresh: Story = {
   parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const restore = acceptConfirm();
     try {
-      await waitFor(() => expect(c.getByRole("button", { name: "Re-queue, ask afresh" })).toBeInTheDocument());
-      await userEvent.click(c.getByRole("button", { name: "Re-queue, ask afresh" }));
+      await waitFor(() => expect(c.getByRole("button", { name: "Requeue, ask afresh" })).toBeInTheDocument());
+      await userEvent.click(c.getByRole("button", { name: "Requeue, ask afresh" }));
       expect(await c.findByText(/asks afresh/)).toBeInTheDocument();
     } finally {
       restore();
@@ -315,16 +315,16 @@ export const RequeueAskAfresh: Story = {
   },
 };
 
-// Declining the confirmation re-queues nothing.
+// Declining the confirmation requeues nothing.
 export const RequeueDeclined: Story = {
   parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     setAutoConfirm(false);
     try {
-      await waitFor(() => expect(c.getByRole("button", { name: "Re-queue" })).toBeInTheDocument());
-      await userEvent.click(c.getByRole("button", { name: "Re-queue" }));
-      expect(c.queryByText(/Execution re-queued/)).not.toBeInTheDocument();
+      await waitFor(() => expect(c.getByRole("button", { name: "Requeue" })).toBeInTheDocument());
+      await userEvent.click(c.getByRole("button", { name: "Requeue" }));
+      expect(c.queryByText(/Run requeued/)).not.toBeInTheDocument();
       expect(c.getByRole("heading", { name: "DeltaJob" })).toBeInTheDocument();
     } finally {
       setAutoConfirm(null);
@@ -461,7 +461,7 @@ export const RunGraphCheckpoints: Story = {
   },
 };
 
-// Resume queues a run that skips past the latest checkpoint, beside Re-queue.
+// Resume queues a run that skips past the latest checkpoint, beside Requeue.
 export const ResumeAfterCheckpoint: Story = {
   parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
@@ -469,7 +469,7 @@ export const ResumeAfterCheckpoint: Story = {
     const restore = acceptConfirm();
     try {
       await userEvent.click(await c.findByRole("button", { name: "Resume" }));
-      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+      expect(await c.findByText("Run queued to resume.")).toBeInTheDocument();
     } finally {
       restore();
     }
@@ -486,7 +486,7 @@ export const ResumeFromNode: Story = {
       const graph = await graphOf(c);
       await waitFor(() => expect(nodeOf(graph, "Publish#4")).toBeInTheDocument());
       await userEvent.click(within(nodeOf(graph, "Publish#4")).getByRole("button", { name: "Resume from here" }));
-      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+      expect(await c.findByText("Run queued to resume.")).toBeInTheDocument();
     } finally {
       restore();
     }
@@ -594,7 +594,7 @@ export const NotResumedHasNoResumesField: Story = {
   },
 };
 
-// A run with no saved input cannot be resumed, as it cannot be re-queued: the checkpoint still
+// A run with no saved input cannot be resumed, as it cannot be requeued: the checkpoint still
 // shows, but nothing offers a resume.
 export const NoInputNoResume: Story = {
   parameters: { route: "/runs/954" },
@@ -660,7 +660,7 @@ export const ResumeFromDeepNode: Story = {
       const graph = await graphOf(c);
       await waitFor(() => expect(nodeOf(graph, leaf)).toBeInTheDocument());
       await userEvent.click(within(nodeOf(graph, leaf)).getByRole("button", { name: "Resume from here" }));
-      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+      expect(await c.findByText("Run queued to resume.")).toBeInTheDocument();
       expect(getGlobalMockStore()!.getState().executionResumes).toHaveProperty("956");
     } finally {
       restore();

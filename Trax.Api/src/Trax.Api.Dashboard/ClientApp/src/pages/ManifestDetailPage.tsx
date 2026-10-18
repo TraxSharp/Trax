@@ -89,7 +89,7 @@ export function ManifestDetailPage() {
     const res = r.data?.operations?.triggerManifest;
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) toast(res.message || `${shortName(m!.name)} has been queued.`, "success");
-    else toast(res?.message ?? "Could not trigger.", "error");
+    else toast(res?.message ?? "Could not queue it.", "error");
     refetch();
   }
 
@@ -206,7 +206,7 @@ export function ManifestDetailPage() {
             disabled={busy}
             className="text-sm text-accent-fg hover:underline disabled:opacity-50"
           >
-            Trigger
+            Queue now
           </button>
           <button
             onClick={() => onTrigger(true)}
@@ -214,7 +214,7 @@ export function ManifestDetailPage() {
             title="Run now; if this releases a queued retry, it asks the model afresh instead of replaying the failed run's decisions."
             className="text-sm text-accent-fg hover:underline disabled:opacity-50"
           >
-            Trigger, ask afresh
+            Queue now, ask afresh
           </button>
           <button
             onClick={() => setLater(true)}
@@ -231,7 +231,7 @@ export function ManifestDetailPage() {
           </button>
           <button
             onClick={() =>
-              run(cancelManifest, `Cancel all running executions of "${shortName(m.name)}"?`)
+              run(cancelManifest, `Cancel every running run of "${shortName(m.name)}"?`)
             }
             className="text-sm text-danger-fg hover:underline"
           >
@@ -347,7 +347,7 @@ function titleCase(s: string): string {
   return s.charAt(0) + s.slice(1).toLowerCase();
 }
 
-// ── Recent execution history ────────────────────────────────────────────────
+// ── Recent run history ────────────────────────────────────────────────
 function ExecutionHistory({ manifestId }: { manifestId: number }) {
   const [{ data }] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
     query: EXECUTIONS,
@@ -355,9 +355,9 @@ function ExecutionHistory({ manifestId }: { manifestId: number }) {
   });
   const items = data?.operations?.executions?.items ?? [];
   return (
-    <DetailPanel title="Recent executions">
+    <DetailPanel title="Recent runs">
       {items.length === 0 ? (
-        <p className="text-sm text-muted">No executions yet.</p>
+        <p className="text-sm text-muted">No runs yet.</p>
       ) : (
         <table className="w-full text-sm">
           <thead className="text-left text-muted">

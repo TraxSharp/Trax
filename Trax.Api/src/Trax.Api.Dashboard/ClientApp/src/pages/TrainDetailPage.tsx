@@ -80,7 +80,7 @@ export function TrainDetailPage() {
       </div>
 
       <h2 className="text-sm font-semibold text-fg mb-3">
-        Recent executions
+        Recent runs
       </h2>
       <div className="bg-surface rounded-lg border border-line overflow-hidden">
         <table className="w-full text-sm">
@@ -110,7 +110,7 @@ export function TrainDetailPage() {
             {recent.length === 0 && (
               <tr>
                 <td colSpan={3} className="px-4 py-8 text-center text-muted">
-                  No executions for this train.
+                  No runs for this train.
                 </td>
               </tr>
             )}

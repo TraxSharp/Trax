@@ -31,6 +31,7 @@ import type {
   PagedResult,
 } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { TermHelp } from "../components/TermHelp";
 
 const PAGE_SIZE = 25;
 
@@ -110,7 +111,7 @@ export function ManifestGroupsPage() {
     setBusy(false);
     const res: BatchTriggerResponse | undefined = r.data?.operations?.triggerGroups;
     if (r.error || !res) {
-      setBatchError(r.error?.message ?? "The trigger did not answer.");
+      setBatchError(r.error?.message ?? "The queue request did not answer.");
       return;
     }
     const report = reportBatchTrigger(res);
@@ -177,8 +178,8 @@ export function ManifestGroupsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg">
-          Manifest groups
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
+          Manifest groups <TermHelp term="manifestGroup" />
         </h1>
         <div className="flex items-center gap-2 ml-auto">
           <button
@@ -226,7 +227,7 @@ export function ManifestGroupsPage() {
             disabled={busy}
             className="text-accent-fg font-medium hover:underline disabled:opacity-50"
           >
-            Trigger selected
+            Queue selected
           </button>
           <button
             onClick={() => onSetSelected(true)}

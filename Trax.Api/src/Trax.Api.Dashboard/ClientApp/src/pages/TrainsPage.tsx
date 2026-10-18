@@ -5,6 +5,7 @@ import { TRAINS } from "../graphql/queries";
 import { QueueTrainDialog } from "../components/QueueTrainDialog";
 import { RunTrainDialog } from "../components/RunTrainDialog";
 import type { TrainInfo } from "../types";
+import { TermHelp } from "../components/TermHelp";
 
 interface TrainsData {
   operations: { trains: TrainInfo[] };
@@ -55,7 +56,7 @@ export function TrainsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg">Trains</h1>
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Trains <TermHelp term="train" /></h1>
         <div className="flex items-center gap-4">
           <input
             value={filter}

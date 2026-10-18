@@ -40,13 +40,13 @@ export const Panels: Story = {
     expect(c.getByRole("link", { name: "View run #962" })).toHaveAttribute("href", "/runs/962");
     expect(c.getByText(/at Trax\.Demo\.Trains\.OrderTrain\.ChargeCard\(\)/)).toBeInTheDocument();
     expect(c.getByText(/"cardNumber": "\[REDACTED\]"/)).toBeInTheDocument();
-    // Failed execution history.
+    // Failed run history.
     expect(await c.findByRole("link", { name: "#961" })).toBeInTheDocument();
     expect(c.getByRole("link", { name: "#962" })).toBeInTheDocument();
   },
 };
 
-// Requeue, ask afresh: confirms, re-queues, and toasts the new work queue entry.
+// Requeue, ask afresh: confirms, requeues, and toasts the new work queue entry.
 export const RequeueAskAfresh: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
@@ -54,7 +54,7 @@ export const RequeueAskAfresh: Story = {
     try {
       await waitFor(() => expect(c.getByRole("button", { name: "Requeue, ask afresh" })).toBeInTheDocument());
       await userEvent.click(c.getByRole("button", { name: "Requeue, ask afresh" }));
-      expect(await c.findByText(/has been re-queued \(work queue entry 9000701\)/)).toBeInTheDocument();
+      expect(await c.findByText(/has been requeued \(work queue entry 9000701\)/)).toBeInTheDocument();
     } finally {
       restore();
     }
@@ -85,7 +85,7 @@ export const ResolvedWithoutFailedRuns: Story = {
     await waitFor(() => expect(c.getByText("Dead letter details")).toBeInTheDocument());
     expect(c.queryByRole("button", { name: "Requeue" })).not.toBeInTheDocument();
     expect(c.queryByRole("button", { name: "Acknowledge" })).not.toBeInTheDocument();
-    expect(await c.findByText("No failed executions found for this manifest.")).toBeInTheDocument();
+    expect(await c.findByText("No failed runs found for this manifest.")).toBeInTheDocument();
     expect(c.queryByText("Most recent failure")).not.toBeInTheDocument();
   },
 };

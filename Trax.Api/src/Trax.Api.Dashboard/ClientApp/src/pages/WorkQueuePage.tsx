@@ -16,6 +16,7 @@ import { toast } from "../lib/toast";
 import type { PagedResult, WorkQueueStatus, WorkQueueSummary } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
+import { TermHelp } from "../components/TermHelp";
 
 const PAGE_SIZE = 25;
 const STATUSES: (WorkQueueStatus | "")[] = ["", "QUEUED", "DISPATCHED", "CANCELLED"];
@@ -98,7 +99,7 @@ export function WorkQueuePage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg">Work queue</h1>
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Queued <TermHelp term="workQueue" /></h1>
         <div className="flex gap-2">
           <button
             onClick={() => setShowQueue(true)}
@@ -326,7 +327,7 @@ function Confirmed({ entry }: { entry: WorkQueueSummary }) {
   if (entry.confirmedAt === null && entry.status === "QUEUED")
     return (
       <span
-        title="Staged until its OnQueue hook returns"
+        title="Staged until the train's queue check finishes"
         className="text-xs px-2 py-0.5 rounded-full bg-warn-soft text-warn-fg"
       >
         Staged

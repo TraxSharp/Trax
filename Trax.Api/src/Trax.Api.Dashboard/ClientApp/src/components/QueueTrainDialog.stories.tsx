@@ -169,7 +169,7 @@ export const SubjectKeyNote: Story = {
     const select = c.getByRole("combobox");
     await waitFor(() => expect(within(select).getAllByRole("option").length).toBeGreaterThan(1));
     await userEvent.selectOptions(select, "Trax.Trains.ZebraTrain");
-    expect(c.getByTestId("queue-subject-note")).toHaveTextContent("its queued runs for one subject run one at a time");
+    expect(c.getByTestId("queue-subject-note")).toHaveTextContent("runs one piece of queued work per subject at a time");
     await userEvent.selectOptions(select, "Trax.Trains.MangoTrain");
     expect(c.queryByTestId("queue-subject-note")).not.toBeInTheDocument();
   },

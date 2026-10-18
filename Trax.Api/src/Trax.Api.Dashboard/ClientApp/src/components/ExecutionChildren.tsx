@@ -9,7 +9,7 @@ interface ChildrenData {
   operations: { executionChildren: PagedResult<ExecutionSummary> };
 }
 
-// Child executions of a parent. Only mounted when the parent reports childCount > 0, so the
+// Child runs of a parent. Only mounted when the parent reports childCount > 0, so the
 // query never runs for the common (leaf) case.
 export function ExecutionChildren({
   parentId,
@@ -27,12 +27,12 @@ export function ExecutionChildren({
   const items = page?.items ?? [];
 
   return (
-    <DetailPanel title={`Child executions (${childCount})`}>
+    <DetailPanel title={`Child runs (${childCount})`}>
       {result.error ? (
         <p className="text-sm text-danger-fg">{result.error.message}</p>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted">
-          {result.fetching ? "Loading…" : "No child executions."}
+          {result.fetching ? "Loading…" : "No child runs."}
         </p>
       ) : (
         <ul className="space-y-1 text-sm">

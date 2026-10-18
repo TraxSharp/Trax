@@ -100,7 +100,7 @@ export function WorkQueueDetailPage() {
               w.confirmedAt
                 ? formatTime(w.confirmedAt)
                 : w.status === "QUEUED"
-                  ? "Not yet: staged until its OnQueue hook returns"
+                  ? "Not yet: staged until the train's queue check finishes"
                   : "—",
             ],
             [
@@ -132,7 +132,7 @@ export function WorkQueueDetailPage() {
               ),
             ],
             [
-              "Execution",
+              "Run",
               w.metadataId != null ? (
                 <DetailLink to={`/runs/${w.metadataId}`}>#{w.metadataId}</DetailLink>
               ) : (

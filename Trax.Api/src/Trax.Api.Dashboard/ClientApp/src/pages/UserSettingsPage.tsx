@@ -134,7 +134,7 @@ function AdminTrainsToggle() {
     <div>
       <p className="text-sm text-fg-2 mb-3">
         The internal scheduler trains (JobDispatcher, ManifestManager, JobRunner, cleanup) run
-        constantly. Hide them from the Executions grid, its live feed, and the Overview metrics so
+        constantly. Hide them from the Runs grid, its live feed, and the Overview metrics so
         you see your own trains instead of the plumbing.
       </p>
       <label className="flex items-center gap-2 text-sm text-fg-2">

@@ -57,7 +57,7 @@ export const Staged: Story = {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "EmailTrain" })).toBeInTheDocument());
     expect(c.getByText("Confirmed at").nextElementSibling).toHaveTextContent(
-      "Not yet: staged until its OnQueue hook returns",
+      "Not yet: staged until the train's queue check finishes",
     );
     expect(c.queryByText("Input")).not.toBeInTheDocument();
   },

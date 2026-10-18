@@ -23,6 +23,7 @@ import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { ManifestSummary, PagedResult, ScheduleType } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
+import { TermHelp } from "../components/TermHelp";
 
 const PAGE_SIZE = 25;
 const SCHEDULES: (ScheduleType | "")[] = [
@@ -45,7 +46,7 @@ export function ManifestsPage() {
   const [enabled, setEnabled] = useUrlState("enabled");
   const [scheduleType, setScheduleType] = useUrlState<ScheduleType | "">("schedule");
   const [name, setName] = useUrlState("name");
-  // The same "Hide admin trains" preference the Executions grid and the Overview use: it leaves out
+  // The same "Hide admin trains" preference the Runs grid and the Overview use: it leaves out
   // the manifests of the scheduler's own trains, server side.
   const hideAdmin = useHideAdminTrains();
   const [result, reexecute] = useQuery<ManifestsData>({
@@ -123,7 +124,7 @@ export function ManifestsPage() {
     setBusy(false);
     const res: BatchTriggerResponse | undefined = r.data?.operations?.triggerManifests;
     if (r.error || !res) {
-      setBatchError(r.error?.message ?? "The trigger did not answer.");
+      setBatchError(r.error?.message ?? "The queue request did not answer.");
       return;
     }
     const report = reportBatchTrigger(res);
@@ -137,7 +138,7 @@ export function ManifestsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-fg">Manifests</h1>
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Manifests <TermHelp term="manifest" /></h1>
         <div className="flex gap-2">
           <input
             value={name}
@@ -213,15 +214,15 @@ export function ManifestsPage() {
             onClick={() => triggerSelected(false)}
             className="text-accent-fg font-medium hover:underline disabled:opacity-50"
           >
-            Trigger selected
+            Queue selected
           </button>
           <button
             disabled={busy}
-            title="Trigger; a queued retry this releases asks the model afresh instead of replaying the failed run's decisions."
+            title="Queue; a queued retry this releases asks its decider afresh instead of replaying the failed run's decisions."
             onClick={() => triggerSelected(true)}
             className="text-accent-fg font-medium hover:underline disabled:opacity-50"
           >
-            Trigger selected, ask afresh
+            Queue selected, ask afresh
           </button>
           <button
             disabled={busy}
@@ -346,11 +347,11 @@ export function ManifestsPage() {
                 <td className="px-4 py-2 text-right whitespace-nowrap">
                   <button
                     onClick={() =>
-                      run(trigger, m.externalId, `Trigger "${shortName(m.name)}" now?`)
+                      run(trigger, m.externalId, `Queue "${shortName(m.name)}" now?`)
                     }
                     className="text-accent-fg hover:underline mr-3"
                   >
-                    Trigger
+                    Queue
                   </button>
                   {m.isEnabled ? (
                     <button

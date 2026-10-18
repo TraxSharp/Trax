@@ -60,7 +60,7 @@ export function OverviewPage() {
   // Refresh once when the live socket recovers, so a drop doesn't leave stale KPIs until the poll.
   useRefetchOnReconnect(() => reexecute({ requestPolicy: "network-only" }));
 
-  // Live nudge: when executions change, refresh sooner than the poll. The handler returns
+  // Live nudge: when runs change, refresh sooner than the poll. The handler returns
   // the latest event, and the debounced effect coalesces bursts into a single refetch so a
   // flood of events never hammers the heavy metrics query.
   const [{ data: lastEvent }] = useSubscription<
@@ -78,7 +78,7 @@ export function OverviewPage() {
   }, [lastEvent, reexecute]);
 
   // The KPI cards also count queue depth, unresolved dead letters, and reflect config changes, so
-  // nudge on those domains too (executions are already covered by the lifecycle subscription above).
+  // nudge on those domains too (runs are already covered by the lifecycle subscription above).
   useRefetchOnChange(["WORK_QUEUE", "DEAD_LETTER", "SCHEDULER_CONFIG"], () =>
     reexecute({ requestPolicy: "network-only" }),
   );
@@ -119,7 +119,7 @@ export function OverviewPage() {
 
       {show.summaryCards && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Stat label="Executions today" value={kpis.executionsToday} />
+          <Stat label="Runs today" value={kpis.executionsToday} />
           <Stat label="Success rate" value={`${kpis.successRate}%`} />
           <Stat label="Running now" value={kpis.currentlyRunning} />
           <Stat
@@ -162,7 +162,7 @@ export function OverviewPage() {
 
       {show.executionsChart && (
         <>
-          <Panel title={`Executions over time (${rangeMeta.chartLabel})`}>
+          <Panel title={`Runs over time (${rangeMeta.chartLabel})`}>
             <ExecutionsOverTimeChart buckets={metrics.dashboard.executionsOverTime} />
           </Panel>
 

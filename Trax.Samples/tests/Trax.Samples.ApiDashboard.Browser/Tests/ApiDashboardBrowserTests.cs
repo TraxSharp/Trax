@@ -147,7 +147,7 @@ public class ApiDashboardBrowserTests
         "Trax.Samples.ApiDashboard.Browser.Host.IRefreshRatesTrain",
         "text=Total runs"
     )]
-    [TestCase("machines", "State machines", "text=browser-gate")]
+    [TestCase("machines", "Machines", "text=browser-gate")]
     [TestCase(
         "machines/browser-gate/system/{gate}",
         "browser-gate",

@@ -136,6 +136,6 @@ export const NotEnabled: Story = {
   parameters: { mock: persistedOperationsUnavailable },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    expect(await c.findByText(/Persisted Operations is not enabled on this server/)).toBeInTheDocument();
+    expect(await c.findByText(/Persisted operations are not managed on this server/)).toBeInTheDocument();
   },
 };

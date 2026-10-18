@@ -156,7 +156,7 @@ export function JunctionTimeline({
       {rows.length === 0 ? (
         <p className="text-sm text-muted">
           {loaded || error
-            ? "No steps recorded for this run. Steps are recorded only when the host enables junction events with AddJunctionEvents(), and a run that has not started has none yet."
+            ? "No steps recorded for this run. Steps are recorded only on a host that records junction events, and a run that has not started has none yet."
             : "Loading steps…"}
         </p>
       ) : (

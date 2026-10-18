@@ -8,6 +8,7 @@ import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { MachineInstance, MachineInstanceCount, SnapshotOwnerKind } from "../types";
 import { useUrlStateOrNull } from "../lib/urlState";
+import { TermHelp } from "../components/TermHelp";
 
 const PAGE_SIZE = 20;
 
@@ -77,7 +78,7 @@ export function StateMachinesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-fg mb-1">State machines</h1>
+      <h1 className="text-2xl font-bold text-fg mb-1 flex items-center gap-2">Machines <TermHelp term="machine" /></h1>
       <p className="text-sm text-muted mb-6">
         The instances of every state machine this host persists, system-owned and users' drafts alike:
         which state each is in, when it got there, and whether it waits on a train run it invoked. An

@@ -9,7 +9,7 @@ import { toast } from "../lib/toast";
 function TriggerToasts() {
   useEffect(() => {
     toast("Manifest updated.", "success");
-    toast("Could not re-queue: unknown train.", "error");
+    toast("Could not requeue: unknown train.", "error");
     toast("Cancellation requested.", "info");
   }, []);
   return (

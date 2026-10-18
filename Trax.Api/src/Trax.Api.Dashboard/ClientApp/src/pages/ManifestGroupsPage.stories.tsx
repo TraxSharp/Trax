@@ -152,11 +152,11 @@ export const TriggerSelectedGroups: Story = {
       await waitFor(() => expect(c.getByLabelText("Select #1")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #1"));
       await userEvent.click(c.getByLabelText("Select #2"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(await c.findByText("4 queued across 2 of 2 manifest group(s).")).toBeInTheDocument();
       await waitFor(() => expect(c.queryByText(/selected$/)).not.toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #1"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(
         await c.findByText("0 queued, 2 already queued (that entry now runs as the trigger) across 1 of 1 manifest group(s)."),
       ).toBeInTheDocument();
@@ -175,7 +175,7 @@ export const TriggerSelectedGroupsNotes: Story = {
     try {
       await waitFor(() => expect(c.getByLabelText("Select #1000002")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #1000002"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(await c.findByRole("alert")).toHaveTextContent("Manifest group 1000002 not found.");
       expect(c.getByText("0 queued, 1 not found across 0 of 1 manifest group(s).")).toBeInTheDocument();
     } finally {

@@ -20,6 +20,7 @@ import { toast } from "../lib/toast";
 import type { DeadLetterStatus, DeadLetterSummary, PagedResult } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
+import { TermHelp } from "../components/TermHelp";
 
 const PAGE_SIZE = 25;
 const STATUSES: (DeadLetterStatus | "")[] = [
@@ -231,7 +232,7 @@ export function DeadLettersPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg">Dead letters</h1>
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Dead letters <TermHelp term="deadLetter" /></h1>
         <div className="flex items-center gap-2">
           <button
             onClick={() => onRequeueAll(false)}

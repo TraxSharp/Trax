@@ -52,10 +52,11 @@ export function PersistedOperationsPage() {
 export function NotEnabled() {
   return (
     <div className="bg-info-soft border border-info-line text-info-fg rounded-lg p-4 text-sm">
-      Persisted Operations is not enabled on this server, or you are outside its management gate. The
-      host serves management with{" "}
-      <code className="font-mono">UsePersistedOperations(po =&gt; po.GateManagement(...))</code> on the
-      Trax GraphQL builder, to the role or policy it names.
+      Persisted operations are not managed on this server, or your account may not manage them. See{" "}
+      <a className="underline" href="https://traxsharp.net/docs/api/turn-on-persisted-operations" target="_blank" rel="noreferrer">
+        persisted operations
+      </a>{" "}
+      for how a host turns management on and who it lets in.
     </div>
   );
 }

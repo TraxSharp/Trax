@@ -79,7 +79,7 @@ export function ExecutionDetailPage() {
 
   const e = result.data?.operations.executionDetail;
   const graph = graphResult.data?.operations?.runGraph ?? null;
-  // A resume, like a re-queue, runs on the saved input, so a run without one offers no resume, as
+  // A resume, like a requeue, runs on the saved input, so a run without one offers no resume, as
   // on the Blazor page.
   const hasInput = Boolean(e?.input?.trim());
 
@@ -99,12 +99,12 @@ export function ExecutionDetailPage() {
     if (r.error) toast(r.error.message, "error");
     // A refusal says why: a run a user's state-machine draft started is read-only to operators.
     else if (res && !res.success) toast(res.message ?? "Could not request cancellation.", "error");
-    else if (res?.count === 0) toast("Execution is no longer cancellable.", "info");
+    else if (res?.count === 0) toast("Run is no longer cancellable.", "info");
     else toast("Cancellation requested.", "success");
     reexecute({ requestPolicy: "network-only" });
   }
 
-  // Re-queue queues a fresh run with this run's saved input and opens its work queue entry, as the
+  // Requeue queues a fresh run with this run's saved input and opens its work queue entry, as the
   // Blazor page does. askAfresh: the new run asks the model afresh instead of replaying this run's
   // decisions.
   async function onRequeue(askAfresh: boolean) {
@@ -118,15 +118,15 @@ export function ExecutionDetailPage() {
     const res = r.data?.operations?.requeueExecution;
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) {
-      toast(res.message ? `Execution re-queued. ${res.message}` : "Execution re-queued.", "success");
+      toast(res.message ? `Run requeued. ${res.message}` : "Run requeued.", "success");
       if (res.id != null) navigate(`/runs/queued/${res.id}`);
-    } else toast(res?.message ?? "Could not re-queue.", "error");
+    } else toast(res?.message ?? "Could not requeue.", "error");
   }
 
   // Resume queues a run that skips to the step after this run's latest checkpoint (from null), or to
   // the node a "Resume from here" names, and opens its work queue entry. Through resumeExecution,
   // the call the Blazor page's Resume buttons make, so the API refuses the same runs with the same
-  // reasons. One re-queue or resume at a time.
+  // reasons. One requeue or resume at a time.
   async function onResume(from: string | null) {
     if (busy) return;
     const what = from
@@ -141,7 +141,7 @@ export function ExecutionDetailPage() {
     const res = r.data?.operations?.resumeExecution;
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) {
-      toast(res.message ? `Execution queued to resume. ${res.message}` : "Execution queued to resume.", "success");
+      toast(res.message ? `Run queued to resume. ${res.message}` : "Run queued to resume.", "success");
       if (res.id != null) navigate(`/runs/queued/${res.id}`);
     } else toast(res?.message ?? "Could not resume.", "error");
   }
@@ -149,16 +149,16 @@ export function ExecutionDetailPage() {
   if (result.error)
     return (
       <>
-        <BackLink to="/runs" label="All executions" />
+        <BackLink to="/runs" label="All runs" />
         <p className="text-danger-fg mt-4">{result.error.message}</p>
       </>
     );
   if (result.fetching && !e) return <Loading />;
-  if (!e) return <NotFound what="execution" />;
+  if (!e) return <NotFound what="run" />;
 
   return (
     <div>
-      <BackLink to="/runs" label="All executions" />
+      <BackLink to="/runs" label="All runs" />
       <div className="flex items-center gap-3 mt-2 mb-6">
         <h1 className="text-2xl font-bold text-fg">
           {shortName(e.name)}
@@ -204,15 +204,15 @@ export function ExecutionDetailPage() {
                 disabled={busy}
                 className="text-sm px-3 py-1 rounded-md bg-accent text-on-accent hover:bg-accent-hover disabled:opacity-50"
               >
-                Re-queue
+                Requeue
               </button>
               <button
                 onClick={() => onRequeue(true)}
                 disabled={busy}
-                title="Re-queue; the new run asks the model afresh instead of replaying this run's decisions."
+                title="Requeue; the new run asks the model afresh instead of replaying this run's decisions."
                 className="text-sm px-3 py-1 rounded-md border border-accent-line text-accent-fg hover:bg-accent-soft disabled:opacity-50"
               >
-                Re-queue, ask afresh
+                Requeue, ask afresh
               </button>
             </>
           )}
@@ -297,7 +297,7 @@ export function ExecutionDetailPage() {
       </DetailPanel>
 
       {(e.hostName != null || e.hostEnvironment != null) && (
-        <DetailPanel title="Execution host">
+        <DetailPanel title="Host">
           <Fields
             rows={[
               ["Hostname", e.hostName ?? "—"],

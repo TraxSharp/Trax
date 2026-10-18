@@ -45,7 +45,7 @@ describe("navigation", () => {
     renderAt("/");
     for (const name of ["Overview", "All runs", "Queued", "Dead letters", "Trains", "Manifests", "Hosts", "Scheduler"])
       expect((await screen.findAllByRole("link", { name })).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "Executions" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Data" })).toBeNull();
   });
 

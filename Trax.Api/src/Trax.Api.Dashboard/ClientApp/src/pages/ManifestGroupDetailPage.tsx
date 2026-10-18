@@ -79,7 +79,7 @@ export function ManifestGroupDetailPage() {
           group={group}
           onSave={save}
           onTrigger={() => act(triggerGroup, `Trigger every manifest in "${group.name}"?`)}
-          onCancel={() => act(cancelGroup, `Cancel running executions in "${group.name}"?`)}
+          onCancel={() => act(cancelGroup, `Cancel every running run in "${group.name}"?`)}
         />
 
         <div className="bg-surface rounded-lg border border-line p-5">
@@ -168,7 +168,7 @@ function GroupManifests({ groupId }: { groupId: number }) {
   );
 }
 
-// ── Recent executions across the group ──────────────────────────────────────
+// ── Recent runs across the group ──────────────────────────────────────
 function GroupExecutions({ groupId }: { groupId: number }) {
   const [{ data }] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
     query: EXECUTIONS,
@@ -178,10 +178,10 @@ function GroupExecutions({ groupId }: { groupId: number }) {
   return (
     <div className="mt-6 bg-surface rounded-lg border border-line p-5">
       <h2 className="text-sm font-semibold text-fg mb-3">
-        Recent executions
+        Recent runs
       </h2>
       {items.length === 0 ? (
-        <p className="text-sm text-muted">No executions yet.</p>
+        <p className="text-sm text-muted">No runs yet.</p>
       ) : (
         <ul className="divide-y divide-line text-sm">
           {items.map((e) => (
@@ -269,7 +269,7 @@ function GroupSettings({
 
       <div className="mt-6 pt-4 border-t border-line flex gap-3">
         <button onClick={onTrigger} className="text-sm text-accent-fg hover:underline">
-          Trigger group
+          Queue group
         </button>
         <button onClick={onCancel} className="text-sm text-danger-fg hover:underline">
           Cancel group

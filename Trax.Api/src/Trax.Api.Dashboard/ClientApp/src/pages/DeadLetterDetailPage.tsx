@@ -76,7 +76,7 @@ export function DeadLetterDetailPage() {
   const awaiting = d.status === "AWAITING_INTERVENTION";
   const title = manifest ? shortName(manifest.name) : d.manifestName || `Dead letter #${d.id}`;
 
-  // A re-queue opens the new work queue entry, as the Blazor page does. askAfresh: the run asks
+  // A requeue opens the new work queue entry, as the Blazor page does. askAfresh: the run asks
   // the model afresh instead of replaying the failed run's decisions.
   async function onRequeue(askAfresh: boolean) {
     if (
@@ -92,7 +92,7 @@ export function DeadLetterDetailPage() {
     const res = r.data?.operations?.deadLetters?.requeueDeadLetter;
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) {
-      toast(`${title} has been re-queued (work queue entry ${res.workQueueId}).`, "success");
+      toast(`${title} has been requeued (work queue entry ${res.workQueueId}).`, "success");
       if (res.workQueueId != null) {
         navigate(`/runs/queued/${res.workQueueId}`);
         return;
@@ -130,7 +130,7 @@ export function DeadLetterDetailPage() {
             <button
               onClick={() => onRequeue(true)}
               disabled={busy}
-              title="Re-queue; the run asks the model afresh instead of replaying the failed run's decisions."
+              title="Requeue; the run asks the model afresh instead of replaying the failed run's decisions."
               className="text-sm px-3 py-1 rounded-md border border-accent-line text-accent-fg hover:bg-accent-soft disabled:opacity-50"
             >
               Requeue, ask afresh
@@ -164,7 +164,7 @@ export function DeadLetterDetailPage() {
               </span>,
             ],
             [
-              "Retry execution",
+              "Retry run",
               d.retryMetadataId != null ? (
                 <DetailLink to={`/runs/${d.retryMetadataId}`}>#{d.retryMetadataId}</DetailLink>
               ) : (
@@ -251,7 +251,7 @@ function LatestFailedRun({ manifestId }: { manifestId: number }) {
       </div>
       <Fields
         rows={[
-          ["Metadata ID", run.id],
+          ["Run id", run.id],
           ["Failure junction", run.failureJunction ?? "—"],
           ["Exception", run.failureException ?? "—"],
           ["Failure class", run.failureClass ? enumLabel(run.failureClass) : "—"],
@@ -290,11 +290,11 @@ function FailedRuns({ manifestId }: { manifestId: number }) {
   const page = data?.operations?.executions;
   const items = page?.items ?? [];
   return (
-    <DetailPanel title="Failed execution history">
+    <DetailPanel title="Failed run history">
       {error && <p className="text-sm text-danger-fg">{error.message}</p>}
       {items.length === 0 ? (
         <p className="text-sm text-muted">
-          No failed executions found for this manifest.
+          No failed runs found for this manifest.
         </p>
       ) : (
         <>

@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
+import { TermHelp } from "../components/TermHelp";
 
 const ACTIVE_STATES = new Set<TrainState>(["PENDING", "IN_PROGRESS"]);
 
@@ -128,7 +129,7 @@ export function ExecutionsPage() {
     [allEvents, hideAdmin, adminNames],
   );
 
-  // On the first page, overlay live events: prepend brand-new executions and update the
+  // On the first page, overlay live events: prepend brand-new runs and update the
   // state of rows already shown. Deeper pages show history unchanged (dedup by id means a
   // prepended row drops out once the base query refetches to include it).
   const rows = useMemo(() => {
@@ -187,8 +188,8 @@ export function ExecutionsPage() {
       toast(
         res.message ??
           (n > 0
-            ? `Cancellation requested for ${n} execution(s).`
-            : "None of the selected executions is still cancellable."),
+            ? `Cancellation requested for ${n} run(s).`
+            : "None of the selected runs is still cancellable."),
         n > 0 ? "success" : "info",
       );
     } else toast(res?.message ?? "Could not request cancellation.", "error");
@@ -198,7 +199,7 @@ export function ExecutionsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg">Executions</h1>
+        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Runs <TermHelp term="run" /></h1>
         <div className="flex gap-2">
           <input
             value={trainName}
@@ -311,7 +312,7 @@ export function ExecutionsPage() {
             resetToFirst();
           }}
           placeholder="External id (exact)…"
-          title="Only the execution with this external id"
+          title="Only the run with this external id"
           className="border border-line-strong rounded-md px-2 py-1 w-56 bg-field"
         />
         <input
@@ -322,7 +323,7 @@ export function ExecutionsPage() {
             resetToFirst();
           }}
           placeholder="Parent id…"
-          title="Only the executions started from inside this execution's run"
+          title="Only the runs this run started"
           className="border border-line-strong rounded-md px-2 py-1 w-28 bg-field"
         />
         <input
@@ -333,7 +334,7 @@ export function ExecutionsPage() {
             resetToFirst();
           }}
           placeholder="Host name (exact)…"
-          title="Only the executions run on the machine with this name"
+          title="Only the runs on the host with this name"
           className="border border-line-strong rounded-md px-2 py-1 w-44 bg-field"
         />
       </div>
@@ -444,7 +445,7 @@ export function ExecutionsPage() {
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-muted">
-                      No executions.
+                      No runs.
                     </td>
                   </tr>
                 )}

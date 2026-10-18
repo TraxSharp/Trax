@@ -62,7 +62,7 @@ export interface RunGraphViewProps {
   onResume?: (nodeId: string) => void;
   // The node whose resume is in flight.
   resumingNode?: string | null;
-  // True while any re-queue or resume of the page is in flight.
+  // True while any requeue or resume of the page is in flight.
   resumeDisabled?: boolean;
 }
 

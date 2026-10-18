@@ -64,7 +64,7 @@ export const SubjectKeyWarning: Story = {
     expect(c.queryByTestId("run-subject-bypass-warning")).not.toBeInTheDocument();
     await userEvent.selectOptions(select, "Trax.Trains.ZebraTrain");
     expect(c.getByTestId("run-subject-bypass-warning")).toHaveTextContent(
-      "Run bypasses subject serialization. This train overrides QueueSubjectKey",
+      "Run skips the queue. This train runs one piece of queued work per subject at a time",
     );
     await userEvent.selectOptions(select, "Trax.Trains.AlphaTrain");
     expect(c.queryByTestId("run-subject-bypass-warning")).not.toBeInTheDocument();

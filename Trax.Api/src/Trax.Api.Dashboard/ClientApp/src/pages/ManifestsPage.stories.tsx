@@ -47,7 +47,7 @@ export const TriggerManifest: Story = {
     try {
       await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
       const row = c.getByText("OrderManifest").closest("tr") as HTMLElement;
-      await userEvent.click(within(row).getByText("Trigger"));
+      await userEvent.click(within(row).getByText("Queue"));
       await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
     } finally {
       restore();
@@ -234,11 +234,11 @@ export const TriggerSelected: Story = {
       await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #801"));
       await userEvent.click(c.getByLabelText("Select #802"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(await c.findByText("2 queued across 2 of 2 manifest(s).")).toBeInTheDocument();
       await waitFor(() => expect(c.queryByText(/selected$/)).not.toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #801"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(
         await c.findByText("0 queued, 1 already queued (that entry now runs as the trigger) across 1 of 1 manifest(s)."),
       ).toBeInTheDocument();
@@ -257,7 +257,7 @@ export const TriggerSelectedAskAfresh: Story = {
     try {
       await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #803"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected, ask afresh" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected, ask afresh" }));
       expect(await c.findByText("1 queued across 1 of 1 manifest(s), asking afresh.")).toBeInTheDocument();
     } finally {
       restore();
@@ -273,7 +273,7 @@ export const TriggerSelectedDeclined: Story = {
     try {
       await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #801"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(c.getByText("1 selected")).toBeInTheDocument();
       expect(c.queryByText(/queued across/)).not.toBeInTheDocument();
     } finally {
@@ -292,7 +292,7 @@ export const TriggerSelectedNotes: Story = {
       await waitFor(() => expect(c.getByText("RetiredManifest")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #801"));
       await userEvent.click(c.getByLabelText("Select #1000001"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(await c.findByRole("alert")).toHaveTextContent("Manifest 1000001 not found.");
       expect(c.getByText("1 queued, 1 not found across 1 of 2 manifest(s).")).toBeInTheDocument();
     } finally {
@@ -330,7 +330,7 @@ export const TriggerSelectedRefused: Story = {
     try {
       await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
       await userEvent.click(c.getByLabelText("Select #801"));
-      await userEvent.click(c.getByRole("button", { name: "Trigger selected" }));
+      await userEvent.click(c.getByRole("button", { name: "Queue selected" }));
       expect(await c.findByRole("alert")).toHaveTextContent("At most 1000 ids can be sent at once.");
       expect(c.getByText("1 selected")).toBeInTheDocument();
     } finally {

@@ -35,7 +35,7 @@ interface Bucket {
   cancelled: number;
 }
 
-// Stacked bar chart of execution outcomes over the selected window.
+// Stacked bar chart of run outcomes over the selected window.
 export function ExecutionsOverTimeChart({ buckets }: { buckets: Bucket[] }) {
   const data = buckets.map((b) => ({
     ...b,
@@ -46,7 +46,7 @@ export function ExecutionsOverTimeChart({ buckets }: { buckets: Bucket[] }) {
   }));
 
   if (data.every((d) => d.completed + d.failed + d.cancelled === 0))
-    return <Empty>No executions in this window.</Empty>;
+    return <Empty>No runs in this window.</Empty>;
 
   return (
     <ResponsiveContainer width="100%" height={220}>

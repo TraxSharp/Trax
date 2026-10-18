@@ -66,8 +66,8 @@ export const Richness: Story = {
     await waitFor(() => expect(c.getByText("Exclusion windows")).toBeInTheDocument());
     expect(c.getByText(/Skips Saturday, Sunday/)).toBeInTheDocument();
     expect(c.getByText(/Skips daily 02:00:00 to 04:00:00/)).toBeInTheDocument();
-    // Recent executions (manifest-scoped history).
-    await waitFor(() => expect(c.getByText("Recent executions")).toBeInTheDocument());
+    // Recent runs (manifest-scoped history).
+    await waitFor(() => expect(c.getByText("Recent runs")).toBeInTheDocument());
     await waitFor(() => expect(c.getByText("#950")).toBeInTheDocument());
   },
 };
@@ -79,7 +79,7 @@ export const Trigger: Story = {
     const restore = acceptConfirm();
     try {
       await waitFor(() => expect(c.getByRole("heading", { name: "OrderManifest" })).toBeInTheDocument());
-      await userEvent.click(c.getByText("Trigger"));
+      await userEvent.click(c.getByText("Queue now"));
       await waitFor(() => expect(c.getByRole("heading", { name: "OrderManifest" })).toBeInTheDocument());
     } finally {
       restore();
@@ -137,7 +137,7 @@ export const TriggerAskAfresh: Story = {
     const restore = acceptConfirm();
     try {
       await waitFor(() => expect(c.getByRole("heading", { name: "OrderManifest" })).toBeInTheDocument());
-      await userEvent.click(c.getByText("Trigger, ask afresh"));
+      await userEvent.click(c.getByText("Queue now, ask afresh"));
       expect(await c.findByText(/a released retry asks afresh/)).toBeInTheDocument();
     } finally {
       restore();

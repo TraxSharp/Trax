@@ -6,6 +6,7 @@ import { prettyJson, shortName } from "../lib/format";
 import { toast } from "../lib/toast";
 import { ConfigureEffectDialog } from "../components/ConfigureEffectDialog";
 import type { EffectInfo } from "../types";
+import { TermHelp } from "../components/TermHelp";
 
 interface EffectsData {
   operations: { effects: EffectInfo[] };
@@ -58,9 +59,9 @@ export function EffectsSettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-fg mb-2">Effects</h1>
+      <h1 className="text-2xl font-bold text-fg mb-2 flex items-center gap-2">Effects <TermHelp term="effect" /></h1>
       <p className="text-sm text-muted mb-6">
-        Effect changes apply to the next train execution scope in the API process. The registry is
+        Effect changes apply to the next run's scope in the API process. The registry is
         per-process: a change here does not reach separate scheduler or worker processes.
       </p>
 

@@ -193,7 +193,7 @@ describe("writes (real mutations, verified by re-query)", () => {
       expect(pick(await gql(EXECUTION_DETAIL, { id }), "operations.executionDetail.cancellationRequested")).toBe(true);
   });
 
-  test("re-queue a run asking afresh -> a queued entry for its train", async () => {
+  test("requeue a run asking afresh -> a queued entry for its train", async () => {
     const ack = await gql(REQUEUE_EXECUTION, { id: 7, askAfresh: true });
     const res = pick(ack, "operations.requeueExecution") as { success: boolean; id: number };
     expect(res.success).toBe(true);

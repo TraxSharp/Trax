@@ -27,12 +27,12 @@ export const RangeToggleAndCpu: Story = {
       expect(c.getByRole("heading", { name: "Overview" })).toBeInTheDocument(),
     );
     expect(c.getByRole("button", { name: "24h" })).toHaveAttribute("aria-pressed", "true");
-    expect(c.getByText(/Executions over time \(last 24h\)/)).toBeInTheDocument();
+    expect(c.getByText(/Runs over time \(last 24h\)/)).toBeInTheDocument();
     expect(c.getByText("CPU")).toBeInTheDocument();
 
     await userEvent.click(c.getByRole("button", { name: "1h" }));
     await waitFor(() =>
-      expect(c.getByText(/Executions over time \(last hour\)/)).toBeInTheDocument(),
+      expect(c.getByText(/Runs over time \(last hour\)/)).toBeInTheDocument(),
     );
     expect(c.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "true");
   },
@@ -44,15 +44,15 @@ export const HiddenPanels: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "Overview" })).toBeInTheDocument());
-    expect(c.getByText("Executions today")).toBeInTheDocument();
+    expect(c.getByText("Runs today")).toBeInTheDocument();
     expect(c.getByText("Top failures (7d)")).toBeInTheDocument();
     setOverviewPanel("summaryCards", false);
     setOverviewPanel("failures", false);
     setOverviewPanel("serverHealth", false);
-    await waitFor(() => expect(c.queryByText("Executions today")).not.toBeInTheDocument());
+    await waitFor(() => expect(c.queryByText("Runs today")).not.toBeInTheDocument());
     expect(c.queryByText("Top failures (7d)")).not.toBeInTheDocument();
     expect(c.queryByText("CPU")).not.toBeInTheDocument();
     expect(c.getByText("Slowest trains (7d)")).toBeInTheDocument();
-    expect(c.getByText(/Executions over time/)).toBeInTheDocument();
+    expect(c.getByText(/Runs over time/)).toBeInTheDocument();
   },
 };

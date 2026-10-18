@@ -157,7 +157,7 @@ describe("what the recordings do not hold yet", () => {
     const ledger = newLedger();
     const { container, unmount } = renderDemo("/", ledger);
     await settle();
-    expect(within(container).queryByRole("link", { name: "State machines" }) == null).toBe(
+    expect(within(container).queryByRole("link", { name: "Machines" }) == null).toBe(
       notOfferedYet("MachineInstances"),
     );
     unmount();
