@@ -68,7 +68,7 @@ placed against them. Reserve stock in a transaction, and store each confirmed or
 You learn: domain data contexts, their companion interfaces, creating their schema at startup,
 and testing against a real database.
 
-### 5. Does this order look like fraud
+### [5. Does this order look like fraud](/docs/book/does-this-order-look-like-fraud)
 
 Stop an order that looks like fraud before it is charged, with a rule the train asks rather than
 an `if` inside a junction. Then try a second rule beside the first without letting it decide.
