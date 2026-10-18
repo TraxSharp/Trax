@@ -138,10 +138,11 @@ persisted operations, logging what they would refuse rather than refusing it.
 You learn: authoring a machine, guards, timers, an authorization rule on every event, serving a
 machine as its own API, and persisted operations in shadow mode.
 
-### 13. The machine places the order
+### [13. The machine places the order](/docs/book/the-machine-places-the-order)
 
-When checkout reaches placing, the machine invokes `PlaceOrder` and moves on with its result:
-confirmed, failed or cancelled. A confirmed order starts a parcel machine of its own.
+When checkout reaches `Placing`, the machine invokes `PlaceOrder` as the checkout's owner and moves
+on with its result: placed, or failed and ready to retry without charging twice. A placed order's
+parcel is a child machine the checkout waits on.
 
 You learn: invoking a train from a state, routing its outcome back into the machine, idempotent
 charges, and spawning a child machine.
