@@ -64,7 +64,7 @@
       "folder": "Trax.Samples",
       "project": "tests/Trax.Samples.ApiDashboard.Browser",
       "upstream": ["Trax.Api"],
-      "paths": ["Trax.Samples/tests/Trax.Samples.ApiDashboard.Browser/", "Trax.Samples/Directory.Build.props", "Trax.Samples/.config/"],
+      "paths": ["Trax.Samples/tests/Trax.Samples.ApiDashboard.Browser/", "Trax.Samples/lib/Trax.Samples.Shared.Testing/", "Trax.Samples/Directory.Build.props", "Trax.Samples/.config/"],
       "dotnet": { "api-dashboard": true, "chromium": true, "postgres": "trax", "rabbitmq": false, "databases": ["api_dashboard_browser_tests"], "timeout": 15, "test-args": "--blame-hang-timeout 5m --blame-hang-dump-type none" }
     }
   ]

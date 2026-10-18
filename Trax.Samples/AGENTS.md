@@ -78,7 +78,10 @@ Playwright, so the browser tests and the script download one browser build (cent
 
 `tests/Trax.Samples.ApiDashboard.Browser/` drives the operations console in chromium. CI runs it in
 its own job, `console-browser`, whenever Trax.Api or anything upstream changes, or the project
-does; this folder's job leaves it out. Locally: `trax-test console-browser`.
+does; this folder's job leaves it out. Locally: `trax-test console-browser`. A test there derives from
+`Fixtures/ConsoleTest` (whose teardown fails it on a console error, a CSP violation, an off-origin request or
+document text sent to a host that requires persisted operations), seeds the state it needs through
+`Fixtures/Seed`, signs in as one of `Fixtures/Caller`, and reads the page through the page objects in `Pages/`.
 
 `tests/Trax.Samples.Recovery.Browser/` drives the Recovery page in chromium with Playwright for .NET.
 It builds the page with vite, so it needs `npm ci` in the page's folder and in

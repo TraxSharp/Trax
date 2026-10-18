@@ -1,0 +1,387 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Core.Functional;
+using Trax.Effect.Enums;
+using Trax.Effect.Models.DeadLetter;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.PersistedOperation;
+using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.StateMachine.Persistence;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Mediator.Services.TrustedExecution;
+using Trax.Samples.ApiDashboard.Browser.Factories;
+using Trax.Samples.ApiDashboard.Browser.Host;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.Scheduling;
+using Trax.Scheduler.Services.TraxScheduler;
+
+namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
+
+/// <summary>
+/// Builds the states a console page shows, one builder per state, through the host's own services (the scheduler,
+/// the mediator, the machine instances, the operations service, the persisted-operation store), never SQL. Each
+/// test seeds only what it needs, under names of its own, and <see cref="DisposeAsync"/> undoes what a builder
+/// switched on the host (an outage, a hold, a paused dispatcher, a stopped machine sweep), newest first, so the
+/// next test starts on a healthy host. Every wait is on the host's state (Trax.Docs/adr/0006).
+/// </summary>
+public sealed class Seed(ConsoleHost host) : IAsyncDisposable
+{
+    /// <summary>A cron that names a moment a year away: the manifest runs only when triggered.</summary>
+    private static readonly Schedule OnlyWhenTriggered = Schedule.FromCron("0 0 1 1 *");
+
+    private readonly Stack<Func<Task>> _undo = new();
+
+    private Outages Outages => host.Services.GetRequiredService<Outages>();
+
+    private Holds Holds => host.Services.GetRequiredService<Holds>();
+
+    /// <summary>A key no other seed uses, readable in a row.</summary>
+    public static string NewKey(string prefix) =>
+        $"{prefix}-{Guid.NewGuid():N}"[..(prefix.Length + 9)];
+
+    /// <summary>
+    /// A manifest whose run failed once with <c>MaxRetries(0)</c>, so the scheduler dead-lettered it. Its supplier
+    /// is back by the time this returns, so a requeue of it succeeds.
+    /// </summary>
+    public async Task<DeadLetter> DeadLetterAsync()
+    {
+        var key = NewKey("feed");
+        Outages.Down(key);
+        try
+        {
+            var manifest = await ScheduleAsync<IImportFeedTrain>(key, o => o.MaxRetries(0));
+            await InScope<ITraxScheduler>(s => s.TriggerAsync(key));
+            return await Wait.ForAsync(
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.DeadLetters.AsNoTracking()
+                            .FirstOrDefaultAsync(d =>
+                                d.ManifestId == manifest.Id
+                                && d.Status == DeadLetterStatus.AwaitingIntervention
+                            )
+                    ),
+                BrowserTimeouts.Server,
+                $"the scheduler dead-letters {key}"
+            );
+        }
+        finally
+        {
+            Outages.Up(key);
+        }
+    }
+
+    /// <summary>Two dead letters of two manifests that failed the same way: their reasons are the same text.</summary>
+    public async Task<(DeadLetter First, DeadLetter Second)> DeadLettersSharingAReasonAsync()
+    {
+        var first = await DeadLetterAsync();
+        var second = await DeadLetterAsync();
+        second.Reason.Should().Be(first.Reason, "both failed once against no retries");
+        return (first, second);
+    }
+
+    /// <summary>
+    /// A run of <see cref="ISettleClaimTrain"/> that answered its Gate, stored its checkpoint and then failed:
+    /// what a resume starts from.
+    /// </summary>
+    public async Task<Metadata> FailedRunWithCheckpointAsync()
+    {
+        var key = NewKey("claim");
+        Outages.Down(key);
+        try
+        {
+            var run = await QueueAndWaitAsync<ISettleClaimTrain>(key, TrainState.Failed);
+            await Wait.UntilAsync(
+                () => host.QueryAsync(dc => dc.Checkpoints.AnyAsync(c => c.MetadataId == run.Id)),
+                BrowserTimeouts.Server,
+                $"run {run.Id} stores its checkpoint"
+            );
+            return run;
+        }
+        finally
+        {
+            Outages.Up(key);
+        }
+    }
+
+    /// <summary>A completed run of <see cref="ISettleClaimTrain"/>, whose Gate a decider answered.</summary>
+    public Task<Metadata> GatedRunAsync() =>
+        QueueAndWaitAsync<ISettleClaimTrain>(NewKey("claim"), TrainState.Completed);
+
+    /// <summary>A completed run that <see cref="RelayMachine"/>'s <c>Relaying</c> state invoked.</summary>
+    public async Task<(MachineInstance Instance, Metadata Run)> RunInvokedByMachineAsync()
+    {
+        var key = NewKey("parcel");
+        var instance = await StartRelayAsync(key);
+        var run = await Wait.ForAsync(
+            () =>
+                host.QueryAsync(dc =>
+                    dc.Metadatas.AsNoTracking()
+                        .FirstOrDefaultAsync(m =>
+                            m.InvokingInstanceId == instance.Id
+                            && m.TrainState == TrainState.Completed
+                        )
+                ),
+            BrowserTimeouts.Server,
+            $"{RelayMachine.Id} {instance.Id} invokes its run and the run completes"
+        );
+        return (instance, run);
+    }
+
+    /// <summary>
+    /// A queue entry of <see cref="ISyncMailboxTrain"/> left staged: its <c>OnQueue</c> hook waits until this seed
+    /// is disposed, so the entry is written but not yet confirmed.
+    /// </summary>
+    public async Task<WorkQueue> StagedQueueEntryAsync()
+    {
+        var key = NewKey("mailbox");
+        Holds.Hold(key);
+        var after = await host.QueryAsync(dc => dc.WorkQueues.MaxAsync(w => (long?)w.Id)) ?? 0;
+        var queued = InScope<ITrainExecutionService, QueueTrainResult>(q =>
+            q.QueueAsync(TrainName<ISyncMailboxTrain>(), Input(key))
+        );
+        _undo.Push(async () =>
+        {
+            Holds.Release(key);
+            await queued.WaitAsync(BrowserTimeouts.Server);
+        });
+        return await Wait.ForAsync(
+            () =>
+                host.QueryAsync(dc =>
+                    dc.WorkQueues.AsNoTracking()
+                        .FirstOrDefaultAsync(w =>
+                            w.Id > after
+                            && w.TrainName == TrainName<ISyncMailboxTrain>()
+                            && w.ConfirmedAt == null
+                            && w.Status == WorkQueueStatus.Queued
+                        )
+                ),
+            BrowserTimeouts.Server,
+            $"the staged entry for {key} is written"
+        );
+    }
+
+    /// <summary>
+    /// A queued entry of <see cref="IReconcileAccountTrain"/> blocked behind another run about the same subject,
+    /// which holds until this seed is disposed. Returns the blocked entry and the run it waits behind.
+    /// </summary>
+    public async Task<(WorkQueue Blocked, Metadata Holding)> BlockedQueueEntryAsync()
+    {
+        var key = NewKey("account");
+        Holds.Hold(key);
+        _undo.Push(() =>
+        {
+            Holds.Release(key);
+            return Task.CompletedTask;
+        });
+        var holding = await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress);
+        var second = await InScope<ITrainExecutionService, QueueTrainResult>(q =>
+            q.QueueAsync(TrainName<IReconcileAccountTrain>(), Input(key))
+        );
+        var blocked = await host.QueryAsync(dc =>
+            dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == second.WorkQueueId)
+        );
+        blocked.Status.Should().Be(WorkQueueStatus.Queued);
+        return (blocked, holding);
+    }
+
+    /// <summary>
+    /// A <see cref="ReminderMachine"/> instance whose timer is past due and has not fired: the machine sweep that
+    /// fires timers is stopped until this seed is disposed, which then fires it.
+    /// </summary>
+    public async Task<MachineInstance> OverdueTimerAsync()
+    {
+        await StopMachineSweepAsync();
+        var instance = await InScope<IMachineInstances, MachineInstance>(m =>
+            m.Start<ReminderMachine>(MachineKey.Of(NewKey("reminder")))
+        );
+        await Wait.UntilAsync(
+            () =>
+                host.QueryAsync(async dc =>
+                    await dc
+                        .SnapshotDrafts.AsNoTracking()
+                        .Where(d => d.Id == instance.Id)
+                        .Select(d => d.DueAt)
+                        .SingleAsync()
+                        is { } due
+                    && due.AddSeconds(2) < DateTimeOffset.UtcNow
+                ),
+            BrowserTimeouts.Server,
+            $"{ReminderMachine.Id} {instance.Id}'s timer is past due"
+        );
+        return instance;
+    }
+
+    /// <summary>
+    /// A <see cref="RelayMachine"/> instance still in <c>Relaying</c> although the run it invoked ended: the run's
+    /// queue entry was cancelled before dispatch, an outcome only the machine sweep applies, and the sweep is
+    /// stopped (and the dispatcher paused) until this seed is disposed. Returns the instance and the cancelled entry.
+    /// </summary>
+    public async Task<(
+        MachineInstance Instance,
+        WorkQueue Entry
+    )> InstanceWaitingOnAnEndedRunAsync()
+    {
+        await StopMachineSweepAsync();
+        await PausedDispatcherAsync();
+        var instance = await StartRelayAsync(NewKey("parcel"));
+        var entry = await Wait.ForAsync(
+            () =>
+                host.QueryAsync(dc =>
+                    dc.WorkQueues.AsNoTracking()
+                        .FirstOrDefaultAsync(w => w.InvokingInstanceId == instance.Id)
+                ),
+            BrowserTimeouts.Server,
+            $"{RelayMachine.Id} {instance.Id} queues its run"
+        );
+        var cancelled = await InScope<IOperationsService, OperationResult>(o =>
+            o.CancelWorkQueueEntryAsync(entry.Id, CancellationToken.None)
+        );
+        cancelled.Success.Should().BeTrue(cancelled.Message);
+        return (
+            instance,
+            await host.QueryAsync(dc =>
+                dc.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == entry.Id)
+            )
+        );
+    }
+
+    /// <summary>A manifest the operator disabled: it stays listed and does not run.</summary>
+    public async Task<Manifest> DisabledManifestAsync()
+    {
+        var key = NewKey("disabled");
+        var manifest = await ScheduleAsync<IImportFeedTrain>(key);
+        await InScope<ITraxScheduler>(s => s.DisableAsync(key));
+        return await host.QueryAsync(dc =>
+            dc.Manifests.AsNoTracking().SingleAsync(m => m.Id == manifest.Id)
+        );
+    }
+
+    /// <summary>The job dispatcher switched off, as an operator does from the settings; on again on dispose.</summary>
+    public async Task PausedDispatcherAsync()
+    {
+        await SetDispatcherAsync(enabled: false);
+        _undo.Push(() => SetDispatcherAsync(enabled: true));
+    }
+
+    /// <summary>An active persisted operation the store holds, as a deploy step would upload it.</summary>
+    public Task<PersistedOperation> PersistedOperationAsync()
+    {
+        var name = $"browserSeed{Guid.NewGuid():N}"[..19];
+        return InScope<IPersistedOperationStore, PersistedOperation>(store =>
+            store.UpsertAsync(
+                $"{name}.v1",
+                $"query {name} {{ operations {{ hosts {{ name }} }} }}",
+                null,
+                CancellationToken.None
+            )
+        );
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var failures = new List<Exception>();
+        while (_undo.TryPop(out var undo))
+        {
+            try
+            {
+                await undo();
+            }
+            catch (Exception ex)
+            {
+                failures.Add(ex);
+            }
+        }
+        if (failures.Count > 0)
+            throw new AggregateException("Undoing a seed failed.", failures);
+    }
+
+    private async Task StopMachineSweepAsync()
+    {
+        await host.MachineSweep.StopAsync(CancellationToken.None);
+        _undo.Push(() => host.MachineSweep.StartAsync(CancellationToken.None));
+    }
+
+    private Task SetDispatcherAsync(bool enabled) =>
+        InScope<IOperationsService, OperationResult>(o =>
+                o.UpdateSchedulerConfigAsync(
+                    new UpdateSchedulerConfigInput(JobDispatcherEnabled: enabled),
+                    CancellationToken.None
+                )
+            )
+            .ContinueWith(t => t.Result.Success.Should().BeTrue(t.Result.Message));
+
+    private async Task<MachineInstance> StartRelayAsync(string key)
+    {
+        var machineKey = MachineKey.Of(key);
+        var instance = await InScope<IMachineInstances, MachineInstance>(m =>
+            m.Start<RelayMachine>(machineKey, new JsonObject { ["key"] = key })
+        );
+        await InScope<IMachineInstances, AdvanceOutcome>(m =>
+            m.Advance<RelayMachine>(machineKey, nameof(RelayTrigger.Send))
+        );
+        return instance;
+    }
+
+    private Task<Manifest> ScheduleAsync<TTrain>(
+        string key,
+        Action<ScheduleOptions>? options = null
+    )
+        where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<KeyedInput, Unit> =>
+        InScope<ITraxScheduler, Manifest>(s =>
+            s.ScheduleAsync<TTrain, KeyedInput, Unit>(
+                key,
+                new KeyedInput { Key = key },
+                OnlyWhenTriggered,
+                options
+            )
+        );
+
+    // Queues the train about key through the mediator and waits for its run to reach state.
+    private async Task<Metadata> QueueAndWaitAsync<TTrain>(string key, TrainState state)
+    {
+        var queued = await InScope<ITrainExecutionService, QueueTrainResult>(q =>
+            q.QueueAsync(TrainName<TTrain>(), Input(key))
+        );
+        return await Wait.ForAsync(
+            () =>
+                host.QueryAsync(dc =>
+                    dc.Metadatas.AsNoTracking()
+                        .FirstOrDefaultAsync(m =>
+                            m.ExternalId == queued.ExternalId && m.TrainState == state
+                        )
+                ),
+            BrowserTimeouts.Server,
+            $"the run of {TrainName<TTrain>()} about {key} reaches {state}"
+        );
+    }
+
+    private static string TrainName<TTrain>() => typeof(TTrain).FullName!;
+
+    private static string Input(string key) =>
+        JsonSerializer.Serialize(new KeyedInput { Key = key });
+
+    private async Task InScope<TService>(Func<TService, Task> act)
+        where TService : notnull
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+        using var trusted = scope
+            .ServiceProvider.GetRequiredService<ITrustedExecutionScope>()
+            .BeginTrusted("browser test seed");
+        await act(scope.ServiceProvider.GetRequiredService<TService>());
+    }
+
+    private async Task<T> InScope<TService, T>(Func<TService, Task<T>> act)
+        where TService : notnull
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+        using var trusted = scope
+            .ServiceProvider.GetRequiredService<ITrustedExecutionScope>()
+            .BeginTrusted("browser test seed");
+        return await act(scope.ServiceProvider.GetRequiredService<TService>());
+    }
+}
