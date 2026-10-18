@@ -184,13 +184,14 @@ working when text is refused.
 
 ## Part 7: Shipping it
 
-### 18. Deploy
+### [18. Deploy](/docs/book/deploy)
 
-Split Shopfront into a hub and a worker, put them in containers, and point them at one Postgres.
-Secure the operations console.
+Run the hub and two workers in containers against one Postgres and RabbitMQ, in Production.
+Migrate the shop's schema with EF Core, add health checks, and decide what guards the console.
 
-You learn: the [deployment topologies](/docs/reference/deployment-topologies), migrations at
-startup, health checks, and what each process needs.
+You learn: the [deployment topologies](/docs/reference/deployment-topologies), EF migrations
+beside Trax's own, broadcasting runs between processes, health checks, and what each process
+needs.
 
 ## Where to go next
 
