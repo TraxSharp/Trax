@@ -743,6 +743,28 @@ export interface TrainChain {
 // An instance as operators see it: never its context, never whose a user's draft is.
 export type SnapshotOwnerKind = "SYSTEM" | "USER";
 
+// The machine instance whose invoking state queued a run (RUN_LINKS). Never whose a user's draft
+// is; rowId is set while the instance still waits on the run.
+export interface RunInvoker {
+  machine: string;
+  instanceId: string;
+  ownerKind: SnapshotOwnerKind;
+  rowId: number | null;
+}
+
+// What a run is linked to (RUN_LINKS).
+export interface RunLinks {
+  id: number;
+  manifestId: number | null;
+  parentId: number | null;
+  childCount: number;
+  replayDecisionsOf: number | null;
+  resumeFrom: number | null;
+  workQueueEntryId: number | null;
+  deadLetterId: number | null;
+  invokedBy: RunInvoker | null;
+}
+
 export interface MachineInstance {
   machine: string;
   ownerKind: SnapshotOwnerKind;

@@ -185,6 +185,7 @@ namespace Trax.Api.DTOs
         public bool CancellationRequested { get; init; }
         public int ChildCount { get; init; }
         public string? CurrentlyRunningJunction { get; init; }
+        public long? DeadLetterId { get; init; }
         public System.DateTime? EndTime { get; init; }
         public string? Executor { get; init; }
         public string ExternalId { get; init; }
@@ -198,6 +199,7 @@ namespace Trax.Api.DTOs
         public string? HostName { get; init; }
         public long Id { get; init; }
         public string? Input { get; init; }
+        public Trax.Api.DTOs.RunInvoker? InvokedBy { get; init; }
         public System.DateTime? JunctionStartedAt { get; init; }
         public long? ManifestId { get; init; }
         public string Name { get; init; }
@@ -211,6 +213,7 @@ namespace Trax.Api.DTOs
         public string? StackTrace { get; init; }
         public System.DateTime StartTime { get; init; }
         public Trax.Effect.Enums.TrainState TrainState { get; init; }
+        public long? WorkQueueEntryId { get; init; }
     }
     public class ExecutionSummary : System.IEquatable<Trax.Api.DTOs.ExecutionSummary>
     {
@@ -598,6 +601,14 @@ namespace Trax.Api.DTOs
         public string Name { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes { get; init; }
         public bool Taken { get; init; }
+    }
+    public sealed class RunInvoker : System.IEquatable<Trax.Api.DTOs.RunInvoker>
+    {
+        public RunInvoker(string Machine, System.Guid InstanceId, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, long? RowId) { }
+        public System.Guid InstanceId { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long? RowId { get; init; }
     }
     public enum RunNodeState
     {

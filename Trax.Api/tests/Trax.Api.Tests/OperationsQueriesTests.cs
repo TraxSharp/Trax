@@ -322,6 +322,72 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task GetExecutionDetail_LinksItsWorkQueueEntry_AndTheDeadLetterItRetries()
+    {
+        var manifest = await SeedManifestForDeadLetter();
+        long retry,
+            plain,
+            entryId,
+            deadLetterId;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var deadLetter = DeadLetter.Create(
+                new CreateDeadLetter
+                {
+                    Manifest = manifest,
+                    Reason = "retries used up",
+                    RetryCount = 3,
+                }
+            );
+            await db.Track(deadLetter);
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.RetryTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            var other = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.RetryTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            await db.Track(run);
+            await db.Track(other);
+            await db.SaveChanges(default);
+
+            // The requeue's entry, dispatched as the retry run; the dead letter names that run.
+            var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
+                {
+                    TrainName = "Trax.X.RetryTrain",
+                }
+            );
+            entry.MetadataId = run.Id;
+            entry.Status = WorkQueueStatus.Dispatched;
+            await db.Track(entry);
+            deadLetter.RetryMetadataId = run.Id;
+            await db.SaveChanges(default);
+
+            (retry, plain, entryId, deadLetterId) = (run.Id, other.Id, entry.Id, deadLetter.Id);
+        }
+
+        var detail = await new OperationsQueries().GetExecutionDetail(retry, _factory, default);
+        detail!.WorkQueueEntryId.Should().Be(entryId);
+        detail.DeadLetterId.Should().Be(deadLetterId);
+        detail.InvokedBy.Should().BeNull();
+
+        var unlinked = await new OperationsQueries().GetExecutionDetail(plain, _factory, default);
+        unlinked!.WorkQueueEntryId.Should().BeNull();
+        unlinked.DeadLetterId.Should().BeNull();
+        unlinked.ChildCount.Should().Be(0);
+    }
+
+    [Test]
     public async Task GetExecutionDetail_MissingId_ReturnsNull()
     {
         var detail = await new OperationsQueries().GetExecutionDetail(999999, _factory, default);

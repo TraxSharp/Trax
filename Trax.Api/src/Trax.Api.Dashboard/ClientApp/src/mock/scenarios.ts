@@ -559,6 +559,11 @@ function execDetail(id: number, name: string, state: string, childCount: number)
     // 952 resumed 902 at Summarize, the step after its checkpoint.
     resumeFrom: id === 952 ? 902 : null,
     resumeAt: id === 952 ? "Summarize#2" : null,
+    // 903 ran from a queued entry a machine's invoking state queued; 951 retried a dead letter.
+    workQueueEntryId: id === 903 ? 504 : id === 951 ? 505 : null,
+    deadLetterId: id === 951 ? 31 : null,
+    invokedBy:
+      id === 903 ? { machine: "source-partition", instanceId: MACHINE_IDS.dispatched, ownerKind: "SYSTEM", rowId: 11 } : null,
   };
 }
 

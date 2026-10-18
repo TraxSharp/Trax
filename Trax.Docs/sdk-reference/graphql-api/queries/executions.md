@@ -126,6 +126,10 @@ query {
       scheduledTime
       executor
       replayDecisionsOf
+      childCount
+      invokedBy { machine instanceId ownerKind rowId }
+      workQueueEntryId
+      deadLetterId
     }
   }
 }
@@ -156,6 +160,17 @@ retry that replays; it is null when the run replays nothing, a run queued to ask
 resumed from a [checkpoint](/docs/sdk-reference/train-methods/checkpoint), shown on the dashboard as
 **Resumes**, and `resumeAt` (`String`) the step it resumed at, null when it resumed after the latest
 checkpoint; both are null for a run that ran from the top.
+
+What the run is linked to, so a client can go from it to what started it:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `invokedBy` | `RunInvoker` | The state-machine instance whose [invoking state](/docs/statemachine/invoking-trains) queued the run, or null for a run no machine started. It names `machine`, `instanceId` and `ownerKind`, and `rowId`, the instance's row while it still waits on this run (the key [`machineInstance`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstance) takes for a user's draft), null once it has moved on. It never says whose a user's draft is: the run does not record that, and the row is found through the run's own id, which the instance holds as its invoke token |
+| `workQueueEntryId` | `Long` | The [work queue](/docs/sdk-reference/graphql-api/queries/work-queue) entry the run was dispatched from; null for a run that was not queued |
+| `deadLetterId` | `Long` | The [dead letter](/docs/sdk-reference/graphql-api/queries/dead-letters) this run retries, the run its requeue started; null for every other run. A run that failed into a dead letter is not linked to it, because a dead letter records its manifest, not the run that used up the retries |
+
+Each is one indexed read: `ix_work_queue_metadata_id`, `ix_dead_letter_retry_metadata_id`, and the instance's unique
+invoke token. The `RunInvoker` type is `Trax.Api.DTOs.RunInvoker`.
 
 `input` and `output` can hold credentials. They are on this single-row read and on no list; see
 [Train inputs and the operations gate](/docs/sdk-reference/graphql-api/queries#train-inputs-and-the-operations-gate).

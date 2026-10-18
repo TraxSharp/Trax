@@ -87,4 +87,44 @@ public record ExecutionDetail(
     /// checkpoint of <see cref="ResumeFrom"/> (or did not resume).
     /// </summary>
     public string? ResumeAt { get; init; }
+
+    /// <summary>
+    /// The state-machine instance whose invoking state queued this execution, or <c>null</c> for
+    /// a run no machine started. It names the machine, the instance and who owns it, never whose
+    /// a user's draft is: the run does not record that. See
+    /// Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md.
+    /// </summary>
+    public RunInvoker? InvokedBy { get; init; }
+
+    /// <summary>
+    /// The work queue entry this execution was dispatched from, or <c>null</c> for a run that
+    /// was not queued (one started inline, for one).
+    /// </summary>
+    public long? WorkQueueEntryId { get; init; }
+
+    /// <summary>
+    /// The dead letter this execution retries: the run a dead letter's requeue started. <c>null</c>
+    /// for every other run. A run that failed into a dead letter is not linked to it here, because
+    /// a dead letter records its manifest and not the run that exhausted the retries.
+    /// </summary>
+    public long? DeadLetterId { get; init; }
 }
+
+/// <summary>
+/// The state-machine instance whose invoking state queued a run, as
+/// <see cref="ExecutionDetail.InvokedBy"/> names it. Never the context of the instance, and never
+/// whose a user's draft is.
+/// </summary>
+/// <param name="Machine">The machine's id.</param>
+/// <param name="InstanceId">The instance's id.</param>
+/// <param name="OwnerKind">Whether a user or the system owns the instance.</param>
+/// <param name="RowId">
+/// The instance's row while it still waits on this run, the key <c>machineInstance</c> takes
+/// with a user's draft; <c>null</c> once it has moved on, or when the row is gone.
+/// </param>
+public sealed record RunInvoker(
+    string Machine,
+    Guid InstanceId,
+    SnapshotOwnerKind OwnerKind,
+    long? RowId
+);

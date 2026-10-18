@@ -878,8 +878,16 @@ public partial class OperationsQueries
 
     /// <summary>
     /// Full detail for one execution, including its input, output, stack trace and the number of
-    /// executions it started, or <c>null</c> when none has that id.
+    /// executions it started, what it is linked to (the state-machine instance that invoked it,
+    /// the work queue entry it ran from, the dead letter it retries), or <c>null</c> when none has
+    /// that id.
     /// </summary>
+    /// <remarks>
+    /// Each link is one indexed read: <c>ix_metadata_parent_id</c> for the children,
+    /// <c>ix_work_queue_metadata_id</c> for the entry, <c>ix_dead_letter_retry_metadata_id</c> for
+    /// the dead letter, and the instance's unique invoke token for its row. An invoking instance
+    /// is named by machine, id and owner kind only, as <c>machineInstances</c> names it.
+    /// </remarks>
     public async Task<ExecutionDetail?> GetExecutionDetail(
         long id,
         [Service] IDataContextProviderFactory dataContextFactory,
@@ -888,53 +896,105 @@ public partial class OperationsQueries
     {
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-        var detail = await db
+        var row = await db
             .Metadatas.AsNoTracking()
             .Where(m => m.Id == id)
-            .Select(m => new ExecutionDetail(
-                m.Id,
-                m.ExternalId,
-                m.Name,
-                m.TrainState,
-                m.StartTime,
-                m.EndTime,
-                m.FailureJunction,
-                m.FailureReason,
-                m.FailureException,
-                m.StackTrace,
-                m.Input,
-                m.Output,
-                m.ManifestId,
-                m.CancellationRequested,
-                m.CurrentlyRunningJunction,
-                m.JunctionStartedAt,
-                m.HostName,
-                m.HostEnvironment,
-                m.HostInstanceId,
-                // ChildCount is filled in after projection; passed explicitly only because an
-                // expression tree cannot skip to a later argument by name.
-                0,
-                m.FailureClass,
-                m.ParentId,
-                m.ScheduledTime,
-                m.Executor,
-                m.HostLabels,
-                m.ReplayDecisionsOf
-            )
+            .Select(m => new
             {
-                ReplayAbandoned = m.ReplayAbandoned,
-                ResumeFrom = m.ResumeFrom,
-                ResumeAt = m.ResumeAt,
+                Detail = new ExecutionDetail(
+                    m.Id,
+                    m.ExternalId,
+                    m.Name,
+                    m.TrainState,
+                    m.StartTime,
+                    m.EndTime,
+                    m.FailureJunction,
+                    m.FailureReason,
+                    m.FailureException,
+                    m.StackTrace,
+                    m.Input,
+                    m.Output,
+                    m.ManifestId,
+                    m.CancellationRequested,
+                    m.CurrentlyRunningJunction,
+                    m.JunctionStartedAt,
+                    m.HostName,
+                    m.HostEnvironment,
+                    m.HostInstanceId,
+                    // ChildCount is filled in after projection; passed explicitly only because an
+                    // expression tree cannot skip to a later argument by name.
+                    0,
+                    m.FailureClass,
+                    m.ParentId,
+                    m.ScheduledTime,
+                    m.Executor,
+                    m.HostLabels,
+                    m.ReplayDecisionsOf
+                )
+                {
+                    ReplayAbandoned = m.ReplayAbandoned,
+                    ResumeFrom = m.ResumeFrom,
+                    ResumeAt = m.ResumeAt,
+                },
+                m.InvokingMachine,
+                m.InvokingInstanceId,
+                m.InvokingOwnerKind,
             })
             .FirstOrDefaultAsync(ct);
 
-        if (detail is null)
+        if (row is null)
             return null;
 
         // parent_id is covered by the partial index ix_metadata_parent_id, so counting
         // children stays cheap even on the huge metadata table.
         var childCount = await db.Metadatas.AsNoTracking().CountAsync(c => c.ParentId == id, ct);
-        return detail with { ChildCount = childCount };
+
+        var entry = await db
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.MetadataId == id)
+            .OrderBy(w => w.Id)
+            .Select(w => new { w.Id, w.DeadLetterId })
+            .FirstOrDefaultAsync(ct);
+
+        var deadLetterId =
+            entry?.DeadLetterId
+            ?? await db
+                .DeadLetters.AsNoTracking()
+                .Where(d => d.RetryMetadataId == id)
+                .OrderBy(d => d.Id)
+                .Select(d => (long?)d.Id)
+                .FirstOrDefaultAsync(ct);
+
+        RunInvoker? invokedBy = null;
+        if (
+            row.InvokingMachine is { } machine
+            && row.InvokingInstanceId is { } instanceId
+            && row.InvokingOwnerKind is { } ownerKind
+        )
+        {
+            // The row still waiting on this run holds its external id as its invoke token. A
+            // user's draft is found through that alone, never through who owns it.
+            var token = row.Detail.ExternalId.TrimEnd();
+            var rowId = await db
+                .SnapshotDrafts.AsNoTracking()
+                .Where(x =>
+                    x.InvokeToken == token
+                    && x.Machine == machine
+                    && x.Id == instanceId
+                    && x.OwnerKind == ownerKind
+                )
+                .Select(x => (long?)x.RowId)
+                .FirstOrDefaultAsync(ct);
+            invokedBy = new RunInvoker(machine, instanceId, ownerKind, rowId);
+        }
+
+        return row.Detail with
+        {
+            ChildCount = childCount,
+            InvokedBy = invokedBy,
+            WorkQueueEntryId = entry?.Id,
+            DeadLetterId = deadLetterId,
+        };
     }
 
     /// <summary>

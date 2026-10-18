@@ -202,6 +202,10 @@
       "text": "query RunGraph($metadataId: Long!) {\n  operations {\n    runGraph(metadataId: $metadataId) {\n      metadataId\n      hasGraph\n      moreSteps\n      canResume\n      unmatchedSteps {\n        position\n        name\n        nameWithheld\n        state\n        __typename\n      }\n      allNodes {\n        id\n        kind\n        opaque\n        replayed\n        checkpointed\n        canResume\n        state\n        steps {\n          state\n          failureClass\n          failureException\n          __typename\n        }\n        parentId\n        track\n        depth\n        tracks {\n          name\n          description\n          isFallback\n          taken\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "RunLinks",
+      "text": "query RunLinks($id: Long!) {\n  operations {\n    executionDetail(id: $id) {\n      id\n      manifestId\n      parentId\n      childCount\n      replayDecisionsOf\n      resumeFrom\n      workQueueEntryId\n      deadLetterId\n      invokedBy {\n        machine\n        instanceId\n        ownerKind\n        rowId\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "RunTrain",
       "text": "mutation RunTrain($input: RunTrainInput!) {\n  operations {\n    workQueue {\n      runTrain(input: $input) {\n        success\n        message\n        id\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },

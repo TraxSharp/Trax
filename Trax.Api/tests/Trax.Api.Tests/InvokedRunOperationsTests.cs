@@ -93,6 +93,63 @@ public class InvokedRunOperationsTests
     }
 
     [Test]
+    public async Task Execution_detail_names_the_machine_instance_that_invoked_the_run()
+    {
+        var machine = "ingest-" + Guid.NewGuid().ToString("N");
+        var token = Guid.NewGuid().ToString("N");
+        var instance = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", token);
+        var live = await SeedInvokedRunAsync(machine, instance.Id, SnapshotOwnerKind.System, token);
+        var earlier = await SeedInvokedRunAsync(machine, instance.Id, SnapshotOwnerKind.System);
+
+        var detail = await new OperationsQueries().GetExecutionDetail(live, _factory, default);
+
+        detail!
+            .InvokedBy.Should()
+            .Be(
+                new RunInvoker(machine, instance.Id, SnapshotOwnerKind.System, instance.RowId),
+                "the run names the instance whose state queued it, and its row while it waits"
+            );
+
+        var past = await new OperationsQueries().GetExecutionDetail(earlier, _factory, default);
+        past!
+            .InvokedBy.Should()
+            .Be(
+                new RunInvoker(machine, instance.Id, SnapshotOwnerKind.System, null),
+                "an instance that no longer waits on the run is still named, without its row"
+            );
+    }
+
+    [Test]
+    public async Task Execution_detail_never_says_whose_a_users_draft_invoked_the_run()
+    {
+        var secret = "secret-" + Guid.NewGuid().ToString("N");
+        var machine = "ingest-" + Guid.NewGuid().ToString("N");
+        var token = Guid.NewGuid().ToString("N");
+        var draft = await SeedDraftAsync(machine, SnapshotOwnerKind.User, secret, token);
+        var run = await SeedInvokedRunAsync(machine, draft.Id, SnapshotOwnerKind.User, token);
+
+        var detail = await new OperationsQueries().GetExecutionDetail(run, _factory, default);
+
+        detail!
+            .InvokedBy.Should()
+            .Be(new RunInvoker(machine, draft.Id, SnapshotOwnerKind.User, draft.RowId));
+        var json = JsonSerializer.Serialize(detail);
+        json.Should()
+            .NotContain(draft.UserKey!, $"an operator is not shown whose a draft is. See {Adr}");
+        json.Should().NotContain(secret, "nor anything of the draft's context");
+    }
+
+    [Test]
+    public async Task Execution_detail_of_a_run_no_machine_started_names_no_instance()
+    {
+        var run = await SeedRunAsync(TrainState.Completed);
+
+        var detail = await new OperationsQueries().GetExecutionDetail(run, _factory, default);
+
+        detail!.InvokedBy.Should().BeNull();
+    }
+
+    [Test]
     public async Task No_operator_surface_returns_a_snapshots_context()
     {
         var secret = "secret-" + Guid.NewGuid().ToString("N");

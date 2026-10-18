@@ -279,6 +279,33 @@ export const EXECUTION_DETAIL = gql`
   }
 `;
 
+// What a run is linked to, so the run page can go to what started it and what it came from: the
+// machine instance whose invoking state queued it (never whose a user's draft is; rowId is the row
+// machineInstance takes while the instance still waits on the run), the work queue entry it ran
+// from, the dead letter it retries, and the runs around it.
+export const RUN_LINKS = gql`
+  query RunLinks($id: Long!) {
+    operations {
+      executionDetail(id: $id) {
+        id
+        manifestId
+        parentId
+        childCount
+        replayDecisionsOf
+        resumeFrom
+        workQueueEntryId
+        deadLetterId
+        invokedBy {
+          machine
+          instanceId
+          ownerKind
+          rowId
+        }
+      }
+    }
+  }
+`;
+
 // Child executions of a parent (parent/child tree on the detail page).
 export const EXECUTION_CHILDREN = gql`
   query ExecutionChildren($parentId: Long!, $take: Int!, $afterId: Long) {
