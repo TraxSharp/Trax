@@ -22,6 +22,7 @@ using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Effects;
 using Trax.Scheduler.Services.Operations;
+using HostHeartbeatRow = Trax.Effect.Models.HostHeartbeat.HostHeartbeat;
 using ManifestExecutionStats = Trax.Api.DTOs.ManifestExecutionStats;
 
 namespace Trax.Api.GraphQL.Queries;
@@ -547,50 +548,61 @@ public partial class OperationsQueries
     }
 
     /// <summary>
-    /// The processes that have executed trains, rolled up from the recorded executions by
-    /// <c>HostInstanceId</c>: last-seen, total executions, and how many are still running. Backs the
-    /// dashboard's cluster view. It aggregates over every recorded execution (like the dashboard
-    /// metrics), so it is meant for occasional refresh, not a hot poll.
+    /// The host processes that have beaten in the last day, from <c>trax.host_heartbeat</c>: each
+    /// one's identity, Trax version, start, last heartbeat, whether it is online, what it runs, and
+    /// how many runs it has in progress. Every host with a data provider beats every 15 seconds
+    /// whether or not it has work, and one is offline once three beats are missed (45 seconds).
+    /// Online hosts come first, then by name.
     /// </summary>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">The request's cancellation token.</param>
+    /// <param name="timeProvider">The clock <c>online</c> is judged by; resolved from DI, the system clock when absent.</param>
     public async Task<IReadOnlyList<HostInfo>> GetHosts(
         [Service] IDataContextProviderFactory dataContextFactory,
-        CancellationToken ct
+        CancellationToken ct,
+        [Service] TimeProvider? timeProvider = null
     )
     {
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-        // Aggregate into an anonymous shape first: a filtered COUNT and a DTO constructor inside a
-        // GroupBy projection don't translate, but SUM(CASE ...) does. Order and map to HostInfo
-        // client-side (the host list is tiny).
-        var rows = await db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.HostInstanceId != null)
-            .GroupBy(m => new
-            {
-                m.HostInstanceId,
-                m.HostName,
-                m.HostEnvironment,
-            })
-            .Select(g => new
-            {
-                g.Key.HostInstanceId,
-                g.Key.HostName,
-                g.Key.HostEnvironment,
-                LastSeen = g.Max(m => m.StartTime),
-                Total = g.LongCount(),
-                Running = g.Sum(m => m.TrainState == TrainState.InProgress ? 1 : 0),
-            })
-            .ToListAsync(ct);
+        // One row per process seen in the last day, pruned by every beat, so the table is small.
+        var beats = await db.HostHeartbeats.AsNoTracking().ToListAsync(ct);
+        if (beats.Count == 0)
+            return [];
 
-        return rows.OrderByDescending(r => r.LastSeen)
-            .Select(r => new HostInfo(
-                r.HostInstanceId!,
-                r.HostName,
-                r.HostEnvironment,
-                r.LastSeen,
-                r.Total,
-                r.Running
+        // Runs in progress are few, and the partial index on in-progress runs finds them, so this
+        // stays cheap however many runs a host has finished.
+        var ids = beats.Select(b => b.InstanceId).ToList();
+        var running = await db
+            .Metadatas.AsNoTracking()
+            .Where(m =>
+                m.TrainState == TrainState.InProgress
+                && m.HostInstanceId != null
+                && ids.Contains(m.HostInstanceId)
+            )
+            .GroupBy(m => m.HostInstanceId!)
+            .Select(g => new { InstanceId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(r => r.InstanceId, r => r.Count, ct);
+
+        return beats
+            .Select(b => new HostInfo(
+                b.InstanceId,
+                b.HostName,
+                b.HostEnvironment,
+                b.TraxVersion,
+                DateTime.SpecifyKind(b.StartedAt, DateTimeKind.Utc),
+                DateTime.SpecifyKind(b.LastHeartbeatAt, DateTimeKind.Utc),
+                HostHeartbeatRow.IsOnline(b.LastHeartbeatAt, now),
+                b.RunsDispatcher,
+                b.RunsManifestManager,
+                b.WorkerSlots,
+                b.WorkerSlotsInUse,
+                running.GetValueOrDefault(b.InstanceId)
             ))
+            .OrderByDescending(h => h.Online)
+            .ThenBy(h => h.Name, StringComparer.Ordinal)
+            .ThenBy(h => h.InstanceId, StringComparer.Ordinal)
             .ToList();
     }
 

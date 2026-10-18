@@ -247,13 +247,19 @@ namespace Trax.Api.DTOs
     }
     public class HostInfo : System.IEquatable<Trax.Api.DTOs.HostInfo>
     {
-        public HostInfo(string InstanceId, string? Name, string? Environment, System.DateTime LastSeen, long TotalExecutions, int CurrentlyRunning) { }
+        public HostInfo(string InstanceId, string Name, string Environment, string TraxVersion, System.DateTime StartedAt, System.DateTime LastHeartbeat, bool Online, bool RunsDispatcher, bool RunsManifestManager, int? WorkerSlots, int? WorkerSlotsInUse, int CurrentlyRunning) { }
         public int CurrentlyRunning { get; init; }
-        public string? Environment { get; init; }
+        public string Environment { get; init; }
         public string InstanceId { get; init; }
-        public System.DateTime LastSeen { get; init; }
-        public string? Name { get; init; }
-        public long TotalExecutions { get; init; }
+        public System.DateTime LastHeartbeat { get; init; }
+        public string Name { get; init; }
+        public bool Online { get; init; }
+        public bool RunsDispatcher { get; init; }
+        public bool RunsManifestManager { get; init; }
+        public System.DateTime StartedAt { get; init; }
+        public string TraxVersion { get; init; }
+        public int? WorkerSlots { get; init; }
+        public int? WorkerSlotsInUse { get; init; }
     }
     public class InputPropertySchema : System.IEquatable<Trax.Api.DTOs.InputPropertySchema>
     {

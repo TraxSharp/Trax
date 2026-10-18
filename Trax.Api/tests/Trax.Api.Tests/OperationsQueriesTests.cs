@@ -28,6 +28,7 @@ using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
+using HostHeartbeat = Trax.Effect.Models.HostHeartbeat.HostHeartbeat;
 
 namespace Trax.Api.Tests;
 
@@ -100,7 +101,7 @@ public class OperationsQueriesTests
         await using var db = await _factory.CreateDbContextAsync(default);
         var ctx = (Microsoft.EntityFrameworkCore.DbContext)db;
         await ctx.Database.ExecuteSqlRawAsync(
-            "TRUNCATE TABLE trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
+            "TRUNCATE TABLE trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group, trax.host_heartbeat RESTART IDENTITY CASCADE"
         );
     }
 
@@ -812,76 +813,143 @@ public class OperationsQueriesTests
         names.Should().Contain(n => n.EndsWith("IJobDispatcherTrain"));
     }
 
-    [Test]
-    public async Task GetHosts_RollsUpByInstance_WithRunningAndTotalCounts()
+    private static readonly DateTimeOffset HostsNow = new(2026, 10, 18, 12, 0, 0, TimeSpan.Zero);
+
+    private async Task SeedHeartbeat(
+        string instance,
+        string name,
+        DateTimeOffset lastBeat,
+        bool runsDispatcher = false,
+        int? workerSlots = null,
+        int? workerSlotsInUse = null
+    )
     {
-        await using (var db = await _factory.CreateDbContextAsync(default))
-        {
-            // inst-1: two runs, one still in progress. inst-2: a single completed run.
-            async Task Seed(string instance, string name, string env, TrainState state)
+        await using var db = await _factory.CreateDbContextAsync(default);
+        db.HostHeartbeats.Add(
+            new HostHeartbeat
             {
-                var m = Metadata.Create(
-                    new CreateMetadata
-                    {
-                        Name = "Trax.X.HostTrain",
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
-                    }
-                );
-                m.HostInstanceId = instance;
-                m.HostName = name;
-                m.HostEnvironment = env;
-                m.TrainState = state;
-                await db.Track(m);
+                InstanceId = instance,
+                HostName = name,
+                HostEnvironment = "kubernetes",
+                TraxVersion = "1.70.0",
+                StartedAt = (lastBeat - TimeSpan.FromHours(1)).UtcDateTime,
+                LastHeartbeatAt = lastBeat.UtcDateTime,
+                RunsDispatcher = runsDispatcher,
+                RunsManifestManager = runsDispatcher,
+                WorkerSlots = workerSlots,
+                WorkerSlotsInUse = workerSlotsInUse,
             }
+        );
+        await db.SaveChanges(default);
+    }
 
-            await Seed("inst-1", "host-1", "Production", TrainState.Completed);
-            await Seed("inst-1", "host-1", "Production", TrainState.InProgress);
-            await Seed("inst-2", "host-2", "Development", TrainState.Completed);
-            await db.SaveChanges(default);
-        }
-
-        var hosts = await new OperationsQueries().GetHosts(_factory, default);
-
-        hosts.Should().HaveCount(2);
-        var one = hosts.Single(h => h.InstanceId == "inst-1");
-        one.Name.Should().Be("host-1");
-        one.Environment.Should().Be("Production");
-        one.TotalExecutions.Should().Be(2);
-        one.CurrentlyRunning.Should().Be(1);
-        var two = hosts.Single(h => h.InstanceId == "inst-2");
-        two.TotalExecutions.Should().Be(1);
-        two.CurrentlyRunning.Should().Be(0);
+    private async Task SeedRun(string? instance, TrainState state)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var m = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Trax.X.HostTrain",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        m.HostInstanceId = instance;
+        m.TrainState = state;
+        await db.Track(m);
+        await db.SaveChanges(default);
     }
 
     [Test]
-    public async Task GetHosts_IgnoresRowsWithoutAHostInstance()
+    public async Task GetHosts_ReadsTheHeartbeatTable_WithOnlineAndRunsInProgress()
     {
-        await using (var db = await _factory.CreateDbContextAsync(default))
-        {
-            for (var i = 0; i < 3; i++)
-            {
-                var m = Metadata.Create(
-                    new CreateMetadata
-                    {
-                        Name = $"Trax.X.NoHost{i}",
-                        ExternalId = Guid.NewGuid().ToString("N"),
-                        Input = null,
-                    }
-                );
-                // Metadata.Create stamps the running process's host by default; clear it so this
-                // row represents pre-host-tracking data that the rollup must skip.
-                m.HostInstanceId = null;
-                m.HostName = null;
-                m.HostEnvironment = null;
-                await db.Track(m);
-            }
-            await db.SaveChanges(default);
-        }
+        // pod-a beat 10 seconds ago and runs the scheduler with four workers, three busy. pod-b
+        // last beat a minute ago, so it has missed more than three beats.
+        await SeedHeartbeat(
+            "pod-a",
+            "host-a",
+            HostsNow - TimeSpan.FromSeconds(10),
+            runsDispatcher: true,
+            workerSlots: 4,
+            workerSlotsInUse: 3
+        );
+        await SeedHeartbeat("pod-b", "host-b", HostsNow - TimeSpan.FromMinutes(1));
+        await SeedRun("pod-a", TrainState.InProgress);
+        await SeedRun("pod-a", TrainState.InProgress);
+        await SeedRun("pod-a", TrainState.Completed);
+        await SeedRun("pod-b", TrainState.Completed);
+        await SeedRun("gone", TrainState.InProgress);
 
-        var hosts = await new OperationsQueries().GetHosts(_factory, default);
+        var hosts = await new OperationsQueries().GetHosts(
+            _factory,
+            default,
+            new ManualTime(HostsNow)
+        );
+
+        hosts.Select(h => h.InstanceId).Should().Equal(new[] { "pod-a", "pod-b" }, "online first");
+        var a = hosts[0];
+        a.Online.Should().BeTrue();
+        a.Name.Should().Be("host-a");
+        a.Environment.Should().Be("kubernetes");
+        a.TraxVersion.Should().Be("1.70.0");
+        a.LastHeartbeat.Should().Be((HostsNow - TimeSpan.FromSeconds(10)).UtcDateTime);
+        a.StartedAt.Kind.Should().Be(DateTimeKind.Utc);
+        a.RunsDispatcher.Should().BeTrue();
+        a.RunsManifestManager.Should().BeTrue();
+        a.WorkerSlots.Should().Be(4);
+        a.WorkerSlotsInUse.Should().Be(3);
+        a.CurrentlyRunning.Should().Be(2, "only runs still in progress count");
+        var b = hosts[1];
+        b.Online.Should().BeFalse("its last beat is a minute old");
+        b.RunsDispatcher.Should().BeFalse();
+        b.WorkerSlots.Should().BeNull();
+        b.CurrentlyRunning.Should().Be(0);
+    }
+
+    [Test]
+    public async Task GetHosts_MarksAHostOffline_AfterThreeMissedBeats()
+    {
+        var lastBeat = HostsNow;
+        await SeedHeartbeat("pod-a", "host-a", lastBeat);
+
+        async Task<bool> OnlineAt(TimeSpan later) =>
+            (
+                await new OperationsQueries().GetHosts(
+                    _factory,
+                    default,
+                    new ManualTime(lastBeat + later)
+                )
+            )
+                .Single()
+                .Online;
+
+        (await OnlineAt(TimeSpan.FromSeconds(15))).Should().BeTrue("one missed beat");
+        (await OnlineAt(TimeSpan.FromSeconds(44))).Should().BeTrue("two missed beats");
+        (await OnlineAt(TimeSpan.FromSeconds(45)))
+            .Should()
+            .BeFalse("three missed beats, 45 seconds, is offline");
+    }
+
+    [Test]
+    public async Task GetHosts_ListsNoHost_ThatHasNotBeaten_EvenWhenItsRunsAreRecorded()
+    {
+        // A host that predates the heartbeat, or one that stopped more than a day ago and was
+        // pruned, has runs but no row: it is not up, so it is not listed.
+        await SeedRun("old-host", TrainState.Completed);
+        await SeedRun(null, TrainState.InProgress);
+
+        var hosts = await new OperationsQueries().GetHosts(
+            _factory,
+            default,
+            new ManualTime(HostsNow)
+        );
 
         hosts.Should().BeEmpty();
+    }
+
+    private sealed class ManualTime(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     [Test]

@@ -313,10 +313,16 @@ export interface ManifestGroupDependencyGraph {
 // A process (host instance) that has executed trains. Backs the cluster page.
 export interface HostInfo {
   instanceId: string;
-  name: string | null;
-  environment: string | null;
-  lastSeen: string;
-  totalExecutions: number;
+  name: string;
+  environment: string;
+  traxVersion: string;
+  startedAt: string;
+  lastHeartbeat: string;
+  online: boolean;
+  runsDispatcher: boolean;
+  runsManifestManager: boolean;
+  workerSlots: number | null;
+  workerSlotsInUse: number | null;
   currentlyRunning: number;
 }
 

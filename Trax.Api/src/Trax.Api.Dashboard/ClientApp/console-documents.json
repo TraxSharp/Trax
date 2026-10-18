@@ -99,7 +99,7 @@
     },
     {
       "name": "Hosts",
-      "text": "query Hosts {\n  operations {\n    hosts {\n      instanceId\n      name\n      environment\n      lastSeen\n      totalExecutions\n      currentlyRunning\n      __typename\n    }\n    __typename\n  }\n}"
+      "text": "query Hosts {\n  operations {\n    hosts {\n      instanceId\n      name\n      environment\n      traxVersion\n      startedAt\n      lastHeartbeat\n      online\n      runsDispatcher\n      runsManifestManager\n      workerSlots\n      workerSlotsInUse\n      currentlyRunning\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "JunctionRuns",

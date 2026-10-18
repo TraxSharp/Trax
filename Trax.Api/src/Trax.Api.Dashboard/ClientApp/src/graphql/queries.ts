@@ -605,7 +605,8 @@ export const ADMIN_TRAIN_NAMES = gql`
   }
 `;
 
-// Processes that have run trains, rolled up by host instance. Backs the cluster page.
+// Host processes from their heartbeat rows, online when beaten in the last 45 seconds. Backs the
+// cluster page.
 export const HOSTS = gql`
   query Hosts {
     operations {
@@ -613,8 +614,14 @@ export const HOSTS = gql`
         instanceId
         name
         environment
-        lastSeen
-        totalExecutions
+        traxVersion
+        startedAt
+        lastHeartbeat
+        online
+        runsDispatcher
+        runsManifestManager
+        workerSlots
+        workerSlotsInUse
         currentlyRunning
       }
     }

@@ -290,23 +290,43 @@ public class AdminEndpointStressTests : StressTestSetup
     [Test]
     public async Task Hosts_AtScale_WithinBudget()
     {
-        // The cluster rollup is a full aggregation of the metadata table by host instance (no time
-        // filter, so it scans every row). Inherently O(rows) and refresh-on-demand, so it gets the
-        // dedicated cluster budget, not the hot-path metrics budget. Migration 039's covering index
-        // keeps it near the floor for a full aggregation.
+        // The hosts read takes the heartbeat table, one row per process seen in a day, and counts
+        // each listed host's runs in progress among millions of runs. Give it the seeded run hosts
+        // and a few hundred more that ran nothing, as a large autoscaled cluster would have.
+        await using (var db = await Factory(Services).CreateDbContextAsync(default))
+        {
+            var now = DateTime.UtcNow;
+            var ids = Enumerable
+                .Range(0, 4)
+                .Select(i => $"stress-instance-{i}")
+                .Concat(Enumerable.Range(0, 300).Select(i => $"stress-idle-{i}"))
+                .ToList();
+            var existing = db
+                .HostHeartbeats.Where(h => ids.Contains(h.InstanceId))
+                .Select(h => h.InstanceId)
+                .ToHashSet();
+            foreach (var id in ids.Where(id => !existing.Contains(id)))
+                db.HostHeartbeats.Add(
+                    new Trax.Effect.Models.HostHeartbeat.HostHeartbeat
+                    {
+                        InstanceId = id,
+                        HostName = id,
+                        HostEnvironment = "server",
+                        TraxVersion = "stress",
+                        StartedAt = now,
+                        LastHeartbeatAt = now,
+                    }
+                );
+            await db.SaveChanges(default);
+        }
+
         await MeasureAsync(
             "operations.hosts",
-            ClusterBudget,
+            ListBudget,
             async (sp, ct) =>
             {
                 var hosts = await new OperationsQueries().GetHosts(Factory(sp), ct);
-                hosts.Should().NotBeEmpty();
-                // Every seeded row carries a host, so the per-host totals account for at least the
-                // whole seed (a reused stress DB may hold a few extra rows from other processes).
-                hosts
-                    .Sum(h => h.TotalExecutions)
-                    .Should()
-                    .BeGreaterThanOrEqualTo(Profile.Metadata);
+                hosts.Should().HaveCountGreaterThanOrEqualTo(304);
             }
         );
     }

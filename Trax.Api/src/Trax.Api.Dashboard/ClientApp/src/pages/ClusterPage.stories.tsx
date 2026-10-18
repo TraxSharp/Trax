@@ -16,9 +16,11 @@ export const Mock: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("trax-api-1")).toBeInTheDocument());
-    // The recent host is Live; the 8-minutes-idle scheduler is Stale.
-    expect(c.getByText("Live")).toBeInTheDocument();
-    expect(c.getByText("Stale")).toBeInTheDocument();
+    // The scheduler beat 5 seconds ago and is online; the API host stopped 8 minutes ago.
+    expect(c.getByText("Online")).toBeInTheDocument();
+    expect(c.getByText("Offline")).toBeInTheDocument();
+    expect(c.getByText("3 / 8")).toBeInTheDocument();
+    expect(c.queryByText(/No online host runs the dispatcher/)).not.toBeInTheDocument();
   },
 };
 
@@ -29,7 +31,7 @@ export const Empty: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() =>
-      expect(c.getByText(/No hosts have executed trains yet/)).toBeInTheDocument(),
+      expect(c.getByText(/No host has sent a heartbeat in the last day/)).toBeInTheDocument(),
     );
   },
 };

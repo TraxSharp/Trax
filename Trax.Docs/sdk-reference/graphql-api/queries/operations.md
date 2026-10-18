@@ -134,7 +134,9 @@ The subscription feed streams every train on an admin host, so the dashboard rea
 
 ## hosts
 
-Rolls up the processes that have executed trains, grouped by `HostInstanceId` from the metadata table. Backs the dashboard's cluster view across a split API + scheduler + worker deployment. Rows without a stamped host instance are ignored.
+The host processes that have beaten in the last day, from `trax.host_heartbeat`. Every host with a data provider
+rewrites its row every 15 seconds whether or not it has work ([Host Tracking](/docs/sdk-reference/configuration/host-tracking#heartbeat)),
+so the list shows an idle host as online and a dead one as offline. Online hosts come first, then by name.
 
 ```graphql
 query {
@@ -143,15 +145,22 @@ query {
       instanceId
       name
       environment
-      lastSeen
-      totalExecutions
+      traxVersion
+      startedAt
+      lastHeartbeat
+      online
+      runsDispatcher
+      runsManifestManager
+      workerSlots
+      workerSlotsInUse
       currentlyRunning
     }
   }
 }
 ```
 
-This is a full aggregation over the metadata table (like `metrics.dashboard`), so treat it as an occasional-refresh read, not a hot poll. `lastSeen` is the most recent execution start on the host, the freshness signal the dashboard renders; there is no separate heartbeat.
+It reads the small heartbeat table and counts each listed host's runs in progress, so it is cheap at any history
+size. A host on a version from before the heartbeat writes no row and is not listed.
 
 **Returns**: `[HostInfo!]!`
 
@@ -159,12 +168,18 @@ This is a full aggregation over the metadata table (like `metrics.dashboard`), s
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `instanceId` | `String!` | Stable per-process id (lives for the process's lifetime) |
-| `name` | `String` | Machine / container host name, if stamped |
-| `environment` | `String` | Hosting environment (e.g. `Production`), if stamped |
-| `lastSeen` | `DateTime!` | Most recent execution start on this host |
-| `totalExecutions` | `Long!` | Total executions attributed to this host |
-| `currentlyRunning` | `Int!` | Executions on this host still `InProgress` |
+| `instanceId` | `String!` | The process's instance id, the one stamped on each run it executes |
+| `name` | `String!` | Machine or container host name |
+| `environment` | `String!` | Hosting environment, such as `server`, `ecs`, `kubernetes` or `lambda` |
+| `traxVersion` | `String!` | The Trax version the process runs |
+| `startedAt` | `DateTime!` | When the process began beating |
+| `lastHeartbeat` | `DateTime!` | When the process last wrote its row |
+| `online` | `Boolean!` | `true` while the last heartbeat is under 45 seconds old (three beats) |
+| `runsDispatcher` | `Boolean!` | The process runs the job dispatcher, switched on |
+| `runsManifestManager` | `Boolean!` | The process runs the manifest manager, switched on |
+| `workerSlots` | `Int` | Local workers the process runs, `null` with none |
+| `workerSlotsInUse` | `Int` | Workers running a job at the last heartbeat, `null` with none |
+| `currentlyRunning` | `Int!` | Runs attributed to this host still `InProgress` |
 
 ## trainStats
 
