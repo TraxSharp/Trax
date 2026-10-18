@@ -79,7 +79,7 @@ You learn: decisions, deciders, decision recording, shadow deciders, and testing
 
 ## Part 2: The API
 
-### 6. Customers and staff
+### [6. Customers and staff](/docs/book/customers-and-staff)
 
 Add sign-in. A customer places orders as themselves and reads only their own orders, and a member
 of staff reads all of them.
