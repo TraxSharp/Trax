@@ -17,7 +17,7 @@ namespace Trax.Docs.Snippets.Tests.Tests;
 public class DocsPackageVersionsTests
 {
     private static readonly Regex TraxReference = new(
-        @"<PackageReference\s+Include=""(?<id>Trax\.[^""]+)""\s+Version=""(?<version>[^""]+)""",
+        @"<Package(?:Reference|Version)\s+Include=""(?<id>Trax\.[^""]+)""\s+Version=""(?<version>[^""]+)""",
         RegexOptions.Compiled
     );
 

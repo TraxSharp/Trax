@@ -41,7 +41,7 @@ find . -name "*.md" -not -name "README.md" \
 done
 
 # Every Trax package releases at one version, and a page names it in each
-# <PackageReference Include="Trax.*" Version="..."> it shows. A production build stamps
+# <PackageReference Include="Trax.*" Version="..."> or <PackageVersion ...> it shows. A production build stamps
 # the version of the latest release into those, so the site always tells a reader to
 # install what exists; the version written in Trax.Docs is only where it was last edited.
 # TRAX_DOCS_VERSION overrides it; outside production nothing is stamped.
@@ -63,7 +63,7 @@ if [ -n "${TRAX_DOCS_VERSION:-}" ] || [ "${VERCEL_ENV:-}" = "production" ]; then
     exit 1
   fi
   find "$CACHE_DIR" -name "*.md" -print0 | xargs -0 perl -pi -e \
-    's/(<PackageReference\s+Include="Trax\.[^"]+"\s+Version=")[^"]+"/${1}'"$version"'"/g'
+    's/(<Package(?:Reference|Version)\s+Include="Trax\.[^"]+"\s+Version=")[^"]+"/${1}'"$version"'"/g'
   echo "Stamped Trax package versions with $version"
   site_ref="v$version"
 fi

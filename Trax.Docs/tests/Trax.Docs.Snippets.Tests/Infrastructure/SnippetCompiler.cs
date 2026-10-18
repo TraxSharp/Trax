@@ -7,6 +7,15 @@ namespace Trax.Docs.Snippets.Tests.Infrastructure;
 /// <summary>
 /// The fences of one page that compile together: one fence marked <c>compile</c>, or every fence
 /// on the page that names the same <c>compile=group</c>.
+///
+/// <para>
+/// A page whose front matter says <c>follows: book/an-order-is-a-train</c> carries on a project the
+/// page it names started, as a chapter of the book carries on the last one. Each of its groups
+/// compiles with the followed page's group of the same name, and that page's own followed page,
+/// back to the first. A fence that names a file (<c>file=Program.cs</c>) replaces the fence before
+/// it that names the same file, so a chapter shows only the files it adds or changes and still
+/// compiles as the whole project.
+/// </para>
 /// </summary>
 public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence> Fences)
 {
@@ -14,8 +23,11 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
 
     /// <summary>The compiled fences of every page, one unit per page and group.</summary>
     public static IEnumerable<SnippetUnit> InDocs() =>
-        Infrastructure
-            .Fences.InDocs()
+        Following(Own(Infrastructure.Fences.InDocs()).ToList(), SnippetCompiler.FollowedPageOf);
+
+    /// <summary>The units the fences make on their own pages, before any page follows another.</summary>
+    public static IEnumerable<SnippetUnit> Own(IEnumerable<Fence> fences) =>
+        fences
             .Where(f => f.IsCompiled && f.IsCSharp)
             .SelectMany(f => f.Groups.Select(g => (Fence: f, Group: g)))
             .GroupBy(x => (x.Fence.Page, x.Group))
@@ -26,6 +38,67 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
                 g.Key.Group,
                 g.Select(x => x.Fence).OrderBy(f => f.OpenLine).ToList()
             ));
+
+    /// <summary>
+    /// Each unit with the fences of the pages it follows, oldest first, a fence naming a file
+    /// replacing an earlier one that names the same file.
+    /// </summary>
+    /// <param name="units">Every page's own units.</param>
+    /// <param name="followedPageOf">The page a page follows, or null.</param>
+    public static IEnumerable<SnippetUnit> Following(
+        IReadOnlyList<SnippetUnit> units,
+        Func<string, string?> followedPageOf
+    )
+    {
+        var byPage = units.ToDictionary(u => (u.Page, u.Group));
+
+        foreach (var unit in units)
+        {
+            var chain = ChainOf(unit.Page, followedPageOf);
+            if (chain.Count == 0)
+            {
+                yield return unit;
+                continue;
+            }
+
+            var fences = new List<Fence>();
+            foreach (var page in chain.Append(unit.Page))
+            {
+                if (!byPage.TryGetValue((page, unit.Group), out var earlier))
+                    continue;
+                foreach (var fence in earlier.Fences)
+                {
+                    if (fence.File is not null)
+                        fences.RemoveAll(f => f.File == fence.File);
+                    fences.Add(fence);
+                }
+            }
+
+            yield return unit with
+            {
+                Fences = fences,
+            };
+        }
+    }
+
+    /// <summary>
+    /// The pages <paramref name="page"/> follows, the first page of the chain first. Throws on a
+    /// chain that comes back to a page it has passed.
+    /// </summary>
+    public static IReadOnlyList<string> ChainOf(string page, Func<string, string?> followedPageOf)
+    {
+        var chain = new List<string>();
+        for (var at = followedPageOf(page); at is not null; at = followedPageOf(at))
+        {
+            if (at == page || chain.Contains(at))
+                throw new InvalidOperationException(
+                    $"{page} follows a chain of pages that comes back to {at}."
+                );
+            chain.Add(at);
+        }
+        chain.Reverse();
+        return chain;
+    }
 }
 
 /// <summary>
@@ -168,6 +241,31 @@ public static class SnippetCompiler
 
     public static bool OptsOutOfSharedContextIn(string markdown) =>
         NoSnippetContext.IsMatch(markdown);
+
+    private static readonly Regex Follows = new(
+        @"\A---\n(?:(?!---\n).*\n)*?follows:[ \t]*(?<page>\S+)[ \t]*\n(?:.*\n)*?---(?:\n|\z)",
+        RegexOptions.Compiled
+    );
+
+    /// <summary>
+    /// The page <paramref name="page"/> follows, from <c>follows:</c> in its front matter, as a
+    /// path relative to the docs root (<c>book/an-order-is-a-train.md</c>). Null when it follows
+    /// none or does not exist.
+    /// </summary>
+    public static string? FollowedPageOf(string page)
+    {
+        var file = RepoRoot.Combine(page.Split('/'));
+        return File.Exists(file)
+            ? FollowedPageIn(File.ReadAllText(file).Replace("\r\n", "\n"))
+            : null;
+    }
+
+    /// <summary>The page the front matter's <c>follows:</c> names, with <c>.md</c>, or null.</summary>
+    public static string? FollowedPageIn(string markdown)
+    {
+        var match = Follows.Match(markdown);
+        return match.Success ? match.Groups["page"].Value.Trim('"', '\'', '/') + ".md" : null;
+    }
 
     /// <summary>
     /// The unit's errors and warnings, each as <c>page.md:line:column: severity id: message</c>.

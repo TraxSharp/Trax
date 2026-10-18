@@ -32,6 +32,13 @@ public sealed record Fence(
     public string? FromRegion { get; init; }
 
     /// <summary>
+    /// The file a <c>file=</c> word names: the path of the file the fence shows, in the reader's
+    /// project. A page that follows another compiles with that page's fences, and a fence here
+    /// replaces the one there that names the same file. Null when the fence names none.
+    /// </summary>
+    public string? File { get; init; }
+
+    /// <summary>
     /// The text of the last level 1 or level 2 heading above the fence, or null when there is
     /// none. A level 3 heading does not change it, so a fence under <c>### Runtime</c> inside
     /// <c>## Signatures</c> is still a signature fence.
@@ -86,6 +93,10 @@ public sealed record Fence(
 /// <c>from=Trax.Samples/samples/X/Program.cs#docs-setup</c> declares it an excerpt of a real
 /// file, which <c>SampleExcerptsMatchSourceTests</c> holds it to.
 /// </para>
+/// <para>
+/// A compiled fence may also name the file it shows, <c>```csharp compile=app file=Program.cs</c>,
+/// which lets a later page replace it (see <see cref="SnippetUnit"/>).
+/// </para>
 /// </summary>
 public static class Fences
 {
@@ -94,6 +105,12 @@ public static class Fences
     public const string FragmentMarker = "fragment";
 
     public const string FromMarker = "from=";
+
+    /// <summary>
+    /// Names the file a compiled fence shows. It is not a marker: it says which file, not how the
+    /// fence relates to the code, so it goes beside <c>compile</c> rather than instead of it.
+    /// </summary>
+    public const string FileWord = "file=";
 
     private static readonly Regex Opening = new(
         @"^(?<indent>[ \t]*)(?<fence>`{3,}|~{3,})(?<info>.*)$",
@@ -161,6 +178,9 @@ public static class Fences
                 IsFragment = markers.Contains(FragmentMarker, StringComparer.Ordinal),
                 From = hash < 0 ? from : from![..hash],
                 FromRegion = hash < 0 ? null : from![(hash + 1)..],
+                File = markers
+                    .FirstOrDefault(w => w.StartsWith(FileWord, StringComparison.Ordinal))
+                    ?[FileWord.Length..],
                 Section = section,
             };
             i = j;

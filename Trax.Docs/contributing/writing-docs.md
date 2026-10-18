@@ -47,6 +47,7 @@ redirect_from:
 | `parent`, `grand_parent`, `has_children` | no | Nest the page under the page whose `title` is `parent`. |
 | `section` | no | The sidebar section, when it is not the one `type` implies. `none` puts the page at the top of the sidebar, under Home, outside every section. |
 | `snippet_context` | no | `none` compiles the page's snippets without the shared context. |
+| `follows` | no | The page whose project this one carries on, such as `book/an-order-is-a-train`. See [Compiled examples](#compiled-examples). |
 | `package`, `namespace`, `surface` | on SDK reference pages | See [SDK reference pages](#sdk-reference-pages). |
 
 `layout` is left over from Jekyll and the site ignores it; delete it from a page you edit.
@@ -283,6 +284,24 @@ reader never sees them. They layer, widest first:
 | `<folder>/_section.cs` | every page under that folder, at any depth | Sample types a whole section's examples share. `global using Trax.*` lines only under `sdk-reference/`. |
 | `<page path>.cs` | that page (`Context/sdk-reference/scheduler-api/schedule.cs`) | The types the page only implies, such as the `ISyncTrain` a scheduling example schedules, and `global using` lines for the namespaces its examples leave out. |
 
+A page can carry on the project another page started, as each chapter of the book carries on
+the last. Its front matter names that page, `follows: book/an-order-is-a-train`, and each of its
+groups then compiles with the followed page's group of the same name, back to the first page of
+the chain. Every compiled fence on such a page, and on a page another one follows, names the file
+it shows:
+
+~~~markdown
+```csharp compile=app file=Trains/PlaceOrder/PlaceOrderTrain.cs
+```
+~~~
+
+A fence replaces the fence before it in the chain that names the same file, so a chapter shows
+only the files it adds or changes and is still compiled as the whole project. Diagnostics name the
+page each fence is on. `FollowedPagesTests` fails on a `follows:` that names no published page or
+comes back on itself, on a fence in a chain that names no file or names one twice in a group, and
+on `file=` on a C# fence that is not compiled. A fence in another language may name its file too
+(`xml file=Shopfront.csproj`), so the page records every file of the project, not only the C# ones.
+
 A snippet that declares its own `builder` or `services`, as a `Program.cs` does, hides the shared
 one. A page whose front matter says `snippet_context: none` gets only its own file, so it compiles
 as a reader's empty project would; `getting-started.md` does, because it is the page a reader
@@ -306,7 +325,8 @@ sides. A failure names the page and line, the file, and the first chunk that did
 
 ### Package versions
 
-Every Trax `PackageReference` with a `Version` on a page names one exact version, the same on
+Every Trax `PackageReference` with a `Version` on a page, and every Trax `PackageVersion` in a
+`Directory.Packages.props` it shows, names one exact version, the same on
 every page, because every Trax package releases at one version; `DocsPackageVersionsTests` lists
 each one that differs. A production build of the site stamps the latest release version into each
 of them, so a reader installs the release the site was published from.
