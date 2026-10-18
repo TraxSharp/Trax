@@ -6,8 +6,6 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Trax.Mediator.Tests.StateMachine.Integration</RootNamespace>
-    <!-- TRAXEXP001: a refused train declares a Parallel step. -->
-    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

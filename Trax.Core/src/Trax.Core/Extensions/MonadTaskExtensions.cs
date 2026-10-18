@@ -225,12 +225,10 @@ public readonly struct MonadTask<TInput, TReturn>
     /// <see cref="Monad{TInput, TReturn}.Parallel"/>: runs a fixed set of named branches side by
     /// side, each on its own copy of Memory, and joins them before the next link.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Parallel)]
     public MonadTask<TInput, TReturn> Parallel(
         Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
     ) => new(ParallelAsync(branches));
 
-#pragma warning disable TRAXEXP001 // The experimental feature's own entry point.
     private async Task<Monad<TInput, TReturn>> ParallelAsync(
         Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
     )
@@ -238,7 +236,6 @@ public readonly struct MonadTask<TInput, TReturn>
         var monad = await Source.ConfigureAwait(false);
         return await monad.Parallel(branches).ConfigureAwait(false);
     }
-#pragma warning restore TRAXEXP001
 
     /// <summary>
     /// After the links before it, the asynchronous form of

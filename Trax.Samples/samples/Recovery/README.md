@@ -129,8 +129,7 @@ LoadCorpus → Parallel ─┬─ embedding:  EmbeddingSimilarity           (bag
            → FindHiddenTwins (papers that read alike but cite nothing in common)
 ```
 
-Branches compute; the join commits. `Parallel` is experimental, so the project opts in with
-`<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`. Over GraphQL:
+Branches compute; the join commits. Over GraphQL:
 
 ```graphql
 mutation { dispatch { startRun(input: { scenario: TOPIC_MAP, crashOnce: true, fromYear: 2016, toYear: 2025 }) {

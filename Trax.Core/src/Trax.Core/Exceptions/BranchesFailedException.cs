@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Trax.Core.Monad;
 
 namespace Trax.Core.Exceptions;
@@ -6,7 +5,6 @@ namespace Trax.Core.Exceptions;
 /// <summary>
 /// One branch of a <c>Parallel</c> step that failed. Only the step that failed makes one.
 /// </summary>
-[Experimental(ExperimentalIds.Parallel)]
 public sealed record FailedBranch
 {
     internal FailedBranch(string branch, Exception exception, FailureClass? failureClass)
@@ -40,7 +38,6 @@ public sealed record FailedBranch
 /// never with this.</para>
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/parallel">SDK reference</seealso>
-[Experimental(ExperimentalIds.Parallel)]
 public sealed class BranchesFailedException : TrainException
 {
     /// <summary>Creates the failure of a <c>Parallel</c> step. Only the step that failed makes one.</summary>

@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
@@ -18,7 +17,6 @@ namespace Trax.Core.Monad;
 /// Every registered initializer runs, in registration order, before the branch's first step. One
 /// that throws fails the branch: a branch that cannot see what the run sees does not run.
 /// </remarks>
-[Experimental(ExperimentalIds.Parallel)]
 public interface IBranchScopeInitializer
 {
     /// <summary>Copies what the branch needs from the run's scope into the branch's.</summary>
@@ -32,7 +30,6 @@ public interface IBranchScopeInitializer
     );
 }
 
-#pragma warning disable TRAXEXP001 // The implementation of the experimental feature itself.
 /// <summary>The chain steps the train methods of the same name call.</summary>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/parallel">SDK reference</seealso>
 public partial class Monad<TInput, TReturn>
@@ -73,7 +70,6 @@ public partial class Monad<TInput, TReturn>
     /// all-or-nothing belong after the join, because each branch has its own scope and so its
     /// own transaction.</para>
     /// </remarks>
-    [Experimental(ExperimentalIds.Parallel)]
     public MonadTask<TInput, TReturn> Parallel(
         Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
     )
@@ -474,7 +470,6 @@ public partial class Monad<TInput, TReturn>
         return steps;
     }
 }
-#pragma warning restore TRAXEXP001
 
 /// <summary>
 /// What a <c>Parallel</c> step's join puts into the run's Memory: each type exactly one branch

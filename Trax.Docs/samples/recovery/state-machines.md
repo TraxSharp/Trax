@@ -12,8 +12,7 @@ nav_order: 1
 Part of the [Recovery](/docs/samples/recovery) sample tour. Three state machines run trains through
 [`Invokes`](/docs/statemachine/invoking-trains): a
 state names a train, entering the state queues one run in the transaction that moves the machine, and only
-that entry of the state receives the run's outcome. The project opts in to the experimental `Parallel` with
-`<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`, and the host adds `AddStateMachines(...)` before
+that entry of the state receives the run's outcome. The host adds `AddStateMachines(...)` before
 `AddMediator(...)`, `AddJunctionProgress()` so a run can be cancelled from any host, and an
 `ISnapshotPrincipal` that maps each demo key to a user.
 

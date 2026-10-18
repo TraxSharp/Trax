@@ -541,8 +541,7 @@ through a `DomainDataContext`; at startup the host creates the schema with
             .Resolve();
 ```
 
-`Parallel` is experimental: the project opts in with `<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`. Each
-branch starts from a copy of Memory taken after `LoadCorpus`, runs in its own DI scope, and adds one
+Each branch starts from a copy of Memory taken after `LoadCorpus`, runs in its own DI scope, and adds one
 signal: `EmbeddingSignal` (a bag-of-words cosine over title and abstract, standing in for an
 embedding model), `CoCitationSignal` (how many works two papers both cite, weighted by the track the
 model chose) and `AuthorSignal`. `CombineSignals` reads all three as a tuple once every branch has

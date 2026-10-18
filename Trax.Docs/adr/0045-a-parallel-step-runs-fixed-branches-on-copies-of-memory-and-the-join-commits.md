@@ -15,10 +15,11 @@ branches add is merged before the next step. Branches compute; the step after th
 
 ## Status
 
-**Accepted.** Ships behind `[Experimental("TRAXEXP001")]` until the `Parallel` row of the interaction matrix
-(`Trax.Core/docs/interaction-matrix.md`) is complete. This sets the convention for experimental features: one
-diagnostic id per feature, `TRAXEXP` and a number. Using one reports an error, so a project that opts in suppresses
-the id with a comment saying why.
+**Accepted.** Shipped behind `[Experimental("TRAXEXP001")]` until the `Parallel` row of the interaction matrix
+(`Trax.Core/docs/interaction-matrix.md`) was complete and a `Parallel` train had been tested on a full remote run; both
+are done and the attribute is gone. This set the convention for experimental features: one diagnostic id per feature,
+`TRAXEXP` and a number, never reused. Using one reports an error, so a project that opts in suppresses the id with a
+comment saying why.
 
 ## Why this is written down
 
@@ -93,6 +94,8 @@ branches together and one after another holds only while junctions follow that c
 
 ## Changelog
 
+- **2026-10-18**: `[Experimental("TRAXEXP001")]` lifted: a `Parallel` train now runs end to end on a remote worker
+  under test (`RemoteParallelRunTests`), with each branch's junction events recorded under its branch path.
 - **2026-10-08**: A cancellation a branch raises on its own fails the branch; only the run's token or its cancel flag
   (`CancellationRequestedException`) cancels the run. One junction instance found at run time in two branches fails the
   step. A branch that fails after its siblings were cancelled counts as cancelled by its sibling whatever it threw.

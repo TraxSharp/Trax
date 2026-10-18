@@ -78,7 +78,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
 | [Junctions](/docs/sdk-reference/train-methods/junctions) | The override that declares the chain. The base implementation throws `NotImplementedException`. |
 | [Chain](/docs/sdk-reference/train-methods/chain), [IChain](/docs/sdk-reference/train-methods/i-chain), [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit), [Extract](/docs/sdk-reference/train-methods/extract), [AddServices](/docs/sdk-reference/train-methods/add-services), [Resolve](/docs/sdk-reference/train-methods/resolve) | The chain methods. All are `protected`: they are called inside `Junctions()`. |
 | [Decide](/docs/sdk-reference/train-methods/decide), [Switch](/docs/sdk-reference/train-methods/switch), [Gate](/docs/sdk-reference/train-methods/gate), [Scale](/docs/sdk-reference/train-methods/scale) | The decision and routing steps, also `protected`. |
-| [Parallel](/docs/sdk-reference/train-methods/parallel), [Checkpoint](/docs/sdk-reference/train-methods/checkpoint) | Branches that run side by side, and a stored state a later run resumes after. `Parallel` is experimental (`TRAXEXP001`). |
+| [Parallel](/docs/sdk-reference/train-methods/parallel), [Checkpoint](/docs/sdk-reference/train-methods/checkpoint) | Branches that run side by side, and a stored state a later run resumes after. |
 | `NewMonad()` | The seam `ServiceTrain` overrides to supply its container. Hidden from completion; not an extension point. |
 
 ## Behavior

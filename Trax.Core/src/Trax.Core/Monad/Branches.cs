@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Trax.Core.Train;
 
 namespace Trax.Core.Monad;
@@ -6,7 +5,6 @@ namespace Trax.Core.Monad;
 /// <summary>
 /// What a <c>Parallel</c> step does to its other branches when one of them fails.
 /// </summary>
-[Experimental(ExperimentalIds.Parallel)]
 public enum BranchFailurePolicy
 {
     /// <summary>
@@ -36,7 +34,6 @@ public enum BranchFailurePolicy
 /// injection scope, so its writes are not in the same transaction as its siblings'.</para>
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/train-methods/parallel">SDK reference</seealso>
-[Experimental(ExperimentalIds.Parallel)]
 public sealed class Branches<TInput, TReturn>
 {
     internal List<DeclaredBranch<TInput, TReturn>> Declared { get; } = [];
@@ -90,21 +87,6 @@ public sealed class Branches<TInput, TReturn>
         Declared.Count == 0
             ? Problems.Append("declares no branches. Add one with Branch.")
             : Problems;
-}
-
-/// <summary>
-/// The diagnostic ids experimental features ship under, one per feature. Using one reports its id
-/// as an error until the feature's row of the interaction matrix is complete; a project that opts
-/// in suppresses it.
-/// </summary>
-internal static class ExperimentalIds
-{
-    /// <summary><c>Parallel</c>: branches that run side by side within one run.</summary>
-    public const string Parallel = "TRAXEXP001";
-
-    // TRAXEXP002 (Invokes, Trax.Docs/adr/0046) and TRAXEXP003 (Checkpoint, Trax.Docs/adr/0047) were
-    // lifted once their rows of the interaction matrix were complete. TRAXEXP004 was reserved for the machine
-    // API (Trax.Docs/adr/0048) and never applied. Ids are never reused.
 }
 
 /// <summary>One declared branch: its name and its chain.</summary>

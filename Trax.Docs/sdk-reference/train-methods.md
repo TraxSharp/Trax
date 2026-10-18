@@ -32,7 +32,7 @@ The members of `Train<TInput, TReturn>` (Trax.Core), inherited by `ServiceTrain<
 | [Switch](/docs/sdk-reference/train-methods/switch) | Sends the train down one of several tracks, one per enum member |
 | [Gate](/docs/sdk-reference/train-methods/gate) | Routes on the probability that a yes/no answer is yes |
 | [Scale](/docs/sdk-reference/train-methods/scale) | Routes on where the state falls on an ordered scale |
-| [Parallel](/docs/sdk-reference/train-methods/parallel) | Runs named branches side by side and joins them (experimental) |
+| [Parallel](/docs/sdk-reference/train-methods/parallel) | Runs named branches side by side and joins them |
 | [Checkpoint](/docs/sdk-reference/train-methods/checkpoint) | Stores a declared state, so a later run of the same input resumes after it |
 
 ## Running a train

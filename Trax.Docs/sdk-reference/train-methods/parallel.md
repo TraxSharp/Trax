@@ -27,28 +27,24 @@ one of them is verified at startup.
 
 ```csharp fragment
 // Train<TInput, TReturn>; MonadTask<TInput, TReturn> and Monad<TInput, TReturn> have the same, public
-[Experimental("TRAXEXP001")]
 protected MonadTask<TInput, TReturn> Parallel(
     Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
 );
 
 namespace Trax.Core.Monad;
 
-[Experimental("TRAXEXP001")]
 public sealed class Branches<TInput, TReturn>
 {
     public Branches<TInput, TReturn> Branch(string name, Func<MonadTask<TInput, TReturn>, MonadTask<TInput, TReturn>> body);
     public Branches<TInput, TReturn> OnFailure(BranchFailurePolicy policy);
 }
 
-[Experimental("TRAXEXP001")]
 public enum BranchFailurePolicy
 {
     CancelSiblings = 0,
     WaitForAll = 1,
 }
 
-[Experimental("TRAXEXP001")]
 public interface IBranchScopeInitializer
 {
     Task Initialize(IServiceProvider run, IServiceProvider branch, CancellationToken cancellationToken);
@@ -71,8 +67,6 @@ public interface IBranchScopeInitializer
 `MonadTask<TInput, TReturn>`, the next link of the chain. `Parallel` is also available inside a track and inside another branch.
 
 ## Behavior
-
-`Parallel` is experimental: using it reports the diagnostic `TRAXEXP001` as an error until the project adds it to `NoWarn` (`<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`) or suppresses it with `#pragma warning disable TRAXEXP001`.
 
 ### How it runs
 
@@ -107,6 +101,19 @@ cancel flag, which raises a `CancellationRequestedException` in the branch that 
 recorded as cancelled, never as failed branches. Any other `OperationCanceledException` a branch
 raises on its own, such as an `HttpClient` timeout, is that branch's failure.
 
+### Logs and traces
+
+Each branch runs under a logger scope and an `Activity` that carry its branch path (`Parallel#0/cocitation`), so the
+lines and spans of two branches running side by side can be told apart. Both flow into the branch's junctions.
+
+| Name | Value |
+| --- | --- |
+| `BranchDiagnostics.SourceName` | `"Trax.Core"`, the `ActivitySource` the branch activities come from; add it to a tracer to collect them |
+| `BranchDiagnostics.BranchPathKey` | `"trax.branch"`, the activity's tag and the logger scope's key holding the path |
+
+The scope is opened through the logger factory in Memory or the container; a train with neither logs as before. A
+provider that prints scopes shows `Parallel branch Parallel#0/cocitation`.
+
 ### What the startup check refuses
 
 - two branches producing the same type: the join would have two values for one type
@@ -128,7 +135,6 @@ node whose tracks are its branches, and a step in a branch has an id such as
 ## Example
 
 ```csharp compile
-#pragma warning disable TRAXEXP001 // this train uses the experimental Parallel step
 using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 
