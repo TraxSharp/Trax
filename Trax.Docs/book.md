@@ -174,7 +174,7 @@ machine's twin and the server confirms it.
 
 You learn: the TypeScript twin and the generated machine hooks.
 
-### 17. Require persisted operations
+### [17. Require persisted operations](/docs/book/require-persisted-operations)
 
 Turn persisted operations from logging to refusing. Shopfront then runs only the documents its
 storefront wrote, the ones it generates for its machines, and the console's.
