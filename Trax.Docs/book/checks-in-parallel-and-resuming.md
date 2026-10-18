@@ -1,6 +1,6 @@
 ---
 title: "14. Checks in parallel, and resuming"
-description: "Chapter 14 of the Trax book: run fulfilment's box and courier lookups side by side, and checkpoint the label so a crashed fulfilment resumes without buying another."
+description: "Chapter 14 of the Trax book: look up fulfilment's box and courier rates side by side, and checkpoint the label so a resume never buys another."
 type: tutorial
 area: general
 parent: The Trax book
