@@ -112,7 +112,7 @@ then skip the report on public holidays.
 You learn: the scheduler, cron and interval schedules, dependent manifests, exclusions and misfire
 policies.
 
-### 10. Failures, retries and dead letters
+### [10. Failures, retries and dead letters](/docs/book/failures-retries-and-dead-letters)
 
 Sync stock from a supplier that is sometimes down. Retry it with backoff, exhaust the retries,
 find it among the dead letters, and requeue it once the supplier is back.
