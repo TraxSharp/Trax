@@ -95,14 +95,7 @@ Follow an order's progress while it runs.
 You learn: `[TraxQuery]` and `[TraxMutation]`, query models, and following a run with
 `[TraxRunProgress]`.
 
-### 8. Persisted operations
-
-Switch the API to persisted operations, so it accepts no query text it does not already know.
-
-You learn: persisted operations, the documents Trax generates for trains, and what stops working
-when they are required.
-
-### 9. The operations console
+### [8. The operations console](/docs/book/the-operations-console)
 
 Open the operations console as a member of staff: every run, its input and output, the junction
 that failed and the decisions it made.
@@ -111,7 +104,7 @@ You learn: the operations namespace, gating it to a role, and the console.
 
 ## Part 3: Running it for real
 
-### 10. Scheduled work
+### 9. Scheduled work
 
 Add the nightly stock report and a low-stock check that runs after it. Watch both in the console,
 then skip the report on public holidays.
@@ -119,15 +112,14 @@ then skip the report on public holidays.
 You learn: the scheduler, cron and interval schedules, dependent manifests, exclusions and misfire
 policies.
 
-### 11. Failures, retries and dead letters
+### 10. Failures, retries and dead letters
 
 Sync stock from a supplier that is sometimes down. Retry it with backoff, exhaust the retries,
 find it among the dead letters, and requeue it once the supplier is back.
 
-You learn: retries, dead letters, requeueing a run, decisions replayed on a requeue, and lifecycle
-hooks.
+You learn: retries, dead letters, decisions replayed on a requeue, and lifecycle hooks.
 
-### 12. A separate worker
+### 11. A separate worker
 
 Queue fulfilment after each order and move it to a worker process of its own. Cap it to two at a
 time, kill the worker mid-run and see what happens to the run.
@@ -137,15 +129,16 @@ work, host tracking, and recovering a run whose worker died.
 
 ## Part 4: Machines
 
-### 13. Checkout is a state machine
+### 12. Checkout is a state machine
 
 Rewrite checkout as a machine: cart, address, payment, placing. Each move is a typed mutation, the
-server applies it, and an abandoned cart is cleared on its own.
+server applies it, and an abandoned cart is cleared on its own. Serving a machine turns on
+persisted operations, logging what they would refuse rather than refusing it.
 
-You learn: authoring a machine, guards, timers, an authorization rule on every event, and serving
-a machine as its own API.
+You learn: authoring a machine, guards, timers, an authorization rule on every event, serving a
+machine as its own API, and persisted operations in shadow mode.
 
-### 14. The machine places the order
+### 13. The machine places the order
 
 When checkout reaches placing, the machine invokes `PlaceOrder` and moves on with its result:
 confirmed, failed or cancelled. A confirmed order starts a parcel machine of its own.
@@ -155,7 +148,7 @@ charges, and spawning a child machine.
 
 ## Part 5: Composition
 
-### 15. Checks in parallel, and resuming
+### 14. Checks in parallel, and resuming
 
 Run fulfilment's address check, carrier quote and packing estimate side by side. Put a checkpoint
 after the label is bought, so a fulfilment that fails later resumes there.
@@ -165,20 +158,28 @@ GraphQL.
 
 ## Part 6: The storefront
 
-### 16. A generated client
+### 15. A generated client
 
-Export the client manifest from the host and generate a typed React client with `trax client`.
-Build the catalogue page and the order page with the generated functions.
+Write the storefront's GraphQL documents, export the client manifest from the host and generate a
+typed React client with `trax client`. Build the catalogue page and the order page.
 
-You learn: the client manifest, `trax client`, typed train functions, following a run from the
-browser, and `--check` in CI.
+You learn: client documents, the client manifest, `trax client`, typed functions, following a run
+from the browser, and `--check` in CI.
 
-### 17. Checkout in the browser
+### 16. Checkout in the browser
 
 Drive checkout from React with the generated hooks. The browser predicts each move with the
 machine's twin and the server confirms it.
 
 You learn: the TypeScript twin and the generated machine hooks.
+
+### 17. Require persisted operations
+
+Turn persisted operations from logging to refusing. Shopfront then runs only the documents its
+storefront wrote, the ones it generates for its machines, and the console's.
+
+You learn: requiring persisted operations, registering a frontend's documents, and what stops
+working when text is refused.
 
 ## Part 7: Shipping it
 

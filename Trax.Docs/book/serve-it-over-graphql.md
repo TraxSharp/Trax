@@ -611,8 +611,8 @@ anyone, `PlaceOrder` for customers, each customer's own orders, and the progress
 one customer who started it. Not a line of it repeats a rule: the roles are on the train, the rows
 on the context, and the schema follows both.
 
-It also answers any query anyone writes against it, including ones no client of ours will ever
-send. The next chapter closes that: Shopfront will run only the operations it already knows.
+Staff can read orders, but not yet what happened to them: which runs failed, where and why. The
+next chapter gives them the operations console.
 
 ## SDK Reference
 
