@@ -51,7 +51,7 @@ host as a client calls it.
 You learn: unit tests for internal junctions, train tests on in-memory storage, host tests, and
 the architecture guards.
 
-### 3. Every order is recorded
+### [3. Every order is recorded](/docs/book/every-order-is-recorded)
 
 Move to Postgres. Every run of `PlaceOrder` is now a row with its input, output, timing and, when it
 fails, the junction and exception. Make the payment provider fail one call in five, give the stock
@@ -60,7 +60,15 @@ back when it does, and read the failed runs back.
 You learn: the effect system, metadata, junction logging, failure classes, and keeping a secret
 out of the record with `[TraxSensitive]`.
 
-### 4. Does this order look like fraud
+### 4. The shop's own data
+
+Give Shopfront a database of its own beside Trax's: products with their stock, and the orders
+placed against them. Reserve stock in a transaction, and store each confirmed order.
+
+You learn: domain data contexts, their companion interfaces, creating their schema at startup,
+and testing against a real database.
+
+### 5. Does this order look like fraud
 
 Stop an order that looks like fraud before it is charged, with a rule the train asks rather than
 an `if` inside a junction. Then try a second rule beside the first without letting it decide.
@@ -69,7 +77,7 @@ You learn: decisions, deciders, decision recording, shadow deciders, and testing
 
 ## Part 2: Running it for real
 
-### 5. Scheduled work
+### 6. Scheduled work
 
 Add the nightly stock report and a low-stock check that runs after it. Open the operations console
 and watch both run, then skip the report on public holidays.
@@ -77,7 +85,7 @@ and watch both run, then skip the report on public holidays.
 You learn: the scheduler, cron and interval schedules, dependent manifests, exclusions, misfire
 policies, and the operations console.
 
-### 6. Failures, retries and dead letters
+### 7. Failures, retries and dead letters
 
 Sync stock from a supplier that is sometimes down. Retry it with backoff, exhaust the retries,
 find it among the dead letters, and requeue it once the supplier is back.
@@ -85,7 +93,7 @@ find it among the dead letters, and requeue it once the supplier is back.
 You learn: retries, dead letters, requeueing a run, decisions replayed on a requeue, and lifecycle
 hooks.
 
-### 7. A separate worker
+### 8. A separate worker
 
 Queue fulfilment after each order and move it to a worker process of its own. Cap it to two at a
 time, kill the worker mid-run and see what happens to the run.
@@ -95,7 +103,7 @@ work, host tracking, and recovering a run whose worker died.
 
 ## Part 3: The API
 
-### 8. Customers and staff
+### 9. Customers and staff
 
 Add sign-in. A customer places orders as themselves and reads only their own orders, and a member
 of staff reads all of them.
@@ -103,7 +111,7 @@ of staff reads all of them.
 You learn: authentication, `[TraxAuthorize]`, taking the caller from the principal rather than the
 input, owner-scoped rows, and the startup checks that refuse an unguarded train.
 
-### 9. Serve it over GraphQL
+### 10. Serve it over GraphQL
 
 Expose the catalogue to everyone, `PlaceOrder` to customers, and the orders to their owners.
 Follow an order's progress while it runs.
@@ -111,7 +119,7 @@ Follow an order's progress while it runs.
 You learn: `[TraxQuery]` and `[TraxMutation]`, query models, and following a run with
 `[TraxRunProgress]`.
 
-### 10. Persisted operations
+### 11. Persisted operations
 
 Switch the API to persisted operations, so it accepts no query text it does not already know.
 
@@ -120,7 +128,7 @@ when they are required.
 
 ## Part 4: Machines
 
-### 11. Checkout is a state machine
+### 12. Checkout is a state machine
 
 Rewrite checkout as a machine: cart, address, payment, placing. Each move is a typed mutation, the
 server applies it, and an abandoned cart is cleared on its own.
@@ -128,7 +136,7 @@ server applies it, and an abandoned cart is cleared on its own.
 You learn: authoring a machine, guards, timers, an authorization rule on every event, and serving
 a machine as its own API.
 
-### 12. The machine places the order
+### 13. The machine places the order
 
 When checkout reaches placing, the machine invokes `PlaceOrder` and moves on with its result:
 confirmed, failed or cancelled. A confirmed order starts a parcel machine of its own.
@@ -138,7 +146,7 @@ charges, and spawning a child machine.
 
 ## Part 5: Composition
 
-### 13. Checks in parallel, and resuming
+### 14. Checks in parallel, and resuming
 
 Run fulfilment's address check, carrier quote and packing estimate side by side. Put a checkpoint
 after the label is bought, so a fulfilment that fails later resumes there.
@@ -148,7 +156,7 @@ GraphQL.
 
 ## Part 6: The storefront
 
-### 14. A generated client
+### 15. A generated client
 
 Export the client manifest from the host and generate a typed React client with `trax client`.
 Build the catalogue page and the order page with the generated functions.
@@ -156,7 +164,7 @@ Build the catalogue page and the order page with the generated functions.
 You learn: the client manifest, `trax client`, typed train functions, following a run from the
 browser, and `--check` in CI.
 
-### 15. Checkout in the browser
+### 16. Checkout in the browser
 
 Drive checkout from React with the generated hooks. The browser predicts each move with the
 machine's twin and the server confirms it.
@@ -165,7 +173,7 @@ You learn: the TypeScript twin and the generated machine hooks.
 
 ## Part 7: Shipping it
 
-### 16. Deploy
+### 17. Deploy
 
 Split Shopfront into a hub and a worker, put them in containers, and point them at one Postgres.
 Secure the operations console.
