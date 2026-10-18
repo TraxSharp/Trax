@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useClient, useMutation, useQuery } from "urql";
 import { DEAD_LETTERS, REQUEUE_ALL_JOB } from "../graphql/queries";
 import {
@@ -19,6 +19,7 @@ import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
 import type { DeadLetterStatus, DeadLetterSummary, PagedResult } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { useUrlState } from "../lib/urlState";
 
 const PAGE_SIZE = 25;
 const STATUSES: (DeadLetterStatus | "")[] = [
@@ -51,10 +52,10 @@ interface DeadLettersData {
 
 export function DeadLettersPage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
-  const [status, setStatus] = useState<DeadLetterStatus | "">("");
+  const [status, setStatus] = useUrlState<DeadLetterStatus | "">("status");
   // One manifest's dead letters; the dead-letter page links here with ?manifestId=.
-  const [params] = useSearchParams();
-  const [manifestId, setManifestId] = useState((params.get("manifestId") ?? "").replace(/\D/g, ""));
+  const [manifestIdParam, setManifestId] = useUrlState("manifestId");
+  const manifestId = manifestIdParam.replace(/\D/g, "");
   const { selected, toggle, setMany, clear } = useSelection();
   // note dialog: single dead-letter id, "bulk" (selection), "all" (every unresolved), or null.
   const [ackTarget, setAckTarget] = useState<number | "bulk" | "all" | null>(null);

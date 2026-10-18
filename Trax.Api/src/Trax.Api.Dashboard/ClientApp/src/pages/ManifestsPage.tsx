@@ -22,6 +22,7 @@ import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { ManifestSummary, PagedResult, ScheduleType } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { useUrlState } from "../lib/urlState";
 
 const PAGE_SIZE = 25;
 const SCHEDULES: (ScheduleType | "")[] = [
@@ -41,9 +42,9 @@ interface ManifestsData {
 
 export function ManifestsPage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
-  const [enabled, setEnabled] = useState("");
-  const [scheduleType, setScheduleType] = useState<ScheduleType | "">("");
-  const [name, setName] = useState("");
+  const [enabled, setEnabled] = useUrlState("enabled");
+  const [scheduleType, setScheduleType] = useUrlState<ScheduleType | "">("schedule");
+  const [name, setName] = useUrlState("name");
   // The same "Hide admin trains" preference the Executions grid and the Overview use: it leaves out
   // the manifests of the scheduler's own trains, server side.
   const hideAdmin = useHideAdminTrains();

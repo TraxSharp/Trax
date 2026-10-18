@@ -51,7 +51,6 @@ export function DashboardHeader() {
       {paused && (
         <Link
           to="/system/scheduler"
-          role="status"
           className="flex items-center gap-1 rounded px-2 py-0.5 font-semibold bg-warn-soft text-warn-fg hover:underline"
         >
           <CirclePause className="size-3.5" />

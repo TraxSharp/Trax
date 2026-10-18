@@ -19,6 +19,7 @@ import type {
   TrainState,
 } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { useUrlState } from "../lib/urlState";
 
 const ACTIVE_STATES = new Set<TrainState>(["PENDING", "IN_PROGRESS"]);
 
@@ -50,17 +51,17 @@ export function ExecutionsPage() {
   const [cursors, setCursors] = useState<(number | null)[]>([null]);
   const afterId = cursors[cursors.length - 1];
   const isFirstPage = cursors.length === 1;
-  const [trainState, setTrainState] = useState<TrainState | "">("");
-  const [trainName, setTrainName] = useState("");
-  const [order, setOrder] = useState<"NEWEST" | "OLDEST">("NEWEST");
-  const [failureClass, setFailureClass] = useState<FailureClass | "">("");
-  const [after, setAfter] = useState(""); // datetime-local value
-  const [before, setBefore] = useState("");
+  const [trainState, setTrainState] = useUrlState<TrainState | "">("state");
+  const [trainName, setTrainName] = useUrlState("train");
+  const [order, setOrder] = useUrlState<"NEWEST" | "OLDEST">("order", "NEWEST");
+  const [failureClass, setFailureClass] = useUrlState<FailureClass | "">("failure");
+  const [after, setAfter] = useUrlState("after"); // datetime-local value
+  const [before, setBefore] = useUrlState("before");
   // Exact-match filters the API serves from its own indexes: one run by external id, a run's
   // children, and what one machine ran.
-  const [externalId, setExternalId] = useState("");
-  const [parentId, setParentId] = useState("");
-  const [hostName, setHostName] = useState("");
+  const [externalId, setExternalId] = useUrlState("externalId");
+  const [parentId, setParentId] = useUrlState("parentId");
+  const [hostName, setHostName] = useUrlState("host");
   const hasFilter =
     trainState !== "" ||
     trainName !== "" ||

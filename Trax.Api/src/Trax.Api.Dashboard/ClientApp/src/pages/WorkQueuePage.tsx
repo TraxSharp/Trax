@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "urql";
 import { WORK_QUEUE } from "../graphql/queries";
 import {
@@ -15,6 +15,7 @@ import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
 import type { PagedResult, WorkQueueStatus, WorkQueueSummary } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { useUrlState } from "../lib/urlState";
 
 const PAGE_SIZE = 25;
 const STATUSES: (WorkQueueStatus | "")[] = ["", "QUEUED", "DISPATCHED", "CANCELLED"];
@@ -31,13 +32,13 @@ interface WorkQueueData {
 
 export function WorkQueuePage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
-  const [status, setStatus] = useState<WorkQueueStatus | "">("");
-  const [trainName, setTrainName] = useState("");
+  const [status, setStatus] = useUrlState<WorkQueueStatus | "">("status");
+  const [trainName, setTrainName] = useUrlState("train");
   // A subject's queue (exact key) and a manifest's entries. Both can arrive in the URL, so a
   // manifest or a subject elsewhere can link to its entries.
-  const [params] = useSearchParams();
-  const [subjectKey, setSubjectKey] = useState(params.get("subjectKey") ?? "");
-  const [manifestId, setManifestId] = useState((params.get("manifestId") ?? "").replace(/\D/g, ""));
+  const [subjectKey, setSubjectKey] = useUrlState("subjectKey");
+  const [manifestIdParam, setManifestId] = useUrlState("manifestId");
+  const manifestId = manifestIdParam.replace(/\D/g, "");
   const [showQueue, setShowQueue] = useState(false);
   const { selected, toggle, setMany, clear } = useSelection();
   const [busy, setBusy] = useState(false);

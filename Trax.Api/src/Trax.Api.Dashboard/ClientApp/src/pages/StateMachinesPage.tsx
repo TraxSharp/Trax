@@ -7,6 +7,7 @@ import { machineInstancePath, ownerLabel } from "../lib/machineInstances";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { MachineInstance, MachineInstanceCount, SnapshotOwnerKind } from "../types";
+import { useUrlStateOrNull } from "../lib/urlState";
 
 const PAGE_SIZE = 20;
 
@@ -32,9 +33,9 @@ const select = "text-sm border border-line-strong rounded-md px-2 py-1 bg-field"
 // never the user who owns a draft. The list pages by offset: it is ordered by a time that moves.
 export function StateMachinesPage() {
   const navigate = useNavigate();
-  const [machine, setMachine] = useState<string | null>(null);
-  const [state, setState] = useState<string | null>(null);
-  const [ownerKind, setOwnerKind] = useState<SnapshotOwnerKind | null>(null);
+  const [machine, setMachine] = useUrlStateOrNull("machine");
+  const [state, setState] = useUrlStateOrNull("state");
+  const [ownerKind, setOwnerKind] = useUrlStateOrNull<SnapshotOwnerKind>("owner");
   const [skip, setSkip] = useState(0);
 
   const [counts, reexecuteCounts] = useQuery<CountsData>({ query: MACHINE_INSTANCE_COUNTS });
