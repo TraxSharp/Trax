@@ -714,9 +714,9 @@ with the run that asked, and a candidate rule is weighed against the live one on
 without touching any.
 
 That ends the first part. `PlaceOrder` is a train of small junctions, tested at every level,
-recorded in full, and careful with stock, payments and secrets. Everything it does still happens
-while one customer waits on one request. The next part adds the work nobody waits for: jobs that
-run on a schedule.
+recorded in full, and careful with stock, payments and secrets. Anyone can call it, though, and
+for anyone. The next part puts Shopfront in front of the people it serves: customers who sign in
+and order as themselves, and staff who see every order.
 
 ## SDK Reference
 
