@@ -50,7 +50,7 @@ function renderExecutions(baseRows: unknown[]) {
   });
   render(
     <Provider value={client}>
-      <MemoryRouter initialEntries={["/executions"]}>
+      <MemoryRouter initialEntries={["/runs"]}>
         <AppRoutes />
       </MemoryRouter>
     </Provider>,

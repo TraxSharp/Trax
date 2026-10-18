@@ -6,7 +6,7 @@ import { emptyPage, errorOverride, groupScenario, groupScenarioWithRetired } fro
 const meta = {
   title: "Pages/Manifest groups",
   component: ManifestGroupsPage,
-  parameters: { route: "/groups", mock: groupScenario },
+  parameters: { route: "/schedules/groups", mock: groupScenario },
 } satisfies Meta<typeof ManifestGroupsPage>;
 
 export default meta;

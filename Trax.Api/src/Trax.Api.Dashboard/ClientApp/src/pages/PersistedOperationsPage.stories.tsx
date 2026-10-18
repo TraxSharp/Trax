@@ -10,7 +10,7 @@ import {
 const meta = {
   title: "Pages/Persisted ops",
   component: PersistedOperationsPage,
-  parameters: { route: "/persisted-operations", mock: persistedOperationsScenario },
+  parameters: { route: "/api-admin/persisted-operations", mock: persistedOperationsScenario },
 } satisfies Meta<typeof PersistedOperationsPage>;
 
 export default meta;
@@ -28,9 +28,9 @@ export const Lists: Story = {
     await waitFor(() => expect(table(c).getByText("greet.v1")).toBeInTheDocument());
     expect(table(c).getByRole("link", { name: "orders.list" })).toHaveAttribute(
       "href",
-      "/persisted-operations/orders.list?tenant=acme",
+      "/api-admin/persisted-operations/orders.list?tenant=acme",
     );
-    expect(table(c).getByRole("link", { name: "greet.v1" })).toHaveAttribute("href", "/persisted-operations/greet.v1");
+    expect(table(c).getByRole("link", { name: "greet.v1" })).toHaveAttribute("href", "/api-admin/persisted-operations/greet.v1");
     expect(table(c).getAllByText("(default)")).toHaveLength(2);
     expect(table(c).getByText("Inactive")).toBeInTheDocument();
     expect(c.getByText("1–3 of 3")).toBeInTheDocument();

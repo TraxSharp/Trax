@@ -51,7 +51,7 @@ export function QueueTrainDialog({
     }
     onQueued();
     onClose();
-    if (result.id != null) navigate(`/work-queue/${result.id}`);
+    if (result.id != null) navigate(`/runs/queued/${result.id}`);
   }
 
   return (

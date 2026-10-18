@@ -7,7 +7,7 @@ const meta = {
   title: "Pages/Dead letter detail",
   component: DeadLetterDetailPage,
   // routePath lets the page read its id from useParams.
-  parameters: { routePath: "/dead-letters/:id", route: "/dead-letters/701", mock: deadLetterDetailScenario },
+  parameters: { routePath: "/runs/dead-letters/:id", route: "/runs/dead-letters/701", mock: deadLetterDetailScenario },
 } satisfies Meta<typeof DeadLetterDetailPage>;
 
 export default meta;
@@ -22,7 +22,7 @@ function acceptConfirm() {
 }
 
 // The captured real-data fixture (route selects a fixtured id).
-export const Fixture: Story = { parameters: { fixtures: true, mock: undefined, route: "/dead-letters/1000000" } };
+export const Fixture: Story = { parameters: { fixtures: true, mock: undefined, route: "/runs/dead-letters/1000000" } };
 export const Real: Story = { parameters: { real: true } };
 
 // The manifest panel with masked properties, the latest failed run whole, and the failed runs.
@@ -37,7 +37,7 @@ export const Panels: Story = {
     expect(c.getByText("Cron 0 */5 * * * *")).toBeInTheDocument();
     // Most recent failure: run 962 with its stack trace and (masked) input.
     expect(await c.findByText("Most recent failure")).toBeInTheDocument();
-    expect(c.getByRole("link", { name: "View run #962" })).toHaveAttribute("href", "/executions/962");
+    expect(c.getByRole("link", { name: "View run #962" })).toHaveAttribute("href", "/runs/962");
     expect(c.getByText(/at Trax\.Demo\.Trains\.OrderTrain\.ChargeCard\(\)/)).toBeInTheDocument();
     expect(c.getByText(/"cardNumber": "\[REDACTED\]"/)).toBeInTheDocument();
     // Failed execution history.
@@ -79,7 +79,7 @@ export const Acknowledge: Story = {
 
 // A resolved dead letter whose manifest has no failed runs: no actions, the empty history.
 export const ResolvedWithoutFailedRuns: Story = {
-  parameters: { route: "/dead-letters/705" },
+  parameters: { route: "/runs/dead-letters/705" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("Dead letter details")).toBeInTheDocument());
@@ -91,7 +91,7 @@ export const ResolvedWithoutFailedRuns: Story = {
 };
 
 export const NotFound: Story = {
-  parameters: { route: "/dead-letters/9999" },
+  parameters: { route: "/runs/dead-letters/9999" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText("No dead letter found.")).toBeInTheDocument();
@@ -112,7 +112,7 @@ export const LinksManifestDeadLetters: Story = {
     const c = within(canvasElement);
     expect(await c.findByRole("link", { name: "its dead letters" })).toHaveAttribute(
       "href",
-      "/dead-letters?manifestId=801",
+      "/runs/dead-letters?manifestId=801",
     );
   },
 };

@@ -7,8 +7,8 @@ const meta = {
   title: "Pages/Manifest group detail",
   component: ManifestGroupDetailPage,
   parameters: {
-    routePath: "/groups/:id",
-    route: "/groups/1",
+    routePath: "/schedules/groups/:id",
+    route: "/schedules/groups/1",
     mock: groupDetailScenario,
   },
 } satisfies Meta<typeof ManifestGroupDetailPage>;
@@ -26,7 +26,7 @@ function acceptConfirm() {
 
 export const Mock: Story = {};
 
-export const Real: Story = { parameters: { real: true, route: "/groups/200" } };
+export const Real: Story = { parameters: { real: true, route: "/schedules/groups/200" } };
 
 // Edit the group's priority and save.
 export const EditAndSave: Story = {
@@ -72,7 +72,7 @@ export const InputsSanitized: Story = {
 
 // A group with no cap renders an empty max-active field with the ∞ placeholder.
 export const UnlimitedGroupShowsPlaceholder: Story = {
-  parameters: { route: "/groups/2" },
+  parameters: { route: "/schedules/groups/2" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "beta-group" })).toBeInTheDocument());

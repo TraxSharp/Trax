@@ -46,7 +46,7 @@ test("WorkQueuePage refetches its grid when a WORK_QUEUE signal fires", async ()
 
   render(
     <Provider value={client}>
-      <MemoryRouter initialEntries={["/work-queue"]}>
+      <MemoryRouter initialEntries={["/runs/queued"]}>
         <AppRoutes />
       </MemoryRouter>
     </Provider>,

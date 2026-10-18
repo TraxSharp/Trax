@@ -8,7 +8,7 @@ import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/sto
 const meta = {
   title: "Pages/Executions",
   component: ExecutionsPage,
-  parameters: { route: "/executions", mock: executionScenario },
+  parameters: { route: "/runs", mock: executionScenario },
 } satisfies Meta<typeof ExecutionsPage>;
 
 export default meta;
@@ -303,7 +303,7 @@ export const ParentAndRunningJunctionColumns: Story = {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("BetaJob")).toBeInTheDocument());
     const beta = c.getByText("BetaJob").closest("tr") as HTMLElement;
-    expect(within(beta).getByRole("link", { name: "#800" })).toHaveAttribute("href", "/executions/800");
+    expect(within(beta).getByRole("link", { name: "#800" })).toHaveAttribute("href", "/runs/800");
     const gamma = c.getByText("GammaJob").closest("tr") as HTMLElement;
     expect(within(gamma).getByText("ProcessStep")).toBeInTheDocument();
     const alpha = c.getByText("AlphaJob").closest("tr") as HTMLElement;

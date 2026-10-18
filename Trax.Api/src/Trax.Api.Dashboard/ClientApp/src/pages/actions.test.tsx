@@ -49,7 +49,7 @@ function renderAt(route: string, overrides: MockSchemaOverrides) {
 }
 
 test("Cancel on a system instance sends that instance, and reads it again to show the cancel", async () => {
-  const { named } = renderAt(`/state-machines/source-partition/system/${MACHINE_IDS.dispatched}`, machineScenario);
+  const { named } = renderAt(`/machines/source-partition/system/${MACHINE_IDS.dispatched}`, machineScenario);
   fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
   expect(await screen.findByText(/Cancellation requested for the run instance/)).toBeInTheDocument();
   expect(named("mutation", "CancelMachineInstance").map((op) => op.variables)).toEqual([
@@ -61,27 +61,27 @@ test("Cancel on a system instance sends that instance, and reads it again to sho
 
 test("Cancel declined at the prompt sends nothing", async () => {
   confirmSpy.mockReturnValue(false);
-  const { named } = renderAt(`/state-machines/source-partition/system/${MACHINE_IDS.dispatched}`, machineScenario);
+  const { named } = renderAt(`/machines/source-partition/system/${MACHINE_IDS.dispatched}`, machineScenario);
   fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
   await new Promise((r) => setTimeout(r, 50));
   expect(named("mutation", "CancelMachineInstance")).toHaveLength(0);
 });
 
 test("Resume sends no node, and opens the queued entry", async () => {
-  const { named } = renderAt("/executions/902", executionDetailScenario);
+  const { named } = renderAt("/runs/902", executionDetailScenario);
   fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
-  await waitFor(() => expect(screen.getByTestId("where").textContent).toMatch(/^\/work-queue\/\d+$/));
+  await waitFor(() => expect(screen.getByTestId("where").textContent).toMatch(/^\/runs\/queued\/\d+$/));
   expect(named("mutation", "ResumeExecution").map((op) => op.variables)).toEqual([{ id: 902, from: null }]);
 });
 
 test("Resume from here sends the node, at any depth", async () => {
   const leaf = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0";
-  const { named } = renderAt("/executions/956", executionDetailScenario);
+  const { named } = renderAt("/runs/956", executionDetailScenario);
   const graph = await screen.findByRole("region", { name: "Run graph" });
   await waitFor(() => expect(graph.querySelector(`[data-node-id="${leaf}"]`)).not.toBeNull());
   const node = graph.querySelector(`[data-node-id="${leaf}"]`) as HTMLElement;
   // The node's own button, not one of a node nested under it.
   fireEvent.click(within(node.firstElementChild as HTMLElement).getByRole("button", { name: "Resume from here" }));
-  await waitFor(() => expect(screen.getByTestId("where").textContent).toMatch(/^\/work-queue\/\d+$/));
+  await waitFor(() => expect(screen.getByTestId("where").textContent).toMatch(/^\/runs\/queued\/\d+$/));
   expect(named("mutation", "ResumeExecution").map((op) => op.variables)).toEqual([{ id: 956, from: leaf }]);
 });

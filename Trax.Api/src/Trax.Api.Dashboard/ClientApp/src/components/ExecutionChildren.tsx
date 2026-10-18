@@ -40,7 +40,7 @@ export function ExecutionChildren({
             <li key={c.id} className="flex items-center gap-3">
               <span className="text-faint">└</span>
               <Link
-                to={`/executions/${c.id}`}
+                to={`/runs/${c.id}`}
                 className="text-accent-fg hover:underline font-medium"
               >
                 {shortName(c.name)}

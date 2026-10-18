@@ -95,7 +95,7 @@ export function TrainDetailPage() {
             {recent.map((e) => (
               <tr key={e.id}>
                 <td className="px-4 py-2">
-                  <Link to={`/executions/${e.id}`} className="hover:underline">
+                  <Link to={`/runs/${e.id}`} className="hover:underline">
                     <StateBadge state={e.trainState} />
                   </Link>
                 </td>

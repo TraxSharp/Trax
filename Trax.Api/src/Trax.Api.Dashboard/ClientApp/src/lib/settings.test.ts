@@ -42,8 +42,8 @@ describe("display helpers", () => {
     expect(environmentBadgeColor("Staging")).toBe("#757575");
   });
   test("persisted operation routes carry the tenant only when there is one", () => {
-    expect(persistedOperationPath("greet.v1", null)).toBe("/persisted-operations/greet.v1");
-    expect(persistedOperationPath("a b", "acme")).toBe("/persisted-operations/a%20b?tenant=acme");
+    expect(persistedOperationPath("greet.v1", null)).toBe("/api-admin/persisted-operations/greet.v1");
+    expect(persistedOperationPath("a b", "acme")).toBe("/api-admin/persisted-operations/a%20b?tenant=acme");
     expect(tenantLabel(null)).toBe("(default)");
   });
   test("durations read at the right scale", () => {

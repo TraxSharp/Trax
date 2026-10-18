@@ -7,7 +7,7 @@ import { noLogLevelServiceOverlay } from "../mock/store/overlays";
 const meta = {
   title: "Pages/Server settings",
   component: SettingsPage,
-  parameters: { route: "/settings/server", mock: schedulerConfigScenario },
+  parameters: { route: "/system/scheduler", mock: schedulerConfigScenario },
 } satisfies Meta<typeof SettingsPage>;
 
 export default meta;

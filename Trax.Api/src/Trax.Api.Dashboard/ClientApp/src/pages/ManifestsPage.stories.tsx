@@ -7,7 +7,7 @@ import type { StatefulOverlay } from "../mock/store/overlays";
 const meta = {
   title: "Pages/Manifests",
   component: ManifestsPage,
-  parameters: { route: "/manifests", mock: manifestScenario },
+  parameters: { route: "/schedules", mock: manifestScenario },
 } satisfies Meta<typeof ManifestsPage>;
 
 export default meta;

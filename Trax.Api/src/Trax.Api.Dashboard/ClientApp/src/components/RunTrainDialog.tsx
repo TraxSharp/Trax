@@ -40,7 +40,7 @@ export function RunTrainDialog({
       return;
     }
     onClose();
-    if (result.id != null) navigate(`/executions/${result.id}`);
+    if (result.id != null) navigate(`/runs/${result.id}`);
   }
 
   return (

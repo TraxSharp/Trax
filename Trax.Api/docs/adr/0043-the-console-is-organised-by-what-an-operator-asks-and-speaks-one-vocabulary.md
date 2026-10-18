@@ -24,10 +24,11 @@ the thing an operator works with, and every page takes its words from one table.
 | Trains | Every registered train; a train's page holds its chain, runs, manifests, the machines that invoke it, and Run and Queue |
 | Machines | Every registered machine; a machine's page holds its diagram and its instances |
 | Schedules | Manifests and manifest groups |
-| System | Hosts, the scheduler's switches, retry and retention, effects, log levels, live events, bulk operations |
+| System | Hosts, the scheduler's switches, retry and retention, effects, log levels, logs, live events, bulk operations |
 | API admin | Persisted operations, shown only to a caller the host lets manage them |
 
-An old route redirects to its new one, so a link in a log line keeps working.
+Preferences, which this browser keeps for itself, sit at the foot of the sidebar. An old route redirects to its
+new one, so a link in a log line keeps working.
 
 ## The vocabulary
 

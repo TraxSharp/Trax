@@ -3,13 +3,13 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { StateMachineInstancePage } from "./StateMachineInstancePage";
 import { MACHINE_IDS, machineScenario } from "../mock/scenarios";
 
-const system = (id: string) => `/state-machines/source-partition/system/${id}`;
+const system = (id: string) => `/machines/source-partition/system/${id}`;
 
 const meta = {
   title: "Pages/State machine instance",
   component: StateMachineInstancePage,
   parameters: {
-    routePath: "/state-machines/:machine/:owner/:id",
+    routePath: "/machines/:machine/:owner/:id",
     route: system(MACHINE_IDS.dispatched),
     mock: machineScenario,
   },
@@ -41,7 +41,7 @@ export const SystemInstance: Story = {
     expect(field(c, "State")).toHaveTextContent("Ingesting");
     expect(field(c, "Waiting on a run")).toHaveTextContent(/^Yes/);
     expect(c.queryByText(/context/i, { selector: "dt" })).not.toBeInTheDocument();
-    expect(runs(c).getByRole("link", { name: "7101" })).toHaveAttribute("href", "/executions/7101");
+    expect(runs(c).getByRole("link", { name: "7101" })).toHaveAttribute("href", "/runs/7101");
     const rows = runs(c).getAllByRole("row").slice(1);
     expect(rows.map((r) => r.getAttribute("data-run-id"))).toEqual(["7101", "7090"]);
     expect(within(rows[0]).getByText("Live")).toBeInTheDocument();
@@ -76,7 +76,7 @@ export const CancelQueuedRun: Story = {
       await c.findByRole("region", { name: "Invoked runs" });
       expect(runs(c).getByRole("link", { name: "work queue entry 7201" })).toHaveAttribute(
         "href",
-        "/work-queue/7201",
+        "/runs/queued/7201",
       );
       expect(runs(c).getByText("No runs to show.")).toBeInTheDocument();
       await userEvent.click(c.getByRole("button", { name: "Cancel" }));
@@ -103,7 +103,7 @@ export const IdleInstance: Story = {
 // A user's draft is read-only to operators: no Cancel, and its runs say why only the live one is
 // listed. Whose draft it is is never shown.
 export const UserDraft: Story = {
-  parameters: { route: `/state-machines/topic-map/user/${MACHINE_IDS.draftBuilding}?row=21` },
+  parameters: { route: `/machines/topic-map/user/${MACHINE_IDS.draftBuilding}?row=21` },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByRole("heading", { name: "topic-map" })).toBeInTheDocument();
@@ -115,7 +115,7 @@ export const UserDraft: Story = {
 
 // A user's draft named without its row is refused before any read.
 export const UserDraftWithoutRow: Story = {
-  parameters: { route: `/state-machines/topic-map/user/${MACHINE_IDS.draftBuilding}` },
+  parameters: { route: `/machines/topic-map/user/${MACHINE_IDS.draftBuilding}` },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText(/named by its row as well as its id/)).toBeInTheDocument();
@@ -124,7 +124,7 @@ export const UserDraftWithoutRow: Story = {
 
 // An owner segment other than system or user is refused.
 export const UnknownOwner: Story = {
-  parameters: { route: `/state-machines/topic-map/admin/${MACHINE_IDS.draftBuilding}` },
+  parameters: { route: `/machines/topic-map/admin/${MACHINE_IDS.draftBuilding}` },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText("'admin' is not an owner: an instance is owned by the system or by a user.")).toBeInTheDocument();

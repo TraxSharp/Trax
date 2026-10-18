@@ -6,7 +6,7 @@ import { deadLetterScenario, emptyPage, errorOverride } from "../mock/scenarios"
 const meta = {
   title: "Pages/Dead letters",
   component: DeadLettersPage,
-  parameters: { route: "/dead-letters", mock: deadLetterScenario },
+  parameters: { route: "/runs/dead-letters", mock: deadLetterScenario },
 } satisfies Meta<typeof DeadLettersPage>;
 
 export default meta;
@@ -284,7 +284,7 @@ export const RequeueSelectedAskAfresh: Story = {
 
 // The manifest filter narrows to one manifest's dead letters; the detail page links here with it.
 export const FilterByManifest: Story = {
-  parameters: { route: "/dead-letters?manifestId=41" },
+  parameters: { route: "/runs/dead-letters?manifestId=41" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(c.getByLabelText("Manifest id")).toHaveValue("41");

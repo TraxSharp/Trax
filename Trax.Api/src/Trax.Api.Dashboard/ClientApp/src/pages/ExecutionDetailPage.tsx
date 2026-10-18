@@ -111,7 +111,7 @@ export function ExecutionDetailPage() {
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) {
       toast(res.message ? `Execution re-queued. ${res.message}` : "Execution re-queued.", "success");
-      if (res.id != null) navigate(`/work-queue/${res.id}`);
+      if (res.id != null) navigate(`/runs/queued/${res.id}`);
     } else toast(res?.message ?? "Could not re-queue.", "error");
   }
 
@@ -134,14 +134,14 @@ export function ExecutionDetailPage() {
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) {
       toast(res.message ? `Execution queued to resume. ${res.message}` : "Execution queued to resume.", "success");
-      if (res.id != null) navigate(`/work-queue/${res.id}`);
+      if (res.id != null) navigate(`/runs/queued/${res.id}`);
     } else toast(res?.message ?? "Could not resume.", "error");
   }
 
   if (result.error)
     return (
       <>
-        <BackLink to="/executions" label="All executions" />
+        <BackLink to="/runs" label="All executions" />
         <p className="text-danger-fg mt-4">{result.error.message}</p>
       </>
     );
@@ -150,7 +150,7 @@ export function ExecutionDetailPage() {
 
   return (
     <div>
-      <BackLink to="/executions" label="All executions" />
+      <BackLink to="/runs" label="All executions" />
       <div className="flex items-center gap-3 mt-2 mb-6">
         <h1 className="text-2xl font-bold text-fg">
           {shortName(e.name)}
@@ -239,7 +239,7 @@ export function ExecutionDetailPage() {
             [
               "Manifest ID",
               e.manifestId != null ? (
-                <DetailLink to={`/manifests/${e.manifestId}`}>{e.manifestId}</DetailLink>
+                <DetailLink to={`/schedules/${e.manifestId}`}>{e.manifestId}</DetailLink>
               ) : (
                 "—"
               ),
@@ -247,7 +247,7 @@ export function ExecutionDetailPage() {
             [
               "Parent ID",
               e.parentId != null ? (
-                <DetailLink to={`/executions/${e.parentId}`}>{e.parentId}</DetailLink>
+                <DetailLink to={`/runs/${e.parentId}`}>{e.parentId}</DetailLink>
               ) : (
                 "—"
               ),
@@ -257,7 +257,7 @@ export function ExecutionDetailPage() {
               ? ([
                   [
                     "Replays decisions of",
-                    <DetailLink to={`/executions/${e.replayDecisionsOf}`}>
+                    <DetailLink to={`/runs/${e.replayDecisionsOf}`}>
                       {e.replayDecisionsOf}
                     </DetailLink>,
                   ],
@@ -274,7 +274,7 @@ export function ExecutionDetailPage() {
                   [
                     "Resumes",
                     <>
-                      <DetailLink to={`/executions/${e.resumeFrom}`}>
+                      <DetailLink to={`/runs/${e.resumeFrom}`}>
                         {e.resumeFrom}
                       </DetailLink>
                       {e.resumeAt != null

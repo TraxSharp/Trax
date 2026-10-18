@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
+  CalendarClock,
   ChevronDown,
   ChevronRight,
-  Database,
   FileCog,
   FlaskConical,
   Inbox,
@@ -51,48 +51,74 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const TOP: NavItem[] = [
-  { path: "/", label: "Overview", icon: LayoutDashboard },
-  { path: "/trains", label: "Trains", icon: TrainFront },
-  { path: "/cluster", label: "Cluster", icon: Network },
-  { path: "/realtime", label: "Real-time", icon: Radio },
-];
+// The navigation api/0043 decides: what an operator works with, not the tables behind it. A group
+// with one entry is drawn as a plain row.
+const TOP: NavItem[] = [{ path: "/", label: "Overview", icon: LayoutDashboard }];
 
 const GROUPS: NavGroup[] = [
   {
-    label: "Data",
-    icon: Database,
+    label: "Runs",
+    icon: Play,
     items: [
-      { path: "/executions", label: "Executions", icon: Play },
-      { path: "/work-queue", label: "Work queue", icon: Inbox },
-      { path: "/dead-letters", label: "Dead letters", icon: MailX },
-      { path: "/manifests", label: "Manifests", icon: FileCog },
-      { path: "/groups", label: "Manifest groups", icon: Layers },
-      { path: "/logs", label: "Logs", icon: ScrollText },
-      { path: "/state-machines", label: "State machines", icon: Workflow, feature: "stateMachines" },
-      { path: "/persisted-operations", label: "Persisted ops", icon: Pin, feature: "persistedOperations" },
+      { path: "/runs", label: "All runs", icon: Play },
+      { path: "/runs/queued", label: "Queued", icon: Inbox },
+      { path: "/runs/dead-letters", label: "Dead letters", icon: MailX },
+    ],
+  },
+  { label: "Trains", icon: TrainFront, items: [{ path: "/trains", label: "Trains", icon: TrainFront }] },
+  {
+    label: "Machines",
+    icon: Workflow,
+    items: [{ path: "/machines", label: "Machines", icon: Workflow, feature: "stateMachines" }],
+  },
+  {
+    label: "Schedules",
+    icon: CalendarClock,
+    items: [
+      { path: "/schedules", label: "Manifests", icon: FileCog },
+      { path: "/schedules/groups", label: "Manifest groups", icon: Layers },
     ],
   },
   {
-    label: "Settings",
+    label: "System",
     icon: Settings,
     items: [
-      { path: "/settings/user", label: "User", icon: User },
-      { path: "/settings/server", label: "Server", icon: Server },
-      { path: "/settings/effects", label: "Effects", icon: Sparkles },
+      { path: "/system/hosts", label: "Hosts", icon: Network },
+      { path: "/system/scheduler", label: "Scheduler", icon: Server },
+      { path: "/system/effects", label: "Effects", icon: Sparkles },
+      { path: "/system/logs", label: "Logs", icon: ScrollText },
+      { path: "/system/live", label: "Live events", icon: Radio },
+    ],
+  },
+  {
+    label: "API admin",
+    icon: Pin,
+    items: [
+      {
+        path: "/api-admin/persisted-operations",
+        label: "Persisted operations",
+        icon: Pin,
+        feature: "persistedOperations",
+      },
     ],
   },
 ];
+
+/** The entry for a path: the longest one it is, or sits under (`/runs/42` is All runs). */
+function activeEntry(pathname: string, paths: string[]): string | undefined {
+  return paths
+    .filter((p) => (p === "/" ? pathname === "/" : pathname === p || pathname.startsWith(`${p}/`)))
+    .sort((x, y) => y.length - x.length)[0];
+}
 
 // Sidebar icons: one size and stroke, inheriting the row's text colour.
 const ICON = "size-4 shrink-0";
 
 export function Layout() {
   const location = useLocation();
-  const active = (path: string) =>
-    path === "/"
-      ? location.pathname === "/"
-      : location.pathname.startsWith(path);
+  const allPaths = [...TOP, ...GROUPS.flatMap((g) => g.items)].map((i) => i.path);
+  const current = activeEntry(location.pathname, [...allPaths, "/preferences", "/dev/mock-overlay"]);
+  const active = (path: string) => path === current;
   // Only surfaced when the app is running against the mock (globalThis.__mockStore is set).
   const mockActive = Boolean(getGlobalMockStore());
   // Persisted operations appear only on a host that serves their management to this caller
@@ -103,7 +129,7 @@ export function Layout() {
   const stateMachines = useAnswers("MachineInstances");
   const shown = (i: NavItem) =>
     i.feature === "persistedOperations" ? persistedOps : i.feature === "stateMachines" ? stateMachines : true;
-  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter(shown) }));
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter(shown) })).filter((g) => g.items.length > 0);
 
   return (
     <div className="flex flex-col h-screen">
@@ -127,13 +153,13 @@ export function Layout() {
             {TOP.map((item) => (
               <NavLinkRow key={item.path} item={item} active={active(item.path)} />
             ))}
-            {groups.map((group) => (
-              <NavGroupSection
-                key={group.label}
-                group={group}
-                isActive={active}
-              />
-            ))}
+            {groups.map((group) =>
+              group.items.length === 1 ? (
+                <NavLinkRow key={group.label} item={group.items[0]} active={active(group.items[0].path)} />
+              ) : (
+                <NavGroupSection key={group.label} group={group} isActive={active} />
+              ),
+            )}
           </nav>
 
           <div className="p-4 border-t border-line space-y-2">
@@ -150,6 +176,7 @@ export function Layout() {
                 Mock overlay
               </Link>
             )}
+            <NavLinkRow item={{ path: "/preferences", label: "Preferences", icon: User }} active={active("/preferences")} />
             <ConnectionIndicator />
             <ThemeToggle />
             {!isDemo && (
@@ -166,7 +193,7 @@ export function Layout() {
 
         <main className="flex-1 overflow-auto">
           <DashboardHeader />
-          <div className="max-w-6xl mx-auto p-8">
+          <div className="max-w-screen-2xl mx-auto p-8">
             <Outlet />
           </div>
           <DashboardFooter />

@@ -7,8 +7,8 @@ const meta = {
   title: "Pages/Manifest detail",
   component: ManifestDetailPage,
   parameters: {
-    routePath: "/manifests/:id",
-    route: "/manifests/801",
+    routePath: "/schedules/:id",
+    route: "/schedules/801",
     mock: manifestDetailScenario,
   },
 } satisfies Meta<typeof ManifestDetailPage>;
@@ -26,7 +26,7 @@ function acceptConfirm() {
 
 export const Mock: Story = {};
 
-export const Real: Story = { parameters: { real: true, route: "/manifests/5000" } };
+export const Real: Story = { parameters: { real: true, route: "/schedules/5000" } };
 
 // Disable an enabled manifest -> badge flips to Disabled.
 export const EnableDisable: Story = {
@@ -97,7 +97,7 @@ export const DetailFields: Story = {
     expect(c.getByText("Misfire threshold (s)").nextElementSibling).toHaveTextContent("60");
     expect(c.getByText("Variance (s)").nextElementSibling).toHaveTextContent("15");
     expect(c.getByText("Next scheduled run").nextElementSibling).not.toHaveTextContent("—");
-    expect(c.getByRole("link", { name: "alpha-group" })).toHaveAttribute("href", "/groups/1");
+    expect(c.getByRole("link", { name: "alpha-group" })).toHaveAttribute("href", "/schedules/groups/1");
     expect(c.getByText("Properties (OrderInput)")).toBeInTheDocument();
     expect(c.getByText(/"apiKey": "\[REDACTED\]"/)).toBeInTheDocument();
   },
@@ -105,11 +105,11 @@ export const DetailFields: Story = {
 
 // A dependent manifest links the manifest it depends on.
 export const DependsOnLink: Story = {
-  parameters: { route: "/manifests/803" },
+  parameters: { route: "/schedules/803" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "ReportManifest" })).toBeInTheDocument());
-    expect(c.getByRole("link", { name: "#801" })).toHaveAttribute("href", "/manifests/801");
+    expect(c.getByRole("link", { name: "#801" })).toHaveAttribute("href", "/schedules/801");
     expect(c.queryByText(/Properties/)).not.toBeInTheDocument(); // no properties
   },
 };
@@ -148,7 +148,7 @@ export const TriggerAskAfresh: Story = {
 // A manifest the server does not have shows the not-found state.
 export const NotFound: Story = {
   parameters: {
-    route: "/manifests/9999",
+    route: "/schedules/9999",
     mock: { resolvers: () => ({ OperationsQueries: { manifestDetail: () => null } }) },
   },
   play: async ({ canvasElement }) => {

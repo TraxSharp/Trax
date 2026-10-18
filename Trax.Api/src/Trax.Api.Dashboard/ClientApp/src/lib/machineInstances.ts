@@ -5,7 +5,7 @@ import type { MachineInstance, SnapshotOwnerKind } from "../types";
 // never share one, and a user's draft carries its row id, because several users can each hold a
 // draft under one id.
 
-export const MACHINE_INSTANCES_PATH = "/state-machines";
+export const MACHINE_INSTANCES_PATH = "/machines";
 
 /** The path segment for an owner kind. */
 export function ownerSegment(ownerKind: SnapshotOwnerKind): "system" | "user" {

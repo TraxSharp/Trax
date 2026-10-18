@@ -10,8 +10,8 @@ const meta = {
   title: "Pages/Execution detail",
   component: ExecutionDetailPage,
   parameters: {
-    routePath: "/executions/:id",
-    route: "/executions/903",
+    routePath: "/runs/:id",
+    route: "/runs/903",
     mock: executionDetailScenario,
   },
 } satisfies Meta<typeof ExecutionDetailPage>;
@@ -29,7 +29,7 @@ function acceptConfirm() {
 
 export const Mock: Story = {};
 
-export const Real: Story = { parameters: { real: true, route: "/executions/1" } };
+export const Real: Story = { parameters: { real: true, route: "/runs/1" } };
 
 // An in-progress execution: Cancel requests cancellation.
 export const CancelActive: Story = {
@@ -96,7 +96,7 @@ export const ActiveHasNoRequeue: Story = {
 
 // A terminal execution offers Re-queue but not Cancel, and shows no cancellation badge.
 export const TerminalHasNoCancel: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("button", { name: "Re-queue" })).toBeInTheDocument());
@@ -107,7 +107,7 @@ export const TerminalHasNoCancel: Story = {
 
 // A terminal execution: Re-queue enqueues a fresh run and toasts.
 export const RequeueTerminal: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const restore = acceptConfirm();
@@ -123,7 +123,7 @@ export const RequeueTerminal: Story = {
 
 // An execution with children renders the child tree.
 export const ChildTree: Story = {
-  parameters: { route: "/executions/800" },
+  parameters: { route: "/runs/800" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("Child executions (3)")).toBeInTheDocument());
@@ -135,16 +135,16 @@ export const ChildTree: Story = {
 // A failed run shows its failure class, scheduled time, executor, parent and the run whose
 // decisions it replays (both links), and the host's instance id and labels.
 export const FailedRunFields: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
     expect(c.getByTitle("Failure class")).toHaveTextContent("Transient");
     expect(c.getByText("Executor").nextElementSibling).toHaveTextContent("JobRunner");
-    expect(c.getByText("Parent ID").nextElementSibling!.querySelector("a")).toHaveAttribute("href", "/executions/800");
+    expect(c.getByText("Parent ID").nextElementSibling!.querySelector("a")).toHaveAttribute("href", "/runs/800");
     expect(c.getByText("Replays decisions of").nextElementSibling!.querySelector("a")).toHaveAttribute(
       "href",
-      "/executions/899",
+      "/runs/899",
     );
     expect(c.getByText("Scheduled time").nextElementSibling).not.toHaveTextContent("—");
     expect(c.getByText("Instance ID").nextElementSibling).toHaveTextContent("i-mock");
@@ -154,7 +154,7 @@ export const FailedRunFields: Story = {
 
 // A run that replays nothing has no "Replays decisions of" row, and no parent.
 export const NoReplayLink: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "DeltaJob" })).toBeInTheDocument());
@@ -167,7 +167,7 @@ export const NoReplayLink: Story = {
 // its answer, confidence and replayed badge, the failed step's class and exception, and the
 // attempt badge.
 export const JunctionTimelineSteps: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const timeline = await c.findByRole("region", { name: "Junction timeline" });
@@ -255,7 +255,7 @@ export const JunctionTimelineLive: Story = {
 
 // A run with more steps than the API's page says the timeline shows only the first 500.
 export const JunctionTimelineCapped: Story = {
-  parameters: { route: "/executions/950" },
+  parameters: { route: "/runs/950" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(
@@ -266,7 +266,7 @@ export const JunctionTimelineCapped: Story = {
 
 // A run with no recorded steps explains why.
 export const JunctionTimelineEmpty: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText(/No steps recorded for this run/)).toBeInTheDocument();
@@ -291,7 +291,7 @@ const junctionError: MockSchemaOverrides = {
 
 // A failed junctionRuns read is shown on the timeline; the rest of the page still renders.
 export const JunctionTimelineError: Story = {
-  parameters: { route: "/executions/902", mock: junctionError },
+  parameters: { route: "/runs/902", mock: junctionError },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText(/Simulated junction read failure/)).toBeInTheDocument();
@@ -301,7 +301,7 @@ export const JunctionTimelineError: Story = {
 
 // Re-queue, ask afresh: the new run asks the model again instead of replaying.
 export const RequeueAskAfresh: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const restore = acceptConfirm();
@@ -317,7 +317,7 @@ export const RequeueAskAfresh: Story = {
 
 // Declining the confirmation re-queues nothing.
 export const RequeueDeclined: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const original = window.confirm;
@@ -336,7 +336,7 @@ export const RequeueDeclined: Story = {
 // The run's recorded decisions, in order: a model's answer, a replay that was refused, a withheld
 // answer (a sensitive question) and a decision on the track taken on it, which keeps only its time.
 export const Decisions: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const table = await c.findByRole("table", { name: "Decisions" });
@@ -363,7 +363,7 @@ export const Decisions: Story = {
 // Details opens a decision's question, shadow answers and fingerprint; a withheld one says why its
 // answer is missing.
 export const DecisionDetails: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const table = await c.findByRole("table", { name: "Decisions" });
@@ -389,7 +389,7 @@ export const RefusedReplayedDecision: Story = {
 
 // More decisions than a page: Next reads the rest after the last one shown, Previous goes back.
 export const DecisionsPaged: Story = {
-  parameters: { route: "/executions/950" },
+  parameters: { route: "/runs/950" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await c.findByText("question-1");
@@ -404,7 +404,7 @@ export const DecisionsPaged: Story = {
 };
 
 export const NoDecisions: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText("This run recorded no decisions.")).toBeInTheDocument();
@@ -413,18 +413,18 @@ export const NoDecisions: Story = {
 
 // A run queued to replay an earlier run that asked afresh instead is marked so.
 export const ReplayAbandoned: Story = {
-  parameters: { route: "/executions/951" },
+  parameters: { route: "/runs/951" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText("Replay abandoned")).toBeInTheDocument();
     expect(c.getByText("Abandoned: it could not be honoured, so the run asked afresh")).toBeInTheDocument();
-    expect(c.getByRole("link", { name: "902" })).toHaveAttribute("href", "/executions/902");
+    expect(c.getByRole("link", { name: "902" })).toHaveAttribute("href", "/runs/902");
   },
 };
 
 // The run's own log reads oldest first, with the text filters; no run filter or column.
 export const RunLogOldestFirst: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const table = await c.findByRole("table", { name: "Log entries" });
@@ -445,7 +445,7 @@ const nodeOf = (graph: HTMLElement, id: string) => graph.querySelector(`[data-no
 // shows its failure, the routing step's tracks sit under it, and the steps it can resume at offer
 // "Resume from here".
 export const RunGraphCheckpoints: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
@@ -464,7 +464,7 @@ export const RunGraphCheckpoints: Story = {
 
 // Resume queues a run that skips past the latest checkpoint, beside Re-queue.
 export const ResumeAfterCheckpoint: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const restore = acceptConfirm();
@@ -479,7 +479,7 @@ export const ResumeAfterCheckpoint: Story = {
 
 // "Resume from here" resumes at that node.
 export const ResumeFromNode: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const restore = acceptConfirm();
@@ -497,7 +497,7 @@ export const ResumeFromNode: Story = {
 // A host that refuses the resume: its reason is shown and the page stays.
 export const ResumeRefused: Story = {
   parameters: {
-    route: "/executions/902",
+    route: "/runs/902",
     overlays: [
       {
         mutations: {
@@ -530,7 +530,7 @@ export const ResumeRefused: Story = {
 // The run that resumed: the steps before its resume point are restored, a Parallel step's branches
 // sit side by side, and a completed run offers no resume.
 export const ResumedRunRestored: Story = {
-  parameters: { route: "/executions/952" },
+  parameters: { route: "/runs/952" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
@@ -547,12 +547,12 @@ export const ResumedRunRestored: Story = {
 
 // A resumed run names the run it resumed, linked, and the node it resumed at.
 export const ResumedRunNamesItsSource: Story = {
-  parameters: { route: "/executions/952" },
+  parameters: { route: "/runs/952" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
     const resumes = c.getByText("Resumes", { selector: "dt" }).nextElementSibling as HTMLElement;
-    expect(within(resumes).getByRole("link", { name: "902" })).toHaveAttribute("href", "/executions/902");
+    expect(within(resumes).getByRole("link", { name: "902" })).toHaveAttribute("href", "/runs/902");
     expect(resumes).toHaveTextContent("902 at Summarize#2");
   },
 };
@@ -560,7 +560,7 @@ export const ResumedRunNamesItsSource: Story = {
 // A run that resumed after the latest checkpoint names no node.
 export const ResumedAfterLatestCheckpoint: Story = {
   parameters: {
-    route: "/executions/952",
+    route: "/runs/952",
     mock: {
       resolvers: () => {
         const r = (executionDetailScenario.resolvers as () => Record<string, Record<string, (...a: unknown[]) => unknown>>)();
@@ -587,7 +587,7 @@ export const ResumedAfterLatestCheckpoint: Story = {
 
 // A run that was not resumed shows no Resumes field.
 export const NotResumedHasNoResumesField: Story = {
-  parameters: { route: "/executions/902" },
+  parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
@@ -598,7 +598,7 @@ export const NotResumedHasNoResumesField: Story = {
 // A run with no saved input cannot be resumed, as it cannot be re-queued: the checkpoint still
 // shows, but nothing offers a resume.
 export const NoInputNoResume: Story = {
-  parameters: { route: "/executions/954" },
+  parameters: { route: "/runs/954" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
@@ -611,7 +611,7 @@ export const NoInputNoResume: Story = {
 
 // A train this host has no declared graph for says so.
 export const NoDeclaredGraph: Story = {
-  parameters: { route: "/executions/900" },
+  parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
@@ -625,7 +625,7 @@ export const NoDeclaredGraph: Story = {
 // here". A Parallel step's branches are lanes side by side, and a step the host stopped mid-junction
 // shows as interrupted.
 export const DeepRunGraph: Story = {
-  parameters: { route: "/executions/956" },
+  parameters: { route: "/runs/956" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
@@ -652,7 +652,7 @@ export const DeepRunGraph: Story = {
 
 // Resuming at the deep step names it.
 export const ResumeFromDeepNode: Story = {
-  parameters: { route: "/executions/956" },
+  parameters: { route: "/runs/956" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const restore = acceptConfirm();
@@ -688,7 +688,7 @@ const runGraphError: MockSchemaOverrides = {
 // A run graph that could not be read says so in its section, rather than looking like a run that
 // cannot be resumed; the rest of the page still shows.
 export const RunGraphReadFailed: Story = {
-  parameters: { route: "/executions/902", mock: runGraphError },
+  parameters: { route: "/runs/902", mock: runGraphError },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);

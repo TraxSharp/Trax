@@ -6,7 +6,7 @@ import { clusterScenario } from "../mock/scenarios";
 const meta = {
   title: "Pages/Cluster",
   component: ClusterPage,
-  parameters: { route: "/cluster", mock: clusterScenario },
+  parameters: { route: "/system/hosts", mock: clusterScenario },
 } satisfies Meta<typeof ClusterPage>;
 
 export default meta;

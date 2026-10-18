@@ -36,17 +36,17 @@ function expectAllRecorded(ledger: Ledger) {
 }
 
 const LIST_PAGES = [
-  "/executions",
-  "/work-queue",
-  "/dead-letters",
-  "/manifests",
-  "/groups",
-  "/logs",
-  "/persisted-operations",
+  "/runs",
+  "/runs/queued",
+  "/runs/dead-letters",
+  "/schedules",
+  "/schedules/groups",
+  "/system/logs",
+  "/api-admin/persisted-operations",
   // Offered once the recordings hold it (harness.tsx, NOT_RECORDED_YET).
-  ...(notOfferedYet("MachineInstances") ? [] : ["/state-machines"]),
+  ...(notOfferedYet("MachineInstances") ? [] : ["/machines"]),
 ];
-const OTHER_PAGES = ["/", "/trains", "/cluster", "/realtime", "/settings/user", "/settings/server", "/settings/effects"];
+const OTHER_PAGES = ["/", "/trains", "/system/hosts", "/system/live", "/preferences", "/system/scheduler", "/system/effects"];
 
 describe("every page, filter, sort and page of every list", () => {
   for (const hideAdmin of [true, false]) {
@@ -77,11 +77,11 @@ describe("every page, filter, sort and page of every list", () => {
 
 describe("every row's page", () => {
   const details: [string, string, string][] = [
-    ["ExecutionDetail", "id", "/executions/"],
-    ["WorkQueueDetail", "id", "/work-queue/"],
-    ["DeadLetterDetail", "id", "/dead-letters/"],
-    ["ManifestDetail", "id", "/manifests/"],
-    ["ManifestGroupDetail", "id", "/groups/"],
+    ["ExecutionDetail", "id", "/runs/"],
+    ["WorkQueueDetail", "id", "/runs/queued/"],
+    ["DeadLetterDetail", "id", "/runs/dead-letters/"],
+    ["ManifestDetail", "id", "/schedules/"],
+    ["ManifestGroupDetail", "id", "/schedules/groups/"],
     ["TrainStats", "trainName", "/trains/"],
   ];
   for (const [op, variable, prefix] of details) {
@@ -99,7 +99,7 @@ describe("every row's page", () => {
     }, 240_000);
   }
 
-  test("/persisted-operations/:id for every operation in the store", async () => {
+  test("/api-admin/persisted-operations/:id for every operation in the store", async () => {
     const ledger = newLedger();
     const keys = Object.keys(recordings().queries.PersistedOperationDetail ?? {}).map(
       (k) => JSON.parse(k) as { id: string; tenantKey?: string },
@@ -107,7 +107,7 @@ describe("every row's page", () => {
     expect(keys.length).toBeGreaterThan(0);
     for (const { id, tenantKey } of keys) {
       const query = tenantKey != null ? `?tenant=${encodeURIComponent(tenantKey)}` : "";
-      const { unmount } = renderDemo(`/persisted-operations/${encodeURIComponent(id)}${query}`, ledger);
+      const { unmount } = renderDemo(`/api-admin/persisted-operations/${encodeURIComponent(id)}${query}`, ledger);
       await settle();
       unmount();
     }
@@ -124,11 +124,11 @@ describe("every link leads to a recorded page", () => {
     const queue = [
       ...LIST_PAGES,
       ...OTHER_PAGES,
-      ...recordedIds("ExecutionDetail", "id").map((id) => `/executions/${id}`),
-      ...recordedIds("WorkQueueDetail", "id").map((id) => `/work-queue/${id}`),
-      ...recordedIds("DeadLetterDetail", "id").map((id) => `/dead-letters/${id}`),
-      ...recordedIds("ManifestDetail", "id").map((id) => `/manifests/${id}`),
-      ...recordedIds("ManifestGroupDetail", "id").map((id) => `/groups/${id}`),
+      ...recordedIds("ExecutionDetail", "id").map((id) => `/runs/${id}`),
+      ...recordedIds("WorkQueueDetail", "id").map((id) => `/runs/queued/${id}`),
+      ...recordedIds("DeadLetterDetail", "id").map((id) => `/runs/dead-letters/${id}`),
+      ...recordedIds("ManifestDetail", "id").map((id) => `/schedules/${id}`),
+      ...recordedIds("ManifestGroupDetail", "id").map((id) => `/schedules/groups/${id}`),
     ];
     const seen = new Set(queue);
     while (queue.length > 0) {
@@ -161,7 +161,7 @@ describe("what the recordings do not hold yet", () => {
     );
     unmount();
     for (const id of recordedIds("ExecutionDetail", "id").slice(0, 10)) {
-      const page = renderDemo(`/executions/${id}`, ledger);
+      const page = renderDemo(`/runs/${id}`, ledger);
       await settle();
       expect(within(page.container).queryByRole("region", { name: "Run graph" }) == null).toBe(notOfferedYet("RunGraph"));
       page.unmount();
@@ -200,7 +200,7 @@ describe("writes", () => {
 
   test("cancelling a queued entry on the page reads back cancelled", async () => {
     const ledger = newLedger();
-    const { container } = renderDemo("/work-queue", ledger);
+    const { container } = renderDemo("/runs/queued", ledger);
     await settle();
     const page = pageOf(container);
     const badges = () => within(page).queryAllByText("Cancelled", { selector: "span" }).length;

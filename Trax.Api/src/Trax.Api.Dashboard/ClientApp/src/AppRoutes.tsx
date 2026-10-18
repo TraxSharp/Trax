@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation, useParams } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { OverviewPage } from "./pages/OverviewPage";
 import { TrainsPage } from "./pages/TrainsPage";
@@ -25,35 +25,73 @@ import { DeadLetterDetailPage } from "./pages/DeadLetterDetailPage";
 import { ManifestDetailPage } from "./pages/ManifestDetailPage";
 import { MockOverlayPage } from "./pages/dev/MockOverlayPage";
 
+// The console's routes follow its navigation (api/0043): Runs (with its Queued and Dead letter views),
+// Trains, Machines, Schedules, System, API admin. The routes before it moved keep working as
+// redirects, so a link already pasted into a log line or a ticket still lands.
 export function AppRoutes() {
   return (
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<OverviewPage />} />
-        <Route path="/executions" element={<ExecutionsPage />} />
-        <Route path="/executions/:id" element={<ExecutionDetailPage />} />
-        <Route path="/work-queue" element={<WorkQueuePage />} />
-        <Route path="/work-queue/:id" element={<WorkQueueDetailPage />} />
-        <Route path="/dead-letters" element={<DeadLettersPage />} />
-        <Route path="/dead-letters/:id" element={<DeadLetterDetailPage />} />
-        <Route path="/logs" element={<LogsPage />} />
-        <Route path="/state-machines" element={<StateMachinesPage />} />
-        <Route path="/state-machines/:machine/:owner/:id" element={<StateMachineInstancePage />} />
-        <Route path="/manifests" element={<ManifestsPage />} />
-        <Route path="/manifests/:id" element={<ManifestDetailPage />} />
-        <Route path="/groups" element={<ManifestGroupsPage />} />
-        <Route path="/groups/:id" element={<ManifestGroupDetailPage />} />
-        <Route path="/persisted-operations" element={<PersistedOperationsPage />} />
-        <Route path="/persisted-operations/:id" element={<PersistedOperationDetailPage />} />
-        <Route path="/settings/user" element={<UserSettingsPage />} />
-        <Route path="/settings/server" element={<SettingsPage />} />
-        <Route path="/settings/effects" element={<EffectsSettingsPage />} />
+        <Route path="/runs" element={<ExecutionsPage />} />
+        <Route path="/runs/queued" element={<WorkQueuePage />} />
+        <Route path="/runs/queued/:id" element={<WorkQueueDetailPage />} />
+        <Route path="/runs/dead-letters" element={<DeadLettersPage />} />
+        <Route path="/runs/dead-letters/:id" element={<DeadLetterDetailPage />} />
+        <Route path="/runs/:id" element={<ExecutionDetailPage />} />
         <Route path="/trains" element={<TrainsPage />} />
         <Route path="/trains/:name" element={<TrainDetailPage />} />
-        <Route path="/cluster" element={<ClusterPage />} />
-        <Route path="/realtime" element={<RealTimePage />} />
+        <Route path="/machines" element={<StateMachinesPage />} />
+        <Route path="/machines/:machine/:owner/:id" element={<StateMachineInstancePage />} />
+        <Route path="/schedules" element={<ManifestsPage />} />
+        <Route path="/schedules/groups" element={<ManifestGroupsPage />} />
+        <Route path="/schedules/groups/:id" element={<ManifestGroupDetailPage />} />
+        <Route path="/schedules/:id" element={<ManifestDetailPage />} />
+        <Route path="/system/hosts" element={<ClusterPage />} />
+        <Route path="/system/scheduler" element={<SettingsPage />} />
+        <Route path="/system/effects" element={<EffectsSettingsPage />} />
+        <Route path="/system/logs" element={<LogsPage />} />
+        <Route path="/system/live" element={<RealTimePage />} />
+        <Route path="/api-admin/persisted-operations" element={<PersistedOperationsPage />} />
+        <Route path="/api-admin/persisted-operations/:id" element={<PersistedOperationDetailPage />} />
+        <Route path="/preferences" element={<UserSettingsPage />} />
         <Route path="/dev/mock-overlay" element={<MockOverlayPage />} />
+
+        {MOVED.map(([from, to]) => (
+          <Route key={from} path={from} element={<Moved to={to} />} />
+        ))}
       </Route>
     </Routes>
   );
+}
+
+/** Each route the console had before api/0043, and where it lives now (`:params` carried over). */
+const MOVED: [string, string][] = [
+  ["/executions", "/runs"],
+  ["/executions/:id", "/runs/:id"],
+  ["/work-queue", "/runs/queued"],
+  ["/work-queue/:id", "/runs/queued/:id"],
+  ["/dead-letters", "/runs/dead-letters"],
+  ["/dead-letters/:id", "/runs/dead-letters/:id"],
+  ["/state-machines", "/machines"],
+  ["/state-machines/:machine/:owner/:id", "/machines/:machine/:owner/:id"],
+  ["/manifests", "/schedules"],
+  ["/manifests/:id", "/schedules/:id"],
+  ["/groups", "/schedules/groups"],
+  ["/groups/:id", "/schedules/groups/:id"],
+  ["/cluster", "/system/hosts"],
+  ["/realtime", "/system/live"],
+  ["/logs", "/system/logs"],
+  ["/settings/server", "/system/scheduler"],
+  ["/settings/effects", "/system/effects"],
+  ["/settings/user", "/preferences"],
+  ["/persisted-operations", "/api-admin/persisted-operations"],
+  ["/persisted-operations/:id", "/api-admin/persisted-operations/:id"],
+];
+
+function Moved({ to }: { to: string }) {
+  const params = useParams();
+  const { search, hash } = useLocation();
+  const path = to.replace(/:(\w+)/g, (_, name: string) => encodeURIComponent(params[name] ?? ""));
+  return <Navigate to={`${path}${search}${hash}`} replace />;
 }

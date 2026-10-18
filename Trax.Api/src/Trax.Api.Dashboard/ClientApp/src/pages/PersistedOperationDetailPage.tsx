@@ -41,7 +41,7 @@ export function PersistedOperationDetailPage() {
 
   return (
     <div>
-      <BackLink to="/persisted-operations" label="Persisted operations" />
+      <BackLink to="/api-admin/persisted-operations" label="Persisted operations" />
       <div className="flex items-center gap-3 mt-2 mb-6">
         <h1 className="text-2xl font-bold font-mono text-fg">{id}</h1>
         <span title="Tenant" className="text-xs px-2 py-0.5 rounded-full bg-raised text-fg-2">

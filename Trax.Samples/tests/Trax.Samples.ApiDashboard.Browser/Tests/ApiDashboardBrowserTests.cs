@@ -100,7 +100,7 @@ public class ApiDashboardBrowserTests
                         acknowledged.TrySetResult(socket.Url);
                 };
 
-            await page.GotoAsync(new Uri(_address, "/trax/dashboard/executions").ToString());
+            await page.GotoAsync(new Uri(_address, "/trax/dashboard/runs").ToString());
 
             // Deep link, no credential yet: the app asks for one.
             await page.GetByLabel("API key").FillAsync(ApiKey, new() { Timeout = Ms(Render) });
@@ -126,7 +126,7 @@ public class ApiDashboardBrowserTests
             socketUrl.Should().Be($"ws://{_address.Authority}/trax/graphql");
 
             // The router took the deep link under the base path the host wrote into the page.
-            page.Url.Should().EndWith("/trax/dashboard/executions");
+            page.Url.Should().EndWith("/trax/dashboard/runs");
 
             (await ViolationsAsync(page, violations))
                 .Should()
@@ -141,15 +141,15 @@ public class ApiDashboardBrowserTests
     // Each page, loaded from its own URL (as a reload is), and something only it draws. {gate} is the
     // machine instance the host started.
     [TestCase("", "Overview", ".recharts-surface")]
-    [TestCase("groups", "Dependency graph", "[aria-label='Dependency graph'] .react-flow__node")]
+    [TestCase("schedules/groups", "Dependency graph", "[aria-label='Dependency graph'] .react-flow__node")]
     [TestCase(
         "trains/Trax.Samples.ApiDashboard.Browser.Host.IRefreshRatesTrain",
         "Trax.Samples.ApiDashboard.Browser.Host.IRefreshRatesTrain",
         "text=Total runs"
     )]
-    [TestCase("state-machines", "State machines", "text=browser-gate")]
+    [TestCase("machines", "State machines", "text=browser-gate")]
     [TestCase(
-        "state-machines/browser-gate/system/{gate}",
+        "machines/browser-gate/system/{gate}",
         "browser-gate",
         "text=All state machines"
     )]
@@ -204,7 +204,7 @@ public class ApiDashboardBrowserTests
         {
             var page = await context.NewPageAsync();
             var violations = await WatchForViolationsAsync(page);
-            var url = new Uri(_address, "/trax/dashboard/executions").ToString();
+            var url = new Uri(_address, "/trax/dashboard/runs").ToString();
 
             await page.GotoAsync(url);
             var connected = await ConnectAsync(page);

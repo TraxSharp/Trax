@@ -18,7 +18,7 @@ export function usePersistedOperationsAvailable(): { available: boolean; checkin
 
 /** The route for one operation; the default tenant has no `tenant` parameter. */
 export function persistedOperationPath(id: string, tenantKey: string | null | undefined): string {
-  const base = `/persisted-operations/${encodeURIComponent(id)}`;
+  const base = `/api-admin/persisted-operations/${encodeURIComponent(id)}`;
   return tenantKey ? `${base}?tenant=${encodeURIComponent(tenantKey)}` : base;
 }
 

@@ -81,7 +81,7 @@ async function signal(store: ReturnType<typeof createMockStore>, domain: ChangeD
 test("a state machine route the API cannot look up sends no machineInstance read on a change", async () => {
   const calls = { n: 0 };
   const { store, sent } = renderAt(
-    `/state-machines/topic-map/user/${MACHINE_IDS.draftBuilding}`,
+    `/machines/topic-map/user/${MACHINE_IDS.draftBuilding}`,
     counting(machineScenario, "machineInstance", calls),
   );
   expect(await screen.findByText(/named by its row as well as its id/)).toBeInTheDocument();
@@ -94,7 +94,7 @@ test("a state machine route the API cannot look up sends no machineInstance read
 test("an unknown owner segment sends no machineInstance read on a change", async () => {
   const calls = { n: 0 };
   const { store, sent } = renderAt(
-    `/state-machines/topic-map/admin/${MACHINE_IDS.draftBuilding}`,
+    `/machines/topic-map/admin/${MACHINE_IDS.draftBuilding}`,
     counting(machineScenario, "machineInstance", calls),
   );
   expect(await screen.findByText(/is not an owner/)).toBeInTheDocument();
@@ -106,7 +106,7 @@ test("an unknown owner segment sends no machineInstance read on a change", async
 test("a state machine instance the API can look up is refetched on a change", async () => {
   const calls = { n: 0 };
   const { store } = renderAt(
-    `/state-machines/source-partition/system/${MACHINE_IDS.dispatched}`,
+    `/machines/source-partition/system/${MACHINE_IDS.dispatched}`,
     counting(machineScenario, "machineInstance", calls),
   );
   expect(await screen.findByRole("heading", { name: "source-partition" })).toBeInTheDocument();
@@ -117,7 +117,7 @@ test("a state machine instance the API can look up is refetched on a change", as
 
 test("a client that cannot answer the run graph is never sent one on a change", async () => {
   const calls = { n: 0 };
-  const { store, sent } = renderAt("/executions/903", counting(executionDetailScenario, "runGraph", calls), (client) =>
+  const { store, sent } = renderAt("/runs/903", counting(executionDetailScenario, "runGraph", calls), (client) =>
     limitAnswers(client, ["ExecutionDetail", "JunctionRuns", "Decisions", "Logs", "ExecutionChildren"]),
   );
   expect(await screen.findByRole("heading", { name: "AlphaJob" })).toBeInTheDocument();
@@ -128,7 +128,7 @@ test("a client that cannot answer the run graph is never sent one on a change", 
 
 test("a finished run's graph is not read again on a change", async () => {
   const calls = { n: 0 };
-  const { store } = renderAt("/executions/952", counting(executionDetailScenario, "runGraph", calls));
+  const { store } = renderAt("/runs/952", counting(executionDetailScenario, "runGraph", calls));
   expect(await screen.findByRole("region", { name: "Run graph" })).toBeInTheDocument();
   const before = calls.n;
   expect(before).toBeGreaterThan(0);
@@ -138,7 +138,7 @@ test("a finished run's graph is not read again on a change", async () => {
 
 test("an active run's graph is read again on a change", async () => {
   const calls = { n: 0 };
-  const { store } = renderAt("/executions/903", counting(executionDetailScenario, "runGraph", calls));
+  const { store } = renderAt("/runs/903", counting(executionDetailScenario, "runGraph", calls));
   expect(await screen.findByRole("heading", { name: "AlphaJob" })).toBeInTheDocument();
   await new Promise((r) => setTimeout(r, 50));
   const before = calls.n;
@@ -168,7 +168,7 @@ test("a run's graph is read once more when the run ends, and not after", async (
       };
     },
   };
-  const { store } = renderAt("/executions/903", ends);
+  const { store } = renderAt("/runs/903", ends);
   expect(await screen.findByRole("heading", { name: "AlphaJob" })).toBeInTheDocument();
   await new Promise((r) => setTimeout(r, 50));
   const before = graphCalls.n;

@@ -51,7 +51,7 @@ test("ExecutionsPage refetches its grid when an EXECUTION signal fires", async (
 
   render(
     <Provider value={client}>
-      <MemoryRouter initialEntries={["/executions"]}>
+      <MemoryRouter initialEntries={["/runs"]}>
         <AppRoutes />
       </MemoryRouter>
     </Provider>,

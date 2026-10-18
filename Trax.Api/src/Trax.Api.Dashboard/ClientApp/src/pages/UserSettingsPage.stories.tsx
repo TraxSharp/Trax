@@ -6,7 +6,7 @@ import { getOverviewPanels } from "../lib/overviewPanels";
 const meta = {
   title: "Pages/User settings",
   component: UserSettingsPage,
-  parameters: { route: "/settings/user" },
+  parameters: { route: "/preferences" },
 } satisfies Meta<typeof UserSettingsPage>;
 
 export default meta;

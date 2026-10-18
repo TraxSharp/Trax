@@ -7,7 +7,7 @@ import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/sto
 const meta = {
   title: "Pages/WorkQueue",
   component: WorkQueuePage,
-  parameters: { route: "/work-queue", mock: workQueueScenario },
+  parameters: { route: "/runs/queued", mock: workQueueScenario },
 } satisfies Meta<typeof WorkQueuePage>;
 
 export default meta;
@@ -269,7 +269,7 @@ export const FilterBySubject: Story = {
 
 // The manifest filter narrows to one manifest's entries; it can arrive in the URL.
 export const FilterByManifest: Story = {
-  parameters: { route: "/work-queue?manifestId=42" },
+  parameters: { route: "/runs/queued?manifestId=42" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(c.getByLabelText("Manifest id")).toHaveValue("42");
@@ -286,6 +286,6 @@ export const ReplaysColumn: Story = {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByLabelText("Select #603")).toBeInTheDocument());
     const row = c.getByLabelText("Select #603").closest("tr") as HTMLElement;
-    expect(within(row).getByRole("link", { name: "#899" })).toHaveAttribute("href", "/executions/899");
+    expect(within(row).getByRole("link", { name: "#899" })).toHaveAttribute("href", "/runs/899");
   },
 };

@@ -45,7 +45,7 @@ function shrinkingHost(before: number, after: number) {
   });
   render(
     <Provider value={client}>
-      <MemoryRouter initialEntries={["/state-machines"]}>
+      <MemoryRouter initialEntries={["/machines"]}>
         <AppRoutes />
       </MemoryRouter>
     </Provider>,

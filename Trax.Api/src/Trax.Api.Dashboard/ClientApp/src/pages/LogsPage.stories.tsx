@@ -6,7 +6,7 @@ import { emptyPage, errorOverride, logsScenario } from "../mock/scenarios";
 const meta = {
   title: "Pages/Logs",
   component: LogsPage,
-  parameters: { route: "/logs", mock: logsScenario },
+  parameters: { route: "/system/logs", mock: logsScenario },
 } satisfies Meta<typeof LogsPage>;
 
 export default meta;

@@ -176,7 +176,7 @@ export function StateMachineInstancePage() {
         {instance.queuedInvokedRunEntryId != null && (
           <p className="text-sm text-fg-2 mb-2">
             The run its state waits on is still queued:{" "}
-            <DetailLink to={`/work-queue/${instance.queuedInvokedRunEntryId}`}>
+            <DetailLink to={`/runs/queued/${instance.queuedInvokedRunEntryId}`}>
               work queue entry {instance.queuedInvokedRunEntryId}
             </DetailLink>
             .
@@ -202,7 +202,7 @@ export function StateMachineInstancePage() {
                 {runs.map((r) => (
                   <tr key={r.id} data-run-id={r.id}>
                     <td className="py-1">
-                      <DetailLink to={`/executions/${r.id}`}>{r.id}</DetailLink>
+                      <DetailLink to={`/runs/${r.id}`}>{r.id}</DetailLink>
                     </td>
                     <td className="py-1 text-fg-2" title={r.name}>
                       {shortName(r.name)}

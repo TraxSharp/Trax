@@ -271,7 +271,7 @@ export function ManifestGroupsPage() {
                 </td>
                 <td className="px-4 py-2">
                   <Link
-                    to={`/groups/${g.id}`}
+                    to={`/schedules/groups/${g.id}`}
                     className="font-medium text-accent-fg hover:underline"
                   >
                     {g.name}
@@ -335,7 +335,7 @@ export function ManifestGroupsPage() {
             nodes={drawn.nodes}
             edges={drawn.edges}
             ariaLabel="Dependency graph"
-            onSelect={(id) => navigate(`/groups/${id}`)}
+            onSelect={(id) => navigate(`/schedules/groups/${id}`)}
           />
         </div>
       )}

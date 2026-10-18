@@ -396,7 +396,7 @@ export function ExecutionsPage() {
                     </td>
                     <td className="px-4 py-2">
                       <Link
-                        to={`/executions/${e.id}`}
+                        to={`/runs/${e.id}`}
                         className="font-medium text-accent-fg hover:underline"
                         title={e.name}
                       >
@@ -422,7 +422,7 @@ export function ExecutionsPage() {
                     </td>
                     <td className="px-4 py-2 text-xs">
                       {e.parentId != null && (
-                        <Link to={`/executions/${e.parentId}`} className="text-accent-fg hover:underline">
+                        <Link to={`/runs/${e.parentId}`} className="text-accent-fg hover:underline">
                           #{e.parentId}
                         </Link>
                       )}

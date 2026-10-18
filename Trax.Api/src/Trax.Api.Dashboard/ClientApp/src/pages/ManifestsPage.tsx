@@ -310,7 +310,7 @@ export function ManifestsPage() {
                 </td>
                 <td className="px-4 py-2">
                   <Link
-                    to={`/manifests/${m.id}`}
+                    to={`/schedules/${m.id}`}
                     className="font-medium text-accent-fg hover:underline"
                     title={m.name}
                   >

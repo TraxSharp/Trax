@@ -7,7 +7,7 @@ import type { MockSchemaOverrides } from "../mock/build-mock-schema";
 const meta = {
   title: "Pages/State machines",
   component: StateMachinesPage,
-  parameters: { route: "/state-machines", mock: machineScenario },
+  parameters: { route: "/machines", mock: machineScenario },
 } satisfies Meta<typeof StateMachinesPage>;
 
 export default meta;
@@ -33,12 +33,12 @@ export const Lists: Story = {
     expect(instances(c).getAllByText("Yes")).toHaveLength(3);
     expect(instances(c).getByRole("link", { name: MACHINE_IDS.dispatched })).toHaveAttribute(
       "href",
-      `/state-machines/source-partition/system/${MACHINE_IDS.dispatched}`,
+      `/machines/source-partition/system/${MACHINE_IDS.dispatched}`,
     );
     // A user's draft is named by its row too.
     expect(instances(c).getByRole("link", { name: MACHINE_IDS.draftBuilding })).toHaveAttribute(
       "href",
-      `/state-machines/topic-map/user/${MACHINE_IDS.draftBuilding}?row=21`,
+      `/machines/topic-map/user/${MACHINE_IDS.draftBuilding}?row=21`,
     );
     expect(c.queryByText(/context/i, { selector: "th" })).not.toBeInTheDocument();
     expect(c.getByText("1–5 of 5")).toBeInTheDocument();

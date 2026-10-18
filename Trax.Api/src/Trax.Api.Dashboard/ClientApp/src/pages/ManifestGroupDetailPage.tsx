@@ -64,7 +64,7 @@ export function ManifestGroupDetailPage() {
 
   return (
     <div>
-      <Link to="/groups" className="text-sm text-accent-fg hover:underline">
+      <Link to="/schedules/groups" className="text-sm text-accent-fg hover:underline">
         ← All groups
       </Link>
       <h1 className="text-2xl font-bold text-fg mt-2 mb-6">{group.name}</h1>
@@ -144,7 +144,7 @@ function GroupManifests({ groupId }: { groupId: number }) {
           {items.map((m) => (
             <li key={m.id} className="py-2 flex items-center justify-between">
               <Link
-                to={`/manifests/${m.id}`}
+                to={`/schedules/${m.id}`}
                 className="text-accent-fg hover:underline"
               >
                 {shortName(m.name)}
@@ -185,7 +185,7 @@ function GroupExecutions({ groupId }: { groupId: number }) {
           {items.map((e) => (
             <li key={e.id} className="py-2 flex items-center justify-between">
               <Link
-                to={`/executions/${e.id}`}
+                to={`/runs/${e.id}`}
                 className="text-accent-fg hover:underline"
               >
                 {shortName(e.name)}
@@ -301,7 +301,7 @@ function Dag({
       edges={drawn.edges}
       ariaLabel="Dependency graph"
       selectedId={String(focalId)}
-      onSelect={(id) => id !== String(focalId) && navigate(`/groups/${id}`)}
+      onSelect={(id) => id !== String(focalId) && navigate(`/schedules/groups/${id}`)}
     />
   );
 }

@@ -8,7 +8,7 @@ const meta = {
   title: "Pages/Work queue detail",
   component: WorkQueueDetailPage,
   // routePath lets the page read its id from useParams.
-  parameters: { routePath: "/work-queue/:id", route: "/work-queue/601", mock: workQueueScenario },
+  parameters: { routePath: "/runs/queued/:id", route: "/runs/queued/601", mock: workQueueScenario },
 } satisfies Meta<typeof WorkQueueDetailPage>;
 
 export default meta;
@@ -23,7 +23,7 @@ function acceptConfirm() {
 }
 
 // The captured real-data fixture (route selects a fixtured id).
-export const Fixture: Story = { parameters: { fixtures: true, mock: undefined, route: "/work-queue/1500000" } };
+export const Fixture: Story = { parameters: { fixtures: true, mock: undefined, route: "/runs/queued/1500000" } };
 export const Real: Story = { parameters: { real: true } };
 
 // A subject-keyed entry names the entry it waits on, and links it.
@@ -35,13 +35,13 @@ export const WaitingOnSubject: Story = {
     expect(c.getByText("Waiting on").nextElementSibling).toHaveTextContent(
       "Entry 604, which is running for the same subject",
     );
-    expect(c.getByRole("link", { name: "Entry 604" })).toHaveAttribute("href", "/work-queue/604");
+    expect(c.getByRole("link", { name: "Entry 604" })).toHaveAttribute("href", "/runs/queued/604");
   },
 };
 
 // The input is shown as the API returns it, sensitive values masked.
 export const MaskedInput: Story = {
-  parameters: { route: "/work-queue/603" },
+  parameters: { route: "/runs/queued/603" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "ReportTrain" })).toBeInTheDocument());
@@ -52,7 +52,7 @@ export const MaskedInput: Story = {
 
 // A staged entry says it is waiting on its OnQueue hook.
 export const Staged: Story = {
-  parameters: { route: "/work-queue/602" },
+  parameters: { route: "/runs/queued/602" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "EmailTrain" })).toBeInTheDocument());
@@ -99,17 +99,17 @@ export const CancelUserDraftEntryRefused: Story = {
 
 // A dispatched entry cannot be cancelled and links its run.
 export const DispatchedHasNoCancel: Story = {
-  parameters: { route: "/work-queue/604" },
+  parameters: { route: "/runs/queued/604" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "OrderTrain" })).toBeInTheDocument());
     expect(c.queryByRole("button", { name: "Cancel entry" })).not.toBeInTheDocument();
-    expect(c.getByRole("link", { name: "#88001" })).toHaveAttribute("href", "/executions/88001");
+    expect(c.getByRole("link", { name: "#88001" })).toHaveAttribute("href", "/runs/88001");
   },
 };
 
 export const NotFound: Story = {
-  parameters: { route: "/work-queue/999" },
+  parameters: { route: "/runs/queued/999" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText("No work queue entry found.")).toBeInTheDocument();
@@ -126,17 +126,17 @@ export const LoadError: Story = {
 
 // An entry whose run replays an earlier run's decisions links that run; the subject links its queue.
 export const ReplaysDecisions: Story = {
-  parameters: { route: "/work-queue/603" },
+  parameters: { route: "/runs/queued/603" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    expect(await c.findByRole("link", { name: "#899" })).toHaveAttribute("href", "/executions/899");
+    expect(await c.findByRole("link", { name: "#899" })).toHaveAttribute("href", "/runs/899");
   },
 };
 
 export const SubjectLinksItsQueue: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    expect(await c.findByRole("link", { name: "order-42" })).toHaveAttribute("href", "/work-queue?subjectKey=order-42");
+    expect(await c.findByRole("link", { name: "order-42" })).toHaveAttribute("href", "/runs/queued?subjectKey=order-42");
     expect(c.getByText("None: it asks afresh")).toBeInTheDocument();
   },
 };

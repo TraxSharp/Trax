@@ -228,7 +228,7 @@ export function WorkQueuePage() {
                 </td>
                 <td className="px-4 py-2" title={w.trainName}>
                   <Link
-                    to={`/work-queue/${w.id}`}
+                    to={`/runs/queued/${w.id}`}
                     className="font-medium text-accent-fg hover:underline"
                   >
                     {shortName(w.trainName)}
@@ -268,7 +268,7 @@ export function WorkQueuePage() {
                 </td>
                 <td className="px-4 py-2 text-xs">
                   {w.replayDecisionsOf != null ? (
-                    <Link to={`/executions/${w.replayDecisionsOf}`} className="text-accent-fg hover:underline">
+                    <Link to={`/runs/${w.replayDecisionsOf}`} className="text-accent-fg hover:underline">
                       #{w.replayDecisionsOf}
                     </Link>
                   ) : (

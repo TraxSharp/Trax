@@ -7,8 +7,8 @@ const meta = {
   title: "Pages/Persisted op detail",
   component: PersistedOperationDetailPage,
   parameters: {
-    routePath: "/persisted-operations/:id",
-    route: "/persisted-operations/greet.v1",
+    routePath: "/api-admin/persisted-operations/:id",
+    route: "/api-admin/persisted-operations/greet.v1",
     mock: persistedOperationsScenario,
   },
 } satisfies Meta<typeof PersistedOperationDetailPage>;
@@ -68,7 +68,7 @@ export const DeactivateCancelled: Story = {
 
 // An inactive operation shows why, and Restore brings it back.
 export const Restore: Story = {
-  parameters: { route: "/persisted-operations/greet.v0" },
+  parameters: { route: "/api-admin/persisted-operations/greet.v0" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("Deprecation reason")).toBeInTheDocument());
@@ -114,7 +114,7 @@ export const EditShapeDiff: Story = {
 
 // A named tenant's operation is read with its tenant.
 export const NamedTenant: Story = {
-  parameters: { route: "/persisted-operations/orders.list?tenant=acme" },
+  parameters: { route: "/api-admin/persisted-operations/orders.list?tenant=acme" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("Orders (v3)")).toBeInTheDocument());
@@ -123,7 +123,7 @@ export const NamedTenant: Story = {
 };
 
 export const NotFound: Story = {
-  parameters: { route: "/persisted-operations/missing.v1" },
+  parameters: { route: "/api-admin/persisted-operations/missing.v1" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(

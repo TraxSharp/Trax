@@ -355,7 +355,7 @@ export function DeadLettersPage() {
                 </td>
                 <td className="px-4 py-2">
                   <Link
-                    to={`/dead-letters/${d.id}`}
+                    to={`/runs/dead-letters/${d.id}`}
                     className="font-medium text-accent-fg hover:underline"
                   >
                     {d.manifestName}

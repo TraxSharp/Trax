@@ -5,7 +5,7 @@ import { RealTimePage } from "./RealTimePage";
 const meta = {
   title: "Pages/Real-time",
   component: RealTimePage,
-  parameters: { route: "/realtime" },
+  parameters: { route: "/system/live" },
 } satisfies Meta<typeof RealTimePage>;
 
 export default meta;

@@ -64,7 +64,7 @@ export function DeadLetterDetailPage() {
   if (result.error && !d)
     return (
       <>
-        <BackLink to="/dead-letters" label="Dead letters" />
+        <BackLink to="/runs/dead-letters" label="Dead letters" />
         <p className="text-danger-fg mt-4">{result.error.message}</p>
       </>
     );
@@ -88,7 +88,7 @@ export function DeadLetterDetailPage() {
     else if (res?.success) {
       toast(`${title} has been re-queued (work queue entry ${res.workQueueId}).`, "success");
       if (res.workQueueId != null) {
-        navigate(`/work-queue/${res.workQueueId}`);
+        navigate(`/runs/queued/${res.workQueueId}`);
         return;
       }
     } else toast(res?.message ?? "Could not requeue.", "error");
@@ -109,7 +109,7 @@ export function DeadLetterDetailPage() {
 
   return (
     <div>
-      <BackLink to="/dead-letters" label="Dead letters" />
+      <BackLink to="/runs/dead-letters" label="Dead letters" />
       <div className="flex items-center gap-3 mt-2 mb-6">
         <h1 className="text-2xl font-bold text-fg">{title}</h1>
         {awaiting && (
@@ -152,15 +152,15 @@ export function DeadLetterDetailPage() {
             [
               "Manifest ID",
               <span>
-                <DetailLink to={`/manifests/${d.manifestId}`}>{d.manifestId}</DetailLink>
+                <DetailLink to={`/schedules/${d.manifestId}`}>{d.manifestId}</DetailLink>
                 {" · "}
-                <DetailLink to={`/dead-letters?manifestId=${d.manifestId}`}>its dead letters</DetailLink>
+                <DetailLink to={`/runs/dead-letters?manifestId=${d.manifestId}`}>its dead letters</DetailLink>
               </span>,
             ],
             [
               "Retry execution",
               d.retryMetadataId != null ? (
-                <DetailLink to={`/executions/${d.retryMetadataId}`}>#{d.retryMetadataId}</DetailLink>
+                <DetailLink to={`/runs/${d.retryMetadataId}`}>#{d.retryMetadataId}</DetailLink>
               ) : (
                 "—"
               ),
@@ -200,7 +200,7 @@ function ManifestPanel({ manifest: m }: { manifest: ManifestDetail }) {
     <DetailPanel title="Manifest">
       <Fields
         rows={[
-          ["Name", <DetailLink to={`/manifests/${m.id}`}>{shortName(m.name)}</DetailLink>],
+          ["Name", <DetailLink to={`/schedules/${m.id}`}>{shortName(m.name)}</DetailLink>],
           ["Enabled", m.isEnabled ? "Yes" : "No"],
           ["Schedule", schedule(m)],
           ["Max retries", m.maxRetries],
@@ -239,7 +239,7 @@ function LatestFailedRun({ manifestId }: { manifestId: number }) {
     <div className="bg-surface rounded-lg border border-line border-l-4 border-l-danger p-5 mb-6">
       <div className="flex items-center gap-3 mb-4">
         <h2 className="text-sm font-semibold text-danger-fg">Most recent failure</h2>
-        <Link to={`/executions/${run.id}`} className="text-xs text-accent-fg hover:underline">
+        <Link to={`/runs/${run.id}`} className="text-xs text-accent-fg hover:underline">
           View run #{run.id}
         </Link>
       </div>
@@ -307,7 +307,7 @@ function FailedRuns({ manifestId }: { manifestId: number }) {
               {items.map((e) => (
                 <tr key={e.id}>
                   <td className="py-1">
-                    <DetailLink to={`/executions/${e.id}`}>#{e.id}</DetailLink>
+                    <DetailLink to={`/runs/${e.id}`}>#{e.id}</DetailLink>
                   </td>
                   <td className="py-1">
                     <StateBadge state={e.trainState} />

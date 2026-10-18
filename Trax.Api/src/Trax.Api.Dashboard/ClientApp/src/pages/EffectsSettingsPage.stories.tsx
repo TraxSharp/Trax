@@ -6,7 +6,7 @@ import { effectsScenario } from "../mock/scenarios";
 const meta = {
   title: "Pages/Effects settings",
   component: EffectsSettingsPage,
-  parameters: { route: "/settings/effects", mock: effectsScenario },
+  parameters: { route: "/system/effects", mock: effectsScenario },
 } satisfies Meta<typeof EffectsSettingsPage>;
 
 export default meta;

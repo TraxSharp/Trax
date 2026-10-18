@@ -26,7 +26,7 @@ test("fixtures render real captured data on the Work queue page", async () => {
   const client = createMockClient({ store: createMockStore() }); // fixtures on by default
   const { findAllByText } = render(
     <Provider value={client}>
-      <MemoryRouter initialEntries={["/work-queue"]}>
+      <MemoryRouter initialEntries={["/runs/queued"]}>
         <AppRoutes />
       </MemoryRouter>
     </Provider>,
@@ -36,7 +36,7 @@ test("fixtures render real captured data on the Work queue page", async () => {
   expect(rows.length).toBeGreaterThan(0);
 });
 
-test("the sidebar lists Persisted ops when the host exposes the namespace", async () => {
+test("the sidebar lists Persisted operations when the host exposes the namespace", async () => {
   const client = createMockClient({ store: createMockStore(), fixtures: false });
   const { findByRole, findByTestId } = render(
     <Provider value={client}>
@@ -45,12 +45,12 @@ test("the sidebar lists Persisted ops when the host exposes the namespace", asyn
       </MemoryRouter>
     </Provider>,
   );
-  expect(await findByRole("link", { name: /Persisted ops/ })).toBeInTheDocument();
+  expect(await findByRole("link", { name: /Persisted operations/ })).toBeInTheDocument();
   // The header shows the host's environment.
   expect(await findByTestId("environment-badge")).toBeInTheDocument();
 });
 
-test("the sidebar hides Persisted ops on a host that does not serve their management", async () => {
+test("the sidebar hides Persisted operations on a host that does not serve their management", async () => {
   const client = createMockClient({
     store: createMockStore(),
     fixtures: false,
@@ -63,8 +63,8 @@ test("the sidebar hides Persisted ops on a host that does not serve their manage
       </MemoryRouter>
     </Provider>,
   );
-  expect(await findByRole("link", { name: /Work queue/ })).toBeInTheDocument();
-  await waitFor(() => expect(queryByRole("link", { name: /Persisted ops/ })).not.toBeInTheDocument());
+  expect(await findByRole("link", { name: /Queued/ })).toBeInTheDocument();
+  await waitFor(() => expect(queryByRole("link", { name: /Persisted operations/ })).not.toBeInTheDocument());
   // The failed probe is an answer, not a failed refresh.
   expect(queryByRole("status")).not.toBeInTheDocument();
 });

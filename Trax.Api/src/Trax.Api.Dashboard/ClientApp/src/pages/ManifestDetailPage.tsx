@@ -58,7 +58,7 @@ export function ManifestDetailPage() {
   if (result.error && !m)
     return (
       <>
-        <BackLink to="/manifests" label="Manifests" />
+        <BackLink to="/schedules" label="Manifests" />
         <p className="text-danger-fg mt-4">{result.error.message}</p>
       </>
     );
@@ -120,7 +120,7 @@ export function ManifestDetailPage() {
 
   return (
     <div>
-      <BackLink to="/manifests" label="Manifests" />
+      <BackLink to="/schedules" label="Manifests" />
       <div className="flex items-center gap-3 mt-2 mb-6">
         <h1 className="text-2xl font-bold text-fg">
           {shortName(m.name)}
@@ -157,14 +157,14 @@ export function ManifestDetailPage() {
             ["Priority", m.priority],
             [
               "Group",
-              <Link className="text-accent-fg hover:underline" to={`/groups/${m.manifestGroupId}`}>
+              <Link className="text-accent-fg hover:underline" to={`/schedules/groups/${m.manifestGroupId}`}>
                 {m.manifestGroupName ?? `#${m.manifestGroupId}`}
               </Link>,
             ],
             [
               "Depends on",
               m.dependsOnManifestId ? (
-                <Link className="text-accent-fg hover:underline" to={`/manifests/${m.dependsOnManifestId}`}>
+                <Link className="text-accent-fg hover:underline" to={`/schedules/${m.dependsOnManifestId}`}>
                   #{m.dependsOnManifestId}
                 </Link>
               ) : (
@@ -175,11 +175,11 @@ export function ManifestDetailPage() {
             [
               "Queue and dead letters",
               <span>
-                <Link className="text-accent-fg hover:underline" to={`/work-queue?manifestId=${m.id}`}>
+                <Link className="text-accent-fg hover:underline" to={`/runs/queued?manifestId=${m.id}`}>
                   Work queue entries
                 </Link>
                 {" · "}
-                <Link className="text-accent-fg hover:underline" to={`/dead-letters?manifestId=${m.id}`}>
+                <Link className="text-accent-fg hover:underline" to={`/runs/dead-letters?manifestId=${m.id}`}>
                   Dead letters
                 </Link>
               </span>,
@@ -374,7 +374,7 @@ function ExecutionHistory({ manifestId }: { manifestId: number }) {
               <tr key={e.id}>
                 <td className="py-1">
                   <Link
-                    to={`/executions/${e.id}`}
+                    to={`/runs/${e.id}`}
                     className="text-accent-fg hover:underline"
                   >
                     #{e.id}
