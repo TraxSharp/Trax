@@ -162,6 +162,11 @@ public partial class Monad<TInput, TReturn>
                 child.CancellationToken,
                 child.Memory.GetValueOrDefault(typeof(IServiceProvider)) as IServiceProvider
             );
+            // Two branches log and trace side by side; the scope and the Activity say which one wrote
+            // what. Both flow into the branch's junctions with the async context.
+            using var activity = BranchDiagnostics.Source.StartActivity(child.BranchPath!);
+            activity?.SetTag(BranchDiagnostics.BranchPathKey, child.BranchPath);
+            using var scope = child.BranchLogScope();
             Exception? failure;
 
             try

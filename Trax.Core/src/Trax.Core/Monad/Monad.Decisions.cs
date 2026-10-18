@@ -1453,6 +1453,25 @@ public partial class Monad<TInput, TReturn>
     }
 
     /// <summary>
+    /// Opens the logger scope a <c>Parallel</c> branch runs under, through the logger factory in
+    /// Memory or the container when there is one; null when there is none, or it cannot open one.
+    /// </summary>
+    internal IDisposable? BranchLogScope()
+    {
+        try
+        {
+            return Optional<ILoggerFactory>()
+                ?.CreateLogger("Trax.Core.Parallel")
+                .BeginScope(new BranchScope(BranchPath!));
+        }
+        catch
+        {
+            // Logging must not fail a branch.
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Logs a problem the run carries on past, through the logger factory in Memory or the
     /// container when there is one.
     /// </summary>

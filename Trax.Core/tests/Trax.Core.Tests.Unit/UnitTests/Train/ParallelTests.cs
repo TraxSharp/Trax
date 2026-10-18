@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using AwesomeAssertions;
 using CsCheck;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Core;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
@@ -8,6 +10,7 @@ using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;
+using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
 
@@ -413,6 +416,62 @@ public class ParallelTests : TestSetup
             .BeOfType<BranchesFailedException>()
             .Which.Failures.Should()
             .OnlyContain(f => f.Exception.Message.Contains("could not prepare its scope"));
+    }
+
+    [Test]
+    public async Task EachBranch_LogsAndTracesUnderItsBranchPath()
+    {
+        var lines = new LogLineProvider();
+        var factory = LoggerFactory.Create(b => b.AddProvider(lines));
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == BranchDiagnostics.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var result = await new LoggingBranchesTrain(factory).RunEither("abc").WaitAsync(Hang);
+
+        result.IsRight.Should().BeTrue();
+
+        var embedding = lines.Lines.Single(l => l.Message == "embedding");
+        var cocitation = lines.Lines.Single(l => l.Message == "cocitation");
+
+        NamesBranch(embedding.Scopes, "Parallel#0/embedding")
+            .Should()
+            .BeTrue(
+                $"the branch opens a logger scope naming it, so its lines are told apart ({Adr})"
+            );
+        embedding
+            .Activity.Should()
+            .NotBeNull($"the branch starts an Activity, so its traces are told apart ({Adr})");
+        Carries(embedding.Activity, "Parallel#0/embedding")
+            .Should()
+            .BeTrue($"each Activity carries its branch's path ({Adr})");
+
+        NamesBranch(cocitation.Scopes, "Parallel#0/cocitation")
+            .Should()
+            .BeTrue(
+                $"the branch opens a logger scope naming it, so its lines are told apart ({Adr})"
+            );
+        cocitation
+            .Activity.Should()
+            .NotBeNull($"the branch starts an Activity, so its traces are told apart ({Adr})");
+        Carries(cocitation.Activity, "Parallel#0/cocitation")
+            .Should()
+            .BeTrue($"each Activity carries its branch's path ({Adr})");
+
+        static bool NamesBranch(IReadOnlyList<object?> scopes, string path) =>
+            scopes.Any(s => s?.ToString()?.Contains(path) == true);
+
+        static bool Carries(Activity? activity, string path) =>
+            activity is not null
+            && (
+                activity.DisplayName.Contains(path)
+                || activity.Tags.Any(t => (t.Value ?? string.Empty).Contains(path))
+                || activity.Baggage.Any(b => (b.Value ?? string.Empty).Contains(path))
+            );
     }
 
     #endregion
@@ -1441,6 +1500,89 @@ public class ParallelTests : TestSetup
                         .Branch("b", b => b.Chain<ReadsSharedB>())
                 )
                 .Chain<JoinSeen>()
+                .Resolve();
+    }
+
+    /// <summary>
+    /// Records every line that passes through it with the scopes open when it was written and the
+    /// <see cref="Activity"/> current on the writing thread. Scopes come from the factory's shared
+    /// scope provider, as they do for the console and OpenTelemetry providers: a scope opened on any
+    /// of the factory's loggers covers the lines of all of them.
+    /// </summary>
+    private sealed class LogLineProvider : ILoggerProvider, ISupportExternalScope
+    {
+        private IExternalScopeProvider _scopes = new LoggerExternalScopeProvider();
+
+        public List<LogLine> Lines { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new Logger(this);
+
+        public void SetScopeProvider(IExternalScopeProvider scopeProvider) =>
+            _scopes = scopeProvider;
+
+        public void Dispose() { }
+
+        private sealed class Logger(LogLineProvider provider) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => provider._scopes.Push(state);
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter
+            )
+            {
+                var scopes = new List<object?>();
+                provider._scopes.ForEachScope((scope, list) => list.Add(scope), scopes);
+                lock (provider.Lines)
+                    provider.Lines.Add(
+                        new LogLine(formatter(state, exception), scopes, Activity.Current)
+                    );
+            }
+        }
+    }
+
+    private sealed record LogLine(
+        string Message,
+        IReadOnlyList<object?> Scopes,
+        Activity? Activity
+    );
+
+    private sealed class LogsEmbedding(ILogger<LoggingBranchesTrain> logger)
+        : Junction<string, Embedding>
+    {
+        public override Task<Embedding> Run(string input)
+        {
+            logger.LogInformation("embedding");
+            return Task.FromResult(new Embedding(1));
+        }
+    }
+
+    private sealed class LogsCoCitation(ILogger<LoggingBranchesTrain> logger)
+        : Junction<string, CoCitation>
+    {
+        public override Task<CoCitation> Run(string input)
+        {
+            logger.LogInformation("cocitation");
+            return Task.FromResult(new CoCitation(1));
+        }
+    }
+
+    private sealed class LoggingBranchesTrain(ILoggerFactory loggerFactory) : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            AddServices<ILoggerFactory>(loggerFactory)
+                .Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("embedding", b => b.Chain<LogsEmbedding>())
+                        .Branch("cocitation", b => b.Chain<LogsCoCitation>())
+                )
+                .Chain<Combine>()
                 .Resolve();
     }
 
