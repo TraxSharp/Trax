@@ -46,7 +46,11 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
     /// <summary>The compiled fences of every page, one unit per page and group.</summary>
     public static IEnumerable<SnippetUnit> InDocs() =>
         WithTheAppInTheTests(
-            Following(Own(Infrastructure.Fences.InDocs()).ToList(), SnippetCompiler.FollowedPageOf)
+            Following(
+                    Own(Infrastructure.Fences.InDocs()).ToList(),
+                    SnippetCompiler.FollowedPageOf,
+                    SnippetCompiler.MovesOf
+                )
                 .ToList(),
             SnippetCompiler.FollowedPageOf
         );
@@ -64,7 +68,15 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
         var apps = units.Where(u => u.Group == AppGroup).ToDictionary(u => u.Page);
         return units.Select(u =>
         {
-            if (!u.IsTests)
+            // A test project, or on a page in a chain, any project but the app: each is an assembly
+            // of its own that references the app, as a book's worker references its library.
+            var chained =
+                followedPageOf is not null
+                && (
+                    followedPageOf(u.Page) is not null
+                    || units.Any(o => followedPageOf(o.Page) == u.Page)
+                );
+            if (u.Group == AppGroup || !(u.IsTests || chained))
                 return u;
             var page = (string?)u.Page;
             while (page is not null && !apps.ContainsKey(page))
@@ -95,7 +107,8 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
     /// <param name="followedPageOf">The page a page follows, or null.</param>
     public static IEnumerable<SnippetUnit> Following(
         IReadOnlyList<SnippetUnit> units,
-        Func<string, string?> followedPageOf
+        Func<string, string?> followedPageOf,
+        Func<string, IReadOnlyList<(string From, string To)>>? movesOf = null
     )
     {
         var byPage = units.ToDictionary(u => (u.Page, u.Group));
@@ -112,6 +125,15 @@ public sealed record SnippetUnit(string Page, string Group, IReadOnlyList<Fence>
             var fences = new List<Fence>();
             foreach (var page in chain.Append(unit.Page))
             {
+                // A page that moves files moves the ones the pages before it showed, before its own
+                // fences replace any of them.
+                foreach (var (from, to) in movesOf?.Invoke(page) ?? [])
+                    for (var i = 0; i < fences.Count; i++)
+                        if (
+                            fences[i].File is { } file
+                            && file.StartsWith(from, StringComparison.Ordinal)
+                        )
+                            fences[i] = fences[i] with { File = to + file[from.Length..] };
                 if (!byPage.TryGetValue((page, unit.Group), out var earlier))
                     continue;
                 foreach (var fence in earlier.Fences)
@@ -310,6 +332,47 @@ public static class SnippetCompiler
     public static bool OptsOutOfSharedContextIn(string markdown) =>
         NoSnippetContext.IsMatch(markdown);
 
+    private static readonly Regex FrontMatter = new(
+        @"\A---\n(?<body>(?:(?!---\n).*\n)*?)---(?:\n|\z)",
+        RegexOptions.Compiled
+    );
+
+    private static readonly Regex Move = new(
+        @"^[ \t]+-[ \t]+""?(?<from>[^""\s]+)[ \t]+->[ \t]+(?<to>[^""\s]+?)""?[ \t]*$",
+        RegexOptions.Compiled
+    );
+
+    /// <summary>
+    /// The moves the page's front matter lists under <c>moves:</c>, each a path prefix of the files
+    /// the pages before it showed and the prefix they move to (<c>- Trains/ -> Shopfront.Core/Trains/</c>).
+    /// </summary>
+    public static IReadOnlyList<(string From, string To)> MovesOf(string page)
+    {
+        var file = RepoRoot.Combine(page.Split('/'));
+        return File.Exists(file) ? MovesIn(File.ReadAllText(file).Replace("\r\n", "\n")) : [];
+    }
+
+    /// <summary>The moves listed under <c>moves:</c> in the front matter of <paramref name="markdown"/>.</summary>
+    public static IReadOnlyList<(string From, string To)> MovesIn(string markdown)
+    {
+        var body = FrontMatter.Match(markdown);
+        if (!body.Success)
+            return [];
+        var moves = new List<(string, string)>();
+        var inMoves = false;
+        foreach (var line in body.Groups["body"].Value.Split('\n'))
+        {
+            if (!line.StartsWith(' ') && !line.StartsWith('\t'))
+            {
+                inMoves = line.TrimEnd() == "moves:";
+                continue;
+            }
+            if (inMoves && Move.Match(line) is { Success: true } move)
+                moves.Add((move.Groups["from"].Value, move.Groups["to"].Value));
+        }
+        return moves;
+    }
+
     private static readonly Regex Follows = new(
         @"\A---\n(?:(?!---\n).*\n)*?follows:[ \t]*(?<page>\S+)[ \t]*\n(?:.*\n)*?---(?:\n|\z)",
         RegexOptions.Compiled
@@ -341,9 +404,9 @@ public static class SnippetCompiler
     /// </summary>
     public static IReadOnlyList<string> Diagnose(SnippetUnit unit)
     {
-        if (unit.IsTests && unit.App.Count > 0)
+        if (unit.App.Count > 0)
         {
-            // The project under test: its own diagnostics belong to the app unit, which reports
+            // The project it references: its own diagnostics belong to the app unit, which reports
             // them. It grants the tests its internals, as InternalsVisibleTo does.
             var app = Compile(
                 AppAssemblyName,
@@ -355,11 +418,14 @@ public static class SnippetCompiler
             );
             return Report(
                 Compile(
-                    TestsAssemblyName,
+                    unit.IsTests ? TestsAssemblyName : $"{AppAssemblyName}.{unit.Group}",
                     unit.Page,
                     unit.Fences,
-                    TestImplicitUsings,
-                    [.. TestReferences.Value, app.ToMetadataReference()],
+                    unit.IsTests ? TestImplicitUsings : ImplicitUsings,
+                    [
+                        .. unit.IsTests ? TestReferences.Value : References.Value,
+                        app.ToMetadataReference(),
+                    ],
                     withContext: false
                 )
             );

@@ -381,4 +381,72 @@ public class SnippetCompilerTests
         tests.App.Should().ContainSingle();
         SnippetCompiler.Diagnose(tests).Should().BeEmpty();
     }
+
+    [Test]
+    public void MovedFiles_AreReplacedAtTheirNewPath()
+    {
+        var units = SnippetUnit
+            .Following(
+                SnippetUnit
+                    .Own(
+                        Fences
+                            .In(
+                                "one.md",
+                                "```csharp compile=app file=Trains/A.cs\npublic record A;\n```\n"
+                            )
+                            .Concat(
+                                Fences.In(
+                                    "two.md",
+                                    "```csharp compile=app file=Core/Trains/A.cs\npublic record A(int X);\n```\n"
+                                )
+                            )
+                    )
+                    .ToList(),
+                page => Chapters.GetValueOrDefault(page),
+                page => page == "two.md" ? [("Trains/", "Core/Trains/")] : []
+            )
+            .ToList();
+
+        var two = units.Single(u => u.Page == "two.md");
+        two.Fences.Should().ContainSingle().Which.Page.Should().Be("two.md");
+        SnippetCompiler.Diagnose(two).Should().BeEmpty();
+    }
+
+    [TestCase(
+        "---\nmoves:\n  - Trains/ -> Core/Trains/\n  - \"Program.cs -> Hub/Program.cs\"\ntitle: X\n---\n"
+    )]
+    public void Moves_AreReadFromTheFrontMatter(string markdown) =>
+        SnippetCompiler
+            .MovesIn(markdown)
+            .Should()
+            .Equal(("Trains/", "Core/Trains/"), ("Program.cs", "Hub/Program.cs"));
+
+    [Test]
+    public void AnotherGroupOnAChainedPage_CompilesAgainstTheApp()
+    {
+        var units = SnippetUnit
+            .WithTheAppInTheTests(
+                SnippetUnit
+                    .Own(
+                        Fences
+                            .In(
+                                "one.md",
+                                "```csharp compile=app file=A.cs\npublic record A;\n```\n"
+                            )
+                            .Concat(
+                                Fences.In(
+                                    "two.md",
+                                    "```csharp compile=worker file=Worker/Program.cs\nConsole.WriteLine(new A());\n```\n"
+                                )
+                            )
+                    )
+                    .ToList(),
+                page => Chapters.GetValueOrDefault(page)
+            )
+            .ToList();
+
+        var worker = units.Single(u => u.Group == "worker");
+        worker.App.Should().ContainSingle();
+        SnippetCompiler.Diagnose(worker).Should().BeEmpty();
+    }
 }
