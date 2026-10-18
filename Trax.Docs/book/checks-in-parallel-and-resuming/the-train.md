@@ -15,9 +15,6 @@ follows: book/checks-in-parallel-and-resuming/the-courier-and-the-warehouse
 `Shopfront.Core/Trains/FulfilOrder/FulfilOrderTrain.cs`:
 
 ```csharp compile=app file=Shopfront.Core/Trains/FulfilOrder/FulfilOrderTrain.cs
-// Parallel is experimental, and says so with TRAXEXP001 wherever it is used.
-#pragma warning disable TRAXEXP001
-
 using Shopfront.Trains.FulfilOrder.Junctions;
 using Shopfront.Trains.FulfilOrder.Models;
 using Trax.Core.Functional;
@@ -63,8 +60,6 @@ What is new:
   Only that value is stored, not the rest of Memory, so the startup check can tell from the chain
   alone that every step after it finds what it needs: `PackOrderJunction` needs the input, which a
   resumed run has, and the label, which the checkpoint gives back.
-- **`#pragma warning disable TRAXEXP001`.** `Parallel` is experimental and reports `TRAXEXP001` as
-  an error until the code that uses it says it knows. The pragma says so in the one file that does.
 
 A run that completes deletes its checkpoints. A run that fails keeps them until a resume of it
 completes or metadata cleanup takes the run.
