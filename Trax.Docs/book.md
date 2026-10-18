@@ -129,7 +129,7 @@ work, host tracking, and recovering a run whose worker died.
 
 ## Part 4: Machines
 
-### 12. Checkout is a state machine
+### [12. Checkout is a state machine](/docs/book/checkout-is-a-state-machine)
 
 Rewrite checkout as a machine: cart, address, payment, placing. Each move is a typed mutation, the
 server applies it, and an abandoned cart is cleared on its own. Serving a machine turns on
