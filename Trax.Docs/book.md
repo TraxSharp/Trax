@@ -119,7 +119,7 @@ find it among the dead letters, and requeue it once the supplier is back.
 
 You learn: retries, dead letters, decisions replayed on a requeue, and lifecycle hooks.
 
-### 11. A separate worker
+### [11. A separate worker](/docs/book/a-separate-worker)
 
 Queue fulfilment after each order and move it to a worker process of its own. Cap it to two at a
 time, kill the worker mid-run and see what happens to the run.
