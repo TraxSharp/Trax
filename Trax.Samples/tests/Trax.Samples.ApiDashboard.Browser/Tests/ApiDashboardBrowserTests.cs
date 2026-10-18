@@ -141,7 +141,7 @@ public class ApiDashboardBrowserTests
     // Each page, loaded from its own URL (as a reload is), and something only it draws. {gate} is the
     // machine instance the host started.
     [TestCase("", "Overview", ".recharts-surface")]
-    [TestCase("groups", "Dependency graph", "svg[role=img]")]
+    [TestCase("groups", "Dependency graph", "[aria-label='Dependency graph'] .react-flow__node")]
     [TestCase(
         "trains/Trax.Samples.ApiDashboard.Browser.Host.IRefreshRatesTrain",
         "Trax.Samples.ApiDashboard.Browser.Host.IRefreshRatesTrain",

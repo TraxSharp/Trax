@@ -17,8 +17,8 @@ import { BatchTriggerNotice } from "../components/BatchTriggerNotice";
 import { useSelection } from "../lib/useSelection";
 import { toast } from "../lib/toast";
 import { Pager } from "../components/Pager";
-import { DagGraph } from "../components/DagGraph";
-import { computeDagLayout } from "../lib/dagLayout";
+import { Graph } from "../components/Graph";
+import { groupGraph } from "../lib/groupGraph";
 import { useKeyset } from "../lib/useKeyset";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
@@ -139,18 +139,7 @@ export function ManifestGroupsPage() {
     reexecuteGraph({ requestPolicy: "network-only" }),
   );
   const graph = graphResult.data?.operations?.manifestGroups?.dependencyGraph;
-  const layout = useMemo(
-    () =>
-      computeDagLayout(
-        (graph?.nodes ?? []).map((n) => ({
-          id: n.id,
-          label: n.name,
-          isHighlighted: n.isHighlighted,
-        })),
-        (graph?.edges ?? []).map((e) => ({ fromId: e.fromId, toId: e.toId })),
-      ),
-    [graph],
-  );
+  const drawn = useMemo(() => groupGraph(graph), [graph]);
 
   // Fetch per-group stats for just the visible page, in one batched call (see the API notes on
   // why this is not folded into the list query: it is a heavier aggregation).
@@ -334,7 +323,7 @@ export function ManifestGroupsPage() {
         onNext={next}
       />
 
-      {layout.nodes.length > 0 && (
+      {drawn.nodes.length > 0 && (
         <div className="mt-8 bg-surface rounded-lg border border-line p-5">
           <h2 className="text-sm font-semibold text-fg mb-1">
             Dependency graph
@@ -342,7 +331,12 @@ export function ManifestGroupsPage() {
           <p className="text-xs text-muted mb-3">
             Cross-group dependencies (parent → dependent). Click a group to open it.
           </p>
-          <DagGraph layout={layout} onNodeClick={(id) => navigate(`/groups/${id}`)} />
+          <Graph
+            nodes={drawn.nodes}
+            edges={drawn.edges}
+            ariaLabel="Dependency graph"
+            onSelect={(id) => navigate(`/groups/${id}`)}
+          />
         </div>
       )}
     </div>

@@ -13,8 +13,8 @@ import {
   UPDATE_MANIFEST_GROUP,
 } from "../graphql/mutations";
 import { StateBadge } from "../components/StateBadge";
-import { DagGraph } from "../components/DagGraph";
-import { computeDagLayout } from "../lib/dagLayout";
+import { Graph } from "../components/Graph";
+import { groupGraph } from "../lib/groupGraph";
 import type {
   ExecutionSummary,
   ManifestGroupDependencyGraph,
@@ -285,14 +285,7 @@ function Dag({
   focalId: number;
 }) {
   const navigate = useNavigate();
-  const layout = useMemo(
-    () =>
-      computeDagLayout(
-        graph.nodes.map((n) => ({ id: n.id, label: n.name, isHighlighted: n.isHighlighted })),
-        graph.edges.map((e) => ({ fromId: e.fromId, toId: e.toId })),
-      ),
-    [graph],
-  );
+  const drawn = useMemo(() => groupGraph(graph), [graph]);
 
   // A lone focal node means the group has no cross-group dependencies.
   if (graph.nodes.length <= 1 && graph.edges.length === 0)
@@ -303,9 +296,12 @@ function Dag({
     );
 
   return (
-    <DagGraph
-      layout={layout}
-      onNodeClick={(id) => id !== focalId && navigate(`/groups/${id}`)}
+    <Graph
+      nodes={drawn.nodes}
+      edges={drawn.edges}
+      ariaLabel="Dependency graph"
+      selectedId={String(focalId)}
+      onSelect={(id) => id !== String(focalId) && navigate(`/groups/${id}`)}
     />
   );
 }

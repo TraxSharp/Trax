@@ -40,3 +40,19 @@ configureStorybook({ asyncUtilTimeout: 5000 });
 // Register the global .storybook/preview annotations so composeStories applies the mock
 // decorator (urql Provider + router) to portable stories rendered in vitest.
 setProjectAnnotations([preview]);
+
+// React Flow (components/Graph.tsx) watches its container's size and reads the viewport's zoom from
+// a CSS transform; jsdom has neither API. A no-op observer and an identity matrix are enough for
+// it to render the positioned nodes and edges the layout gave it.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+if (typeof globalThis.DOMMatrixReadOnly === "undefined") {
+  globalThis.DOMMatrixReadOnly = class {
+    m22 = 1;
+  } as unknown as typeof DOMMatrixReadOnly;
+}
