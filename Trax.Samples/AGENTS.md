@@ -53,8 +53,8 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Samples.Tests.Meta/` holds twenty-two convention guards. Eleven are shared with other
-folders, and eleven are this folder's own. `E2EDatabaseProvisioningTests` reads the root CI workflow
+`tests/Trax.Samples.Tests.Meta/` holds twenty-three convention guards. Eleven are shared with other
+folders, and twelve are this folder's own. `E2EDatabaseProvisioningTests` reads the root CI workflow
 and `.github/ci/packages.json`, checking every sample factory's *default* connection string
 against the ports and databases CI actually creates; a factory that declares none, because its sample runs on SQLite or the
 in-memory provider or reads the connection from configuration, gives it nothing to check.
@@ -73,6 +73,12 @@ uses. `SamplePortsTests` keeps every sample port in 5200-5299 or 5310-5319 and o
 `AsyncAssertionsAreAwaitedTests` refuses an async assertion whose Task is dropped unawaited.
 `PlaywrightVersionTests` keeps the `Microsoft.Playwright` pin equal to the screenshot script's
 Playwright, so the browser tests and the script download one browser build (central ADR `0049`).
+`SuitesRunOnceTests` keeps every project CI runs in a job of its own (a suite in
+`.github/ci/packages.json`) out of this folder's job, so its tests run once.
+
+`tests/Trax.Samples.ApiDashboard.Browser/` drives the operations console in chromium. CI runs it in
+its own job, `console-browser`, whenever Trax.Api or anything upstream changes, or the project
+does; this folder's job leaves it out. Locally: `trax-test console-browser`.
 
 `tests/Trax.Samples.Recovery.Browser/` drives the Recovery page in chromium with Playwright for .NET.
 It builds the page with vite, so it needs `npm ci` in the page's folder and in

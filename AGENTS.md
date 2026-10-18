@@ -168,7 +168,10 @@ Cognito key-rotation tests (401 instead of 200).
 change can affect: a folder runs when it or anything upstream of it changed, and a change outside
 every folder runs everything. Each .NET folder then gets the same steps (locked restore, lock and
 deprecation checks, build, pack with package validation, tests, the ADR guard), with the services
-and databases its entry in `.github/ci/packages.json` names. **`CI result` is the one required
+and databases its entry in `.github/ci/packages.json` names. A slow test project can be carved
+out of its folder's job into one of its own, beside it: a `suites` entry there names it, the
+folders it runs for and its paths, and the folder's row leaves its tests out with a `--filter`
+(the console's browser tests, `console-browser`, are one). **`CI result` is the one required
 check.**
 
 ## Releases

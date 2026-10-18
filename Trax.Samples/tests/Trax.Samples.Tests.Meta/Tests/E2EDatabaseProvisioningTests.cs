@@ -35,17 +35,27 @@ public class E2EDatabaseProvisioningTests
 
         // Databases the run can reach: the service's POSTGRES_DB plus every database the
         // workflow creates before the tests, both named by this folder's entry in the CI
-        // package table.
-        var package = JsonNode.Parse(
+        // package table, and by each suite of this folder (a test project with a job of its own).
+        var config = JsonNode.Parse(
             File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json"))
-        )!["packages"]!
+        )!;
+        var rows = config["packages"]!
             .AsArray()
-            .Single(p => (string?)p!["folder"] == "Trax.Samples")!["dotnet"]!;
+            .Where(p => (string?)p!["folder"] == "Trax.Samples")
+            .Concat(
+                (config["suites"]?.AsArray() ?? []).Where(s =>
+                    (string?)s!["folder"] == "Trax.Samples"
+                )
+            )
+            .Select(p => p!["dotnet"]!);
         var provisioned = new HashSet<string>(StringComparer.Ordinal);
-        if ((string?)package["postgres"] is { Length: > 0 } defaultDb)
-            provisioned.Add(defaultDb);
-        foreach (var db in package["databases"]!.AsArray())
-            provisioned.Add((string)db!);
+        foreach (var package in rows)
+        {
+            if ((string?)package["postgres"] is { Length: > 0 } defaultDb)
+                provisioned.Add(defaultDb);
+            foreach (var db in package["databases"]!.AsArray())
+                provisioned.Add((string)db!);
+        }
 
         hostPorts.Should().NotBeEmpty("the workflow must map at least one Postgres host port");
         provisioned.Should().NotBeEmpty("the workflow must provision at least one database");
@@ -81,7 +91,7 @@ public class E2EDatabaseProvisioningTests
             else if (!provisioned.Contains(db))
                 offenders.Add(
                     $"{rel}: database '{db}' is not provisioned in CI. Add it to the "
-                        + "Trax.Samples databases in .github/ci/packages.json (provisioned: "
+                        + "Trax.Samples databases, or its suite's, in .github/ci/packages.json (provisioned: "
                         + $"{string.Join(", ", provisioned.OrderBy(d => d))})."
                 );
         }

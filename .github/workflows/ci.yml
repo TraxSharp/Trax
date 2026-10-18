@@ -34,6 +34,7 @@ jobs:
       folders: ${{ steps.changes.outputs.folders }}
       dotnet: ${{ steps.changes.outputs.dotnet }}
       adr: ${{ steps.changes.outputs.adr }}
+      suites: ${{ steps.changes.outputs.suites }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
@@ -270,6 +271,134 @@ jobs:
           path: ${{ matrix.package.folder }}/TestResults/**/coverage.cobertura.xml
           if-no-files-found: warn
           retention-days: 1
+
+  # A test project carved out of its folder's job (packages.json "suites"), so a slow suite runs
+  # beside that job instead of behind it. The folder's job builds, formats and lock-checks the
+  # whole folder and leaves this project's tests out with its test-args filter; this job restores,
+  # builds and tests the one project. It runs whenever the folder's job does for a change upstream
+  # (or to the project), so the checks the folder's job makes cover it too.
+  suite:
+    needs: changes
+    if: needs.changes.outputs.suites != '[]'
+    name: ${{ matrix.suite.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.suite.timeout }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.changes.outputs.suites) }}
+    services:
+      postgres:
+        image: ${{ matrix.suite.postgres != '' && 'postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527' || '' }}
+        env:
+          POSTGRES_USER: trax
+          POSTGRES_PASSWORD: trax123
+          POSTGRES_DB: ${{ matrix.suite.postgres }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trax"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      rabbitmq:
+        image: ${{ matrix.suite.rabbitmq && 'rabbitmq:4-management@sha256:dbaf95088210b885b305e338e846d8d2ce7a2659d4b4005da8da02b885a71671' || '' }}
+        env:
+          RABBITMQ_DEFAULT_USER: trax
+          RABBITMQ_DEFAULT_PASS: trax123
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      FOLDER: ${{ matrix.suite.folder }}
+      PROJECT: ${{ matrix.suite.project }}
+    steps:
+      - name: Harden runner
+        # The dotnet job's list, less what only another folder's tests reach. chromium and the
+        # system libraries it needs come from Playwright's CDN and the Ubuntu archive.
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            aka.ms:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
+            dot.net:443
+            api.nuget.org:443
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            crl.globalsign.com:80
+            crl.sectigo.com:80
+            s.symcb.com:80
+            ts-crl.ws.symantec.com:80
+            www.microsoft.com:80
+            registry.npmjs.org:443
+            cdn.playwright.dev:443
+            playwright.download.prss.microsoft.com:443
+            storage.googleapis.com:443
+            azure.archive.ubuntu.com:80
+            azure.archive.ubuntu.com:443
+            esm.ubuntu.com:80
+            esm.ubuntu.com:443
+            packages.microsoft.com:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore (locked)
+        working-directory: ${{ matrix.suite.folder }}
+        run: dotnet restore "$PROJECT" --locked-mode
+      - name: Setup Node
+        if: matrix.suite['api-dashboard']
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install the API dashboard (locked, no install scripts)
+        # Building Trax.Api.Dashboard compiles the React app and embeds it: the browser tests open it.
+        if: matrix.suite['api-dashboard']
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
+        run: npm ci --ignore-scripts
+      - name: Build
+        working-directory: ${{ matrix.suite.folder }}
+        run: dotnet build "$PROJECT" --configuration Release --no-restore -warnaserror
+      - name: Install chromium
+        # The playwright.ps1 the build put beside the test assembly, as in the dotnet job.
+        if: matrix.suite.chromium
+        run: pwsh "$FOLDER/$PROJECT/bin/Release/net10.0/playwright.ps1" install --with-deps chromium
+      - name: Create test databases
+        if: matrix.suite.databases[0] != null
+        env:
+          PGPASSWORD: trax123
+          POSTGRES_DB: ${{ matrix.suite.postgres }}
+          DATABASES: ${{ join(matrix.suite.databases, ' ') }}
+        run: |
+          for db in $DATABASES; do
+            psql -h localhost -U trax -d "$POSTGRES_DB" -c "CREATE DATABASE \"$db\";"
+          done
+      - name: Test
+        working-directory: ${{ matrix.suite.folder }}
+        env:
+          TEST_ARGS: ${{ matrix.suite['test-args'] }}
+        run: |
+          # Word splitting is the point: TEST_ARGS is a list of flags from packages.json.
+          # shellcheck disable=SC2086
+          dotnet test "$PROJECT" --configuration Release --no-build $TEST_ARGS
 
   # The Codecov token is kept out of the jobs that run restore, build and tests, so
   # nothing those leave running can read it. This job runs no project code.
@@ -746,7 +875,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, adr-guard, website, api-dashboard, recovery-client, statemachine-client, state-machine, release-tooling]
+    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, state-machine, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
