@@ -17,16 +17,17 @@ The [quick start](/docs/getting-started) is the short version: one train, record
 served in an afternoon. The book covers the same ground more slowly and then keeps going.
 
 Every C# block in the book compiles in CI against the release the site was published from, as in the
-quick start. Chapters without a link are not written yet.
+quick start, and each chapter compiles as the whole project so far. Chapters without a link are not
+written yet.
 
 ## What we build
 
-Shopfront sells a small catalogue. Customers browse it, put items in a cart, check out and follow
-their order. Staff manage stock and see every order. Behind that:
+Shopfront sells a small catalogue. Customers browse it, check out and follow their order. Staff
+manage stock and see every order. Behind that:
 
-- placing an order reserves stock, takes a payment from a fake payment provider that sometimes
-  fails, and confirms the order;
-- a nightly job writes a stock report, and an hourly one releases carts nobody finished;
+- placing an order prices the cart, reserves stock, takes a payment from a fake provider that
+  sometimes fails, and confirms the order;
+- a nightly job writes a stock report, and a supplier sync is retried when the supplier is down;
 - fulfilment runs on a separate worker process;
 - checkout is a state machine the browser and the server share;
 - the storefront is a React app over a client generated from the API.
@@ -35,121 +36,142 @@ their order. Staff manage stock and see every order. Behind that:
 
 ### [1. An order is a train](/docs/book/an-order-is-a-train)
 
-Create the project and write `PlaceOrder` as a train of small junctions: validate the cart, reserve
+Create the project and write `PlaceOrder` as a train of small junctions: price the cart, reserve
 stock, take the payment, confirm. Run it in-process with in-memory storage and print what each
 junction did.
 
-You learn: trains, junctions, Memory, how one junction's output becomes a later one's input, and
-the check that refuses to start an application whose chain cannot run.
+You learn: trains, junctions, Memory, `TrainException`, cancellation, and the check that refuses to
+start an application whose chain cannot run.
 
-### 2. Every order is recorded
+### 2. Testing PlaceOrder
+
+Add a test project. Test each junction on its own, the whole train through the train bus, and the
+host as a client calls it.
+
+You learn: unit tests for internal junctions, train tests on in-memory storage, host tests, and
+the architecture guards.
+
+### 3. Every order is recorded
 
 Move to Postgres. Every run of `PlaceOrder` is now a row with its input, output, timing and, when it
-fails, the junction and exception. Make the payment provider fail one call in five and read the
-failed runs back.
+fails, the junction and exception. Make the payment provider fail one call in five, give the stock
+back when it does, and read the failed runs back.
 
-You learn: the effect system, metadata, junction logging, and masking the card number with
-`[TraxSensitive]` so it is never stored.
+You learn: the effect system, metadata, junction logging, failure classes, and keeping a secret
+out of the record with `[TraxSensitive]`.
+
+### 4. Does this order look like fraud
+
+Stop an order that looks like fraud before it is charged, with a rule the train asks rather than
+an `if` inside a junction. Then try a second rule beside the first without letting it decide.
+
+You learn: decisions, deciders, decision recording, shadow deciders, and testing a decision.
 
 ## Part 2: Running it for real
 
-### 3. Scheduled work
+### 5. Scheduled work
 
-Add the nightly stock report and the hourly cart cleanup. Open the dashboard and watch both run,
-then skip the report on public holidays.
+Add the nightly stock report and a low-stock check that runs after it. Open the operations console
+and watch both run, then skip the report on public holidays.
 
-You learn: the scheduler, cron and interval schedules, exclusion windows, misfire policies, and
-the operations dashboard.
+You learn: the scheduler, cron and interval schedules, dependent manifests, exclusions, misfire
+policies, and the operations console.
 
-### 4. Failures, retries and dead letters
+### 6. Failures, retries and dead letters
 
-Queue `PlaceOrder` instead of running it inline, and give it a retry policy so a failed payment is tried again with backoff. Exhaust the
-retries and find the order among the dead letters, then requeue it after fixing the provider.
+Sync stock from a supplier that is sometimes down. Retry it with backoff, exhaust the retries,
+find it among the dead letters, and requeue it once the supplier is back.
 
-You learn: failure classes, retry backoff, dead letters, and requeueing a run with the input it
-was given.
+You learn: retries, dead letters, requeueing a run, decisions replayed on a requeue, and lifecycle
+hooks.
 
-### 5. A separate worker
+### 7. A separate worker
 
-Move fulfilment out of the API into its own worker process that takes queued runs. Cap it to two
-fulfilments at a time, kill it mid-run and watch the run come back.
+Queue fulfilment after each order and move it to a worker process of its own. Cap it to two at a
+time, kill the worker mid-run and see what happens to the run.
 
-You learn: queueing, workers, per-train concurrency limits, and what happens to a run whose worker
-dies.
+You learn: queueing through the mediator, trains in a class library, workers, capping queued
+work, host tracking, and recovering a run whose worker died.
 
 ## Part 3: The API
 
-### 6. Serve it over GraphQL
+### 8. Customers and staff
 
-Expose the catalogue as queries and `PlaceOrder` as a typed mutation. Follow an order's progress
-over a subscription.
+Add sign-in. A customer places orders as themselves and reads only their own orders, and a member
+of staff reads all of them.
 
-You learn: `[TraxQuery]` and `[TraxMutation]`, query models with filtering, sorting and paging, and
-lifecycle subscriptions.
+You learn: authentication, `[TraxAuthorize]`, taking the caller from the principal rather than the
+input, owner-scoped rows, and the startup checks that refuse an unguarded train.
 
-### 7. Customers and staff
+### 9. Serve it over GraphQL
 
-Add sign-in. A customer reads only their own orders and a member of staff reads all of them.
-Switch the API to persisted operations so it accepts no query text from the browser.
+Expose the catalogue to everyone, `PlaceOrder` to customers, and the orders to their owners.
+Follow an order's progress while it runs.
 
-You learn: JWT authentication, `[TraxAuthorize]` on trains and on query models, owner-scoped rows,
-and persisted operations.
+You learn: `[TraxQuery]` and `[TraxMutation]`, query models, and following a run with
+`[TraxRunProgress]`.
+
+### 10. Persisted operations
+
+Switch the API to persisted operations, so it accepts no query text it does not already know.
+
+You learn: persisted operations, the documents Trax generates for trains, and what stops working
+when they are required.
 
 ## Part 4: Machines
 
-### 8. Checkout is a state machine
+### 11. Checkout is a state machine
 
-Rewrite checkout as a machine: cart, address, payment, placed. Each move is a typed mutation, the
-server applies it, and an abandoned checkout times out on its own.
+Rewrite checkout as a machine: cart, address, payment, placing. Each move is a typed mutation, the
+server applies it, and an abandoned cart is cleared on its own.
 
 You learn: authoring a machine, guards, timers, an authorization rule on every event, and serving
 a machine as its own API.
 
-### 9. The machine runs the order
+### 12. The machine places the order
 
-When checkout reaches placed, the machine invokes `PlaceOrder` and moves on with its result:
-confirmed, failed or cancelled.
+When checkout reaches placing, the machine invokes `PlaceOrder` and moves on with its result:
+confirmed, failed or cancelled. A confirmed order starts a parcel machine of its own.
 
-You learn: invoking a train from a state, and routing a train's outcome back into the machine.
+You learn: invoking a train from a state, routing its outcome back into the machine, idempotent
+charges, and spawning a child machine.
 
 ## Part 5: Composition
 
-### 10. Checks in parallel, and resuming after a crash
+### 13. Checks in parallel, and resuming
 
-Run the fraud check, the stock check and the price check side by side. Put a checkpoint after the
-payment, so a crash after it resumes there instead of charging the customer twice.
+Run fulfilment's address check, carrier quote and packing estimate side by side. Put a checkpoint
+after the label is bought, so a fulfilment that fails later resumes there.
 
-You learn: `Parallel` and its branches, checkpoints, and resuming a run from the dashboard and
-from GraphQL.
+You learn: `Parallel` and its branches, checkpoints, and resuming a run from the console and from
+GraphQL.
 
 ## Part 6: The storefront
 
-### 11. A generated client
+### 14. A generated client
 
 Export the client manifest from the host and generate a typed React client with `trax client`.
-Write the documents the catalogue page and the order page send, and build both pages on the functions `trax client`
-generates from them.
+Build the catalogue page and the order page with the generated functions.
 
-You learn: the client manifest, `.graphql` documents and `trax client --documents`, typed functions, and `--check`
-in CI.
+You learn: the client manifest, `trax client`, typed train functions, following a run from the
+browser, and `--check` in CI.
 
-### 12. Checkout in the browser
+### 15. Checkout in the browser
 
 Drive checkout from React with the generated hooks. The browser predicts each move with the
-machine's twin and the server confirms it. Show an order's progress while `PlaceOrder` runs.
+machine's twin and the server confirms it.
 
-You learn: the TypeScript twin, the generated machine hooks, and following a run with
-`useRunProgress`.
+You learn: the TypeScript twin and the generated machine hooks.
 
 ## Part 7: Shipping it
 
-### 13. Deploy
+### 16. Deploy
 
-Split Shopfront into the API, the scheduler and the worker, put them in containers, and point them
-at one Postgres. Secure the dashboard.
+Split Shopfront into a hub and a worker, put them in containers, and point them at one Postgres.
+Secure the operations console.
 
 You learn: the [deployment topologies](/docs/reference/deployment-topologies), migrations at
-startup, and what each process needs.
+startup, health checks, and what each process needs.
 
 ## Where to go next
 
