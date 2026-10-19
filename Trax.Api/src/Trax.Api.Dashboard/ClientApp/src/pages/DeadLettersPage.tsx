@@ -21,6 +21,7 @@ import type { DeadLetterStatus, DeadLetterSummary, PagedResult } from "../types"
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
+import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
 
 const PAGE_SIZE = 25;
 const STATUSES: (DeadLetterStatus | "")[] = [
@@ -92,6 +93,12 @@ export function DeadLettersPage() {
     (d) => d.status === "AWAITING_INTERVENTION",
   );
   const selectedIds = [...selected];
+  const askingDecisions = useTrainsAskingDecisions();
+  const listedAsk = offersDecisions(askingDecisions, (page?.items ?? []).map((d) => d.manifestName));
+  const selectedAsk = offersDecisions(
+    askingDecisions,
+    (page?.items ?? []).filter((d) => selected.has(d.id)).map((d) => d.manifestName),
+  );
   const allSelected =
     actionable.length > 0 && actionable.every((d) => selected.has(d.id));
 
@@ -244,14 +251,16 @@ export function DeadLettersPage() {
           >
             Requeue all
           </button>
-          <button
-            onClick={() => onRequeueAll(true)}
-            disabled={busy}
-            title="Requeue every dead letter; each run asks the model afresh instead of replaying the failed run's decisions."
-            className="text-sm px-3 py-1 rounded-md text-accent-fg hover:bg-accent-soft disabled:opacity-50"
-          >
-            Requeue all, ask afresh
-          </button>
+          {listedAsk && (
+            <button
+              onClick={() => onRequeueAll(true)}
+              disabled={busy}
+              title="Requeue every dead letter; each run asks the model afresh instead of replaying the failed run's decisions."
+              className="text-sm px-3 py-1 rounded-md text-accent-fg hover:bg-accent-soft disabled:opacity-50"
+            >
+              Requeue all, ask afresh
+            </button>
+          )}
           <button
             onClick={() => setAckTarget("all")}
             disabled={busy}
@@ -306,14 +315,16 @@ export function DeadLettersPage() {
           >
             Requeue selected
           </button>
-          <button
-            onClick={() => onBulkRequeue(true)}
-            disabled={busy}
-            title="Requeue the selected dead letters; each run asks the model afresh instead of replaying the failed run's decisions."
-            className="text-accent-fg font-medium hover:underline disabled:opacity-50"
-          >
-            Requeue selected, ask afresh
-          </button>
+          {selectedAsk && (
+            <button
+              onClick={() => onBulkRequeue(true)}
+              disabled={busy}
+              title="Requeue the selected dead letters; each run asks the model afresh instead of replaying the failed run's decisions."
+              className="text-accent-fg font-medium hover:underline disabled:opacity-50"
+            >
+              Requeue selected, ask afresh
+            </button>
+          )}
           <button
             onClick={() => setAckTarget("bulk")}
             disabled={busy}

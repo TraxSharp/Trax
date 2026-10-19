@@ -953,6 +953,18 @@ export const RUN_GRAPH = gql`
 // Each train's declared chain, drawn the way runGraph draws a run of it but with no run (every node
 // NOT_REACHED, metadataId 0), and whether it asks a decider, so the train page can show what a train
 // does before it has run and offer Ask Afresh only where a run has decisions to ask again.
+// Which trains ask a decider, so Ask afresh and replay-on-retry show only where they mean something.
+export const TRAINS_ASKING_DECISIONS = gql`
+  query TrainsAskingDecisions {
+    operations {
+      trains(hideAdminTrains: false) {
+        fullName
+        asksDecisions
+      }
+    }
+  }
+`;
+
 export const TRAIN_CHAINS = gql`
   query TrainChains($hideAdmin: Boolean!) {
     operations {

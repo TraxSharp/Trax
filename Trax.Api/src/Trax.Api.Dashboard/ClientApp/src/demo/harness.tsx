@@ -118,7 +118,7 @@ export async function everyPage(page: HTMLElement) {
  * no resume. Once the recordings hold one, it is checked like every other read; drop it from here
  * when they all do.
  */
-export const NOT_RECORDED_YET = ["RunGraph", "MachineInstanceCounts", "MachineInstances", "MachineInstance"];
+export const NOT_RECORDED_YET = ["RunGraph", "MachineInstanceCounts", "MachineInstances", "MachineInstance", "TrainsAskingDecisions"];
 
 /** The read each write not recorded yet is offered from: no read, no write. */
 export const WRITES_OFFERED_FROM: Record<string, string> = {

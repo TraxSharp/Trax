@@ -24,6 +24,7 @@ import type { ManifestSummary, PagedResult, ScheduleType } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
+import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
 
 const PAGE_SIZE = 25;
 const SCHEDULES: (ScheduleType | "")[] = [
@@ -76,6 +77,8 @@ export function ManifestsPage() {
   const page = result.data?.operations?.manifests;
   const rows = page?.items ?? [];
   const selectedIds = [...selected];
+  const askingDecisions = useTrainsAskingDecisions();
+  const selectedAsk = offersDecisions(askingDecisions, rows.filter((r) => selected.has(r.id)).map((r) => r.name));
   const allSelected = rows.length > 0 && rows.every((m) => selected.has(m.id));
   const refetch = () => reexecute({ requestPolicy: "network-only" });
 
@@ -219,14 +222,16 @@ export function ManifestsPage() {
           >
             Queue selected
           </button>
-          <button
-            disabled={busy}
-            title="Queue; a queued retry this releases asks its decider afresh instead of replaying the failed run's decisions."
-            onClick={() => triggerSelected(true)}
-            className="text-accent-fg font-medium hover:underline disabled:opacity-50"
-          >
-            Queue selected, ask afresh
-          </button>
+          {selectedAsk && (
+            <button
+              disabled={busy}
+              title="Queue; a queued retry this releases asks its decider afresh instead of replaying the failed run's decisions."
+              onClick={() => triggerSelected(true)}
+              className="text-accent-fg font-medium hover:underline disabled:opacity-50"
+            >
+              Queue selected, ask afresh
+            </button>
+          )}
           <button
             disabled={busy}
             onClick={() =>
@@ -245,34 +250,38 @@ export function ManifestsPage() {
           >
             Disable selected
           </button>
-          <button
-            disabled={busy}
-            title="Retries of the selected manifests replay the decisions the failed run recorded."
-            onClick={() =>
-              bulkSet(
-                "Retries replay decisions.",
-                () => setReplayMany({ ids: selectedIds, replay: true }),
-                "setManifestsReplayDecisionsOnRetry",
-              )
-            }
-            className="text-accent-fg font-medium hover:underline disabled:opacity-50"
-          >
-            Replay on retry
-          </button>
-          <button
-            disabled={busy}
-            title="Retries of the selected manifests ask the model afresh instead of replaying the failed run's decisions."
-            onClick={() =>
-              bulkSet(
-                "Retries ask afresh.",
-                () => setReplayMany({ ids: selectedIds, replay: false }),
-                "setManifestsReplayDecisionsOnRetry",
-              )
-            }
-            className="text-accent-fg font-medium hover:underline disabled:opacity-50"
-          >
-            Ask afresh on retry
-          </button>
+          {selectedAsk && (
+            <button
+              disabled={busy}
+              title="Retries of the selected manifests replay the decisions the failed run recorded."
+              onClick={() =>
+                bulkSet(
+                  "Retries replay decisions.",
+                  () => setReplayMany({ ids: selectedIds, replay: true }),
+                  "setManifestsReplayDecisionsOnRetry",
+                )
+              }
+              className="text-accent-fg font-medium hover:underline disabled:opacity-50"
+            >
+              Replay on retry
+            </button>
+          )}
+          {selectedAsk && (
+            <button
+              disabled={busy}
+              title="Retries of the selected manifests ask the model afresh instead of replaying the failed run's decisions."
+              onClick={() =>
+                bulkSet(
+                  "Retries ask afresh.",
+                  () => setReplayMany({ ids: selectedIds, replay: false }),
+                  "setManifestsReplayDecisionsOnRetry",
+                )
+              }
+              className="text-accent-fg font-medium hover:underline disabled:opacity-50"
+            >
+              Ask afresh on retry
+            </button>
+          )}
           <button
             onClick={clear}
             className="ml-auto text-muted hover:underline"

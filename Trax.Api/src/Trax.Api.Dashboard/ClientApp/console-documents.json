@@ -270,6 +270,10 @@
       "text": "query Trains($hideAdmin: Boolean!) {\n  operations {\n    trains(hideAdminTrains: $hideAdmin) {\n      fullName\n      serviceTypeName\n      implementationTypeName\n      inputTypeName\n      outputTypeName\n      lifetime\n      isQuery\n      isMutation\n      graphQLName\n      isBroadcastEnabled\n      requiredRoles\n      requiredPolicies\n      inputSchema {\n        name\n        typeName\n        isNullable\n        enumValues\n        __typename\n      }\n      hasQueueSubjectKey\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "TrainsAskingDecisions",
+      "text": "query TrainsAskingDecisions {\n  operations {\n    trains(hideAdminTrains: false) {\n      fullName\n      asksDecisions\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "TriggerGroup",
       "text": "mutation TriggerGroup($groupId: Long!) {\n  operations {\n    triggerGroup(groupId: $groupId) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
     },

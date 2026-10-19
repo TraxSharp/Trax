@@ -26,6 +26,7 @@ import { useAnswers } from "../lib/answerable";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { ExecutionDetail, RunGraph } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
 
 const ACTIVE_STATES = new Set(["PENDING", "IN_PROGRESS"]);
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
@@ -78,6 +79,7 @@ export function ExecutionDetailPage() {
   const navigate = useNavigate();
 
   const e = result.data?.operations.executionDetail;
+  const askingDecisions = useTrainsAskingDecisions();
   const graph = graphResult.data?.operations?.runGraph ?? null;
   // A resume, like a requeue, runs on the saved input, so a run without one offers no resume, as
   // on the Blazor page.
@@ -206,14 +208,16 @@ export function ExecutionDetailPage() {
               >
                 Requeue
               </button>
-              <button
-                onClick={() => onRequeue(true)}
-                disabled={busy}
-                title="Requeue; the new run asks the model afresh instead of replaying this run's decisions."
-                className="text-sm px-3 py-1 rounded-md border border-accent-line text-accent-fg hover:bg-accent-soft disabled:opacity-50"
-              >
-                Requeue, ask afresh
-              </button>
+              {offersDecisions(askingDecisions, [e.name]) && (
+                <button
+                  onClick={() => onRequeue(true)}
+                  disabled={busy}
+                  title="Requeue; the new run asks the model afresh instead of replaying this run's decisions."
+                  className="text-sm px-3 py-1 rounded-md border border-accent-line text-accent-fg hover:bg-accent-soft disabled:opacity-50"
+                >
+                  Requeue, ask afresh
+                </button>
+              )}
             </>
           )}
         </div>

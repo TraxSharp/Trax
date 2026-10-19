@@ -31,6 +31,7 @@ import type {
   PagedResult,
 } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
 
 const FAILED_PAGE_SIZE = 10;
 
@@ -54,6 +55,7 @@ export function DeadLetterDetailPage() {
   const [busy, setBusy] = useState(false);
   const [acking, setAcking] = useState(false);
   const d = result.data?.operations?.deadLetters?.deadLetter;
+  const askingDecisions = useTrainsAskingDecisions();
 
   const [manifestResult] = useQuery<{ operations: { manifestDetail: ManifestDetail | null } }>({
     query: MANIFEST_DETAIL,
@@ -127,14 +129,16 @@ export function DeadLetterDetailPage() {
             >
               Requeue
             </button>
-            <button
-              onClick={() => onRequeue(true)}
-              disabled={busy}
-              title="Requeue; the run asks the model afresh instead of replaying the failed run's decisions."
-              className="text-sm px-3 py-1 rounded-md border border-accent-line text-accent-fg hover:bg-accent-soft disabled:opacity-50"
-            >
-              Requeue, ask afresh
-            </button>
+            {offersDecisions(askingDecisions, [d.manifestName]) && (
+              <button
+                onClick={() => onRequeue(true)}
+                disabled={busy}
+                title="Requeue; the run asks the model afresh instead of replaying the failed run's decisions."
+                className="text-sm px-3 py-1 rounded-md border border-accent-line text-accent-fg hover:bg-accent-soft disabled:opacity-50"
+              >
+                Requeue, ask afresh
+              </button>
+            )}
             <button
               onClick={() => setAcking(true)}
               disabled={busy}

@@ -36,6 +36,7 @@ import type {
 } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { Modal } from "../components/Modal";
+import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
 
 interface ManData {
   operations: { manifestDetail: ManifestDetail | null };
@@ -57,6 +58,7 @@ export function ManifestDetailPage() {
   const [busy, setBusy] = useState(false);
   const [later, setLater] = useState(false);
   const m = result.data?.operations?.manifestDetail;
+  const askingDecisions = useTrainsAskingDecisions();
 
   if (result.error && !m)
     return (
@@ -181,23 +183,27 @@ export function ManifestDetailPage() {
                 </Link>
               </span>,
             ],
-            [
-              "Replay decisions on retry",
-              <label
-                className="inline-flex items-center gap-2 cursor-pointer"
-                title="On: a retry of a failed run replays the decisions that run recorded. Off: retries ask the model afresh."
-              >
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label="Replay decisions on retry"
-                  checked={m.replayDecisionsOnRetry !== false}
-                  disabled={busy}
-                  onChange={(e) => onReplayChange(e.target.checked)}
-                />
-                {m.replayDecisionsOnRetry !== false ? "Yes" : "No (retries ask afresh)"}
-              </label>,
-            ],
+            ...(offersDecisions(askingDecisions, [m.name])
+              ? ([
+                [
+                  "Replay decisions on retry",
+                  <label
+                    className="inline-flex items-center gap-2 cursor-pointer"
+                    title="On: a retry of a failed run replays the decisions that run recorded. Off: retries ask the model afresh."
+                  >
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label="Replay decisions on retry"
+                      checked={m.replayDecisionsOnRetry !== false}
+                      disabled={busy}
+                      onChange={(e) => onReplayChange(e.target.checked)}
+                    />
+                    {m.replayDecisionsOnRetry !== false ? "Yes" : "No (retries ask afresh)"}
+                  </label>,
+                ],
+                ] as [string, React.ReactNode][])
+              : []),
           ]}
         />
         <div className="mt-4 flex flex-wrap gap-4">
@@ -208,14 +214,16 @@ export function ManifestDetailPage() {
           >
             Queue now
           </button>
-          <button
-            onClick={() => onTrigger(true)}
-            disabled={busy}
-            title="Run now; if this releases a queued retry, it asks the model afresh instead of replaying the failed run's decisions."
-            className="text-sm text-accent-fg hover:underline disabled:opacity-50"
-          >
-            Queue now, ask afresh
-          </button>
+          {offersDecisions(askingDecisions, [m.name]) && (
+            <button
+              onClick={() => onTrigger(true)}
+              disabled={busy}
+              title="Run now; if this releases a queued retry, it asks the model afresh instead of replaying the failed run's decisions."
+              className="text-sm text-accent-fg hover:underline disabled:opacity-50"
+            >
+              Queue now, ask afresh
+            </button>
+          )}
           <button
             onClick={() => setLater(true)}
             className="text-sm text-accent-fg hover:underline"
