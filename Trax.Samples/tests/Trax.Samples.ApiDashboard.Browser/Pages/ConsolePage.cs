@@ -48,6 +48,50 @@ public class ConsolePage(IPage page, Uri origin)
                 new() { Has = Page.GetByRole(AriaRole.Link, new() { Name = name, Exact = true }) }
             );
 
+    /// <summary>The console's dialog titled <paramref name="title"/>.</summary>
+    public ILocator Dialog(string title) =>
+        Page.GetByRole(AriaRole.Dialog, new() { Name = title, Exact = true });
+
+    /// <summary>A toast the console shows, by part of its text.</summary>
+    public ILocator Toast(string contains) =>
+        Page.GetByRole(AriaRole.Status).Filter(new() { HasText = contains });
+
+    /// <summary>A button on the page, by its accessible name.</summary>
+    public ILocator Button(string name) =>
+        Page.GetByRole(AriaRole.Button, new() { Name = name, Exact = true });
+
+    /// <summary>
+    /// Confirms in the console's own dialog, typing <paramref name="typed"/> first where the dialog asks for it.
+    /// </summary>
+    public async Task ConfirmTypingAsync(string title, string contains, string typed)
+    {
+        await Dialog(title)
+            .GetByLabel($"Type {typed} to confirm", new() { Exact = true })
+            .FillAsync(typed, new() { Timeout = BrowserTimeouts.Render.Ms() });
+        await ConfirmAsync(title, contains);
+    }
+
+    /// <summary>Writes <paramref name="note"/> in the note dialog titled <paramref name="title"/> and sends it.</summary>
+    public async Task NoteAsync(string title, string note, string confirm)
+    {
+        var dialog = Dialog(title);
+        await dialog
+            .GetByRole(AriaRole.Textbox)
+            .FillAsync(note, new() { Timeout = BrowserTimeouts.Render.Ms() });
+        await dialog
+            .GetByRole(AriaRole.Button, new() { Name = confirm, Exact = true })
+            .ClickAsync();
+    }
+
+    /// <summary>Waits until the page has sent <paramref name="operation"/>, and returns the request.</summary>
+    public Task<IRequest> SendsAsync(string operation) =>
+        Page.WaitForRequestAsync(
+            r =>
+                r.Url.EndsWith("/trax/graphql")
+                && r.PostData?.Contains($"\"operationName\":\"{operation}\"") == true,
+            new() { Timeout = BrowserTimeouts.Render.Ms() }
+        );
+
     public async Task<IResponse?> GotoAsync(string route = "") => await Page.GotoAsync(Url(route));
 
     /// <summary>

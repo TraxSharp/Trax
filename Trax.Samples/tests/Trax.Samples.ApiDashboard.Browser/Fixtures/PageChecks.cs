@@ -16,6 +16,9 @@ public sealed class PageChecks
     private readonly ConcurrentQueue<string> _problems = new();
     private readonly ConcurrentQueue<GraphQLSent> _sent = new();
     private readonly List<Func<string, bool>> _allowed = [];
+    private readonly List<string> _frames = [];
+    private readonly List<(Func<string, bool> Match, TaskCompletionSource<string> Seen)> _waiting =
+    [];
     private readonly Uri _origin;
     private readonly IReadOnlyDictionary<string, string> _documentIds;
     private readonly bool _persisted;
@@ -59,9 +62,90 @@ public sealed class PageChecks
         {
             if (!checks.SameOrigin(new Uri(socket.Url)))
                 checks.Problem($"socket off the console's origin: {socket.Url}");
-            socket.FrameSent += (_, frame) => checks.OnFrame(frame.Text);
+            socket.FrameSent += (_, frame) =>
+            {
+                checks.OnFrame(frame.Text);
+                checks.Seen($"sent {frame.Text}");
+            };
+            socket.FrameReceived += (_, frame) => checks.Seen($"received {frame.Text}");
         };
         return checks;
+    }
+
+    /// <summary>
+    /// Waits for a socket frame, sent by the page or pushed to it, whose text <paramref name="match"/> accepts; a
+    /// frame already seen counts. Each frame's text starts with <c>sent </c> or <c>received </c>.
+    /// </summary>
+    public Task<string> FrameAsync(Func<string, bool> match, string what)
+    {
+        lock (_frames)
+        {
+            var seen = _frames.FirstOrDefault(match);
+            if (seen is not null)
+                return Task.FromResult(seen);
+            var waiter = new TaskCompletionSource<string>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            _waiting.Add((match, waiter));
+            return Bounded(waiter.Task, what);
+        }
+    }
+
+    /// <summary>
+    /// Waits until the page subscribes with the console's registered document for <paramref name="operation"/>,
+    /// sent by its id.
+    /// </summary>
+    public Task<string> SubscribedAsync(string operation, string? alsoContaining = null)
+    {
+        var id = _documentIds[operation];
+        return FrameAsync(
+            f =>
+                f.StartsWith("sent ", StringComparison.Ordinal)
+                && f.Contains("\"subscribe\"")
+                && f.Contains(id)
+                && (alsoContaining is null || f.Contains(alsoContaining)),
+            $"the page subscribes to {operation} by its registered id"
+        );
+    }
+
+    /// <summary>Waits until the server pushes the page an event of <paramref name="field"/> that holds every text given.</summary>
+    public Task<string> PushedAsync(string field, params string[] containing) =>
+        FrameAsync(
+            f =>
+                f.StartsWith("received ", StringComparison.Ordinal)
+                && f.Contains("\"next\"")
+                && f.Contains($"\"{field}\"")
+                && containing.All(f.Contains),
+            $"the server pushes {field} with {string.Join(", ", containing)}"
+        );
+
+    private static async Task<string> Bounded(Task<string> seen, string what)
+    {
+        try
+        {
+            return await seen.WaitAsync(BrowserTimeouts.Server);
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException(
+                $"Expected {what} within {BrowserTimeouts.Server.TotalSeconds:0} s."
+            );
+        }
+    }
+
+    private void Seen(string? frame)
+    {
+        if (frame is null)
+            return;
+        lock (_frames)
+        {
+            _frames.Add(frame);
+            foreach (var waiter in _waiting.Where(w => w.Match(frame)).ToList())
+            {
+                _waiting.Remove(waiter);
+                waiter.Seen.TrySetResult(frame);
+            }
+        }
     }
 
     /// <summary>The problems so far, with the policy violations the page recorded.</summary>

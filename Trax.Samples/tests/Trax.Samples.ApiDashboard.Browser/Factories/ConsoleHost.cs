@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -45,6 +46,9 @@ public sealed class ConsoleHost : IAsyncDisposable
 
     /// <summary>The role persisted-operation management admits.</summary>
     public const string ApiAdminRole = "ApiAdmin";
+
+    /// <summary>A log category the host configures besides <c>Default</c>, which a test may change.</summary>
+    public const string LoggedCategory = "Trax.Samples.ApiDashboard.Browser";
 
     public static string ConnectionString { get; } =
         new NpgsqlConnectionStringBuilder(DefaultConnectionString)
@@ -131,6 +135,14 @@ public sealed class ConsoleHost : IAsyncDisposable
         );
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        // Two configured categories, so the scheduler page has log levels to show and change.
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["Logging:LogLevel:Default"] = "Warning",
+                [$"Logging:LogLevel:{LoggedCategory}"] = "Warning",
+            }
+        );
 
         builder.Services.AddTraxApiKeyAuth(keys =>
         {

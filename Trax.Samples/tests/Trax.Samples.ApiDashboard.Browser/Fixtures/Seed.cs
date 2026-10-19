@@ -7,6 +7,7 @@ using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.Manifest;
+using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.PersistedOperation;
 using Trax.Effect.Models.WorkQueue;
@@ -231,6 +232,123 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             runs.Add(await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress));
         }
         return runs;
+    }
+
+    /// <summary>
+    /// A run of <see cref="IReconcileAccountTrain"/> in progress and held, with what releases it; disposing the seed
+    /// releases it too.
+    /// </summary>
+    public async Task<(Metadata Run, Action Release)> HeldRunAsync()
+    {
+        var key = NewKey("ledger");
+        Holds.Hold(key);
+        _undo.Push(() =>
+        {
+            Holds.Release(key);
+            return Task.CompletedTask;
+        });
+        var run = await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress);
+        return (run, () => Holds.Release(key));
+    }
+
+    /// <summary>
+    /// A manifest that runs only when triggered, in <paramref name="group"/> when one is named: what Queue now,
+    /// Queue later, Edit and the on/off switches act on.
+    /// </summary>
+    public Task<Manifest> OnDemandManifestAsync(string? group = null) =>
+        ScheduleAsync<IImportFeedTrain>(
+            NewKey("feed"),
+            o =>
+            {
+                if (group is not null)
+                    o.Group(group);
+            }
+        );
+
+    /// <summary>
+    /// A manifest of <see cref="ISettleClaimTrain"/>, whose Gate a decider answers, so the console offers its
+    /// replay-on-retry switch. It runs only when triggered.
+    /// </summary>
+    public Task<Manifest> DecidingManifestAsync() =>
+        ScheduleAsync<ISettleClaimTrain>(NewKey("claim"));
+
+    /// <summary>
+    /// A manifest of <see cref="IReconcileAccountTrain"/>, in <paramref name="group"/> when one is named, triggered
+    /// once and its run held in progress until this seed is disposed: what Cancel runs and Cancel group act on.
+    /// </summary>
+    public async Task<(Manifest Manifest, Metadata Run)> ManifestWithAHeldRunAsync(
+        string? group = null
+    )
+    {
+        var key = NewKey("account");
+        Holds.Hold(key);
+        _undo.Push(() =>
+        {
+            Holds.Release(key);
+            return Task.CompletedTask;
+        });
+        var manifest = await ScheduleAsync<IReconcileAccountTrain>(
+            key,
+            o =>
+            {
+                if (group is not null)
+                    o.Group(group);
+            }
+        );
+        await InScope<ITraxScheduler>(s => s.TriggerAsync(key));
+        var run = await Wait.ForAsync(
+            () =>
+                host.QueryAsync(dc =>
+                    dc.Metadatas.AsNoTracking()
+                        .FirstOrDefaultAsync(m =>
+                            m.ManifestId == manifest.Id && m.TrainState == TrainState.InProgress
+                        )
+                ),
+            BrowserTimeouts.Server,
+            $"the triggered run of {key} is in progress"
+        );
+        return (manifest, run);
+    }
+
+    /// <summary>A group of its own holding one manifest that runs only when triggered. Returns both.</summary>
+    public async Task<(ManifestGroup Group, Manifest Manifest)> GroupOfOneAsync()
+    {
+        var name = NewKey("group");
+        var manifest = await OnDemandManifestAsync(name);
+        return (await GroupNamedAsync(name), manifest);
+    }
+
+    /// <summary>The group the host stores under <paramref name="name"/>.</summary>
+    public Task<ManifestGroup> GroupNamedAsync(string name) =>
+        host.QueryAsync(dc => dc.ManifestGroups.AsNoTracking().SingleAsync(g => g.Name == name));
+
+    /// <summary>
+    /// A <see cref="RelayMachine"/> instance in <c>Relaying</c>, the run it invoked in progress and held until
+    /// this seed is disposed: an instance whose state waits on a live run, which an operator may cancel.
+    /// </summary>
+    public async Task<(MachineInstance Instance, Metadata Run)> InstanceWaitingOnAHeldRunAsync()
+    {
+        var key = NewKey("parcel");
+        Holds.Hold(key);
+        _undo.Push(() =>
+        {
+            Holds.Release(key);
+            return Task.CompletedTask;
+        });
+        var instance = await StartRelayAsync(key);
+        var run = await Wait.ForAsync(
+            () =>
+                host.QueryAsync(dc =>
+                    dc.Metadatas.AsNoTracking()
+                        .FirstOrDefaultAsync(m =>
+                            m.InvokingInstanceId == instance.Id
+                            && m.TrainState == TrainState.InProgress
+                        )
+                ),
+            BrowserTimeouts.Server,
+            $"{RelayMachine.Id} {instance.Id}'s run is in progress"
+        );
+        return (instance, run);
     }
 
     /// <summary>

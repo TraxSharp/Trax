@@ -40,6 +40,13 @@ public abstract class AreaPage(ConsolePage console, string route, string heading
 
     public ILocator Button(ILocator within, string name) =>
         within.GetByRole(AriaRole.Button, new() { Name = name, Exact = true });
+
+    /// <summary>The page's own content, under the shell's navigation and header.</summary>
+    public ILocator Main => Page.GetByRole(AriaRole.Main);
+
+    /// <summary>The value a detail page's field list gives for <paramref name="label"/>.</summary>
+    public ILocator DetailField(string label) =>
+        Main.Locator($"xpath=.//dt[normalize-space()='{label}']/following-sibling::dd").First;
 }
 
 /// <summary>
@@ -135,6 +142,10 @@ public sealed class WorkQueuePage(ConsolePage console) : AreaPage(console, "runs
         row.GetByRole(AriaRole.Link, new() { Name = $"#{id}", Exact = true });
 }
 
+/// <summary>One queue entry's page, by its id; the heading is its train's short name.</summary>
+public sealed class QueueEntryPage(ConsolePage console, long id, string train)
+    : AreaPage(console, $"runs/queued/{id}", train);
+
 /// <summary>One queue entry's page: its fields, and what a queued entry waits on.</summary>
 public sealed class WorkQueueEntryPage(ConsolePage console)
 {
@@ -190,6 +201,13 @@ public sealed class DeadLettersPage(ConsolePage console)
     }
 }
 
+/// <summary>One dead letter: why it was dead-lettered, its manifest, and Requeue and Acknowledge.</summary>
+public sealed class DeadLetterPage(ConsolePage console, long id, string train = "IImportFeedTrain")
+    : AreaPage(console, $"runs/dead-letters/{id}", train)
+{
+    public ILocator Details => Main;
+}
+
 /// <summary>Manifests: what runs on a schedule, in words, when it runs next, and whether it is enabled.</summary>
 public sealed class ManifestsPage(ConsolePage console) : AreaPage(console, "schedules", "Manifests")
 {
@@ -224,9 +242,19 @@ public sealed class ManifestGroupsPage(ConsolePage console)
 {
     public ILocator Graph => Page.GetByRole(AriaRole.Group, new() { Name = "Dependency graph" });
 
+    public ILocator NameFilter =>
+        Page.GetByRole(AriaRole.Textbox, new() { Name = "Filter by name…", Exact = true });
+
     /// <summary>The node of the group named <paramref name="group"/>, which opens the group.</summary>
     public ILocator Node(string group) =>
         Graph.GetByRole(AriaRole.Button).Filter(new() { HasText = group });
+}
+
+/// <summary>One manifest group: its stats, its settings, its manifests and runs, and Queue and Cancel.</summary>
+public sealed class ManifestGroupPage(ConsolePage console, long id, string name)
+    : AreaPage(console, $"schedules/groups/{id}", name)
+{
+    public ILocator Setting(string label) => Main.GetByLabel(label, new() { Exact = true });
 }
 
 /// <summary>Machines: every machine the host registers, with its instance and stuck counts.</summary>
@@ -330,6 +358,10 @@ public sealed class PersistedOperationsPage(ConsolePage console)
     /// <summary>What a caller outside the management gate is told instead of the list.</summary>
     public ILocator NotServed => Page.GetByText("your account may not manage them");
 }
+
+/// <summary>One persisted operation, by its id, in the default tenant: its fields, its document, its history.</summary>
+public sealed class PersistedOperationPage(ConsolePage console, string id)
+    : AreaPage(console, $"api-admin/persisted-operations/{Uri.EscapeDataString(id)}", id);
 
 /// <summary>
 /// The scheduler's settings: the manifest manager and the job dispatcher paused and resumed one at a time, then
