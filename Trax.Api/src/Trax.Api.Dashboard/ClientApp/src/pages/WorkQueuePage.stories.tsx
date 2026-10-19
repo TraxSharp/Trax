@@ -136,8 +136,7 @@ export const QueueTrainDialogFlow: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await userEvent.click(c.getByRole("button", { name: "Queue train" }));
-    await waitFor(() => expect(c.getByText("Queue a train")).toBeInTheDocument());
-    const dialog = c.getByText("Queue a train").closest("div") as HTMLElement;
+    const dialog = await waitFor(() => c.getByRole("dialog", { name: "Queue a train" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(c.queryByText("Queue a train")).not.toBeInTheDocument());
   },

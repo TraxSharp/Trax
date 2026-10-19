@@ -4,6 +4,7 @@ import { UPDATE_MANIFEST } from "../graphql/mutations";
 import { Modal } from "./Modal";
 import { Spinner } from "./Spinner";
 import { toast } from "../lib/toast";
+import { enumLabel } from "../lib/format";
 import type { ManifestSummary, ScheduleType } from "../types";
 
 const SCHEDULE_TYPES: ScheduleType[] = [
@@ -75,7 +76,7 @@ export function ManifestEditForm({
           >
             {SCHEDULE_TYPES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {enumLabel(s)}
               </option>
             ))}
           </select>

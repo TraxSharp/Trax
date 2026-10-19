@@ -28,16 +28,16 @@ export function NotePrompt({
     <Modal title={title} onClose={onClose}>
       <label className="block text-sm text-fg-2 mb-2">
         {label}
+        <textarea
+          autoFocus
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          maxLength={MAX_NOTE_LENGTH}
+          className="mt-2 w-full rounded-lg border border-line-strong bg-field px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+          placeholder="Reason / note…"
+        />
       </label>
-      <textarea
-        autoFocus
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        rows={3}
-        maxLength={MAX_NOTE_LENGTH}
-        className="w-full rounded-lg border border-line-strong bg-field px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-        placeholder="Reason / note…"
-      />
       <div className="mt-4 flex justify-end gap-2">
         <button
           onClick={onClose}
