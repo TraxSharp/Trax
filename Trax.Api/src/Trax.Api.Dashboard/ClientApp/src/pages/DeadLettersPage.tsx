@@ -232,7 +232,10 @@ export function DeadLettersPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Dead letters <TermHelp term="deadLetter" /></h1>
+        <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg">Dead letters</h1>
+        <TermHelp term="deadLetter" />
+      </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => onRequeueAll(false)}

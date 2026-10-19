@@ -138,7 +138,10 @@ export function ManifestsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Manifests <TermHelp term="manifest" /></h1>
+        <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg">Manifests</h1>
+        <TermHelp term="manifest" />
+      </div>
         <div className="flex gap-2">
           <input
             value={name}

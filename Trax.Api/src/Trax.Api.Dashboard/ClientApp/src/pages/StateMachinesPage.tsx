@@ -78,7 +78,10 @@ export function StateMachinesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-fg mb-1 flex items-center gap-2">Machines <TermHelp term="machine" /></h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg mb-1">Machines</h1>
+        <TermHelp term="machine" />
+      </div>
       <p className="text-sm text-muted mb-6">
         The instances of every state machine this host persists, system-owned and users' drafts alike:
         which state each is in, when it got there, and whether it waits on a train run it invoked. An

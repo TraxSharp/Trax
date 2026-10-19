@@ -99,7 +99,10 @@ export function WorkQueuePage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Queued <TermHelp term="workQueue" /></h1>
+        <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg">Queued</h1>
+        <TermHelp term="workQueue" />
+      </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowQueue(true)}

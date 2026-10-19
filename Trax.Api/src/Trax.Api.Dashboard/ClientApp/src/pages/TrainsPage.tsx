@@ -56,7 +56,10 @@ export function TrainsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Trains <TermHelp term="train" /></h1>
+        <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg">Trains</h1>
+        <TermHelp term="train" />
+      </div>
         <div className="flex items-center gap-4">
           <input
             value={filter}

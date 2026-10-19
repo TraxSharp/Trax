@@ -178,9 +178,10 @@ export function ManifestGroupsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">
-          Manifest groups <TermHelp term="manifestGroup" />
-        </h1>
+        <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg">Manifest groups</h1>
+        <TermHelp term="manifestGroup" />
+      </div>
         <div className="flex items-center gap-2 ml-auto">
           <button
             onClick={() => onSetAll(true)}

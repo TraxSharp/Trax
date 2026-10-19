@@ -59,7 +59,10 @@ export function EffectsSettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-fg mb-2 flex items-center gap-2">Effects <TermHelp term="effect" /></h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg mb-2">Effects</h1>
+        <TermHelp term="effect" />
+      </div>
       <p className="text-sm text-muted mb-6">
         Effect changes apply to the next run's scope in the API process. The registry is
         per-process: a change here does not reach separate scheduler or worker processes.

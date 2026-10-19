@@ -199,7 +199,10 @@ export function ExecutionsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-fg flex items-center gap-2">Runs <TermHelp term="run" /></h1>
+        <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-fg">Runs</h1>
+        <TermHelp term="run" />
+      </div>
         <div className="flex gap-2">
           <input
             value={trainName}
