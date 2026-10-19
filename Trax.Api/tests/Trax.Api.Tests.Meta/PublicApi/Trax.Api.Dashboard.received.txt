@@ -5,6 +5,7 @@ namespace Trax.Api.Dashboard.Configuration
         public TraxApiDashboardOptions() { }
         public string? GraphQLPath { get; set; }
         public Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions AllowAnonymousShell() { }
+        public Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions HostAuthenticates() { }
         public Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions RequirePolicy(string policy) { }
         public Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions RequireRoles(params string[] roles) { }
     }

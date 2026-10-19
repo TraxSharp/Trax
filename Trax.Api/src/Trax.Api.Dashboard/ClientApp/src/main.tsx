@@ -5,7 +5,7 @@ import { Provider } from "urql";
 import type { Client } from "@urql/core";
 import "./lib/theme"; // applies persisted/system theme before first paint
 import { ConnectionGate } from "./components/ConnectionGate";
-import { removeStoredCredentials } from "./lib/auth";
+import { removeStoredCredentials, setHostAuthenticates } from "./lib/auth";
 import { AppRoutes } from "./AppRoutes";
 import { readRuntimeConfig, routerBasename } from "./lib/runtimeConfig";
 import "./index.css";
@@ -54,16 +54,18 @@ async function boot() {
 
   const { client } = await import("./lib/graphql");
   // The path the host serves the app under (Trax.Api.Dashboard writes it into index.html).
-  const basename = routerBasename(readRuntimeConfig());
+  const config = readRuntimeConfig();
+  const basename = routerBasename(config);
+  const app = (
+    <BrowserRouter basename={basename}>
+      <AppRoutes />
+    </BrowserRouter>
+  );
+  // A host that signs the browser in itself needs no key from the operator (HostAuthenticates()).
+  setHostAuthenticates(config.hostAuthenticates);
   root.render(
     <StrictMode>
-      <Provider value={client}>
-        <ConnectionGate>
-          <BrowserRouter basename={basename}>
-            <AppRoutes />
-          </BrowserRouter>
-        </ConnectionGate>
-      </Provider>
+      <Provider value={client}>{config.hostAuthenticates ? app : <ConnectionGate>{app}</ConnectionGate>}</Provider>
     </StrictMode>,
   );
 }

@@ -516,6 +516,29 @@ public partial class ApiDashboardHostTests
     }
 
     [Test]
+    public void The_runtime_config_says_the_host_authenticates_only_when_it_does()
+    {
+        var path = new Microsoft.AspNetCore.Http.PathString("/trax/dashboard");
+
+        var keyed = DashboardEndpoint.RenderIndex(
+            IndexTemplate,
+            path,
+            "/trax/graphql",
+            new Dictionary<string, string>()
+        );
+        var signedIn = DashboardEndpoint.RenderIndex(
+            IndexTemplate,
+            path,
+            "/trax/graphql",
+            new Dictionary<string, string>(),
+            hostAuthenticates: true
+        );
+
+        keyed.Should().NotContain("hostAuthenticates");
+        signedIn.Should().Contain("hostAuthenticates&quot;:true");
+    }
+
+    [Test]
     public void The_package_carries_the_documents_the_app_sends()
     {
         ConsoleDocumentsResource
@@ -573,6 +596,24 @@ public partial class ApiDashboardHostTests
                 $"{Adr}: the dashboard maps nothing until the host chooses who may load it"
             )
             .WithMessage("*RequirePolicy*RequireRoles*AllowAnonymousShell*");
+    }
+
+    [Test]
+    public void HostAuthenticates_and_an_anonymous_shell_contradict_each_other()
+    {
+        new TraxApiDashboardOptions()
+            .AllowAnonymousShell()
+            .Invoking(o => o.HostAuthenticates())
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*contradict*");
+        new TraxApiDashboardOptions()
+            .RequireRoles("Admin")
+            .HostAuthenticates()
+            .Invoking(o => o.AllowAnonymousShell())
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*contradict*");
     }
 
     [Test]

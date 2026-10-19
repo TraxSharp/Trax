@@ -126,7 +126,8 @@ public static class ApiDashboardEndpointExtensions
             assets,
             () => options.GraphQLPath ?? graphQL.MappedRoutePrefix ?? DefaultGraphQLPath,
             () => graphQL.ConsoleDocumentIds,
-            options.AnonymousShellAllowed
+            options.AnonymousShellAllowed,
+            options.HostAuthenticated
         );
         var marker = new DashboardEndpointMetadata(options.AnonymousShellAllowed);
         DashboardResponseHeaders.Subscribe(

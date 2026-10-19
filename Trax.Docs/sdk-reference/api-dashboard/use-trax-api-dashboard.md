@@ -111,6 +111,21 @@ sign-in, authorizes its GraphQL requests; **Change credential** forgets it at on
 Earlier versions stored the credential in `localStorage`. The app deletes whatever they left there
 when it loads, without using it.
 
+**A host that signs the browser in asks for no key.** When every request the browser makes already
+carries who is asking (a cookie or OpenID Connect sign-in, or a proxy in front that adds identity
+headers), call `HostAuthenticates()` beside `RequirePolicy` or `RequireRoles`. The app then shows no
+credential prompt and no **Change credential**, sends no `X-Api-Key`, `Authorization` header or
+`connection_init` credential, and the GraphQL endpoint authorizes each request by the host's own
+scheme, so that scheme must also be one the endpoint's policy accepts. `HostAuthenticates()`
+together with `AllowAnonymousShell()` throws: with an anonymous shell nothing gates the page or
+vouches that the endpoint will know the caller.
+
+```csharp
+app.UseTraxApiDashboard(dashboard => dashboard
+    .RequirePolicy(OidcDefaults.PolicyName)
+    .HostAuthenticates());
+```
+
 ## It needs the operations namespace
 
 Every page of the app reads `operations`, so `UseTraxApiDashboard` throws at startup unless the

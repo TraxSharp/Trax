@@ -22,6 +22,9 @@ public sealed class TraxApiDashboardOptions
     /// <summary>Whether <see cref="AllowAnonymousShell"/> was called.</summary>
     internal bool AnonymousShellAllowed { get; private set; }
 
+    /// <summary>Whether <see cref="HostAuthenticates"/> was called.</summary>
+    internal bool HostAuthenticated { get; private set; }
+
     /// <summary>
     /// The path of the Trax GraphQL endpoint the app talks to, on the host's own origin, such as
     /// <c>/trax/graphql</c>. When unset, the app talks to the path <c>UseTraxGraphQL</c> mapped,
@@ -76,12 +79,36 @@ public sealed class TraxApiDashboardOptions
     /// </summary>
     public TraxApiDashboardOptions AllowAnonymousShell()
     {
+        if (HostAuthenticated)
+            throw new InvalidOperationException(
+                "AllowAnonymousShell() and HostAuthenticates() contradict each other: with an anonymous "
+                    + "shell nothing tells the app the GraphQL endpoint will know the caller. Remove one."
+            );
         if (Policy is not null || Roles is not null)
             throw new InvalidOperationException(
                 "AllowAnonymousShell() and RequirePolicy()/RequireRoles() contradict each other: "
                     + "the dashboard is either gated or not. Remove one."
             );
         AnonymousShellAllowed = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Says the host already knows who is asking on every request the browser makes, by a cookie or
+    /// OpenID Connect sign-in, or a proxy that adds identity headers, so the app asks for no API key
+    /// or token: it sends none, on HTTP or in the subscription socket, and the GraphQL endpoint
+    /// authorizes each request by the host's own scheme. Use it with <see cref="RequirePolicy"/> or
+    /// <see cref="RequireRoles"/>; with <see cref="AllowAnonymousShell"/> it throws, since then
+    /// nothing gates the page or vouches that the endpoint will know the caller.
+    /// </summary>
+    public TraxApiDashboardOptions HostAuthenticates()
+    {
+        if (AnonymousShellAllowed)
+            throw new InvalidOperationException(
+                "HostAuthenticates() and AllowAnonymousShell() contradict each other: with an anonymous "
+                    + "shell nothing tells the app the GraphQL endpoint will know the caller. Remove one."
+            );
+        HostAuthenticated = true;
         return this;
     }
 

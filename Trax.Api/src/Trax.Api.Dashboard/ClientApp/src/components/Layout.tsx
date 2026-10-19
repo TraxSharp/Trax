@@ -25,7 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAnswers } from "../lib/answerable";
-import { clearCredential } from "../lib/auth";
+import { clearCredential, hostAuthenticates } from "../lib/auth";
 import { getGlobalMockStore } from "../mock/global-store";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 import { DemoBanner } from "./DemoBanner";
@@ -180,7 +180,7 @@ export function Layout() {
             <NavLinkRow item={{ path: "/preferences", label: "Preferences", icon: User }} active={active("/preferences")} />
             <ConnectionIndicator />
             <ThemeToggle />
-            {!isDemo && (
+            {!isDemo && !hostAuthenticates() && (
               <button
                 onClick={clearCredential}
                 className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted hover:bg-hover"

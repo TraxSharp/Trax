@@ -35,7 +35,8 @@ internal sealed partial class DashboardEndpoint(
     DashboardAssets assets,
     Func<string> graphQLPath,
     Func<IReadOnlyDictionary<string, string>> documentIds,
-    bool anonymousShell
+    bool anonymousShell,
+    bool hostAuthenticates = false
 )
 {
     /// <summary>The route value the catch-all segment of the dashboard's route binds to.</summary>
@@ -144,22 +145,22 @@ internal sealed partial class DashboardEndpoint(
         string template,
         PathString basePath,
         string graphQLPath,
-        IReadOnlyDictionary<string, string> documentIds
+        IReadOnlyDictionary<string, string> documentIds,
+        bool hostAuthenticates = false
     )
     {
         var baseHref = basePath.Add(new PathString("/")).ToUriComponent();
-        var config = JsonSerializer.Serialize(
-            documentIds.Count == 0
-                ? new { basePath = baseHref, graphqlPath = graphQLPath }
-                : (object)
-                    new
-                    {
-                        basePath = baseHref,
-                        graphqlPath = graphQLPath,
-                        documents = documentIds,
-                    },
-            ConfigJson
-        );
+        var fields = new Dictionary<string, object>
+        {
+            ["basePath"] = baseHref,
+            ["graphqlPath"] = graphQLPath,
+        };
+        if (documentIds.Count > 0)
+            fields["documents"] = documentIds;
+        // The host knows the caller on every request, so the app asks for no credential.
+        if (hostAuthenticates)
+            fields["hostAuthenticates"] = true;
+        var config = JsonSerializer.Serialize(fields, ConfigJson);
         var head =
             $"<base href=\"{HtmlEncoder.Default.Encode(baseHref)}\" />"
             + $"<meta name=\"trax-dashboard-config\" content=\"{HtmlEncoder.Default.Encode(config)}\" />";
@@ -176,7 +177,7 @@ internal sealed partial class DashboardEndpoint(
     {
         var graphQL = context.Request.PathBase.Add(new PathString(graphQLPath())).ToUriComponent();
         var html = Encoding.UTF8.GetBytes(
-            RenderIndex(assets.IndexTemplate!, basePath, graphQL, documentIds())
+            RenderIndex(assets.IndexTemplate!, basePath, graphQL, documentIds(), hostAuthenticates)
         );
         await WriteAsync(
             context,

@@ -20,9 +20,14 @@ export interface RuntimeConfig {
   graphqlPath: string;
   /** The persisted id of each console document, by operation name; empty when the host sends none. */
   documents: Readonly<Record<string, string>>;
+  /**
+   * The host knows who is asking on every request (a cookie or OpenID Connect sign-in, or a proxy's
+   * identity headers), so the app asks for no API key or token and sends none.
+   */
+  hostAuthenticates: boolean;
 }
 
-const DEFAULTS: RuntimeConfig = { basePath: "/", graphqlPath: "/trax/graphql", documents: {} };
+const DEFAULTS: RuntimeConfig = { basePath: "/", graphqlPath: "/trax/graphql", documents: {}, hostAuthenticates: false };
 
 /** The prefix every console document's id is under. */
 export const CONSOLE_DOCUMENT_PREFIX = "trax_console_";
@@ -49,6 +54,7 @@ export function readRuntimeConfig(doc: Document = document): RuntimeConfig {
     basePath: isLocalPath(raw.basePath) ? withTrailingSlash(raw.basePath) : DEFAULTS.basePath,
     graphqlPath: isLocalPath(raw.graphqlPath) ? raw.graphqlPath : DEFAULTS.graphqlPath,
     documents: documentIds(raw.documents),
+    hostAuthenticates: raw.hostAuthenticates === true,
   };
 }
 

@@ -87,6 +87,19 @@ export function clearCredential(): void {
   notify();
 }
 
+// On a host that authenticates the browser itself (HostAuthenticates()), the app holds no credential
+// and offers none to change.
+let hostAuthenticated = false;
+
+export function setHostAuthenticates(value: boolean): void {
+  hostAuthenticated = value;
+  notify();
+}
+
+export function hostAuthenticates(): boolean {
+  return hostAuthenticated;
+}
+
 export function onAuthChange(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
