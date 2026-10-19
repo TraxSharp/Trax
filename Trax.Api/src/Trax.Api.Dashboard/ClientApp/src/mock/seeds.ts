@@ -1,6 +1,7 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import { operationFixtures } from "./fixtures";
 import {
+  attentionNeedsWork,
   lookupMatches,
   machineQueryResolvers,
   manifestScheduleResolvers,
@@ -132,6 +133,7 @@ export const devMockSeed: MockSchemaOverrides = {
       ...machineQueryResolvers,
       runGraph: (_root: unknown, args: Record<string, unknown>) => devRunGraph(args.metadataId as number),
       lookup: (_root: unknown, args: Record<string, unknown>) => lookupMatches(args),
+      attention: () => attentionNeedsWork,
     },
     ...trainChainResolvers,
   }),

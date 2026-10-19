@@ -947,6 +947,249 @@ public class OperationsQueriesTests
         hosts.Should().BeEmpty();
     }
 
+    [Test]
+    public async Task GetAttention_ListsAPausedDispatcher_AndOneGroupOfTwoDeadLettersSharingAReason()
+    {
+        // The job dispatcher is switched off the way the console switches it, and two manifests
+        // of one train are dead-lettered for the same reason, a third for another.
+        var ops = Operations;
+        (
+            await ops.UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(JobDispatcherEnabled: false),
+                default
+            )
+        )
+            .Success.Should()
+            .BeTrue();
+        try
+        {
+            var groupId = await SeedManifestGroup("attention-group");
+            async Task<Manifest> SeedManifest()
+            {
+                await using var db = await _factory.CreateDbContextAsync(default);
+                var m = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+                m.ManifestGroupId = groupId;
+                await db.Track(m);
+                await db.SaveChanges(default);
+                return m;
+            }
+            var first = await SeedManifest();
+            var second = await SeedManifest();
+            var third = await SeedManifest();
+            await using (var db = await _factory.CreateDbContextAsync(default))
+            {
+                foreach (
+                    var (manifest, reason) in new[]
+                    {
+                        (first, "Max retries exceeded"),
+                        (second, "Max retries exceeded"),
+                        (third, "Timed out"),
+                    }
+                )
+                    await db.Track(
+                        DeadLetter.Create(
+                            new CreateDeadLetter
+                            {
+                                Manifest = manifest,
+                                Reason = reason,
+                                RetryCount = 3,
+                            }
+                        )
+                    );
+                await db.SaveChanges(default);
+            }
+
+            var attention = await new OperationsQueries().GetAttention(ops, default);
+
+            attention.Scheduler.JobDispatcherEnabled.Should().BeFalse();
+            attention.Scheduler.ManifestManagerEnabled.Should().BeTrue();
+            attention.Scheduler.Paused.Should().BeTrue();
+            attention.Scheduler.Link.Should().Be("/system/scheduler");
+
+            var train = typeof(SomeFakeTrain).FullName!;
+            attention
+                .DeadLetters.Select(g => (g.TrainName, g.Reason, g.Count))
+                .Should()
+                .Equal((train, "Max retries exceeded", 2L), (train, "Timed out", 1L));
+            attention
+                .DeadLetters[0]
+                .Link.Should()
+                .Be(
+                    "/runs/dead-letters?status=AWAITING_INTERVENTION&train="
+                        + Uri.EscapeDataString(train)
+                        + "&reason=Max%20retries%20exceeded"
+                );
+        }
+        finally
+        {
+            await using var db = await _factory.CreateDbContextAsync(default);
+            await ((DbContext)db).Database.ExecuteSqlRawAsync("DELETE FROM trax.scheduler_config");
+        }
+    }
+
+    [Test]
+    public async Task GetAttention_ListsATrainFailingMoreThisHourThanThisWeek_AndNotOneThatAlwaysFails()
+    {
+        var now = DateTime.UtcNow;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            void Run(string name, TrainState state, DateTime start)
+            {
+                var m = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = name,
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                m.TrainState = state;
+                m.StartTime = start;
+                m.EndTime = start.AddSeconds(1);
+                db.Metadatas.Add(m);
+            }
+
+            // Flaky: one failure in three this hour, none in the four runs earlier in the week.
+            Run("Trax.X.Flaky", TrainState.Failed, now.AddMinutes(-10));
+            Run("Trax.X.Flaky", TrainState.Completed, now.AddMinutes(-20));
+            Run("Trax.X.Flaky", TrainState.Completed, now.AddMinutes(-30));
+            for (var i = 0; i < 4; i++)
+                Run("Trax.X.Flaky", TrainState.Completed, now.AddDays(-2).AddHours(i));
+            // Broken: fails every time, this hour and before.
+            Run("Trax.X.Broken", TrainState.Failed, now.AddMinutes(-5));
+            Run("Trax.X.Broken", TrainState.Failed, now.AddDays(-3));
+            // New: its first run, this hour, failed.
+            Run("Trax.X.New", TrainState.Failed, now.AddMinutes(-1));
+            // Old: failed this often eight days ago, outside the week.
+            Run("Trax.X.Old", TrainState.Completed, now.AddMinutes(-15));
+            Run("Trax.X.Old", TrainState.Failed, now.AddDays(-8));
+            await db.SaveChanges(default);
+        }
+
+        var attention = await new OperationsQueries().GetAttention(Operations, default);
+
+        attention.Scheduler.Paused.Should().BeFalse();
+        attention
+            .FailingTrains.Select(t => t.TrainName)
+            .Should()
+            .Equal("Trax.X.New", "Trax.X.Flaky");
+        var flaky = attention.FailingTrains[1];
+        flaky.FailedLastHour.Should().Be(1);
+        flaky.FinishedLastHour.Should().Be(3);
+        flaky.LastHourFailureRate.Should().BeApproximately(1.0 / 3, 1e-9);
+        flaky.BaselineFailureRate.Should().Be(0);
+        flaky.Link.Should().Be("/runs?state=FAILED&train=Trax.X.Flaky");
+    }
+
+    [Test]
+    public async Task GetAttention_CountsTheDueBacklog_StuckInstancesAndOfflineHosts()
+    {
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var ctx = (DbContext)db;
+            await ctx.Database.ExecuteSqlRawAsync(
+                "TRUNCATE TABLE trax.work_queue, trax.snapshot_draft RESTART IDENTITY CASCADE"
+            );
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        await SeedHeartbeat("pod-up", "host-up", now - TimeSpan.FromSeconds(5));
+        await SeedHeartbeat("pod-gone", "host-gone", now - TimeSpan.FromMinutes(10), true);
+
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var oldest = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" }
+            );
+            oldest.CreatedAt = now.UtcDateTime.AddMinutes(-7);
+            var newer = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" }
+            );
+            var later = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue { TrainName = "Trax.X.Q" }
+            );
+            later.ScheduledAt = now.UtcDateTime.AddHours(1);
+            later.CreatedAt = now.UtcDateTime.AddHours(-1);
+            db.WorkQueues.AddRange(oldest, newer, later);
+
+            // Two runs machine instances wait on: one failed ten minutes ago, one completed.
+            Metadata Ran(TrainState state)
+            {
+                var m = Metadata.Create(
+                    new CreateMetadata
+                    {
+                        Name = "Trax.X.Invoked",
+                        ExternalId = Guid.NewGuid().ToString("N"),
+                        Input = null,
+                    }
+                );
+                m.TrainState = state;
+                m.EndTime = now.UtcDateTime.AddMinutes(-10);
+                db.Metadatas.Add(m);
+                return m;
+            }
+            var failedRun = Ran(TrainState.Failed);
+            var completedRun = Ran(TrainState.Completed);
+
+            Trax.Effect.Models.SnapshotDraft.SnapshotDraft Instance(
+                string state,
+                DateTimeOffset? due,
+                string? token = null
+            ) =>
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    OwnerKind = SnapshotOwnerKind.System,
+                    Machine = "order",
+                    Version = 1,
+                    State = state,
+                    Context = "{}",
+                    ConcurrencyToken = Guid.NewGuid(),
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    DueAt = due,
+                    InvokeToken = token,
+                };
+            db.SnapshotDrafts.AddRange(
+                Instance("Waiting", now - TimeSpan.FromMinutes(5)),
+                Instance("Waiting", now - TimeSpan.FromMinutes(6)),
+                Instance("Waiting", now + TimeSpan.FromMinutes(5)),
+                Instance("Shipped", null),
+                Instance("Charging", null, failedRun.ExternalId),
+                Instance("Charging", null, completedRun.ExternalId)
+            );
+            await db.SaveChanges(default);
+        }
+
+        var attention = await new OperationsQueries().GetAttention(Operations, default);
+
+        attention.Queue.Queued.Should().Be(2, "the entry scheduled for later is not due");
+        attention.Queue.OldestAgeSeconds.Should().BeInRange(7 * 60 - 5, 7 * 60 + 60);
+        attention.Queue.Link.Should().Be("/runs/queued?status=QUEUED");
+
+        attention
+            .StuckInstances.Select(g => (g.Machine, g.State, g.Count, g.Link))
+            .Should()
+            .Equal(
+                ("order", "Waiting", 2L, "/machines/order?state=Waiting&stuck=true"),
+                ("order", "Charging", 1L, "/machines/order?state=Charging&stuck=true")
+            );
+
+        attention
+            .OfflineHosts.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new
+                {
+                    InstanceId = "pod-gone",
+                    HostName = "host-gone",
+                    RunsDispatcher = true,
+                    Link = "/system/hosts",
+                }
+            );
+    }
+
     private sealed class ManualTime(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;

@@ -518,6 +518,69 @@ namespace Trax.Scheduler.Services.LogLevels
 }
 namespace Trax.Scheduler.Services.Operations
 {
+    public sealed class Attention : System.IEquatable<Trax.Scheduler.Services.Operations.Attention>
+    {
+        public Attention(Trax.Scheduler.Services.Operations.AttentionScheduler Scheduler, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionDeadLetterGroup> DeadLetters, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionFailingTrain> FailingTrains, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionStuckInstances> StuckInstances, Trax.Scheduler.Services.Operations.AttentionQueue Queue, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionHost> OfflineHosts, System.DateTime AsOf) { }
+        public System.DateTime AsOf { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionDeadLetterGroup> DeadLetters { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionFailingTrain> FailingTrains { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionHost> OfflineHosts { get; init; }
+        public Trax.Scheduler.Services.Operations.AttentionQueue Queue { get; init; }
+        public Trax.Scheduler.Services.Operations.AttentionScheduler Scheduler { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.AttentionStuckInstances> StuckInstances { get; init; }
+    }
+    public sealed class AttentionDeadLetterGroup : System.IEquatable<Trax.Scheduler.Services.Operations.AttentionDeadLetterGroup>
+    {
+        public AttentionDeadLetterGroup(string TrainName, string Reason, long Count, System.DateTime OldestDeadLetteredAt, string Link) { }
+        public long Count { get; init; }
+        public string Link { get; init; }
+        public System.DateTime OldestDeadLetteredAt { get; init; }
+        public string Reason { get; init; }
+        public string TrainName { get; init; }
+    }
+    public sealed class AttentionFailingTrain : System.IEquatable<Trax.Scheduler.Services.Operations.AttentionFailingTrain>
+    {
+        public AttentionFailingTrain(string TrainName, long FailedLastHour, long FinishedLastHour, double LastHourFailureRate, double BaselineFailureRate, string Link) { }
+        public double BaselineFailureRate { get; init; }
+        public long FailedLastHour { get; init; }
+        public long FinishedLastHour { get; init; }
+        public double LastHourFailureRate { get; init; }
+        public string Link { get; init; }
+        public string TrainName { get; init; }
+    }
+    public sealed class AttentionHost : System.IEquatable<Trax.Scheduler.Services.Operations.AttentionHost>
+    {
+        public AttentionHost(string InstanceId, string HostName, System.DateTime LastHeartbeatAt, bool RunsDispatcher, string Link) { }
+        public string HostName { get; init; }
+        public string InstanceId { get; init; }
+        public System.DateTime LastHeartbeatAt { get; init; }
+        public string Link { get; init; }
+        public bool RunsDispatcher { get; init; }
+    }
+    public sealed class AttentionQueue : System.IEquatable<Trax.Scheduler.Services.Operations.AttentionQueue>
+    {
+        public AttentionQueue(long Queued, System.DateTime? OldestQueuedAt, double? OldestAgeSeconds, string Link) { }
+        public string Link { get; init; }
+        public double? OldestAgeSeconds { get; init; }
+        public System.DateTime? OldestQueuedAt { get; init; }
+        public long Queued { get; init; }
+    }
+    public sealed class AttentionScheduler : System.IEquatable<Trax.Scheduler.Services.Operations.AttentionScheduler>
+    {
+        public AttentionScheduler(bool ManifestManagerEnabled, bool JobDispatcherEnabled, string Link) { }
+        public bool JobDispatcherEnabled { get; init; }
+        public string Link { get; init; }
+        public bool ManifestManagerEnabled { get; init; }
+        public bool Paused { get; }
+    }
+    public sealed class AttentionStuckInstances : System.IEquatable<Trax.Scheduler.Services.Operations.AttentionStuckInstances>
+    {
+        public AttentionStuckInstances(string Machine, string State, long Count, string Link) { }
+        public long Count { get; init; }
+        public string Link { get; init; }
+        public string Machine { get; init; }
+        public string State { get; init; }
+    }
     public class BatchItemNote : System.IEquatable<Trax.Scheduler.Services.Operations.BatchItemNote>
     {
         public BatchItemNote(long Id, string Message) { }
@@ -585,6 +648,7 @@ namespace Trax.Scheduler.Services.Operations
         System.Threading.Tasks.Task<int> CountLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogCount> CountLogsCappedAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceTotal> CountMachineInstancesAsync(Trax.Scheduler.Services.Operations.MachineInstanceQuery query, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.Attention> GetAttentionAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogPage> GetLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct);
@@ -941,6 +1005,7 @@ namespace Trax.Scheduler.Services.Operations
     }
     public class OperationsService : Trax.Scheduler.Services.Operations.IOperationsService
     {
+        public const int AttentionListCap = 50;
         public const int LogCountCap = 10000;
         public const int LookupMatchCap = 10;
         public const int LookupTextLimit = 512;
@@ -968,6 +1033,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.Threading.Tasks.Task<int> CountLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogCount> CountLogsCappedAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceTotal> CountMachineInstancesAsync(Trax.Scheduler.Services.Operations.MachineInstanceQuery query, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.Attention> GetAttentionAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogPage> GetLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct) { }

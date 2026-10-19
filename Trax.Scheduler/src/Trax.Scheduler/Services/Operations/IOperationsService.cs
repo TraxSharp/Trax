@@ -751,6 +751,25 @@ public interface IOperationsService
     Task<IReadOnlyList<MachineDescription>> GetMachinesAsync(CancellationToken ct) =>
         throw NotImplementedBy(nameof(GetMachinesAsync));
 
+    /// <summary>
+    /// What needs an operator's attention, in one read: whether the manifest manager and the job
+    /// dispatcher are switched on, the dead letters awaiting intervention grouped by train and
+    /// reason, the trains failing more in the last hour than over the week before it, the stuck
+    /// state-machine instances by machine and state, the queue backlog and its oldest entry's
+    /// age, and the hosts that have stopped beating. Each entry carries the console path and
+    /// query that lists it. The console's Overview and the API's <c>operations.attention</c> both
+    /// read it here.
+    /// </summary>
+    /// <remarks>
+    /// Each list holds at most <see cref="OperationsService.AttentionListCap"/> entries, largest
+    /// or worst first. A stuck instance is one <see cref="MachineInstanceRecord.Stuck"/> calls
+    /// stuck; an offline host is one whose last beat is three beats old.
+    /// </remarks>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
+    Task<Attention> GetAttentionAsync(CancellationToken ct) =>
+        throw NotImplementedBy(nameof(GetAttentionAsync));
+
     private NotSupportedException NotImplementedBy(string member) =>
         new(
             $"{GetType().Name} does not implement {member}. It was added to IOperationsService "

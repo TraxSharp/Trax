@@ -830,6 +830,24 @@ export interface LookupMatch {
   rowId: number | null;
 }
 
+// What needs attention (ATTENTION). Each entry's link is a console path with its list's filter.
+export interface Attention {
+  asOf: string;
+  scheduler: { manifestManagerEnabled: boolean; jobDispatcherEnabled: boolean; paused: boolean; link: string };
+  deadLetters: { trainName: string; reason: string; count: number; oldestDeadLetteredAt: string; link: string }[];
+  failingTrains: {
+    trainName: string;
+    failedLastHour: number;
+    finishedLastHour: number;
+    lastHourFailureRate: number;
+    baselineFailureRate: number;
+    link: string;
+  }[];
+  stuckInstances: { machine: string; state: string; count: number; link: string }[];
+  queue: { queued: number; oldestQueuedAt: string | null; oldestAgeSeconds: number | null; link: string };
+  offlineHosts: { instanceId: string; hostName: string; lastHeartbeatAt: string; runsDispatcher: boolean; link: string }[];
+}
+
 // What a run is linked to (RUN_LINKS).
 export interface RunLinks {
   id: number;

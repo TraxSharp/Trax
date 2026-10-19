@@ -1581,3 +1581,78 @@ export const bulkOperationsOverlay: StatefulOverlay = {
     },
   },
 };
+
+// ── Attention ──────────────────────────────────────────────────────────────
+// operations.attention as the API answers it: each entry's link is the console path and query that lists it.
+const ATTENTION_AS_OF = "2026-07-07T12:00:00.000Z";
+
+/** Nothing needs attention: the scheduler runs, nothing is dead-lettered, stuck, backed up or offline. */
+export const attentionAllClear = {
+  asOf: ATTENTION_AS_OF,
+  scheduler: { manifestManagerEnabled: true, jobDispatcherEnabled: true, paused: false, link: "/system/scheduler" },
+  deadLetters: [],
+  failingTrains: [],
+  stuckInstances: [],
+  queue: { queued: 0, oldestQueuedAt: null, oldestAgeSeconds: null, link: "/runs/queued?status=QUEUED" },
+  offlineHosts: [],
+};
+
+/** A paused dispatcher, two dead letters sharing a train and reason, a failing train, stuck instances, a backlog and an offline host. */
+export const attentionNeedsWork = {
+  asOf: ATTENTION_AS_OF,
+  scheduler: { manifestManagerEnabled: true, jobDispatcherEnabled: false, paused: true, link: "/system/scheduler" },
+  deadLetters: [
+    {
+      trainName: "Trax.Samples.Billing.IChargeCardTrain",
+      reason: "Max retries exceeded: (4) failures > (3) max retries",
+      count: 2,
+      oldestDeadLetteredAt: "2026-07-07T09:30:00.000Z",
+      link:
+        "/runs/dead-letters?status=AWAITING_INTERVENTION&train=Trax.Samples.Billing.IChargeCardTrain" +
+        "&reason=Max%20retries%20exceeded%3A%20(4)%20failures%20%3E%20(3)%20max%20retries",
+    },
+    {
+      trainName: "Trax.Samples.Mail.ISendDigestTrain",
+      reason: "Max retries exceeded: (2) failures > (1) max retries",
+      count: 1,
+      oldestDeadLetteredAt: "2026-07-07T11:10:00.000Z",
+      link:
+        "/runs/dead-letters?status=AWAITING_INTERVENTION&train=Trax.Samples.Mail.ISendDigestTrain" +
+        "&reason=Max%20retries%20exceeded%3A%20(2)%20failures%20%3E%20(1)%20max%20retries",
+    },
+  ],
+  failingTrains: [
+    {
+      trainName: "Trax.Samples.Billing.IChargeCardTrain",
+      failedLastHour: 6,
+      finishedLastHour: 10,
+      lastHourFailureRate: 0.6,
+      baselineFailureRate: 0.04,
+      link: "/runs?state=FAILED&train=Trax.Samples.Billing.IChargeCardTrain",
+    },
+  ],
+  stuckInstances: [
+    { machine: "order", state: "AwaitingPayment", count: 3, link: "/machines/order?state=AwaitingPayment&stuck=true" },
+  ],
+  queue: {
+    queued: 42,
+    oldestQueuedAt: "2026-07-07T11:48:00.000Z",
+    oldestAgeSeconds: 720,
+    link: "/runs/queued?status=QUEUED",
+  },
+  offlineHosts: [
+    {
+      instanceId: "worker-7c41d2",
+      hostName: "trax-worker-2",
+      lastHeartbeatAt: "2026-07-07T11:20:00.000Z",
+      runsDispatcher: false,
+      link: "/system/hosts",
+    },
+  ],
+};
+
+export function attentionScenarioOf(attention: typeof attentionAllClear | typeof attentionNeedsWork): MockSchemaOverrides {
+  return { resolvers: () => ({ OperationsQueries: { attention: () => attention } }) };
+}
+
+export const attentionScenario = attentionScenarioOf(attentionNeedsWork);

@@ -319,6 +319,44 @@ instances by id, and registered trains by full or friendly name. Each is one rea
 matches of each kind. An instance is named the way [`machineInstances`](/docs/sdk-reference/graphql-api/queries/machine-instances)
 names it, never by its context or whose a user's draft is. Like every field here it answers to the operations gate.
 
+## attention
+
+What needs an operator's attention, the read behind the console's Overview. It calls
+[`IOperationsService.GetAttentionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#getattentionasync).
+
+```graphql
+query {
+  operations {
+    attention {
+      asOf
+      scheduler { manifestManagerEnabled jobDispatcherEnabled paused link }
+      deadLetters { trainName reason count oldestDeadLetteredAt link }
+      failingTrains { trainName failedLastHour finishedLastHour lastHourFailureRate baselineFailureRate link }
+      stuckInstances { machine state count link }
+      queue { queued oldestQueuedAt oldestAgeSeconds link }
+      offlineHosts { instanceId hostName lastHeartbeatAt runsDispatcher link }
+    }
+  }
+}
+```
+
+**Returns**: `Attention!`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scheduler` | `AttentionScheduler!` | Whether the manifest manager and the job dispatcher are switched on; `paused` is true when either is off |
+| `deadLetters` | `[AttentionDeadLetterGroup!]!` | Dead letters awaiting intervention, one group per train and reason, with `count` and `oldestDeadLetteredAt`, largest first |
+| `failingTrains` | `[AttentionFailingTrain!]!` | Trains whose failure rate among runs started in the last hour is above their rate over the seven days before it, highest first |
+| `stuckInstances` | `[AttentionStuckInstances!]!` | Stuck state-machine instances, one group per machine and state, largest first |
+| `queue` | `AttentionQueue!` | Queued entries that are confirmed and due, and how long the oldest has waited |
+| `offlineHosts` | `[AttentionHost!]!` | Hosts that have missed three heartbeats, most recently seen first |
+| `asOf` | `DateTime!` | When the read was made |
+
+Each list holds at most 50 entries. Every entry has a `link`: the console path and query that lists what it counts, such
+as `/runs?state=FAILED&train=Shop.ICheckoutTrain` or `/machines/order?state=Waiting&stuck=true`. A stuck-instance group
+names a machine and a state, never an instance's owner or context. Like every field here it answers to the operations
+gate.
+
 ## See also
 
 - [Queries](/docs/sdk-reference/graphql-api/queries)

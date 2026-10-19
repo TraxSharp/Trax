@@ -266,6 +266,7 @@ namespace Trax.Api.GraphQL.Queries
         public Trax.Api.GraphQL.Queries.ConfigQueries Config() { }
         public Trax.Api.GraphQL.Queries.DeadLetterQueries DeadLetters() { }
         public System.Collections.Generic.IReadOnlyList<string> GetAdminTrainNames() { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.Attention> GetAttention([HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
         public Trax.Api.DTOs.BulkOperation? GetBulkOperation(System.Guid id, [HotChocolate.Service] Trax.Api.GraphQL.Extensions.TraxApplicationServices applicationServices) { }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.BulkOperation> GetBulkOperations([HotChocolate.Service] Trax.Api.GraphQL.Extensions.TraxApplicationServices applicationServices) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.DecisionPage> GetDecisions(long metadataId, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct, long? afterId = default, int take = 50) { }

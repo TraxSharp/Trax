@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import { LOOKUP, RUN_LINKS, TRAIN_CHAINS } from "../graphql/queries";
-import type { LookupMatch, RunLinks, TrainChain } from "../types";
+import { ATTENTION, LOOKUP, RUN_LINKS, TRAIN_CHAINS } from "../graphql/queries";
+import type { Attention, LookupMatch, RunLinks, TrainChain } from "../types";
 import { createMockClient, createMockStore } from "./index";
-import { executionDetailScenario, lookupScenario, MACHINE_IDS, trainsScenario } from "./scenarios";
+import { attentionScenario, executionDetailScenario, lookupScenario, MACHINE_IDS, trainsScenario } from "./scenarios";
 
 // The mock answers the console's reads that no page uses yet, in the shapes the API serves them.
 
@@ -49,4 +49,16 @@ test("LOOKUP: exact matches only, a user's draft by its rowId and never its owne
   ]);
   expect(await find("902")).toMatchObject([{ kind: "RUN", id: "902", matchedOn: "id" }]);
   expect(await find("Trax.Trains.Zebra")).toEqual([]);
+});
+
+test("ATTENTION: a paused dispatcher and dead letters grouped by train and reason, each with the link to its list", async () => {
+  const client = createMockClient({ store: createMockStore(), fixtures: false, overrides: attentionScenario });
+  const result = await client.query(ATTENTION, {}).toPromise();
+  expect(result.error).toBeUndefined();
+
+  const attention = result.data.operations.attention as Attention;
+  expect(attention.scheduler).toMatchObject({ jobDispatcherEnabled: false, paused: true, link: "/system/scheduler" });
+  expect(attention.deadLetters[0]).toMatchObject({ count: 2 });
+  expect(attention.deadLetters[0].link).toMatch(/^\/runs\/dead-letters\?status=AWAITING_INTERVENTION&train=.+&reason=.+/);
+  expect(attention.stuckInstances[0].link).toBe("/machines/order?state=AwaitingPayment&stuck=true");
 });
