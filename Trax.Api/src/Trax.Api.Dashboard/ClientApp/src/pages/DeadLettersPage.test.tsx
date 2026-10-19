@@ -94,3 +94,16 @@ test("the list shows every dead letter as its own row, and the choice is held in
   expect(named("DeadLetters")[0].variables).toMatchObject({ take: 25 });
   expect(named("DeadLetterGroups")).toHaveLength(0);
 });
+
+test("the Overview's link to one group shows only that group, open, and offers every group back", async () => {
+  const train = "Trax.Demo.Trains.ImportFeedTrain";
+  renderAt(
+    `/runs/dead-letters?status=AWAITING_INTERVENTION&train=${encodeURIComponent(train)}&reason=${encodeURIComponent(SHARED_DEAD_LETTER_REASON)}`,
+  );
+  await groupRow();
+  expect(screen.getAllByRole("checkbox", { name: /^Select group: / })).toHaveLength(1);
+  // Opened, though it holds two.
+  expect(await screen.findByRole("checkbox", { name: "Select #721" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Show every group" }));
+  await waitFor(() => expect(screen.getAllByRole("checkbox", { name: /^Select group: / })).toHaveLength(2));
+});

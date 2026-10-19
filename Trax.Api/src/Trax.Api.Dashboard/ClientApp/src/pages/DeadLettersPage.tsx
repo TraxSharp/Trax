@@ -78,6 +78,9 @@ export function DeadLettersPage() {
   // has no recording of the grouped read, so it shows the list (lib/answerable.ts).
   const groupable = useAnswers("DeadLetterGroups");
   const [viewParam, setView] = useUrlState<"groups" | "list">("view", "groups");
+  // The Overview links one group (a train and the reason its dead letters share) by these two.
+  const [trainFilter, setTrainFilter] = useUrlState("train");
+  const [reasonFilter, setReasonFilter] = useUrlState("reason");
   const view = groupable ? viewParam : "list";
   const { selected, toggle, setMany, clear } = useSelection();
   // note dialog: single dead-letter id, "bulk" (selection), "all" (every unresolved), or null.
@@ -129,8 +132,15 @@ export function DeadLettersPage() {
     items.filter((d) => selected.has(d.id)).map((d) => d.manifestName),
   );
 
-  const groups = useMemo(() => groupDeadLetters(items), [items]);
-  const hasFilter = status !== "" || manifestId !== "";
+  const groups = useMemo(
+    () =>
+      groupDeadLetters(items).filter(
+        (g) => (trainFilter === "" || g.train === trainFilter) && (reasonFilter === "" || g.reason === reasonFilter),
+      ),
+    [items, trainFilter, reasonFilter],
+  );
+  const narrowedToGroup = trainFilter !== "" || reasonFilter !== "";
+  const hasFilter = status !== "" || manifestId !== "" || narrowedToGroup;
 
   async function onRequeue(id: number) {
     if (
@@ -407,6 +417,22 @@ export function DeadLettersPage() {
         />
       </BatchBar>
 
+      {view === "groups" && narrowedToGroup && (
+        <p className="text-xs text-muted mb-2" role="status">
+          Showing{trainFilter && <> {shortName(trainFilter)}</>}
+          {reasonFilter && <>, failed with &ldquo;{reasonFilter}&rdquo;</>}.{" "}
+          <button
+            onClick={() => {
+              setTrainFilter("");
+              setReasonFilter("");
+            }}
+            className="text-accent-fg hover:underline"
+          >
+            Show every group
+          </button>
+        </p>
+      )}
+
       {view === "groups" && page && page.totalCount > items.length && (
         <p className="text-xs text-muted mb-2">
           Grouped from the newest {items.length.toLocaleString()} of {page.totalCount.toLocaleString()} dead letters.
@@ -431,7 +457,7 @@ export function DeadLettersPage() {
                   rows: g.rows,
                   summary: <GroupSummary group={g} />,
                   // A group of one shows its row; a bigger one opens on request.
-                  expanded: (g.rows.length === 1) !== toggled.has(g.key),
+                  expanded: (g.rows.length === 1 || narrowedToGroup) !== toggled.has(g.key),
                   onToggle: () =>
                     setToggled((t) => {
                       const n = new Set(t);
