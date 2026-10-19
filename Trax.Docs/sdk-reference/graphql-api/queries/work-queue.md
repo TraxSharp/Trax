@@ -115,8 +115,7 @@ query {
 | `subjectHeldBy` | `Long` | For a queued entry with a subject: the dispatched entry for the same subject whose run is still pending or in progress. Dispatch skips the subject until that run finishes |
 | `subjectQueuedBehind` | `Long` | For a queued entry with a subject that nothing holds: the queued entry for the same subject that dispatch offers first (confirmed, due, in an enabled group, then higher priority, then older). Dispatch offers one entry per subject each cycle |
 
-Both are null for an entry that is not queued or has no subject. The Blazor dashboard's work queue
-detail page reports the same two answers from the same predicate.
+Both are null for an entry that is not queued or has no subject.
 
 ## See also
 

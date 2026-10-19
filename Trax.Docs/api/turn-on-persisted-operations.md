@@ -193,42 +193,31 @@ builder.Services.AddTraxGraphQL(graphql =>
 Every builder method is on
 [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder).
 
-## 7. Manage operations from the dashboard
+## 7. Manage operations from the operations console
 
-With the [dashboard](/docs/dashboard) on the host, a **Persisted Operations** entry appears under
-**Data** once the host turns on persisted operations, with `UsePersistedOperations(...)` on a
-GraphQL host or `AddPersistedOperationStore(...)` on a dashboard host that serves no GraphQL, and
-declares the management gate with `GateManagement(...)`. Without both, the entry is hidden and
-`/trax/data/persisted-operations` says management is not served on this server.
+With the [operations console](/docs/dashboard) on the host, a **Persisted operations** entry appears
+under **API admin** once the host turns on persisted operations with `UsePersistedOperations(...)`
+and declares the management gate with `GateManagement(...)`, and the caller passes that gate.
+Without them the entry is hidden, and `/trax/dashboard/api-admin/persisted-operations` says
+management is not served on this server.
 
-The pages hold the operator to the same gate as the `persistedOperations` fields: every read and
-write checks the dashboard's own posture, then the gate's policy and roles. An operator at the
-dashboard who manages documents needs both, as one at the React dashboard does.
+The page reads and writes through the `persistedOperations` fields, so every request it sends is
+held to the management gate, whoever loaded the page. An operator who manages documents needs a
+credential the gate admits, besides one for the `operations` gate the rest of the console uses.
 
 The page lists `trax.persisted_operation` a page at a time, filters by tenant, status and id
 prefix, and uploads, edits, deactivates and restores against the row's own tenant. It goes through
-the same service as the GraphQL fields, so it refuses what the API refuses, with the same message;
-parse, schema and shape errors show inline in the editor, and the editor's **Bypass shape-diff
-guardrail** checkbox is the `bypassShapeDiff` flag. A change saved but not broadcast shows as a
-warning carrying the `CHANGE_NOT_BROADCAST` message, not as a refusal.
+the same service as any other caller of those fields, so it refuses what the API refuses, with the
+same message; parse, schema and shape errors show inline in the editor, and its bypass checkbox is
+the `bypassShapeDiff` flag. A change saved but not broadcast shows as a warning carrying the
+`CHANGE_NOT_BROADCAST` message, not as a refusal.
 
-A dashboard in a process of its own declares how its writes reach the GraphQL nodes, the same way
-an uploader does:
-
-```csharp compile
-using Trax.Api.GraphQL.PersistedOperations.Extensions;
-
-builder.Services.AddPersistedOperationStore(store =>
-    store.UseRabbitMqInvalidation(rabbitMqConnectionString).GateManagement(roles: "Deployer")
-);
-```
-
-The dashboard's own setup, including the posture it refuses to start without, is in
-[Add the dashboard to a host](/docs/dashboard).
-
-The React operations console keeps working on a host that requires persisted operations: the
-host registers the console's own documents when it starts and the console sends them by id. See
+The console keeps working on a host that requires persisted operations: the host registers the
+console's own documents when it starts and the console sends them by id. The persisted-operation
+pages still send text, which runs behind `GateManagement`. See
 [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard#with-persisted-operations).
+The console's own setup, including the posture it refuses to start without, is in
+[Add the console to a host](/docs/dashboard/add-the-console-to-a-host).
 
 ## SDK Reference
 

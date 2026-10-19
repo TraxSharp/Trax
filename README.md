@@ -50,8 +50,7 @@ folder depends only on folders above it in this table; take the layers you need,
 | [Trax.Effect](Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine |
 | [Trax.Mediator](Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
 | [Trax.Scheduler](Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
-| [Trax.Api](Trax.Api) | GraphQL generated from your trains and machines: a mutation per machine event, authorization checked on the server, persisted operations, audit and live subscriptions |
-| [Trax.Dashboard](Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
+| [Trax.Api](Trax.Api) | GraphQL generated from your trains and machines: a mutation per machine event, authorization checked on the server, persisted operations, audit, live subscriptions and the operations console your host serves |
 | [Trax.Cli](Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
 | [Trax.Samples](Trax.Samples) | **Start here.** Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
 | [Trax.Api.StateMachine](Trax.Api.StateMachine) | `@traxsharp/state-machine`, the TypeScript twin of the state-machine engine |

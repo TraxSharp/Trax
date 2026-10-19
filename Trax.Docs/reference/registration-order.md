@@ -16,8 +16,8 @@ naming the call to move. Nothing about registration is allowed to fail silently.
 
 | Requirement | What happens if you get it wrong |
 |---|---|
-| `AddTrax()` before `AddTraxGraphQL()` / `AddTraxDashboard()` | Throws immediately, naming the missing call. |
-| An authorization posture in `AddTraxDashboard()` options before `UseTraxDashboard()` | `UseTraxDashboard()` throws, naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousDashboard`. |
+| `AddTrax()` before `AddTraxGraphQL()` | Throws immediately, naming the missing call. |
+| An authorization posture in the `UseTraxApiDashboard(...)` options | `UseTraxApiDashboard()` throws, naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousShell`. |
 | Trains registered before `AddTraxGraphQL()` | The host refuses to start, naming each `[TraxQuery]`, `[TraxMutation]` or `[TraxBroadcast]` train registered afterwards. `AddTraxGraphQL()` checks each train's authorization posture and name and builds the schema roots from the trains registered before it. |
 | Your own `IDecisionObserver` before `AddTrax()`, on a host that calls `AddDecisionRecording()` | The host refuses to start, naming the observer, and every run that would record its decisions refuses too. One registered after `AddTrax()` would replace the composite that tells decision recording. See [Other decision observers](/docs/effect/decisions#other-decision-observers). |
 
@@ -33,11 +33,11 @@ These are not about order: the call is missing. Each one fails at startup, with 
 
 | Missing | Message |
 |---|---|
-| `AddScheduler()` on a host that calls `UseTraxDashboard()` | `UseTraxDashboard() requires the Trax Scheduler: the dashboard queues, runs and cancels trains through IOperationsService, which AddScheduler() registers.` |
 | A data provider (`UseInMemory()`, `UseSqlite()`, `UsePostgres()`) in `AddEffects` on a host that calls `AddScheduler()` | `AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()).` |
 | The train's assembly in `AddMediator(...)`, for a train named in `Schedule<T>` | `No train implements IServiceTrain<TInput, TOut>. Add the train's assembly to AddMediator(m => m.ScanAssemblies(typeof(MyTrain).Assembly)).` |
 | `[TraxAuthorize]` or `[TraxAllowAnonymous]` on a `[TraxQuery]` or `[TraxMutation]` train | `Trax GraphQL exposure authorization check failed:` followed by one line per train |
-| `AddTraxDashboard()` on a host that calls `UseTraxDashboard()` | `UseTraxDashboard() requires AddTraxDashboard() to be called first.` |
+| `AddTraxGraphQL()` on a host that calls `UseTraxApiDashboard()` | `UseTraxApiDashboard() requires AddTraxGraphQL(): the dashboard reads and changes everything through the Trax GraphQL endpoint.` |
+| `ExposeOperationQueries()` on a host that calls `UseTraxApiDashboard()` | `UseTraxApiDashboard() requires the GraphQL operations namespace, which every page of the dashboard reads, and AddTraxGraphQL() does not expose it.` |
 | `AddTraxGraphQL()` on a host that calls `UseTraxGraphQL()` | `UseTraxGraphQL() requires AddTraxGraphQL() to be called first.` |
 | `AddAuthentication()` on a host that calls `UseAuthentication()` with no auth package registered (a template outside Development, where the demo key is not registered) | `Unable to resolve service for type 'Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider'` |
 | A registered demo key outside Development: `AddTraxApiKeyAuth` with a key containing `do-not-use-in-production` | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production', which marks a published demo key, and the environment is 'Production'.` |

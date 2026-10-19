@@ -2,8 +2,8 @@
 
 The effect layer: execution metadata, data contexts, effect and junction providers, the
 state machine engine, and the Postgres / Sqlite / InMemory data providers. It sits directly
-above `Trax.Core`, so a change here reaches the six folders downstream of it (Trax.Mediator,
-Trax.Scheduler, Trax.Api, Trax.Dashboard, Trax.Cli and Trax.Samples) through project
+above `Trax.Core`, so a change here reaches the five folders downstream of it (Trax.Mediator,
+Trax.Scheduler, Trax.Api, Trax.Cli and Trax.Samples) through project
 references, in the same commit. Trax.Core is upstream and never sees it.
 
 This file is the entry point. It routes; it does not restate the rules.

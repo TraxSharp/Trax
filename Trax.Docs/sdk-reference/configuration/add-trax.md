@@ -86,7 +86,7 @@ order (CS0619) instead of a missing method:
 
 | Service | Lifetime | Role |
 |---------|----------|------|
-| `TraxMarker` | Singleton | Records that `AddTrax` ran. `AddTraxDashboard()` and `AddTraxGraphQL()` throw `InvalidOperationException` without it, for example `AddTraxDashboard() requires AddTrax() to be called first.` |
+| `TraxMarker` | Singleton | Records that `AddTrax` ran. `AddTraxGraphQL()` throws `InvalidOperationException` without it: `AddTraxGraphQL() requires AddTrax() to be called first.` |
 | `IEffectRegistry` | Singleton | The `EffectRegistry` every effect, junction effect and lifecycle hook is registered in, and toggled through |
 | `ITraxEffectConfiguration` | Singleton | The effect settings `AddEffects` built |
 | `IEffectRunner`, `IJunctionEffectRunner`, `ILifecycleHookRunner` | Transient | Run a train's effects, junction effects and lifecycle hooks |

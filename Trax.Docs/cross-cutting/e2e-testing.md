@@ -34,7 +34,7 @@ environment with `UseEnvironment` and call the host with the factory's `HttpClie
     {
         await using var app = Start("Production");
 
-        var response = await app.CreateClient().GetAsync("/trax");
+        var response = await app.CreateClient().GetAsync("/trax/dashboard/");
 
         Assert.That(
             response.StatusCode,

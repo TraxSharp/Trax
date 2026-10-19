@@ -1,6 +1,6 @@
 ---
 title: Quick start
-description: "A tutorial building one Trax app from an empty folder: a train run in-process, recorded in Postgres, scheduled, shown in the dashboard and served over GraphQL."
+description: "A tutorial building one Trax app from an empty folder: a train run in-process, recorded in Postgres, scheduled, served over GraphQL, shown in the console."
 type: tutorial
 area: general
 section: none
@@ -11,8 +11,8 @@ snippet_context: none
 # Quick start: build a greeter service
 
 In this tutorial we build one application from an empty folder: a train that greets someone, run
-in-process first, then recorded in Postgres, scheduled, watched from the dashboard, and called over
-GraphQL. Each step shows every file it changes in full, and what you should see when you run it.
+in-process first, then recorded in Postgres, scheduled, and called over GraphQL and watched from the
+operations console. Each step shows every file it changes in full, and what you should see when you run it.
 
 Every C# block on this page is compiled in CI against the package versions in the project file below.
 
@@ -38,8 +38,6 @@ each one:
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- The dashboard's Blazor Server script (step 5). -->
-    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
@@ -53,13 +51,13 @@ each one:
     <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
     <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
 
-    <!-- Step 5: the scheduler and the dashboard. -->
+    <!-- Step 5: the scheduler. -->
     <PackageReference Include="Trax.Scheduler" Version="1.61.0" />
-    <PackageReference Include="Trax.Dashboard" Version="1.61.0" />
 
-    <!-- Step 6: GraphQL, and an API key to call it with. -->
+    <!-- Step 6: GraphQL, an API key to call it with, and the operations console. -->
     <PackageReference Include="Trax.Api.GraphQL" Version="1.61.0" />
     <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.61.0" />
+    <PackageReference Include="Trax.Api.Dashboard" Version="1.61.0" />
   </ItemGroup>
 </Project>
 ```
@@ -312,13 +310,12 @@ docker exec greeter-db psql -U trax -d trax -c \
 Each row is one run of `Greeter.IGreetTrain`. The failed one also records the junction that failed
 and its exception. Stop the application before the next step.
 
-## 5. Schedule it, and open the dashboard
+## 5. Schedule it
 
 `Program.cs`:
 
 ```csharp compile=schedule
 using Greeter;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Logging.Extensions;
@@ -347,15 +344,7 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// The dashboard can queue, run and cancel trains. Here it is open to anyone, so it is only
-// added in Development.
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
-
 var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
 
 app.MapPost(
     "/greet",
@@ -379,17 +368,8 @@ app.Run();
 and runs the train every minute on worker threads in this process. The manifest lives in Postgres,
 so it survives a restart.
 
-Run the application. Among the startup lines is a warning that the dashboard has no authorization
-of its own:
-
-```text
-warn: Trax.Dashboard[0]
-      AllowAnonymousDashboard() is set: the Trax dashboard at /trax applies no authorization of its own, ...
-```
-
-Open `http://localhost:5080/trax` in a browser. The dashboard lists the `greet-world` manifest with
-its next run time, and within a minute or two its runs appear, each greeting `World`. The `psql`
-query from step 4 now lists them above the two earlier runs:
+Run the application. Within a minute or two the scheduled runs appear, each greeting `World`. The
+`psql` query from step 4 lists them above the two earlier runs:
 
 ```text
         name         | train_state | name_in |    message
@@ -427,8 +407,8 @@ public class GreetTrain : ServiceTrain<GreetInput, Greeting>, IGreetTrain
 
 ```csharp compile=graphql
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Logging.Extensions;
@@ -458,24 +438,33 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// A demo key holding the User role. A key containing "do-not-use-in-production" stops the
-// application from starting outside Development.
+// Two demo keys: one holding the User role, for calling the train, and one holding Operator, for
+// the operations console. A key containing "do-not-use-in-production" stops the application from
+// starting outside Development.
 builder.Services.AddTraxApiKeyAuth(keys =>
     keys.Add("greeter-key-do-not-use-in-production", id: "demo", "User")
+        .Add("greeter-operator-key-do-not-use-in-production", id: "operator", "Operator")
 );
 
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
-
-builder.Services.AddTraxGraphQL();
+// The operations namespace is what the console reads and changes: runs, schedules, dead letters.
+// It is off until exposed, and only the Operator role may use it.
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
+        .GateOperations(roles: "Operator")
+);
 
 var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
 app.UseTraxGraphQL();
+
+// The console's page has no sign-in in front of it here, so it is only served in Development.
+// Everything it shows or changes still needs the operator key.
+if (app.Environment.IsDevelopment())
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
 ```
@@ -502,12 +491,18 @@ Send the same request without the `X-Api-Key` header and the response holds an `
 instead of the greeting. `http://localhost:5080/trax/graphql` in a browser opens the Nitro GraphQL
 IDE, with the schema to explore.
 
+Open `http://localhost:5080/trax/dashboard`, the operations console, and paste the operator key,
+`greeter-operator-key-do-not-use-in-production`, when it asks. **Schedules** lists the
+`greet-world` manifest with its next run, and **Runs** every run so far, the failed one with its
+exception. The console holds the key in memory only, so it asks again on every page load.
+
 We now have one process that runs a train on request, records every run, runs it on a schedule,
-shows it in a dashboard and serves it over GraphQL.
+serves it over GraphQL and shows it in the operations console.
 
 ## Next steps
 
-- [Secure the dashboard](/docs/dashboard) before it runs outside Development.
+- [Put a sign-in in front of the console](/docs/dashboard/add-the-console-to-a-host) before it runs
+  outside Development.
 - [Secure a GraphQL host](/docs/api-security) with real credentials, and expose a train as a
   mutation with [TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute).
 - [Start from a project template](/docs/reference/templates): `trax-hub` scaffolds this same shape
@@ -519,4 +514,4 @@ shows it in a dashboard and serves it over GraphQL.
 
 ## SDK Reference
 
-> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Run / RunEither](/docs/sdk-reference/train-methods/run) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL / UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Run / RunEither](/docs/sdk-reference/train-methods/run) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [AddTraxGraphQL / UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth)

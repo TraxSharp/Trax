@@ -14,7 +14,8 @@ source:
   - Trax.Api/src/Trax.Api.Auth.ApiKey/DemoApiKeyEnvironmentValidator.cs
   - Trax.Api/src/Trax.Api.Auth.Jwt/DemoJwtKeyEnvironmentValidator.cs
   - Trax.Mediator/src/Trax.Mediator/Services/TrainAuthorization/AuthorizationRegistrationValidator.cs
-  - Trax.Dashboard/src/Trax.Dashboard/Extensions/DashboardServiceExtensions.cs
+  - Trax.Api/src/Trax.Api.Dashboard/Extensions/ApiDashboardEndpointExtensions.cs
+  - Trax.Api/src/Trax.Api.Dashboard/Configuration/TraxApiDashboardOptions.cs
 ---
 
 # Startup refusals
@@ -30,7 +31,7 @@ A refusal is raised at one of these points:
 | The builder call | The method itself throws while `Program.cs` registers services, before `builder.Build()`. |
 | `AddTraxGraphQL` | The GraphQL builder's `Build()` and the train census, while `AddTraxGraphQL(...)` runs. |
 | Host start | A hosted service checks the built container and schema in `StartingAsync`, before the host serves a request. |
-| `UseTraxDashboard` | The dashboard checks its posture while it is mapped. |
+| `UseTraxApiDashboard` | The operations console checks its posture while it is mapped, and once more as the endpoint is built at host start. |
 
 ## Exposed surfaces
 
@@ -100,17 +101,18 @@ at startup and is not checked.
 |---|---|---|---|
 | The socket interceptor for the Trax schema has been replaced by HotChocolate's default, which accepts every `connection_init` | Host start | `<scheme> is registered, but the subscription socket interceptor for the Trax schema is HotChocolate's default, which accepts every connection_init. ...` | Remove the replacement, or register your own interceptor type with `ConfigureSchema(b => b.AddSocketSessionInterceptor<T>())` |
 
-## The dashboard
+## The operations console
 
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
-| `AddTraxDashboard` set no posture: no `RequirePolicy(...)`, `RequireRoles(...)` or `AllowAnonymousDashboard()` | `UseTraxDashboard` | `UseTraxDashboard() needs to know who may use the dashboard, ...` | Choose one |
-| `AllowAnonymousDashboard()` together with `RequirePolicy(...)` or `RequireRoles(...)` | The builder call | `... contradict each other: the dashboard is either gated or not. Remove one.` | Remove one |
-| `AddTraxDashboard` called twice | The builder call | `AddTraxDashboard() has already been called on this host. ...` | One call, with every option |
-| `RequirePolicy(name)` names a policy that is not registered | `UseTraxDashboard` | `The dashboard requires the authorization policy '<name>', which is not registered. ...` | Register the policy |
-| The dashboard is gated but no authentication scheme can challenge or forbid a refused caller | `UseTraxDashboard` | `The dashboard requires authorization, but the host has no authentication scheme to challenge a caller with, ...`, or names the missing schemes | Register a scheme, or name it on the policy with `AddAuthenticationSchemes(...)` |
+| No posture: no `RequirePolicy(...)`, `RequireRoles(...)` or `AllowAnonymousShell()` | `UseTraxApiDashboard` | `UseTraxApiDashboard() needs to know who may load the dashboard, ...` | Choose one |
+| `AllowAnonymousShell()` together with `RequirePolicy(...)` or `RequireRoles(...)` | The options call | `AllowAnonymousShell() and RequirePolicy()/RequireRoles() contradict each other: ...` | Remove one |
+| `AllowAnonymousShell()` together with `HostAuthenticates()` | The options call | `AllowAnonymousShell() and HostAuthenticates() contradict each other: ...` | Remove one |
+| `RequirePolicy(name)` names a policy that is not registered | `UseTraxApiDashboard` | `The dashboard requires the authorization policy '<name>', which is not registered. ...` | Register the policy |
+| The console is gated but no authentication scheme can challenge or forbid a refused caller | `UseTraxApiDashboard` | `The dashboard requires authorization, but the host has no authentication scheme ...`, or names the missing schemes | Register a scheme, or name it on the policy with `AddAuthenticationSchemes(...)` |
+| `AllowAnonymous()` chained on the returned builder over a policy or roles posture | Host start | `The Trax API dashboard at <path> was given AllowAnonymous(), which removes its RequirePolicy()/RequireRoles() posture ...` | Remove `AllowAnonymous()`, or use `AllowAnonymousShell()` |
 
-[UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) documents the options
+[UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) documents the options
 these refer to.
 
 ## Not refused at startup

@@ -6,6 +6,11 @@ area: dashboard
 parent: SDK Reference
 has_children: true
 nav_order: 7.5
+redirect_from:
+  - /docs/sdk-reference/dashboard-api
+  - /docs/sdk-reference/dashboard-api/dashboard-options
+  - /docs/sdk-reference/dashboard-api/i-dashboard-settings-service
+  - /docs/sdk-reference/dashboard-api/component-model-types
 ---
 
 # API Dashboard
@@ -17,9 +22,9 @@ host needs no Node. Everything it shows or changes goes through the host's Trax 
 (the `operations` namespace and the machines root), which authorizes it on its own. A demo runs
 on recorded data at [traxsharp.net/dashboard](https://traxsharp.net/dashboard).
 
-It is the GraphQL-side counterpart of the Blazor [Trax.Dashboard](/docs/dashboard), which runs
-inside the host's process and calls its services directly. Use this one when the host already
-serves the Trax GraphQL API, or when the people using the dashboard reach the host only over HTTP.
+It is the one operator dashboard Trax ships. The Blazor `Trax.Dashboard` package it replaced is
+removed; [Moving from the Blazor dashboard](/docs/dashboard/add-the-console-to-a-host#moving-from-the-blazor-dashboard)
+says what a host changes.
 
 ```csharp compile
 using Trax.Api.Dashboard.Extensions;

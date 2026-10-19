@@ -43,7 +43,6 @@ Every public type and method a Trax package ships, one per page. Each page names
 
 | Section | Covers |
 |---------|--------|
-| [Dashboard API](/docs/sdk-reference/dashboard-api) | `AddTraxDashboard`, `UseTraxDashboard`, options and the settings service |
 | [API Dashboard](/docs/sdk-reference/api-dashboard) | `UseTraxApiDashboard` and `TraxApiDashboardOptions`: the React operations dashboard a Trax.Api host serves over its GraphQL endpoint |
 
 ## Testing

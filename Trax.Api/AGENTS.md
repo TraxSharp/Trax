@@ -3,7 +3,7 @@
 The GraphQL layer: schema generation over `[TraxQueryModel]` entities, authentication and
 authorization, subscriptions, persisted operations, audit, the cross-schema data
 loaders, and the React operations dashboard a host serves over them (Trax.Api.Dashboard). It
-sits above `Trax.Scheduler` and below `Trax.Dashboard` and `Trax.Samples`.
+sits above `Trax.Scheduler` and below `Trax.Samples`.
 
 This file is the entry point. It routes; it does not restate the rules.
 

@@ -106,8 +106,8 @@ leaves the change saved and in force on the node that made it, and the mutation 
 
 `SingleNode()` claims that one process serves the endpoint and writes the store. Nothing can check
 that claim at runtime. A second node, or a CI uploader writing the store from its own process,
-makes it false. An uploader or a dashboard that writes the store from another process makes the
-same declaration through `AddPersistedOperationStore`, for the same reason.
+makes it false. An uploader that writes the store from another process makes the same declaration
+through `AddPersistedOperationStore`, for the same reason.
 
 Behind both sits a maximum age, five minutes by default. A cached entry is served for at most that
 long after its document was read from the database, then the store is read again. It bounds the
@@ -187,9 +187,8 @@ operator's credential, and turning on persisted operations exposes nothing under
 Where Trax checks authorization is in
 [Where Trax checks authorization](/docs/security/where-authorization-is-checked).
 
-A host without HotChocolate in process, such as a CI uploader or a dashboard running alone, uses
-`AddPersistedOperationStore`. A dashboard running alone declares its gate there, with
-`store.GateManagement(...)`. A process that also calls `UsePersistedOperations` declares the gate
+A host without HotChocolate in process, such as a CI uploader, uses `AddPersistedOperationStore`,
+and declares its gate there, with `store.GateManagement(...)`. A process that also calls `UsePersistedOperations` declares the gate
 there only: its options are the ones in force whichever call comes first, and a store gate that
 differs from it refuses the host at startup. With no schema to validate against it gets a validator that accepts
 every document; the shape check still runs.

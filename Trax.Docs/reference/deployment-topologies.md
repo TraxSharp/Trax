@@ -22,14 +22,14 @@ that the registrations described work together. The second one has no sample.
 
 Samples: [Scheduling](/docs/samples/scheduling), [Recovery](/docs/samples/recovery).
 
-One ASP.NET process schedules trains, runs them, serves GraphQL and, in Development, hosts the
-dashboard. It runs them on the scheduler's local workers, which `AddScheduler()` registers by
+One ASP.NET process schedules trains, runs them, serves GraphQL and, in Development, serves the
+operations console. It runs them on the scheduler's local workers, which `AddScheduler()` registers by
 default whenever the effects have a database provider: a `PostgresJobSubmitter` writes each job to
 `background_job` and worker threads in the same process claim it. The Recovery sample adds
 subscriptions on the same host; its page listens to `onJunctionEvent` for live progress. Nothing
 crosses a process, so no broadcaster is needed.
 
-The process registers `AddScheduler()`, `AddTraxGraphQL()` and `AddTraxDashboard()`.
+The process registers `AddScheduler()` and `AddTraxGraphQL()`, and maps `UseTraxApiDashboard()`.
 
 This is where most applications start, and it holds until execution has to scale apart from the
 API, or a long job must not compete with requests for the same CPU.
@@ -40,8 +40,8 @@ Sample: none. No sample runs this topology, so the registrations below are not e
 by any end-to-end suite.
 
 Two processes share the trains and the Postgres database. The scheduler process runs background
-work and hosts the dashboard; the API process serves GraphQL, runs light trains inline and queues
-heavy ones. Each calls `UseBroadcaster(b => b.UseRabbitMq(...))`, because a train the scheduler
+work; the API process serves GraphQL and the operations console, which reads everything over it,
+runs light trains inline and queues heavy ones. Each calls `UseBroadcaster(b => b.UseRabbitMq(...))`, because a train the scheduler
 runs must reach the API's subscriptions.
 
 The API needs a job submitter to queue anything. `AddTraxGraphQL()` refuses to start a host that
@@ -104,7 +104,7 @@ It suits chat, collaboration and notification feeds driven by train results.
 | Scheduler | in-process | scheduler process | hub, scheduling only | API, dispatch only | none |
 | Execution | local workers | scheduler process | workers, polling | runner, HTTP push | inline |
 | API | in-process | API process | hub | API | in-process |
-| Dashboard (Development) | in-process | scheduler process | hub | API | none |
+| Operations console (Development) | in-process | API process | hub | API | none |
 | Job table | `background_job` | `background_job` | `background_job` | none | none |
 | Horizontal scaling | no | no | workers | runner | no |
 | Subscriptions | built-in, junction events | over RabbitMQ | over RabbitMQ | over RabbitMQ | custom field fed by a lifecycle hook |

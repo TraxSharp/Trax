@@ -10,8 +10,8 @@ redirect_from:
 
 # Cut a release
 
-Every Trax package (Trax.Core, Trax.Effect, Trax.Mediator, Trax.Scheduler, Trax.Api,
-Trax.Dashboard, Trax.Cli and Trax.Samples.Templates) is released from the one
+Every Trax package (Trax.Core, Trax.Effect, Trax.Mediator, Trax.Scheduler, Trax.Api, Trax.Cli
+and Trax.Samples.Templates) is released from the one
 [TraxSharp/Trax](https://github.com/TraxSharp/Trax) repository, at **one shared version**, by
 [semantic-release](https://github.com/semantic-release/semantic-release). Releases are cut by
 hand. A merge to `main` runs no workflow and publishes nothing, since the pull request already built

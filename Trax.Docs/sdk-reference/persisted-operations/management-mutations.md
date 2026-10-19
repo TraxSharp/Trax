@@ -42,11 +42,11 @@ services.AddTraxGraphQL(graphql => graphql
 | `GateManagement(roles: "A,B")` | Callers holding at least one of the roles. |
 | Repeated `GateManagement(...)` calls | Callers meeting every one of them. |
 | `GateManagementToAuthenticatedUsers()` | Any authenticated caller. On a host with public sign-up that is anyone. |
-| none | Nobody: the fields are not in the schema, and the dashboard shows no management pages. |
+| none | Nobody: the fields are not in the schema, and the operations console shows no management pages. |
 
-The Trax dashboard's persisted-operations pages check the same gate for the operator through `IPersistedOperationsManagementGate`, after the dashboard's own posture, so the Blazor dashboard, the React dashboard and GraphQL refuse the same people. Every gate requires an authenticated caller, whichever of its identities is authenticated, even when a policy alone would admit one that is not.
+The operations console's persisted-operations pages call these fields, so the console and any other GraphQL caller are refused by the same gate. Every gate requires an authenticated caller, whichever of its identities is authenticated, even when a policy alone would admit one that is not.
 
-The gate is not the operations gate. `GateOperations` and `RequireAuthorization()` govern `operations`; `GateManagement` governs `persistedOperations`. A deploy pipeline that uploads documents holds the management role and reaches nothing under `operations`, and an operator who manages documents at the dashboard holds both. `RequireAuthorization()` on the builder still gates the whole endpoint, these fields included.
+The gate is not the operations gate. `GateOperations` and `RequireAuthorization()` govern `operations`; `GateManagement` governs `persistedOperations`. A deploy pipeline that uploads documents holds the management role and reaches nothing under `operations`, and an operator who manages documents in the operations console holds both. `RequireAuthorization()` on the builder still gates the whole endpoint, these fields included.
 
 These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), since a client cannot send them by an id it has not uploaded yet. A document is admitted inline only when every operation in it selects nothing at the root but `persistedOperations`; mixing in another field sends it through enforcement like any other document. A host that declares no management gate serves none of these fields and gets no bypass.
 

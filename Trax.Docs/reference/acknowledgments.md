@@ -201,11 +201,22 @@ packages and the .NET shared framework: `Trax.Api`, `Trax.Api.Auth`, `Trax.Api.A
 | [Microsoft.Extensions.Hosting.Abstractions](https://github.com/dotnet/runtime) | MIT | Startup validation as a hosted service |
 | [Microsoft.Extensions.Logging.Abstractions](https://github.com/dotnet/runtime) | MIT | Logging abstractions |
 
-## Trax.Dashboard
+## Trax.Api.Dashboard
+
+The package references no third-party NuGet package. The operations console it carries is built
+from these npm packages, which ship inside it, bundled:
 
 | Package | Licence | Used for |
 |---|---|---|
-| [Radzen.Blazor](https://github.com/radzenhq/radzen-blazor) | MIT | Blazor UI component library for the dashboard |
+| [react](https://github.com/facebook/react), [react-dom](https://github.com/facebook/react) | MIT | The UI |
+| [react-router-dom](https://github.com/remix-run/react-router) | MIT | The console's routes |
+| [urql](https://github.com/urql-graphql/urql), [@urql/core](https://github.com/urql-graphql/urql) | MIT | GraphQL requests and the cache |
+| [graphql](https://github.com/graphql/graphql-js) | MIT | Document parsing |
+| [graphql-ws](https://github.com/enisdenjo/graphql-ws) | MIT | Subscriptions over WebSockets |
+| [@xyflow/react](https://github.com/xyflow/xyflow), [@dagrejs/dagre](https://github.com/dagrejs/dagre) | MIT | Drawing and laying out graphs |
+| [recharts](https://github.com/recharts/recharts) | MIT | Charts |
+| [lucide-react](https://github.com/lucide-icons/lucide) | ISC | Icons |
+| [@fontsource-variable/geist](https://github.com/fontsource/font-files), [@fontsource-variable/geist-mono](https://github.com/fontsource/font-files) | OFL-1.1 | The console's fonts |
 
 ## Trax.Cli
 

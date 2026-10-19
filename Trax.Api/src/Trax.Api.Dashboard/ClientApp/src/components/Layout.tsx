@@ -125,7 +125,7 @@ export function Layout() {
   // Only surfaced when the app is running against the mock (globalThis.__mockStore is set).
   const mockActive = Boolean(getGlobalMockStore());
   // Persisted operations appear only on a host that serves their management to this caller
-  // (UsePersistedOperations with GateManagement), as in the Blazor sidebar.
+  // (UsePersistedOperations with GateManagement).
   const persistedOps = usePersistedOperationsAvailable().available;
   // Every host has machines; only the demo, before its recordings hold them, cannot show the page
   // (lib/answerable.ts).

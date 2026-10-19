@@ -125,14 +125,13 @@ triggering it is operating the scheduler rather than submitting new work. The wh
 dead-letter surface sits behind one admin gate, and an operator who passes it can trigger any
 manifest. Protect it accordingly.
 
-The dashboard is the admin surface as a whole, gated by the host that serves it. Its dialogs run
-inside a trusted scope (`"dashboard"`), so a train's `[TraxAuthorize]` does not apply to a
-dashboard user; the train's `OnQueue` hook and the input cap still do. Part of the reason is
-mechanical: a Blazor Server circuit has no HTTP request behind a click, and the default enforcer
-reads the user from the request. Part is the model: whoever passes the dashboard's gate is an
-operator. A dashboard-only or scheduler-only host still has to register an enforcer or call
-`AllowMissingAuthorizationService()`, because the startup check that refuses a host with gated
-trains and no enforcer does not know which callers it will have.
+The operations console holds no authority of its own. Every read and action it offers is an
+`operations` request, so the operations gate decides who may use it, and a run or a queue it asks
+for checks the train's `[TraxAuthorize]` against the caller as any other GraphQL caller's does; the
+train's `OnQueue` hook and the input cap apply too. Whoever loaded the console's page proves
+nothing to the API: its posture gates the page, not the data. A scheduler-only host still has to
+register an enforcer or call `AllowMissingAuthorizationService()`, because the startup check that
+refuses a host with gated trains and no enforcer does not know which callers it will have.
 
 A run differs from a queue in one way that matters. A queued entry takes its train's
 `QueueSubjectKey` and is serialized against other work for the same subject; a run started from

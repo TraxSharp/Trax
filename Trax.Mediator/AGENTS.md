@@ -2,7 +2,7 @@
 
 Decoupled dispatch: the train bus routes by input type instead of direct injection, plus
 train discovery, the registry, and train-level authorization. It sits above `Trax.Effect`
-and below `Trax.Scheduler`, `Trax.Api`, `Trax.Dashboard` and `Trax.Samples`.
+and below `Trax.Scheduler`, `Trax.Api` and `Trax.Samples`.
 
 This file is the entry point. It routes; it does not restate the rules.
 

@@ -46,7 +46,7 @@ The postures are described in [Runner authorization posture](/docs/scheduler/run
 
 | Cause | Message starts |
 |---|---|
-| `UseTraxDashboard()` with no posture | `UseTraxDashboard() needs to know who may use the dashboard` |
+| `UseTraxApiDashboard()` with no posture | `UseTraxApiDashboard() needs to know who may load the dashboard` |
 | `ExposeOperationQueries()` or `ExposeOperationMutations()` with no gate | `ExposeOperationMutations() exposes scheduler-control mutations (...) but the GraphQL endpoint is not gated` |
 | `GateOperations()` with no policy or roles | `GateOperations() needs a policy or roles` |
 | A `do-not-use-in-production` demo key outside Development | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production'` |

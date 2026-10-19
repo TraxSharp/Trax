@@ -17,6 +17,8 @@ field.
 ## Status
 
 **Accepted.** Amends 0022: its shared-method rule stands, and the control it requires is the console's.
+The removal is done: `Trax.Dashboard` is deleted from the repository, and every sample and template
+serves the console instead.
 
 ## Considered options
 
@@ -49,4 +51,7 @@ held by review, because a guard against a folder that is about to be deleted wou
 
 ## Changelog
 
+- **2026-10-19**: The removal happened. The `Trax.Dashboard` folder, its CI row and its pins are
+  gone, the samples and templates serve the console with `AllowAnonymousShell()` in Development, and
+  the package is deprecated on nuget.org at release, by hand.
 - **2026-10-18**: Recorded.

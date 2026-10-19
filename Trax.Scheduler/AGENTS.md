@@ -2,7 +2,7 @@
 
 Timetable management: manifests, the work queue, retries, dead-lettering, job dependencies,
 and the remote execution topologies (HTTP workers, SQS, Lambda). It sits above
-`Trax.Mediator` and below `Trax.Api`, `Trax.Dashboard` and `Trax.Samples`.
+`Trax.Mediator` and below `Trax.Api` and `Trax.Samples`.
 
 This file is the entry point. It routes; it does not restate the rules.
 
@@ -70,7 +70,7 @@ not to record. The format is
 repository-wide conventions shared with the other folders. The thirteenth,
 `SchedulerBuilderOrderDiagnosticsTests`, is this folder's form of the builder-order check that
 Trax.Effect and Trax.Mediator run as `BuilderOrderDiagnosticsTests`. The fourteenth,
-`WorkQueueCreationSitesTests`, also runs in Trax.Api and Trax.Dashboard with a different
+`WorkQueueCreationSitesTests`, also runs in Trax.Api with a different
 allow-list in each; here it permits only the ManifestManager's enqueue, dormant dependents, and
 `TraxScheduler`'s manifest trigger and dead-letter requeue (`docs/0017`). The fifteenth,
 `TestProjectsAreNotPackedTests`, keeps every project under `tests/` unpackable, since the helper

@@ -112,7 +112,7 @@ Quartz.NET has the most granular listener system, with separate interfaces for j
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
-| Dashboard | Blazor Server + Radzen at `/trax` | Blazor Server at `/quartz` | Built-in middleware at `/hangfire` |
+| Dashboard | React operations console at `/trax/dashboard`, served by the API host over GraphQL | Blazor Server at `/quartz` | Built-in middleware at `/hangfire` |
 | GraphQL API | `AddTraxGraphQL()` with `[TraxQuery]`/`[TraxMutation]` whitelist | No built-in API | REST API via community extensions |
 | Manual job actions | Dashboard-triggered runs with **custom inputs** | Pause/resume, manual trigger | Requeue, delete, reschedule |
 | Exception inspection | Expandable stack traces with syntax highlighting + copy button | Via history plugins | Expandable stack traces |
@@ -156,7 +156,7 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 **You want the lowest learning curve.** The Trax learning curve is incremental (trains and junctions at Core, metadata and DI at Effect, dispatch at Mediator, manifests at Scheduler), but reaching scheduled jobs means understanding the full stack. Hangfire requires understanding `BackgroundJob.Enqueue()`. For teams that need to onboard quickly or for projects where background work is a small part of the system, the layered abstraction cost isn't justified.
 
-**You want dashboard access control without writing any.** Hangfire's dashboard includes authorization middleware out of the box. Trax's dashboard refuses to start until you choose a posture (`RequirePolicy`, `RequireRoles` or an explicit `AllowAnonymousDashboard()`), but the policy behind it is yours to register; Trax's API layer adds per-train authorization via `[TraxAuthorize]` and an endpoint gate via the GraphQL builder's `RequireAuthorization()`.
+**You want dashboard access control without writing any.** Hangfire's dashboard includes authorization middleware out of the box. Trax's operations console refuses to start until you choose a posture (`RequirePolicy`, `RequireRoles` or an explicit `AllowAnonymousShell()`), but the policy behind it is yours to register; Trax's API layer adds per-train authorization via `[TraxAuthorize]` and an endpoint gate via the GraphQL builder's `RequireAuthorization()`.
 
 **You only need a scheduler.** Trax.Scheduler is one layer in a stack that builds on Core, Effect, and Mediator. Each layer is independently useful (you can use Core alone for typed pipelines, or Core + Effect for execution logging without ever touching the scheduler), but you can't add the scheduler without the layers below it. Quartz.NET and Hangfire are self-contained: add the NuGet package, configure storage, schedule jobs.
 

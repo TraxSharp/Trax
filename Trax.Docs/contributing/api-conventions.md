@@ -163,11 +163,11 @@ unified entry point. Everything else follows one of two prefixes.
 
 | Prefix | Means | Examples |
 |---|---|---|
-| `Add*` | Registers services on the `IServiceCollection` | `AddTraxDashboard`, `AddTraxGraphQL`, `AddTraxWorker`, `AddTraxJobRunner` |
-| `Use*` | Maps endpoints or components onto a built `WebApplication` | `UseTraxDashboard`, `UseTraxGraphQL` |
+| `Add*` | Registers services on the `IServiceCollection` | `AddTraxGraphQL`, `AddTraxWorker`, `AddTraxJobRunner` |
+| `Use*` | Maps endpoints or components onto a built `WebApplication` | `UseTraxApiDashboard`, `UseTraxGraphQL` |
 
 Every public extension method in an `Extensions/` folder contains `Trax` in its name.
-`ExtensionMethodNamingTests`, which the `Tests.Meta` suite of each of the eight .NET package
+`ExtensionMethodNamingTests`, which the `Tests.Meta` suite of each of the seven .NET package
 folders carries, holds part of that: it parses the `.cs` files under an `Extensions/` folder in
 that folder's source tree and flags a
 `public static` method only when the name starts with `Add` or `Use` **and** the `this`
@@ -212,4 +212,4 @@ Making one safe and recording why is the way past it; raising its count is not.
 
 ## SDK Reference
 
-> [Configuration](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Architecture guards](/docs/reference/architecture-guards)
+> [Configuration](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Architecture guards](/docs/reference/architecture-guards)

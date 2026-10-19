@@ -131,21 +131,10 @@ When CI provides what the test needs (a service in `.github/ci/packages.json`, n
 skipping when the `CI` environment variable is set, so a broken job cannot report a skipped
 suite as green. `PersistedOperationCrossNodeTests` and `TwinSequenceParityTests` do this.
 
-A suite meant to be run by hand carries `[Explicit]` on each concrete fixture, as the Trax.Api,
-Trax.Scheduler and Trax.Dashboard stress suites do: a normal `dotnet test` skips it and `--filter TestCategory=Stress` runs
+A suite meant to be run by hand carries `[Explicit]` on each concrete fixture, as the Trax.Api and
+Trax.Scheduler stress suites do: a normal `dotnet test` skips it and `--filter TestCategory=Stress` runs
 it. Put the attribute on the concrete class, because NUnit does not inherit `[Explicit]` or
 `[Ignore]` from a base class.
-
-Trax.Dashboard's suite, `tests/Trax.Dashboard.Tests.Stress`, seeds Postgres and checks that the
-list grids' queries stay within budget at scale. It reads the same `TRAX_TEST_PG_PORT` as the
-other Postgres suites, and `TRAX_STRESS_CONNECTION` replaces the connection string outright. The
-row counts default to a million runs, 500,000 work queue entries, 5,000 manifests and 200 runs
-carrying large inputs and outputs, and `TRAX_STRESS_METADATA`, `TRAX_STRESS_WORKQUEUE`,
-`TRAX_STRESS_MANIFEST` and `TRAX_STRESS_BLOB_ROWS` override each:
-
-```bash
-TRAX_TEST_PG_PORT=5433 dotnet test tests/Trax.Dashboard.Tests.Stress --filter TestCategory=Stress
-```
 
 ## Tests written before their code
 
@@ -161,31 +150,13 @@ by `tests/Directory.Build.props`. The copies are identical, and `RedAttributeTes
 Trax.Core checks its behaviour. Remove the attribute, and its `using`, in the change that
 makes the test pass.
 
-## Dashboard component tests
+## Operations console tests
 
-Trax.Dashboard's components are rendered with [bUnit](https://bunit.dev) in
-`Trax.Dashboard/tests/Trax.Dashboard.Tests.Integration`, under `UnitTests/Components/`. Each
-fixture builds a fresh context per test and disposes it after:
-
-```csharp fragment
-[SetUp]
-public void SetUp()
-{
-    _ctx = new Bunit.TestContext();
-    _ctx.Services.AddRadzenComponents();
-    _ctx.JSInterop.Mode = JSRuntimeMode.Loose;
-}
-
-[TearDown]
-public void TearDown() => _ctx.Dispose();
-```
-
-- Write `Bunit.TestContext` in full: NUnit has a `TestContext` of its own, and both namespaces
-  are imported.
-- `AddRadzenComponents()` registers the services Radzen's components inject (dialogs,
-  notifications, tooltips), without which a page does not render.
-- `JSRuntimeMode.Loose` answers every JavaScript interop call Radzen makes with a default, so a
-  test does not have to set up each one.
+The console's own tests live with its app in `Trax.Api/src/Trax.Api.Dashboard/ClientApp`: vitest
+for its modules and pages, and every story run as a test against the mock schema
+(`npx vitest run`). The tests that drive it in a real browser, against a host built in-process,
+are `Trax.Samples/tests/Trax.Samples.ApiDashboard.Browser`, run in CI as the `console-browser`
+suite. Its page objects locate by role and accessible name.
 
 ## Operations query tests
 

@@ -74,8 +74,8 @@ query {
 `environmentName` is `IHostEnvironment.EnvironmentName` (`String!`).
 
 `version` (`String!`) is the version of Trax serving the API, such as `1.46.0`: the Trax.Api.GraphQL
-package's version without its build metadata. It is what the dashboard's footer shows for the
-Trax.Dashboard package. It says which Trax release the host runs, not the host application's own
+package's version without its build metadata, and what the operations console's footer shows. It
+says which Trax release the host runs, not the host application's own
 version, which Trax does not know.
 
 `logLevels` is `[LogLevelSetting!]!`, one per category configured under `Logging:LogLevel` (and per

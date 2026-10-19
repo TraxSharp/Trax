@@ -321,7 +321,7 @@ In Nitro (the built-in GraphQL IDE, served in Development), subscriptions work o
 
 For programmatic clients, use any GraphQL client that supports the `graphql-ws` protocol (e.g., Apollo Client, urql, Strawberry Shake).
 
-`AddTraxGraphQL()` wires the WebSocket upgrade middleware at the front of the pipeline (via an `IStartupFilter`), so the handshake upgrades no matter where you place `UseTraxGraphQL()` relative to other endpoint middleware such as `UseTraxDashboard()`. You do not need to call `app.UseWebSockets()` yourself.
+`AddTraxGraphQL()` wires the WebSocket upgrade middleware at the front of the pipeline (via an `IStartupFilter`), so the handshake upgrades no matter where you place `UseTraxGraphQL()` relative to other endpoint middleware such as `UseTraxApiDashboard()`. You do not need to call `app.UseWebSockets()` yourself.
 
 A subscription releases its place on the topic as soon as it ends: when the client sends `complete`, closes the socket, or drops the connection without a close frame, and when code running a subscription in-process through `IRequestExecutor` disposes its response stream. It does not wait for the next event on the topic, so a quiet topic such as `onTrainCancelled` keeps no buffer for a subscriber that has left.
 

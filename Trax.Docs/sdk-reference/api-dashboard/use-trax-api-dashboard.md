@@ -13,6 +13,9 @@ nav_order: 1
 source:
   - Trax.Api/src/Trax.Api.Dashboard/Extensions/ApiDashboardEndpointExtensions.cs
   - Trax.Api/src/Trax.Api.Dashboard/Configuration/TraxApiDashboardOptions.cs
+redirect_from:
+  - /docs/sdk-reference/dashboard-api/use-trax-dashboard
+  - /docs/sdk-reference/dashboard-api/add-trax-dashboard
 ---
 
 # UseTraxApiDashboard
@@ -75,9 +78,8 @@ With none of them, `UseTraxApiDashboard` throws `InvalidOperationException` nami
 `AllowAnonymousShell()` together with either of the others throws as a contradiction. A policy or
 roles posture also fails at startup when the host has no authentication scheme to challenge a
 caller with, when the policy names a scheme that is not registered, or when the default forbid
-scheme is not registered, because every refusal would otherwise be a 500. This is the same rule
-the Blazor dashboard follows ([UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)),
-recorded in `Trax.Api/docs/adr/0039`.
+scheme is not registered, because every refusal would otherwise be a 500. The rule is recorded in
+`Trax.Api/docs/adr/0039`.
 
 **The posture gates the app, not the data.** The app holds no data. Everything it shows or changes
 is a request to the Trax GraphQL endpoint, authorized there by the endpoint's own policy and the
@@ -205,6 +207,29 @@ host's other routes are not touched.
 The app runs under that policy as built: no inline script or style element, no `eval`, and its
 fonts are files rather than inline data. A `Host` header that is not a plain host name is left out
 of `connect-src`.
+
+## Moving from UseTraxDashboard
+
+The Blazor dashboard (`Trax.Dashboard`) is removed, and `UseTraxApiDashboard` is its replacement.
+A host that called `AddTraxDashboard(...)` and `UseTraxDashboard()`:
+
+1. References `Trax.Api.Dashboard` instead of `Trax.Dashboard`, and drops
+   `<RequiresAspNetWebAssets>` unless something else in the host needs it.
+2. Deletes both calls, and any `IDashboardSettingsService` it registered: the console keeps its
+   preferences in the browser.
+3. Calls `AddTraxGraphQL` with `ExposeOperationQueries()`, `ExposeOperationMutations()` and the
+   gate they require (`GateOperations(...)` or `RequireAuthorization(...)`), since every page reads
+   `operations`, and maps `UseTraxGraphQL()`.
+4. Maps `UseTraxApiDashboard(...)` with the posture the Blazor dashboard had: `RequirePolicy` and
+   `RequireRoles` carry over, on a scheme the browser carries. `AllowAnonymousDashboard()` becomes
+   `AllowAnonymousShell()`; a host whose only credentials are API keys or bearer tokens, as the
+   Trax samples are, uses it inside an `IsDevelopment()` check, and the operator pastes a key that
+   passes the operations gate.
+5. Moves links from `/trax/...` to `/trax/dashboard/...`; the console names its pages for what
+   they hold (`/runs/42`, `/schedules/7`).
+
+The longer version, with the failures a moved host meets, is
+[Moving from the Blazor dashboard](/docs/dashboard/add-the-console-to-a-host#moving-from-the-blazor-dashboard).
 
 ## Remarks
 

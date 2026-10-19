@@ -50,17 +50,16 @@ No train implements IServiceTrain<OrderInput, TOut>. Add the train's assembly to
 
 A scheduled run runs the train it names, so the scheduler also refuses a train that was not scanned when another train takes the same input type: `Train 'MyApp.Orders.IOrderTrain' is not registered, although another train takes OrderInput.`, followed by the same fix.
 
-## "AddTraxDashboard() requires AddTrax() to be called first"
+## "AddTraxGraphQL() requires AddTrax() to be called first"
 
-`AddTraxDashboard()` checks, when it is called, that `AddTrax()` has already registered Trax in
-the same `IServiceCollection`. The full message is "AddTraxDashboard() requires AddTrax() to be
-called first. Call services.AddTrax(trax => ...) before services.AddTraxDashboard()."
+`AddTraxGraphQL()` checks, when it is called, that `AddTrax()` has already registered Trax in the
+same `IServiceCollection`.
 
-**Cause:** `AddTrax()` was not called, or it was called after `AddTraxDashboard()`.
+**Cause:** `AddTrax()` was not called, or it was called after `AddTraxGraphQL()`.
 
 **Fix:** Call `AddTrax()` first:
 ```csharp compile
-using Trax.Dashboard.Extensions;
+using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -72,19 +71,18 @@ builder.Services.AddTrax(trax => trax
     .AddScheduler()
 );
 
-builder.Services.AddTraxDashboard(o => o.RequireRoles("Admin"));   // After AddTrax()
+builder.Services.AddTraxGraphQL();   // After AddTrax()
 ```
 
-## "AddTraxGraphQL() requires AddTrax() to be called first"
+## "UseTraxApiDashboard() requires the GraphQL operations namespace"
 
-The same check in `AddTraxGraphQL()`, with the same fix: call
-`services.AddTrax(trax => ...)` before `services.AddTraxGraphQL(...)`.
+Every page of the operations console reads `operations`, which `AddTraxGraphQL()` leaves out until
+it is exposed.
 
-## "AddTraxDashboard() has already been called on this host"
-
-`AddTraxDashboard()` was called twice. A second call would replace the first one's authorization
-settings, so a shared bootstrap that allows anonymous access could silently undo a host's
-`RequireRoles(...)`. Call it once, with every dashboard option in that call.
+**Fix:** Call `ExposeOperationQueries()`, and `ExposeOperationMutations()` for the console's
+actions, on the GraphQL builder, with the gate it then asks for (`GateOperations(...)` or
+`RequireAuthorization(...)`). See
+[Add the console to a host](/docs/dashboard/add-the-console-to-a-host).
 
 ## "Call AddEffects(...) before AddMediator(...)."
 
@@ -304,4 +302,4 @@ Possible causes:
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory)
