@@ -24,12 +24,6 @@
           "HotChocolate.Utilities.DependencyInjection": "16.6.7"
         }
       },
-      "Microsoft.AspNetCore.App.Internal.Assets": {
-        "type": "Direct",
-        "requested": "[10.0.9, )",
-        "resolved": "10.0.9",
-        "contentHash": "E9Wp/LPKAYkGOVBv4lt5U5TnUA/7pov7QZAwF3eI64kK8AAXqkPDwuadEOwpL1WXEfgecYm0fccluvABp32D8g=="
-      },
       "ChilliCream.Nitro.App": {
         "type": "Transitive",
         "resolved": "32.0.2",
@@ -529,6 +523,12 @@
           "Trax.Api.Auth": "[1.99.99, )"
         }
       },
+      "trax.api.dashboard": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.GraphQL": "[1.99.99, )"
+        }
+      },
       "trax.api.graphql": {
         "type": "Project",
         "dependencies": {
@@ -543,27 +543,8 @@
           "Trax.Api.Auth.Jwt": "[1.99.99, )"
         }
       },
-      "trax.api.graphql.persistedoperations": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
-          "RabbitMQ.Client": "[7.2.2, )",
-          "Trax.Api.GraphQL": "[1.99.99, )"
-        }
-      },
       "trax.core": {
         "type": "Project"
-      },
-      "trax.dashboard": {
-        "type": "Project",
-        "dependencies": {
-          "Radzen.Blazor": "[11.*, )",
-          "Trax.Api.GraphQL.PersistedOperations": "[1.99.99, )",
-          "Trax.Effect": "[1.99.99, )",
-          "Trax.Effect.Data": "[1.99.99, )",
-          "Trax.Mediator": "[1.99.99, )",
-          "Trax.Scheduler": "[1.99.99, )"
-        }
       },
       "trax.effect": {
         "type": "Project",
@@ -821,12 +802,6 @@
         "requested": "[7.2.2, )",
         "resolved": "7.2.2",
         "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA=="
-      },
-      "Radzen.Blazor": {
-        "type": "CentralTransitive",
-        "requested": "[11.*, )",
-        "resolved": "11.5.1",
-        "contentHash": "1grwHjm04KGvp9bwE+0ZPa/cCGepxi058eGza+NRMZxuTJeEc+PuQge7gvxxzjWk/VtkxrUxuaYVF8igEpHMSQ=="
       }
     }
   }

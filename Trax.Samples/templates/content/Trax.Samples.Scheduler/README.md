@@ -1,13 +1,14 @@
 # Trax.Samples.Scheduler
 
 A [Trax](https://traxsharp.net/docs) scheduler: it runs your trains on a timer and shows every run
-in the Trax dashboard. It runs with no database: the in-memory provider keeps every run in this
+in the Trax operations console. It runs with no database: the in-memory provider keeps every run in this
 process and loses it on restart.
 
 | Path | What it is |
 |---|---|
 | `Program.cs` | The whole host, every registration commented with what it does and what fails without it |
 | `Trains/HelloWorld/` | A train that logs a greeting, scheduled every 20 seconds |
+| `Auth/DemoKeys.cs` | The Development-only operator key the console asks for |
 | `tests/Trax.Samples.Scheduler.Tests/` | NUnit tests: a train run through the bus, and the host started in Development and Production |
 | `Directory.Packages.props` | Every package version, in one place |
 
@@ -18,8 +19,9 @@ dotnet run
 ```
 
 `dotnet run` starts in Development (from `Properties/launchSettings.json`). Open
-`http://localhost:5401/trax` for the dashboard: the `hello-world` manifest, its next run, every run
-so far, and buttons to run it now, disable it or cancel a run. The console logs
+`http://localhost:5401/trax/dashboard` for the operations console and paste the operator key,
+`operator-key-do-not-use-in-production`, when it asks: the `hello-world` schedule, its next run,
+every run so far, and buttons to run it now, disable it or cancel a run. The console logs
 `Hello, Trax!` every 20 seconds.
 
 ## Run the tests
@@ -30,7 +32,7 @@ dotnet test tests/Trax.Samples.Scheduler.Tests
 
 `IntegrationTests/HelloWorldTrainTests` runs the train through `ITrainBus` and reads the record
 Trax kept of it. `IntegrationTests/HostTests` starts the application in Development and in
-Production and checks that the dashboard is served only in Development; it is the test that fails
+Production and checks that the console is served only in Development; it is the test that fails
 when `Program.cs` stops starting. See [Testing](https://traxsharp.net/docs/cross-cutting/testing).
 
 ## Add a scheduled train
@@ -128,19 +130,23 @@ effects.UsePostgres(
 ```
 
 Trax creates and migrates its `trax` schema at startup. With Postgres the manifests and runs
-survive a restart, changes made from the dashboard are kept, and several scheduler processes can
+survive a restart, changes made from the console are kept, and several scheduler processes can
 share the work. See
 [Data Persistence](https://traxsharp.net/docs/effect/effect-providers/data-persistence).
 
 ## Before deploying
 
-The dashboard exists only in Development. Started any other way
+Two things exist only in Development: the operator key and the console. Started any other way
 (`dotnet bin/.../Trax.Samples.Scheduler.dll`, a container), the application runs in Production:
-the trains still run on schedule, and `/trax` is a 404.
+the trains still run on schedule, every operation is refused, and `/trax/dashboard` is a 404.
 
-- Add authentication, choose who may use the dashboard, `RequirePolicy("<policy>")` or
-  `RequireRoles("<role>")`, in place of `AllowAnonymousDashboard()`, then remove the two
-  `IsDevelopment()` checks around it. See [Dashboard](https://traxsharp.net/docs/dashboard).
+- Replace the operator key with real credentials (`keys.AddHashed(...)` from a secret store, or
+  `AddTraxJwtAuth`), then remove the `IsDevelopment()` check around `AddTraxApiKeyAuth`. See
+  [API Security](https://traxsharp.net/docs/api-security).
+- Add a sign-in the browser carries (a cookie or OpenID Connect), choose who may load the console,
+  `RequirePolicy("<policy>")` or `RequireRoles("<role>")`, in place of `AllowAnonymousShell()`,
+  then remove the `IsDevelopment()` check around it. See
+  [UseTraxApiDashboard](https://traxsharp.net/docs/sdk-reference/api-dashboard/use-trax-api-dashboard).
 - Outside `dotnet run` the URL comes from `ASPNETCORE_URLS` (or `ASPNETCORE_HTTP_PORTS`), not
   `launchSettings.json`.
 

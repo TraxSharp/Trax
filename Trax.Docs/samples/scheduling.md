@@ -11,7 +11,7 @@ nav_order: 3
 `samples/Scheduling` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) is one ASP.NET
 process that schedules trains, runs them on the built-in local workers, retries the ones that
 fail and dead-letters the ones that keep failing. The Trax GraphQL operations surface and the
-dashboard show and steer it. It shows the scheduling surface and nothing else, and its E2E suite
+operations console show and steer it. It shows the scheduling surface and nothing else, and its E2E suite
 proves every behaviour on this page against the running host.
 
 ## What it proves
@@ -45,13 +45,13 @@ a database `docker compose` creates (see [Running the samples](/docs/samples#run
 
 | URL | What |
 |---|---|
-| `http://localhost:5230/trax` | The dashboard. Development only, no sign-in |
+| `http://localhost:5230/trax/dashboard` | The operations console. Development only; it asks for the operator key on every load |
 | `http://localhost:5230/trax/graphql` | The GraphQL endpoint. `operations` needs the header `X-Api-Key: operator-key-do-not-use-in-production` |
 
 ## Try it
 
-Within about ten seconds of starting, the dashboard's **Data > Dead Letters** page lists
-`import-supplier-feed`, and **Data > Metadata** shows its three failed runs, each with the
+Within about ten seconds of starting, the console's **Runs > Dead letters** page lists
+`import-supplier-feed`, and **Runs** shows its three failed runs, each with the
 junction that threw (`DownloadFeedJunction`), the exception type and the stack trace.
 
 The same over GraphQL:
@@ -106,7 +106,7 @@ samples/Scheduling/
 
 The library references `Trax.Effect`, `Trax.Mediator` and `Trax.Scheduler` (the last for
 `IDormantDependentContext`). The host adds `Trax.Effect.Data.Postgres`,
-`Trax.Effect.Provider.Parameter`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL` and `Trax.Dashboard`.
+`Trax.Effect.Provider.Parameter`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL` and `Trax.Api.Dashboard`.
 
 ### Program.cs
 
@@ -114,8 +114,8 @@ The whole file, less its banner comment:
 
 ```csharp from=Trax.Samples/samples/Scheduling/Trax.Samples.Scheduling.Host/Program.cs
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -250,22 +250,21 @@ builder.Services.AddTraxGraphQL(graphql =>
         .GateOperations(roles: DemoKeys.OperatorRole)
 );
 
-// ── The dashboard ───────────────────────────────────────────────────────────
-// The dashboard can trigger, cancel and requeue work and change scheduler settings. This
-// sample puts no sign-in in front of it, so it is served only in Development. Anywhere else,
-// gate it with RequirePolicy or RequireRoles before serving it.
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(options => options.AllowAnonymousDashboard());
-
 var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
-
 app.UseTraxGraphQL();
+
+// ── The operations console ──────────────────────────────────────────────────
+// The console triggers, cancels and requeues work through the operations namespace above, so
+// every read and write it makes needs the operator key, which it asks for on each load. The
+// page itself has no sign-in in front of it (AllowAnonymousShell), so it is served only in
+// Development. Anywhere else, gate it with RequirePolicy or RequireRoles on a sign-in the
+// browser carries, such as a cookie or OpenID Connect.
+if (app.Environment.IsDevelopment())
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
 
@@ -285,8 +284,8 @@ namespace Trax.Samples.Scheduling.Host
 | `AddTrax(...)` with `AddEffects`, then `AddMediator`, then `AddScheduler` | First | The builder types enforce the order inside it at compile time: `AddScheduler` exists only on what `AddMediator` returns |
 | `AddTraxApiKeyAuth`, `AddAuthentication`, `AddAuthorization` | Anywhere | The subscription interceptor and `GateOperations` read the registered schemes once the container is built |
 | `AddTraxGraphQL(...)` | After `AddTrax` | It throws `AddTraxGraphQL() requires AddTrax() to be called first` otherwise |
-| `AddTraxDashboard(...)` | After `AddTrax` | It throws `AddTraxDashboard() requires AddTrax() to be called first` otherwise, and lists only the trains registered before it |
-| `UseAuthentication`, `UseAuthorization` | Before `UseTraxDashboard` and `UseTraxGraphQL` | So the dashboard and the operations gate see the caller |
+| `UseAuthentication`, `UseAuthorization` | Before `UseTraxGraphQL` and `UseTraxApiDashboard` | So the operations gate sees the caller, and a posture other than `AllowAnonymousShell()` can check it |
+| `UseTraxApiDashboard(...)` | After `AddTraxGraphQL` | It throws at startup without the GraphQL endpoint and its `operations` namespace, which every page of the console reads |
 
 ### The schedules
 
@@ -360,7 +359,7 @@ interval or cron manifest that fails when it was due stays due, so it is retried
 backoff passes. A run started off-schedule, by a trigger, that fails is retried only once the
 manifest is next due by its schedule.
 
-Requeueing the dead letter (the dashboard, the `requeueDeadLetter` mutation or
+Requeueing the dead letter (the console, the `requeueDeadLetter` mutation or
 `ITraxScheduler.RequeueDeadLetterAsync`) queues a run with the manifest's own input, marks the dead
 letter `Retried` and, once the run is dispatched, sets the dead letter's `RetryMetadataId` to it.
 Resolving a dead letter either way resets the failure count, so the requeued run starts a fresh
@@ -385,8 +384,8 @@ Keep the defaults in production. One second is the floor for both polling interv
 `ExposeOperationQueries()` and `ExposeOperationMutations()` add the `operations` namespace;
 `GateOperations(roles: "Operator")` requires that role on all of it. The demo key carries the role
 and is registered only in Development. Started in Production the host still starts, registers no
-key at all, and refuses every `operations` call with `TRAX_AUTHORIZATION`; the dashboard is not
-mapped, so `/trax` is a 404. Register real keys with `AddHashed` or a resolver
+key at all, and refuses every `operations` call with `TRAX_AUTHORIZATION`; the console is not
+mapped, so `/trax/dashboard` is a 404. Register real keys with `AddHashed` or a resolver
 ([AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth)) before serving it.
 
 ### What fails at startup
@@ -398,7 +397,7 @@ ones the sample printed when the line was changed.
 |---|---|
 | Drop `.GateOperations(...)` | `ExposeOperationMutations() exposes scheduler-control mutations (...) but the GraphQL endpoint is not gated and the namespace carries no gate of its own` |
 | `.GateOperations()` with no policy or roles | `GateOperations() needs a policy or roles: GateOperations(policy: "...") or GateOperations(roles: "...")` |
-| `AddTraxDashboard()` with no posture | `UseTraxDashboard() needs to know who may use the dashboard` |
+| `UseTraxApiDashboard(_ => { })`, with no posture | `UseTraxApiDashboard() needs to know who may load the dashboard` |
 | Register the demo key outside Development | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production', which marks a published demo key, and the environment is 'Production'` |
 | `cleanup.DeleteBatchSize = 20_000` | `The scheduler configuration has values it cannot run with. AddMetadataCleanup: DeleteBatchSize must be between 1 and 10000.` |
 
@@ -420,11 +419,11 @@ the Trax tables and the GraphQL endpoint:
 - Run a metadata cleanup sweep on demand by resolving `IMetadataCleanupTrain` from the host's
   services and calling `Run(new MetadataCleanupRequest())`.
 - Start a second factory with `UseEnvironment("Production")` to prove the demo key and the
-  dashboard are gone.
+  console are gone.
 
 ## SDK Reference
 
-> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [IDormantDependentContext](/docs/sdk-reference/scheduler-api/i-dormant-dependent-context) | [ScheduleOnce / TriggerAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard)
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ThenInclude / Include](/docs/sdk-reference/scheduler-api/dependent-scheduling) | [IDormantDependentContext](/docs/sdk-reference/scheduler-api/i-dormant-dependent-context) | [ScheduleOnce / TriggerAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard)
 
 Feature pages: [Scheduling](/docs/scheduler), [Dependent Trains](/docs/scheduler/dependent-trains),
 [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs),

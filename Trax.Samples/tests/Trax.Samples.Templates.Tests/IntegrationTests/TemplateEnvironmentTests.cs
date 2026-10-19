@@ -11,10 +11,11 @@ namespace Trax.Samples.Templates.Tests.IntegrationTests;
 
 /// <summary>
 /// What a project scaffolded from the <c>trax-hub</c>, <c>trax-scheduler</c> and
-/// <c>trax-api</c> templates serves outside Development. The templates put no authorization in
-/// front of the dashboard and ship a plaintext demo API key, so both exist only in
+/// <c>trax-api</c> templates serves outside Development. The templates put no sign-in in front
+/// of the operations console's page and ship plaintext demo API keys, so both exist only in
 /// Development, where <c>dotnet run</c> starts through launchSettings.json. Every template
-/// operation requires the demo key's role, so without the key nothing runs.
+/// operation requires a demo key's role, and the operations namespace the console uses requires
+/// the operator key's, so without the keys nothing runs.
 ///
 /// <para>Enforces <c>docs/adr/0003-templates-serve-the-dashboard-only-in-development.md</c>.</para>
 /// </summary>
@@ -35,7 +36,7 @@ public class TemplateEnvironmentTests
     {
         await using var factory = Start<Hub.Data.AppDbContext>("Production");
 
-        var response = await factory.CreateClient().GetAsync("/trax");
+        var response = await factory.CreateClient().GetAsync("/trax/dashboard/");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound, Adr);
     }
@@ -45,7 +46,7 @@ public class TemplateEnvironmentTests
     {
         await using var factory = Start<Hub.Data.AppDbContext>("Development");
 
-        var response = await factory.CreateClient().GetAsync("/trax");
+        var response = await factory.CreateClient().GetAsync("/trax/dashboard/");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, "the premise of the Production test");
     }
@@ -55,7 +56,7 @@ public class TemplateEnvironmentTests
     {
         await using var factory = Start<Scheduler.Trains.HelloWorld.HelloWorldInput>("Production");
 
-        var response = await factory.CreateClient().GetAsync("/trax");
+        var response = await factory.CreateClient().GetAsync("/trax/dashboard/");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound, Adr);
     }
@@ -65,7 +66,7 @@ public class TemplateEnvironmentTests
     {
         await using var factory = Start<Scheduler.Trains.HelloWorld.HelloWorldInput>("Development");
 
-        var response = await factory.CreateClient().GetAsync("/trax");
+        var response = await factory.CreateClient().GetAsync("/trax/dashboard/");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, "the premise of the Production test");
     }
@@ -75,6 +76,17 @@ public class TemplateEnvironmentTests
     {
         (await SchemeNames<Hub.Data.AppDbContext>("Production")).Should().BeEmpty(Adr);
         (await SchemeNames<Hub.Data.AppDbContext>("Development")).Should().NotBeEmpty();
+    }
+
+    [Test]
+    public async Task The_scheduler_template_registers_the_operator_key_only_in_Development()
+    {
+        (await SchemeNames<Scheduler.Trains.HelloWorld.HelloWorldInput>("Production"))
+            .Should()
+            .BeEmpty(Adr);
+        (await SchemeNames<Scheduler.Trains.HelloWorld.HelloWorldInput>("Development"))
+            .Should()
+            .NotBeEmpty();
     }
 
     [Test]
@@ -93,6 +105,69 @@ public class TemplateEnvironmentTests
     private const string DiscoverNotes = "query { discover { app { notes { nodes { id } } } } }";
 
     private const string DemoKey = "demo-key-do-not-use-in-production";
+
+    private const string OperatorKey = "operator-key-do-not-use-in-production";
+
+    // What the console reads first: the operations namespace, gated to the operator.
+    private const string OperationsManifests =
+        "query { operations { manifests(take: 1) { totalCount } } }";
+
+    [Test]
+    public async Task The_hub_template_refuses_operations_to_an_anonymous_caller_in_Development() =>
+        (await ErrorCodes<Hub.Data.AppDbContext>("Development", OperationsManifests, key: null))
+            .Should()
+            .Contain("TRAX_AUTHORIZATION", Adr);
+
+    [Test]
+    public async Task The_hub_template_refuses_operations_to_the_app_demo_key() =>
+        (await ErrorCodes<Hub.Data.AppDbContext>("Development", OperationsManifests, DemoKey))
+            .Should()
+            .Contain(
+                "TRAX_AUTHORIZATION",
+                "the app's key holds User, and the operations namespace is gated to Operator"
+            );
+
+    [Test]
+    public async Task The_hub_template_serves_operations_to_the_operator_key_in_Development() =>
+        (await ErrorCodes<Hub.Data.AppDbContext>("Development", OperationsManifests, OperatorKey))
+            .Should()
+            .BeEmpty("the operator key carries the role the operations gate requires");
+
+    [Test]
+    public async Task The_scheduler_template_refuses_operations_to_an_anonymous_caller_in_Development() =>
+        (
+            await ErrorCodes<Scheduler.Trains.HelloWorld.HelloWorldInput>(
+                "Development",
+                OperationsManifests,
+                key: null
+            )
+        )
+            .Should()
+            .Contain("TRAX_AUTHORIZATION", Adr);
+
+    [Test]
+    public async Task The_scheduler_template_serves_operations_to_the_operator_key_in_Development() =>
+        (
+            await ErrorCodes<Scheduler.Trains.HelloWorld.HelloWorldInput>(
+                "Development",
+                OperationsManifests,
+                OperatorKey
+            )
+        )
+            .Should()
+            .BeEmpty("the operator key carries the role the operations gate requires");
+
+    [Test]
+    public async Task The_scheduler_template_refuses_the_operator_key_outside_Development() =>
+        (
+            await ErrorCodes<Scheduler.Trains.HelloWorld.HelloWorldInput>(
+                "Production",
+                OperationsManifests,
+                OperatorKey
+            )
+        )
+            .Should()
+            .Contain("TRAX_AUTHORIZATION", Adr);
 
     [Test]
     public async Task The_hub_template_refuses_an_anonymous_notes_query_outside_Development() =>

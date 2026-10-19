@@ -94,8 +94,8 @@ public class ScaffoldedTemplateTests
             .Contain("dotnet test tests/App.Tests", "the README says how to run the tests");
     }
 
-    [TestCase("trax-hub", "/trax", HttpStatusCode.OK)]
-    [TestCase("trax-scheduler", "/trax", HttpStatusCode.OK)]
+    [TestCase("trax-hub", "/trax/dashboard/", HttpStatusCode.OK)]
+    [TestCase("trax-scheduler", "/trax/dashboard/", HttpStatusCode.OK)]
     [TestCase("trax-api", "/trax/health", HttpStatusCode.OK)]
     public async Task Scaffold_DotnetRun_StartsInDevelopmentWithoutAnAddressOverride(
         string shortName,
@@ -131,9 +131,9 @@ public class ScaffoldedTemplateTests
             );
     }
 
-    [TestCase("trax-hub", "/trax", HttpStatusCode.NotFound)]
+    [TestCase("trax-hub", "/trax/dashboard/", HttpStatusCode.NotFound)]
     [TestCase("trax-hub", "/trax/health", HttpStatusCode.OK)]
-    [TestCase("trax-scheduler", "/trax", HttpStatusCode.NotFound)]
+    [TestCase("trax-scheduler", "/trax/dashboard/", HttpStatusCode.NotFound)]
     [TestCase("trax-api", "/trax/health", HttpStatusCode.OK)]
     public async Task Scaffold_StartsInProduction_WithoutTheDevelopmentOnlyParts(
         string shortName,

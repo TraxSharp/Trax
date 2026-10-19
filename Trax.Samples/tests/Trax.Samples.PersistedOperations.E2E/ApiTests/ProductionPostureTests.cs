@@ -79,7 +79,7 @@ public class ProductionPostureTests
     {
         using var http = _production.CreateClient();
 
-        var resp = await http.GetAsync("/trax");
+        var resp = await http.GetAsync("/trax/dashboard/");
 
         ((int)resp.StatusCode).Should().Be(404);
     }
@@ -88,10 +88,10 @@ public class ProductionPostureTests
     public async Task Development_serves_the_dashboard()
     {
         // The dashboard refuses to start without a posture. The sample opens it with
-        // AllowAnonymousDashboard() inside its Development block, so it is served there.
+        // AllowAnonymousShell() inside its Development block, so it is served there.
         using var http = SharedApiSetup.Factory.CreateClient();
 
-        var resp = await http.GetAsync("/trax");
+        var resp = await http.GetAsync("/trax/dashboard/");
 
         ((int)resp.StatusCode).Should().Be(200);
     }
@@ -126,7 +126,7 @@ public class ProductionPostureTests
     {
         using var http = SharedApiSetup.Factory.CreateClient();
 
-        var dashboard = await http.GetAsync("/trax");
+        var dashboard = await http.GetAsync("/trax/dashboard/");
         var inline = await http.PostAsJsonAsync(
             "/trax/graphql/",
             new

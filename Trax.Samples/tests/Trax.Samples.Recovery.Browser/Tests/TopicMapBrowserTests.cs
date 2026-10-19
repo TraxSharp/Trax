@@ -224,7 +224,7 @@ public class TopicMapBrowserTests
     }
 
     [Test]
-    public async Task TheDashboardAndGraphQL_ShowTheSameStateRevisionAndRuns()
+    public async Task TheConsoleAndGraphQL_ShowTheSameStateAndRuns()
     {
         await using var open = await BrowserSetup.NewPageAsync();
         var page = open.Recovery;
@@ -232,32 +232,35 @@ public class TopicMapBrowserTests
         await ChooseFieldsAsync(page);
         var draft = await DraftAsync(page);
 
-        // The dashboard's page for the draft records every run link it ever shows, from the first byte of each load:
+        // The console's page for the draft records every run link it ever shows, from the first byte of each load:
         // a user's draft lists only the run its state waits on, which is gone again once the build ends.
-        var dashboard = await open.Recovery.Context.NewPageAsync();
-        await dashboard.AddInitScriptAsync(
+        var console = await open.Recovery.Context.NewPageAsync();
+        await console.AddInitScriptAsync(
             """
             window.__runLinks = new Set();
             const record = () => document
-              .querySelectorAll(".cs-machine-runs a[href*='data/metadata/']")
+              .querySelectorAll("section[aria-label='Invoked runs'] a[href*='/runs/']:not([href*='/runs/queued/'])")
               .forEach(a => window.__runLinks.add(a.getAttribute("href")));
             new MutationObserver(record).observe(document, { subtree: true, childList: true });
             """
         );
         var instancePage = new Uri(
             BrowserSetup.HostAddress,
-            $"/trax/data/state-machines/topic-map/user/{draft.Id}?row={draft.RowId}"
+            $"/trax/dashboard/machines/topic-map/user/{draft.Id}?row={draft.RowId}"
         ).ToString();
-        await dashboard.GotoAsync(instancePage);
-        var runs = dashboard.Locator(".cs-machine-runs");
+        await OpenTheConsoleAsync(console, instancePage);
+        var runs = console.GetByRole(AriaRole.Region, new() { Name = "Invoked runs" });
+        var state = console.Locator(
+            "section[aria-label='Where it is'] div:has(> dt:text-is('State')) > dd"
+        );
         await Expect(runs)
             .ToContainTextAsync("No runs to show", new() { Timeout = BrowserTimeouts.Render.Ms() });
 
         await BuildAsync(page);
 
-        // Once the build's run has started, both read it: the dashboard loads the page again (it re-reads a
-        // draft's runs when its state moves, and the state does not move when the queued run starts), and
-        // GraphQL's operations.machineInstance is asked.
+        // Once the build's run has started, both read it: the console loads the page again (the state does not
+        // move when the queued run starts), and GraphQL's operations.machineInstance is asked. The console holds
+        // its key in memory only, so a fresh load asks for it again.
         (
             await Polling.WaitUntilAsync(
                 async () => await DraftRows.RunStateAsync(draft.Id) == "in_progress",
@@ -267,7 +270,7 @@ public class TopicMapBrowserTests
         )
             .Should()
             .BeTrue("the build's run starts");
-        var reloaded = dashboard.ReloadAsync();
+        var reloaded = OpenTheConsoleAsync(console, instancePage);
         var live = await MachineInstanceAsync(draft);
         await reloaded;
         var run = live.GetProperty("invokedRuns").EnumerateArray().Single();
@@ -279,16 +282,16 @@ public class TopicMapBrowserTests
 
         await Expect(page.WizardState)
             .ToHaveTextAsync(Built, new() { Timeout = BrowserTimeouts.Server.Ms() });
-        (await dashboard.EvaluateAsync<string[]>("() => [...window.__runLinks]"))
+        (await console.EvaluateAsync<string[]>("() => [...window.__runLinks]"))
             .Should()
             .ContainSingle(
-                "the dashboard lists the same one live run while the map builds, per " + Adr
+                "the console lists the same one live run while the map builds, per " + Adr
             )
             .Which.Should()
-            .EndWith($"data/metadata/{runId}");
+            .EndWith($"/runs/{runId}");
 
-        // Built: the typed get, operations.machineInstance and the dashboard agree on the state, the revision,
-        // and on there being no live run.
+        // Built: the typed get, operations.machineInstance and the console agree on the state, and on there
+        // being no live run.
         var got = await TypedAsync(page, DemoKeysUser, "get", new { id = draft.Id });
         var revision = await DraftRows.RevisionAsync(draft.Id);
         got.GetProperty("state").GetString().Should().Be("Built");
@@ -302,16 +305,20 @@ public class TopicMapBrowserTests
             .Should()
             .Be(0, "the build's run has ended");
 
-        var card = dashboard.Locator(".rz-card").First;
-        await Expect(card)
-            .ToContainTextAsync("Built", new() { Timeout = BrowserTimeouts.Render.Ms() });
-        await Expect(card)
-            .ToContainTextAsync(
-                new Regex($@"Revision\s*{revision}\b"),
-                new() { Timeout = BrowserTimeouts.Render.Ms() }
-            );
+        await Expect(state)
+            .ToHaveTextAsync("Built", new() { Timeout = BrowserTimeouts.Render.Ms() });
         await Expect(runs)
             .ToContainTextAsync("No runs to show", new() { Timeout = BrowserTimeouts.Render.Ms() });
+    }
+
+    // Loads the operations console at a route and connects with the operator key, which it asks for on every load.
+    private static async Task OpenTheConsoleAsync(IPage console, string url)
+    {
+        await console.GotoAsync(url);
+        await console
+            .GetByLabel("API key", new() { Exact = true })
+            .FillAsync(DemoKeysOperator, new() { Timeout = BrowserTimeouts.Render.Ms() });
+        await console.GetByRole(AriaRole.Button, new() { Name = "Connect" }).ClickAsync();
     }
 
     [Test]

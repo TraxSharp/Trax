@@ -17,7 +17,7 @@ public class HealthCheckTests : HubTestFixture
     public async Task Dashboard_Responds()
     {
         using var client = GetHttpClient();
-        var response = await client.GetAsync("/trax");
+        var response = await client.GetAsync("/trax/dashboard/");
         ((int)response.StatusCode)
             .Should()
             .BeLessThan(500, "dashboard should not return server error");

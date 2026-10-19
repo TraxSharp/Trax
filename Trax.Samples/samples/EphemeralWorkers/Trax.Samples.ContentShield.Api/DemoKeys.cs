@@ -9,4 +9,11 @@ public static class DemoKeys
 {
     /// <summary>Holds the <see cref="ContentShieldRoles.Moderator"/> role.</summary>
     public const string ModeratorKey = "contentshield-moderator-key-do-not-use-in-production";
+
+    /// <summary>
+    /// Holds the <see cref="ContentShieldRoles.Operator"/> role, which the operations namespace and
+    /// the console need. A separate key from the moderator's: an operator's subscription carries
+    /// every train, the anonymous ones included.
+    /// </summary>
+    public const string OperatorKey = "contentshield-operator-key-do-not-use-in-production";
 }

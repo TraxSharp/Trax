@@ -58,7 +58,7 @@ public class HostTests
     {
         await using var app = Start("Development");
 
-        var response = await app.CreateClient().GetAsync("/trax");
+        var response = await app.CreateClient().GetAsync("/trax/dashboard/");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
@@ -78,7 +78,7 @@ public class HostTests
     {
         await using var app = Start("Production");
 
-        var response = await app.CreateClient().GetAsync("/trax");
+        var response = await app.CreateClient().GetAsync("/trax/dashboard/");
 
         Assert.That(
             response.StatusCode,

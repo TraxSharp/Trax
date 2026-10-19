@@ -1,7 +1,7 @@
 # Trax.Samples.Hub
 
 A [Trax](https://traxsharp.net/docs) server in one process: a GraphQL API over your trains, a
-scheduler that runs them on a timer, and the Trax dashboard. It runs with no database: the
+scheduler that runs them on a timer, and the Trax operations console. It runs with no database: the
 in-memory provider keeps every run in this process and loses it on restart.
 
 | Path | What it is |
@@ -10,7 +10,7 @@ in-memory provider keeps every run in this process and loses it on restart.
 | `Trains/HelloWorld/` | A `[TraxMutation]` train, also scheduled every 20 seconds |
 | `Trains/Lookup/` | A `[TraxQuery]` train that returns typed output |
 | `Data/` | Your application's own EF Core context, with one `[TraxQueryModel]` entity (`Note`) |
-| `Auth/DemoKeys.cs` | The Development-only demo API key |
+| `Auth/DemoKeys.cs` | The Development-only demo API keys: one for the trains, one for the console |
 | `tests/Trax.Samples.Hub.Tests/` | NUnit tests: a junction, a train run through the bus, and the host started in Development and Production |
 | `Directory.Packages.props` | Every package version, in one place |
 
@@ -26,7 +26,7 @@ dotnet run
 | URL | What |
 |---|---|
 | `http://localhost:5400/trax/graphql` | The GraphQL IDE |
-| `http://localhost:5400/trax` | The dashboard: every run, the `hello-world` schedule, run or cancel |
+| `http://localhost:5400/trax/dashboard` | The operations console: every run, the `hello-world` schedule, run or cancel. It asks for the operator key, `operator-key-do-not-use-in-production` |
 | `http://localhost:5400/trax/health` | The health check |
 
 Every operation needs the demo key:
@@ -152,16 +152,17 @@ adds `mode: QUEUE`) works too, and several processes can share one database. See
 
 ## Before deploying
 
-Two things exist only in Development: the demo key and the dashboard. Started any other way
+Two things exist only in Development: the demo keys and the console. Started any other way
 (`dotnet bin/.../Trax.Samples.Hub.dll`, a container), the application runs in Production, every
-operation is refused and `/trax` is a 404.
+operation is refused and `/trax/dashboard` is a 404.
 
-- Replace the demo key with real credentials (`keys.AddHashed(...)` from a secret store, or
+- Replace the demo keys with real credentials (`keys.AddHashed(...)` from a secret store, or
   `AddTraxJwtAuth`), then remove the `IsDevelopment()` check around `AddTraxApiKeyAuth`. See
   [API Security](https://traxsharp.net/docs/api-security).
-- Choose who may use the dashboard, `RequirePolicy("<policy>")` or `RequireRoles("<role>")`, in
-  place of `AllowAnonymousDashboard()`, then remove the two `IsDevelopment()` checks around it. See
-  [Dashboard](https://traxsharp.net/docs/dashboard).
+- Add a sign-in the browser carries (a cookie or OpenID Connect), choose who may load the console,
+  `RequirePolicy("<policy>")` or `RequireRoles("<role>")`, in place of `AllowAnonymousShell()`,
+  then remove the `IsDevelopment()` check around it. See
+  [UseTraxApiDashboard](https://traxsharp.net/docs/sdk-reference/api-dashboard/use-trax-api-dashboard).
 - Outside `dotnet run` the URL comes from `ASPNETCORE_URLS` (or `ASPNETCORE_HTTP_PORTS`), not
   `launchSettings.json`.
 

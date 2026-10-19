@@ -61,7 +61,7 @@ public class OperationsAuthorizationTests : SchedulingTestFixture
 
         var graphql = await http.PostAsJsonAsync("/trax/graphql", new { query = ListManifests });
         var body = await graphql.Content.ReadAsStringAsync();
-        var dashboard = await http.GetAsync("/trax");
+        var dashboard = await http.GetAsync("/trax/dashboard/");
 
         graphql.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError, body);
         body.Should().Contain("TRAX_AUTHORIZATION").And.NotContain("totalCount\":");

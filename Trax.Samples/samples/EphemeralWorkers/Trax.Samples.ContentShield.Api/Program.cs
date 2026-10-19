@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ContentShield: API (GraphQL + dashboard) dispatching to an ephemeral runner
+// ContentShield: API (GraphQL + operations console) dispatching to an ephemeral runner
 //
 // No scheduled jobs: every piece of work starts with a GraphQL request, and the
 // API executes none of it. Queued mutations are POSTed to the Runner over HTTP
@@ -33,6 +33,7 @@
 //   Mutations:  dispatch { moderation { reviewContent } }                   anonymous, queued to the Runner
 //               dispatch { sendViolationNotice }                            Moderator, queued to the Runner
 //               dispatch { reports { generateModerationReport(mode:) } }    Moderator, run or queued on the Runner
+//   Operations:    operations { executions, workQueue, ... }                Operator
 //   Subscriptions: onTrainStarted, onTrainCompleted, onTrainFailed, ... for the Moderator
 //                  trains only; the anonymous ones are not broadcast
 //
@@ -42,7 +43,7 @@
 //   3. dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Api
 //
 // Endpoints (Development):
-//   Dashboard:   http://localhost:5204/trax
+//   Console:     http://localhost:5204/trax/dashboard   (paste the Operator key)
 //   GraphQL IDE: http://localhost:5204/trax/graphql
 //
 // Try it:
@@ -63,9 +64,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -101,11 +102,13 @@ var runnerKey = RunnerSigningKey.Resolve(
 builder.Services.AddLogging(logging => logging.AddConsole());
 
 // ── Who may moderate ────────────────────────────────────────────────────
-// sendViolationNotice and generateModerationReport require the Moderator role. The only key that
-// carries it is a published demo key, registered in Development alone.
+// sendViolationNotice and generateModerationReport require the Moderator role, and the operations
+// namespace the Operator role. The only keys that carry them are published demo keys, registered in
+// Development alone.
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys =>
         keys.Add(DemoKeys.ModeratorKey, id: "moderator", ContentShieldRoles.Moderator)
+            .Add(DemoKeys.OperatorKey, id: "operator", ContentShieldRoles.Operator)
     );
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
@@ -159,27 +162,39 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// ── Dashboard: Development only ────────────────────────────────────────
-// The dashboard can queue, run and cancel trains. This sample puts no login in front of it, so it
-// is served only in Development. Gate it (RequirePolicy / RequireRoles) before serving it elsewhere.
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
-
 // ── Register GraphQL API ────────────────────────────────────────────────
 // Trains annotated with [TraxQuery] or [TraxMutation] get typed GraphQL
 // fields generated. [TraxBroadcast] trains emit subscription events, and the
 // Runner's events reach them over RabbitMQ.
-builder.Services.AddTraxGraphQL();
+//
+// The operations namespace (runs, the work queue, dead letters, and queueing and cancelling
+// work) is what the operations console reads and writes. It is off until exposed, and exposing
+// it without a gate refuses to start the host; GateOperations puts the Operator role in front
+// of it alone, so the anonymous trains keep working. It is not the Moderator role: a subscriber
+// the operations gate admits receives every train's events, and a moderator's subscription
+// carries only the [TraxBroadcast] trains.
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
+        .GateOperations(roles: ContentShieldRoles.Operator)
+);
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
+
+// ── Operations console: Development only ────────────────────────────────
+// The console asks for the Operator key on every load and sends it with each request, which the
+// operations gate checks. The page itself has no sign-in in front of it (AllowAnonymousShell), so
+// it is served only in Development. To serve it elsewhere, gate it with RequirePolicy or
+// RequireRoles on a sign-in the browser carries, such as a cookie or OpenID Connect.
+if (app.Environment.IsDevelopment())
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
 

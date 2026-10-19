@@ -6,15 +6,16 @@ status: accepted
 
 # The templates serve the dashboard and the demo key only in Development
 
-The `trax-hub` and `trax-scheduler` templates mount the dashboard, and the `trax-hub` and
-`trax-api` templates register the plaintext demo API key, only when
-`IHostEnvironment.IsDevelopment()`, and declare the dashboard's posture as
-`AllowAnonymousDashboard()` inside that check and nowhere else. Every train and query model in
-the `trax-hub` and `trax-api` templates carries `[TraxAuthorize(Roles = "User")]`, the role the demo key holds,
-and none is anonymous. `dotnet run` starts in Development through each template's
-`launchSettings.json`, so the out-of-the-box experience is unchanged once the demo key is
-sent; a scaffold started any other way has no dashboard and no credential until its author
-adds real ones, so every operation it serves is refused.
+The `trax-hub` and `trax-scheduler` templates mount the operations console (`UseTraxApiDashboard`),
+and every template registers its plaintext demo API keys, only when
+`IHostEnvironment.IsDevelopment()`, and declare the console's posture as `AllowAnonymousShell()`
+inside that check and nowhere else. Every train and query model in the `trax-hub` and `trax-api`
+templates carries `[TraxAuthorize(Roles = "User")]`, the role the demo key holds, and none is
+anonymous. The `operations` namespace the console reads and writes is gated to `Operator`, which
+only the separate operator key holds. `dotnet run` starts in Development through each template's
+`launchSettings.json`, so the out-of-the-box experience is unchanged once a demo key is sent; a
+scaffold started any other way has no console and no credential until its author adds real ones,
+so every operation it serves is refused.
 
 ## Status
 
@@ -24,7 +25,9 @@ adds real ones, so every operation it serves is refused.
 
 **Gate the template's dashboard with the demo key.** It would keep the dashboard in every
 environment, but the key is published in the template itself, so a gate that accepts it is no
-gate. A scaffold is started as-is more often than it is read.
+gate. A scaffold is started as-is more often than it is read. The console's page cannot be gated
+by an API key at all (a page load sends no header), so the console's data is gated by the operator
+key and its page by the environment check.
 
 **Ship real authentication in the template.** A user store, a login page and a scheme are the
 host's choice, and any one the template picked would be the wrong one for most scaffolds. The
@@ -67,11 +70,13 @@ Production, and `/trax` is a 404 there. That is the intended surprise: the fix i
 
 - `ScaffoldedTemplateTests` packs the templates, scaffolds each one outside the repo, builds
   it, and starts the built application through `dotnet run` in Development and with
-  `ASPNETCORE_ENVIRONMENT=Production`, pinning that `/trax` is served only in Development.
+  `ASPNETCORE_ENVIRONMENT=Production`, pinning that `/trax/dashboard/` is served only in
+  Development.
 - `TemplateEnvironmentTests` starts each template host in Production and in Development, and
-  pins that `/trax` is served only in Development, that the demo key's scheme is registered
-  only there, that an anonymous `dispatch.helloWorld`, `discover.lookup` or notes query is
-  refused, and that the demo key runs them in Development.
+  pins that `/trax/dashboard/` is served only in Development, that the demo keys' scheme is
+  registered only there, that an anonymous `dispatch.helloWorld`, `discover.lookup` or notes query
+  is refused, that the demo key runs them in Development, and that `operations` is refused to an
+  anonymous caller and to the app's demo key and served to the operator key in Development only.
 
 Not covered: the tests scaffold from a package packed in this repository, not from the
 published `Trax.Samples.Templates`. Nothing fails when a new template operation is added with `[TraxAllowAnonymous]` or with no attribute;
@@ -79,6 +84,10 @@ only the three operations named above are pinned.
 
 ## Changelog
 
+- **2026-10-19**: Amended: the templates serve the operations console instead of the removed
+  Blazor dashboard, with `AllowAnonymousShell()` inside the Development check. `trax-scheduler`
+  gains the GraphQL `operations` namespace and an operator key, and `trax-hub` an operator key
+  beside its demo key, because the console reads everything through that namespace.
 - **2026-10-03**: Amended: the templates declare `AllowAnonymousDashboard()` inside the
   Development check, because Trax.Dashboard 1.16 refuses to start a dashboard with no posture.
   `ScaffoldedTemplateTests` added as an exemplar.

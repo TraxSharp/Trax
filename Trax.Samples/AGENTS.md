@@ -16,7 +16,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | --- | --- |
 | a new sample, or an E2E factory's connection string | [0001](./docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md), a factory CI does not provision reports green while testing nothing |
 | a guard fixture, here or upstream | [0002](./docs/adr/0002-the-samples-adopt-the-guards-as-a-consumer-would.md), Bookworm is the only place the fixtures are adopted from outside the folder that ships them |
-| a template's `Program.cs` or its dashboard | [0003](./docs/adr/0003-templates-serve-the-dashboard-only-in-development.md), the dashboard and the demo key exist only in Development |
+| a template's `Program.cs` or its console | [0003](./docs/adr/0003-templates-serve-the-dashboard-only-in-development.md), the console and the demo keys exist only in Development |
 | a template's package versions | [0004](./docs/adr/0004-the-template-package-carries-its-package-versions.md), versions are generated at pack, Trax's from the release version and the rest from the root pins |
 | the README's feature-coverage table, or a new or retired sample | [0006](./docs/adr/0006-one-sample-per-major-feature-proven-end-to-end.md), one sample per major feature, each proven by E2E tests; a feature without a sample is proven upstream and listed in the table |
 | `docker-compose.yml` | [0005](./docs/adr/0005-sample-infrastructure-listens-on-loopback-only.md), every published port binds `127.0.0.1` because the credentials sit beside it |

@@ -3,7 +3,7 @@
 //
 // One process that schedules trains, runs them on local workers, retries the ones that fail
 // and dead-letters the ones that keep failing, with two ways to watch and steer it: the Trax
-// GraphQL operations surface and the Trax Dashboard.
+// GraphQL operations surface and the Trax operations console.
 //
 //   refresh-exchange-rates   every 5 seconds
 //     ├── reprice-catalog    dependent: after each successful refresh
@@ -17,13 +17,13 @@
 //   docker compose up -d database
 //   dotnet run --project samples/Scheduling/Trax.Samples.Scheduling.Host
 //
-// Dashboard:  http://localhost:5230/trax            (Development only)
+// Console:    http://localhost:5230/trax/dashboard  (Development only; paste the operator key)
 // GraphQL:    http://localhost:5230/trax/graphql    header X-Api-Key: operator-key-do-not-use-in-production
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -158,22 +158,21 @@ builder.Services.AddTraxGraphQL(graphql =>
         .GateOperations(roles: DemoKeys.OperatorRole)
 );
 
-// ── The dashboard ───────────────────────────────────────────────────────────
-// The dashboard can trigger, cancel and requeue work and change scheduler settings. This
-// sample puts no sign-in in front of it, so it is served only in Development. Anywhere else,
-// gate it with RequirePolicy or RequireRoles before serving it.
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(options => options.AllowAnonymousDashboard());
-
 var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
-
 app.UseTraxGraphQL();
+
+// ── The operations console ──────────────────────────────────────────────────
+// The console triggers, cancels and requeues work through the operations namespace above, so
+// every read and write it makes needs the operator key, which it asks for on each load. The
+// page itself has no sign-in in front of it (AllowAnonymousShell), so it is served only in
+// Development. Anywhere else, gate it with RequirePolicy or RequireRoles on a sign-in the
+// browser carries, such as a cookie or OpenID Connect.
+if (app.Environment.IsDevelopment())
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
 

@@ -18,7 +18,7 @@ public class HealthCheckTests : ApiTestFixture
     public async Task Dashboard_is_served_in_development()
     {
         using var client = GetHttpClient();
-        var response = await client.GetAsync("/trax");
+        var response = await client.GetAsync("/trax/dashboard/");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

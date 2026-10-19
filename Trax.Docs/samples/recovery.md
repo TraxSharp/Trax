@@ -31,7 +31,7 @@ Six features working together, against Postgres, in one process:
 |---|---|---|
 | Train decisions | A `Switch` (what went wrong with the order) and a `Gate` (whether to pay it), answered by an `IDecider` | [Decisions](/docs/core/decisions) |
 | Retries replay decisions | The manifest's automatic retry replays every recorded answer whose state hashes the same, asks afresh when the data changed, and asks afresh on purpose with `askAfresh` | [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions) |
-| Checkpoints and resume | The refund checkpoints its outcome before it emails the customer; the manifest's retry resumes after it, and an operator resumes the failed run at `NotifyCustomer` with `resumeExecution` or the dashboard's **Resume** | [Resuming from a checkpoint](#resuming-from-a-checkpoint) |
+| Checkpoints and resume | The refund checkpoints its outcome before it emails the customer; the manifest's retry resumes after it, and an operator resumes the failed run at `NotifyCustomer` with `resumeExecution` or the console's **Resume** | [Resuming from a checkpoint](#resuming-from-a-checkpoint) |
 | Junction events | `onJunctionEvent` and `operations.junctionRuns` drive the page | [Junction Events](/docs/effect/junction-events) |
 | Parallel branches | The topic map's three signals run side by side; a failed branch fails the run by name, and only the step after the join writes | [The topic map](#the-topic-map) |
 | State machines that invoke trains | System-owned instances started from a train, an unsure output routed by a guarded `OnDone`, a failed ingest retried by entering its state again, a user's wizard whose result no client can write, and a draft rebuilt after its host is killed mid-run | [Recovery state machines](/docs/samples/recovery/state-machines) |
@@ -56,8 +56,9 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`. The host listens on `http://localhost:5260`, with the dashboard at
-`/trax` and the GraphQL IDE at `/trax/graphql`, both in Development only. When your Postgres is not
+Open `http://localhost:5173`. The host listens on `http://localhost:5260`, with the operations
+console at `/trax/dashboard` (it asks for the operator key) and the GraphQL IDE at `/trax/graphql`,
+both in Development only. When your Postgres is not
 on 5432, start the host with
 `ConnectionStrings__TraxDatabase="Host=localhost;Port=<port>;Database=trax_recovery;Username=trax;Password=trax123"`.
 
@@ -126,7 +127,7 @@ case file, so every retry that reads it again fails and the manifest dead-letter
 crashed while emailing resumes after its checkpoint and does not read it again). A requeue would fail the same way, so the page
 offers no re-run once a run is dead. It offers **Resume from NotifyCustomer** then instead, and only then: when every
 retry failed and the latest failed attempt's run graph says it can resume at `NotifyCustomer#0`, the button calls
-`resumeExecution(id, from: "NotifyCustomer#0")`, the operation behind the dashboard's **Resume from here**, and the
+`resumeExecution(id, from: "NotifyCustomer#0")`, the operation behind the console's **Resume from here**, and the
 `resume` row runs only `NotifyCustomer`, from the outcome the checkpoint stored. While the run is alive its own retry
 already resumes from the checkpoint, and a run is resumed to completion once.
 
@@ -173,7 +174,7 @@ query {
 ### The host
 
 One ASP.NET process holds the GraphQL API, the scheduler, its local workers and, in Development,
-the dashboard. The parts that make recovery work (the demo decider is registered unless `Recovery:Model` is
+the operations console. The parts that make recovery work (the demo decider is registered unless `Recovery:Model` is
 `Nimble`, and `AddNimbleDecider` joins the effects when it is):
 
 ```csharp from=Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Api/Program.cs
@@ -263,7 +264,7 @@ See [Keying the state hash](/docs/effect/decisions#keying-the-state-hash).
 The page signs in as a demo user and follows only its own runs, through
 [`runProgress`](/docs/sdk-reference/graphql-api/run-progress). The refund and topic map trains carry
 `[TraxRunProgress(Answers = true)]`, so the user who started a run sees each question's answer and the junctions on a
-track; nobody else sees that run at all. The operations namespace stays behind its own role, for the dashboard and
+track; nobody else sees that run at all. The operations namespace stays behind its own role, for the console and
 an operator. The sample registers three demo keys in Development only:
 
 ```csharp from=Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Api/Program.cs
@@ -281,7 +282,7 @@ map's `Build` and `Rebuild` require `recovery-user`. The refund train also carri
 view, without answers. The topic map's train carries no `[TraxBroadcast]`: the `topic-map` machine invokes it, and a
 user's own machine may not invoke one that broadcasts every run to every subscriber.
 
-Outside Development no key exists, the operations namespace answers no one and the dashboard is
+Outside Development no key exists, the operations namespace answers no one and the console is
 not mapped.
 
 ### The trains
@@ -469,8 +470,8 @@ letter's requeue resumes the same way; `requeueExecution` still reruns from the 
 
 **What the operator sees.** On the failed run, `operations.runGraph` sets `canResume`, marks the
 checkpoint's node `checkpointed` and every node after it that a resume can start at `canResume`;
-nothing before the checkpoint can. The dashboard's Metadata Detail page offers **Resume** beside
-**Re-queue**, puts a **checkpoint** badge on the stored step of its run graph and a **Resume from
+nothing before the checkpoint can. The console's run page offers **Resume** beside
+**Requeue**, marks the stored step of its run graph as a checkpoint and offers **Resume from
 here** on each step the graph allows; both call `IOperationsService.ResumeExecutionAsync`, the call
 behind `resumeExecution`. On the resumed run, every node before its resume point is `RESTORED`: it
 was skipped, not run, and a step on a track the failed run did not take is `SKIPPED`. On a failed

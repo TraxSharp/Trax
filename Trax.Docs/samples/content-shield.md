@@ -78,7 +78,7 @@ key answers `Not authorized.` with code `TRAX_AUTHORIZATION`.
 ```
 samples/EphemeralWorkers/
 ├── Trax.Samples.ContentShield/          trains, roles, RunnerSigningKey
-├── Trax.Samples.ContentShield.Api/      GraphQL + dispatch + dashboard (port 5204)
+├── Trax.Samples.ContentShield.Api/      GraphQL + dispatch + operations console (port 5204)
 └── Trax.Samples.ContentShield.Runner/   Function : TraxLambdaFunction; Program.cs runs it locally (port 5205)
 ```
 
@@ -247,8 +247,12 @@ endpoint, with the same `SigningKey`. See
 Anyone may submit content (`reviewContent`) and look up a result. `sendViolationNotice` and
 `generateModerationReport` carry `[TraxAuthorize(Roles = "Moderator")]`; the only key with that role
 is a demo key registered in Development. The runner needs no authorization service for them: a remote
-run executes inside a trusted scope, because the API already checked the caller. The dashboard is
-registered and served only in Development, with `AllowAnonymousDashboard()`.
+run executes inside a trusted scope, because the API already checked the caller. The `operations`
+namespace is exposed for the operations console and gated to a separate Operator role, held by a
+second demo key (`contentshield-operator-key-do-not-use-in-production`). It is not the Moderator
+role, because a subscriber the operations gate admits receives every train's events, the anonymous
+review's included. The console's page is served only in Development, with `AllowAnonymousShell()`,
+and asks for the operator key on every load.
 
 Only the Moderator trains, `sendViolationNotice` and `generateModerationReport`, are
 `[TraxBroadcast]`. A broadcast train's events carry every run's output to every subscriber the train

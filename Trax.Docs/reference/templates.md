@@ -15,8 +15,8 @@ until you choose one. Each also ships a README, a `.gitignore` and an NUnit test
 | Template | Short name | What it is | URL in Development |
 |----------|------------|------------|------|
 | Trax GraphQL API | `trax-api` | A GraphQL API with a typed query train and a mutation train | `http://localhost:5402` |
-| Trax Scheduler with Dashboard | `trax-scheduler` | A scheduler running one train every 20 seconds, with the Trax Dashboard | `http://localhost:5401` |
-| Trax Hub | `trax-hub` | The API, the scheduler and the dashboard in one process | `http://localhost:5400` |
+| Trax Scheduler with Dashboard | `trax-scheduler` | A scheduler running one train every 20 seconds, with the operations console | `http://localhost:5401` |
+| Trax Hub | `trax-hub` | The API, the scheduler and the operations console in one process | `http://localhost:5400` |
 
 `trax generate` scaffolds `trax-hub` (see [CLI](/docs/reference/cli)).
 
@@ -110,18 +110,18 @@ error its removal causes:
 
 | Registration | What it does | Without it |
 |---|---|---|
-| `AddTraxApiKeyAuth(...)`, Development only | The demo key `demo-key-do-not-use-in-production`, holding the `User` role | Every operation is refused, as it is in Production |
+| `AddTraxApiKeyAuth(...)`, Development only | The demo key `demo-key-do-not-use-in-production`, holding the `User` role, and the operator key `operator-key-do-not-use-in-production`, holding `Operator` | Every operation is refused, as it is in Production |
 | `AddAuthentication()`, `AddAuthorization()` | ASP.NET Core authentication and authorization | Outside Development, `UseAuthentication()` throws at startup: `Unable to resolve service for type 'IAuthenticationSchemeProvider'` (`AddTraxApiKeyAuth` registers it in Development) |
 | `AddTrax(...)` with `UseInMemory().SaveTrainParameters().AddJunctionProgress()` | Records every run in memory, with its input and output, and the junction it is on | `AddTraxGraphQL()` throws: `AddTraxGraphQL() requires AddTrax() to be called first` |
 | `.AddMediator(typeof(Program).Assembly)` | Registers every train in the project under its interface | The trains do not exist; `Schedule<IHelloWorldTrain>` refuses to start: `No train implements IServiceTrain<HelloWorldInput, TOut>` |
-| `.AddScheduler(...)` with `Schedule<IHelloWorldTrain>("hello-world", ..., Every.Seconds(20))` | Stores the manifest at startup and runs it every 20 seconds | `UseTraxDashboard()` refuses to start: `UseTraxDashboard() requires the Trax Scheduler` |
+| `.AddScheduler(...)` with `Schedule<IHelloWorldTrain>("hello-world", ..., Every.Seconds(20))` | Stores the manifest at startup and runs it every 20 seconds | The `operations` namespace has none of the services it reads, so the host refuses to start |
 | `AddDbContextFactory<AppDbContext>(...)` | Your own EF Core context, on an in-memory database | The `EnsureCreated()` bootstrap throws: `No service for type 'IDbContextFactory<AppDbContext>' has been registered` |
-| `AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>())` | The schema at `/trax/graphql`: trains under `discover` and `dispatch`, `Note` under `discover { app }` | `UseTraxGraphQL()` throws: `UseTraxGraphQL() requires AddTraxGraphQL() to be called first.` |
+| `AddTraxGraphQL(...)` with `AddDbContext<AppDbContext>()`, `ExposeOperationQueries()`, `ExposeOperationMutations()` and `GateOperations(roles: "Operator")` | The schema at `/trax/graphql`: trains under `discover` and `dispatch`, `Note` under `discover { app }`, and the `operations` namespace the console uses, gated to `Operator` | `UseTraxGraphQL()` throws: `UseTraxGraphQL() requires AddTraxGraphQL() to be called first.` Without the two `Expose` calls, `UseTraxApiDashboard()` throws: `UseTraxApiDashboard() requires the GraphQL operations namespace` |
 | `AddHealthChecks().AddTraxHealthCheck()` | `/trax/health` | `MapHealthChecks` throws, naming `AddHealthChecks` |
-| `AddTraxDashboard(d => d.AllowAnonymousDashboard())`, Development only | The dashboard at `/trax`, open to anyone who can reach the port | Without the posture, `UseTraxDashboard()` throws naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousDashboard`; without `AddTraxDashboard` at all, it throws `UseTraxDashboard() requires AddTraxDashboard() to be called first.` |
+| `UseTraxApiDashboard(d => d.AllowAnonymousShell())`, Development only | The operations console at `/trax/dashboard`. Anyone who can reach the port can load the page; everything it reads or changes needs the operator key, which it asks for | Without a posture, `UseTraxApiDashboard()` throws naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousShell` |
 
-`AllowAnonymousDashboard()` sits inside the `IsDevelopment()` check, and so do `AddTraxDashboard`
-and `UseTraxDashboard`: the dashboard is not served anywhere else until you choose who may use it
+`UseTraxApiDashboard` and its `AllowAnonymousShell()` sit inside the `IsDevelopment()` check: the
+console is not served anywhere else until you choose who may load it
 (see [Prepare a template for deployment](/docs/reference/prepare-a-template-for-deployment)).
 
 The two trains both carry `[TraxAuthorize(Roles = "User")]`:
@@ -139,15 +139,15 @@ The junctions derive `EffectJunction<TIn, TOut>`, because `AddJunctionProgress()
 junctions of that type. See [Junction Progress](/docs/effect/effect-providers/junction-progress).
 
 **Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
-`Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Dashboard`,
+`Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Api.Dashboard`,
 `Trax.Api`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL`.
 
 ### trax-api
 
 The `Auth/`, `Data/`, `Trains/` and `tests/` of `trax-hub`, in a host with no scheduler and no
-dashboard. `Program.cs` registers the demo key, `AddTrax` with
+console. `Program.cs` registers the demo key, `AddTrax` with
 `UseInMemory().SaveTrainParameters()` and `AddMediator`, the application context, GraphQL and the
-health check. The tests have no dashboard checks.
+health check. The tests have no console checks.
 
 The API runs every train itself, when it is called. Running trains on a timer, or queueing them
 for another process, needs a scheduler with the same trains registered and a database both
@@ -166,6 +166,8 @@ MyCompany.Scheduler/
 ├── README.md
 ├── .gitignore
 ├── appsettings.json
+├── Auth/
+│   └── DemoKeys.cs
 ├── Properties/
 │   └── launchSettings.json
 ├── Trains/
@@ -184,11 +186,14 @@ MyCompany.Scheduler/
 ```
 
 `Program.cs` registers `AddTrax` with `UseInMemory().SaveTrainParameters().AddJunctionProgress()`,
-`AddMediator`, `AddScheduler` with the `hello-world` manifest every 20 seconds, and the dashboard
-with `AllowAnonymousDashboard()` in Development only. It has no GraphQL and no authentication.
+`AddMediator`, `AddScheduler` with the `hello-world` manifest every 20 seconds, the operator key
+`operator-key-do-not-use-in-production` in Development only, `AddTraxGraphQL` exposing only the
+`operations` namespace behind `GateOperations(roles: "Operator")`, and the operations console with
+`AllowAnonymousShell()` in Development only. It exposes no train of its own over GraphQL.
 
 **Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
-`Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Dashboard`.
+`Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Api.Auth.ApiKey`,
+`Trax.Api.GraphQL`, `Trax.Api.Dashboard`.
 
 ## Running
 
@@ -201,9 +206,9 @@ which is also the only place the URL is set:
 
 | Template | Open |
 |----------|------|
-| `trax-hub` | `http://localhost:5400/trax/graphql` for the GraphQL IDE, `http://localhost:5400/trax` for the dashboard, `/trax/health` |
+| `trax-hub` | `http://localhost:5400/trax/graphql` for the GraphQL IDE, `http://localhost:5400/trax/dashboard` for the operations console, `/trax/health` |
 | `trax-api` | `http://localhost:5402/trax/graphql` for the GraphQL IDE, `/trax/health` |
-| `trax-scheduler` | `http://localhost:5401/trax` for the dashboard |
+| `trax-scheduler` | `http://localhost:5401/trax/dashboard` for the operations console |
 
 Send `X-Api-Key: demo-key-do-not-use-in-production` with every GraphQL operation:
 
@@ -215,9 +220,11 @@ curl -X POST http://localhost:5400/trax/graphql \
 ```
 
 Without the key, or with a wrong one, the response is HTTP 200 with an error whose
-`extensions.code` is `TRAX_AUTHORIZATION`.
+`extensions.code` is `TRAX_AUTHORIZATION`. The console, and `operations` queries, take the operator
+key instead, `operator-key-do-not-use-in-production`; the console asks for it on every load and keeps
+it in memory only.
 
-The HelloWorld train runs every 20 seconds in `trax-scheduler` and `trax-hub`; the dashboard shows
+The HelloWorld train runs every 20 seconds in `trax-scheduler` and `trax-hub`; the console shows
 each run. The in-memory provider keeps its data inside the process, so it is lost on restart and
 two processes never see each other's.
 
@@ -238,7 +245,7 @@ Each test project references the application and uses NUnit with
 |---|---|
 | `UnitTests/FetchDataJunctionTests` | A junction constructed with its dependencies and called directly: no container, no database |
 | `IntegrationTests/HelloWorldTrainTests` | A train run through `ITrainBus` on a container with `UseInMemory()` and `AddMediator`, then its `Metadata` read back from `IDataContext` |
-| `IntegrationTests/HostTests` | `WebApplicationFactory<Program>` starting the whole host in Development and in Production, calling GraphQL with and without the demo key, and checking the dashboard is served only in Development |
+| `IntegrationTests/HostTests` | `WebApplicationFactory<Program>` starting the whole host in Development and in Production, calling GraphQL with and without the demo key, and checking the console is served only in Development |
 
 `HostTests` is the test that fails when `Program.cs` no longer starts. The application's top-level
 `Program` class is public in .NET 10, so `WebApplicationFactory<Program>` needs nothing added. See
@@ -249,7 +256,7 @@ Each test project references the application and uses NUnit with
 - [Organize trains in a project](/docs/core/organize-trains): where each train, input and junction goes.
 - [Add your own trains to a template](/docs/reference/add-trains-to-a-template): a query train and a scheduled train.
 - [Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres): a database that survives a restart and lets `mode: QUEUE` run.
-- [Prepare a template for deployment](/docs/reference/prepare-a-template-for-deployment): the dashboard and the demo key exist only in Development.
+- [Prepare a template for deployment](/docs/reference/prepare-a-template-for-deployment): the console and the demo keys exist only in Development.
 
 ## Uninstalling
 
@@ -259,4 +266,4 @@ dotnet new uninstall Trax.Samples.Templates
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth)

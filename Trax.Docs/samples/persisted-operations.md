@@ -28,7 +28,7 @@ client plays the app and the operator through three stories:
 | `SingleNode()`: the declaration persisted operations refuse to start without | `Program.cs` |
 | The management mutations under `persistedOperations`, gated to one role with `GateManagement` | `ProductionPostureTests`, `MutationFlowTests` |
 | An upload that keeps the response shape served on the next call by the same id; one that changes it refused | the Client, `HotFixFlowTests` |
-| The demo key, the dashboard and the page only in Development | `Program.cs`, `ProductionPostureTests` |
+| The demo key, the console and the page only in Development | `Program.cs`, `ProductionPostureTests` |
 
 ## Run
 
@@ -99,8 +99,8 @@ curl -s $G -H 'Content-Type: application/json' \
 # {"errors":[{"message":"Not authorized.","path":["persistedOperations"],"extensions":{"code":"TRAX_AUTHORIZATION"}}],"data":{"persistedOperations":null}}
 ```
 
-The dashboard is at http://localhost:5240/trax, with the stored operations under
-**Data > Persisted Operations**.
+The operations console is at http://localhost:5240/trax/dashboard (paste the operator key), with
+the stored operations under **API admin > Persisted operations**.
 
 ## How it works
 
@@ -162,9 +162,9 @@ the app, so changing it is the operator's job:
 
 ```csharp from=Trax.Samples/samples/PersistedOperations/Trax.Samples.PersistedOperations.Api/Program.cs
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -190,7 +190,7 @@ if (isDevelopment)
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
-// The stored documents live in Postgres. The dashboard's pages need the scheduler services even
+// The stored documents live in Postgres. The console's pages need the scheduler services even
 // though this sample queues no work.
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString))
@@ -199,24 +199,25 @@ builder.Services.AddTrax(trax =>
 );
 
 builder.Services.AddTraxGraphQL(graphql =>
-    graphql.UsePersistedOperations(opts =>
-        opts.RequirePersisted(true)
-            .LogNonPersistedRequests(true)
-            // One process serves this endpoint and writes the store, so an upload reaches
-            // every cached copy without a broadcast. A second node needs
-            // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
-            .SingleNode()
-            // The upload mutations live under `persistedOperations`, behind their own gate.
-            // Gate them to the operator; greet stays reachable to the app.
-            .GateManagement(roles: DemoKeys.OperatorRole)
-    )
+    graphql
+        // The operations namespace is what the operations console reads and writes, gated to the
+        // operator. The console registers its own documents when the host starts, so it keeps
+        // working although this endpoint runs only stored documents.
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
+        .GateOperations(roles: DemoKeys.OperatorRole)
+        .UsePersistedOperations(opts =>
+            opts.RequirePersisted(true)
+                .LogNonPersistedRequests(true)
+                // One process serves this endpoint and writes the store, so an upload reaches
+                // every cached copy without a broadcast. A second node needs
+                // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
+                .SingleNode()
+                // The upload mutations live under `persistedOperations`, behind their own gate.
+                // Gate them to the operator; greet stays reachable to the app.
+                .GateManagement(roles: DemoKeys.OperatorRole)
+        )
 );
-
-// The dashboard shows the stored documents under Data > Persisted Operations. It refuses to start
-// without a posture: this sample serves it only in Development, open. Anywhere else, register it
-// with RequirePolicy(...) or RequireRoles(...).
-if (isDevelopment)
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
 
 var app = builder.Build();
 
@@ -233,8 +234,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseTraxGraphQL();
+
+// The console shows the stored documents under API admin > Persisted operations. It refuses to
+// start without a posture. This sample has no sign-in a browser carries, so the page is open
+// (AllowAnonymousShell) and served only in Development; everything it reads or changes still needs
+// the operator key. Anywhere else, gate it with RequirePolicy(...) or RequireRoles(...) on a cookie
+// or OpenID Connect sign-in.
 if (isDevelopment)
-    app.UseTraxDashboard();
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
 
@@ -248,10 +255,9 @@ public partial class Program;
 "operator-key-do-not-use-in-production"` and `OperatorRole = "Operator"`.
 
 The host references `Trax.Api`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL`,
-`Trax.Api.GraphQL.PersistedOperations`, `Trax.Dashboard`, `Trax.Scheduler` and
+`Trax.Api.GraphQL.PersistedOperations`, `Trax.Api.Dashboard`, `Trax.Scheduler` and
 `Trax.Effect.Provider.Json`; `Trax.Effect.Data.Postgres` and `Trax.Mediator` come in through the
-trains library. A host that calls `UseTraxDashboard()` also sets
-`<RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>` in its csproj.
+trains library.
 
 What each piece is for:
 
@@ -267,14 +273,19 @@ What each piece is for:
 - **`GateManagement(roles: "Operator")`.** The management mutations live under
   `persistedOperations` at the root, and they are in the schema only once a gate is declared for
   them. The gate covers those fields only, so `greet` stays reachable to the app, which carries no
-  credential, and the host exposes nothing under `operations`. The management mutations always
+  credential. The management mutations always
   bypass enforcement (they cannot be persisted by id), and the gate is what protects them.
 - **The demo key.** It is published in this repository, so `AddTraxApiKeyAuth` registers it only in
   Development. Anywhere else no credential exists until you register a real scheme, so every upload
   is refused.
-- **The dashboard.** It refuses to start without a posture. The sample serves it only in
-  Development, opened with `AllowAnonymousDashboard()`; anywhere else, register it with
-  `RequirePolicy(...)` or `RequireRoles(...)`.
+- **`ExposeOperationQueries()`, `ExposeOperationMutations()` and `GateOperations(roles: "Operator")`.**
+  The operations console reads and changes everything under `operations`, which the gate keeps to
+  the operator. The console registers its own documents when the host starts (under
+  `trax_console_`), so it keeps working on an endpoint that refuses document text.
+- **The console.** `UseTraxApiDashboard` refuses to start without a posture. The sample has no
+  sign-in a browser carries, so it serves the page only in Development, opened with
+  `AllowAnonymousShell()`, and the console asks for the operator key on every load. Anywhere else,
+  gate it with `RequirePolicy(...)` or `RequireRoles(...)` on a cookie or OpenID Connect sign-in.
 
 A JSON-array batch is refused by the endpoint with `HC0009` before enforcement sees it, so an
 inline document smuggled into a batch beside a persisted id runs nothing.
@@ -294,9 +305,9 @@ rather than skips, when the database is missing.
 | `HotFixFlowTests` | the three stories: the call by id and the inline refusal, the FORMAL fix with no bypass, the refused rename with the old answer standing, and the manifest restoring CASUAL; with history, deactivate and restore |
 | `EnforcementTests` | inline documents refused, ids served, an unknown id reported |
 | `MutationFlowTests` | upload, schema-mismatch refusal, shape-diff refusal and bypass, deactivate, all through the GraphQL mutations |
-| `ProductionPostureTests` | in Production an inline document is refused and the dashboard and the page are gone; an anonymous upload is refused in every environment; Development serves the dashboard and the page, which shadows neither the dashboard nor the endpoint |
+| `ProductionPostureTests` | in Production an inline document is refused and the console and the page are gone; an anonymous upload is refused in every environment; Development serves the console and the page, which shadows neither the console nor the endpoint |
 | `AdditionalCoverageTests` | variables, content types, batches, tenant scoping, the shape-diff guardrail |
 
 ## SDK Reference
 
-> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
+> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard)

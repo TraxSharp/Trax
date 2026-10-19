@@ -8,15 +8,16 @@
 // response the app reads.
 //
 // The upload mutations require the Operator role. The demo operator key
-// (X-Api-Key: operator-key-do-not-use-in-production) and the dashboard exist
-// only in Development, which `dotnet run` starts, and so does the page at
+// (X-Api-Key: operator-key-do-not-use-in-production) and the operations console
+// (http://localhost:5240/trax/dashboard, paste the key) exist only in
+// Development, which `dotnet run` starts, and so does the page at
 // http://localhost:5240 that plays the three stories against this API.
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -42,7 +43,7 @@ if (isDevelopment)
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
-// The stored documents live in Postgres. The dashboard's pages need the scheduler services even
+// The stored documents live in Postgres. The console's pages need the scheduler services even
 // though this sample queues no work.
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString))
@@ -51,24 +52,25 @@ builder.Services.AddTrax(trax =>
 );
 
 builder.Services.AddTraxGraphQL(graphql =>
-    graphql.UsePersistedOperations(opts =>
-        opts.RequirePersisted(true)
-            .LogNonPersistedRequests(true)
-            // One process serves this endpoint and writes the store, so an upload reaches
-            // every cached copy without a broadcast. A second node needs
-            // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
-            .SingleNode()
-            // The upload mutations live under `persistedOperations`, behind their own gate.
-            // Gate them to the operator; greet stays reachable to the app.
-            .GateManagement(roles: DemoKeys.OperatorRole)
-    )
+    graphql
+        // The operations namespace is what the operations console reads and writes, gated to the
+        // operator. The console registers its own documents when the host starts, so it keeps
+        // working although this endpoint runs only stored documents.
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
+        .GateOperations(roles: DemoKeys.OperatorRole)
+        .UsePersistedOperations(opts =>
+            opts.RequirePersisted(true)
+                .LogNonPersistedRequests(true)
+                // One process serves this endpoint and writes the store, so an upload reaches
+                // every cached copy without a broadcast. A second node needs
+                // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
+                .SingleNode()
+                // The upload mutations live under `persistedOperations`, behind their own gate.
+                // Gate them to the operator; greet stays reachable to the app.
+                .GateManagement(roles: DemoKeys.OperatorRole)
+        )
 );
-
-// The dashboard shows the stored documents under Data > Persisted Operations. It refuses to start
-// without a posture: this sample serves it only in Development, open. Anywhere else, register it
-// with RequirePolicy(...) or RequireRoles(...).
-if (isDevelopment)
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
 
 var app = builder.Build();
 
@@ -85,8 +87,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseTraxGraphQL();
+
+// The console shows the stored documents under API admin > Persisted operations. It refuses to
+// start without a posture. This sample has no sign-in a browser carries, so the page is open
+// (AllowAnonymousShell) and served only in Development; everything it reads or changes still needs
+// the operator key. Anywhere else, gate it with RequirePolicy(...) or RequireRoles(...) on a cookie
+// or OpenID Connect sign-in.
 if (isDevelopment)
-    app.UseTraxDashboard();
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
 

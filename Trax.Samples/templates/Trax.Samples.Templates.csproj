@@ -3,7 +3,7 @@
     <PackageId>Trax.Samples.Templates</PackageId>
     <PackageType>Template</PackageType>
     <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Project templates for Trax .NET - GraphQL API and Scheduler with Dashboard for .NET</PackageDescription>
+    <PackageDescription>Project templates for Trax .NET - GraphQL API and Scheduler with the operations console for .NET</PackageDescription>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>

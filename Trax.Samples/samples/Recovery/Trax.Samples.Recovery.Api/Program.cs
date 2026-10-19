@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Trax Recovery: watch a train recover from a crash without asking the model again
 //
-// One process: GraphQL API + scheduler + local workers + dashboard, on Postgres.
+// One process: GraphQL API + scheduler + local workers + operations console, on Postgres.
 // The refund train asks a decider (a stand-in model by default) twice and can crash before or after its
 // checkpoint; the topic map runs three signals side by side and crashes one of the branches.
 // The manifest's automatic retry replays the recorded decisions instead of asking again, and every
@@ -11,21 +11,22 @@
 //   docker compose up -d database
 //   dotnet run --project samples/Recovery/Trax.Samples.Recovery.Api
 //   cd samples/Recovery/Trax.Samples.Recovery.Client && npm ci && npm run dev
-// Then open http://localhost:5173. The dashboard is at http://localhost:5260/trax (Development only).
+// Then open http://localhost:5173. The operations console is at http://localhost:5260/trax/dashboard
+// (Development only; paste the operator key).
 //
 // Auth: three demo keys, Development only:
 //   X-Api-Key: recovery-user-key-do-not-use-in-production       (role recovery-user: what the page uses)
-//   X-Api-Key: recovery-operator-key-do-not-use-in-production   (roles Operator and recovery-user: the dashboard, the API suites)
+//   X-Api-Key: recovery-operator-key-do-not-use-in-production   (roles Operator and recovery-user: the console, the API suites)
 //   X-Api-Key: recovery-viewer-key-do-not-use-in-production     (role Viewer: the broadcast view)
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Core.Decisions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Configuration.ClientExport;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -242,10 +243,6 @@ builder.Services.AddTraxGraphQL(graphql =>
 builder.Services.AddHostedService<RetiredPageDocuments>();
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
-// ── Dashboard, Development only ─────────────────────────────────────────────
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
-
 // ── CORS for the Vite dev server ────────────────────────────────────────────
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
@@ -271,10 +268,14 @@ if (!TraxClientExport.Requested)
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
+
+// ── Operations console, Development only ────────────────────────────────────
+// It asks for the operator key on every load; the operations gate checks each request it sends.
+// The page has no sign-in in front of it (AllowAnonymousShell), so it is served only here.
+if (app.Environment.IsDevelopment())
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 // Serves, or writes the client manifest and exits when started with --trax-export-client <path>.
 await app.RunTraxAsync(args);

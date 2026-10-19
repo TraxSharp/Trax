@@ -12,7 +12,7 @@ nav_order: 10
 
 `samples/DistributedWorkers` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) splits
 scheduling from execution. One process, the hub, owns the GraphQL API, the scheduler and the
-dashboard. Separate worker processes run every job the hub queues. The two share PostgreSQL (the
+operations console. Separate worker processes run every job the hub queues. The two share PostgreSQL (the
 `background_job` table) and RabbitMQ (lifecycle events), and nothing else, so you can run as many
 workers as the load needs.
 
@@ -42,8 +42,8 @@ dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 ```
 
 `dotnet run` starts both in Development through `Properties/launchSettings.json`. That is the only
-environment that registers the demo operator key and serves the dashboard at
-<http://localhost:5202/trax>. Started any other way, the hub serves no dashboard and accepts no key,
+environment that registers the demo operator key and serves the operations console at
+<http://localhost:5202/trax/dashboard>. Started any other way, the hub serves no console and accepts no key,
 so its mutations and `operations` namespace refuse every caller until you register real credentials.
 
 ## Try it
@@ -91,7 +91,7 @@ from there and runs them, so the header cannot drift from the schema.
 ```
 samples/DistributedWorkers/
 ├── Trax.Samples.EnergyHub/          trains, manifest names, roles
-├── Trax.Samples.EnergyHub.Hub/      GraphQL API + scheduler + dashboard (port 5202)
+├── Trax.Samples.EnergyHub.Hub/      GraphQL API + scheduler + console (port 5202)
 └── Trax.Samples.EnergyHub.Worker/   AddTraxWorker (port 5203, serves nothing)
 ```
 
@@ -255,12 +255,8 @@ if (builder.Environment.IsDevelopment())
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 // ...
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
-// ...
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
-        .MaxExecutionDepth(6)
         // ...
         .ExposeOperationQueries()
         .ExposeOperationMutations()
@@ -271,16 +267,19 @@ var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
 app.UseTraxGraphQL();
+// ...
+if (app.Environment.IsDevelopment())
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 ```
 
 `GateOperations` gates the `operations` namespace alone, so the anonymous solar query keeps working,
-while each mutation is gated by its own `[TraxAuthorize]`. The dashboard has no login in front of it,
-so it is registered and served only in Development; `UseTraxDashboard()` refuses to start until the
-dashboard has a posture, which `AllowAnonymousDashboard()` gives it there. See
-[API Security](/docs/api-security) and [Dashboard](/docs/dashboard).
+while each mutation is gated by its own `[TraxAuthorize]`. The operations console reads and changes
+everything through that namespace, so it asks for the Operator key on every load. Its page has no
+sign-in in front of it, so it is served only in Development; `UseTraxApiDashboard()` refuses to start
+until it has a posture, which `AllowAnonymousShell()` gives it there. See
+[API Security](/docs/api-security) and
+[UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard).
 
 ## Tests
 
@@ -303,4 +302,4 @@ instances, against the `energyhub_e2e_tests` database. `TRAX_TEST_PG_PORT` moves
 
 ## SDK Reference
 
-> [AddScheduler / OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions)
+> [AddScheduler / OverrideSubmitter](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions)

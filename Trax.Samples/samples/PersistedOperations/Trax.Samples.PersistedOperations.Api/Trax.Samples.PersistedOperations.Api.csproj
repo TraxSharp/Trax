@@ -5,13 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
-    <!-- Required by Trax.Dashboard. The dashboard package cannot propagate
-         this transitively because the Razor SDK overwrites its NuGet build
-         props with static-asset imports during pack. Every host that calls
-         UseTraxDashboard() must set this themselves. Without it, the build
-         omits _framework/blazor.web.js and the Blazor Server circuit never
-         establishes (the page renders but every button click is a no-op). -->
-    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,7 +17,7 @@
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
-    <ProjectReference Include="../../../../Trax.Dashboard/src/Trax.Dashboard/Trax.Dashboard.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Dashboard/Trax.Api.Dashboard.csproj" />
     <ProjectReference Include="../../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
   </ItemGroup>

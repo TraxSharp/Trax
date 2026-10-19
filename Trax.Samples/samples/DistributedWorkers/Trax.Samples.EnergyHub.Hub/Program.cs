@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Somerset Energy Hub: the hub (GraphQL API + scheduler + dashboard)
+// Somerset Energy Hub: the hub (GraphQL API + scheduler + operations console)
 //
 // The hub schedules work and serves the API; it does not run scheduled or queued
 // jobs. OverrideSubmitter registers PostgresJobSubmitter on its own, so every job
@@ -26,7 +26,7 @@
 //   3. dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 //
 // Endpoints (Development):
-//   Dashboard:   http://localhost:5202/trax
+//   Console:     http://localhost:5202/trax/dashboard   (paste the Operator key)
 //   GraphQL IDE: http://localhost:5202/trax/graphql
 //
 // Try it:
@@ -48,9 +48,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Auth.ApiKey;
+using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
-using Trax.Dashboard.Extensions;
 using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -204,25 +204,13 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// ── Dashboard: Development only ────────────────────────────────────────
-// The dashboard can queue, run and cancel trains and change scheduler settings. This sample puts
-// no login in front of it, so it is served only in Development, where it is open to anyone who
-// can reach localhost. Gate it (RequirePolicy / RequireRoles) before serving it anywhere else.
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
-
 // ── Register GraphQL API ────────────────────────────────────────────────
 // Trains annotated with [TraxQuery] or [TraxMutation] get typed GraphQL
 // fields generated. [TraxBroadcast] trains emit subscription events, and
 // because UseBroadcaster is registered, AddTraxGraphQL also forwards the
 // events workers publish over RabbitMQ to this hub's subscribers.
-
-// Depth 6 accommodates the dispatch → mutation → output → nested type →
-// field → scalar query chain. The Trax default of 4 is the conservative
-// production choice; raise it deliberately when your schema needs it.
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
-        .MaxExecutionDepth(6)
         // The operations namespace lists manifests and executions and triggers, disables and
         // cancels scheduled work. Both halves are off by default; exposing them requires a gate.
         // GateOperations gates that namespace alone, so the anonymous solar query keeps working.
@@ -236,10 +224,17 @@ var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
-if (app.Environment.IsDevelopment())
-    app.UseTraxDashboard();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
+
+// ── Operations console: Development only ────────────────────────────────
+// The console reads and changes everything through the operations namespace, so it asks for the
+// Operator key on every load and each request it sends is gated like any other caller's. The page
+// itself has no sign-in in front of it (AllowAnonymousShell), so it is served only in Development.
+// To serve it elsewhere, gate it with RequirePolicy or RequireRoles on a sign-in the browser
+// carries, such as a cookie or OpenID Connect.
+if (app.Environment.IsDevelopment())
+    app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
 app.Run();
 
