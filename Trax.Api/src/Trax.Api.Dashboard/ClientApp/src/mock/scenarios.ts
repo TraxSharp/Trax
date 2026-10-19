@@ -389,6 +389,20 @@ export const clusterScenario: MockSchemaOverrides = {
         },
       ],
     },
+    // Both scheduler loops switched on, so only the heartbeat decides the dispatcher warning.
+    ConfigQueries: {
+      scheduler: () => ({ manifestManagerEnabled: true, jobDispatcherEnabled: true }),
+    },
+    // The process serving the dashboard (the Hosts page's own panel).
+    MetricsQueries: {
+      server: () => ({
+        processStartTimeUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
+        uptimeSeconds: 26 * 3600 + 15 * 60,
+        workingSetBytes: 412 * 1024 * 1024,
+        gcHeapBytes: 96 * 1024 * 1024,
+      }),
+      serverCpuPercent: () => 4.2,
+    },
   }),
 };
 

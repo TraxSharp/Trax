@@ -236,7 +236,7 @@ function GroupSettings({
     <div className="bg-surface rounded-lg border border-line p-5">
       <h2 className="text-sm font-semibold text-fg mb-4">Settings</h2>
       <div className="space-y-4 text-sm">
-        <Field label="Max active jobs (blank = unlimited)">
+        <Field label="Max active jobs in this group (blank = no group limit)">
           <input
             value={maxActive}
             onChange={(e) => setMaxActive(e.target.value.replace(/\D/g, ""))}

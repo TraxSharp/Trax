@@ -4,7 +4,7 @@ import { UserSettingsPage } from "./UserSettingsPage";
 import { getOverviewPanels } from "../lib/overviewPanels";
 
 const meta = {
-  title: "Pages/User settings",
+  title: "Pages/Preferences",
   component: UserSettingsPage,
   parameters: { route: "/preferences" },
 } satisfies Meta<typeof UserSettingsPage>;
@@ -31,7 +31,7 @@ export const ThemeToggle: Story = {
 export const AutoRefresh: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    const box = c.getByLabelText("Auto-refresh seconds") as HTMLInputElement;
+    const box = c.getByLabelText("Refresh this page every (seconds)") as HTMLInputElement;
     expect(box).toHaveValue(0);
     await userEvent.clear(box);
     await userEvent.type(box, "15");

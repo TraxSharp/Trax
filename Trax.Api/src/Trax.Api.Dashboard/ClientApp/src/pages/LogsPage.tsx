@@ -1,7 +1,7 @@
 import { LogsGrid } from "../components/LogsGrid";
 
 // Every run's log entries, newest first, with the filters the API serves. The grid is the one the
-// run page uses for its own log.
+// run page uses for its own log; here its filters live in the URL.
 export function LogsPage() {
   return (
     <div>
@@ -9,7 +9,7 @@ export function LogsPage() {
       <p className="text-sm text-muted mb-6">
         Log entries captured while trains run, including messages, exceptions, and diagnostic information.
       </p>
-      <LogsGrid poll />
+      <LogsGrid poll inUrl />
     </div>
   );
 }

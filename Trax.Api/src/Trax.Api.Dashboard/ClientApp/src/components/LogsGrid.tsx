@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useUrlState } from "../lib/urlState";
 import { useQuery } from "urql";
 import { LOGS } from "../graphql/queries";
 import { Pager } from "./Pager";
@@ -35,13 +37,16 @@ export type LogOrder = "NEWEST" | "OLDEST";
  * text is not searchable. A text filter counts at most 10,000 matches, and then the pager says
  * "10,000+" and a caption says how to reach the rest.
  *
- * With `metadataId` it shows one run's entries and leaves out the run filter and column.
+ * With `metadataId` it shows one run's entries and leaves out the run filter and column. With
+ * `inUrl` (the Logs page) the filters live in the URL, so a filtered view can be linked and survives
+ * a reload; a run page keeps them to itself.
  */
 export function LogsGrid({
   metadataId,
   defaultOrder = "NEWEST",
   pageSize = 50,
   poll = false,
+  inUrl = false,
 }: {
   metadataId?: number;
   // A run's own log reads top to bottom, oldest first.
@@ -49,13 +54,14 @@ export function LogsGrid({
   pageSize?: number;
   // Refetch on the auto-refresh interval (the Logs page does; a run page reads once).
   poll?: boolean;
+  inUrl?: boolean;
 }) {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
-  const [runId, setRunId] = useState("");
-  const [level, setLevel] = useState<LogLevel | "">("");
-  const [category, setCategory] = useState("");
-  const [message, setMessage] = useState("");
-  const [order, setOrder] = useState<LogOrder>(defaultOrder);
+  const [runId, setRunId] = useFilter<string>("run", "", inUrl);
+  const [level, setLevel] = useFilter<LogLevel | "">("level", "", inUrl);
+  const [category, setCategory] = useFilter<string>("category", "", inUrl);
+  const [message, setMessage] = useFilter<string>("message", "", inUrl);
+  const [order, setOrder] = useFilter<LogOrder>("order", defaultOrder, inUrl);
   const categoryContains = useDebouncedValue(category.trim());
   const messageContains = useDebouncedValue(message.trim());
   const fixedRun = metadataId != null;
@@ -196,7 +202,15 @@ export function LogsGrid({
                   {shortName(l.category)}
                 </td>
                 {!fixedRun && (
-                  <td className="px-4 py-2 text-muted">{l.metadataId || "—"}</td>
+                  <td className="px-4 py-2 text-muted">
+                    {l.metadataId ? (
+                      <Link to={`/runs/${l.metadataId}`} className="text-accent-fg hover:underline">
+                        #{l.metadataId}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 )}
               </tr>
             ))}
@@ -222,6 +236,13 @@ export function LogsGrid({
       />
     </div>
   );
+}
+
+/** A filter held in the URL query under `key`, or in the component when `inUrl` is false. */
+function useFilter<T extends string = string>(key: string, fallback: T, inUrl: boolean): [T, (v: T) => void] {
+  const url = useUrlState<T>(key, fallback);
+  const local = useState<T>(fallback);
+  return inUrl ? url : local;
 }
 
 function levelLabel(s: string): string {

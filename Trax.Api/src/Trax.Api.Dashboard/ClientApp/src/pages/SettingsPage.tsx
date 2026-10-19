@@ -1,56 +1,392 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { LOG_LEVELS, SCHEDULER_CONFIG } from "../graphql/queries";
 import { SET_LOG_LEVELS, UPDATE_SCHEDULER } from "../graphql/mutations";
 import { toast } from "../lib/toast";
+import { confirmAction } from "../lib/confirm";
 import { changedLogLevels, LOG_LEVEL_NAMES, notAppliedMessage } from "../lib/logLevels";
-import {
-  buildDuration,
-  parseDuration,
-  UNIT_LABEL,
-  type DurationUnit,
-} from "../lib/duration";
+import { buildDuration, parseDuration, UNIT_LABEL, type DurationUnit } from "../lib/duration";
 import type { LogLevelSetting, SchedulerConfigSnapshot, SetLogLevelsResponse } from "../types";
 
 interface ConfigData {
   operations: { config: { scheduler: SchedulerConfigSnapshot } };
 }
 
+type Patch = Record<string, unknown>;
+type Save = (patch: Patch) => Promise<string | null>;
+
+const DOCS = "https://traxsharp.net/docs/scheduler";
+
+// The scheduler's runtime settings, one section per concern, each saved on its own: a save sends
+// only the fields that section changed (updateScheduler is a patch), so saving the retry policy
+// never rewrites a switch another operator just flipped. The two switches are Pause and Resume
+// actions, confirmed, and the header's paused badge reads the same query this page refetches.
 export function SettingsPage() {
   const [result, reexecute] = useQuery<ConfigData>({ query: SCHEDULER_CONFIG });
   const [, update] = useMutation(UPDATE_SCHEDULER);
   const cfg = result.data?.operations?.config?.scheduler;
 
-  if (result.error)
-    return (
-      <div className="bg-danger-soft border border-danger-line text-danger-fg rounded-lg p-4 text-sm">
-        {result.error.message}
-      </div>
-    );
-  if (!cfg) return <p className="text-muted">Loading…</p>;
-
-  async function save(input: Record<string, unknown>) {
+  /** Sends one patch; null when it was saved, else what the server said. */
+  const save: Save = async (input) => {
     const r = await update({ input });
-    if (r.error) {
-      toast(r.error.message, "error");
-      return;
-    }
+    if (r.error) return r.error.message;
     const res = r.data?.operations?.config?.updateScheduler;
-    if (res?.success) {
-      toast(res.message || "Scheduler settings saved.", "success");
-      reexecute({ requestPolicy: "network-only" });
-    } else {
-      toast(res?.message || "Save failed.", "error");
-    }
+    if (!res?.success) return res?.message || "Not saved.";
+    toast(res.message || "Saved.", "success");
+    reexecute({ requestPolicy: "network-only" });
+    return null;
+  };
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold text-fg mb-2">Scheduler</h1>
+      <p className="text-sm text-muted mb-6">
+        These settings are stored in the database and shared by every scheduler host. A saved change applies at once
+        on the host serving this page and on every other scheduler host within a few seconds, unless its section says
+        otherwise.{" "}
+        <a href={`${DOCS}/setup`} target="_blank" rel="noreferrer" className="text-accent-fg hover:underline">
+          How the scheduler is set up
+        </a>
+      </p>
+
+      {result.error && (
+        <div className="bg-danger-soft border border-danger-line text-danger-fg rounded-lg p-4 text-sm mb-6">
+          {result.error.message}
+        </div>
+      )}
+      {!cfg && !result.error && <p className="text-muted">Loading…</p>}
+      {cfg && <SchedulerSections cfg={cfg} save={save} />}
+
+      <LogLevelsPanel />
+    </div>
+  );
+}
+
+function SchedulerSections({ cfg, save }: { cfg: SchedulerConfigSnapshot; save: Save }) {
+  // A section is remounted when the values it shows change on the server, so a save (here or by
+  // another operator) shows what is stored; an edit in another section is kept.
+  const keyOf = (fields: Field[]) => JSON.stringify(fields.map((f) => cfg[f.key]));
+  return (
+    <div className="space-y-6">
+      <Switches cfg={cfg} save={save} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {SECTIONS.map((s) => {
+          const fields = s.fields.filter((f) => !f.onlyWhenSet || cfg[f.key] != null);
+          return <SettingsSection key={`${s.title}:${keyOf(fields)}`} section={s} fields={fields} cfg={cfg} save={save} />;
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Pause and resume ──────────────────────────────────────────────────────
+
+interface Loop {
+  key: "manifestManagerEnabled" | "jobDispatcherEnabled";
+  name: string;
+  does: string;
+  paused: string;
+}
+
+const LOOPS: Loop[] = [
+  {
+    key: "manifestManagerEnabled",
+    name: "Manifest manager",
+    does: "Queues each manifest's run when its schedule comes due.",
+    paused: "No manifest is queued on its schedule. Work queued by hand is still started.",
+  },
+  {
+    key: "jobDispatcherEnabled",
+    name: "Job dispatcher",
+    does: "Starts queued work on a worker.",
+    paused: "Queued work waits and nothing new starts from the queue. Runs already started finish.",
+  },
+];
+
+function Switches({ cfg, save }: { cfg: SchedulerConfigSnapshot; save: Save }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function flip(loop: Loop) {
+    const running = cfg[loop.key];
+    const verb = running ? "Pause" : "Resume";
+    const title = `${verb} ${loop.name.toLowerCase()}`;
+    const ok = await confirmAction({
+      title,
+      message: running
+        ? `${loop.paused} This applies to every scheduler host within a few seconds, until someone resumes it.`
+        : `The ${loop.name.toLowerCase()} starts again on every scheduler host within a few seconds.`,
+      danger: running,
+    });
+    if (!ok) return;
+    setProblem(null);
+    setBusy(loop.key);
+    const refused = await save({ [loop.key]: !running });
+    setBusy(null);
+    if (refused) setProblem(`${title}: ${refused}`);
   }
 
   return (
-    <>
-      <SettingsView cfg={cfg} onSave={save} />
-      <LogLevelsPanel />
-    </>
+    <section aria-labelledby="scheduler-switches" className="bg-surface rounded-lg border border-line p-5">
+      <h2 id="scheduler-switches" className="text-sm font-semibold text-fg mb-1">
+        Pause and resume
+      </h2>
+      <p className="text-xs text-muted mb-4">
+        Takes effect at once on this host and within a few seconds on every scheduler host. While either is paused,
+        the header says so on every page.
+      </p>
+      <ul className="divide-y divide-line">
+        {LOOPS.map((loop) => {
+          const running = cfg[loop.key];
+          return (
+            <li key={loop.key} aria-label={loop.name} className="py-3 flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-[16rem]">
+                <p className="text-sm font-medium text-fg">
+                  {loop.name}{" "}
+                  <span
+                    className={`ml-1 text-xs px-2 py-0.5 rounded-full ${
+                      running ? "bg-ok-soft text-ok-fg" : "bg-warn-soft text-warn-fg"
+                    }`}
+                  >
+                    {running ? "Running" : "Paused"}
+                  </span>
+                </p>
+                <p className="text-xs text-muted">{running ? loop.does : loop.paused}</p>
+              </div>
+              <button
+                onClick={() => flip(loop)}
+                disabled={busy !== null}
+                className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 ${
+                  running
+                    ? "border border-warn-line text-warn-fg hover:bg-warn-soft"
+                    : "bg-accent text-on-accent hover:bg-accent-hover"
+                }`}
+              >
+                {running ? "Pause" : "Resume"} {loop.name.toLowerCase()}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {problem && (
+        <p role="alert" className="mt-3 text-sm text-danger-fg">
+          {problem}
+        </p>
+      )}
+    </section>
   );
 }
+
+// ── The other settings, a section each ─────────────────────────────────────
+
+type Key = keyof SchedulerConfigSnapshot;
+
+interface Field {
+  key: Key;
+  label: string;
+  kind: "duration" | "int" | "decimal" | "bool";
+  hint?: string;
+  /** Blank is allowed and sends this flag instead (no limit, or the host's default). */
+  clear?: string;
+  /** Shown only when the host reports a value (it has local workers, or metadata cleanup). */
+  onlyWhenSet?: boolean;
+}
+
+interface Section {
+  title: string;
+  /** When a saved change takes effect. */
+  effect: string;
+  docs: string;
+  fields: Field[];
+}
+
+const SECTIONS: Section[] = [
+  {
+    title: "Polling and queue",
+    effect:
+      "Intervals apply from each loop's next wait and the limit from the dispatcher's next cycle. The local worker count is saved at once but used only when a host next starts, because a host starts its workers then.",
+    docs: `${DOCS}/concurrency`,
+    fields: [
+      { key: "manifestManagerPollingInterval", label: "Manifest manager checks schedules every", kind: "duration" },
+      { key: "jobDispatcherPollingInterval", label: "Job dispatcher checks the queue every", kind: "duration" },
+      {
+        key: "maxActiveJobs",
+        label: "Max active jobs, all groups (blank = no limit)",
+        kind: "int",
+        clear: "clearMaxActiveJobs",
+        hint: "The most runs the dispatcher keeps active at once across every manifest group. A manifest group's own limit is set on the group's page, under Schedules.",
+      },
+      {
+        key: "localWorkerCount",
+        label: "Local workers per host (blank = one per processor)",
+        kind: "int",
+        clear: "clearLocalWorkerCount",
+        onlyWhenSet: true,
+      },
+    ],
+  },
+  {
+    title: "Retry",
+    effect: "Applies to the next retry the scheduler schedules, within a few seconds on every scheduler host.",
+    docs: `${DOCS}/how-retries-work`,
+    fields: [
+      {
+        key: "defaultMaxRetries",
+        label: "Default max retries",
+        kind: "int",
+        hint: "Retries after a failed first run before the manifest becomes a dead letter. A manifest that sets its own uses that.",
+      },
+      { key: "defaultRetryDelay", label: "Default retry delay", kind: "duration" },
+      { key: "retryBackoffMultiplier", label: "Retry backoff multiplier", kind: "decimal", hint: "1 keeps the delay constant." },
+      { key: "maxRetryDelay", label: "Max retry delay", kind: "duration" },
+      {
+        key: "failureCountWindow",
+        label: "Failure count window",
+        kind: "duration",
+        onlyWhenSet: true,
+        hint: "How far back a manifest's failed runs count toward its retry backoff and its dead letter. A manifest scheduled with its own failure window uses that instead.",
+      },
+    ],
+  },
+  {
+    title: "Job timeouts",
+    effect:
+      "Timeouts apply from the scheduler's next cycle, within a few seconds on every scheduler host. Recovery on start applies the next time a host starts.",
+    docs: `${DOCS}/cancellation-and-timeouts`,
+    fields: [
+      {
+        key: "defaultJobTimeout",
+        label: "Default job timeout",
+        kind: "duration",
+        hint: "A dispatched run whose manifest sets no timeout is cancelled after this long.",
+      },
+      {
+        key: "stalePendingTimeout",
+        label: "Stale pending timeout",
+        kind: "duration",
+        hint: "A run still pending this long after it was dispatched is marked failed.",
+      },
+      {
+        key: "recoverStuckJobsOnStartup",
+        label: "Fail runs left in progress when a host starts",
+        kind: "bool",
+        hint: "Every in-progress run that started before the host did is marked failed, whichever host was running it.",
+      },
+    ],
+  },
+  {
+    title: "Retention and purge",
+    effect: "Applies from each cleanup's next pass, on every scheduler host.",
+    docs: `${DOCS}/dead-letters-and-cleanup`,
+    fields: [
+      { key: "autoPurgeDeadLetters", label: "Delete resolved dead letters automatically", kind: "bool" },
+      { key: "deadLetterRetentionPeriod", label: "Keep resolved dead letters for", kind: "duration" },
+      { key: "metadataCleanupInterval", label: "Run metadata cleanup every", kind: "duration", onlyWhenSet: true },
+      { key: "metadataCleanupRetention", label: "Keep scheduler train runs for", kind: "duration", onlyWhenSet: true },
+    ],
+  },
+];
+
+/** The value a field edits, as the form holds it. */
+function initial(f: Field, cfg: SchedulerConfigSnapshot): string | boolean {
+  const v = cfg[f.key];
+  if (f.kind === "bool") return Boolean(v);
+  return v == null ? "" : String(v);
+}
+
+function SettingsSection({
+  section,
+  fields,
+  cfg,
+  save,
+}: {
+  section: Section;
+  fields: Field[];
+  cfg: SchedulerConfigSnapshot;
+  save: Save;
+}) {
+  const [start] = useState(() => Object.fromEntries(fields.map((f) => [f.key, initial(f, cfg)])));
+  const [form, setForm] = useState(start);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const changed = fields.filter((f) => form[f.key] !== start[f.key]);
+  const id = `section-${section.title.replace(/\W+/g, "-").toLowerCase()}`;
+
+  async function submit() {
+    setProblem(null);
+    const patch: Patch = {};
+    for (const f of changed) {
+      const v = form[f.key];
+      if (f.kind === "bool") patch[f.key] = v;
+      else if (v === "" && f.clear) patch[f.clear] = true;
+      else if (v === "") {
+        setProblem(`${f.label} needs a value.`);
+        return;
+      } else patch[f.key] = f.kind === "duration" ? v : Number(v);
+    }
+    setBusy(true);
+    const refused = await save(patch);
+    setBusy(false);
+    if (refused) setProblem(refused);
+  }
+
+  return (
+    <section
+      aria-labelledby={id}
+      className={`bg-surface rounded-lg border p-5 ${changed.length > 0 ? "border-warn-line" : "border-line"}`}
+    >
+      <h2 id={id} className="text-sm font-semibold text-fg mb-1">
+        {section.title}
+      </h2>
+      <p className="text-xs text-muted mb-4">
+        {section.effect}{" "}
+        <a href={section.docs} target="_blank" rel="noreferrer" className="text-accent-fg hover:underline">
+          Docs
+        </a>
+      </p>
+      <div className="space-y-3 text-sm">
+        {fields.map((f) => {
+          const v = form[f.key];
+          const set = (next: string | boolean) => setForm((cur) => ({ ...cur, [f.key]: next }));
+          if (f.kind === "bool")
+            return <Toggle key={f.key} label={f.label} hint={f.hint} checked={v as boolean} onChange={set} />;
+          if (f.kind === "duration")
+            return <DurationField key={f.key} label={f.label} hint={f.hint} value={v as string} onChange={set} />;
+          return (
+            <NumField key={f.key} label={f.label} hint={f.hint} value={v as string} decimal={f.kind === "decimal"} onChange={set} />
+          );
+        })}
+      </div>
+      {problem && (
+        <p role="alert" className="mt-3 text-sm text-danger-fg">
+          {problem}
+        </p>
+      )}
+      <div className="mt-4 flex items-center justify-end gap-2">
+        {changed.length > 0 && <span className="text-xs text-warn-fg mr-auto">{changed.length} unsaved change(s)</span>}
+        <button
+          onClick={() => {
+            setForm(start);
+            setProblem(null);
+          }}
+          disabled={busy || changed.length === 0}
+          className="px-3 py-1.5 rounded-lg text-sm border border-line-strong text-fg-2 disabled:opacity-50"
+        >
+          Discard
+        </button>
+        <button
+          onClick={submit}
+          disabled={busy || changed.length === 0}
+          className="px-3 py-1.5 rounded-lg text-sm bg-accent text-on-accent hover:bg-accent-hover disabled:opacity-50"
+        >
+          Save {section.title.toLowerCase()}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ── Log levels ────────────────────────────────────────────────────────────
 
 // The level each configured log category filters at in the API process, editable through
 // setLogLevels as on the Blazor server settings: a level per category, Save sends the ones changed,
@@ -98,20 +434,19 @@ function LogLevelsPanel() {
   }
 
   return (
-    <div
-      className={`mt-6 bg-surface rounded-lg border p-5 ${
-        changed.length > 0 ? "border-warn-line" : "border-line"
-      }`}
+    <section
+      aria-labelledby="log-levels"
+      className={`mt-6 bg-surface rounded-lg border p-5 ${changed.length > 0 ? "border-warn-line" : "border-line"}`}
     >
-      <h2 className="text-sm font-semibold text-fg mb-1">Logging</h2>
+      <h2 id="log-levels" className="text-sm font-semibold text-fg mb-1">
+        Log levels
+      </h2>
       <p className="text-xs text-muted mb-4">
-        Log level changes take effect immediately for this process&apos;s loggers. They are runtime overrides: they
-        apply only to the process serving the API and reset when it restarts.
+        Not stored with the settings above: a change takes effect at once, only in the process serving this page, and
+        lasts until it restarts. Scheduler and worker processes keep their own levels.
       </p>
       {error && <p className="text-sm text-danger-fg">{error.message}</p>}
-      {levels && levels.length === 0 && (
-        <p className="text-sm text-muted">No log levels are configured.</p>
-      )}
+      {levels && levels.length === 0 && <p className="text-sm text-muted">No log levels are configured.</p>}
       {levels && levels.length > 0 && (
         <table className="w-full text-sm" aria-label="Log levels">
           <thead className="text-left text-muted">
@@ -164,9 +499,7 @@ function LogLevelsPanel() {
       )}
       {levels && levels.length > 0 && (
         <div className="mt-4 flex items-center justify-end gap-2">
-          {changed.length > 0 && (
-            <span className="text-xs text-warn-fg mr-auto">{changed.length} unsaved change(s)</span>
-          )}
+          {changed.length > 0 && <span className="text-xs text-warn-fg mr-auto">{changed.length} unsaved change(s)</span>}
           <button
             onClick={discard}
             disabled={busy}
@@ -183,242 +516,64 @@ function LogLevelsPanel() {
           </button>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-function SettingsView({
-  cfg,
-  onSave,
-}: {
-  cfg: SchedulerConfigSnapshot;
-  onSave: (input: Record<string, unknown>) => void;
-}) {
-  // Initialised once from the loaded config. Duration fields are edited as TimeSpan strings
-  // ("HH:MM:SS" or "D.HH:MM:SS"), which is what the API's TimeSpan scalar accepts.
-  const [form, setForm] = useState(() => ({
-    manifestManagerEnabled: cfg.manifestManagerEnabled,
-    jobDispatcherEnabled: cfg.jobDispatcherEnabled,
-    recoverStuckJobsOnStartup: cfg.recoverStuckJobsOnStartup,
-    autoPurgeDeadLetters: cfg.autoPurgeDeadLetters,
-    defaultMaxRetries: cfg.defaultMaxRetries.toString(),
-    retryBackoffMultiplier: cfg.retryBackoffMultiplier.toString(),
-    maxActiveJobs: cfg.maxActiveJobs?.toString() ?? "",
-    localWorkerCount: cfg.localWorkerCount?.toString() ?? "",
-    manifestManagerPollingInterval: cfg.manifestManagerPollingInterval,
-    jobDispatcherPollingInterval: cfg.jobDispatcherPollingInterval,
-    defaultRetryDelay: cfg.defaultRetryDelay,
-    maxRetryDelay: cfg.maxRetryDelay,
-    defaultJobTimeout: cfg.defaultJobTimeout,
-    stalePendingTimeout: cfg.stalePendingTimeout,
-    deadLetterRetentionPeriod: cfg.deadLetterRetentionPeriod,
-    metadataCleanupInterval: cfg.metadataCleanupInterval ?? "",
-    metadataCleanupRetention: cfg.metadataCleanupRetention ?? "",
-    failureCountWindow: cfg.failureCountWindow ?? "",
-  }));
+// ── Fields ────────────────────────────────────────────────────────────────
 
-  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  function save() {
-    const input: Record<string, unknown> = {
-      manifestManagerEnabled: form.manifestManagerEnabled,
-      jobDispatcherEnabled: form.jobDispatcherEnabled,
-      recoverStuckJobsOnStartup: form.recoverStuckJobsOnStartup,
-      autoPurgeDeadLetters: form.autoPurgeDeadLetters,
-      defaultMaxRetries: Number(form.defaultMaxRetries),
-      retryBackoffMultiplier: Number(form.retryBackoffMultiplier),
-      manifestManagerPollingInterval: form.manifestManagerPollingInterval,
-      jobDispatcherPollingInterval: form.jobDispatcherPollingInterval,
-      defaultRetryDelay: form.defaultRetryDelay,
-      maxRetryDelay: form.maxRetryDelay,
-      defaultJobTimeout: form.defaultJobTimeout,
-      stalePendingTimeout: form.stalePendingTimeout,
-      deadLetterRetentionPeriod: form.deadLetterRetentionPeriod,
-    };
-    if (form.maxActiveJobs) input.maxActiveJobs = Number(form.maxActiveJobs);
-    else input.clearMaxActiveJobs = true;
-    if (form.localWorkerCount) input.localWorkerCount = Number(form.localWorkerCount);
-    else input.clearLocalWorkerCount = true;
-    if (form.metadataCleanupInterval)
-      input.metadataCleanupInterval = form.metadataCleanupInterval;
-    if (form.metadataCleanupRetention)
-      input.metadataCleanupRetention = form.metadataCleanupRetention;
-    if (form.failureCountWindow) input.failureCountWindow = form.failureCountWindow;
-    onSave(input);
-  }
-
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-fg mb-6">Scheduler settings</h1>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Services & retries">
-          <Toggle
-            label="Manifest manager enabled"
-            checked={form.manifestManagerEnabled}
-            onChange={(v) => set("manifestManagerEnabled", v)}
-          />
-          <Toggle
-            label="Job dispatcher enabled"
-            checked={form.jobDispatcherEnabled}
-            onChange={(v) => set("jobDispatcherEnabled", v)}
-          />
-          <Toggle
-            label="Recover stuck jobs on startup"
-            checked={form.recoverStuckJobsOnStartup}
-            onChange={(v) => set("recoverStuckJobsOnStartup", v)}
-          />
-          <Toggle
-            label="Auto-purge dead letters"
-            checked={form.autoPurgeDeadLetters}
-            onChange={(v) => set("autoPurgeDeadLetters", v)}
-          />
-          <NumField
-            label="Default max retries"
-            value={form.defaultMaxRetries}
-            onChange={(v) => set("defaultMaxRetries", v)}
-          />
-          <NumField
-            label="Retry backoff multiplier"
-            value={form.retryBackoffMultiplier}
-            decimal
-            onChange={(v) => set("retryBackoffMultiplier", v)}
-          />
-          <NumField
-            label="Max active jobs (blank = unlimited)"
-            value={form.maxActiveJobs}
-            onChange={(v) => set("maxActiveJobs", v)}
-          />
-          <NumField
-            label="Local worker count (blank = default)"
-            value={form.localWorkerCount}
-            onChange={(v) => set("localWorkerCount", v)}
-          />
-        </Card>
-
-        <Card title="Intervals & timeouts">
-          <DurationField
-            label="Manifest manager poll"
-            value={form.manifestManagerPollingInterval}
-            onChange={(v) => set("manifestManagerPollingInterval", v)}
-          />
-          <DurationField
-            label="Job dispatcher poll"
-            value={form.jobDispatcherPollingInterval}
-            onChange={(v) => set("jobDispatcherPollingInterval", v)}
-          />
-          <DurationField
-            label="Default retry delay"
-            value={form.defaultRetryDelay}
-            onChange={(v) => set("defaultRetryDelay", v)}
-          />
-          <DurationField
-            label="Max retry delay"
-            value={form.maxRetryDelay}
-            onChange={(v) => set("maxRetryDelay", v)}
-          />
-          <DurationField
-            label="Default job timeout"
-            value={form.defaultJobTimeout}
-            onChange={(v) => set("defaultJobTimeout", v)}
-          />
-          <DurationField
-            label="Stale pending timeout"
-            value={form.stalePendingTimeout}
-            onChange={(v) => set("stalePendingTimeout", v)}
-          />
-          <DurationField
-            label="Dead letter retention"
-            value={form.deadLetterRetentionPeriod}
-            onChange={(v) => set("deadLetterRetentionPeriod", v)}
-          />
-          <DurationField
-            label="Metadata cleanup interval (blank = off)"
-            value={form.metadataCleanupInterval}
-            onChange={(v) => set("metadataCleanupInterval", v)}
-          />
-          <DurationField
-            label="Metadata cleanup retention (blank = off)"
-            value={form.metadataCleanupRetention}
-            onChange={(v) => set("metadataCleanupRetention", v)}
-          />
-          <DurationField
-            label="Failure count window"
-            hint="How far back a manifest's failed runs count toward its retry backoff and its dead letter. A manifest scheduled with its own failure window uses that instead."
-            value={form.failureCountWindow}
-            onChange={(v) => set("failureCountWindow", v)}
-          />
-        </Card>
-      </div>
-
-      <div className="mt-6">
-        <button
-          onClick={save}
-          className="px-4 py-2 bg-accent text-on-accent rounded-lg hover:bg-accent-hover"
-        >
-          Save
-        </button>
-        <p className="text-xs text-muted mt-2">
-          Durations are ISO 8601 values (PT5M = 5 minutes, PT2H = 2 hours, P1D = 1 day). Polling and
-          worker-count changes take effect on the next cycle or restart.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-surface rounded-lg border border-line p-5">
-      <h2 className="text-sm font-semibold text-fg mb-4">{title}</h2>
-      <div className="space-y-3 text-sm">{children}</div>
-    </div>
-  );
+function Hint({ text }: { text?: string }) {
+  return text ? <p className="text-xs text-muted mb-1">{text}</p> : null;
 }
 
 function Toggle({
   label,
+  hint,
   checked,
   onChange,
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      {label}
-    </label>
+    <div>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        {label}
+      </label>
+      <Hint text={hint} />
+    </div>
   );
 }
 
 function NumField({
   label,
+  hint,
   value,
   onChange,
   decimal,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (v: string) => void;
   decimal?: boolean;
 }) {
+  const id = useId();
   return (
     <div>
-      <label className="block text-xs text-muted mb-1">{label}</label>
+      <label htmlFor={id} className="block text-xs text-muted mb-1">
+        {label}
+      </label>
+      <Hint text={hint} />
       <input
+        id={id}
         value={value}
-        onChange={(e) =>
-          onChange(e.target.value.replace(decimal ? /[^\d.]/g : /\D/g, ""))
-        }
-        className="w-full border border-line-strong rounded-md px-2 py-1"
+        inputMode={decimal ? "decimal" : "numeric"}
+        onChange={(e) => onChange(e.target.value.replace(decimal ? /[^\d.]/g : /\D/g, ""))}
+        className="w-full border border-line-strong rounded-md px-2 py-1 bg-field"
       />
     </div>
   );
@@ -438,29 +593,32 @@ function DurationField({
   onChange: (v: string) => void;
 }) {
   const [state, setState] = useState(() => parseDuration(value));
+  // Discard puts the form back; follow it when the value no longer matches what is typed.
+  const shown = buildDuration(state.value, state.unit);
+  const current = shown === value || (value === "" && state.value === "") ? state : parseDuration(value);
   function update(next: Partial<typeof state>) {
-    const merged = { ...state, ...next };
+    const merged = { ...current, ...next };
     setState(merged);
     onChange(buildDuration(merged.value, merged.unit));
   }
   return (
     <div>
-      <label className="block text-xs text-muted mb-1">{label}</label>
-      {hint && <p className="text-xs text-muted mb-1">{hint}</p>}
+      <p className="block text-xs text-muted mb-1">{label}</p>
+      <Hint text={hint} />
       <div className="flex gap-2">
         <input
           type="number"
           min={0}
           aria-label={label}
-          value={state.value}
+          value={current.value}
           onChange={(e) => update({ value: e.target.value.replace(/\D/g, "") })}
-          className="w-24 border border-line-strong rounded-md px-2 py-1"
+          className="w-24 border border-line-strong rounded-md px-2 py-1 bg-field"
         />
         <select
           aria-label={`${label} unit`}
-          value={state.unit}
+          value={current.unit}
           onChange={(e) => update({ unit: e.target.value as DurationUnit })}
-          className="flex-1 border border-line-strong rounded-md px-2 py-1"
+          className="flex-1 border border-line-strong rounded-md px-2 py-1 bg-field"
         >
           {(["s", "m", "h", "d"] as DurationUnit[]).map((u) => (
             <option key={u} value={u}>

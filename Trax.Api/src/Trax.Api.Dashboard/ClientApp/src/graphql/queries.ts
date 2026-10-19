@@ -695,7 +695,7 @@ export const ADMIN_TRAIN_NAMES = gql`
 `;
 
 // Host processes from their heartbeat rows, online when beaten in the last 45 seconds. Backs the
-// cluster page.
+// Hosts page.
 export const HOSTS = gql`
   query Hosts {
     operations {
@@ -712,6 +712,23 @@ export const HOSTS = gql`
         workerSlots
         workerSlotsInUse
         currentlyRunning
+      }
+    }
+  }
+`;
+
+// The process serving the dashboard: uptime, memory and CPU. Backs the Hosts page's panel for this
+// host; the other hosts report only their heartbeat.
+export const SERVER_PROCESS = gql`
+  query ServerProcess {
+    operations {
+      metrics {
+        server {
+          uptimeSeconds
+          workingSetBytes
+          gcHeapBytes
+        }
+        serverCpuPercent
       }
     }
   }

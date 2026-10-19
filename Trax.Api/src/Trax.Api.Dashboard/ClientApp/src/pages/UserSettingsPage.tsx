@@ -27,9 +27,10 @@ export function UserSettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-fg mb-6">
-        User settings
-      </h1>
+      <h1 className="text-2xl font-bold text-fg mb-2">Preferences</h1>
+      <p className="text-sm text-muted mb-6">
+        Kept in this browser only. Nothing here changes the server; its settings are under System.
+      </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Panel title="Appearance">
@@ -75,11 +76,11 @@ export function UserSettingsPage() {
           <NotificationsToggle />
         </Panel>
 
-        <Panel title="Auto-refresh">
+        <Panel title="Refresh">
           <AutoRefreshControl />
         </Panel>
 
-        <Panel title="Administration trains">
+        <Panel title="Scheduler trains">
           <AdminTrainsToggle />
         </Panel>
 
@@ -133,18 +134,18 @@ function AdminTrainsToggle() {
   return (
     <div>
       <p className="text-sm text-fg-2 mb-3">
-        The internal scheduler trains (JobDispatcher, ManifestManager, JobRunner, cleanup) run
-        constantly. Hide them from the Runs grid, its live feed, and the Overview metrics so
-        you see your own trains instead of the plumbing.
+        The scheduler runs its own work as trains (the job dispatcher, the manifest manager, the job
+        runner and the cleanups), and they run constantly. Hide them from the run lists, the live
+        feed and the Overview in this browser, so you see your own trains.
       </p>
       <label className="flex items-center gap-2 text-sm text-fg-2">
         <input
           type="checkbox"
-          aria-label="Hide administration trains"
+          aria-label="Hide scheduler trains"
           checked={hide}
           onChange={(e) => setHideAdminTrains(e.target.checked)}
         />
-        Hide administration trains
+        Hide scheduler trains
       </label>
     </div>
   );
@@ -156,15 +157,16 @@ function AutoRefreshControl() {
     <div>
       <p className="text-sm text-fg-2 mb-3">
         The list pages update live over the subscription when data changes, so you normally don't
-        need this. It's a fallback that re-queries on a fixed interval in case the WebSocket drops. 0
-        (the default) turns it off.
+        need this. It reads the page you have open again on a fixed interval, in case the WebSocket
+        drops. 0 (the default) turns it off. How often the scheduler checks for work is set under
+        System, Scheduler.
       </p>
       <label className="flex items-center gap-2 text-sm text-fg-2">
-        Every
+        Refresh this page every
         <input
           type="number"
           min={0}
-          aria-label="Auto-refresh seconds"
+          aria-label="Refresh this page every (seconds)"
           value={seconds}
           onChange={(e) => setPollSeconds(Number(e.target.value))}
           className="w-20 border border-line-strong rounded-md px-2 py-1"

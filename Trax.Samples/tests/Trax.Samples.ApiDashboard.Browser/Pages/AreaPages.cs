@@ -249,12 +249,54 @@ public sealed class PersistedOperationsPage(ConsolePage console)
     public ILocator NotServed => Page.GetByText("your account may not manage them");
 }
 
-/// <summary>The scheduler's settings, where the dispatcher is switched on and off.</summary>
-public sealed class SchedulerSettingsPage(ConsolePage console)
-    : AreaPage(console, "system/scheduler", "Scheduler settings")
+/// <summary>
+/// The scheduler's settings: the manifest manager and the job dispatcher paused and resumed one at a time, then
+/// a section per concern, each with its own Save.
+/// </summary>
+public sealed class SchedulerPage(ConsolePage console)
+    : AreaPage(console, "system/scheduler", "Scheduler")
 {
-    public ILocator DispatcherEnabled =>
-        Page.GetByRole(AriaRole.Checkbox, new() { Name = "Job dispatcher enabled" });
+    /// <summary>The row of one of the scheduler's loops, by its name: "Job dispatcher", "Manifest manager".</summary>
+    public ILocator Loop(string name) =>
+        Page.GetByRole(AriaRole.Listitem, new() { Name = name, Exact = true });
+
+    /// <summary>A settings section, by its heading: "Retry", "Job timeouts".</summary>
+    public ILocator Section(string name) =>
+        Page.GetByRole(AriaRole.Region, new() { Name = name, Exact = true });
+
+    /// <summary>Pauses or resumes a loop from its row, confirming in the console's dialog.</summary>
+    public async Task SwitchAsync(string verb, string loop, string contains)
+    {
+        var action = $"{verb} {loop.ToLowerInvariant()}";
+        await Button(Loop(loop), action).ClickAsync();
+        await Console.ConfirmAsync(action, contains);
+    }
+}
+
+/// <summary>Hosts: every process that beats, what it runs, and the dashboard process's own stats.</summary>
+public sealed class HostsPage(ConsolePage console) : AreaPage(console, "system/hosts", "Hosts")
+{
+    public ILocator Hosts => Page.GetByRole(AriaRole.Table, new() { Name = "Hosts", Exact = true });
+
+    public ILocator ThisProcess =>
+        Page.GetByRole(AriaRole.Region, new() { Name = "This dashboard's process", Exact = true });
+}
+
+/// <summary>Every run's log entries, with filters held in the URL.</summary>
+public sealed class LogsPage(ConsolePage console) : AreaPage(console, "system/logs", "Logs")
+{
+    public ILocator MinimumLevel => Page.GetByLabel("Minimum level", new() { Exact = true });
+}
+
+/// <summary>What this browser keeps for itself.</summary>
+public sealed class PreferencesPage(ConsolePage console)
+    : AreaPage(console, "preferences", "Preferences")
+{
+    public ILocator HideSchedulerTrains =>
+        Page.GetByRole(AriaRole.Checkbox, new() { Name = "Hide scheduler trains", Exact = true });
+
+    public ILocator RefreshEvery =>
+        Page.GetByLabel("Refresh this page every (seconds)", new() { Exact = true });
 }
 
 /// <summary>

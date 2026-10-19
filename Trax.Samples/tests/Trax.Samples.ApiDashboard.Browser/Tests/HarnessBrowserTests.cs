@@ -140,13 +140,13 @@ public class HarnessBrowserTests : ConsoleTest
             .Expect(manifests.Row(disabled.Id))
             .ToContainTextAsync("Disabled", new() { Timeout = Render });
 
-        var settings = new SchedulerSettingsPage(Console);
-        await Page.GotoAsync(Console.Url(settings.Route));
+        var scheduler = new SchedulerPage(Console);
+        await Page.GotoAsync(Console.Url(scheduler.Route));
         await Console.ConnectAsync(Caller.Operator);
-        await Assertions.Expect(settings.Heading).ToBeVisibleAsync(new() { Timeout = Render });
+        await Assertions.Expect(scheduler.Heading).ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions
-            .Expect(settings.DispatcherEnabled)
-            .Not.ToBeCheckedAsync(new() { Timeout = Render });
+            .Expect(scheduler.Loop("Job dispatcher"))
+            .ToContainTextAsync("Paused", new() { Timeout = Render });
     }
 
     [Test]

@@ -810,7 +810,10 @@ const SCHED_KEY = "schedulerPatch";
 function schedulerPatchFromInput(input: Rec): Rec {
   const patch: Rec = { ...input };
   delete patch.clearMaxActiveJobs;
+  delete patch.clearLocalWorkerCount;
   if (input.clearMaxActiveJobs) patch.maxActiveJobs = null;
+  // The server resets the count to one worker per processor; the mock host has four.
+  if (input.clearLocalWorkerCount) patch.localWorkerCount = 4;
   return patch;
 }
 

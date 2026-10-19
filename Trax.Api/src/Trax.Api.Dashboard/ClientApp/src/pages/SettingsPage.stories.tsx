@@ -5,7 +5,7 @@ import { schedulerConfigScenario } from "../mock/scenarios";
 import { noLogLevelServiceOverlay } from "../mock/store/overlays";
 
 const meta = {
-  title: "Pages/Server settings",
+  title: "Pages/Scheduler",
   component: SettingsPage,
   parameters: { route: "/system/scheduler", mock: schedulerConfigScenario },
 } satisfies Meta<typeof SettingsPage>;
@@ -17,40 +17,79 @@ export const Mock: Story = {};
 
 export const Real: Story = { parameters: { real: true } };
 
-// Toggle a setting and save the scheduler config.
-export const SaveConfig: Story = {
+const heading = (c: ReturnType<typeof within>) =>
+  waitFor(() => expect(c.getByRole("heading", { name: "Scheduler", level: 1 })).toBeInTheDocument());
+
+const section = (c: ReturnType<typeof within>, name: string) => c.getByRole("region", { name });
+
+// Pausing the job dispatcher asks first, in the console's dialog; confirmed, the switch shows
+// Paused and offers Resume.
+export const PauseDispatcher: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByRole("heading", { name: "Scheduler settings" })).toBeInTheDocument());
-    const toggle = c.getAllByRole("checkbox")[0];
-    const before = (toggle as HTMLInputElement).checked;
-    await userEvent.click(toggle);
-    expect((toggle as HTMLInputElement).checked).toBe(!before);
-    await userEvent.click(c.getByRole("button", { name: "Save" }));
-    // A success toast confirms the save (previously there was no confirmation).
-    expect(await c.findByText(/Scheduler updated|saved/i)).toBeInTheDocument();
+    await heading(c);
+    await userEvent.click(c.getByRole("button", { name: "Pause job dispatcher" }));
+    const dialog = await within(document.body).findByRole("dialog", { name: "Pause job dispatcher" });
+    expect(dialog).toHaveTextContent("Queued work waits");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Pause job dispatcher" }));
+    expect(await c.findByRole("button", { name: "Resume job dispatcher" })).toBeInTheDocument();
+    const row = c.getByRole("listitem", { name: "Job dispatcher" });
+    expect(within(row).getByText("Paused")).toBeInTheDocument();
+    expect(within(c.getByRole("listitem", { name: "Manifest manager" })).getByText("Running")).toBeInTheDocument();
   },
 };
 
-// The previously read-only duration fields are now editable TimeSpan text inputs; editing one
-// and saving round-trips through UpdateScheduler.
+// Declining the dialog changes nothing.
+export const PauseDeclined: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await heading(c);
+    await userEvent.click(c.getByRole("button", { name: "Pause manifest manager" }));
+    const dialog = await within(document.body).findByRole("dialog", { name: "Pause manifest manager" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Keep it" }));
+    expect(c.getByRole("button", { name: "Pause manifest manager" })).toBeInTheDocument();
+  },
+};
+
+// A section's Save is enabled only once something in it changed, and saves that section alone.
 export const EditDurationAndSave: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() =>
-      expect(c.getByRole("heading", { name: "Scheduler settings" })).toBeInTheDocument(),
-    );
+    await heading(c);
+    const polling = within(section(c, "Polling and queue"));
+    const save = polling.getByRole("button", { name: "Save polling and queue" });
+    expect(save).toBeDisabled();
     // Durations are a number input + a unit dropdown. Manager poll is seeded PT5S -> 5 + seconds.
-    const num = c.getByLabelText("Manifest manager poll") as HTMLInputElement;
-    const unit = c.getByLabelText("Manifest manager poll unit") as HTMLSelectElement;
+    const num = polling.getByLabelText("Manifest manager checks schedules every") as HTMLInputElement;
+    const unit = polling.getByLabelText("Manifest manager checks schedules every unit") as HTMLSelectElement;
     expect(num).toHaveValue(5);
     expect(unit).toHaveValue("s");
     await userEvent.clear(num);
     await userEvent.type(num, "30");
     await userEvent.selectOptions(unit, "m"); // 30 minutes
-    expect(num).toHaveValue(30);
-    await userEvent.click(c.getByRole("button", { name: "Save" }));
-    expect(await c.findByText(/Scheduler updated|saved/i)).toBeInTheDocument();
+    expect(polling.getByText("1 unsaved change(s)")).toBeInTheDocument();
+    // Another section is untouched and stays disabled.
+    expect(c.getByRole("button", { name: "Save retry" })).toBeDisabled();
+    await userEvent.click(save);
+    expect(await c.findByText("Scheduler updated")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(section(c, "Polling and queue")).getByLabelText("Manifest manager checks schedules every")).toHaveValue(30),
+    );
+  },
+};
+
+// Discard puts a section back to what is stored.
+export const DiscardSection: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await heading(c);
+    const retry = within(section(c, "Retry"));
+    const num = retry.getByLabelText("Default retry delay") as HTMLInputElement;
+    await userEvent.clear(num);
+    await userEvent.type(num, "99");
+    await userEvent.click(retry.getByRole("button", { name: "Discard" }));
+    expect(num).toHaveValue(10);
+    expect(retry.getByRole("button", { name: "Save retry" })).toBeDisabled();
   },
 };
 
@@ -59,8 +98,10 @@ export const EditDurationAndSave: Story = {
 export const NumberFieldsSanitizeInput: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByRole("heading", { name: "Scheduler settings" })).toBeInTheDocument());
-    const [maxRetries, backoff, maxActive] = c.getAllByRole("textbox") as HTMLInputElement[];
+    await heading(c);
+    const maxRetries = c.getByLabelText("Default max retries") as HTMLInputElement;
+    const backoff = c.getByLabelText("Retry backoff multiplier") as HTMLInputElement;
+    const maxActive = c.getByLabelText("Max active jobs, all groups (blank = no limit)") as HTMLInputElement;
     await userEvent.clear(maxRetries);
     await userEvent.type(maxRetries, "1a.2");
     expect(maxRetries).toHaveValue("12"); // integer: dot + letters stripped
@@ -73,25 +114,37 @@ export const NumberFieldsSanitizeInput: Story = {
   },
 };
 
-// Blanking "Max active jobs" and saving hits the clearMaxActiveJobs branch without erroring;
-// the field stays cleared.
+// Blanking the scheduler-wide "Max active jobs" and saving sends clearMaxActiveJobs; the field
+// stays cleared.
 export const ClearMaxActiveJobsSaves: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByRole("heading", { name: "Scheduler settings" })).toBeInTheDocument());
-    const maxActive = c.getAllByRole("textbox")[2] as HTMLInputElement;
-    await userEvent.clear(maxActive);
-    await userEvent.click(c.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(c.getByRole("heading", { name: "Scheduler settings" })).toBeInTheDocument());
-    expect(maxActive).toHaveValue("");
+    await heading(c);
+    const label = "Max active jobs, all groups (blank = no limit)";
+    await userEvent.clear(c.getByLabelText(label));
+    await userEvent.click(c.getByRole("button", { name: "Save polling and queue" }));
+    expect(await c.findByText("Scheduler updated")).toBeInTheDocument();
+    await waitFor(() => expect(c.getByLabelText(label)).toHaveValue(""));
   },
 };
 
-// The failure count window is edited like the other durations and saved with them.
+// A blank duration is refused in the section before anything is sent.
+export const BlankDurationRefused: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await heading(c);
+    const timeouts = within(section(c, "Job timeouts"));
+    await userEvent.clear(timeouts.getByLabelText("Default job timeout"));
+    await userEvent.click(timeouts.getByRole("button", { name: "Save job timeouts" }));
+    expect(await timeouts.findByRole("alert")).toHaveTextContent("Default job timeout needs a value.");
+  },
+};
+
+// The failure count window is edited like the other durations and saved with the retry policy.
 export const FailureCountWindow: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByRole("heading", { name: "Scheduler settings" })).toBeInTheDocument());
+    await heading(c);
     const num = c.getByLabelText("Failure count window") as HTMLInputElement;
     const unit = c.getByLabelText("Failure count window unit") as HTMLSelectElement;
     expect(num).toHaveValue(1);
@@ -99,8 +152,22 @@ export const FailureCountWindow: Story = {
     await userEvent.clear(num);
     await userEvent.type(num, "12");
     await userEvent.selectOptions(unit, "h");
-    await userEvent.click(c.getByRole("button", { name: "Save" }));
-    expect(await c.findByText(/Scheduler updated|saved/i)).toBeInTheDocument();
+    await userEvent.click(c.getByRole("button", { name: "Save retry" }));
+    expect(await c.findByText("Scheduler updated")).toBeInTheDocument();
+  },
+};
+
+// Every section says when its change takes effect.
+export const EachSectionSaysWhenItApplies: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await heading(c);
+    expect(section(c, "Pause and resume")).toHaveTextContent("Takes effect at once");
+    expect(section(c, "Polling and queue")).toHaveTextContent("used only when a host next starts");
+    expect(section(c, "Retry")).toHaveTextContent("Applies to the next retry");
+    expect(section(c, "Job timeouts")).toHaveTextContent("the next time a host starts");
+    expect(section(c, "Retention and purge")).toHaveTextContent("next pass");
+    expect(section(c, "Log levels")).toHaveTextContent("lasts until it restarts");
   },
 };
 
@@ -143,7 +210,7 @@ export const DiscardLogLevels: Story = {
     const c = within(canvasElement);
     const select = await c.findByLabelText("Default level");
     await userEvent.selectOptions(select, "Trace");
-    await userEvent.click(c.getByRole("button", { name: "Discard" }));
+    await userEvent.click(within(section(c, "Log levels")).getByRole("button", { name: "Discard" }));
     expect(select).toHaveValue("Information");
     expect(c.getByRole("button", { name: "Save log levels" })).toBeDisabled();
   },

@@ -3,7 +3,7 @@ import { expect, waitFor, within } from "storybook/test";
 import { RealTimePage } from "./RealTimePage";
 
 const meta = {
-  title: "Pages/Real-time",
+  title: "Pages/Live events",
   component: RealTimePage,
   parameters: { route: "/system/live" },
 } satisfies Meta<typeof RealTimePage>;
@@ -16,9 +16,9 @@ type Story = StoryObj<typeof meta>;
 export const Mock: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByText("Real-time")).toBeInTheDocument());
+    await waitFor(() => expect(c.getByRole("heading", { name: "Live events" })).toBeInTheDocument());
     expect(c.getByText(/Waiting for events/)).toBeInTheDocument();
-    expect(c.getByText("WORK QUEUE")).toBeInTheDocument();
+    expect(c.getByText("Work queue")).toBeInTheDocument();
   },
 };
 

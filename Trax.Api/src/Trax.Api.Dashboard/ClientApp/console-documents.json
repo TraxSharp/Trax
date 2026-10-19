@@ -258,6 +258,10 @@
       "text": "query SchedulerConfig {\n  operations {\n    config {\n      scheduler {\n        manifestManagerEnabled\n        jobDispatcherEnabled\n        manifestManagerPollingInterval\n        jobDispatcherPollingInterval\n        maxActiveJobs\n        defaultMaxRetries\n        defaultRetryDelay\n        retryBackoffMultiplier\n        maxRetryDelay\n        defaultJobTimeout\n        stalePendingTimeout\n        recoverStuckJobsOnStartup\n        deadLetterRetentionPeriod\n        autoPurgeDeadLetters\n        localWorkerCount\n        metadataCleanupInterval\n        metadataCleanupRetention\n        failureCountWindow\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "ServerProcess",
+      "text": "query ServerProcess {\n  operations {\n    metrics {\n      server {\n        uptimeSeconds\n        workingSetBytes\n        gcHeapBytes\n        __typename\n      }\n      serverCpuPercent\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "ServerVersion",
       "text": "query ServerVersion {\n  operations {\n    config {\n      version\n      __typename\n    }\n    __typename\n  }\n}"
     },

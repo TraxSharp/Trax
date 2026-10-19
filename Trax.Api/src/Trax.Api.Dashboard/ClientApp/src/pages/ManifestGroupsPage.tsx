@@ -274,7 +274,7 @@ export function ManifestGroupsPage() {
               <th className="px-4 py-2 font-medium">Manifests</th>
               <th className="px-4 py-2 font-medium">Runs</th>
               <th className="px-4 py-2 font-medium">Failed</th>
-              <th className="px-4 py-2 font-medium">Max active jobs</th>
+              <th className="px-4 py-2 font-medium">Max active jobs in group</th>
               <th className="px-4 py-2 font-medium">Priority</th>
               <th className="px-4 py-2 font-medium">Enabled</th>
             </tr>
