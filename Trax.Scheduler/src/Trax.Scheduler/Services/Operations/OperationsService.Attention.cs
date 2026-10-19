@@ -213,91 +213,24 @@ public partial class OperationsService
                 .ToList();
     }
 
-    // How many invoke tokens one lookup of their runs or queue entries sends.
-    private const int AttentionTokenChunk = 1000;
-
-    // The stuck instances by machine and state, by the rule StuckPredicate states, read in steps that each use an
-    // index: the overdue timers through ix_snapshot_draft_due, the rows that hold a token through
-    // ux_snapshot_draft_invoke_token, then those tokens' runs and queue entries by their external ids, a chunk at a
-    // time. StuckPredicate compares a run's external id (character(32)) with the token (text) inside one statement,
-    // which Postgres answers by casting the run's column, so it cannot use the run's index and reads every run for
-    // every token; looking the tokens up as values keeps the column's type and its index.
+    // The stuck instances by machine and state, by StuckPredicate: the overdue timers through ix_snapshot_draft_due,
+    // the rows that hold a token through ux_snapshot_draft_invoke_token, and each token's run and queue entry through
+    // their external-id indexes.
     private static async Task<
         List<(string Machine, string State, long Count)>
-    > ReadStuckGroupsAsync(IDataContext db, DateTimeOffset overdueBefore, CancellationToken ct)
-    {
-        var endedBefore = overdueBefore.UtcDateTime;
-        var stuck = new Dictionary<long, (string Machine, string State)>();
-
-        foreach (
-            var row in await db
+    > ReadStuckGroupsAsync(IDataContext db, DateTimeOffset overdueBefore, CancellationToken ct) => (
+            await db
                 .SnapshotDrafts.AsNoTracking()
-                .Where(x => x.DueAt != null && x.DueAt < overdueBefore)
-                .Select(x => new
+                .Where(StuckPredicate(db, overdueBefore))
+                .GroupBy(x => new { x.Machine, x.State })
+                .Select(g => new
                 {
-                    x.RowId,
-                    x.Machine,
-                    x.State,
+                    g.Key.Machine,
+                    g.Key.State,
+                    Count = g.LongCount(),
                 })
                 .ToListAsync(ct)
-        )
-            stuck[row.RowId] = (row.Machine, row.State);
-
-        var waiting = await db
-            .SnapshotDrafts.AsNoTracking()
-            .Where(x => x.InvokeToken != null)
-            .Select(x => new
-            {
-                x.RowId,
-                x.Machine,
-                x.State,
-                Token = x.InvokeToken!,
-            })
-            .ToListAsync(ct);
-
-        var ended = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var chunk in waiting.Select(w => w.Token).Distinct().Chunk(AttentionTokenChunk))
-        {
-            var tokens = chunk.ToList();
-            foreach (
-                var id in await db
-                    .Metadatas.AsNoTracking()
-                    .Where(m =>
-                        tokens.Contains(m.ExternalId)
-                        && (
-                            m.TrainState == TrainState.Failed
-                            || m.TrainState == TrainState.Cancelled
-                        )
-                        && (m.EndTime == null || m.EndTime < endedBefore)
-                    )
-                    .Select(m => m.ExternalId)
-                    .ToListAsync(ct)
-            )
-                ended.Add(id.Trim());
-            foreach (
-                var id in await db
-                    .WorkQueues.AsNoTracking()
-                    .Where(w =>
-                        tokens.Contains(w.ExternalId) && w.Status == WorkQueueStatus.Cancelled
-                    )
-                    .Select(w => w.ExternalId)
-                    .ToListAsync(ct)
-            )
-                ended.Add(id.Trim());
-        }
-
-        foreach (var w in waiting.Where(w => ended.Contains(w.Token.Trim())))
-            stuck[w.RowId] = (w.Machine, w.State);
-
-        return stuck
-            .Values.GroupBy(v => v)
-            .Select(g => (Machine: g.Key.Machine, State: g.Key.State, Count: (long)g.Count()))
-            .OrderByDescending(g => g.Count)
-            .ThenBy(g => g.Machine, StringComparer.Ordinal)
-            .ThenBy(g => g.State, StringComparer.Ordinal)
-            .Take(AttentionListCap)
-            .ToList();
-    }
+        ).Select(g => (g.Machine, g.State, g.Count)).OrderByDescending(g => g.Count).ThenBy(g => g.Machine, StringComparer.Ordinal).ThenBy(g => g.State, StringComparer.Ordinal).Take(AttentionListCap).ToList();
 
     private static string ConsoleLink(string path, params (string Key, string Value)[] query) =>
         query.Length == 0

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Utils;
 
 namespace Trax.Effect.Data.Postgres.Services.PostgresContext;
 
@@ -56,5 +57,6 @@ public class PostgresContext(DbContextOptions<PostgresContext> options)
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.HasDefaultSchema("trax").AddPostgresEnums().ApplyUtcDateTimeConverter();
+        modelBuilder.AddRunExternalIdCast();
     }
 }

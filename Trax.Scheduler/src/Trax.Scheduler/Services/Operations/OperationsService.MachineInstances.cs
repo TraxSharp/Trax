@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.StateMachine.Persistence;
@@ -675,6 +676,12 @@ public partial class OperationsService
     /// outcome was never applied. A run that ended within the grace is not stuck yet, since its outcome is on its
     /// way. An entry cancelled while still queued records no time, so it counts at once.
     /// </summary>
+    /// <remarks>
+    /// A run is found by its external id through <see cref="RunExternalId.Of"/>, which Postgres reads as the run
+    /// column's <c>character(32)</c>, so each lookup uses <c>ix_metadata_external_id</c>. Compared as they are, the
+    /// text token and the <c>character(32)</c> column meet as text, which casts the run's column, and every row
+    /// holding a token read the whole run table. The plain comparison beside it keeps the match exact.
+    /// </remarks>
     internal static Expression<Func<SnapshotDraft, bool>> StuckPredicate(
         IDataContext db,
         DateTimeOffset overdueBefore
@@ -687,7 +694,8 @@ public partial class OperationsService
                 x.InvokeToken != null
                 && (
                     db.Metadatas.Any(m =>
-                        m.ExternalId == x.InvokeToken
+                        m.ExternalId == RunExternalId.Of(x.InvokeToken)
+                        && m.ExternalId == x.InvokeToken
                         && (
                             m.TrainState == TrainState.Failed
                             || m.TrainState == TrainState.Cancelled

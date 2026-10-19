@@ -24,6 +24,7 @@ internal class SqliteContext(DbContextOptions<SqliteContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.AddRunExternalIdUnchanged();
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

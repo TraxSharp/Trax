@@ -56,7 +56,25 @@ public class MachineInstanceListingIndexTests : TestSetup
             .And.NotContain("Sort", $"the index holds the rows in the listing's order:\n{plan}");
     }
 
-    private async Task<string> PlanOf(MachineInstanceQuery query)
+    [Test]
+    public async Task A_stuck_page_finds_each_token_run_through_the_external_id_index()
+    {
+        // metadata.external_id is character(32) and invoke_token is text: compared as they are, Postgres casts the
+        // run's column and reads every run for every row holding a token.
+        var plan = await PlanOf(new MachineInstanceQuery { Stuck = true }, withRuns: true);
+
+        plan.Should()
+            .Contain(
+                "ix_metadata_external_id",
+                $"each token's run should be looked up through the run's external-id index. The plan was:\n{plan}"
+            )
+            .And.NotContain(
+                "Seq Scan on metadata",
+                $"no lookup of a token's run should read the whole run table:\n{plan}"
+            );
+    }
+
+    private async Task<string> PlanOf(MachineInstanceQuery query, bool withRuns = false)
     {
         await using var context = (DbContext)
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>().Create();
@@ -86,6 +104,31 @@ public class MachineInstanceListingIndexTests : TestSetup
             ANALYZE trax.snapshot_draft;
             """
         );
+        if (withRuns)
+            // One instance in a hundred waits on a run. A run table this small fits in one hash, which the planner
+            // reads once for every token; a real one does not, and then each token's run is looked up on its own.
+            // The small work_mem makes the planner plan for the real table.
+            await Execute(
+                connection,
+                npgsqlTransaction,
+                """
+                UPDATE trax.snapshot_draft SET invoke_token = md5(row_id::text)
+                WHERE machine LIKE 'index-machine-%' AND row_id % 100 = 0;
+
+                INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time)
+                SELECT md5(g::text),
+                       'index-train',
+                       (ARRAY['completed','failed','cancelled']::trax.train_state[])[1 + (g % 3)],
+                       now() - interval '1 hour',
+                       now() - interval '1 hour'
+                FROM generate_series(1, 40000) AS g;
+
+                ANALYZE trax.snapshot_draft;
+                ANALYZE trax.metadata;
+
+                SET LOCAL work_mem = '64kB';
+                """
+            );
 
         var page = OperationsService.MachineInstancePageQuery(
             (IDataContext)context,
