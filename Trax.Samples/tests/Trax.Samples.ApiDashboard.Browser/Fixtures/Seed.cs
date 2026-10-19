@@ -36,6 +36,8 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
 
     private readonly Stack<Func<Task>> _undo = new();
 
+    private bool _sweepStopped;
+
     private Outages Outages => host.Services.GetRequiredService<Outages>();
 
     private Holds Holds => host.Services.GetRequiredService<Holds>();
@@ -389,8 +391,14 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
             throw new AggregateException("Undoing a seed failed.", failures);
     }
 
+    // Stops the sweep once per seed, however many builders ask, and starts it once on dispose. The sweep is a
+    // BackgroundService: each StartAsync starts a loop of its own and StopAsync stops only the newest, so a second
+    // start would leave a loop running that no later stop reaches, firing the timers another test needs left due.
     private async Task StopMachineSweepAsync()
     {
+        if (_sweepStopped)
+            return;
+        _sweepStopped = true;
         await host.MachineSweep.StopAsync(CancellationToken.None);
         _undo.Push(() => host.MachineSweep.StartAsync(CancellationToken.None));
     }
