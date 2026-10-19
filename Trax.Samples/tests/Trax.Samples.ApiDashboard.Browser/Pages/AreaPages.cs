@@ -54,6 +54,21 @@ public static class RunViews
         Strip(console).GetByRole(AriaRole.Link, new() { Name = name, Exact = true });
 }
 
+/// <summary>The Overview: what needs attention first, each entry a link to its list, then the charts.</summary>
+public sealed class OverviewPage(ConsolePage console) : AreaPage(console, "", "Overview")
+{
+    public ILocator Attention =>
+        Page.GetByRole(AriaRole.Region, new() { Name = "Needs attention", Exact = true });
+
+    /// <summary>The attention entry whose text matches <paramref name="text"/>.</summary>
+    public ILocator AttentionLink(System.Text.RegularExpressions.Regex text) =>
+        Attention.GetByRole(AriaRole.Link, new() { NameRegex = text });
+
+    /// <summary>A bar of a chart, by the name it carries as a link.</summary>
+    public ILocator ChartBar(string name) =>
+        Page.GetByRole(AriaRole.Link, new() { Name = name, Exact = true });
+}
+
 /// <summary>Runs: every run the host has recorded.</summary>
 public sealed class RunsPage(ConsolePage console) : AreaPage(console, "runs", "Runs")
 {

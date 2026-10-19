@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { Link, useHref, useNavigate } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -6,6 +8,7 @@ import {
   Legend,
   Line,
   LineChart,
+  Rectangle,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -35,8 +38,17 @@ interface Bucket {
   cancelled: number;
 }
 
-// Stacked bar chart of run outcomes over the selected window.
-export function ExecutionsOverTimeChart({ buckets }: { buckets: Bucket[] }) {
+type RunOutcome = "COMPLETED" | "FAILED" | "CANCELLED";
+
+// Stacked bar chart of run outcomes over the selected window. With linkFor, each segment of a bar
+// is a link to the runs it counts.
+export function ExecutionsOverTimeChart({
+  buckets,
+  linkFor,
+}: {
+  buckets: Bucket[];
+  linkFor?: (timestamp: string, state: RunOutcome) => string;
+}) {
   const data = buckets.map((b) => ({
     ...b,
     label: new Date(b.timestamp).toLocaleTimeString([], {
@@ -47,6 +59,19 @@ export function ExecutionsOverTimeChart({ buckets }: { buckets: Bucket[] }) {
 
   if (data.every((d) => d.completed + d.failed + d.cancelled === 0))
     return <Empty>No runs in this window.</Empty>;
+
+  const segment = (state: RunOutcome) =>
+    function Segment(props: BarShapeProps) {
+      const bucket = props.payload as Bucket & { label: string };
+      const count = bucket[state.toLowerCase() as "completed" | "failed" | "cancelled"];
+      const bar = <Rectangle {...props} />;
+      if (!linkFor || !count) return bar;
+      return (
+        <ChartLink to={linkFor(bucket.timestamp, state)} label={`${count} ${state.toLowerCase()} at ${bucket.label}`}>
+          {bar}
+        </ChartLink>
+      );
+    };
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -63,9 +88,9 @@ export function ExecutionsOverTimeChart({ buckets }: { buckets: Bucket[] }) {
           contentStyle={TOOLTIP}
           cursor={CURSOR}
         />
-        <Bar dataKey="completed" stackId="a" fill={COMPLETED} name="Completed" />
-        <Bar dataKey="failed" stackId="a" fill={FAILED} name="Failed" />
-        <Bar dataKey="cancelled" stackId="a" fill={CANCELLED} name="Cancelled" />
+        <Bar dataKey="completed" stackId="a" fill={COMPLETED} name="Completed" shape={segment("COMPLETED")} />
+        <Bar dataKey="failed" stackId="a" fill={FAILED} name="Failed" shape={segment("FAILED")} />
+        <Bar dataKey="cancelled" stackId="a" fill={CANCELLED} name="Cancelled" shape={segment("CANCELLED")} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -77,8 +102,15 @@ interface ThroughputSeries {
 }
 
 // Multi-series line chart of completed-execution throughput over the last 7 days: one line per
-// top train plus an "Other" aggregate. Buckets are merged by timestamp into a row per bucket.
-export function ThroughputChart({ series }: { series: ThroughputSeries[] }) {
+// top train plus an "Other" aggregate. Buckets are merged by timestamp into a row per bucket. With
+// linkFor, each named train in the legend is a link.
+export function ThroughputChart({
+  series,
+  linkFor,
+}: {
+  series: ThroughputSeries[];
+  linkFor?: (trainName: string) => string;
+}) {
   if (series.length === 0 || series.every((s) => s.buckets.every((b) => b.count === 0)))
     return <Empty>No completed runs in the last 7 days.</Empty>;
 
@@ -113,7 +145,19 @@ export function ThroughputChart({ series }: { series: ThroughputSeries[] }) {
         />
         <YAxis tick={{ fill: AXIS, fontSize: 11 }} allowDecimals={false} />
         <Tooltip contentStyle={TOOLTIP} />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <Legend
+          wrapperStyle={{ fontSize: 11 }}
+          formatter={(value: string) => {
+            const full = series.find((s) => shortName(s.trainName) === value)?.trainName;
+            return linkFor && full && full !== "Other" ? (
+              <Link to={linkFor(full)} className="hover:underline">
+                {value}
+              </Link>
+            ) : (
+              value
+            );
+          }}
+        />
         {series.map((s, i) => (
           <Line
             key={s.trainName}
@@ -130,16 +174,21 @@ export function ThroughputChart({ series }: { series: ThroughputSeries[] }) {
 }
 
 // Horizontal bar chart for the top-N lists (failures, slowest trains).
+// With linkFor, each bar is a link, named by linkLabel.
 export function TopBarChart({
   rows,
   color,
   unit,
   empty,
+  linkFor,
+  linkLabel,
 }: {
   rows: { name: string; value: number }[];
   color: string;
   unit?: string;
   empty: string;
+  linkFor?: (name: string) => string;
+  linkLabel?: (name: string, value: number) => string;
 }) {
   if (rows.length === 0) return <Empty>{empty}</Empty>;
 
@@ -164,7 +213,21 @@ export function TopBarChart({
           cursor={CURSOR}
           formatter={(v) => [`${v}${unit ? ` ${unit}` : ""}`, ""]}
         />
-        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+        <Bar
+          dataKey="value"
+          radius={[0, 4, 4, 0]}
+          shape={(props: BarShapeProps) => {
+            const row = props.payload as { name: string; value: number };
+            const bar = <Rectangle {...props} />;
+            return linkFor ? (
+              <ChartLink to={linkFor(row.name)} label={linkLabel?.(row.name, row.value) ?? shortName(row.name)}>
+                {bar}
+              </ChartLink>
+            ) : (
+              bar
+            );
+          }}
+        >
           {data.map((d) => (
             <Cell key={d.name} fill={color} />
           ))}
@@ -181,6 +244,30 @@ const TOOLTIP: React.CSSProperties = {
   fontSize: 12,
   color: "var(--fg)",
 };
+
+// What recharts passes a bar's shape: the rectangle's geometry and the row it draws.
+type BarShapeProps = React.ComponentProps<typeof Rectangle> & { payload?: unknown };
+
+// An SVG link inside a chart that navigates in the app, as a router Link does, so the key held in
+// memory survives the click; a modified click still opens the URL in a new tab.
+function ChartLink({ to, label, children }: { to: string; label: string; children: ReactNode }) {
+  const href = useHref(to);
+  const navigate = useNavigate();
+  return (
+    <a
+      href={href}
+      aria-label={label}
+      className="cursor-pointer"
+      onClick={(e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        navigate(to);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (

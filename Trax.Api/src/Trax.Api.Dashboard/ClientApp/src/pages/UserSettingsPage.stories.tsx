@@ -46,9 +46,9 @@ export const OverviewPanelToggles: Story = {
     const failures = c.getByRole("switch", { name: "Show Failures" });
     expect(failures).toBeChecked();
     await userEvent.click(failures);
-    await userEvent.click(c.getByRole("switch", { name: "Show Server Health" }));
+    await userEvent.click(c.getByRole("switch", { name: "Show Summary Cards" }));
     expect(failures).not.toBeChecked();
-    expect(getOverviewPanels()).toMatchObject({ failures: false, serverHealth: false, summaryCards: true });
+    expect(getOverviewPanels()).toMatchObject({ failures: false, summaryCards: false, executionsChart: true });
     await userEvent.click(c.getByRole("button", { name: "Reset default" }));
     await waitFor(() => expect(c.getByRole("switch", { name: "Show Failures" })).toBeChecked());
     expect(Object.values(getOverviewPanels()).every(Boolean)).toBe(true);

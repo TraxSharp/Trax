@@ -1656,3 +1656,58 @@ export function attentionScenarioOf(attention: typeof attentionAllClear | typeof
 }
 
 export const attentionScenario = attentionScenarioOf(attentionNeedsWork);
+
+// ── Overview ───────────────────────────────────────────────────────────────
+// The Overview's reads: health and the metrics block, either with a day of runs or with none (a
+// new host), plus what needs attention.
+const OVERVIEW_HOURS = Array.from({ length: 24 }, (_, i) => `2026-07-07T${String(i).padStart(2, "0")}:00:00.000Z`);
+
+function overviewMetrics(runs: boolean) {
+  return {
+    kpis: runs
+      ? { executionsToday: 312, successRate: 96.2, currentlyRunning: 3, unresolvedDeadLetters: 3 }
+      : { executionsToday: 0, successRate: 0, currentlyRunning: 0, unresolvedDeadLetters: 0 },
+    executionsOverTime: OVERVIEW_HOURS.map((timestamp, i) => ({
+      timestamp,
+      completed: runs ? 10 + (i % 5) : 0,
+      failed: runs ? i % 3 : 0,
+      cancelled: 0,
+    })),
+    topFailures: runs ? [{ trainName: "Trax.Samples.Billing.IChargeCardTrain", count: 9 }] : [],
+    topAverageDurations: runs ? [{ trainName: "Trax.Samples.Billing.IChargeCardTrain", averageMilliseconds: 840 }] : [],
+    throughputSeries: runs
+      ? [
+          {
+            trainName: "Trax.Samples.Billing.IChargeCardTrain",
+            buckets: OVERVIEW_HOURS.map((timestamp, i) => ({ timestamp, count: 10 + (i % 5) })),
+          },
+        ]
+      : [],
+  };
+}
+
+export function overviewScenario(
+  attention: typeof attentionAllClear | typeof attentionNeedsWork,
+  { runs }: { runs: boolean },
+): MockSchemaOverrides {
+  return {
+    resolvers: () => ({
+      OperationsQueries: {
+        attention: () => attention,
+        health: () => ({
+          status: runs ? "Degraded" : "Healthy",
+          description: runs ? "3 dead letters await intervention." : "No problems found.",
+          queueDepth: runs ? 42 : 0,
+          inProgress: runs ? 3 : 0,
+          failedLastHour: runs ? 6 : 0,
+          deadLetters: runs ? 3 : 0,
+        }),
+      },
+      MetricsQueries: {
+        dashboard: () => overviewMetrics(runs),
+        server: () => ({ uptimeSeconds: 3600, workingSetBytes: 200_000_000, gcHeapBytes: 50_000_000 }),
+        serverCpuPercent: () => 2.5,
+      },
+    }),
+  };
+}

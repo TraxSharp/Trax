@@ -1,17 +1,15 @@
 import { useSyncExternalStore } from "react";
 
 // Which Overview panels the user shows, persisted in localStorage like the other user settings.
-// The same five toggles as the Blazor dashboard's "Dashboard Components" settings; every panel is
-// shown by default.
+// Every panel is shown by default. What needs attention is always shown, and the dashboard host's
+// own process stats are not on the Overview.
 export type OverviewPanel =
-  | "serverHealth"
   | "summaryCards"
   | "executionsChart"
   | "failures"
   | "avgDuration";
 
 export const OVERVIEW_PANELS: { key: OverviewPanel; label: string; description: string }[] = [
-  { key: "serverHealth", label: "Server Health", description: "Process CPU, memory, GC heap, and uptime." },
   {
     key: "summaryCards",
     label: "Summary Cards",
@@ -35,7 +33,6 @@ export type OverviewPanels = Record<OverviewPanel, boolean>;
 
 const KEY = "trax:overview-panels";
 export const DEFAULT_OVERVIEW_PANELS: OverviewPanels = {
-  serverHealth: true,
   summaryCards: true,
   executionsChart: true,
   failures: true,

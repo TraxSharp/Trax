@@ -145,6 +145,7 @@ export const NOT_RECORDED_YET = [
   "ManifestSchedule",
   "MetricSeries",
   "GroupGraphStatus",
+  "Attention",
 ];
 
 /** The read each write not recorded yet is offered from: no read, no write. */
