@@ -147,6 +147,7 @@ public sealed class ConsoleHost : IAsyncDisposable
                         .UsePostgres(ConnectionString)
                         .SaveTrainParameters()
                         .AddDecisionRecording()
+                        .AddJunctionEvents()
                         .AddJunctionProgress()
                         // A run's steps, so the run page places them on its graph and timeline.
                         .AddJunctionEvents()

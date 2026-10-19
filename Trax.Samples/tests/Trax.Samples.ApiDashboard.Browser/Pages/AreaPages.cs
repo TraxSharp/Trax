@@ -350,3 +350,41 @@ public sealed class RunPage(ConsolePage console, long id, string train)
     public ILocator Tab(string name) =>
         Page.GetByRole(AriaRole.Tab, new() { Name = name, Exact = true });
 }
+
+/// <summary>One train's page: its chain, its recent runs by step, what starts it, and Run and Queue.</summary>
+public sealed class TrainPage(ConsolePage console, Type train)
+    : AreaPage(console, $"trains/{train.FullName}", ShortName(train))
+{
+    public ILocator Chain =>
+        Page.GetByRole(
+            AriaRole.Group,
+            new() { Name = $"Chain of {ShortName(train)}", Exact = true }
+        );
+
+    public ILocator Step(string name) => Chain.GetByText(name, new() { Exact = true });
+
+    /// <summary>The badge on a step that counts the range's failed runs that stopped there.</summary>
+    public ILocator FailureCount =>
+        Chain.GetByLabel(
+            new System.Text.RegularExpressions.Regex(@"^Failed runs in the last 24 hours: \d+$")
+        );
+
+    public ILocator Grid =>
+        Page.GetByRole(AriaRole.Table, new() { Name = "Recent runs by step", Exact = true });
+
+    /// <summary>The grid's cell for one step of one run, which links the run.</summary>
+    public ILocator Cell(long run, string step, string state) =>
+        Grid.GetByRole(
+            AriaRole.Link,
+            new() { Name = $"Run #{run}, {step}: {state}", Exact = true }
+        );
+
+    public ILocator NeverRan => Page.GetByText("This train has not run yet.");
+
+    public ILocator Manifests => Page.GetByRole(AriaRole.Region, new() { Name = "Manifests" });
+
+    public ILocator StartedByMachines =>
+        Page.GetByRole(AriaRole.Region, new() { Name = "Started by machines" });
+
+    private static string ShortName(Type train) => train.Name;
+}

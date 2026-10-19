@@ -129,6 +129,12 @@ export const NOT_RECORDED_YET = [
   "MachineInstanceStuckCounts",
   // The decision controls show everywhere until the recordings hold which trains ask.
   "TrainsAskingDecisions",
+  // The train page's chain, the range's series (and the failures it places on steps), its
+  // manifests' schedules and the machines that start it.
+  "TrainChains",
+  "MetricSeries",
+  "ManifestSchedule",
+  "Machines",
   // No page reads bulk operations yet.
   "BulkOperations",
   "BulkOperation",

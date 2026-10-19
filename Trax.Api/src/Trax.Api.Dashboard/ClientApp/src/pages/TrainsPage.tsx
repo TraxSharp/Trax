@@ -6,6 +6,11 @@ import { QueueTrainDialog } from "../components/QueueTrainDialog";
 import { RunTrainDialog } from "../components/RunTrainDialog";
 import type { TrainInfo } from "../types";
 import { TermHelp } from "../components/TermHelp";
+import { setHideAdminTrains, useHideAdminTrains } from "../lib/adminTrains";
+import { shortName } from "../lib/format";
+import { useUrlState } from "../lib/urlState";
+
+const DOCS_TRAINS = "https://traxsharp.net/docs/core/trains-and-junctions";
 
 interface TrainsData {
   operations: { trains: TrainInfo[] };
@@ -20,8 +25,10 @@ const SORT_VALUE: Record<SortKey, (t: TrainInfo) => string> = {
 };
 
 export function TrainsPage() {
-  const [hideAdmin, setHideAdmin] = useState(true);
-  const [filter, setFilter] = useState("");
+  // The same "Hide admin trains" preference the Runs and Schedules pages use; the filter is in the
+  // URL so a filtered list can be linked.
+  const hideAdmin = useHideAdminTrains();
+  const [filter, setFilter] = useUrlState("q");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   // The train a Queue or Run dialog is open for.
@@ -55,25 +62,26 @@ export function TrainsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 gap-4">
+      <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-fg">Trains</h1>
-        <TermHelp term="train" />
-      </div>
+          <h1 className="text-2xl font-bold text-fg">Trains</h1>
+          <TermHelp term="train" />
+        </div>
         <div className="flex items-center gap-4">
           <input
+            aria-label="Filter by name"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter by name…"
-            className="text-sm border border-line-strong rounded-md px-2 py-1 w-56"
+            className="text-sm border border-line-strong rounded-md px-2 py-1 w-56 bg-field"
           />
           <label className="flex items-center gap-2 text-sm text-fg-2 whitespace-nowrap">
             <input
               type="checkbox"
               checked={hideAdmin}
-              onChange={(e) => setHideAdmin(e.target.checked)}
+              onChange={(e) => setHideAdminTrains(e.target.checked)}
             />
-            Hide admin
+            Hide admin trains
           </label>
         </div>
       </div>
@@ -84,7 +92,7 @@ export function TrainsPage() {
         </div>
       )}
 
-      <div className="bg-surface rounded-lg border border-line overflow-hidden">
+      <div className="bg-surface rounded-lg border border-line overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-sunken text-muted text-left">
             <tr>
@@ -133,7 +141,17 @@ export function TrainsPage() {
             {trains.length === 0 && !result.fetching && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-muted">
-                  No trains registered.
+                  {filter ? (
+                    <>No train's name contains “{filter}”.</>
+                  ) : (
+                    <>
+                      This host registers no trains{hideAdmin ? " of its own" : ""}. A train shows here once the host
+                      registers it.{" "}
+                      <a href={DOCS_TRAINS} target="_blank" rel="noreferrer" className="text-accent-fg hover:underline">
+                        Trains and junctions
+                      </a>
+                    </>
+                  )}
                 </td>
               </tr>
             )}
@@ -188,9 +206,4 @@ function kind(t: TrainInfo): string {
   if (t.isQuery) return "Query";
   if (t.isMutation) return "Mutation";
   return "—";
-}
-
-function shortName(fullName: string): string {
-  const parts = fullName.split(".");
-  return parts[parts.length - 1] || fullName;
 }

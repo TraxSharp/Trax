@@ -85,8 +85,8 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     }
 
     /// <summary>
-    /// A run of <see cref="ISettleClaimTrain"/> that answered its Gate, stored its checkpoint and then failed:
-    /// what a resume starts from.
+    /// A run of <see cref="ISettleClaimTrain"/> that answered its Gate, stored its checkpoint and then failed at
+    /// <see cref="NotifyClaimant"/>: what a resume starts from. Its failed step is recorded by the time this returns.
     /// </summary>
     public async Task<Metadata> FailedRunWithCheckpointAsync()
     {
@@ -99,6 +99,19 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
                 () => host.QueryAsync(dc => dc.Checkpoints.AnyAsync(c => c.MetadataId == run.Id)),
                 BrowserTimeouts.Server,
                 $"run {run.Id} stores its checkpoint"
+            );
+            // Steps are stored by a background writer, after the run has ended.
+            await Wait.UntilAsync(
+                () =>
+                    host.QueryAsync(dc =>
+                        dc.JunctionRuns.AnyAsync(j =>
+                            j.MetadataId == run.Id
+                            && j.Name == nameof(NotifyClaimant)
+                            && j.State == JunctionRunState.Failed
+                        )
+                    ),
+                BrowserTimeouts.Server,
+                $"run {run.Id} records its failed step"
             );
             return run;
         }

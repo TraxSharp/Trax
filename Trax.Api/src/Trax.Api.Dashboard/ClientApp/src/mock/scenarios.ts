@@ -407,26 +407,100 @@ export const clusterScenario: MockSchemaOverrides = {
 };
 
 // ── Train detail ─────────────────────────────────────────────────────────
+// ZebraTrain declares 902's chain (trainChain). Its ten recent runs alternate, every third one
+// failing at Summarize; three failed in the range at Summarize and one outside any step. A manifest
+// (801's schedule) runs it, and the zebra-feeder machine's Feeding state invokes it. AlphaTrain has
+// the same chain and has never run: no run, no manifest, no machine.
+export const TRAIN_DETAIL_TRAIN = "Trax.Trains.ZebraTrain";
+export const TRAIN_NEVER_RAN = "Trax.Trains.AlphaTrain";
+
+const TRAIN_DETAIL_RUNS = Array.from({ length: 10 }, (_, i) => {
+  const id = 960 - i;
+  const state = i === 0 ? "IN_PROGRESS" : i % 3 === 1 ? "FAILED" : "COMPLETED";
+  return { ...exec(id, TRAIN_DETAIL_TRAIN, state, i + 1), failureJunction: state === "FAILED" ? "Summarize" : null };
+});
+
+const TRAIN_DETAIL_FAILED = [
+  ...TRAIN_DETAIL_RUNS.filter((r) => r.trainState === "FAILED"),
+  { ...exec(930, TRAIN_DETAIL_TRAIN, "FAILED", 60), failureJunction: "TrainException" },
+];
+
+// One recent run of ZebraTrain on its chain: a failed run stopped at Summarize, a running one is in
+// it, and a completed one took the Short track.
+function trainDetailRunGraph(metadataId: number) {
+  const run = TRAIN_DETAIL_RUNS.find((r) => r.id === metadataId);
+  const before = new Set(["Fetch#0", "Findings#1"]);
+  const stateOf = (id: string): RunNodeState => {
+    if (!run) return "NOT_REACHED";
+    if (run.trainState === "COMPLETED") return id === "Route#3/Long/Split#0" ? "SKIPPED" : "COMPLETED";
+    if (before.has(id)) return "COMPLETED";
+    if (id === "Summarize#2") return run.trainState === "FAILED" ? "FAILED" : "IN_PROGRESS";
+    return "NOT_REACHED";
+  };
+  const chain = trainChain(TRAIN_DETAIL_TRAIN);
+  return {
+    ...chain,
+    metadataId,
+    allNodes: chain.allNodes.map((n) => ({ ...n, state: stateOf(n.id) })),
+  };
+}
+
+const ZEBRA_FEEDER = {
+  name: "zebra-feeder",
+  version: 1,
+  systemOwned: true,
+  schemaHash: "feed".repeat(16),
+  initialState: "Hungry",
+  graphUnavailableReason: null,
+  states: [
+    { name: "Hungry", isInitial: true, isFinal: false, isCommitted: false, invokesTrain: null, spawnsMachine: null },
+    { name: "Feeding", isInitial: false, isFinal: false, isCommitted: false, invokesTrain: TRAIN_DETAIL_TRAIN, spawnsMachine: null },
+  ],
+  transitions: [
+    { from: "Hungry", command: "Feed", to: "Feeding", kind: "COMMAND", guard: null, effect: null, after: null },
+    { from: "Feeding", command: "Feeding.done", to: "Hungry", kind: "OUTCOME", guard: null, effect: null, after: null },
+  ],
+  timers: [],
+};
+
+function trainDetailStats(trainName: string) {
+  const ran = trainName === TRAIN_DETAIL_TRAIN;
+  return {
+    trainName,
+    total: ran ? 420 : 0,
+    completed: ran ? 400 : 0,
+    failed: ran ? 15 : 0,
+    inProgress: ran ? 2 : 0,
+    pending: ran ? 3 : 0,
+    cancelled: 0,
+    lastRun: ran ? "2026-07-07T11:59:00.000Z" : null,
+    lastSuccessfulRun: ran ? "2026-07-07T11:58:00.000Z" : null,
+    averageMilliseconds: ran ? 1234.5 : null,
+  };
+}
+
 export const trainDetailScenario: MockSchemaOverrides = {
   resolvers: () => ({
+    ManifestSummary: manifestScheduleResolvers,
+    ManifestDetail: manifestScheduleResolvers,
+    MetricsQueries: metricSeriesResolvers,
+    ...trainChainResolvers,
     OperationsQueries: {
-      trainStats: (_root: unknown, args: Args) => ({
-        trainName: args.trainName as string,
-        total: 420,
-        completed: 400,
-        failed: 15,
-        inProgress: 2,
-        pending: 3,
-        cancelled: 0,
-        lastRun: "2026-07-07T11:59:00.000Z",
-        lastSuccessfulRun: "2026-07-07T11:58:00.000Z",
-        averageMilliseconds: 1234.5,
-      }),
-      executions: () =>
-        pagedResult([
-          exec(950, "Trax.Demo.Trains.OrderTrain", "COMPLETED", 1),
-          exec(949, "Trax.Demo.Trains.OrderTrain", "FAILED", 2),
-        ]),
+      trains: () => TRAIN_ROWS,
+      trainStats: (_root: unknown, args: Args) => trainDetailStats(args.trainName as string),
+      executions: (_root: unknown, args: Args) => {
+        if (args.trainName !== TRAIN_DETAIL_TRAIN) return pagedResult([]);
+        return pagedResult(args.trainState === "FAILED" ? TRAIN_DETAIL_FAILED : TRAIN_DETAIL_RUNS);
+      },
+      runGraph: (_root: unknown, args: Args) => trainDetailRunGraph(args.metadataId as number),
+      manifests: (_root: unknown, args: Args) =>
+        pagedResult(
+          args.nameContains === TRAIN_DETAIL_TRAIN
+            ? [{ ...MANIFEST_ROWS[0], externalId: "zebra-every-5", name: TRAIN_DETAIL_TRAIN }]
+            : [],
+        ),
+      manifestDetail: (_root: unknown, args: Args) => manifestDetail(args.id as number),
+      machines: () => [...MACHINE_DEFINITIONS, ZEBRA_FEEDER],
     },
   }),
 };

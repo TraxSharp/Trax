@@ -12,7 +12,7 @@ using Trax.Effect.StateMachine.Persistence;
 // groups page's dependency graph) and a system-owned machine has an instance (the state-machine pages); the rest
 // is what the seed builders (Fixtures/Seed.cs) drive into the states a console page shows: a train that fails
 // while its key is down, one that holds while its subject is held, one whose queue entry stays staged, one with
-// a Gate and a checkpoint, and two machines, one invoking a train and one with a timer.
+// a Gate and a checkpoint, one that never runs, and two machines, one invoking a train and one with a timer.
 namespace Trax.Samples.ApiDashboard.Browser.Host;
 
 public record RatesInput : IManifestProperties
@@ -34,6 +34,28 @@ public interface IRepriceCatalogTrain : IServiceTrain<RatesInput, Unit>;
 public class RepriceCatalogTrain : ServiceTrain<RatesInput, Unit>, IRepriceCatalogTrain
 {
     protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
+}
+
+/// <summary>
+/// Registered and never run, scheduled or invoked by anything: the train page's empty state, which still draws
+/// its chain.
+/// </summary>
+public interface IAuditLedgerTrain : IServiceTrain<KeyedInput, Unit>;
+
+public class AuditLedgerTrain : ServiceTrain<KeyedInput, Unit>, IAuditLedgerTrain
+{
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<ReadLedger>().Chain<SealLedger>().Resolve();
+}
+
+public class ReadLedger : EffectJunction<KeyedInput, KeyedInput>
+{
+    public override Task<KeyedInput> Run(KeyedInput input) => Task.FromResult(input);
+}
+
+public class SealLedger : EffectJunction<KeyedInput, Unit>
+{
+    public override Task<Unit> Run(KeyedInput input) => Task.FromResult(Unit.Default);
 }
 
 /// <summary>What the host's switchable trains are about: one key per seeded thing.</summary>
