@@ -57,13 +57,23 @@ export function ManifestGroupDetailPage() {
 
   async function save(input: Record<string, unknown>) {
     const r = await update({ id, input });
+    const res = r.data?.operations?.manifestGroups?.updateManifestGroup;
     if (r.error) toast(r.error.message, "error");
+    else if (res?.success) toast(res.message || "Group saved.", "success");
+    else toast(res?.message ?? "The group was not saved.", "error");
     refetch();
   }
-  async function act(fn: typeof triggerGroup, msg: string) {
-    if (!(await confirmAction({ title: "Confirm", message: msg }))) return;
+  async function act(
+    fn: typeof triggerGroup,
+    field: "triggerGroup" | "cancelGroup",
+    request: { title: string; message: string; danger?: boolean },
+  ) {
+    if (!(await confirmAction(request))) return;
     const r = await fn({ groupId: id });
+    const res = r.data?.operations?.[field];
     if (r.error) toast(r.error.message, "error");
+    else if (res?.success) toast(res.message || "Done.", "success");
+    else toast(res?.message ?? "Nothing changed.", "error");
     refetch();
   }
 
@@ -82,8 +92,19 @@ export function ManifestGroupDetailPage() {
           key={group.id}
           group={group}
           onSave={save}
-          onTrigger={() => act(triggerGroup, `Trigger every manifest in "${group.name}"?`)}
-          onCancel={() => act(cancelGroup, `Cancel every running run in "${group.name}"?`)}
+          onTrigger={() =>
+            act(triggerGroup, "triggerGroup", {
+              title: "Queue group",
+              message: `Queue every manifest in "${group.name}" now?`,
+            })
+          }
+          onCancel={() =>
+            act(cancelGroup, "cancelGroup", {
+              title: "Cancel group",
+              message: `Cancel every pending and running run in "${group.name}"?`,
+              danger: true,
+            })
+          }
         />
 
         <div className="bg-surface rounded-lg border border-line p-5">

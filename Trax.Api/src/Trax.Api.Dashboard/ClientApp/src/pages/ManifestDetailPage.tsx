@@ -77,10 +77,21 @@ export function ManifestDetailPage() {
   if (!m) return <NotFound what="manifest" />;
 
   const refetch = () => reexecute({ requestPolicy: "network-only" });
-  async function run(fn: typeof trigger, confirmMsg?: string) {
-    if (confirmMsg && !(await confirmAction({ title: "Confirm", message: confirmMsg }))) return;
-    const r = await fn({ externalId: m!.externalId });
+  async function onCancelRuns() {
+    if (
+      !(await confirmAction({
+        title: "Cancel runs",
+        message: `Cancel every running run of "${shortName(m!.name)}"? A running run stops at its next junction.`,
+        danger: true,
+      }))
+    )
+      return;
+    const r = await cancelManifest({ externalId: m!.externalId });
+    const res = r.data?.operations?.cancelManifest;
     if (r.error) toast(r.error.message, "error");
+    else if (!res?.success) toast(res?.message ?? "Could not cancel its runs.", "error");
+    else if (res.count === 0) toast("No run of it is pending or running.", "info");
+    else toast(`Cancellation requested for ${res.count} run(s).`, "success");
     refetch();
   }
 
@@ -138,8 +149,11 @@ export function ManifestDetailPage() {
     setLater(false);
     const delay = `PT${minutes}M`; // ISO 8601 duration
     const r = await triggerDelayed({ externalId: m!.externalId, delay });
+    const res = r.data?.operations?.triggerManifestDelayed;
     if (r.error) toast(r.error.message, "error");
-    else toast(`Queued to run in ${minutes} min.`, "success");
+    else if (res?.success) toast(`Queued to run in ${minutes} min.`, "success");
+    else toast(res?.message ?? "Could not queue it.", "error");
+    refetch();
   }
 
   return (
@@ -277,9 +291,7 @@ export function ManifestDetailPage() {
             Edit
           </button>
           <button
-            onClick={() =>
-              run(cancelManifest, `Cancel every running run of "${shortName(m.name)}"?`)
-            }
+            onClick={onCancelRuns}
             className="text-sm text-danger-fg hover:underline"
           >
             Cancel runs

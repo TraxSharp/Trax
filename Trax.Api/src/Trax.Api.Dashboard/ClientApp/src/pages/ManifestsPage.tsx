@@ -105,14 +105,20 @@ export function ManifestsPage() {
   const allSelected = rows.length > 0 && rows.every((m) => selected.has(m.id));
   const refetch = refetchAll;
 
+  // One manifest's Queue, Disable or Enable from its row. The server answers success: false for a
+  // manifest it no longer has; that is said, as an accepted change is.
   async function run(
     action: typeof trigger,
+    field: "triggerManifest" | "enableManifest" | "disableManifest",
     externalId: string,
-    confirmMsg?: string,
+    confirm?: { title: string; message: string },
   ) {
-    if (confirmMsg && !(await confirmAction({ title: "Confirm", message: confirmMsg }))) return;
+    if (confirm && !(await confirmAction(confirm))) return;
     const r = await action({ externalId });
+    const res: OperationResponse | undefined = r.data?.operations?.[field];
     if (r.error) toast(r.error.message, "error");
+    else if (res?.success) toast(res.message || "Done.", "success");
+    else toast(res?.message ?? "Nothing changed.", "error");
     refetch();
   }
 
@@ -406,7 +412,10 @@ export function ManifestsPage() {
                 <td className="px-4 py-2 text-right whitespace-nowrap">
                   <button
                     onClick={() =>
-                      run(trigger, m.externalId, `Queue "${shortName(m.name)}" now?`)
+                      run(trigger, "triggerManifest", m.externalId, {
+                        title: "Queue manifest",
+                        message: `Queue "${shortName(m.name)}" now?`,
+                      })
                     }
                     className="text-accent-fg hover:underline mr-3"
                   >
@@ -414,14 +423,14 @@ export function ManifestsPage() {
                   </button>
                   {m.isEnabled ? (
                     <button
-                      onClick={() => run(disable, m.externalId)}
+                      onClick={() => run(disable, "disableManifest", m.externalId)}
                       className="text-fg-2 hover:underline"
                     >
                       Disable
                     </button>
                   ) : (
                     <button
-                      onClick={() => run(enable, m.externalId)}
+                      onClick={() => run(enable, "enableManifest", m.externalId)}
                       className="text-ok-fg hover:underline"
                     >
                       Enable
