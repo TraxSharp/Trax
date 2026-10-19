@@ -21,7 +21,7 @@ query {
   operations {
     deadLetters {
       deadLetters(status: AWAITING_INTERVENTION, take: 10) {
-        items { id manifestId manifestName status reason retryCountAtDeadLetter deadLetteredAt }
+        items { id manifestId manifestName manifestExternalId status reason retryCountAtDeadLetter deadLetteredAt }
         totalCount
         nextCursor
       }
@@ -58,6 +58,7 @@ query {
 | `id` | `Long!` | Dead letter id |
 | `manifestId` | `Long!` | The manifest that was dead-lettered |
 | `manifestName` | `String!` | The manifest's train name (the interface FullName), not its external id |
+| `manifestExternalId` | `String` | The manifest's external id, the name it was scheduled under; `null` when the manifest can no longer be read |
 | `status` | `DeadLetterStatus!` | `AWAITING_INTERVENTION` until an operator requeues (`RETRIED`) or acknowledges (`ACKNOWLEDGED`) it |
 | `deadLetteredAt` | `DateTime!` | When the ManifestManager wrote it |
 | `reason` | `String!` | For example `Max retries exceeded: (3) failures > (2) max retries` |

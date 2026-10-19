@@ -39,7 +39,7 @@ export function WorkQueueDetailPage() {
   if (result.error && !w)
     return (
       <>
-        <BackLink to="/runs/queued" label="Work queue" />
+        <BackLink to="/runs/queued" label="Queued" />
         <p className="text-danger-fg mt-4">{result.error.message}</p>
       </>
     );
@@ -67,7 +67,7 @@ export function WorkQueueDetailPage() {
 
   return (
     <div>
-      <BackLink to="/runs/queued" label="Work queue" />
+      <BackLink to="/runs/queued" label="Queued" />
       <div className="flex items-center gap-3 mt-2 mb-6">
         <h1 className="text-2xl font-bold text-fg">
           {shortName(w.trainName)}

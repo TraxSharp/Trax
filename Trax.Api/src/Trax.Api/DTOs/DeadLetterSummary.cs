@@ -27,4 +27,11 @@ public record DeadLetterSummary(
     DateTime? ResolvedAt,
     string? ResolutionNote,
     long? RetryMetadataId
-);
+)
+{
+    /// <summary>
+    /// The external id of the manifest whose run was dead-lettered, the name an operator gave it
+    /// when scheduling it; <c>null</c> when the manifest can no longer be read.
+    /// </summary>
+    public string? ManifestExternalId { get; init; }
+}

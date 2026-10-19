@@ -228,7 +228,10 @@ export interface WorkQueueDetail extends WorkQueueSummary {
 export interface DeadLetterSummary {
   id: number;
   manifestId: number;
+  // The train the manifest runs (its FullName), despite the name.
   manifestName: string;
+  // The manifest's own name, its external id; absent from rows read before the field existed.
+  manifestExternalId?: string | null;
   status: DeadLetterStatus;
   deadLetteredAt: string;
   reason: string;

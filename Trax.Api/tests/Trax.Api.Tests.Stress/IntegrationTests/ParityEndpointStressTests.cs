@@ -438,6 +438,28 @@ public class ParityEndpointStressTests : StressTestSetup
         );
     }
 
+    [Test]
+    public async Task DeadLetters_LargestPage_Awaiting_WithinBudget()
+    {
+        // The console's Dead letters view groups the newest page the API serves (500) by train
+        // and reason, and polls it, so that page has to stay cheap at the seed's scale.
+        await MeasureAsync(
+            "operations.deadLetters.deadLetters (take 500, awaiting)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var page = await new DeadLetterQueries().GetDeadLetters(
+                    Factory(sp),
+                    ct,
+                    take: 500,
+                    status: Trax.Effect.Enums.DeadLetterStatus.AwaitingIntervention
+                );
+                page.Items.Should().HaveCount(500);
+                page.Items.Should().OnlyContain(d => d.ManifestExternalId != null);
+            }
+        );
+    }
+
     #endregion
 
     #region Logs

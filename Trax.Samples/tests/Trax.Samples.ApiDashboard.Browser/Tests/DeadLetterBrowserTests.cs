@@ -22,6 +22,8 @@ public class DeadLetterBrowserTests : ConsoleTest
 
         await deadLetters.OpenAsync(Caller.Operator);
         await deadLetters.ShowAwaitingAsync();
+        // Every test's dead letter failed the same way, so grouped it would sit in a closed group.
+        await deadLetters.ShowAsListAsync();
         var row = deadLetters.Row(deadLetter.Id);
         await Assertions
             .Expect(row)

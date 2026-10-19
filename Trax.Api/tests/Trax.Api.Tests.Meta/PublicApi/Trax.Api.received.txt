@@ -141,6 +141,7 @@ namespace Trax.Api.DTOs
         public DeadLetterSummary(long Id, long ManifestId, string ManifestName, Trax.Effect.Enums.DeadLetterStatus Status, System.DateTime DeadLetteredAt, string Reason, int RetryCountAtDeadLetter, System.DateTime? ResolvedAt, string? ResolutionNote, long? RetryMetadataId) { }
         public System.DateTime DeadLetteredAt { get; init; }
         public long Id { get; init; }
+        public string? ManifestExternalId { get; init; }
         public long ManifestId { get; init; }
         public string ManifestName { get; init; }
         public string Reason { get; init; }

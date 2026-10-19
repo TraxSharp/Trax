@@ -6,7 +6,6 @@ import {
   CANCEL_WORK_QUEUE_ENTRIES,
   CANCEL_WORK_QUEUE_ENTRY,
 } from "../graphql/mutations";
-import { Pager } from "../components/Pager";
 import { QueueTrainDialog } from "../components/QueueTrainDialog";
 import { useKeyset } from "../lib/useKeyset";
 import { useSelection } from "../lib/useSelection";
@@ -17,6 +16,9 @@ import type { PagedResult, WorkQueueStatus, WorkQueueSummary } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
+import { RunsTabs } from "../components/RunsTabs";
+import { BatchBar, EmptyState, ListView, MaybeIdLink, type Column } from "../components/ListView";
+import { enumLabel, shortName } from "../lib/format";
 
 const PAGE_SIZE = 25;
 const STATUSES: (WorkQueueStatus | "")[] = ["", "QUEUED", "DISPATCHED", "CANCELLED"];
@@ -67,9 +69,13 @@ export function WorkQueuePage() {
     reexecute({ requestPolicy: "network-only" });
   };
 
-  const queued = (page?.items ?? []).filter((w) => w.status === "QUEUED");
   const selectedIds = [...selected];
-  const allSelected = queued.length > 0 && queued.every((w) => selected.has(w.id));
+  const hasFilter = status !== "" || trainName !== "" || subjectKey !== "" || manifestId !== "";
+  const showSubject = (key: string) => {
+    setSubjectKey(key);
+    clear();
+    reset();
+  };
 
   async function onCancel(id: number) {
     if (!(await confirmAction({ title: "Cancel queued entry", message: `Cancel queued entry #${id}? Its run never starts.`, danger: true }))) return;
@@ -96,14 +102,82 @@ export function WorkQueuePage() {
     refetch();
   }
 
+  const columns: Column<WorkQueueSummary>[] = [
+    {
+      header: "Train",
+      cell: (w) => (
+        <Link to={`/runs/queued/${w.id}`} title={w.trainName} className="font-medium text-accent-fg hover:underline">
+          {shortName(w.trainName)}
+        </Link>
+      ),
+    },
+    { header: "Entry", cell: (w) => <MaybeIdLink to={(id) => `/runs/queued/${id}`} id={w.id} />, className: "text-xs" },
+    {
+      header: "Status",
+      cell: (w) => <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLE[w.status]}`}>{enumLabel(w.status)}</span>,
+    },
+    { header: "Created", cell: (w) => new Date(w.createdAt).toLocaleString(), className: "text-fg-2 whitespace-nowrap" },
+    { header: "Priority", cell: (w) => w.priority, className: "text-fg-2" },
+    { header: "Attempts", cell: (w) => w.dispatchAttempts, className: "text-fg-2" },
+    {
+      header: "Subject",
+      title: "Entries with one subject run one at a time; click to see that subject's queue",
+      cell: (w) =>
+        w.subjectKey ? (
+          <button
+            onClick={() => showSubject(w.subjectKey!)}
+            title="Show this subject's queue"
+            className="text-accent-fg hover:underline"
+          >
+            {w.subjectKey}
+          </button>
+        ) : (
+          "—"
+        ),
+      className: "text-fg-2 max-w-[10rem] truncate",
+    },
+    { header: "Confirmed", cell: (w) => <Confirmed entry={w} />, className: "text-fg-2" },
+    {
+      header: "Manifest",
+      title: "The manifest that queued the entry",
+      cell: (w) => <MaybeIdLink to={(id) => `/schedules/${id}`} id={w.manifestId} />,
+      className: "text-xs",
+    },
+    {
+      header: "Run",
+      title: "The run the entry started, once dispatched",
+      cell: (w) => <MaybeIdLink to={(id) => `/runs/${id}`} id={w.metadataId} />,
+      className: "text-xs",
+    },
+    {
+      header: "Replays",
+      title: "The run whose recorded decisions this entry's run replays",
+      cell: (w) => <MaybeIdLink to={(id) => `/runs/${id}`} id={w.replayDecisionsOf} />,
+      className: "text-xs",
+    },
+    {
+      header: "Actions",
+      cell: (w) =>
+        w.status === "QUEUED" ? (
+          <button onClick={() => onCancel(w.id)} className="text-danger-fg hover:underline">
+            Cancel
+          </button>
+        ) : (
+          <span className="text-faint">—</span>
+        ),
+      className: "text-right whitespace-nowrap",
+    },
+  ];
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 gap-4">
+      <RunsTabs />
+      <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-fg">Queued</h1>
-        <TermHelp term="workQueue" />
-      </div>
-        <div className="flex gap-2">
+          <h1 className="text-2xl font-bold text-fg">Queued</h1>
+          <TermHelp term="workQueue" />
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setShowQueue(true)}
             className="text-sm px-3 py-1 rounded-md bg-accent text-on-accent hover:bg-accent-hover"
@@ -144,6 +218,7 @@ export function WorkQueuePage() {
             className="text-sm border border-line-strong rounded-md px-2 py-1 w-28"
           />
           <select
+            aria-label="Status"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as WorkQueueStatus | "");
@@ -154,165 +229,44 @@ export function WorkQueuePage() {
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s === "" ? "All statuses" : label(s)}
+                {s === "" ? "All statuses" : enumLabel(s)}
               </option>
             ))}
           </select>
         </div>
       </div>
 
-      {result.error && (
-        <div className="bg-danger-soft border border-danger-line text-danger-fg rounded-lg p-4 text-sm mb-4">
-          {result.error.message}
-        </div>
-      )}
+      <BatchBar count={selectedIds.length} onClear={clear}>
+        <button
+          onClick={onBulkCancel}
+          disabled={busy}
+          className="text-danger-fg font-medium hover:underline disabled:opacity-50"
+        >
+          Cancel selected
+        </button>
+      </BatchBar>
 
-      {selectedIds.length > 0 && (
-        <div className="flex items-center gap-3 mb-3 px-4 py-2 rounded-lg bg-accent-soft border border-accent-line text-sm">
-          <span className="text-accent-fg font-medium">
-            {selectedIds.length} selected
-          </span>
-          <button
-            onClick={onBulkCancel}
-            disabled={busy}
-            className="text-danger-fg font-medium hover:underline disabled:opacity-50"
-          >
-            Cancel selected
-          </button>
-          <button
-            onClick={clear}
-            className="ml-auto text-muted hover:underline"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      <div className="bg-surface rounded-lg border border-line overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-sunken text-muted text-left">
-            <tr>
-              <th className="px-4 py-2 w-8">
-                <input
-                  type="checkbox"
-                  aria-label="Select all"
-                  checked={allSelected}
-                  disabled={queued.length === 0}
-                  onChange={(e) =>
-                    setMany(
-                      queued.map((w) => w.id),
-                      e.target.checked,
-                    )
-                  }
-                />
-              </th>
-              <th className="px-4 py-2 font-medium">Train</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-              <th className="px-4 py-2 font-medium">Created</th>
-              <th className="px-4 py-2 font-medium">Priority</th>
-              <th className="px-4 py-2 font-medium">Attempts</th>
-              <th className="px-4 py-2 font-medium">Subject</th>
-              <th className="px-4 py-2 font-medium">Confirmed</th>
-              <th className="px-4 py-2 font-medium" title="The run whose recorded decisions this entry's run replays">
-                Replays
-              </th>
-              <th className="px-4 py-2 font-medium text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {page?.items.map((w) => (
-              <tr key={w.id}>
-                <td className="px-4 py-2">
-                  {w.status === "QUEUED" && (
-                    <input
-                      type="checkbox"
-                      aria-label={`Select #${w.id}`}
-                      checked={selected.has(w.id)}
-                      onChange={() => toggle(w.id)}
-                    />
-                  )}
-                </td>
-                <td className="px-4 py-2" title={w.trainName}>
-                  <Link
-                    to={`/runs/queued/${w.id}`}
-                    className="font-medium text-accent-fg hover:underline"
-                  >
-                    {shortName(w.trainName)}
-                  </Link>
-                </td>
-                <td className="px-4 py-2">
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLE[w.status]}`}
-                  >
-                    {label(w.status)}
-                  </span>
-                </td>
-                <td className="px-4 py-2 text-fg-2">
-                  {new Date(w.createdAt).toLocaleString()}
-                </td>
-                <td className="px-4 py-2 text-fg-2">{w.priority}</td>
-                <td className="px-4 py-2 text-fg-2">{w.dispatchAttempts}</td>
-                <td className="px-4 py-2 text-fg-2 max-w-[10rem] truncate" title={w.subjectKey ?? ""}>
-                  {w.subjectKey ? (
-                    <button
-                      onClick={() => {
-                        setSubjectKey(w.subjectKey!);
-                        clear();
-                        reset();
-                      }}
-                      title="Show this subject's queue"
-                      className="text-accent-fg hover:underline"
-                    >
-                      {w.subjectKey}
-                    </button>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-4 py-2 text-fg-2">
-                  <Confirmed entry={w} />
-                </td>
-                <td className="px-4 py-2 text-xs">
-                  {w.replayDecisionsOf != null ? (
-                    <Link to={`/runs/${w.replayDecisionsOf}`} className="text-accent-fg hover:underline">
-                      #{w.replayDecisionsOf}
-                    </Link>
-                  ) : (
-                    <span className="text-faint">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right whitespace-nowrap">
-                  {w.status === "QUEUED" ? (
-                    <button
-                      onClick={() => onCancel(w.id)}
-                      className="text-danger-fg hover:underline"
-                    >
-                      Cancel
-                    </button>
-                  ) : (
-                    <span className="text-faint">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {page?.items.length === 0 && (
-              <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-muted">
-                  No entries.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Pager
-        total={page?.totalCount}
-        isEstimated={page?.isEstimatedCount}
-        isFirstPage={isFirstPage}
-        nextCursor={page?.nextCursor}
-        onPrev={prev}
-        onNext={next}
+      <ListView
+        label="Queued entries"
+        columns={columns}
+        rows={page?.items}
+        selection={{ selected, toggle, setMany, can: (w) => w.status === "QUEUED" }}
+        error={result.error?.message}
+        empty={
+          <EmptyState title="No entries." docs={QUEUE_DOCS}>
+            {hasFilter
+              ? "No entry matches these filters."
+              : "An entry is listed here while a queued run waits for a worker, and after, until it is cleaned up."}
+          </EmptyState>
+        }
+        paging={{
+          total: page?.totalCount,
+          isEstimated: page?.isEstimatedCount,
+          isFirstPage,
+          nextCursor: page?.nextCursor,
+          onPrev: prev,
+          onNext: next,
+        }}
       />
 
       {showQueue && (
@@ -321,6 +275,8 @@ export function WorkQueuePage() {
     </div>
   );
 }
+
+const QUEUE_DOCS = "https://traxsharp.net/docs/scheduler/job-submission";
 
 // An entry staged by a two-phase enqueue is queued but not yet dispatchable; it is normally
 // confirmed moments later, once its OnQueue hook returns. Only a queued entry can be staged: a
@@ -339,14 +295,3 @@ function Confirmed({ entry }: { entry: WorkQueueSummary }) {
   return <>{entry.confirmedAt ? "Yes" : "—"}</>;
 }
 
-function label(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/^\w/, (c) => c.toUpperCase());
-}
-
-function shortName(fullName: string): string {
-  const parts = fullName.split(".");
-  return parts[parts.length - 1] || fullName;
-}

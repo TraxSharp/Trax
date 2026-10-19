@@ -1431,7 +1431,7 @@ export const deadLetterOverlay: StatefulOverlay = {
     RequeueAllDeadLetters: requeueAllDeadLetters,
     AcknowledgeAllDeadLetters: acknowledgeAllDeadLetters,
   },
-  queries: { DeadLetters: readDeadLetters, DeadLetterDetail: readDeadLetterDetail },
+  queries: { DeadLetters: readDeadLetters, DeadLetterGroups: readDeadLetters, DeadLetterDetail: readDeadLetterDetail },
 };
 
 export const executionOverlay: StatefulOverlay = {

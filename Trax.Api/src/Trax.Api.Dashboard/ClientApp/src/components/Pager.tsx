@@ -6,6 +6,7 @@ export function Pager({
   nextCursor,
   onPrev,
   onNext,
+  note,
 }: {
   total: number | undefined;
   isEstimated: boolean | undefined;
@@ -15,11 +16,14 @@ export function Pager({
   nextCursor: number | null | undefined;
   onPrev: () => void;
   onNext: (cursor: number) => void;
+  // Said beside the total, such as why live updates stop on a later page.
+  note?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between mt-4 text-sm">
       <span className="text-muted">
         {total != null ? totalLabel(total, isEstimated, isCapped) : ""}
+        {note && <span className="ml-2">{note}</span>}
       </span>
       <div className="flex gap-2">
         <button

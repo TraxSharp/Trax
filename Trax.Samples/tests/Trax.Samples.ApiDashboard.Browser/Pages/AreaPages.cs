@@ -42,9 +42,24 @@ public abstract class AreaPage(ConsolePage console, string route, string heading
         within.GetByRole(AriaRole.Button, new() { Name = name, Exact = true });
 }
 
+/// <summary>
+/// The tab strip every Runs list shows (All, Failed, Queued, Dead letters), the current view marked.
+/// </summary>
+public static class RunViews
+{
+    public static ILocator Strip(ConsolePage console) =>
+        console.Page.GetByRole(AriaRole.Navigation, new() { Name = "Run views", Exact = true });
+
+    public static ILocator Tab(ConsolePage console, string name) =>
+        Strip(console).GetByRole(AriaRole.Link, new() { Name = name, Exact = true });
+}
+
 /// <summary>Runs: every run the host has recorded.</summary>
 public sealed class RunsPage(ConsolePage console) : AreaPage(console, "runs", "Runs")
 {
+    /// <summary>The Failed view: All runs filtered to state FAILED.</summary>
+    public ILocator FailedHeading => Console.Heading("Failed runs");
+
     public ILocator ExternalIdFilter => Page.GetByLabel("External id", new() { Exact = true });
 
     /// <summary>
@@ -66,7 +81,19 @@ public sealed class RunsPage(ConsolePage console) : AreaPage(console, "runs", "R
 }
 
 /// <summary>The work queue: queued, staged and dispatched entries.</summary>
-public sealed class WorkQueuePage(ConsolePage console) : AreaPage(console, "runs/queued", "Queued");
+public sealed class WorkQueuePage(ConsolePage console) : AreaPage(console, "runs/queued", "Queued")
+{
+    /// <summary>The link a row gives to an entry, a run or a manifest by its id: <c>#id</c>.</summary>
+    public ILocator IdLink(ILocator row, long id) =>
+        row.GetByRole(AriaRole.Link, new() { Name = $"#{id}", Exact = true });
+}
+
+/// <summary>One queue entry's page: its fields, and what a queued entry waits on.</summary>
+public sealed class WorkQueueEntryPage(ConsolePage console)
+{
+    public ILocator WaitingOn(long entry) =>
+        console.Page.GetByRole(AriaRole.Link, new() { Name = $"Entry {entry}", Exact = true });
+}
 
 /// <summary>Dead letters, with their requeue and acknowledge actions.</summary>
 public sealed class DeadLettersPage(ConsolePage console)
@@ -79,6 +106,34 @@ public sealed class DeadLettersPage(ConsolePage console)
         await StatusFilter.SelectOptionAsync(
             new SelectOptionValue { Label = "Awaiting intervention" }
         );
+
+    /// <summary>Shows every dead letter as its own row instead of grouped by train and reason.</summary>
+    public async Task ShowAsListAsync() =>
+        await Page.GetByRole(AriaRole.Button, new() { Name = "List", Exact = true }).ClickAsync();
+
+    /// <summary>
+    /// The header row of the group of dead letters of <paramref name="train"/> (its short name) that were
+    /// dead-lettered for <paramref name="reason"/>, by the checkbox that selects the group.
+    /// </summary>
+    public ILocator Group(string train, string reason) =>
+        Page.GetByRole(AriaRole.Row)
+            .Filter(
+                new()
+                {
+                    Has = Page.GetByRole(
+                        AriaRole.Checkbox,
+                        new() { Name = $"Select group: {train}, {reason}", Exact = true }
+                    ),
+                }
+            );
+
+    /// <summary>Opens a group to its rows.</summary>
+    public async Task ExpandAsync(string train, string reason) =>
+        await Page.GetByRole(
+                AriaRole.Button,
+                new() { Name = $"Show {train}, {reason}", Exact = true }
+            )
+            .ClickAsync();
 
     /// <summary>Requeues one dead letter from its row, confirming in the console's dialog.</summary>
     public async Task RequeueAsync(long id)

@@ -18,18 +18,46 @@ public class HarnessBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
-    public async Task Two_dead_letters_that_failed_alike_are_listed_with_one_reason()
+    public async Task Two_dead_letters_that_failed_alike_are_one_group_naming_the_train_its_manifests_and_the_reason()
     {
         var (first, second) = await Seed.DeadLettersSharingAReasonAsync();
+        var manifests = await Host.QueryAsync(dc =>
+            dc.Manifests.AsNoTracking()
+                .Where(m => m.Id == first.ManifestId || m.Id == second.ManifestId)
+                .Select(m => m.ExternalId)
+                .ToListAsync()
+        );
+        // Every test on this host dead-letters the same train the same way, so the group holds theirs too.
+        var awaiting = await Host.QueryAsync(dc =>
+            dc.DeadLetters.AsNoTracking()
+                .CountAsync(d =>
+                    d.Status == DeadLetterStatus.AwaitingIntervention
+                    && d.Reason == first.Reason
+                    && d.Manifest!.Name == typeof(IImportFeedTrain).FullName
+                )
+        );
+        awaiting.Should().BeGreaterThanOrEqualTo(2);
         var page = new DeadLettersPage(Console);
 
         await page.OpenAsync(Caller.Operator);
         await page.ShowAwaitingAsync();
 
+        var group = page.Group(nameof(IImportFeedTrain), first.Reason);
+        await Assertions
+            .Expect(group)
+            .ToContainTextAsync($"{awaiting} dead letters", new() { Timeout = Render });
+        await Assertions.Expect(group).ToContainTextAsync(first.Reason);
+        foreach (var manifest in manifests)
+            await Assertions
+                .Expect(group.GetByRole(AriaRole.Link, new() { Name = manifest, Exact = true }))
+                .ToBeVisibleAsync();
+        await Assertions.Expect(page.Row(first.Id)).ToHaveCountAsync(0);
+
+        await page.ExpandAsync(nameof(IImportFeedTrain), first.Reason);
         foreach (var deadLetter in new[] { first, second })
             await Assertions
                 .Expect(page.Row(deadLetter.Id))
-                .ToContainTextAsync(first.Reason, new() { Timeout = Render });
+                .ToBeVisibleAsync(new() { Timeout = Render });
     }
 
     [Test]

@@ -2308,6 +2308,23 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task GetDeadLetters_NameTheManifestByItsExternalId()
+    {
+        // The console groups dead letters by train and reason and names the manifests in each
+        // group; manifestName is the train, so the manifest's own name has to come with the row.
+        var manifest = await SeedManifestForDeadLetter();
+        await SeedDeadLetters(1, manifest);
+        var queries = new DeadLetterQueries();
+
+        var listed = (await queries.GetDeadLetters(_factory, default)).Items.Single();
+        var read = await queries.GetDeadLetter(listed.Id, _factory, default);
+
+        listed.ManifestExternalId.Should().Be(manifest.ExternalId);
+        listed.ManifestName.Should().Be(manifest.Name);
+        read!.ManifestExternalId.Should().Be(manifest.ExternalId);
+    }
+
+    [Test]
     public async Task GetDeadLetter_MissingId_ReturnsNull()
     {
         var queries = new DeadLetterQueries();

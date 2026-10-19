@@ -53,9 +53,11 @@ export const SortOldest: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("AlphaJob")).toBeInTheDocument());
-    expect(c.getAllByRole("link").filter((l) => !l.getAttribute("href")?.startsWith("http"))[0]).toHaveTextContent("AlphaJob"); // newest first
+    // The first row's first link is its train.
+    const firstTrain = () => within(c.getByRole("table")).getAllByRole("link")[0];
+    expect(firstTrain()).toHaveTextContent("AlphaJob"); // newest first
     await userEvent.selectOptions(c.getAllByRole("combobox")[1], "OLDEST");
-    await waitFor(() => expect(c.getAllByRole("link").filter((l) => !l.getAttribute("href")?.startsWith("http"))[0]).toHaveTextContent("GammaJob"));
+    await waitFor(() => expect(firstTrain()).toHaveTextContent("GammaJob"));
   },
 };
 
@@ -161,10 +163,13 @@ export const DurationFormatting: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("AlphaJob")).toBeInTheDocument());
-    const alpha = c.getByText("AlphaJob").closest("tr") as HTMLElement;
-    expect(within(alpha).getByText("12.0 s")).toBeInTheDocument(); // COMPLETED, 12s
-    const gamma = c.getByText("GammaJob").closest("tr") as HTMLElement;
-    expect(within(gamma).getByText("—")).toBeInTheDocument(); // IN_PROGRESS, no end time
+    const column = within(c.getByRole("table"))
+      .getAllByRole("columnheader")
+      .findIndex((h) => h.textContent === "Duration");
+    const duration = (train: string) =>
+      within(c.getByText(train).closest("tr") as HTMLElement).getAllByRole("cell")[column];
+    expect(duration("AlphaJob")).toHaveTextContent("12.0 s"); // COMPLETED, 12s
+    expect(duration("GammaJob")).toHaveTextContent("—"); // IN_PROGRESS, no end time
   },
 };
 
@@ -308,5 +313,20 @@ export const ParentAndRunningJunctionColumns: Story = {
     expect(within(gamma).getByText("ProcessStep")).toBeInTheDocument();
     const alpha = c.getByText("AlphaJob").closest("tr") as HTMLElement;
     expect(within(alpha).queryByText("ProcessStep")).not.toBeInTheDocument();
+  },
+};
+
+// The Failed view: the same list filtered to state FAILED, with where and why each run failed.
+export const FailedView: Story = {
+  parameters: { route: "/runs?state=FAILED" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getByText("BetaJob")).toBeInTheDocument());
+    expect(c.getByRole("heading", { name: "Failed runs" })).toBeInTheDocument();
+    expect(c.getByRole("link", { name: "Failed" })).toHaveAttribute("aria-current", "page");
+    const beta = c.getByText("BetaJob").closest("tr") as HTMLElement;
+    expect(within(beta).getByText("ValidateStep")).toBeInTheDocument();
+    expect(within(beta).getByText("Assertion failed")).toBeInTheDocument();
+    expect(c.queryByText("AlphaJob")).not.toBeInTheDocument();
   },
 };

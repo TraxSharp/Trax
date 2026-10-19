@@ -128,6 +128,8 @@ export const NOT_RECORDED_YET = [
   // No page reads bulk operations yet.
   "BulkOperations",
   "BulkOperation",
+  // The dead letters page groups from a 500-row window; the recordings hold 25-row pages.
+  "DeadLetterGroups",
 ];
 
 /** The read each write not recorded yet is offered from: no read, no write. */

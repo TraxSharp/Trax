@@ -1,7 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { DeadLettersPage } from "./DeadLettersPage";
-import { deadLetterScenario, emptyPage, errorOverride } from "../mock/scenarios";
+import {
+  deadLetterGroupScenario,
+  deadLetterScenario,
+  emptyPage,
+  errorOverride,
+  SHARED_DEAD_LETTER_REASON,
+} from "../mock/scenarios";
 import { setAutoConfirm } from "../lib/confirm";
 
 const meta = {
@@ -293,5 +299,35 @@ export const FilterByManifest: Story = {
     await userEvent.clear(c.getByLabelText("Manifest id"));
     await userEvent.type(c.getByLabelText("Manifest id"), "999");
     await waitFor(() => expect(c.getByText("No dead letters.")).toBeInTheDocument());
+  },
+};
+
+// Two manifests of one train dead-lettered for the same reason are one group: it names the train,
+// both manifests and the reason, counts two, and opens to its rows.
+export const GroupedByTrainAndReason: Story = {
+  parameters: { mock: deadLetterGroupScenario },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const name = `ImportFeedTrain, ${SHARED_DEAD_LETTER_REASON}`;
+    const group = await waitFor(() => c.getByLabelText(`Select group: ${name}`).closest("tr") as HTMLElement);
+    expect(within(group).getByText("2 dead letters")).toBeInTheDocument();
+    expect(within(group).getByRole("link", { name: "import-eu" })).toBeInTheDocument();
+    expect(within(group).getByRole("link", { name: "import-us" })).toBeInTheDocument();
+    expect(c.queryByLabelText("Select #721")).not.toBeInTheDocument();
+    await userEvent.click(c.getByRole("button", { name: `Show ${name}` }));
+    await waitFor(() => expect(c.getByLabelText("Select #721")).toBeInTheDocument());
+    expect(c.getByLabelText("Select #720")).toBeInTheDocument();
+  },
+};
+
+// The list pages through every dead letter, one row each.
+export const AsList: Story = {
+  parameters: { mock: deadLetterGroupScenario, route: "/runs/dead-letters?view=list" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getAllByLabelText(/^Select #\d+$/)).toHaveLength(3));
+    expect(c.queryAllByLabelText(/^Select group: /)).toHaveLength(0);
+    await userEvent.click(c.getByRole("button", { name: "By train and reason" }));
+    await waitFor(() => expect(c.getAllByLabelText(/^Select group: /)).toHaveLength(2));
   },
 };

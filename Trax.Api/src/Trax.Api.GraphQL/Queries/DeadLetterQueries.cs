@@ -72,7 +72,10 @@ public class DeadLetterQueries
                 dl.ResolvedAt,
                 dl.ResolutionNote,
                 dl.RetryMetadataId
-            ))
+            )
+            {
+                ManifestExternalId = dl.Manifest != null ? dl.Manifest.ExternalId : null,
+            })
             .ToListAsync(ct);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
@@ -123,7 +126,10 @@ public class DeadLetterQueries
                 dl.ResolvedAt,
                 dl.ResolutionNote,
                 dl.RetryMetadataId
-            ))
+            )
+            {
+                ManifestExternalId = dl.Manifest != null ? dl.Manifest.ExternalId : null,
+            })
             .FirstOrDefaultAsync(ct);
     }
 }

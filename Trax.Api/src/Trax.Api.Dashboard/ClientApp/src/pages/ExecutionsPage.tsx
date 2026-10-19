@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { EXECUTIONS, ADMIN_TRAIN_NAMES } from "../graphql/queries";
@@ -21,6 +21,9 @@ import type {
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
+import { RunsTabs } from "../components/RunsTabs";
+import { BatchBar, EmptyState, ListView, MaybeIdLink, type Column } from "../components/ListView";
+import { useKeyset } from "../lib/useKeyset";
 
 const ACTIVE_STATES = new Set<TrainState>(["PENDING", "IN_PROGRESS"]);
 
@@ -47,11 +50,16 @@ interface ExecutionsData {
 }
 
 export function ExecutionsPage() {
+  // All and Failed are two views (components/RunsTabs.tsx): moving between them starts the other
+  // on its first page with nothing selected, as opening a different list would.
+  const [trainState] = useUrlState("state");
+  return <RunsList key={trainState === "FAILED" ? "failed" : "all"} />;
+}
+
+function RunsList() {
   // Keyset pagination: a stack of page-start cursors (afterId). The first page is null.
   // We never use offset `skip`, which scans every skipped row (see the API scaling notes).
-  const [cursors, setCursors] = useState<(number | null)[]>([null]);
-  const afterId = cursors[cursors.length - 1];
-  const isFirstPage = cursors.length === 1;
+  const { afterId, isFirstPage, next, prev, reset: resetToFirst } = useKeyset();
   const [trainState, setTrainState] = useUrlState<TrainState | "">("state");
   const [trainName, setTrainName] = useUrlState("train");
   const [order, setOrder] = useUrlState<"NEWEST" | "OLDEST">("order", "NEWEST");
@@ -73,7 +81,8 @@ export function ExecutionsPage() {
     externalId !== "" ||
     parentId !== "" ||
     hostName !== "";
-  const resetToFirst = () => setCursors([null]);
+  // The Failed view is this list filtered to state FAILED (components/RunsTabs.tsx).
+  const failedView = trainState === "FAILED";
   const hideAdmin = useHideAdminTrains();
 
   const [result, reexecuteExecutions] = useQuery<ExecutionsData>({
@@ -163,10 +172,7 @@ export function ExecutionsPage() {
   }, [page, events, isFirstPage, hasFilter]);
 
   // Only PENDING / IN_PROGRESS rows can be cancelled; the selection goes in one cancelExecutions call.
-  const actionable = rows.filter((e) => ACTIVE_STATES.has(e.trainState));
   const selectedIds = [...selected];
-  const allSelected =
-    actionable.length > 0 && actionable.every((e) => selected.has(e.id));
 
   async function onBulkCancel() {
     if (selectedIds.length === 0) return;
@@ -196,14 +202,17 @@ export function ExecutionsPage() {
     clear();
   }
 
+  const columns = failedView ? [...RUN_COLUMNS.slice(0, 5), ...FAILED_COLUMNS, ...RUN_COLUMNS.slice(6)] : RUN_COLUMNS;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 gap-4">
+      <RunsTabs />
+      <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-fg">Runs</h1>
-        <TermHelp term="run" />
-      </div>
-        <div className="flex gap-2">
+          <h1 className="text-2xl font-bold text-fg">{failedView ? "Failed runs" : "Runs"}</h1>
+          <TermHelp term="run" />
+        </div>
+        <div className="flex flex-wrap gap-2">
           <input
             value={trainName}
             onChange={(e) => {
@@ -214,6 +223,7 @@ export function ExecutionsPage() {
             className="text-sm border border-line-strong rounded-md px-2 py-1 w-64"
           />
           <select
+            aria-label="State"
             value={trainState}
             onChange={(e) => {
               setTrainState(e.target.value as TrainState | "");
@@ -223,11 +233,12 @@ export function ExecutionsPage() {
           >
             {STATES.map((s) => (
               <option key={s} value={s}>
-                {s === "" ? "All states" : label(s)}
+                {s === "" ? "All states" : enumLabel(s)}
               </option>
             ))}
           </select>
           <select
+            aria-label="Order"
             value={order}
             onChange={(e) => {
               setOrder(e.target.value as "NEWEST" | "OLDEST");
@@ -343,150 +354,40 @@ export function ExecutionsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          {result.error && (
-            <div className="bg-danger-soft border border-danger-line text-danger-fg rounded-lg p-4 text-sm mb-4">
-              {result.error.message}
-            </div>
-          )}
+        <div className="lg:col-span-2 min-w-0">
+          <BatchBar count={selectedIds.length} onClear={clear}>
+            <button onClick={onBulkCancel} className="text-danger-fg font-medium hover:underline">
+              Cancel selected
+            </button>
+          </BatchBar>
 
-          {selectedIds.length > 0 && (
-            <div className="flex items-center gap-3 mb-3 px-4 py-2 rounded-lg bg-accent-soft border border-accent-line text-sm">
-              <span className="text-accent-fg font-medium">
-                {selectedIds.length} selected
-              </span>
-              <button
-                onClick={onBulkCancel}
-                className="text-danger-fg font-medium hover:underline"
-              >
-                Cancel selected
-              </button>
-              <button
-                onClick={clear}
-                className="ml-auto text-muted hover:underline"
-              >
-                Clear
-              </button>
-            </div>
-          )}
-
-          <div className="bg-surface rounded-lg border border-line overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-sunken text-muted text-left">
-                <tr>
-                  <th className="px-4 py-2 w-8">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all"
-                      checked={allSelected}
-                      disabled={actionable.length === 0}
-                      onChange={(ev) =>
-                        setMany(actionable.map((e) => e.id), ev.target.checked)
-                      }
-                    />
-                  </th>
-                  <th className="px-4 py-2 font-medium">Train</th>
-                  <th className="px-4 py-2 font-medium">State</th>
-                  <th className="px-4 py-2 font-medium">Started</th>
-                  <th className="px-4 py-2 font-medium">Duration</th>
-                  <th className="px-4 py-2 font-medium">Running junction</th>
-                  <th className="px-4 py-2 font-medium">Parent</th>
-                  <th className="px-4 py-2 font-medium">Failure class</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {rows.map((e) => (
-                  <tr key={e.id}>
-                    <td className="px-4 py-2">
-                      {ACTIVE_STATES.has(e.trainState) && (
-                        <input
-                          type="checkbox"
-                          aria-label={`Select #${e.id}`}
-                          checked={selected.has(e.id)}
-                          onChange={() => toggle(e.id)}
-                        />
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <Link
-                        to={`/runs/${e.id}`}
-                        className="font-medium text-accent-fg hover:underline"
-                        title={e.name}
-                      >
-                        {shortName(e.name)}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2">
-                      <StateBadge state={e.trainState} />
-                      {e.cancellationRequested && ACTIVE_STATES.has(e.trainState) && (
-                        <span className="ml-1 text-[10px] text-warn-fg" title="Cancellation requested">
-                          cancelling
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-fg-2">
-                      {new Date(e.startTime).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-2 text-fg-2">
-                      {duration(e.startTime, e.endTime)}
-                    </td>
-                    <td className="px-4 py-2 text-fg-2 text-xs max-w-[10rem] truncate" title={e.currentlyRunningJunction ?? ""}>
-                      {e.trainState === "IN_PROGRESS" && e.currentlyRunningJunction ? e.currentlyRunningJunction : ""}
-                    </td>
-                    <td className="px-4 py-2 text-xs">
-                      {e.parentId != null && (
-                        <Link to={`/runs/${e.parentId}`} className="text-accent-fg hover:underline">
-                          #{e.parentId}
-                        </Link>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-danger-fg text-xs">
-                      {e.trainState === "FAILED" && e.failureClass ? enumLabel(e.failureClass) : ""}
-                    </td>
-                  </tr>
-                ))}
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-muted">
-                      No runs.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between mt-4 text-sm">
-            <span className="text-muted">
-              {page
-                ? `${page.isEstimatedCount ? "~" : ""}${page.totalCount.toLocaleString()} total`
-                : ""}
-              {!isFirstPage && (
-                <span className="ml-2 text-muted">
-                  · live updates resume on page 1
-                </span>
-              )}
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCursors((c) => c.slice(0, -1))}
-                disabled={isFirstPage}
-                className="px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 disabled:opacity-40 hover:bg-hover"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() =>
-                  page?.nextCursor != null &&
-                  setCursors((c) => [...c, page.nextCursor])
-                }
-                disabled={page?.nextCursor == null}
-                className="px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 disabled:opacity-40 hover:bg-hover"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <ListView
+            label={failedView ? "Failed runs" : "Runs"}
+            columns={columns}
+            rows={result.data || result.error ? rows : undefined}
+            selection={{ selected, toggle, setMany, can: (e) => ACTIVE_STATES.has(e.trainState) }}
+            error={result.error?.message}
+            empty={
+              hasFilter ? (
+                <EmptyState title="No runs." docs={RUNS_DOCS}>
+                  No run matches these filters.
+                </EmptyState>
+              ) : (
+                <EmptyState title="No runs." docs={RUNS_DOCS}>
+                  A run is listed here once a train is run or queued, by a schedule, a machine or a request.
+                </EmptyState>
+              )
+            }
+            paging={{
+              total: page?.totalCount,
+              isEstimated: page?.isEstimatedCount,
+              isFirstPage,
+              nextCursor: page?.nextCursor,
+              onPrev: prev,
+              onNext: next,
+              note: !isFirstPage ? "· live updates resume on page 1" : undefined,
+            }}
+          />
         </div>
 
         <LiveFeed events={events ?? []} />
@@ -494,6 +395,68 @@ export function ExecutionsPage() {
     </div>
   );
 }
+
+const RUNS_DOCS = "https://traxsharp.net/docs/getting-started";
+
+// Every Runs list shows a row the same way: its train links the run, every id opens its page.
+const RUN_COLUMNS: Column<ExecutionSummary>[] = [
+  {
+    header: "Train",
+    cell: (e) => (
+      <Link to={`/runs/${e.id}`} className="font-medium text-accent-fg hover:underline" title={e.name}>
+        {shortName(e.name)}
+      </Link>
+    ),
+  },
+  { header: "Run", cell: (e) => <MaybeIdLink to={(id) => `/runs/${id}`} id={e.id} />, className: "text-xs" },
+  {
+    header: "State",
+    cell: (e) => (
+      <>
+        <StateBadge state={e.trainState} />
+        {e.cancellationRequested && ACTIVE_STATES.has(e.trainState) && (
+          <span className="ml-1 text-[10px] text-warn-fg" title="Cancellation requested">
+            cancelling
+          </span>
+        )}
+      </>
+    ),
+  },
+  { header: "Started", cell: (e) => new Date(e.startTime).toLocaleString(), className: "text-fg-2 whitespace-nowrap" },
+  { header: "Duration", cell: (e) => duration(e.startTime, e.endTime), className: "text-fg-2 whitespace-nowrap" },
+  {
+    header: "Running junction",
+    cell: (e) => (e.trainState === "IN_PROGRESS" && e.currentlyRunningJunction ? e.currentlyRunningJunction : ""),
+    className: "text-fg-2 text-xs max-w-[10rem] truncate",
+  },
+  {
+    header: "Manifest",
+    title: "The manifest that scheduled the run",
+    cell: (e) => <MaybeIdLink to={(id) => `/schedules/${id}`} id={e.manifestId} />,
+    className: "text-xs",
+  },
+  {
+    header: "Parent",
+    title: "The run that started this one",
+    cell: (e) => (e.parentId != null ? <MaybeIdLink to={(id) => `/runs/${id}`} id={e.parentId} /> : null),
+    className: "text-xs",
+  },
+  {
+    header: "Failure class",
+    cell: (e) => (e.trainState === "FAILED" && e.failureClass ? enumLabel(e.failureClass) : ""),
+    className: "text-danger-fg text-xs",
+  },
+];
+
+// The Failed view puts where and why a run failed in place of the running junction.
+const FAILED_COLUMNS: Column<ExecutionSummary>[] = [
+  { header: "Failed at", cell: (e) => e.failureJunction ?? "—", className: "text-fg-2 text-xs max-w-[10rem] truncate" },
+  {
+    header: "Reason",
+    cell: (e) => <span title={e.failureReason ?? ""}>{e.failureReason ?? "—"}</span>,
+    className: "text-fg-2 text-xs max-w-[14rem] truncate",
+  },
+];
 
 function LiveFeed({ events }: { events: TrainLifecycleEvent[] }) {
   return (
@@ -542,13 +505,6 @@ function eventToRow(e: TrainLifecycleEvent): ExecutionSummary {
     manifestId: null,
     hostName: null,
   };
-}
-
-function label(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/^\w/, (c) => c.toUpperCase());
 }
 
 function shortName(fullName: string): string {

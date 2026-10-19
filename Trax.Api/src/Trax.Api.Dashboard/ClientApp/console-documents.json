@@ -66,8 +66,12 @@
       "text": "query DeadLetterDetail($id: Long!) {\n  operations {\n    deadLetters {\n      deadLetter(id: $id) {\n        id\n        manifestId\n        manifestName\n        status\n        deadLetteredAt\n        reason\n        retryCountAtDeadLetter\n        resolvedAt\n        resolutionNote\n        retryMetadataId\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "DeadLetterGroups",
+      "text": "query DeadLetterGroups($take: Int!, $status: DeadLetterStatus, $manifestId: Long) {\n  operations {\n    deadLetters {\n      deadLetters(take: $take, status: $status, manifestId: $manifestId) {\n        items {\n          id\n          manifestId\n          manifestName\n          manifestExternalId\n          status\n          deadLetteredAt\n          reason\n          retryCountAtDeadLetter\n          resolvedAt\n          resolutionNote\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "DeadLetters",
-      "text": "query DeadLetters($take: Int!, $afterId: Long, $status: DeadLetterStatus, $manifestId: Long) {\n  operations {\n    deadLetters {\n      deadLetters(\n        take: $take\n        afterId: $afterId\n        status: $status\n        manifestId: $manifestId\n      ) {\n        items {\n          id\n          manifestId\n          manifestName\n          status\n          deadLetteredAt\n          reason\n          retryCountAtDeadLetter\n          resolvedAt\n          resolutionNote\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+      "text": "query DeadLetters($take: Int!, $afterId: Long, $status: DeadLetterStatus, $manifestId: Long) {\n  operations {\n    deadLetters {\n      deadLetters(\n        take: $take\n        afterId: $afterId\n        status: $status\n        manifestId: $manifestId\n      ) {\n        items {\n          id\n          manifestId\n          manifestName\n          manifestExternalId\n          status\n          deadLetteredAt\n          reason\n          retryCountAtDeadLetter\n          resolvedAt\n          resolutionNote\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "Decisions",
@@ -331,7 +335,7 @@
     },
     {
       "name": "WorkQueue",
-      "text": "query WorkQueue($take: Int!, $afterId: Long, $status: WorkQueueStatus, $trainName: String, $subjectKey: String, $manifestId: Long) {\n  operations {\n    workQueue {\n      workQueues(\n        take: $take\n        afterId: $afterId\n        status: $status\n        trainName: $trainName\n        subjectKey: $subjectKey\n        manifestId: $manifestId\n      ) {\n        items {\n          id\n          externalId\n          trainName\n          status\n          createdAt\n          dispatchedAt\n          priority\n          dispatchAttempts\n          manifestId\n          subjectKey\n          confirmedAt\n          replayDecisionsOf\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+      "text": "query WorkQueue($take: Int!, $afterId: Long, $status: WorkQueueStatus, $trainName: String, $subjectKey: String, $manifestId: Long) {\n  operations {\n    workQueue {\n      workQueues(\n        take: $take\n        afterId: $afterId\n        status: $status\n        trainName: $trainName\n        subjectKey: $subjectKey\n        manifestId: $manifestId\n      ) {\n        items {\n          id\n          externalId\n          trainName\n          status\n          createdAt\n          dispatchedAt\n          priority\n          dispatchAttempts\n          manifestId\n          metadataId\n          subjectKey\n          confirmedAt\n          replayDecisionsOf\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "WorkQueueDetail",

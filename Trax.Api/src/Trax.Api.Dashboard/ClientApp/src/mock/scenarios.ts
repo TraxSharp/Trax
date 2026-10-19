@@ -39,7 +39,7 @@ const WORK_QUEUE_ROWS = [
   { id: 601, externalId: "wq-601", trainName: "Trax.Demo.Trains.OrderTrain",   status: "QUEUED",     createdAt: "2026-07-07T11:59:00.000Z", dispatchedAt: null, priority: 0, dispatchAttempts: 0, manifestId: 41, subjectKey: "order-42", confirmedAt: "2026-07-07T11:59:01.000Z" },
   { id: 602, externalId: "wq-602", trainName: "Trax.Demo.Trains.EmailTrain",   status: "QUEUED",     createdAt: "2026-07-07T11:58:00.000Z", dispatchedAt: null, priority: 5, dispatchAttempts: 0, manifestId: 42, subjectKey: null, confirmedAt: null },
   { id: 603, externalId: "wq-603", trainName: "Trax.Demo.Trains.ReportTrain",  status: "QUEUED",     createdAt: "2026-07-07T11:57:00.000Z", dispatchedAt: null, priority: 0, dispatchAttempts: 1, manifestId: 43, subjectKey: null, confirmedAt: "2026-07-07T11:57:01.000Z", replayDecisionsOf: 899 },
-  { id: 604, externalId: "wq-604", trainName: "Trax.Demo.Trains.OrderTrain",   status: "DISPATCHED", createdAt: "2026-07-07T11:56:00.000Z", dispatchedAt: "2026-07-07T11:56:30.000Z", priority: 0, dispatchAttempts: 1, manifestId: 41, subjectKey: "order-42", confirmedAt: "2026-07-07T11:56:01.000Z" },
+  { id: 604, externalId: "wq-604", trainName: "Trax.Demo.Trains.OrderTrain",   status: "DISPATCHED", createdAt: "2026-07-07T11:56:00.000Z", dispatchedAt: "2026-07-07T11:56:30.000Z", priority: 0, dispatchAttempts: 1, manifestId: 41, metadataId: 88_001, subjectKey: "order-42", confirmedAt: "2026-07-07T11:56:01.000Z" },
   { id: 605, externalId: "wq-605", trainName: "Trax.Demo.Trains.ArchiveTrain", status: "CANCELLED",  createdAt: "2026-07-07T11:55:00.000Z", dispatchedAt: null, priority: 0, dispatchAttempts: 0, manifestId: 44, subjectKey: null, confirmedAt: null },
 ];
 
@@ -82,11 +82,11 @@ export const workQueueScenario: MockSchemaOverrides = {
 // ── Dead letters ─────────────────────────────────────────────────────────
 // 3 AWAITING_INTERVENTION (actionable), 1 RETRIED, 1 ACKNOWLEDGED. Filter-aware.
 const DEAD_LETTER_ROWS = [
-  { id: 701, manifestId: 41, manifestName: "OrderManifest",   status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:59:00.000Z", reason: "Timeout after 3 attempts", retryCountAtDeadLetter: 3, resolvedAt: null, resolutionNote: null },
-  { id: 702, manifestId: 42, manifestName: "EmailManifest",   status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:58:00.000Z", reason: "Validation failed",        retryCountAtDeadLetter: 2, resolvedAt: null, resolutionNote: null },
-  { id: 703, manifestId: 43, manifestName: "ReportManifest",  status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:57:00.000Z", reason: "Null reference",          retryCountAtDeadLetter: 3, resolvedAt: null, resolutionNote: null },
-  { id: 704, manifestId: 41, manifestName: "OrderManifest",   status: "RETRIED",               deadLetteredAt: "2026-07-07T11:56:00.000Z", reason: "Transient network error", retryCountAtDeadLetter: 3, resolvedAt: "2026-07-07T11:56:30.000Z", resolutionNote: null },
-  { id: 705, manifestId: 44, manifestName: "ArchiveManifest", status: "ACKNOWLEDGED",          deadLetteredAt: "2026-07-07T11:55:00.000Z", reason: "Known upstream outage",   retryCountAtDeadLetter: 1, resolvedAt: "2026-07-07T11:55:30.000Z", resolutionNote: "Tracked in TICKET-42" },
+  { id: 701, manifestId: 41, manifestExternalId: "order-nightly", manifestName: "OrderManifest",   status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:59:00.000Z", reason: "Timeout after 3 attempts", retryCountAtDeadLetter: 3, resolvedAt: null, resolutionNote: null },
+  { id: 702, manifestId: 42, manifestExternalId: "email-digest", manifestName: "EmailManifest",   status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:58:00.000Z", reason: "Validation failed",        retryCountAtDeadLetter: 2, resolvedAt: null, resolutionNote: null },
+  { id: 703, manifestId: 43, manifestExternalId: "report-weekly", manifestName: "ReportManifest",  status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:57:00.000Z", reason: "Null reference",          retryCountAtDeadLetter: 3, resolvedAt: null, resolutionNote: null },
+  { id: 704, manifestId: 41, manifestExternalId: "order-nightly", manifestName: "OrderManifest",   status: "RETRIED",               deadLetteredAt: "2026-07-07T11:56:00.000Z", reason: "Transient network error", retryCountAtDeadLetter: 3, resolvedAt: "2026-07-07T11:56:30.000Z", resolutionNote: null },
+  { id: 705, manifestId: 44, manifestExternalId: "archive-hourly", manifestName: "ArchiveManifest", status: "ACKNOWLEDGED",          deadLetteredAt: "2026-07-07T11:55:00.000Z", reason: "Known upstream outage",   retryCountAtDeadLetter: 1, resolvedAt: "2026-07-07T11:55:30.000Z", resolutionNote: "Tracked in TICKET-42" },
 ];
 
 export const deadLetterScenario: MockSchemaOverrides = {
@@ -97,6 +97,26 @@ export const deadLetterScenario: MockSchemaOverrides = {
         let rows = status ? DEAD_LETTER_ROWS.filter((r) => r.status === status) : DEAD_LETTER_ROWS;
         if (args.manifestId != null) rows = rows.filter((r) => r.manifestId === args.manifestId);
         return pagedResult(rows);
+      },
+    },
+  }),
+};
+
+// Two manifests of one train dead-lettered for the same reason, and a third dead letter of that
+// train that failed another way: the Dead letters view shows two groups, the first of two.
+export const SHARED_DEAD_LETTER_REASON = "Max retries exceeded: (1) failures > (0) max retries";
+const SHARED_REASON_ROWS = [
+  { id: 721, manifestId: 45, manifestExternalId: "import-eu", manifestName: "Trax.Demo.Trains.ImportFeedTrain", status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:59:00.000Z", reason: SHARED_DEAD_LETTER_REASON, retryCountAtDeadLetter: 1, resolvedAt: null, resolutionNote: null },
+  { id: 720, manifestId: 46, manifestExternalId: "import-us", manifestName: "Trax.Demo.Trains.ImportFeedTrain", status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:58:00.000Z", reason: SHARED_DEAD_LETTER_REASON, retryCountAtDeadLetter: 1, resolvedAt: null, resolutionNote: null },
+  { id: 719, manifestId: 45, manifestExternalId: "import-eu", manifestName: "Trax.Demo.Trains.ImportFeedTrain", status: "AWAITING_INTERVENTION", deadLetteredAt: "2026-07-07T11:57:00.000Z", reason: "Timeout after 3 attempts", retryCountAtDeadLetter: 3, resolvedAt: null, resolutionNote: null },
+];
+
+export const deadLetterGroupScenario: MockSchemaOverrides = {
+  resolvers: () => ({
+    DeadLetterQueries: {
+      deadLetters: (_root: unknown, args: Args) => {
+        const status = args.status as string | undefined;
+        return pagedResult(status ? SHARED_REASON_ROWS.filter((r) => r.status === status) : SHARED_REASON_ROWS);
       },
     },
   }),

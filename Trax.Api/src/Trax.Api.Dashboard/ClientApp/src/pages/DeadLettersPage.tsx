@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useClient, useMutation, useQuery } from "urql";
-import { DEAD_LETTERS, REQUEUE_ALL_JOB } from "../graphql/queries";
+import { DEAD_LETTER_GROUPS, DEAD_LETTERS, REQUEUE_ALL_JOB } from "../graphql/queries";
 import {
   ACKNOWLEDGE_ALL_DEAD_LETTERS,
   ACKNOWLEDGE_DEAD_LETTER,
@@ -10,7 +10,6 @@ import {
   REQUEUE_DEAD_LETTER,
   REQUEUE_DEAD_LETTERS,
 } from "../graphql/mutations";
-import { Pager } from "../components/Pager";
 import { NotePrompt } from "../components/NotePrompt";
 import { useKeyset } from "../lib/useKeyset";
 import { useSelection } from "../lib/useSelection";
@@ -22,8 +21,24 @@ import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
+import { useAnswers } from "../lib/answerable";
+import { enumLabel, formatTime, shortName } from "../lib/format";
+import { RunsTabs } from "../components/RunsTabs";
+import { groupDeadLetters, type DeadLetterGroup } from "../lib/deadLetterGroups";
+import {
+  BatchBar,
+  EmptyState,
+  ListView,
+  MaybeIdLink,
+  type Column,
+  type ListGroup,
+} from "../components/ListView";
 
 const PAGE_SIZE = 25;
+// How many of the newest dead letters the grouped view reads: the largest page the API serves.
+// More than that and the page says so, and the list pages through every one.
+const GROUP_WINDOW = 500;
+const DOCS = "https://traxsharp.net/docs/scheduler/dead-letters-and-cleanup";
 const STATUSES: (DeadLetterStatus | "")[] = [
   "",
   "AWAITING_INTERVENTION",
@@ -58,20 +73,31 @@ export function DeadLettersPage() {
   // One manifest's dead letters; the dead-letter page links here with ?manifestId=.
   const [manifestIdParam, setManifestId] = useUrlState("manifestId");
   const manifestId = manifestIdParam.replace(/\D/g, "");
+  // Grouped by train and reason, or the plain list that pages through every dead letter. The demo
+  // has no recording of the grouped read, so it shows the list (lib/answerable.ts).
+  const groupable = useAnswers("DeadLetterGroups");
+  const [viewParam, setView] = useUrlState<"groups" | "list">("view", "groups");
+  const view = groupable ? viewParam : "list";
   const { selected, toggle, setMany, clear } = useSelection();
   // note dialog: single dead-letter id, "bulk" (selection), "all" (every unresolved), or null.
   const [ackTarget, setAckTarget] = useState<number | "bulk" | "all" | null>(null);
   const [busy, setBusy] = useState(false);
+  // The groups whose rows are shown, beside the ones open by default (a group of one).
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
 
-  const [result, reexecute] = useQuery<DeadLettersData>({
+  const filters = { status: status || null, manifestId: manifestId ? Number(manifestId) : null };
+  const [listResult, reexecuteList] = useQuery<DeadLettersData>({
     query: DEAD_LETTERS,
-    variables: {
-      take: PAGE_SIZE,
-      afterId,
-      status: status || null,
-      manifestId: manifestId ? Number(manifestId) : null,
-    },
+    variables: { take: PAGE_SIZE, afterId, ...filters },
+    pause: view !== "list",
   });
+  const [groupResult, reexecuteGroups] = useQuery<DeadLettersData>({
+    query: DEAD_LETTER_GROUPS,
+    variables: { take: GROUP_WINDOW, ...filters },
+    pause: view !== "groups",
+  });
+  const result = view === "list" ? listResult : groupResult;
+  const reexecute = view === "list" ? reexecuteList : reexecuteGroups;
   const [, requeue] = useMutation(REQUEUE_DEAD_LETTER);
   const [, acknowledge] = useMutation(ACKNOWLEDGE_DEAD_LETTER);
   const [, requeueMany] = useMutation(REQUEUE_DEAD_LETTERS);
@@ -84,23 +110,26 @@ export function DeadLettersPage() {
 
   // Chain optionally: a GraphQL error can return { operations: null }.
   const page = result.data?.operations?.deadLetters?.deadLetters;
+  const items = useMemo(() => page?.items ?? [], [page]);
   const refetch = () => {
     clear();
     reexecute({ requestPolicy: "network-only" });
   };
+  const onFilter = () => {
+    clear();
+    reset();
+  };
 
-  const actionable = (page?.items ?? []).filter(
-    (d) => d.status === "AWAITING_INTERVENTION",
-  );
   const selectedIds = [...selected];
   const askingDecisions = useTrainsAskingDecisions();
-  const listedAsk = offersDecisions(askingDecisions, (page?.items ?? []).map((d) => d.manifestName));
+  const listedAsk = offersDecisions(askingDecisions, items.map((d) => d.manifestName));
   const selectedAsk = offersDecisions(
     askingDecisions,
-    (page?.items ?? []).filter((d) => selected.has(d.id)).map((d) => d.manifestName),
+    items.filter((d) => selected.has(d.id)).map((d) => d.manifestName),
   );
-  const allSelected =
-    actionable.length > 0 && actionable.every((d) => selected.has(d.id));
+
+  const groups = useMemo(() => groupDeadLetters(items), [items]);
+  const hasFilter = status !== "" || manifestId !== "";
 
   async function onRequeue(id: number) {
     if (
@@ -236,14 +265,33 @@ export function DeadLettersPage() {
     refetch();
   }
 
+  const actions: Column<DeadLetterSummary> = {
+    header: "Actions",
+    cell: (d) =>
+      d.status === "AWAITING_INTERVENTION" ? (
+        <>
+          <button onClick={() => onRequeue(d.id)} className="text-accent-fg hover:underline mr-3">
+            Requeue
+          </button>
+          <button onClick={() => setAckTarget(d.id)} className="text-fg-2 hover:underline">
+            Acknowledge
+          </button>
+        </>
+      ) : (
+        <span className="text-faint">—</span>
+      ),
+    className: "text-right whitespace-nowrap",
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 gap-4">
+      <RunsTabs />
+      <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-fg">Dead letters</h1>
-        <TermHelp term="deadLetter" />
-      </div>
-        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-fg">Dead letters</h1>
+          <TermHelp term="deadLetter" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => onRequeueAll(false)}
             disabled={busy}
@@ -273,171 +321,135 @@ export function DeadLettersPage() {
             value={manifestId}
             onChange={(e) => {
               setManifestId(e.target.value.replace(/\D/g, ""));
-              clear();
-              reset();
+              onFilter();
             }}
             placeholder="Manifest id…"
             className="text-sm border border-line-strong rounded-md px-2 py-1 w-28"
           />
           <select
+            aria-label="Status"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as DeadLetterStatus | "");
-              clear();
-              reset();
+              onFilter();
             }}
             className="text-sm border border-line-strong rounded-md px-2 py-1"
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s === "" ? "All statuses" : label(s)}
+                {s === "" ? "All statuses" : enumLabel(s)}
               </option>
             ))}
           </select>
+          {groupable && (
+            <div role="group" aria-label="Show dead letters" className="flex rounded-md border border-line-strong overflow-hidden text-sm">
+              {(
+                [
+                  ["groups", "By train and reason"],
+                  ["list", "List"],
+                ] as const
+              ).map(([v, text]) => (
+                <button
+                  key={v}
+                  aria-pressed={view === v}
+                  onClick={() => {
+                    setView(v);
+                    onFilter();
+                  }}
+                  className={`px-2 py-1 ${view === v ? "bg-accent-soft text-accent-fg font-medium" : "text-fg-2 hover:bg-hover"}`}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {result.error && (
-        <div className="bg-danger-soft border border-danger-line text-danger-fg rounded-lg p-4 text-sm mb-4">
-          {result.error.message}
-        </div>
-      )}
-
-      {selectedIds.length > 0 && (
-        <div className="flex items-center gap-3 mb-3 px-4 py-2 rounded-lg bg-accent-soft border border-accent-line text-sm">
-          <span className="text-accent-fg font-medium">
-            {selectedIds.length} selected
-          </span>
+      <BatchBar count={selectedIds.length} onClear={clear}>
+        <button
+          onClick={() => onBulkRequeue(false)}
+          disabled={busy}
+          className="text-accent-fg font-medium hover:underline disabled:opacity-50"
+        >
+          Requeue selected
+        </button>
+        {selectedAsk && (
           <button
-            onClick={() => onBulkRequeue(false)}
+            onClick={() => onBulkRequeue(true)}
             disabled={busy}
+            title="Requeue the selected dead letters; each run asks the model afresh instead of replaying the failed run's decisions."
             className="text-accent-fg font-medium hover:underline disabled:opacity-50"
           >
-            Requeue selected
+            Requeue selected, ask afresh
           </button>
-          {selectedAsk && (
-            <button
-              onClick={() => onBulkRequeue(true)}
-              disabled={busy}
-              title="Requeue the selected dead letters; each run asks the model afresh instead of replaying the failed run's decisions."
-              className="text-accent-fg font-medium hover:underline disabled:opacity-50"
-            >
-              Requeue selected, ask afresh
-            </button>
-          )}
-          <button
-            onClick={() => setAckTarget("bulk")}
-            disabled={busy}
-            className="text-fg-2 font-medium hover:underline disabled:opacity-50"
-          >
-            Acknowledge selected
+        )}
+        <button
+          onClick={() => setAckTarget("bulk")}
+          disabled={busy}
+          className="text-fg-2 font-medium hover:underline disabled:opacity-50"
+        >
+          Acknowledge selected
+        </button>
+      </BatchBar>
+
+      {view === "groups" && page && page.totalCount > items.length && (
+        <p className="text-xs text-muted mb-2">
+          Grouped from the newest {items.length.toLocaleString()} of {page.totalCount.toLocaleString()} dead letters.
+          Narrow by status or manifest, or{" "}
+          <button onClick={() => setView("list")} className="text-accent-fg hover:underline">
+            list every one
           </button>
-          <button
-            onClick={clear}
-            className="ml-auto text-muted hover:underline"
-          >
-            Clear
-          </button>
-        </div>
+          .
+        </p>
       )}
 
-      <div className="bg-surface rounded-lg border border-line overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-sunken text-muted text-left">
-            <tr>
-              <th className="px-4 py-2 w-8">
-                <input
-                  type="checkbox"
-                  aria-label="Select all"
-                  checked={allSelected}
-                  disabled={actionable.length === 0}
-                  onChange={(e) =>
-                    setMany(
-                      actionable.map((d) => d.id),
-                      e.target.checked,
-                    )
-                  }
-                />
-              </th>
-              <th className="px-4 py-2 font-medium">Manifest</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-              <th className="px-4 py-2 font-medium">Reason</th>
-              <th className="px-4 py-2 font-medium">Retries</th>
-              <th className="px-4 py-2 font-medium text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {page?.items.map((d) => (
-              <tr key={d.id}>
-                <td className="px-4 py-2">
-                  {d.status === "AWAITING_INTERVENTION" && (
-                    <input
-                      type="checkbox"
-                      aria-label={`Select #${d.id}`}
-                      checked={selected.has(d.id)}
-                      onChange={() => toggle(d.id)}
-                    />
-                  )}
-                </td>
-                <td className="px-4 py-2">
-                  <Link
-                    to={`/runs/dead-letters/${d.id}`}
-                    className="font-medium text-accent-fg hover:underline"
-                  >
-                    {d.manifestName}
-                  </Link>
-                </td>
-                <td className="px-4 py-2">
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLE[d.status]}`}
-                  >
-                    {label(d.status)}
-                  </span>
-                </td>
-                <td className="px-4 py-2 text-fg-2 max-w-xs truncate" title={d.reason}>
-                  {d.reason}
-                </td>
-                <td className="px-4 py-2 text-fg-2">{d.retryCountAtDeadLetter}</td>
-                <td className="px-4 py-2 text-right whitespace-nowrap">
-                  {d.status === "AWAITING_INTERVENTION" ? (
-                    <>
-                      <button
-                        onClick={() => onRequeue(d.id)}
-                        className="text-accent-fg hover:underline mr-3"
-                      >
-                        Requeue
-                      </button>
-                      <button
-                        onClick={() => setAckTarget(d.id)}
-                        className="text-fg-2 hover:underline"
-                      >
-                        Acknowledge
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-faint">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {page?.items.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted">
-                  No dead letters.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Pager
-        total={page?.totalCount}
-        isEstimated={page?.isEstimatedCount}
-        isFirstPage={isFirstPage}
-        nextCursor={page?.nextCursor}
-        onPrev={prev}
-        onNext={next}
+      <ListView
+        label="Dead letters"
+        columns={view === "list" ? [...LIST_COLUMNS, actions] : [...GROUP_ROW_COLUMNS, actions]}
+        rows={view === "list" ? page?.items : undefined}
+        groups={
+          view === "groups" && page
+            ? groups.map(
+                (g): ListGroup<DeadLetterSummary> => ({
+                  key: g.key,
+                  label: `${shortName(g.train)}, ${g.reason}`,
+                  rows: g.rows,
+                  summary: <GroupSummary group={g} />,
+                  // A group of one shows its row; a bigger one opens on request.
+                  expanded: (g.rows.length === 1) !== toggled.has(g.key),
+                  onToggle: () =>
+                    setToggled((t) => {
+                      const n = new Set(t);
+                      if (n.has(g.key)) n.delete(g.key);
+                      else n.add(g.key);
+                      return n;
+                    }),
+                }),
+              )
+            : undefined
+        }
+        selection={{ selected, toggle, setMany, can: (d) => d.status === "AWAITING_INTERVENTION" }}
+        error={result.error?.message}
+        empty={
+          <EmptyState title="No dead letters." docs={DOCS}>
+            {hasFilter
+              ? "No dead letter matches these filters."
+              : "A manifest's run is dead-lettered here once it has failed more times than its retries allow, and waits for someone to requeue or acknowledge it."}
+          </EmptyState>
+        }
+        paging={
+          view === "list"
+            ? {
+                total: page?.totalCount,
+                isEstimated: page?.isEstimatedCount,
+                isFirstPage,
+                nextCursor: page?.nextCursor,
+                onPrev: prev,
+                onNext: next,
+              }
+            : undefined
+        }
       />
 
       {ackTarget != null && (
@@ -460,9 +472,87 @@ export function DeadLettersPage() {
   );
 }
 
-function label(s: DeadLetterStatus): string {
-  return s
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/^\w/, (c) => c.toUpperCase());
+const MANIFESTS_SHOWN = 3;
+
+function GroupSummary({ group: g }: { group: DeadLetterGroup }) {
+  const n = g.rows.length;
+  return (
+    <div className="text-sm space-y-0.5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        <Link
+          to={`/trains/${encodeURIComponent(g.train)}`}
+          title={g.train}
+          className="font-medium text-accent-fg hover:underline"
+        >
+          {shortName(g.train)}
+        </Link>
+        <span className="text-fg-2 font-medium">
+          {n} dead letter{n === 1 ? "" : "s"}
+        </span>
+        {g.awaiting !== n && <span className="text-xs text-muted">{g.awaiting} awaiting</span>}
+        <span className="text-xs text-muted">latest {formatTime(g.latest)}</span>
+      </div>
+      <div className="text-xs text-muted">
+        {g.manifests.length === 1 ? "Manifest " : `${g.manifests.length} manifests: `}
+        {g.manifests.slice(0, MANIFESTS_SHOWN).map((m, i) => (
+          <span key={m.id}>
+            {i > 0 && ", "}
+            <ManifestLink id={m.id} externalId={m.externalId} />
+          </span>
+        ))}
+        {g.manifests.length > MANIFESTS_SHOWN && ` and ${g.manifests.length - MANIFESTS_SHOWN} more`}
+      </div>
+      <div className="text-xs text-danger-fg break-words line-clamp-2" title={g.reason}>
+        {g.reason}
+      </div>
+    </div>
+  );
 }
+
+/** A manifest by its own name (its external id) when the row carries it, by its id otherwise. */
+function ManifestLink({ id, externalId }: { id: number; externalId: string | null | undefined }) {
+  return (
+    <Link to={`/schedules/${id}`} className="text-accent-fg hover:underline" title={`Manifest #${id}`}>
+      {externalId ?? `#${id}`}
+    </Link>
+  );
+}
+
+function StatusBadge({ status }: { status: DeadLetterStatus }) {
+  return <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLE[status]}`}>{enumLabel(status)}</span>;
+}
+
+// A dead letter's row in the list: its train opens it, every id opens its page.
+const LIST_COLUMNS: Column<DeadLetterSummary>[] = [
+  {
+    header: "Train",
+    cell: (d) => (
+      <Link to={`/runs/dead-letters/${d.id}`} title={d.manifestName} className="font-medium text-accent-fg hover:underline">
+        {shortName(d.manifestName)}
+      </Link>
+    ),
+  },
+  { header: "Dead letter", cell: (d) => <MaybeIdLink to={(id) => `/runs/dead-letters/${id}`} id={d.id} />, className: "text-xs" },
+  { header: "Manifest", cell: (d) => <ManifestLink id={d.manifestId} externalId={d.manifestExternalId} />, className: "text-xs" },
+  { header: "Status", cell: (d) => <StatusBadge status={d.status} /> },
+  {
+    header: "Reason",
+    cell: (d) => <span title={d.reason}>{d.reason}</span>,
+    className: "text-fg-2 max-w-xs truncate",
+  },
+  { header: "Retries", cell: (d) => d.retryCountAtDeadLetter, className: "text-fg-2" },
+  { header: "Dead-lettered", cell: (d) => formatTime(d.deadLetteredAt), className: "text-fg-2 whitespace-nowrap" },
+];
+
+// A row inside a group: the group already names its train and reason.
+const GROUP_ROW_COLUMNS: Column<DeadLetterSummary>[] = [
+  {
+    header: "Dead letter",
+    cell: (d) => <MaybeIdLink to={(id) => `/runs/dead-letters/${id}`} id={d.id} />,
+    className: "text-xs",
+  },
+  { header: "Manifest", cell: (d) => <ManifestLink id={d.manifestId} externalId={d.manifestExternalId} />, className: "text-xs" },
+  { header: "Status", cell: (d) => <StatusBadge status={d.status} /> },
+  { header: "Retries", cell: (d) => d.retryCountAtDeadLetter, className: "text-fg-2" },
+  { header: "Dead-lettered", cell: (d) => formatTime(d.deadLetteredAt), className: "text-fg-2 whitespace-nowrap" },
+];
