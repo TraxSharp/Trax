@@ -387,6 +387,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             && Metadata.ManifestId is not null
         )
             Metadata.ReplayAbandoned = true;
+
+        // The chain this run runs, by its hash, when the host has already read it (its startup
+        // check does), so a run graph drawn later on a changed chain can say so. Never read here:
+        // a train that declares no checkpoint never has its chain read by a run.
+        Metadata.ChainHash ??= DeclaredChains.Known(GetType())?.Hash;
         await EffectRunner.Update(Metadata);
 
         // Not the caller's token, for the same reason SaveOutcome does not take it. An

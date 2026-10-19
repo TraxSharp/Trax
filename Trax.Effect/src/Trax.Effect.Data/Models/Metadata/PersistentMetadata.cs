@@ -72,6 +72,9 @@ internal class PersistentMetadata : Effect.Models.Metadata.Metadata
 
             // Who started the run (Postgres 082, SQLite 042), internal like the invoked run's output.
             entity.Property(e => e.StarterHash).HasColumnName("starter_hash");
+
+            // The chain the run started under (Postgres 087, SQLite 046), internal like the starter.
+            entity.Property(e => e.ChainHash).HasColumnName("chain_hash");
         });
     }
 }

@@ -288,6 +288,7 @@ query {
       train
       hasGraph
       hash
+      chainChanged
       moreSteps
       canResume
       nodes {
@@ -383,6 +384,15 @@ node ids were, after a withheld route, or for a node the chain no longer declare
 `unmatchedSteps` rather than dropped. `hasGraph` is false when the host has no graph for the train;
 `nodes` is then empty and every step is unmatched. `moreSteps` says the run recorded more than 500
 steps, so a later node can show as not reached when it ran.
+
+**When the chain has changed.** A run records the hash of its train's chain when it starts (see
+[Run chain hash](/docs/reference/schema-migrations#run-chain-hash-087-sqlite-046)), and `chainChanged`
+is true when that hash differs from `hash`, the chain the host declares now. The nodes are still
+the current chain's, so a run whose node ids match a changed chain is placed on nodes it may not
+have run as drawn: a step that moved, a track whose contents changed. Old chains are not stored, so
+the graph cannot be drawn as it was. `chainChanged` is false when the run recorded no hash (a run
+from before it was recorded, or from a host that skips the startup chain check) and when the host
+has no graph for the train.
 
 **Where a run can resume.** For a failed or cancelled execution, and for one that itself
 resumed, the read also asks the [resume check](/docs/sdk-reference/train-methods/checkpoint#what-can-resume-where)

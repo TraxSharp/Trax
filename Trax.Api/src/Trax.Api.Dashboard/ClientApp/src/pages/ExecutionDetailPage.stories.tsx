@@ -601,6 +601,17 @@ export const ResumedRunRestored: Story = {
     expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     await selectNode(graph, "Summarize#2");
     expect(within(panelOf(graph)!).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
+    expect(within(graph).queryByRole("note")).not.toBeInTheDocument();
+  },
+};
+
+// A run whose chain has changed since it started says so above its graph.
+export const ChainChangedSinceTheRun: Story = {
+  parameters: { route: "/runs/958" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    expect(await within(graph).findByRole("note")).toHaveTextContent("chain has changed since this run started");
   },
 };
 

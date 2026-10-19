@@ -682,3 +682,15 @@ with `SkipMigrations()` against a database without the table logs one warning an
 [`operations.hosts`](/docs/sdk-reference/graphql-api/queries/operations#hosts) reads this table instead of grouping
 the run history, and calls a host offline once its last beat is 45 seconds old. A host on the previous version
 writes no row, so during a rolling deploy it is not listed until it is upgraded. Nothing is backfilled.
+
+## Run chain hash (088, SQLite 047)
+
+`088_metadata_chain_hash.sql` (SQLite `047`) adds a nullable `chain_hash` (`text`) to `trax.metadata`: the hash of
+the train's declared chain when the run started, the same hash a checkpoint row stores. A run records it when the
+host has already read the train's chain, which the startup chain check does for every registered train; a host that
+skips the check records none. [`runGraph`](/docs/sdk-reference/graphql-api/queries/executions#rungraph) compares it
+with the chain the host declares now and answers `chainChanged` when they differ, because the graph is always drawn
+on the current chain and a run whose node ids still match a changed one would otherwise look as if it ran that way.
+
+Nothing is backfilled: a run from before this migration, or from a host on the previous version during a rolling
+deploy, has no hash, and its graph is drawn with nothing to compare it to.

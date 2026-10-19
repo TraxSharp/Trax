@@ -57,6 +57,15 @@ export function RunGraphPanel({ graph, selectedId, onSelect, onResume, resumingN
         </p>
       ) : (
         <>
+          {graph.chainChanged && (
+            <p role="note" className="text-sm rounded-md border border-warn-line bg-warn-soft text-warn-fg px-3 py-2 mb-3">
+              This train's chain has changed since this run started. The graph is today's chain, so a
+              step can sit where the run did not run it.{" "}
+              <a className="underline" href={RUN_GRAPH_DOCS} target="_blank" rel="noreferrer">
+                Why
+              </a>
+            </p>
+          )}
           {graph.moreSteps && (
             <p className="text-sm text-warn-fg mb-2">
               Only the run's first steps are placed; a later node can show as not reached when it ran.

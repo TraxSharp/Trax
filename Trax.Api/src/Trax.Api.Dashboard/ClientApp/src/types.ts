@@ -741,6 +741,9 @@ export interface RunGraphFlatNode extends Omit<RunGraphNode, "tracks"> {
 export interface RunGraph {
   metadataId: number;
   hasGraph: boolean;
+  // True when the run recorded its chain's hash when it started and the chain the host declares now
+  // has another: the graph is drawn on today's chain, which may not be the one the run ran.
+  chainChanged: boolean;
   moreSteps: boolean;
   // True when resumeExecution can resume the run after its latest checkpoint.
   canResume: boolean;

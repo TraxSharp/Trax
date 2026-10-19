@@ -1040,6 +1040,7 @@ export const RUN_GRAPH = gql`
       runGraph(metadataId: $metadataId) {
         metadataId
         hasGraph
+        chainChanged
         moreSteps
         canResume
         unmatchedSteps {

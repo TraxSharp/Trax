@@ -25,6 +25,13 @@ internal sealed class RunGraphType : ObjectType<RunGraph>
                     + "is unmatched."
             );
         descriptor.Field(g => g.Hash);
+        descriptor
+            .Field(g => g.ChainChanged)
+            .Description(
+                "True when the run recorded its chain's hash when it started and it differs from "
+                    + "hash: the chain has changed since the run, and the nodes it is drawn on may "
+                    + "not be the ones it ran. False when the run recorded none or there is no graph."
+            );
         descriptor.Field(g => g.Nodes).Type<NonNullType<ListType<NonNullType<RunGraphNodeType>>>>();
         descriptor
             .Field(g => g.AllNodes)

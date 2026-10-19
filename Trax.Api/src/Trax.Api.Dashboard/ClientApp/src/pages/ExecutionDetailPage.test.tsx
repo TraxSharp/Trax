@@ -68,3 +68,16 @@ test("selecting a node in the graph highlights its bar in the timeline", async (
   await waitFor(() => expect(timeline.querySelector('[data-position="0"]')).toHaveAttribute("data-selected", "true"));
   expect(timeline.querySelector('[data-position="2"]')).not.toHaveAttribute("data-selected");
 });
+
+test("a run under a chain that has changed since says so", async () => {
+  renderRun(958);
+  const graph = await screen.findByRole("region", { name: "Run graph" });
+  expect(await within(graph).findByRole("note")).toHaveTextContent("chain has changed since this run started");
+});
+
+test("a run under today's chain shows no notice", async () => {
+  renderRun(952);
+  const graph = await screen.findByRole("region", { name: "Run graph" });
+  await waitFor(() => expect(graph.querySelector(".react-flow__node")).not.toBeNull());
+  expect(within(graph).queryByRole("note")).toBeNull();
+});

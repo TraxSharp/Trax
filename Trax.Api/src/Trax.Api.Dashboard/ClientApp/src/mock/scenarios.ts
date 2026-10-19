@@ -481,7 +481,8 @@ export const executionScenario: MockSchemaOverrides = {
 // Keyed by id: 903 is active (cancellable), 900 terminal (re-queueable), 800 has children, 902
 // failed (a replaying retry of 899, a child of 800, with a junction timeline, and checkpoints it
 // can resume from), 950 recorded more steps than the timeline shows, 952 resumed 902 after its
-// checkpoint, 954 failed without a saved input, 956 failed deep in its nested routing.
+// checkpoint, 954 failed without a saved input, 956 failed deep in its nested routing, 958 ran
+// under a chain that has changed since.
 
 // One node of a run graph; tracks and steps default to none.
 function graphNode(id: string, kind: ChainStepKind, state: RunNodeState, fields: Partial<RunGraphNode> = {}): RunGraphNode {
@@ -525,7 +526,7 @@ function graphStep(position: number, fields: Partial<RunGraphStep> = {}): RunGra
   };
 }
 
-const NO_GRAPH = { hasGraph: false, moreSteps: false, canResume: false, nodes: [], unmatchedSteps: [] };
+const NO_GRAPH = { hasGraph: false, chainChanged: false, moreSteps: false, canResume: false, nodes: [], unmatchedSteps: [] };
 
 // A run graph as a scenario declares it: the tree, from which runGraph serves the flat list too.
 type DeclaredRunGraph = Omit<RunGraph, "allNodes"> & { nodes: RunGraphNode[] };
@@ -573,6 +574,7 @@ function deepRunGraph(metadataId: number): DeclaredRunGraph {
   return {
     metadataId,
     hasGraph: true,
+    chainChanged: false,
     moreSteps: false,
     canResume: true,
     nodes: [
@@ -605,6 +607,7 @@ function declaredRunGraph(metadataId: number): DeclaredRunGraph {
     return {
       metadataId,
       hasGraph: true,
+      chainChanged: false,
       moreSteps: false,
       canResume: true,
       nodes: [
@@ -635,10 +638,11 @@ function declaredRunGraph(metadataId: number): DeclaredRunGraph {
       unmatchedSteps: [],
     };
   }
-  if (metadataId === 952) {
+  if (metadataId === 952 || metadataId === 958) {
     return {
       metadataId,
       hasGraph: true,
+      chainChanged: metadataId === 958,
       moreSteps: false,
       canResume: false,
       nodes: [
@@ -870,6 +874,7 @@ export const executionDetailScenario: MockSchemaOverrides = {
         if (id === 952) return execDetail(952, "Trax.Exec.BetaJob", "COMPLETED", 0);
         if (id === 954) return { ...execDetail(954, "Trax.Exec.BetaJob", "FAILED", 0), input: null };
         if (id === 956) return execDetail(956, "Trax.Exec.NestedJob", "FAILED", 0);
+        if (id === 958) return execDetail(958, "Trax.Exec.BetaJob", "COMPLETED", 0);
         return execDetail(900, "Trax.Exec.DeltaJob", "COMPLETED", 0);
       },
       runGraph: (_root: unknown, args: Args) => runGraph(args.metadataId as number),

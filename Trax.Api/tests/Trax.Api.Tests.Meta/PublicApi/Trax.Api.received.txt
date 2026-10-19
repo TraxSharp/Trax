@@ -719,6 +719,7 @@ namespace Trax.Api.DTOs
         public RunGraph(long MetadataId, string Train, bool HasGraph, string? Hash, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> UnmatchedSteps, bool MoreSteps) { }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> AllNodes { get; }
         public bool CanResume { get; init; }
+        public bool ChainChanged { get; init; }
         public bool HasGraph { get; init; }
         public string? Hash { get; init; }
         public long MetadataId { get; init; }

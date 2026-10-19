@@ -75,6 +75,7 @@ internal static class RunGraphs
                 m.TrainState,
                 m.InvokingMachine,
                 m.ResumeFrom,
+                m.ChainHash,
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -103,7 +104,7 @@ internal static class RunGraphs
             )
             : null;
 
-        return Match(
+        var drawn = Match(
             metadataId,
             run.Name,
             graph,
@@ -113,7 +114,24 @@ internal static class RunGraphs
             Resumable(run.TrainState, run.InvokingMachine),
             Ended(run.TrainState)
         );
+
+        return drawn with
+        {
+            ChainChanged = ChainChanged(run.ChainHash, graph),
+        };
     }
+
+    /// <summary>
+    /// True when a run that recorded <paramref name="recorded"/> as its chain's hash is drawn on
+    /// <paramref name="graph"/>, a chain with another hash. False when either is missing: a run
+    /// with no hash has nothing to compare, and with no graph nothing is drawn.
+    /// </summary>
+    /// <param name="recorded">The hash the run recorded when it started, or null.</param>
+    /// <param name="graph">The train's graph now, or null.</param>
+    public static bool ChainChanged(string? recorded, ChainGraph? graph) =>
+        recorded is not null
+        && graph is not null
+        && !string.Equals(recorded, graph.Hash, StringComparison.Ordinal);
 
     /// <summary>
     /// The declared chain of the registered train named <paramref name="train"/>, drawn as

@@ -392,6 +392,14 @@ public class Metadata : IModel, IDisposable
     internal string? StarterHash { get; set; }
 
     /// <summary>
+    /// The <c>ChainGraph.Hash</c> of the train's declared chain when this run started, as the
+    /// host's startup check read it; null when nothing had read the chain (a host that skips the
+    /// check), and on every run from before it was recorded. A run graph drawn on a chain whose
+    /// hash differs says so. Internal and never serialized.
+    /// </summary>
+    internal string? ChainHash { get; set; }
+
+    /// <summary>
     /// The output of a completed invoked run, serialized as its machine's <c>OnDone</c> edges read it
     /// (<see cref="Utils.InvokedRunOutput"/>), and written in the run's terminal write so the outcome survives
     /// any crash after it. Null on every other run, on a run that has not completed, on one whose output was

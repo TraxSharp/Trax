@@ -20,6 +20,14 @@ internal static class DeclaredChains
         Chains.TryAdd(train, Of(train, chain, input, output));
 
     /// <summary>
+    /// <paramref name="train"/>'s chain if something already read it for the process, without
+    /// reading it: what a run records as the chain it ran under, so a train that declares no
+    /// checkpoint never has its chain read by a run.
+    /// </summary>
+    public static Declared? Known(Type train) =>
+        Chains.TryGetValue(train, out var known) ? known : null;
+
+    /// <summary>
     /// <paramref name="train"/>'s chain, read with <paramref name="declare"/> until a read
     /// succeeds, or null when it cannot be read this time. A failed read is not remembered: it may
     /// have failed for a reason that passes (a dependency down while the train was built), and

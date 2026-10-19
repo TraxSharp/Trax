@@ -8,7 +8,8 @@ namespace Trax.Api.DTOs;
 /// <c>RunGraphs</c>, which <c>operations.runGraph</c> and the dashboard's run page both call.
 /// </summary>
 /// <remarks>
-/// The graph is the train's chain as the host declares it now, not as it was when the run ran. A
+/// The graph is the train's chain as the host declares it now, not as it was when the run ran;
+/// <see cref="ChainChanged"/> says when the two differ. A
 /// step whose node id is absent (a row recorded before node ids were, or a step on a track whose
 /// answer is withheld) or names no node of the current graph (the chain changed since) is listed in
 /// <see cref="UnmatchedSteps"/> rather than dropped.
@@ -44,6 +45,15 @@ public sealed record RunGraph(
     /// refuse the run as a whole, for its saved input or a resume already queued, with the reason.
     /// </summary>
     public bool CanResume { get; init; }
+
+    /// <summary>
+    /// True when the run recorded the hash of its train's chain when it started, and it differs
+    /// from <see cref="Hash"/>: the chain has changed since the run, so the nodes it is drawn on may
+    /// not be the ones it ran (a step moved, a track's contents changed) though their ids match.
+    /// False when the run recorded no hash (from before it was recorded, or from a host that never
+    /// read the chain) and when the host has no graph for the train.
+    /// </summary>
+    public bool ChainChanged { get; init; }
 
     /// <summary>
     /// Every node of <see cref="Nodes"/> and of their tracks, at any depth, in one list: depth
