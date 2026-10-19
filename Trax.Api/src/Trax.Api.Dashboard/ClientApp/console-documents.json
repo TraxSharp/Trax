@@ -186,6 +186,10 @@
       "text": "query Manifests($take: Int!, $afterId: Long, $isEnabled: Boolean, $scheduleType: ScheduleType, $nameContains: String, $manifestGroupId: Long, $hideAdminTrains: Boolean! = false) {\n  operations {\n    manifests(\n      take: $take\n      afterId: $afterId\n      isEnabled: $isEnabled\n      scheduleType: $scheduleType\n      nameContains: $nameContains\n      manifestGroupId: $manifestGroupId\n      hideAdminTrains: $hideAdminTrains\n    ) {\n      items {\n        id\n        externalId\n        name\n        isEnabled\n        scheduleType\n        cronExpression\n        intervalSeconds\n        maxRetries\n        lastSuccessfulRun\n        manifestGroupId\n        priority\n        replayDecisionsOnRetry\n        __typename\n      }\n      totalCount\n      isEstimatedCount\n      nextCursor\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "MetricSeries",
+      "text": "query MetricSeries($scope: MetricSeriesScope!, $range: MetricSeriesRange!, $id: Long, $name: String) {\n  operations {\n    metrics {\n      series(scope: $scope, range: $range, id: $id, name: $name) {\n        scope\n        range\n        from\n        to\n        bucketSeconds\n        buckets {\n          start\n          completed\n          failed\n          cancelled\n          p50DurationMs\n          p95DurationMs\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "OnDataChanged",
       "text": "subscription OnDataChanged {\n  onDataChanged {\n    domain\n    timestamp\n    __typename\n  }\n}"
     },

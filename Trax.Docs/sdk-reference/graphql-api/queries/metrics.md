@@ -1,6 +1,6 @@
 ---
 title: "operations.metrics queries"
-description: "Reference for the operations.metrics query namespace: the dashboard's KPI and chart data, the process snapshot and the CPU sampler."
+description: "Reference for operations.metrics: the dashboard's KPIs and charts, run series per train, manifest or group, the process snapshot and the CPU sampler."
 type: reference
 area: api
 surface: graphql
@@ -106,6 +106,60 @@ query {
 | `count` | `Int!` | Completed executions in the bucket |
 
 `dashboard` runs several aggregations over the last-24h and last-7-day windows on every call, and those windows hold hundreds of thousands to millions of rows at scale. The metadata table carries two covering indexes for them (`ix_metadata_metrics_state_time` and `ix_metadata_metrics_window`) so every aggregation is a heap-free index-only scan. The aggregations run at once, each on a connection of its own, so the block takes as long as the slowest of them, the 7-day throughput aggregation, rather than their sum; a call holds up to seven pooled connections while it runs. At 3,000,000 metadata rows the whole block returns in ~290-345ms, with or without `hideAdminTrains`, against ~460-700ms when they ran one after another. It is the heaviest operations read, so poll it on an interval (a few seconds) rather than on every dashboard interaction.
+
+## series
+
+Runs over time for one train, manifest or group: for each bucket of the range, how many runs that started in it completed, failed or were cancelled, and the median and 95th percentile duration of the completed ones.
+
+```graphql
+query {
+  operations {
+    metrics {
+      series(scope: TRAIN, name: "MyApp.Trains.IImportTrain", range: LAST7_DAYS) {
+        from
+        to
+        bucketSeconds
+        buckets { start completed failed cancelled p50DurationMs p95DurationMs }
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `scope` | `MetricSeriesScope!` | | `TRAIN`, `MANIFEST` or `GROUP` |
+| `range` | `MetricSeriesRange!` | | `LAST_HOUR` (60 one-minute buckets), `LAST24_HOURS` (96 of 15 minutes) or `LAST7_DAYS` (168 of an hour). `LAST30_DAYS` (120 of 6 hours) is refused, see below |
+| `id` | `Long` | `null` | The manifest's or group's id, for `MANIFEST` or `GROUP` |
+| `name` | `String` | `null` | The train's interface FullName, for `TRAIN` |
+
+A `TRAIN` scope without `name`, or a `MANIFEST` or `GROUP` scope without `id`, is refused with the error code `TRAX_METRICS_SERIES_ARGUMENT` (`MetricsQueries.SeriesArgumentCode`), before anything is read. So is a range no scope can serve inside the dashboard's metrics budget on the existing indexes, as `OperationsService.MetricSeriesRefusal` decides: today that is `LAST30_DAYS`, for every scope. A 30-day series reads every run of the 30 days, and over a million runs in one train, manifest or group it took 560 to 660 ms on the stress fixture, against a 450 ms budget; the 7-day series of the same scope (about 230,000 runs) took 170 to 340 ms. The value stays in the enum so a later index can serve it without a schema change.
+
+**Returns**: `MetricSeries`, read through [`IOperationsService.GetMetricSeriesAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#getmetricseriesasync).
+
+### MetricSeries fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scope` | `MetricSeriesScope!` | What the runs are of |
+| `range` | `MetricSeriesRange!` | The window |
+| `from` | `DateTime!` | The first bucket's start (UTC) |
+| `to` | `DateTime!` | The last bucket's end: the end of the bucket holding now |
+| `bucketSeconds` | `Int!` | How long each bucket is |
+| `buckets` | `[MetricSeriesBucket!]!` | Every bucket in the window, oldest first, empty ones included |
+
+### MetricSeriesBucket fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `start` | `DateTime!` | The bucket's start (UTC). A run belongs to the bucket its start time falls in |
+| `completed` | `Int!` | Runs that completed |
+| `failed` | `Int!` | Runs that failed |
+| `cancelled` | `Int!` | Runs that were cancelled. Runs still pending or in progress are not counted |
+| `p50DurationMs` | `Float` | The median duration of the completed runs, or `null` when none completed |
+| `p95DurationMs` | `Float` | The 95th percentile duration of the completed runs, or `null` |
+
+The percentiles are read from a histogram the database builds, with bins about 13% wide, so each is within one bin of the exact value and never outside the durations recorded; a bucket whose completed runs share one bin reads them exactly when they are equal. They are computed the same way on Postgres, Sqlite and InMemory.
 
 ## server
 

@@ -197,6 +197,33 @@ export const LOGS = gql`
   }
 `;
 
+// Runs over time for one train (name), manifest or group (id): per bucket, the runs that
+// completed, failed or were cancelled and the p50/p95 duration of the completed ones. Buckets are
+// a minute (LAST_HOUR), 15 minutes (LAST24_HOURS) or an hour (LAST7_DAYS); LAST30_DAYS is refused.
+export const METRIC_SERIES = gql`
+  query MetricSeries($scope: MetricSeriesScope!, $range: MetricSeriesRange!, $id: Long, $name: String) {
+    operations {
+      metrics {
+        series(scope: $scope, range: $range, id: $id, name: $name) {
+          scope
+          range
+          from
+          to
+          bucketSeconds
+          buckets {
+            start
+            completed
+            failed
+            cancelled
+            p50DurationMs
+            p95DurationMs
+          }
+        }
+      }
+    }
+  }
+`;
+
 // Manifests, newest first. hideAdminTrains leaves out the manifests of the scheduler's own trains.
 export const MANIFESTS = gql`
   query Manifests(

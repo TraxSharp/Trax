@@ -30,6 +30,43 @@ public class MetricsQueries
         return await operationsService.GetDashboardMetricsAsync(range, hideAdminTrains, ct);
     }
 
+    /// <summary>The error code a series with a missing or wrong argument is refused with.</summary>
+    public const string SeriesArgumentCode = "TRAX_METRICS_SERIES_ARGUMENT";
+
+    /// <summary>
+    /// Runs over time for one train, manifest or group: for each bucket of <c>range</c>, how many
+    /// runs that started in it completed, failed or were cancelled, and the median and 95th
+    /// percentile duration of the completed ones. Every bucket is returned, oldest first.
+    /// </summary>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="scope">What the runs are of.</param>
+    /// <param name="range">The window: the last hour in minutes, 24 hours in quarter hours, or 7 days in hours. LAST30_DAYS is refused with TRAX_METRICS_SERIES_ARGUMENT: the existing indexes cannot serve it inside the metrics budget.</param>
+    /// <param name="id">The manifest's or group's id, for a MANIFEST or GROUP scope.</param>
+    /// <param name="name">The train's interface FullName, for a TRAIN scope.</param>
+    public async Task<MetricSeries> GetSeries(
+        [Service] IOperationsService operationsService,
+        CancellationToken ct,
+        MetricSeriesScope scope,
+        MetricSeriesRange range,
+        long? id = null,
+        string? name = null
+    )
+    {
+        var refusal =
+            scope == MetricSeriesScope.Train && string.IsNullOrWhiteSpace(name)
+                ? "A TRAIN series needs name: the train's interface FullName."
+            : scope != MetricSeriesScope.Train && id is null
+                ? $"A {scope.ToString().ToUpperInvariant()} series needs id."
+            : OperationsService.MetricSeriesRefusal(scope, range);
+        if (refusal is not null)
+            throw new GraphQLException(
+                ErrorBuilder.New().SetMessage(refusal).SetCode(SeriesArgumentCode).Build()
+            );
+
+        return await operationsService.GetMetricSeriesAsync(scope, id, name, range, ct);
+    }
+
     /// <summary>
     /// Runtime metrics of this API process: start time, uptime, working set and managed heap
     /// size, read when called. CPU is on <c>serverCpuPercent</c>.

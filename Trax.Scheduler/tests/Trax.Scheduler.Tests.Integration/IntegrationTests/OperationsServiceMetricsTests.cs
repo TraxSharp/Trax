@@ -40,7 +40,8 @@ public class OperationsServiceMetricsTests : TestSetup
         DateTime startTime,
         string name = "",
         DateTime? endTime = null,
-        bool isAdmin = false
+        bool isAdmin = false,
+        long? manifestId = null
     )
     {
         var meta = Metadata.Create(
@@ -55,6 +56,7 @@ public class OperationsServiceMetricsTests : TestSetup
         meta.StartTime = DateTime.SpecifyKind(startTime, DateTimeKind.Utc);
         if (endTime.HasValue)
             meta.EndTime = DateTime.SpecifyKind(endTime.Value, DateTimeKind.Utc);
+        meta.ManifestId = manifestId;
         await DataContext.Track(meta);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
@@ -375,6 +377,177 @@ public class OperationsServiceMetricsTests : TestSetup
 
         metrics.ThroughputSeries.Should().ContainSingle();
         metrics.ThroughputSeries[0].TrainName.Should().Be("Trax.Tests.ISolo");
+    }
+
+    #endregion
+
+    #region GetMetricSeriesAsync
+
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, which the series must not count."
+    )]
+    [Test]
+    public async Task MetricSeries_ForATrainWithTenRunsOverTwoHours_CountsEachBucketAndReadsItsPercentiles()
+    {
+        var name = $"Trax.Tests.ISeries{Guid.NewGuid():N}";
+        var now = DateTime.UtcNow;
+        var quarter = TimeSpan.FromMinutes(15).Ticks;
+        var t0 = new DateTime(now.Ticks - now.Ticks % quarter, DateTimeKind.Utc).AddHours(-2);
+
+        // One run every 12 minutes: buckets 0,0,1,2,3,4,4,5,6,7 of 15 minutes from t0. Run 3 failed,
+        // run 7 was cancelled, the rest completed in (i + 1) seconds.
+        for (var i = 0; i < 10; i++)
+        {
+            var start = t0.AddMinutes(12 * i);
+            var state = i switch
+            {
+                3 => TrainState.Failed,
+                7 => TrainState.Cancelled,
+                _ => TrainState.Completed,
+            };
+            await SeedMetadata(state, start, name, start.AddSeconds(i + 1));
+        }
+        await SeedMetadata(TrainState.InProgress, t0, name);
+        await SeedMetadata(TrainState.Completed, t0, endTime: t0.AddHours(1));
+
+        var series = await _operations.GetMetricSeriesAsync(
+            MetricSeriesScope.Train,
+            null,
+            name,
+            MetricSeriesRange.Last24Hours,
+            CancellationToken.None
+        );
+
+        series.BucketSeconds.Should().Be(900);
+        series.Buckets.Should().HaveCount(96);
+        series.Buckets.Should().BeInAscendingOrder(b => b.Start);
+        MetricSeriesBucket At(int quarterHour) =>
+            series.Buckets.Single(b => b.Start == t0.AddMinutes(15 * quarterHour));
+
+        At(0)
+            .Should()
+            .Be(new MetricSeriesBucket(t0, 2, 0, 0, At(0).P50DurationMs, At(0).P95DurationMs));
+        At(0).P95DurationMs.Should().BeInRange(1000, 2000);
+        At(0).P50DurationMs.Should().BeInRange(1000, 2000);
+        At(2).Completed.Should().Be(0);
+        At(2).Failed.Should().Be(1);
+        At(2).P95DurationMs.Should().BeNull("no run in it completed");
+        At(5).Cancelled.Should().Be(1);
+        At(5).Completed.Should().Be(0);
+        // A bucket with one completed run reads its duration exactly.
+        At(6).P50DurationMs.Should().BeApproximately(9000, 1);
+        At(6).P95DurationMs.Should().BeApproximately(9000, 1);
+        series.Buckets.Sum(b => b.Completed).Should().Be(8);
+        series.Buckets.Sum(b => b.Failed).Should().Be(1);
+        series.Buckets.Sum(b => b.Cancelled).Should().Be(1);
+        series
+            .Buckets.Where(b => b.P95DurationMs is not null)
+            .Should()
+            .OnlyContain(b => b.P95DurationMs >= 1000 && b.P95DurationMs <= 10000);
+    }
+
+    [Test]
+    public async Task MetricSeries_ForAManifestAndItsGroup_CountOnlyTheirRuns()
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, name: $"s-{Guid.NewGuid():N}");
+        var manifest = Manifest.Create(new CreateManifest { Name = typeof(ISchedulerTestTrain) });
+        manifest.ManifestGroupId = group.Id;
+        var other = Manifest.Create(new CreateManifest { Name = typeof(ISchedulerTestTrain) });
+        other.ManifestGroupId = group.Id;
+        await DataContext.Track(manifest);
+        await DataContext.Track(other);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var start = DateTime.UtcNow.AddDays(-3);
+        foreach (
+            var (owner, state) in new[]
+            {
+                (manifest.Id, TrainState.Completed),
+                (manifest.Id, TrainState.Failed),
+                (other.Id, TrainState.Completed),
+            }
+        )
+            await SeedMetadata(state, start, endTime: start.AddSeconds(5), manifestId: owner);
+        await SeedMetadata(TrainState.Completed, start, endTime: start.AddSeconds(5));
+
+        var ofManifest = await _operations.GetMetricSeriesAsync(
+            MetricSeriesScope.Manifest,
+            manifest.Id,
+            null,
+            MetricSeriesRange.Last7Days,
+            CancellationToken.None
+        );
+        var ofGroup = await _operations.GetMetricSeriesAsync(
+            MetricSeriesScope.Group,
+            group.Id,
+            null,
+            MetricSeriesRange.Last7Days,
+            CancellationToken.None
+        );
+
+        ofManifest.Buckets.Should().HaveCount(168);
+        ofManifest.Buckets.Sum(b => b.Completed).Should().Be(1);
+        ofManifest.Buckets.Sum(b => b.Failed).Should().Be(1);
+        ofGroup.Buckets.Should().HaveCount(168);
+        ofGroup.Buckets.Sum(b => b.Completed).Should().Be(2);
+        ofGroup.Buckets.Sum(b => b.Failed).Should().Be(1);
+        ofGroup
+            .Buckets.Single(b => b.Completed > 0)
+            .P50DurationMs.Should()
+            .BeApproximately(5000, 1);
+    }
+
+    [Test]
+    public async Task MetricSeries_WithoutTheKeyItsScopeNeeds_IsRefused()
+    {
+        var train = () =>
+            _operations.GetMetricSeriesAsync(
+                MetricSeriesScope.Train,
+                42,
+                null,
+                MetricSeriesRange.LastHour,
+                CancellationToken.None
+            );
+        var manifest = () =>
+            _operations.GetMetricSeriesAsync(
+                MetricSeriesScope.Manifest,
+                null,
+                "x",
+                MetricSeriesRange.LastHour,
+                CancellationToken.None
+            );
+
+        var thirtyDays = () =>
+            _operations.GetMetricSeriesAsync(
+                MetricSeriesScope.Train,
+                null,
+                "x",
+                MetricSeriesRange.Last30Days,
+                CancellationToken.None
+            );
+
+        await train.Should().ThrowAsync<ArgumentException>();
+        await manifest.Should().ThrowAsync<ArgumentException>();
+        (await thirtyDays.Should().ThrowAsync<ArgumentException>())
+            .Which.Message.Should()
+            .Contain("30-day");
+    }
+
+    [Test]
+    public void MetricSeries_Percentile_StaysInsideTheRecordedDurations()
+    {
+        OperationsService.Percentile([(1, 1000, 1000)], 0.95).Should().Be(1000);
+        OperationsService
+            .Percentile([(10, 100, 190), (10, 200, 290)], 0.5)
+            .Should()
+            .BeInRange(190, 200);
+        OperationsService
+            .Percentile([(19, 100, 120), (1, 5000, 5000)], 0.95)
+            .Should()
+            .BeInRange(100, 5000);
+        OperationsService.Percentile([(3, 10, 30)], 0.0).Should().Be(10);
+        OperationsService.Percentile([(3, 10, 30)], 1.0).Should().Be(30);
     }
 
     #endregion

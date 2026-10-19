@@ -253,8 +253,10 @@ namespace Trax.Api.GraphQL.Queries
     }
     public class MetricsQueries
     {
+        public const string SeriesArgumentCode = "TRAX_METRICS_SERIES_ARGUMENT";
         public MetricsQueries() { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboard([HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct, Trax.Scheduler.Services.Operations.MetricsRange range = 1, bool hideAdminTrains = false) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MetricSeries> GetSeries([HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct, Trax.Scheduler.Services.Operations.MetricSeriesScope scope, Trax.Scheduler.Services.Operations.MetricSeriesRange range, long? id = default, string? name = null) { }
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServer([HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService) { }
         public double? GetServerCpuPercent([HotChocolate.Service] Trax.Api.Services.Metrics.ProcessCpuSampler sampler) { }
     }

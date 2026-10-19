@@ -96,6 +96,37 @@ public class SqliteDashboardMetricsTests : TestSetup
         metrics.TopAverageDurations[0].AverageMilliseconds.Should().BeApproximately(2000, 1);
     }
 
+    [Test]
+    public async Task A_trains_metric_series_reads_on_Sqlite()
+    {
+        var now = DateTime.UtcNow;
+        var start = new DateTime(
+            now.Ticks - now.Ticks % TimeSpan.TicksPerHour,
+            DateTimeKind.Utc
+        ).AddHours(-3);
+        await Seed("Trax.Tests.ISeries", TrainState.Completed, start, start.AddSeconds(2));
+        await Seed("Trax.Tests.ISeries", TrainState.Completed, start, start.AddSeconds(4));
+        await Seed("Trax.Tests.ISeries", TrainState.Failed, start, start.AddSeconds(1));
+        await Seed("Trax.Tests.IOther", TrainState.Completed, start, start.AddSeconds(9));
+
+        var series = await _operations.GetMetricSeriesAsync(
+            MetricSeriesScope.Train,
+            null,
+            "Trax.Tests.ISeries",
+            MetricSeriesRange.Last7Days,
+            CancellationToken.None
+        );
+
+        var bucket = series.Buckets.Single(b => b.Start == start);
+        bucket.Completed.Should().Be(2);
+        bucket.Failed.Should().Be(1);
+        // Sqlite reads a date difference through julianday, a double, so a duration can come back a
+        // few hundredths of a millisecond short.
+        bucket.P50DurationMs.Should().BeInRange(1999, 4001);
+        bucket.P95DurationMs.Should().BeInRange(1999, 4001);
+        series.Buckets.Sum(b => b.Completed).Should().Be(2);
+    }
+
     private async Task<Metadata> Seed(
         string name,
         TrainState state,

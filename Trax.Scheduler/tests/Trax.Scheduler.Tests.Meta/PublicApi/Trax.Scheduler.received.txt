@@ -595,6 +595,7 @@ namespace Trax.Scheduler.Services.Operations
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestExecutionStats> GetManifestExecutionStatsAsync(long manifestId, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ManifestGroupExecutionStats>> GetManifestGroupExecutionStatsAsync(System.Collections.Generic.IReadOnlyCollection<long> groupIds, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MetricSeries> GetMetricSeriesAsync(Trax.Scheduler.Services.Operations.MetricSeriesScope scope, long? id, string? name, Trax.Scheduler.Services.Operations.MetricSeriesRange range, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.RecordedDecisionPage> GetRecordedDecisionsAsync(long metadataId, long? afterId, int take, System.Threading.CancellationToken ct);
         Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig();
         Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
@@ -890,6 +891,39 @@ namespace Trax.Scheduler.Services.Operations
         public Trax.Effect.Enums.ScheduleType? ScheduleType { get; init; }
         public int? TimeoutSeconds { get; init; }
     }
+    public sealed class MetricSeries : System.IEquatable<Trax.Scheduler.Services.Operations.MetricSeries>
+    {
+        public MetricSeries(Trax.Scheduler.Services.Operations.MetricSeriesScope Scope, Trax.Scheduler.Services.Operations.MetricSeriesRange Range, System.DateTime From, System.DateTime To, int BucketSeconds, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MetricSeriesBucket> Buckets) { }
+        public int BucketSeconds { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MetricSeriesBucket> Buckets { get; init; }
+        public System.DateTime From { get; init; }
+        public Trax.Scheduler.Services.Operations.MetricSeriesRange Range { get; init; }
+        public Trax.Scheduler.Services.Operations.MetricSeriesScope Scope { get; init; }
+        public System.DateTime To { get; init; }
+    }
+    public sealed class MetricSeriesBucket : System.IEquatable<Trax.Scheduler.Services.Operations.MetricSeriesBucket>
+    {
+        public MetricSeriesBucket(System.DateTime Start, int Completed, int Failed, int Cancelled, double? P50DurationMs, double? P95DurationMs) { }
+        public int Cancelled { get; init; }
+        public int Completed { get; init; }
+        public int Failed { get; init; }
+        public double? P50DurationMs { get; init; }
+        public double? P95DurationMs { get; init; }
+        public System.DateTime Start { get; init; }
+    }
+    public enum MetricSeriesRange
+    {
+        LastHour = 0,
+        Last24Hours = 1,
+        Last7Days = 2,
+        Last30Days = 3,
+    }
+    public enum MetricSeriesScope
+    {
+        Train = 0,
+        Manifest = 1,
+        Group = 2,
+    }
     public enum MetricsRange
     {
         Last60Minutes = 0,
@@ -943,6 +977,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestExecutionStats> GetManifestExecutionStatsAsync(long manifestId, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ManifestGroupExecutionStats>> GetManifestGroupExecutionStatsAsync(System.Collections.Generic.IReadOnlyCollection<long> groupIds, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MetricSeries> GetMetricSeriesAsync(Trax.Scheduler.Services.Operations.MetricSeriesScope scope, long? id, string? name, Trax.Scheduler.Services.Operations.MetricSeriesRange range, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.RecordedDecisionPage> GetRecordedDecisionsAsync(long metadataId, long? afterId, int take, System.Threading.CancellationToken ct) { }
         public Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig() { }
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
@@ -968,6 +1003,7 @@ namespace Trax.Scheduler.Services.Operations
         public static string CancelRequestedMessage(Trax.Scheduler.Services.Operations.MachineInstanceKey key, string state) { }
         public static string InstanceNotFoundMessage(Trax.Scheduler.Services.Operations.MachineInstanceKey key) { }
         public static string InvokedRunRequeueRefusal(long metadataId, string machine) { }
+        public static string? MetricSeriesRefusal(Trax.Scheduler.Services.Operations.MetricSeriesScope scope, Trax.Scheduler.Services.Operations.MetricSeriesRange range) { }
         public static string MovedMessage(Trax.Scheduler.Services.Operations.MachineInstanceKey key, string state) { }
         public static string NoLiveRunMessage(Trax.Scheduler.Services.Operations.MachineInstanceKey key, string state) { }
         public static string RunCancelledMessage(Trax.Scheduler.Services.Operations.MachineInstanceKey key) { }

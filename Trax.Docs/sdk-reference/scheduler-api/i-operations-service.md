@@ -60,6 +60,7 @@ public interface IOperationsService
     IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstancesAsync(string? machine, CancellationToken ct);
     Task<IReadOnlyList<MachineDescription>> GetMachinesAsync(CancellationToken ct);
     Task<DashboardMetrics> GetDashboardMetricsAsync(MetricsRange range, bool hideAdminTrains, CancellationToken ct);
+    Task<MetricSeries> GetMetricSeriesAsync(MetricSeriesScope scope, long? id, string? name, MetricSeriesRange range, CancellationToken ct);
     Task<ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, CancellationToken ct);
     Task<ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(CancellationToken ct);
     SchedulerConfigSnapshot GetSchedulerConfig();
@@ -75,7 +76,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | [Queueing and running](#queueing-and-running) | `QueueTrainAsync`, `RunTrainAsync`, `RequeueExecutionAsync`, `ResumeExecutionAsync` |
 | [Batch actions](#batch-actions) | `CancelExecutionsAsync`, `CancelWorkQueueEntriesAsync`, `CancelWorkQueueEntryAsync`, `SetManifestsEnabledAsync`, `SetManifestsReplayDecisionsOnRetryAsync`, `SetManifestGroupsEnabledAsync`, `SetAllManifestGroupsEnabledAsync`, `CancelManifestGroupsAsync`, `TriggerManifestAsync`, `TriggerManifestsAsync`, `TriggerManifestGroupsAsync`, `UpdateManifestAsync` |
 | [Settings](#settings) | `UpdateManifestGroupAsync`, `GetSchedulerConfig`, `UpdateSchedulerConfigAsync` |
-| [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetUpcomingRunsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
+| [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetUpcomingRunsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetMetricSeriesAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
 | [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `CancelMachineInstanceAsync` |
 | [State-machine definitions](#state-machine-definitions) | `GetMachinesAsync` |
 
@@ -417,6 +418,7 @@ run's recorded decisions, a work queue entry's page and the State Machines pages
 | [`GetWorkQueueEntryDetailAsync(id, ct)`](#getworkqueueentrydetailasync) | `WorkQueueEntryDetail?` |
 | [`GetRecordedDecisionsAsync(metadataId, afterId, take, ct)`](#getrecordeddecisionsasync) | `RecordedDecisionPage` |
 | [`GetDashboardMetricsAsync(range, hideAdminTrains, ct)`](#getdashboardmetricsasync) | `DashboardMetrics` |
+| [`GetMetricSeriesAsync(scope, id, name, range, ct)`](#getmetricseriesasync) | `MetricSeries` |
 | [`GetManifestGroupDependencyGraphAsync(groupId, ct)`](#getmanifestgroupdependencygraphasync) | `ManifestGroupDependencyGraph?` |
 | [`GetGlobalManifestGroupGraphAsync(ct)`](#getglobalmanifestgroupgraphasync) | `ManifestGroupDependencyGraph` |
 
@@ -473,6 +475,10 @@ The numbers behind the dashboard's home page and the API's metrics query. `range
 granularity of the executions-over-time chart only; `hideAdminTrains` leaves the framework's admin
 trains (`AdminTrains.FullNames`) out of every series, as the dashboard's "Hide admin trains" toggle
 does. The fields are listed under the GraphQL [queries](/docs/sdk-reference/graphql-api/queries).
+
+### GetMetricSeriesAsync
+
+Runs over time for one train (`MetricSeriesScope.Train`, by `name`, its interface FullName), manifest (`Manifest`, by `id`) or group (`Group`, by `id`, every manifest in it). A `MetricSeries` with every bucket of the `MetricSeriesRange`, oldest first: `LastHour` in 60 one-minute buckets, `Last24Hours` in 96 of 15 minutes, `Last7Days` in 168 of an hour, `Last30Days` in 120 of 6 hours. Each `MetricSeriesBucket` counts the runs that started in it and completed, failed or were cancelled, and gives `P50DurationMs` and `P95DurationMs` of the completed ones, read from a duration histogram grouped in the database (bins about 13% wide; never outside the durations recorded; null when none completed). A train scope without a name, a manifest or group scope without an id, and a range `OperationsService.MetricSeriesRefusal(scope, range)` refuses throw `ArgumentException`. `MetricSeriesRefusal` refuses `Last30Days` for every scope: over a million runs in one train, manifest or group, the 30-day series took 560 to 660 ms on the Trax.Api stress fixture, over the 450 ms dashboard metrics budget, while the 7-day one (about 230,000 runs) took 170 to 340 ms. The cost follows the number of runs in the window, so a scope with far more runs a week than that fixture reads proportionally slower. The fields are listed under the GraphQL [metrics queries](/docs/sdk-reference/graphql-api/queries/metrics#series).
 
 ### GetManifestGroupDependencyGraphAsync
 

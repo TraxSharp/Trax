@@ -847,6 +847,29 @@ public interface IOperationsService
     );
 
     /// <summary>
+    /// Runs over time for one train, manifest or group: for each bucket of the range, how many
+    /// runs started in it that completed, failed or were cancelled, and the median and 95th
+    /// percentile duration of the completed ones. Every bucket is returned, oldest first, empty
+    /// ones included.
+    /// </summary>
+    /// <param name="scope">What the runs are of.</param>
+    /// <param name="id">The manifest's or group's id; ignored for a train.</param>
+    /// <param name="name">The train's interface FullName; ignored for a manifest or group.</param>
+    /// <param name="range">The window, which sets the bucket size.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// A train scope without a name, a manifest or group scope without an id, or a range the
+    /// scope refuses (<c>OperationsService.MetricSeriesRefusal</c> says which).
+    /// </exception>
+    Task<MetricSeries> GetMetricSeriesAsync(
+        MetricSeriesScope scope,
+        long? id,
+        string? name,
+        MetricSeriesRange range,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMetricSeriesAsync));
+
+    /// <summary>
     /// Returns a snapshot of host-process health: working set, GC heap, uptime, and
     /// process start time. Synchronous because all data comes from
     /// <see cref="System.Diagnostics.Process"/>.

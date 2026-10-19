@@ -4,6 +4,7 @@ import {
   lookupMatches,
   machineQueryResolvers,
   manifestScheduleResolvers,
+  metricSeriesResolvers,
   runGraph,
   servedRunGraph,
   trainChainResolvers,
@@ -126,6 +127,7 @@ export const devMockSeed: MockSchemaOverrides = {
   resolvers: () => ({
     ManifestSummary: manifestScheduleResolvers,
     ManifestDetail: manifestScheduleResolvers,
+    MetricsQueries: metricSeriesResolvers,
     OperationsQueries: {
       ...machineQueryResolvers,
       runGraph: (_root: unknown, args: Record<string, unknown>) => devRunGraph(args.metadataId as number),

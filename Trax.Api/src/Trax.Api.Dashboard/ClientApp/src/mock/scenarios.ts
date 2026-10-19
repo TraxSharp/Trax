@@ -1,5 +1,6 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import type { ChainStepKind, RunGraph, RunGraphNode, RunNodeState } from "../types";
+import { GraphQLError } from "graphql";
 import { flattenRunGraph } from "../lib/runGraphTree";
 
 // Reusable auto-mock overrides for interaction stories: deterministic, filterable data plus
@@ -158,6 +159,49 @@ export const manifestScheduleResolvers = {
     const first = Date.parse("2026-07-07T12:05:00.000Z");
     return Array.from({ length: count }, (_, i) => new Date(first + i * step * 1000).toISOString());
   },
+};
+
+// operations.metrics.series: every bucket of the range, oldest first, with a steady trickle of
+// runs and a failure every seventh bucket. Deterministic, so stories and snapshots are stable.
+const SERIES_BUCKETS: Record<string, { seconds: number; count: number }> = {
+  LAST_HOUR: { seconds: 60, count: 60 },
+  LAST24_HOURS: { seconds: 900, count: 96 },
+  LAST7_DAYS: { seconds: 3600, count: 168 },
+};
+
+export function metricSeries(args: Args) {
+  const range = (args.range as string | undefined) ?? "LAST24_HOURS";
+  // The API refuses a 30-day series: the indexes cannot serve it inside the metrics budget.
+  if (range === "LAST30_DAYS")
+    throw new GraphQLError(
+      "A 30-day series is not served: at a million runs it reads past the metrics budget on the existing indexes. Read the last 7 days instead.",
+      { extensions: { code: "TRAX_METRICS_SERIES_ARGUMENT" } },
+    );
+  const { seconds, count } = SERIES_BUCKETS[range] ?? SERIES_BUCKETS.LAST24_HOURS;
+  const to = Date.parse("2026-07-07T12:15:00.000Z");
+  const from = to - seconds * count * 1000;
+  return {
+    scope: args.scope ?? "TRAIN",
+    range,
+    from: new Date(from).toISOString(),
+    to: new Date(to).toISOString(),
+    bucketSeconds: seconds,
+    buckets: Array.from({ length: count }, (_, i) => {
+      const completed = 3 + (i % 4);
+      return {
+        start: new Date(from + i * seconds * 1000).toISOString(),
+        completed,
+        failed: i % 7 === 0 ? 1 : 0,
+        cancelled: i % 23 === 0 ? 1 : 0,
+        p50DurationMs: 1200 + (i % 5) * 40,
+        p95DurationMs: 2900 + (i % 5) * 120,
+      };
+    }),
+  };
+}
+
+export const metricSeriesResolvers = {
+  series: (_root: unknown, args: Args) => metricSeries(args),
 };
 
 function manifestsResolver(extra: Record<string, unknown>[] = []) {
