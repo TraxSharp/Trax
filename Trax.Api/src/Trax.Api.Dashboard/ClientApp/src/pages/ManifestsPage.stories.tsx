@@ -214,7 +214,7 @@ export const HideAdminTrains: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByText("OrderManifest")).toBeInTheDocument());
-    const toggle = c.getByRole("checkbox", { name: "Hide admin trains" });
+    const toggle = c.getByRole("checkbox", { name: "Hide scheduler trains" });
     expect(toggle).toBeChecked();
     expect(c.queryByText("IManifestManagerTrain")).not.toBeInTheDocument();
     await userEvent.click(toggle);

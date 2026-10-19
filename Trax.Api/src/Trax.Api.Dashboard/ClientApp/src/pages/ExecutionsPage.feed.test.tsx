@@ -92,7 +92,7 @@ test("hides admin-train events from the feed and table, and reveals them when to
   expect(screen.queryAllByText("IJobDispatcherTrain")).toHaveLength(0);
 
   // Turning the toggle off reveals the admin train.
-  fireEvent.click(screen.getByRole("checkbox", { name: /hide admin trains/i }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /hide scheduler trains/i }));
   expect(await screen.findAllByText("IJobDispatcherTrain")).not.toHaveLength(0);
 });
 

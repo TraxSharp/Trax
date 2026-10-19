@@ -279,7 +279,7 @@ function RunsList() {
                 resetToFirst();
               }}
             />
-            Hide admin trains
+            Hide scheduler trains
           </label>
         </div>
       </div>

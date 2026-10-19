@@ -221,7 +221,7 @@ export function ManifestsPage() {
                 reset();
               }}
             />
-            Hide admin trains
+            Hide scheduler trains
           </label>
         </div>
       </div>

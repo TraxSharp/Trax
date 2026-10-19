@@ -13,6 +13,7 @@ const REFUSED: [RegExp, string][] = [
   [/\bPersisted ops\b/, "Persisted operations"],
   [/AddJunctionEvents\(\)|<code>QueueSubjectKey<\/code>|OnQueue hook|UsePersistedOperations\(/, "plain words and a docs link"],
   [/>\s*Trigger( selected| group)?\s*</, "Queue"],
+  [/Hide admin trains/, "Hide scheduler trains"],
 ];
 
 function sources(dir: string): string[] {

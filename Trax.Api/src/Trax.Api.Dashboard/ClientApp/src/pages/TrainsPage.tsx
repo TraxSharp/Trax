@@ -81,7 +81,7 @@ export function TrainsPage() {
               checked={hideAdmin}
               onChange={(e) => setHideAdminTrains(e.target.checked)}
             />
-            Hide admin trains
+            Hide scheduler trains
           </label>
         </div>
       </div>
