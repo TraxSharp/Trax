@@ -139,6 +139,10 @@ export const DependencyGraph: Story = {
     const c = within(canvasElement);
     expect(await c.findByText("Dependency graph")).toBeInTheDocument();
     expect(c.getAllByText("alpha-group").length).toBeGreaterThan(1); // grid + graph node
+    // Each node says its state in words beside its colour: alpha runs, beta is off and failing.
+    const graph = c.getByRole("group", { name: "Dependency graph" });
+    await waitFor(() => expect(within(graph).getByText("3 running")).toBeInTheDocument());
+    expect(within(graph).getByText("Disabled · Last run failed")).toBeInTheDocument();
   },
 };
 

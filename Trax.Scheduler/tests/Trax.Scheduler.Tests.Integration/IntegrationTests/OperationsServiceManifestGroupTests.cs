@@ -413,6 +413,36 @@ public class OperationsServiceManifestGroupTests : TestSetup
         graph!.Edges.Should().HaveCount(1);
     }
 
+    [Test]
+    public async Task GetGraph_NodesSayWhetherTheirGroupIsEnabled()
+    {
+        var upstream = await CreateAndSaveManifestGroup(DataContext, "u", isEnabled: false);
+        var focal = await CreateAndSaveManifestGroup(DataContext, "f");
+        var upM = await SeedManifest(upstream.Id);
+        await SeedManifest(focal.Id, dependsOn: upM.Id);
+
+        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
+            focal.Id,
+            CancellationToken.None
+        );
+
+        graph!.Nodes.Should().ContainSingle(n => n.Id == upstream.Id && !n.IsEnabled);
+        graph.Nodes.Should().ContainSingle(n => n.Id == focal.Id && n.IsEnabled);
+    }
+
+    [Test]
+    public async Task GetGraph_EmptyDisabledGroup_FocalNodeIsDisabled()
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, "off", isEnabled: false);
+
+        var graph = await _operations.GetManifestGroupDependencyGraphAsync(
+            group.Id,
+            CancellationToken.None
+        );
+
+        graph!.Nodes.Should().ContainSingle(n => n.Id == group.Id && !n.IsEnabled);
+    }
+
     #endregion
 
     #region GetGlobalManifestGroupGraphAsync
@@ -447,6 +477,18 @@ public class OperationsServiceManifestGroupTests : TestSetup
 
         graph.Nodes.Should().ContainSingle(n => n.Id == g.Id);
         graph.Edges.Should().BeEmpty("a dependency within one group is not a cross-group edge");
+    }
+
+    [Test]
+    public async Task GetGlobalGraph_NodesSayWhetherTheirGroupIsEnabled()
+    {
+        var on = await CreateAndSaveManifestGroup(DataContext, "on");
+        var off = await CreateAndSaveManifestGroup(DataContext, "off", isEnabled: false);
+
+        var graph = await _operations.GetGlobalManifestGroupGraphAsync(CancellationToken.None);
+
+        graph.Nodes.Should().ContainSingle(n => n.Id == on.Id && n.IsEnabled);
+        graph.Nodes.Should().ContainSingle(n => n.Id == off.Id && !n.IsEnabled);
     }
 
     #endregion

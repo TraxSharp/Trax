@@ -563,6 +563,7 @@ namespace Trax.Scheduler.Services.Operations
     {
         public DependencyGraphNode(long Id, string Name, bool IsHighlighted) { }
         public long Id { get; init; }
+        public bool IsEnabled { get; init; }
         public bool IsHighlighted { get; init; }
         public string Name { get; init; }
     }
@@ -866,6 +867,7 @@ namespace Trax.Scheduler.Services.Operations
         public long Failed { get; init; }
         public long GroupId { get; init; }
         public long InProgress { get; init; }
+        public bool LastEndedRunFailed { get; init; }
         public System.DateTime? LastRun { get; init; }
         public long ManifestCount { get; init; }
         public long TotalExecutions { get; init; }

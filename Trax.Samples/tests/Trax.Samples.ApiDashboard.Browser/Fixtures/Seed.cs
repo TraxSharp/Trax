@@ -48,13 +48,21 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     /// A manifest whose run failed once with <c>MaxRetries(0)</c>, so the scheduler dead-lettered it. Its supplier
     /// is back by the time this returns, so a requeue of it succeeds.
     /// </summary>
-    public async Task<DeadLetter> DeadLetterAsync()
+    public async Task<DeadLetter> DeadLetterAsync(string? group = null)
     {
         var key = NewKey("feed");
         Outages.Down(key);
         try
         {
-            var manifest = await ScheduleAsync<IImportFeedTrain>(key, o => o.MaxRetries(0));
+            var manifest = await ScheduleAsync<IImportFeedTrain>(
+                key,
+                o =>
+                {
+                    o.MaxRetries(0);
+                    if (group is not null)
+                        o.Group(group);
+                }
+            );
             await InScope<ITraxScheduler>(s => s.TriggerAsync(key));
             return await Wait.ForAsync(
                 () =>
@@ -311,6 +319,37 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         );
     }
 
+    /// <summary>
+    /// A manifest that runs every night at 02:00 UTC, so its schedule reads in words and it has a next run.
+    /// </summary>
+    public Task<Manifest> NightlyManifestAsync() =>
+        ScheduleAsync<IImportFeedTrain>(
+            NewKey("nightly"),
+            schedule: Schedule.FromCron("0 2 * * *")
+        );
+
+    /// <summary>A manifest in a group of its own that is switched off. Returns the group's name.</summary>
+    public async Task<string> DisabledGroupAsync()
+    {
+        var group = NewKey("off");
+        await ScheduleAsync<IImportFeedTrain>(
+            NewKey("feed"),
+            o => o.Group(group, g => g.Enabled(false))
+        );
+        return group;
+    }
+
+    /// <summary>
+    /// A group of its own whose one manifest's run failed and was dead-lettered, so its latest ended run
+    /// failed. Returns the group's name.
+    /// </summary>
+    public async Task<string> FailingGroupAsync()
+    {
+        var group = NewKey("failing");
+        await DeadLetterAsync(group);
+        return group;
+    }
+
     /// <summary>The job dispatcher switched off, as an operator does from the settings; on again on dispose.</summary>
     public async Task PausedDispatcherAsync()
     {
@@ -379,14 +418,15 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
 
     private Task<Manifest> ScheduleAsync<TTrain>(
         string key,
-        Action<ScheduleOptions>? options = null
+        Action<ScheduleOptions>? options = null,
+        Schedule? schedule = null
     )
         where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<KeyedInput, Unit> =>
         InScope<ITraxScheduler, Manifest>(s =>
             s.ScheduleAsync<TTrain, KeyedInput, Unit>(
                 key,
                 new KeyedInput { Key = key },
-                OnlyWhenTriggered,
+                schedule ?? OnlyWhenTriggered,
                 options
             )
         );

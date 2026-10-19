@@ -490,11 +490,29 @@ export const MANIFEST_DETAIL = gql`
 
 // When each manifest of a page runs next, read from the manifest manager's own due-ness check,
 // and its schedule in plain words ("Daily at 02:00 UTC"). nextRuns is empty for a manifest that
-// has no time (scheduleText says what starts it) or will not run; count is at most 10.
+// has no time (scheduleText says what starts it) or will not run; count is at most 10. It takes
+// the filters MANIFESTS takes, so the two page alike and the list zips them by id.
 export const MANIFEST_SCHEDULES = gql`
-  query ManifestSchedules($take: Int!, $afterId: Long, $manifestGroupId: Long, $count: Int! = 5) {
+  query ManifestSchedules(
+    $take: Int!
+    $afterId: Long
+    $isEnabled: Boolean
+    $scheduleType: ScheduleType
+    $nameContains: String
+    $manifestGroupId: Long
+    $hideAdminTrains: Boolean! = false
+    $count: Int! = 5
+  ) {
     operations {
-      manifests(take: $take, afterId: $afterId, manifestGroupId: $manifestGroupId) {
+      manifests(
+        take: $take
+        afterId: $afterId
+        isEnabled: $isEnabled
+        scheduleType: $scheduleType
+        nameContains: $nameContains
+        manifestGroupId: $manifestGroupId
+        hideAdminTrains: $hideAdminTrains
+      ) {
         items {
           id
           scheduleText
@@ -560,6 +578,7 @@ export const MANIFEST_GROUP_DETAIL = gql`
             id
             name
             isHighlighted
+            isEnabled
           }
           edges {
             fromId
@@ -582,6 +601,7 @@ export const GROUP_DEPENDENCY_GRAPH = gql`
             id
             name
             isHighlighted
+            isEnabled
           }
           edges {
             fromId
@@ -804,6 +824,22 @@ export const MANIFEST_GROUP_STATS = gql`
           failed
           inProgress
           lastRun
+        }
+      }
+    }
+  }
+`;
+
+// What a dependency graph's nodes are toned by: whether each group has a run in progress, and
+// whether its latest ended run failed. Its own read, so the list's stats stay keyed by the page.
+export const GROUP_GRAPH_STATUS = gql`
+  query GroupGraphStatus($groupIds: [Long!]!) {
+    operations {
+      manifestGroups {
+        stats(groupIds: $groupIds) {
+          groupId
+          inProgress
+          lastEndedRunFailed
         }
       }
     }

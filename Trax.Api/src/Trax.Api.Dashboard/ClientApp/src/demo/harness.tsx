@@ -141,6 +141,10 @@ export const NOT_RECORDED_YET = [
   // The dead letters page groups from a 500-row window; the recordings hold 25-row pages.
   "DeadLetterGroups",
   "ServerProcess",
+  "ManifestSchedules",
+  "ManifestSchedule",
+  "MetricSeries",
+  "GroupGraphStatus",
 ];
 
 /** The read each write not recorded yet is offered from: no read, no write. */

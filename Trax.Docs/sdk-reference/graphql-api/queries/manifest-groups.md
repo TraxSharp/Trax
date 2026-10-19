@@ -110,6 +110,7 @@ query {
         failed
         inProgress
         lastRun
+        lastEndedRunFailed
       }
     }
   }
@@ -133,6 +134,7 @@ query {
 | `failed` | `Long!` | Executions in `Failed` |
 | `inProgress` | `Long!` | Executions in `InProgress` |
 | `lastRun` | `DateTime` | Start time of the group's most recent execution. Null when there are none |
+| `lastEndedRunFailed` | `Boolean!` | Whether the group's latest ended execution failed: of its executions that completed, failed or were cancelled, the one that started last. `false` when none has ended. The console tones a failing group by it |
 
 ## graph
 
@@ -143,7 +145,7 @@ query {
   operations {
     manifestGroups {
       graph(groupId: 7) {
-        nodes { id name isHighlighted }
+        nodes { id name isHighlighted isEnabled }
         edges { fromId toId }
       }
     }
@@ -166,7 +168,7 @@ query {
   operations {
     manifestGroups {
       dependencyGraph {
-        nodes { id name isHighlighted }
+        nodes { id name isHighlighted isEnabled }
         edges { fromId toId }
       }
     }
@@ -190,6 +192,7 @@ query {
 | `id` | `Long!` | Manifest group ID |
 | `name` | `String!` | Group name |
 | `isHighlighted` | `Boolean!` | `true` for the focal group; the UI uses this to render it differently |
+| `isEnabled` | `Boolean!` | Whether the group is enabled. A disabled group's manifests are not queued |
 
 ### DependencyGraphEdge fields
 

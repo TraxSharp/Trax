@@ -5,6 +5,7 @@ import {
   EXECUTIONS,
   MANIFEST_DETAIL,
   MANIFEST_EXCLUSIONS,
+  MANIFEST_SCHEDULE,
   MANIFEST_STATS,
 } from "../graphql/queries";
 import {
@@ -32,8 +33,13 @@ import type {
   ManifestDetail,
   ManifestExclusion,
   ManifestExecutionStats,
+  ManifestSchedule,
   PagedResult,
 } from "../types";
+import { useAnswers } from "../lib/answerable";
+import { useNow } from "../lib/useNow";
+import { RunSparkline } from "../components/schedules";
+import { untilText, utcText } from "../lib/schedules";
 import { confirmAction } from "../lib/confirm";
 import { Modal } from "../components/Modal";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
@@ -109,6 +115,25 @@ export function ManifestDetailPage() {
     refetch();
   }
 
+  // The switch beside the heading. Disabling asks first, since the manifest then stops running on
+  // its schedule; enabling does not.
+  async function onEnabledChange(on: boolean) {
+    if (
+      !on &&
+      !(await confirmAction({
+        title: "Disable manifest",
+        message: `Disable "${shortName(m!.name)}"? It does not run on its schedule until it is enabled again.`,
+        danger: true,
+      }))
+    )
+      return;
+    setBusy(true);
+    const r = await (on ? enable : disable)({ externalId: m!.externalId });
+    setBusy(false);
+    if (r.error) toast(r.error.message, "error");
+    refetch();
+  }
+
   async function onQueueLater(minutes: number) {
     setLater(false);
     const delay = `PT${minutes}M`; // ISO 8601 duration
@@ -133,9 +158,23 @@ export function ManifestDetailPage() {
         >
           {m.isEnabled ? "Enabled" : "Disabled"}
         </span>
+        <label className="ml-auto inline-flex items-center gap-2 text-sm text-fg-2 cursor-pointer">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Manifest enabled"
+            checked={m.isEnabled}
+            disabled={busy}
+            onChange={(e) => onEnabledChange(e.target.checked)}
+          />
+          Runs on its schedule
+        </label>
       </div>
 
       <StatCards manifestId={m.id} />
+      {/* Keyed by the switch, so enabling or disabling reads the next runs again. */}
+      <SchedulePanel key={String(m.isEnabled)} manifestId={m.id} isEnabled={m.isEnabled} />
+      <RunSparkline scope="MANIFEST" id={m.id} />
 
       <DetailPanel title="Details">
         <Fields
@@ -143,7 +182,7 @@ export function ManifestDetailPage() {
             ["ID", m.id],
             ["External ID", m.externalId],
             ["Name", m.name],
-            ["Schedule type", m.scheduleType],
+            ["Schedule type", enumLabel(m.scheduleType)],
             ["Cron", m.cronExpression ?? "—"],
             ["Interval (s)", m.intervalSeconds ?? "—"],
             ["Variance (s)", m.varianceSeconds ?? "—"],
@@ -245,15 +284,6 @@ export function ManifestDetailPage() {
           >
             Cancel runs
           </button>
-          {m.isEnabled ? (
-            <button onClick={() => run(disable)} className="text-sm text-fg-2 hover:underline">
-              Disable
-            </button>
-          ) : (
-            <button onClick={() => run(enable)} className="text-sm text-ok-fg hover:underline">
-              Enable
-            </button>
-          )}
         </div>
       </DetailPanel>
 
@@ -273,6 +303,47 @@ export function ManifestDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+// ── When it runs ───────────────────────────────────────────────────────────
+// The schedule in words and the next runs, as the manifest manager's own due-ness check reads
+// them. Not drawn where the client cannot answer it (the demo, until the recordings hold it).
+function SchedulePanel({ manifestId, isEnabled }: { manifestId: number; isEnabled: boolean }) {
+  const answered = useAnswers("ManifestSchedule");
+  const [{ data }] = useQuery<{ operations: { manifestDetail: ManifestSchedule | null } }>({
+    query: MANIFEST_SCHEDULE,
+    variables: { id: manifestId, count: 5 },
+    pause: !answered,
+    requestPolicy: "cache-and-network",
+  });
+  const now = useNow(30_000);
+  const s = data?.operations?.manifestDetail;
+  if (!answered || !s) return null;
+  return (
+    <section aria-label="Schedule" className="mb-6 rounded-lg border border-line bg-surface p-4">
+      <h2 className="text-sm font-semibold text-fg">Schedule</h2>
+      <p className="mt-1 text-lg text-fg">{s.scheduleText}</p>
+      {s.nextRuns.length === 0 ? (
+        <p className="mt-2 text-sm text-muted">
+          {isEnabled
+            ? "No upcoming run: it runs when triggered or when what it depends on succeeds."
+            : "No upcoming run while it is disabled."}
+        </p>
+      ) : (
+        <>
+          <h3 className="mt-3 text-xs font-medium text-muted">Next runs</h3>
+          <ol className="mt-1 space-y-0.5 text-sm">
+            {s.nextRuns.map((t) => (
+              <li key={t} className="flex gap-3">
+                <span className="w-48 text-fg-2">{utcText(t)}</span>
+                <span className="text-muted">{untilText(t, now)}</span>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+    </section>
   );
 }
 

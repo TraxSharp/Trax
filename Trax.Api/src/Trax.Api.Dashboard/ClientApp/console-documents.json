@@ -107,7 +107,11 @@
     },
     {
       "name": "GroupDependencyGraph",
-      "text": "query GroupDependencyGraph {\n  operations {\n    manifestGroups {\n      dependencyGraph {\n        nodes {\n          id\n          name\n          isHighlighted\n          __typename\n        }\n        edges {\n          fromId\n          toId\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+      "text": "query GroupDependencyGraph {\n  operations {\n    manifestGroups {\n      dependencyGraph {\n        nodes {\n          id\n          name\n          isHighlighted\n          isEnabled\n          __typename\n        }\n        edges {\n          fromId\n          toId\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "GroupGraphStatus",
+      "text": "query GroupGraphStatus($groupIds: [Long!]!) {\n  operations {\n    manifestGroups {\n      stats(groupIds: $groupIds) {\n        groupId\n        inProgress\n        lastEndedRunFailed\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "Hosts",
@@ -163,7 +167,7 @@
     },
     {
       "name": "ManifestGroupDetail",
-      "text": "query ManifestGroupDetail($id: Long!) {\n  operations {\n    manifestGroups {\n      group(id: $id) {\n        id\n        name\n        maxActiveJobs\n        priority\n        isEnabled\n        __typename\n      }\n      graph(groupId: $id) {\n        nodes {\n          id\n          name\n          isHighlighted\n          __typename\n        }\n        edges {\n          fromId\n          toId\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+      "text": "query ManifestGroupDetail($id: Long!) {\n  operations {\n    manifestGroups {\n      group(id: $id) {\n        id\n        name\n        maxActiveJobs\n        priority\n        isEnabled\n        __typename\n      }\n      graph(groupId: $id) {\n        nodes {\n          id\n          name\n          isHighlighted\n          isEnabled\n          __typename\n        }\n        edges {\n          fromId\n          toId\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "ManifestGroupStats",
@@ -179,7 +183,7 @@
     },
     {
       "name": "ManifestSchedules",
-      "text": "query ManifestSchedules($take: Int!, $afterId: Long, $manifestGroupId: Long, $count: Int! = 5) {\n  operations {\n    manifests(take: $take, afterId: $afterId, manifestGroupId: $manifestGroupId) {\n      items {\n        id\n        scheduleText\n        nextRuns(count: $count)\n        __typename\n      }\n      nextCursor\n      __typename\n    }\n    __typename\n  }\n}"
+      "text": "query ManifestSchedules($take: Int!, $afterId: Long, $isEnabled: Boolean, $scheduleType: ScheduleType, $nameContains: String, $manifestGroupId: Long, $hideAdminTrains: Boolean! = false, $count: Int! = 5) {\n  operations {\n    manifests(\n      take: $take\n      afterId: $afterId\n      isEnabled: $isEnabled\n      scheduleType: $scheduleType\n      nameContains: $nameContains\n      manifestGroupId: $manifestGroupId\n      hideAdminTrains: $hideAdminTrains\n    ) {\n      items {\n        id\n        scheduleText\n        nextRuns(count: $count)\n        __typename\n      }\n      nextCursor\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "ManifestStats",

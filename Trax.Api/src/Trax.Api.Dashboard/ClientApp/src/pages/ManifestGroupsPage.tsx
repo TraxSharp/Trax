@@ -18,7 +18,9 @@ import { useSelection } from "../lib/useSelection";
 import { toast } from "../lib/toast";
 import { Pager } from "../components/Pager";
 import { Graph } from "../components/Graph";
-import { groupGraph } from "../lib/groupGraph";
+import { GROUP_GRAPH_LEGEND, groupGraph } from "../lib/groupGraph";
+import { SchedulesTabs } from "../components/schedules";
+import { useGroupGraphStatus } from "../lib/schedules";
 import { useKeyset } from "../lib/useKeyset";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
@@ -155,11 +157,16 @@ export function ManifestGroupsPage() {
   const [graphResult, reexecuteGraph] = useQuery<{
     operations: { manifestGroups: { dependencyGraph: ManifestGroupDependencyGraph } };
   }>({ query: GROUP_DEPENDENCY_GRAPH });
-  useRefetchOnChange("MANIFEST_GROUP", () =>
-    reexecuteGraph({ requestPolicy: "network-only" }),
-  );
   const graph = graphResult.data?.operations?.manifestGroups?.dependencyGraph;
-  const drawn = useMemo(() => groupGraph(graph), [graph]);
+  // Each node is toned by whether its group is enabled, running or failing; the status moves
+  // with runs, so it refetches with the grid's poll as well as on a group change.
+  const status = useGroupGraphStatus(graph);
+  useRefetchOnChange("MANIFEST_GROUP", () => {
+    reexecuteGraph({ requestPolicy: "network-only" });
+    status.refetch();
+  });
+  usePoll(status.refetch);
+  const drawn = useMemo(() => groupGraph(graph, status.statuses), [graph, status.statuses]);
 
   // Fetch per-group stats for just the visible page, in one batched call (see the API notes on
   // why this is not folded into the list query: it is a heavier aggregation).
@@ -177,6 +184,7 @@ export function ManifestGroupsPage() {
 
   return (
     <div>
+      <SchedulesTabs />
       <div className="flex items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold text-fg">Manifest groups</h1>
@@ -327,7 +335,15 @@ export function ManifestGroupsPage() {
             {page?.items.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-muted">
-                  No groups.
+                  No groups.{" "}
+                  <a
+                    className="text-accent-fg hover:underline"
+                    href="https://traxsharp.net/docs/scheduler/dependent-trains"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Groups and dependencies
+                  </a>
                 </td>
               </tr>
             )}
@@ -350,12 +366,14 @@ export function ManifestGroupsPage() {
             Dependency graph
           </h2>
           <p className="text-xs text-muted mb-3">
-            Cross-group dependencies (parent → dependent). Click a group to open it.
+            A group runs after the groups with an arrow into it. Each is coloured by whether it is
+            enabled, has a run in progress, or its latest run failed. Click a group to open it.
           </p>
           <Graph
             nodes={drawn.nodes}
             edges={drawn.edges}
             ariaLabel="Dependency graph"
+            legend={GROUP_GRAPH_LEGEND}
             onSelect={(id) => navigate(`/schedules/groups/${id}`)}
           />
         </div>

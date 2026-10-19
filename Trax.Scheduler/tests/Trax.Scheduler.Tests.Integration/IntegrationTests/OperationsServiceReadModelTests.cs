@@ -125,10 +125,37 @@ public class OperationsServiceReadModelTests : TestSetup
                     Failed: 1,
                     InProgress: 1,
                     LastRun: t0.AddHours(3)
-                ),
+                )
+                {
+                    // Of its ended runs, the failure started last; the later two have not ended.
+                    LastEndedRunFailed = true,
+                },
                 new ManifestGroupExecutionStats(idle.Id, 1, 0, 0, 0, 0, null)
             );
     }
+
+    [Test]
+    public async Task Group_stats_say_a_group_is_failing_only_while_its_latest_ended_run_failed()
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, $"flaky-{Guid.NewGuid():N}");
+        var manifest = await SeedManifest(group);
+        var t0 = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        await SeedRun(manifest, TrainState.Completed, t0, t0.AddMinutes(1));
+        await SeedRun(manifest, TrainState.Failed, t0.AddHours(1), t0.AddHours(1));
+
+        (await StatsOf(group.Id)).LastEndedRunFailed.Should().BeTrue();
+
+        await SeedRun(manifest, TrainState.Completed, t0.AddHours(2), t0.AddHours(2));
+
+        (await StatsOf(group.Id))
+            .LastEndedRunFailed.Should()
+            .BeFalse("a run that started after the failure completed");
+    }
+
+    private async Task<ManifestGroupExecutionStats> StatsOf(long groupId) =>
+        (
+            await _operations.GetManifestGroupExecutionStatsAsync([groupId], CancellationToken.None)
+        ).Single();
 
     [Test]
     public async Task Group_stats_for_no_ids_are_empty()

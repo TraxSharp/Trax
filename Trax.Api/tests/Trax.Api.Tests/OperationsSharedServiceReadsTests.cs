@@ -47,7 +47,10 @@ public class OperationsSharedServiceReadsTests
                 Arg.Any<CancellationToken>()
             )
             .Returns([
-                new ManifestGroupExecutionStats(2, 3, 9, 5, 2, 2, null),
+                new ManifestGroupExecutionStats(2, 3, 9, 5, 2, 2, null)
+                {
+                    LastEndedRunFailed = true,
+                },
                 new ManifestGroupExecutionStats(1, 0, 0, 0, 0, 0, null),
             ]);
 
@@ -55,6 +58,7 @@ public class OperationsSharedServiceReadsTests
 
         stats.Select(s => s.GroupId).Should().Equal(2, 1);
         stats[0].TotalExecutions.Should().Be(9);
+        stats.Select(s => s.LastEndedRunFailed).Should().Equal(true, false);
     }
 
     [Test]

@@ -301,6 +301,8 @@ export interface DependencyGraphNode {
   id: number;
   name: string;
   isHighlighted: boolean;
+  /** Absent from an answer recorded before the field existed. */
+  isEnabled?: boolean;
 }
 
 export interface DependencyGraphEdge {
@@ -365,6 +367,34 @@ export interface ManifestGroupStats {
   failed: number;
   inProgress: number;
   lastRun: string | null;
+  lastEndedRunFailed?: boolean;
+}
+
+/** When a manifest runs next and its schedule in words (operations.manifests / manifestDetail). */
+export interface ManifestSchedule {
+  id: number;
+  scheduleText: string;
+  nextRuns: string[];
+}
+
+export type MetricSeriesRange = "LAST_HOUR" | "LAST24_HOURS" | "LAST7_DAYS";
+
+export interface MetricSeriesBucket {
+  start: string;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  p50DurationMs: number | null;
+  p95DurationMs: number | null;
+}
+
+export interface MetricSeries {
+  scope: "TRAIN" | "MANIFEST" | "GROUP";
+  range: MetricSeriesRange;
+  from: string;
+  to: string;
+  bucketSeconds: number;
+  buckets: MetricSeriesBucket[];
 }
 
 export type ExclusionType =

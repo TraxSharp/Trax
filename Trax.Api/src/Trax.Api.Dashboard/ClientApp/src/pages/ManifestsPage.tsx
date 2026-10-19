@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "urql";
-import { MANIFESTS } from "../graphql/queries";
+import { MANIFEST_SCHEDULES, MANIFESTS } from "../graphql/queries";
 import {
   DISABLE_MANIFEST,
   ENABLE_MANIFEST,
@@ -20,7 +20,10 @@ import { useKeyset } from "../lib/useKeyset";
 import { useSelection } from "../lib/useSelection";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
-import type { ManifestSummary, PagedResult, ScheduleType } from "../types";
+import type { ManifestSchedule, ManifestSummary, PagedResult, ScheduleType } from "../types";
+import { useAnswers } from "../lib/answerable";
+import { useNow } from "../lib/useNow";
+import { NextRun, SchedulesTabs } from "../components/schedules";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { ApplyToAllMatching } from "../components/ApplyToAllMatching";
@@ -43,6 +46,10 @@ interface ManifestsData {
   operations: { manifests: PagedResult<ManifestSummary> };
 }
 
+interface SchedulesData {
+  operations: { manifests: { items: ManifestSchedule[] } };
+}
+
 export function ManifestsPage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
   const [enabled, setEnabled] = useUrlState("enabled");
@@ -51,17 +58,28 @@ export function ManifestsPage() {
   // The same "Hide admin trains" preference the Runs grid and the Overview use: it leaves out
   // the manifests of the scheduler's own trains, server side.
   const hideAdmin = useHideAdminTrains();
-  const [result, reexecute] = useQuery<ManifestsData>({
-    query: MANIFESTS,
-    variables: {
-      take: PAGE_SIZE,
-      afterId,
-      isEnabled: enabled === "" ? null : enabled === "true",
-      scheduleType: scheduleType || null,
-      nameContains: name || null,
-      hideAdminTrains: hideAdmin,
-    },
+  const variables = {
+    take: PAGE_SIZE,
+    afterId,
+    isEnabled: enabled === "" ? null : enabled === "true",
+    scheduleType: scheduleType || null,
+    nameContains: name || null,
+    hideAdminTrains: hideAdmin,
+  };
+  const [result, reexecute] = useQuery<ManifestsData>({ query: MANIFESTS, variables });
+  // The schedule in words and the next runs, read for the same page with the same filters and
+  // zipped to its rows by id. Left out where the client cannot answer it (the demo, until the
+  // recordings hold it); the row then shows the schedule from its type.
+  const schedulesAnswered = useAnswers("ManifestSchedules");
+  const [schedulesResult, reexecuteSchedules] = useQuery<SchedulesData>({
+    query: MANIFEST_SCHEDULES,
+    variables: { ...variables, count: 3 },
+    pause: !schedulesAnswered,
   });
+  const schedules = new Map(
+    (schedulesResult.data?.operations?.manifests?.items ?? []).map((s) => [s.id, s]),
+  );
+  const now = useNow(30_000);
   const [, trigger] = useMutation(TRIGGER_MANIFEST);
   const [, enable] = useMutation(ENABLE_MANIFEST);
   const [, disable] = useMutation(DISABLE_MANIFEST);
@@ -72,8 +90,12 @@ export function ManifestsPage() {
   const [batchReport, setBatchReport] = useState<BatchTriggerReport | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
   const { selected, toggle, setMany, clear } = useSelection();
-  useRefetchOnChange("MANIFEST", () => reexecute({ requestPolicy: "network-only" }));
-  usePoll(() => reexecute({ requestPolicy: "network-only" }));
+  const refetchAll = () => {
+    reexecute({ requestPolicy: "network-only" });
+    if (schedulesAnswered) reexecuteSchedules({ requestPolicy: "network-only" });
+  };
+  useRefetchOnChange("MANIFEST", refetchAll);
+  usePoll(refetchAll);
 
   const page = result.data?.operations?.manifests;
   const rows = page?.items ?? [];
@@ -81,7 +103,7 @@ export function ManifestsPage() {
   const askingDecisions = useTrainsAskingDecisions();
   const selectedAsk = offersDecisions(askingDecisions, rows.filter((r) => selected.has(r.id)).map((r) => r.name));
   const allSelected = rows.length > 0 && rows.every((m) => selected.has(m.id));
-  const refetch = () => reexecute({ requestPolicy: "network-only" });
+  const refetch = refetchAll;
 
   async function run(
     action: typeof trigger,
@@ -141,6 +163,7 @@ export function ManifestsPage() {
 
   return (
     <div>
+      <SchedulesTabs />
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold text-fg">Manifests</h1>
@@ -324,6 +347,7 @@ export function ManifestsPage() {
               </th>
               <th className="px-4 py-2 font-medium">Manifest</th>
               <th className="px-4 py-2 font-medium">Schedule</th>
+              <th className="px-4 py-2 font-medium">Next run</th>
               <th className="px-4 py-2 font-medium">Enabled</th>
               <th className="px-4 py-2 font-medium">Retries</th>
               <th className="px-4 py-2 font-medium">Last success</th>
@@ -351,7 +375,12 @@ export function ManifestsPage() {
                   </Link>
                   <span className="block text-xs text-muted">{m.externalId}</span>
                 </td>
-                <td className="px-4 py-2 text-fg-2">{schedule(m)}</td>
+                <td className="px-4 py-2 text-fg-2" title={m.cronExpression ?? undefined}>
+                  {schedules.get(m.id)?.scheduleText ?? schedule(m)}
+                </td>
+                <td className="px-4 py-2 whitespace-nowrap">
+                  <NextRun runs={schedules.get(m.id)?.nextRuns} now={now} />
+                </td>
                 <td className="px-4 py-2">
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full ${
@@ -403,8 +432,16 @@ export function ManifestsPage() {
             ))}
             {page?.items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted">
-                  No manifests.
+                <td colSpan={8} className="px-4 py-8 text-center text-muted">
+                  No manifests.{" "}
+                  <a
+                    className="text-accent-fg hover:underline"
+                    href="https://traxsharp.net/docs/scheduler/setup"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Schedule a train
+                  </a>
                 </td>
               </tr>
             )}

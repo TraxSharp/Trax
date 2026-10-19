@@ -428,7 +428,7 @@ run's recorded decisions, a work queue entry's page and the State Machines pages
 
 ### GetManifestGroupExecutionStatsAsync
 
-One `ManifestGroupExecutionStats` per distinct id, in the order given: manifest count, run counts and the latest run. Zeros for a group with no manifests or runs; an empty list for no ids; more than 1000 ids throws `ArgumentOutOfRangeException`.
+One `ManifestGroupExecutionStats` per distinct id, in the order given: manifest count, run counts and the latest run. `LastEndedRunFailed` says whether the group's latest ended run (completed, failed or cancelled, by start time) failed. Zeros for a group with no manifests or runs; an empty list for no ids; more than 1000 ids throws `ArgumentOutOfRangeException`.
 
 ### GetUpcomingRunsAsync
 
@@ -484,8 +484,8 @@ Runs over time for one train (`MetricSeriesScope.Train`, by `name`, its interfac
 
 The cross-group dependency graph around one group: the group and the groups its manifests depend on
 or are depended on by, as nodes, and each cross-group dependency as a parent to dependent edge.
-`null` when no group has the id; a group with no cross-group dependencies gives a graph of the group
-alone.
+Each node carries `IsEnabled`, whether its group is enabled. `null` when no group has the id; a group
+with no cross-group dependencies gives a graph of the group alone.
 
 ### GetGlobalManifestGroupGraphAsync
 

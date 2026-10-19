@@ -46,4 +46,11 @@ public record ManifestGroupExecutionStats(
     long Failed,
     long InProgress,
     DateTime? LastRun
-);
+)
+{
+    /// <summary>
+    /// Whether the group's latest ended run failed: of its runs that completed, failed or were
+    /// cancelled, the one that started last. False when none has ended.
+    /// </summary>
+    public bool LastEndedRunFailed { get; init; }
+}

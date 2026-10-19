@@ -28,14 +28,55 @@ export const Mock: Story = {};
 
 export const Real: Story = { parameters: { real: true, route: "/schedules/5000" } };
 
-// Disable an enabled manifest -> badge flips to Disabled.
+// The switch beside the heading disables an enabled manifest after the console asks, and the
+// badge flips to Disabled; it enables again without asking.
 export const EnableDisable: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
-    await waitFor(() => expect(c.getByRole("heading", { name: "OrderManifest" })).toBeInTheDocument());
-    expect(c.getByText("Enabled")).toBeInTheDocument();
-    await userEvent.click(c.getByText("Disable"));
-    await waitFor(() => expect(c.getByText("Disabled")).toBeInTheDocument());
+    const restore = acceptConfirm();
+    try {
+      await waitFor(() => expect(c.getByRole("heading", { name: "OrderManifest" })).toBeInTheDocument());
+      expect(c.getByText("Enabled")).toBeInTheDocument();
+      await userEvent.click(c.getByRole("switch", { name: "Manifest enabled" }));
+      await waitFor(() => expect(c.getByText("Disabled")).toBeInTheDocument());
+      expect(c.getByRole("switch", { name: "Manifest enabled" })).not.toBeChecked();
+      await userEvent.click(c.getByRole("switch", { name: "Manifest enabled" }));
+      await waitFor(() => expect(c.getByText("Enabled")).toBeInTheDocument());
+    } finally {
+      restore();
+    }
+  },
+};
+
+// Declining the question leaves the manifest enabled.
+export const DisableDeclined: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    setAutoConfirm(false);
+    try {
+      await waitFor(() => expect(c.getByRole("heading", { name: "OrderManifest" })).toBeInTheDocument());
+      await userEvent.click(c.getByRole("switch", { name: "Manifest enabled" }));
+      expect(c.getByText("Enabled")).toBeInTheDocument();
+      expect(c.getByRole("switch", { name: "Manifest enabled" })).toBeChecked();
+    } finally {
+      setAutoConfirm(null);
+    }
+  },
+};
+
+// When it runs: the schedule in words, the next runs, and the run history by window.
+export const ScheduleAndHistory: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const schedule = await c.findByRole("region", { name: "Schedule" });
+    expect(within(schedule).getByText("Every 5 minutes")).toBeInTheDocument();
+    expect(within(schedule).getAllByRole("listitem")).toHaveLength(5);
+    const history = await c.findByRole("region", { name: "Run history" });
+    await waitFor(() => expect(within(history).getByText(/completed/)).toBeInTheDocument());
+    await userEvent.click(within(history).getByRole("button", { name: "7 days" }));
+    await waitFor(() =>
+      expect(within(history).getByRole("button", { name: "7 days" })).toHaveAttribute("aria-pressed", "true"),
+    );
   },
 };
 

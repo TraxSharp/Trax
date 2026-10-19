@@ -1287,10 +1287,30 @@ public partial class OperationsService : IOperationsService
                     Failed: StateCount(TrainState.Failed),
                     InProgress: StateCount(TrainState.InProgress),
                     LastRun: rows.Count == 0 ? null : rows.Max(x => x.LastRun)
-                );
+                )
+                {
+                    LastEndedRunFailed = LastEndedRunFailed(
+                        rows.Select(x => (x.TrainState, x.LastRun))
+                    ),
+                };
             })
             .ToList();
     }
+
+    // Whether the run that started last among a group's ended runs (completed, failed or
+    // cancelled) failed, from the latest start per state. A tie goes to the run that did not fail.
+    private static bool LastEndedRunFailed(
+        IEnumerable<(TrainState State, DateTime? LastRun)> latest
+    ) =>
+        latest
+            .Where(x =>
+                x.LastRun != null
+                && x.State is TrainState.Completed or TrainState.Failed or TrainState.Cancelled
+            )
+            .OrderByDescending(x => x.LastRun)
+            .ThenBy(x => x.State == TrainState.Failed)
+            .Select(x => x.State == TrainState.Failed)
+            .FirstOrDefault();
 
     /// <inheritdoc />
     /// <remarks>
@@ -2560,7 +2580,12 @@ public partial class OperationsService : IOperationsService
         var focalGroup = await db
             .ManifestGroups.AsNoTracking()
             .Where(g => g.Id == groupId)
-            .Select(g => new { g.Id, g.Name })
+            .Select(g => new
+            {
+                g.Id,
+                g.Name,
+                g.IsEnabled,
+            })
             .FirstOrDefaultAsync(ct);
 
         if (focalGroup is null)
@@ -2573,7 +2598,13 @@ public partial class OperationsService : IOperationsService
         // Empty group: still return a single-node graph so the UI can render the focal node.
         if (!await currentManifestIdsQuery.AnyAsync(ct))
             return new ManifestGroupDependencyGraph(
-                new[] { new DependencyGraphNode(focalGroup.Id, focalGroup.Name, true) },
+                new[]
+                {
+                    new DependencyGraphNode(focalGroup.Id, focalGroup.Name, true)
+                    {
+                        IsEnabled = focalGroup.IsEnabled,
+                    },
+                },
                 Array.Empty<DependencyGraphEdge>()
             );
 
@@ -2609,11 +2640,19 @@ public partial class OperationsService : IOperationsService
         var groups = await db
             .ManifestGroups.AsNoTracking()
             .Where(g => allRelevantGroupIds.Contains(g.Id))
-            .Select(g => new { g.Id, g.Name })
+            .Select(g => new
+            {
+                g.Id,
+                g.Name,
+                g.IsEnabled,
+            })
             .ToListAsync(ct);
 
         var nodes = groups
-            .Select(g => new DependencyGraphNode(g.Id, g.Name, IsHighlighted: g.Id == groupId))
+            .Select(g => new DependencyGraphNode(g.Id, g.Name, IsHighlighted: g.Id == groupId)
+            {
+                IsEnabled = g.IsEnabled,
+            })
             .ToList();
 
         // Cross-group edges only.
@@ -2658,7 +2697,7 @@ public partial class OperationsService : IOperationsService
         var nodes = await db
             .ManifestGroups.AsNoTracking()
             .OrderBy(g => g.Name)
-            .Select(g => new DependencyGraphNode(g.Id, g.Name, false))
+            .Select(g => new DependencyGraphNode(g.Id, g.Name, false) { IsEnabled = g.IsEnabled })
             .ToListAsync(ct);
 
         // Cross-group edges: a manifest in one group depends on a manifest in another. Same shape as

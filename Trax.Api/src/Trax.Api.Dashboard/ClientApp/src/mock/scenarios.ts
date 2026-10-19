@@ -328,12 +328,14 @@ export const groupScenario: MockSchemaOverrides = {
           totalExecutions: id === 1 ? 100 : 40,
           completed: id === 1 ? 90 : 35,
           failed: id === 1 ? 7 : 3,
-          inProgress: id === 1 ? 3 : 2,
+          inProgress: id === 1 ? 3 : 0,
           lastRun: "2026-07-07T11:00:00.000Z",
+          // alpha is running; beta's latest ended run failed.
+          lastEndedRunFailed: id === 2,
         })),
       // Global cross-group DAG: alpha (1) → beta (2).
       dependencyGraph: () => ({
-        nodes: GROUP_ROWS.map((g) => ({ id: g.id, name: g.name, isHighlighted: false })),
+        nodes: GROUP_ROWS.map((g) => ({ id: g.id, name: g.name, isHighlighted: false, isEnabled: g.isEnabled })),
         edges: [{ fromId: 1, toId: 2 }],
       }),
     },
@@ -1129,8 +1131,8 @@ export const groupDetailScenario: MockSchemaOverrides = {
         GROUP_ROWS.find((r) => r.id === args.id) ?? GROUP_ROWS[0],
       graph: (_root: unknown, args: Args) => ({
         nodes: [
-          { id: (args.groupId as number) ?? 1, name: "alpha-group", isHighlighted: true },
-          { id: 2, name: "beta-group", isHighlighted: false },
+          { id: (args.groupId as number) ?? 1, name: "alpha-group", isHighlighted: true, isEnabled: true },
+          { id: 2, name: "beta-group", isHighlighted: false, isEnabled: false },
         ],
         edges: [{ fromId: (args.groupId as number) ?? 1, toId: 2 }],
       }),
@@ -1141,8 +1143,9 @@ export const groupDetailScenario: MockSchemaOverrides = {
           totalExecutions: 120,
           completed: 90,
           failed: 20,
-          inProgress: 10,
+          inProgress: id === 2 ? 0 : 10,
           lastRun: "2026-07-07T11:00:00.000Z",
+          lastEndedRunFailed: id === 2,
         })),
     },
     OperationsQueries: {

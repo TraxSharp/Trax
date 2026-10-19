@@ -153,7 +153,10 @@ public class ManifestGroupQueries
                 s.Failed,
                 s.InProgress,
                 s.LastRun
-            ))
+            )
+            {
+                LastEndedRunFailed = s.LastEndedRunFailed,
+            })
             .ToList();
     }
 

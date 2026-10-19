@@ -14,7 +14,10 @@ import {
 } from "../graphql/mutations";
 import { StateBadge } from "../components/StateBadge";
 import { Graph } from "../components/Graph";
-import { groupGraph } from "../lib/groupGraph";
+import { GROUP_GRAPH_LEGEND, groupGraph } from "../lib/groupGraph";
+import { RunSparkline } from "../components/schedules";
+import { useGroupGraphStatus } from "../lib/schedules";
+import { usePoll } from "../lib/poll";
 import type {
   ExecutionSummary,
   ManifestGroupDependencyGraph,
@@ -72,6 +75,7 @@ export function ManifestGroupDetailPage() {
       <h1 className="text-2xl font-bold text-fg mt-2 mb-6">{group.name}</h1>
 
       <GroupStatCards groupId={id} />
+      <RunSparkline scope="GROUP" id={id} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <GroupSettings
@@ -287,7 +291,9 @@ function Dag({
   focalId: number;
 }) {
   const navigate = useNavigate();
-  const drawn = useMemo(() => groupGraph(graph), [graph]);
+  const status = useGroupGraphStatus(graph);
+  usePoll(status.refetch);
+  const drawn = useMemo(() => groupGraph(graph, status.statuses), [graph, status.statuses]);
 
   // A lone focal node means the group has no cross-group dependencies.
   if (graph.nodes.length <= 1 && graph.edges.length === 0)
@@ -302,6 +308,7 @@ function Dag({
       nodes={drawn.nodes}
       edges={drawn.edges}
       ariaLabel="Dependency graph"
+      legend={GROUP_GRAPH_LEGEND}
       selectedId={String(focalId)}
       onSelect={(id) => id !== String(focalId) && navigate(`/schedules/groups/${id}`)}
     />

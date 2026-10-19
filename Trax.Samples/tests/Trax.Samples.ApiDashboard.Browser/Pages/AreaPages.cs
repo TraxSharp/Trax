@@ -175,9 +175,44 @@ public sealed class DeadLettersPage(ConsolePage console)
     }
 }
 
-/// <summary>Manifests: what runs on a schedule, and whether it is enabled.</summary>
-public sealed class ManifestsPage(ConsolePage console)
-    : AreaPage(console, "schedules", "Manifests");
+/// <summary>Manifests: what runs on a schedule, in words, when it runs next, and whether it is enabled.</summary>
+public sealed class ManifestsPage(ConsolePage console) : AreaPage(console, "schedules", "Manifests")
+{
+    /// <summary>The tab of Schedules named <paramref name="name"/>.</summary>
+    public ILocator Tab(string name) =>
+        Page.GetByRole(AriaRole.Tablist, new() { Name = "Schedules" })
+            .GetByRole(AriaRole.Tab, new() { Name = name, Exact = true });
+}
+
+/// <summary>One manifest: its schedule, its next runs, its run history and its on/off switch.</summary>
+public sealed class ManifestDetailPage(ConsolePage console, long id, string heading)
+    : AreaPage(console, $"schedules/{id}", heading)
+{
+    public ILocator Schedule => Page.GetByRole(AriaRole.Region, new() { Name = "Schedule" });
+
+    public ILocator RunHistory => Page.GetByRole(AriaRole.Region, new() { Name = "Run history" });
+
+    public ILocator EnabledSwitch =>
+        Page.GetByRole(AriaRole.Switch, new() { Name = "Manifest enabled", Exact = true });
+
+    /// <summary>Switches the manifest off, confirming in the console's dialog.</summary>
+    public async Task DisableAsync()
+    {
+        await EnabledSwitch.ClickAsync();
+        await Console.ConfirmAsync("Disable manifest", "does not run on its schedule");
+    }
+}
+
+/// <summary>Manifest groups, and the graph of which groups run after which.</summary>
+public sealed class ManifestGroupsPage(ConsolePage console)
+    : AreaPage(console, "schedules/groups", "Manifest groups")
+{
+    public ILocator Graph => Page.GetByRole(AriaRole.Group, new() { Name = "Dependency graph" });
+
+    /// <summary>The node of the group named <paramref name="group"/>, which opens the group.</summary>
+    public ILocator Node(string group) =>
+        Graph.GetByRole(AriaRole.Button).Filter(new() { HasText = group });
+}
 
 /// <summary>Machines: every machine the host registers, with its instance and stuck counts.</summary>
 public sealed class MachinesPage(ConsolePage console) : AreaPage(console, "machines", "Machines")

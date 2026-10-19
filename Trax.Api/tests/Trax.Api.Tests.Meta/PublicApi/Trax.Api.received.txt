@@ -661,6 +661,7 @@ namespace Trax.Api.DTOs
         public long Failed { get; init; }
         public long GroupId { get; init; }
         public long InProgress { get; init; }
+        public bool LastEndedRunFailed { get; init; }
         public System.DateTime? LastRun { get; init; }
         public long ManifestCount { get; init; }
         public long TotalExecutions { get; init; }
