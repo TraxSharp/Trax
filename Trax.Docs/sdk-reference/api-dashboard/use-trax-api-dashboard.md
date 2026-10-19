@@ -120,7 +120,7 @@ scheme, so that scheme must also be one the endpoint's policy accepts. `HostAuth
 together with `AllowAnonymousShell()` throws: with an anonymous shell nothing gates the page or
 vouches that the endpoint will know the caller.
 
-```csharp
+```csharp fragment
 app.UseTraxApiDashboard(dashboard => dashboard
     .RequirePolicy(OidcDefaults.PolicyName)
     .HostAuthenticates());
