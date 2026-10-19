@@ -981,6 +981,25 @@ export const TRAIN_CHAINS = gql`
   }
 `;
 
+// What an id, key or name names, for the console's search: exact matches only, at most 10 of each
+// kind. kind and id say which page opens; an instance carries its machine, owner kind and rowId (the
+// key machineInstance takes for a user's draft), never whose a draft is.
+export const LOOKUP = gql`
+  query Lookup($text: String!) {
+    operations {
+      lookup(text: $text) {
+        kind
+        id
+        label
+        matchedOn
+        machine
+        ownerKind
+        rowId
+      }
+    }
+  }
+`;
+
 // ── State machines ─────────────────────────────────────────────────────────
 // Operators see instances read-only and never their context: none of these selects it.
 

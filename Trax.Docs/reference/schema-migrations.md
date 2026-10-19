@@ -657,3 +657,11 @@ parent's child and the reconciler's sweep of children that ended; on Postgres it
 Nothing is backfilled: no instance spawned another before this migration. A host on the previous version neither
 spawns nor reads the column, so during a rolling deploy a parent it moves out of a spawning state leaves the child,
 and a child's end is delivered only by an upgraded host. Finish the deploy before machines that spawn are entered.
+
+## State-machine instance by id (086, SQLite 045)
+
+`086_snapshot_draft_id_index.sql` (SQLite `045`) adds `ix_snapshot_draft_id` on `trax.snapshot_draft (id)`, so an
+instance can be found by its id alone, across machines and owners. The operator's lookup of an id of unknown kind
+([`lookup`](/docs/sdk-reference/graphql-api/queries/operations#lookup)) reads it; the other keys on the table lead with
+the machine or the user. On Postgres it is built `CONCURRENTLY`, so drafts keep being saved while it builds. Nothing
+changes for a host on the previous version.

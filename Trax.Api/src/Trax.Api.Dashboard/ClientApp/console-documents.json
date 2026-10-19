@@ -114,6 +114,10 @@
       "text": "query Logs($take: Int!, $afterId: Long, $metadataId: Long, $minimumLevel: LogLevel, $messageContains: String, $categoryContains: String, $order: SortOrder! = NEWEST) {\n  operations {\n    logs {\n      logs(\n        take: $take\n        afterId: $afterId\n        metadataId: $metadataId\n        minimumLevel: $minimumLevel\n        messageContains: $messageContains\n        categoryContains: $categoryContains\n        order: $order\n      ) {\n        items {\n          id\n          metadataId\n          eventId\n          level\n          category\n          message\n          exception\n          __typename\n        }\n        totalCount\n        isEstimatedCount\n        isCountCapped\n        nextCursor\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "Lookup",
+      "text": "query Lookup($text: String!) {\n  operations {\n    lookup(text: $text) {\n      kind\n      id\n      label\n      matchedOn\n      machine\n      ownerKind\n      rowId\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "MachineInstance",
       "text": "query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {\n  operations {\n    machineInstance(\n      machine: $machine\n      ownerKind: $ownerKind\n      id: $id\n      rowId: $rowId\n    ) {\n      machine\n      ownerKind\n      id\n      rowId\n      state\n      version\n      createdAt\n      updatedAt\n      hasLiveInvokedRun\n      queuedInvokedRunEntryId\n      isInvokedRunsCapped\n      invokedRuns {\n        id\n        externalId\n        name\n        trainState\n        startTime\n        endTime\n        failureClass\n        cancellationRequested\n        isLive\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },

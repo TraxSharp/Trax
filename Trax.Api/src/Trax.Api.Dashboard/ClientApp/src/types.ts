@@ -752,6 +752,19 @@ export interface RunInvoker {
   rowId: number | null;
 }
 
+// One thing operations.lookup found (LOOKUP): which page it opens, by kind and id.
+export type LookupKind = "RUN" | "MANIFEST" | "WORK_QUEUE_ENTRY" | "DEAD_LETTER" | "MACHINE_INSTANCE" | "TRAIN";
+
+export interface LookupMatch {
+  kind: LookupKind;
+  id: string;
+  label: string;
+  matchedOn: "id" | "externalId" | "name" | "subjectKey";
+  machine: string | null;
+  ownerKind: SnapshotOwnerKind | null;
+  rowId: number | null;
+}
+
 // What a run is linked to (RUN_LINKS).
 export interface RunLinks {
   id: number;

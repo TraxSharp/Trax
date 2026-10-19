@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import { RUN_LINKS, TRAIN_CHAINS } from "../graphql/queries";
-import type { RunLinks, TrainChain } from "../types";
+import { LOOKUP, RUN_LINKS, TRAIN_CHAINS } from "../graphql/queries";
+import type { LookupMatch, RunLinks, TrainChain } from "../types";
 import { createMockClient, createMockStore } from "./index";
-import { executionDetailScenario, MACHINE_IDS, trainsScenario } from "./scenarios";
+import { executionDetailScenario, lookupScenario, MACHINE_IDS, trainsScenario } from "./scenarios";
 
 // The mock answers the console's reads that no page uses yet, in the shapes the API serves them.
 
@@ -37,4 +37,16 @@ test("RUN_LINKS: what a run is linked to, the invoking instance named without it
   const retry = (await client.query(RUN_LINKS, { id: 951 }).toPromise()).data.operations.executionDetail as RunLinks;
   expect(retry.deadLetterId).toBe(31);
   expect(retry.invokedBy).toBeNull();
+});
+
+test("LOOKUP: exact matches only, a user's draft by its rowId and never its owner", async () => {
+  const client = createMockClient({ store: createMockStore(), fixtures: false, overrides: lookupScenario });
+  const find = async (text: string) =>
+    (await client.query(LOOKUP, { text }).toPromise()).data.operations.lookup as LookupMatch[];
+
+  expect(await find(` ${MACHINE_IDS.draftBuilding} `)).toMatchObject([
+    { kind: "MACHINE_INSTANCE", id: MACHINE_IDS.draftBuilding, ownerKind: "USER", rowId: 21, machine: "topic-map" },
+  ]);
+  expect(await find("902")).toMatchObject([{ kind: "RUN", id: "902", matchedOn: "id" }]);
+  expect(await find("Trax.Trains.Zebra")).toEqual([]);
 });

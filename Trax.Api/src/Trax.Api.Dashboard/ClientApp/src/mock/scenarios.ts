@@ -1127,3 +1127,39 @@ export const machineScenarioCapped: MockSchemaOverrides = {
     },
   }),
 };
+
+// ── Lookup ─────────────────────────────────────────────────────────────────
+// operations.lookup over the scenarios' rows: exact matches only, as the API matches. A number names
+// a scenario run; a GUID an instance (a user's draft carries its rowId, never whose it is); a name a
+// registered train.
+const SCENARIO_RUNS = [800, 900, 902, 903, 950, 951, 952, 954, 956];
+
+export function lookupMatches(args: Args) {
+  const text = String(args.text ?? "").trim();
+  const none = { machine: null, ownerKind: null, rowId: null };
+  const matches: Record<string, unknown>[] = [];
+  if (/^\d+$/.test(text) && SCENARIO_RUNS.includes(Number(text))) {
+    matches.push({ kind: "RUN", id: text, label: `Run ${text}`, matchedOn: "id", ...none });
+  }
+  for (const row of MACHINE_ROWS)
+    if (row.id === text)
+      matches.push({
+        kind: "MACHINE_INSTANCE",
+        id: row.id,
+        label: `${row.machine} · ${row.state}`,
+        matchedOn: "id",
+        machine: row.machine,
+        ownerKind: row.ownerKind,
+        rowId: row.rowId,
+      });
+  for (const train of TRAIN_ROWS)
+    if (train.fullName === text || train.serviceTypeName === text)
+      matches.push({ kind: "TRAIN", id: train.fullName, label: train.serviceTypeName, matchedOn: "name", ...none });
+  return matches;
+}
+
+export const lookupScenario: MockSchemaOverrides = {
+  resolvers: () => ({
+    OperationsQueries: { lookup: (_root: unknown, args: Args) => lookupMatches(args) },
+  }),
+};

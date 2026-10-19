@@ -45,6 +45,8 @@ internal class PersistentSnapshotDraft : BaseModel
                 .HasIndex(e => new { e.UpdatedAt, e.RowId })
                 .IsDescending(true, true)
                 .HasDatabaseName("ix_snapshot_draft_updated");
+            // An instance found by its id alone, across machines and owners: the operator's lookup.
+            entity.HasIndex(e => e.Id).HasDatabaseName("ix_snapshot_draft_id");
             entity.Property(e => e.ConcurrencyToken).IsConcurrencyToken();
         });
     }

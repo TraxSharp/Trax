@@ -598,6 +598,7 @@ namespace Trax.Scheduler.Services.Operations
         Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig();
         Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.LookupMatch>> LookupAsync(string text, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, System.Threading.CancellationToken ct);
@@ -658,6 +659,26 @@ namespace Trax.Scheduler.Services.Operations
         public string Message { get; init; }
         public long MetadataId { get; init; }
         public string? StackTrace { get; init; }
+    }
+    public enum LookupKind
+    {
+        Run = 0,
+        Manifest = 1,
+        WorkQueueEntry = 2,
+        DeadLetter = 3,
+        MachineInstance = 4,
+        Train = 5,
+    }
+    public sealed class LookupMatch : System.IEquatable<Trax.Scheduler.Services.Operations.LookupMatch>
+    {
+        public LookupMatch(Trax.Scheduler.Services.Operations.LookupKind Kind, string Id, string Label, string MatchedOn) { }
+        public string Id { get; init; }
+        public Trax.Scheduler.Services.Operations.LookupKind Kind { get; init; }
+        public string Label { get; init; }
+        public string? Machine { get; init; }
+        public string MatchedOn { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind? OwnerKind { get; init; }
+        public long? RowId { get; init; }
     }
     public enum MachineInstanceCancelOutcome
     {
@@ -809,6 +830,8 @@ namespace Trax.Scheduler.Services.Operations
     public class OperationsService : Trax.Scheduler.Services.Operations.IOperationsService
     {
         public const int LogCountCap = 10000;
+        public const int LookupMatchCap = 10;
+        public const int LookupTextLimit = 512;
         public const int MachineInstanceCountCap = 10000;
         public const int MachineInstanceRunCap = 50;
         public const int MaxBatchSize = 1000;
@@ -846,6 +869,7 @@ namespace Trax.Scheduler.Services.Operations
         public Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig() { }
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.LookupMatch>> LookupAsync(string text, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, System.Threading.CancellationToken ct) { }

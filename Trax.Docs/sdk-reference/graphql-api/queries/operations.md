@@ -265,6 +265,45 @@ Settings can hold credentials. Like an execution's `input`, they are reachable o
 `operations` namespace, so the gate you put on it (`GateOperations` or `RequireAuthorization`)
 decides who reads them. See [Train inputs and the operations gate](/docs/sdk-reference/graphql-api/queries#train-inputs-and-the-operations-gate).
 
+## lookup
+
+Finds what an id, key or name names when you do not know its kind, the read behind the console's search. It calls
+[`IOperationsService.LookupAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#lookupasync).
+
+```graphql
+query {
+  operations {
+    lookup(text: "7f3c0e2a9b1d4c5e8f6a7b8c9d0e1f2a") {
+      kind
+      id
+      label
+      matchedOn
+      machine
+      ownerKind
+      rowId
+    }
+  }
+}
+```
+
+**Returns**: `[LookupMatch!]!`, empty when nothing matches.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `kind` | `LookupKind!` | `RUN`, `MANIFEST`, `WORK_QUEUE_ENTRY`, `DEAD_LETTER`, `MACHINE_INSTANCE` or `TRAIN` |
+| `id` | `String!` | The id the kind's read takes: a run, manifest, entry or dead letter id, an instance's GUID, or a train's `fullName` |
+| `label` | `String!` | The train, manifest or machine, with its state |
+| `matchedOn` | `String!` | The field the text matched: `id`, `externalId`, `name` or `subjectKey` |
+| `machine` | `String` | For an instance, its machine; null otherwise |
+| `ownerKind` | `SnapshotOwnerKind` | For an instance, who owns it; null otherwise |
+| `rowId` | `Long` | For an instance, the row [`machineInstance`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstance) takes for a user's draft; null otherwise |
+
+Matches are exact, after trimming: runs by id and external id, manifests by id, external id and name, work queue
+entries by id, external id and subject key (those still queued or dispatched), dead letters by id, state-machine
+instances by id, and registered trains by full or friendly name. Each is one read of an indexed column, at most 10
+matches of each kind. An instance is named the way [`machineInstances`](/docs/sdk-reference/graphql-api/queries/machine-instances)
+names it, never by its context or whose a user's draft is. Like every field here it answers to the operations gate.
+
 ## See also
 
 - [Queries](/docs/sdk-reference/graphql-api/queries)

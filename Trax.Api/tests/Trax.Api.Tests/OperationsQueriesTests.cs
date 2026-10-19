@@ -388,6 +388,166 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task Lookup_ARunsExternalId_FindsThatRun()
+    {
+        var externalId = Guid.NewGuid().ToString("N");
+        long id;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.LookupTrain",
+                    ExternalId = externalId,
+                    Input = null,
+                }
+            );
+            await db.Track(run);
+            await db.SaveChanges(default);
+            id = run.Id;
+        }
+
+        var matches = await new OperationsQueries().GetLookup(
+            $"  {externalId} ",
+            Operations,
+            default
+        );
+
+        matches
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new LookupMatch(
+                    LookupKind.Run,
+                    id.ToString(),
+                    "Trax.X.LookupTrain · Pending",
+                    "externalId"
+                )
+            );
+        (await new OperationsQueries().GetLookup(externalId[..10], Operations, default))
+            .Should()
+            .BeEmpty("a lookup matches exactly, never a prefix");
+    }
+
+    [Test]
+    public async Task Lookup_ANumber_FindsEveryKindWithThatId_AndASubjectKeyItsEntries()
+    {
+        var manifest = await SeedManifestForDeadLetter();
+        var subject = "customer-" + Guid.NewGuid().ToString("N");
+        long entryId;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = "Trax.X.LookupTrain",
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            await db.Track(run);
+            await db.Track(
+                DeadLetter.Create(
+                    new CreateDeadLetter
+                    {
+                        Manifest = manifest,
+                        Reason = "retries used up",
+                        RetryCount = 3,
+                    }
+                )
+            );
+            var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+                new Trax.Effect.Models.WorkQueue.DTOs.CreateWorkQueue
+                {
+                    TrainName = "Trax.X.LookupTrain",
+                    SubjectKey = subject,
+                }
+            );
+            await db.Track(entry);
+            await db.SaveChanges(default);
+            entryId = entry.Id;
+        }
+
+        // Every table was emptied, so id 1 is the first row of each.
+        var byId = await new OperationsQueries().GetLookup("1", Operations, default);
+        byId.Select(m => (m.Kind, m.Id, m.MatchedOn))
+            .Should()
+            .BeEquivalentTo(
+                new[]
+                {
+                    (LookupKind.Run, "1", "id"),
+                    (LookupKind.Manifest, "1", "id"),
+                    (LookupKind.WorkQueueEntry, "1", "id"),
+                    (LookupKind.DeadLetter, "1", "id"),
+                }
+            );
+
+        var bySubject = await new OperationsQueries().GetLookup(subject, Operations, default);
+        bySubject
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Match<LookupMatch>(m =>
+                m.Kind == LookupKind.WorkQueueEntry
+                && m.Id == entryId.ToString()
+                && m.MatchedOn == "subjectKey"
+            );
+
+        var byName = await new OperationsQueries().GetLookup(manifest.Name, Operations, default);
+        byName.Should().Contain(m => m.Kind == LookupKind.Manifest && m.MatchedOn == "name");
+    }
+
+    [Test]
+    public async Task Lookup_AnInstanceGuid_NamesTheRow_NeverItsContextOrOwner()
+    {
+        var id = Guid.NewGuid();
+        var secret = "secret-" + Guid.NewGuid().ToString("N");
+        var userKey = "user-" + Guid.NewGuid().ToString("N");
+        long rowId;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var draft = new Trax.Effect.Models.SnapshotDraft.SnapshotDraft
+            {
+                Id = id,
+                OwnerKind = SnapshotOwnerKind.User,
+                UserKey = userKey,
+                Machine = "topic-map",
+                Version = 1,
+                State = "Building",
+                Context = JsonSerializer.Serialize(new { apiKey = secret }),
+                ConcurrencyToken = Guid.NewGuid(),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            db.SnapshotDrafts.Add(draft);
+            await db.SaveChanges(default);
+            rowId = draft.RowId;
+        }
+
+        var matches = await new OperationsQueries().GetLookup(id.ToString(), Operations, default);
+
+        var match = matches.Should().ContainSingle().Which;
+        match
+            .Should()
+            .BeEquivalentTo(
+                new LookupMatch(
+                    LookupKind.MachineInstance,
+                    id.ToString(),
+                    "topic-map · Building",
+                    "id"
+                )
+                {
+                    Machine = "topic-map",
+                    OwnerKind = SnapshotOwnerKind.User,
+                    RowId = rowId,
+                }
+            );
+        var json = JsonSerializer.Serialize(matches);
+        json.Should().NotContain(userKey).And.NotContain(secret);
+    }
+
+    [Test]
     public async Task GetExecutionDetail_MissingId_ReturnsNull()
     {
         var detail = await new OperationsQueries().GetExecutionDetail(999999, _factory, default);

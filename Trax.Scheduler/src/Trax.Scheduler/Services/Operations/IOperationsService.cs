@@ -696,6 +696,26 @@ public interface IOperationsService
         CancellationToken ct
     ) => throw NotImplementedBy(nameof(CancelMachineInstanceAsync));
 
+    /// <summary>
+    /// Finds what <paramref name="text"/> names, when the caller does not know what kind of id it
+    /// holds: a run (by id or external id), a manifest (by id, external id or name), a work queue
+    /// entry (by id, external id or subject key), a dead letter (by id), a state-machine instance
+    /// (by its GUID) or a registered train (by its full or friendly name). The console's global
+    /// search calls it, through the API's <c>operations.lookup</c>.
+    /// </summary>
+    /// <remarks>
+    /// Exact matches only, after trimming, each read through an index, at most
+    /// <see cref="OperationsService.LookupMatchCap"/> of each kind. A subject key finds the entries
+    /// still queued or dispatched under it. An instance is named as the operator's list names it,
+    /// by machine, owner kind, id, row id and state, never by its context or whose a user's draft
+    /// is. Empty for empty text and for text longer than <see cref="OperationsService.LookupTextLimit"/>.
+    /// </remarks>
+    /// <param name="text">The id, key or name to look up.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
+    Task<IReadOnlyList<LookupMatch>> LookupAsync(string text, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(LookupAsync));
+
     private NotSupportedException NotImplementedBy(string member) =>
         new(
             $"{GetType().Name} does not implement {member}. It was added to IOperationsService "

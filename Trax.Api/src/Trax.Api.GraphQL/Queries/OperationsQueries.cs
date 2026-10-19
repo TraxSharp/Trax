@@ -1131,6 +1131,30 @@ public partial class OperationsQueries
         );
     }
 
+    /// <summary>
+    /// What an id, key or name names, when the caller does not know its kind: runs (id, external
+    /// id), manifests (id, external id, name), work queue entries (id, external id, subject key),
+    /// dead letters (id), state-machine instances (their GUID) and registered trains (full or
+    /// friendly name). Each match says its <c>kind</c> and <c>id</c>, which page it opens, a
+    /// <c>label</c>, and the field it matched on. Read through
+    /// <see cref="IOperationsService.LookupAsync"/>, the call the console's search makes.
+    /// </summary>
+    /// <remarks>
+    /// Exact matches only, after trimming; nothing matches by prefix or contents. Each read is an
+    /// indexed column, and at most 10 matches of each kind are returned. A subject key finds the
+    /// entries still queued or dispatched under it. An instance is named as
+    /// <c>machineInstances</c> names it (machine, owner kind, id, row id, state), never by its
+    /// context or whose a user's draft is. Empty for empty text or text over 512 characters.
+    /// </remarks>
+    /// <param name="text">The id, key or name to look up.</param>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    public Task<IReadOnlyList<LookupMatch>> GetLookup(
+        string text,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    ) => operationsService.LookupAsync(text, ct);
+
     // Names and enum spellings follow the options the queue and run paths deserialize input
     // with, so a client that builds its JSON from this schema writes what the reader expects.
     private static List<InputPropertySchema> GetInputSchema(Type inputType)
