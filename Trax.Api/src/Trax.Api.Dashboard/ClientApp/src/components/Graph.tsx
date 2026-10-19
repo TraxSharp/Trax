@@ -122,12 +122,15 @@ function TraxNode({ data }: NodeProps<Node<NodeData>>) {
           type="button"
           className={`${frame} cursor-pointer hover:border-accent focus-visible:outline-2 focus-visible:outline-accent`}
           aria-pressed={selected}
+          aria-current={spec.current ? "step" : undefined}
           onClick={() => onSelect(spec.id)}
         >
           {body}
         </button>
       ) : (
-        <div className={frame}>{body}</div>
+        <div className={frame} aria-current={spec.current ? "step" : undefined}>
+          {body}
+        </div>
       )}
       <Handle type="source" position={out} isConnectable={false} className="opacity-0" />
     </>

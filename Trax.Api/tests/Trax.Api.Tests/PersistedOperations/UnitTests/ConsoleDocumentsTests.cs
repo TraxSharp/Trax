@@ -54,6 +54,7 @@ public class ConsoleDocumentsTests
             {
                 d.Name("RootSubscription");
                 d.Field("onTrainStateChanged").Type<StringType>().Resolve("s");
+                d.Field("onMachineInstanceChanged").Type<StringType>().Resolve("s");
                 d.Field("onSomethingElse").Type<StringType>().Resolve("s");
             });
         var executor = await services
@@ -90,6 +91,7 @@ public class ConsoleDocumentsTests
     [TestCase("query Hosts { operations { hosts } }")]
     [TestCase("mutation Hosts { operations { hosts } }")]
     [TestCase("subscription Hosts { onTrainStateChanged }")]
+    [TestCase("subscription Hosts { onMachineInstanceChanged }")]
     [TestCase("query Hosts { operations { ...H } } fragment H on Operations { hosts }")]
     public void A_document_of_the_operations_surface_is_served(string text)
     {

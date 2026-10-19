@@ -928,12 +928,28 @@ export interface MachineInstanceInvokedRun {
   isLive: boolean;
 }
 
-export interface MachineInstanceDetail extends MachineInstance {
+export interface MachineInstanceDetail extends MachineInstance, MachineInstanceAttention {
   invokedRuns: MachineInstanceInvokedRun[];
   // The instance invoked more runs than the newest 50 listed.
   isInvokedRunsCapped: boolean;
   // The work queue entry of the run its state waits on, while that run is still queued.
   queuedInvokedRunEntryId: number | null;
+}
+
+/** One event of onMachineInstanceChanged: an instance as it was just written, never its context. */
+export interface MachineInstanceChange {
+  rowId: number;
+  machine: string;
+  ownerKind: SnapshotOwnerKind;
+  id: string;
+  state: string;
+  updatedAt: string;
+  hasLiveInvokedRun: boolean;
+  revision: number | null;
+  // The instance was deleted or expired; nothing follows for this row.
+  deleted: boolean;
+  // Writes may have been missed: the event names no instance, and the page reads again.
+  reload: boolean;
 }
 
 export type MachineInstanceCancelOutcome =

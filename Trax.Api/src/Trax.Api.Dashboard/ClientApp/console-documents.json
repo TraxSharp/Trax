@@ -131,7 +131,7 @@
     },
     {
       "name": "MachineInstance",
-      "text": "query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {\n  operations {\n    machineInstance(\n      machine: $machine\n      ownerKind: $ownerKind\n      id: $id\n      rowId: $rowId\n    ) {\n      machine\n      ownerKind\n      id\n      rowId\n      state\n      version\n      createdAt\n      updatedAt\n      hasLiveInvokedRun\n      queuedInvokedRunEntryId\n      isInvokedRunsCapped\n      invokedRuns {\n        id\n        externalId\n        name\n        trainState\n        startTime\n        endTime\n        failureClass\n        cancellationRequested\n        isLive\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+      "text": "query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {\n  operations {\n    machineInstance(\n      machine: $machine\n      ownerKind: $ownerKind\n      id: $id\n      rowId: $rowId\n    ) {\n      machine\n      ownerKind\n      id\n      rowId\n      state\n      version\n      createdAt\n      updatedAt\n      hasLiveInvokedRun\n      queuedInvokedRunEntryId\n      isInvokedRunsCapped\n      inStateSince\n      dueAt\n      overdue\n      stuck\n      waitingOn {\n        executionId\n        trainState\n        workQueueEntryId\n        __typename\n      }\n      invokedRuns {\n        id\n        externalId\n        name\n        trainState\n        startTime\n        endTime\n        failureClass\n        cancellationRequested\n        isLive\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "MachineInstanceCounts",
@@ -200,6 +200,10 @@
     {
       "name": "OnJunctionEvent",
       "text": "subscription OnJunctionEvent($metadataId: Long!) {\n  onJunctionEvent(metadataId: $metadataId) {\n    metadataId\n    eventType\n    timestamp\n    sequence\n    junction {\n      position\n      kind\n      name\n      state\n      startedAt\n      endedAt\n      durationMs\n      failureClass\n      failureException\n      questionKey\n      answer\n      confidence\n      replayed\n      decider\n      answerWithheld\n      attempt\n      nameWithheld\n      trackPosition\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "OnMachineInstanceChanged",
+      "text": "subscription OnMachineInstanceChanged($machine: String) {\n  onMachineInstanceChanged(machine: $machine) {\n    rowId\n    machine\n    ownerKind\n    id\n    state\n    updatedAt\n    hasLiveInvokedRun\n    revision\n    deleted\n    reload\n    __typename\n  }\n}"
     },
     {
       "name": "OnTrainStateChanged",

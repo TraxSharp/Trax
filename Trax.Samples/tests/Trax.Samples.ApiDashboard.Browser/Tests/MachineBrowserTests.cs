@@ -119,4 +119,101 @@ public class MachineBrowserTests : ConsoleTest
                 )
             );
     }
+
+    [Test]
+    public async Task An_instance_page_lights_its_state_and_lists_what_it_accepts_and_its_overdue_timer()
+    {
+        var overdue = await Seed.OverdueTimerAsync();
+        var page = new MachineInstancePage(Console, ReminderMachine.Id, overdue.Id);
+
+        await page.OpenAsync(Caller.Operator);
+        await Assertions
+            .Expect(page.Lit)
+            .ToHaveTextAsync(
+                new System.Text.RegularExpressions.Regex($"^{nameof(ReminderState.Pending)}"),
+                new() { Timeout = Render }
+            );
+        await Assertions
+            .Expect(page.Commands)
+            .ToContainTextAsync(nameof(ReminderTrigger.Dismiss), new() { Timeout = Render });
+        await Assertions
+            .Expect(page.Field("Timer due"))
+            .ToContainTextAsync("Overdue", new() { Timeout = Render });
+        await Assertions
+            .Expect(page.Field("Stuck"))
+            .ToContainTextAsync("its timer should have fired", new() { Timeout = Render });
+        // Read-only: the console sends no command.
+        await Assertions.Expect(page.Commands.GetByRole(AriaRole.Button)).ToHaveCountAsync(0);
+    }
+
+    [Test]
+    public async Task An_instance_page_shows_the_ended_run_it_waits_on()
+    {
+        var (waiting, entry) = await Seed.InstanceWaitingOnAnEndedRunAsync();
+        var page = new MachineInstancePage(Console, RelayMachine.Id, waiting.Id);
+
+        await page.OpenAsync(Caller.Operator);
+        var on = page.Field("Waiting on");
+        await Assertions.Expect(on).ToContainTextAsync("Cancelled", new() { Timeout = Render });
+        await Assertions
+            .Expect(
+                on.GetByRole(
+                    AriaRole.Link,
+                    new() { Name = $"Queue entry {entry.Id}", Exact = true }
+                )
+            )
+            .ToBeVisibleAsync(new() { Timeout = Render });
+        await Assertions
+            .Expect(page.Field("Stuck"))
+            .ToContainTextAsync("the run it waits on ended", new() { Timeout = Render });
+        await Assertions
+            .Expect(page.Lit)
+            .ToHaveTextAsync(
+                new System.Text.RegularExpressions.Regex($"^{nameof(RelayState.Relaying)}"),
+                new() { Timeout = Render }
+            );
+    }
+
+    [Test]
+    public async Task An_instance_page_follows_the_instance_through_the_live_feed()
+    {
+        var (gate, key) = await Seed.ClosedGateAsync();
+        var page = new MachineInstancePage(Console, GateMachine.Id, gate.Id);
+
+        // The page subscribes to the feed by the console's registered document; the instance moves only once it has.
+        var feedId = ConsoleSetup.DocumentIds["OnMachineInstanceChanged"];
+        var subscribed = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        Page.WebSocket += (_, socket) =>
+            socket.FrameSent += (_, frame) =>
+            {
+                if (frame.Text?.Contains("\"subscribe\"") == true && frame.Text.Contains(feedId))
+                    subscribed.TrySetResult();
+            };
+
+        await Console.OpenAsync(page.Route, Caller.Operator);
+        await Assertions
+            .Expect(page.Lit)
+            .ToHaveTextAsync(
+                new System.Text.RegularExpressions.Regex($"^{nameof(GateState.Closed)}"),
+                new() { Timeout = Render }
+            );
+        await subscribed.Task.WaitAsync(BrowserTimeouts.Render);
+        await Assertions
+            .Expect(page.Commands)
+            .ToContainTextAsync(nameof(GateTrigger.Open), new() { Timeout = Render });
+
+        await Seed.OpenGateAsync(key);
+
+        await Assertions
+            .Expect(page.Lit)
+            .ToHaveTextAsync(
+                new System.Text.RegularExpressions.Regex($"^{nameof(GateState.Open)}"),
+                new() { Timeout = Render }
+            );
+        await Assertions
+            .Expect(page.Commands)
+            .ToContainTextAsync(nameof(GateTrigger.Close), new() { Timeout = Render });
+    }
 }

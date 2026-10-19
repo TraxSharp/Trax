@@ -1257,7 +1257,8 @@ export const MACHINE_INSTANCE_STUCK_COUNTS = gql`
   }
 `;
 
-// One instance with the runs it invoked (newest first, at most 50). A user's draft is named by its
+// One instance with the runs it invoked (newest first, at most 50) and what says it needs attention
+// (as MACHINE_INSTANCES_ATTENTION reads it). A user's draft is named by its
 // rowId too, because several users can each hold a draft under one id.
 export const MACHINE_INSTANCE = gql`
   query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {
@@ -1274,6 +1275,15 @@ export const MACHINE_INSTANCE = gql`
         hasLiveInvokedRun
         queuedInvokedRunEntryId
         isInvokedRunsCapped
+        inStateSince
+        dueAt
+        overdue
+        stuck
+        waitingOn {
+          executionId
+          trainState
+          workQueueEntryId
+        }
         invokedRuns {
           id
           externalId

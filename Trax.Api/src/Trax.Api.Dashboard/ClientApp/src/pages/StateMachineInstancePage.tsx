@@ -1,32 +1,57 @@
-import { useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import { MACHINE_INSTANCE } from "../graphql/queries";
+import { useEffect, useRef, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useSubscription } from "urql";
+import { MACHINES, MACHINE_INSTANCE } from "../graphql/queries";
 import { CANCEL_MACHINE_INSTANCE } from "../graphql/mutations";
+import { ON_MACHINE_INSTANCE_CHANGED } from "../graphql/subscriptions";
 import { StateBadge } from "../components/StateBadge";
 import { BackLink, DetailLink, DetailPanel, Fields, Loading } from "../components/detail";
+import { MachineDiagram } from "../components/MachineDiagram";
+import { WaitingOn } from "../components/WaitingOn";
+import { connection } from "../lib/connection";
 import { enumLabel, formatTime, shortName } from "../lib/format";
-import { MACHINE_INSTANCES_PATH, parseOwnerSegment } from "../lib/machineInstances";
+import { delayWords, outcomeOf } from "../lib/machineGraph";
+import { machinePath, parseOwnerSegment } from "../lib/machineInstances";
 import { usePoll } from "../lib/poll";
 import { toast } from "../lib/toast";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
-import type { MachineInstanceCancelResponse, MachineInstanceDetail } from "../types";
+import type {
+  MachineDefinition,
+  MachineInstanceCancelResponse,
+  MachineInstanceChange,
+  MachineInstanceDetail,
+} from "../types";
 import { confirmAction } from "../lib/confirm";
 
 interface InstanceData {
   operations: { machineInstance: MachineInstanceDetail | null };
 }
 
+interface MachinesData {
+  operations: { machines: MachineDefinition[] };
+}
+
 interface CancelData {
   operations: { cancelMachineInstance: MachineInstanceCancelResponse };
 }
 
+interface FeedData {
+  onMachineInstanceChanged: MachineInstanceChange;
+}
+
+interface FeedState {
+  live: MachineInstanceChange | null;
+  seen: number;
+}
+
 /**
- * One state-machine instance, at /state-machines/:machine/:owner/:id, with ?row= for a user's
- * draft (operations.machineInstance). It shows the instance's state, version, timestamps, owner
- * kind and the train runs it invoked; never its context, and never the user who owns it. An
- * operator can cancel a system-owned instance's live run (cancelMachineInstance); the API refuses
- * the rest with its reason. Mirrors the Blazor StateMachineInstancePage.
+ * One state-machine instance, at /machines/:machine/:owner/:id, with ?row= for a user's draft
+ * (operations.machineInstance). It draws the machine with the state the instance is in lit, lists
+ * the commands that state accepts (read-only: the console never sends one), its timer and the run
+ * it waits on, and the runs it invoked. It follows the instance live through
+ * onMachineInstanceChanged and polls only while that feed is not connected. Never its context, and
+ * never the user who owns it. An operator can cancel a system-owned instance's live run
+ * (cancelMachineInstance); the API refuses the rest with its reason.
  */
 export function StateMachineInstancePage() {
   const params = useParams();
@@ -42,7 +67,7 @@ export function StateMachineInstancePage() {
     ownerKind == null
       ? `'${params.owner}' is not an owner: an instance is owned by the system or by a user.`
       : ownerKind === "USER" && rowId == null
-        ? "A user's draft is named by its row as well as its id, because several users can each hold a draft under one id. Open it from the State machines list."
+        ? "A user's draft is named by its row as well as its id, because several users can each hold a draft under one id. Open it from its machine's page."
         : null;
 
   const [result, reexecute] = useQuery<InstanceData>({
@@ -50,19 +75,49 @@ export function StateMachineInstancePage() {
     variables: { machine, ownerKind, id, rowId },
     pause: refusal != null,
   });
+  const [machines] = useQuery<MachinesData>({ query: MACHINES, pause: refusal != null });
   // reexecute ignores pause, so a route the API cannot look up must not refetch at all: every
   // change would send a read that can only fail.
   const refetch = () => {
     if (refusal == null) reexecute({ requestPolicy: "network-only" });
   };
-  usePoll(refetch);
-  // Its runs move with the work queue and the runs themselves.
+
+  // The instance as the feed last wrote it. The feed carries its state and when it was written,
+  // so the lit state moves at once; the rest (its timer, its run) is read again. The reducer keeps
+  // only this instance's events and the reloads, so another instance's write changes nothing.
+  const [{ data: feed }] = useSubscription<FeedData, FeedState>(
+    { query: ON_MACHINE_INSTANCE_CHANGED, variables: { machine }, pause: refusal != null },
+    (prev, next) => {
+      const e = next.onMachineInstanceChanged;
+      const ours = e.id === id && e.ownerKind === ownerKind && (rowId == null || e.rowId === rowId);
+      if (!ours && !e.reload) return prev ?? { live: null, seen: 0 };
+      return { live: ours ? e : (prev?.live ?? null), seen: (prev?.seen ?? 0) + 1 };
+    },
+  );
+  const live = feed?.live ?? null;
+  const refetchRef = useRef(refetch);
+  useEffect(() => {
+    refetchRef.current = refetch;
+  });
+  useEffect(() => {
+    if (feed && feed.seen > 0) refetchRef.current();
+  }, [feed]);
+
+  // The feed is the instance's own change signal; polling stands in only while it is not connected.
+  usePoll(() => {
+    if (connection.get() !== "connected") refetch();
+  });
+  // Its run moves with the work queue and the runs themselves, which do not write the instance.
   useRefetchOnChange(["EXECUTION", "WORK_QUEUE"], refetch);
   const [, cancelInstance] = useMutation<CancelData>(CANCEL_MACHINE_INSTANCE);
   const [cancelling, setCancelling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const instance = result.data?.operations?.machineInstance;
+  const definition = machines.data?.operations?.machines.find((m) => m.name === machine);
+  // The feed's write is newer than the read until the read catches up.
+  const fresher = live != null && instance != null && Date.parse(live.updatedAt) > Date.parse(instance.updatedAt);
+  const state = fresher ? live.state : instance?.state;
 
   async function onCancel() {
     if (!instance || ownerKind == null || cancelling) return;
@@ -91,7 +146,7 @@ export function StateMachineInstancePage() {
     <div className="flex items-center gap-3 mt-2 mb-6">
       <h1 className="text-2xl font-bold text-fg">{title}</h1>
       {/* Operators cancel only a system-owned instance whose state waits on a run. */}
-      {instance && instance.ownerKind === "SYSTEM" && instance.hasLiveInvokedRun && (
+      {instance && instance.ownerKind === "SYSTEM" && instance.hasLiveInvokedRun && !live?.deleted && (
         <button
           onClick={onCancel}
           disabled={cancelling}
@@ -103,7 +158,7 @@ export function StateMachineInstancePage() {
     </div>
   );
 
-  const back = <BackLink to={MACHINE_INSTANCES_PATH} label="All state machines" />;
+  const back = <BackLink to={machinePath(machine)} label={`All instances of ${machine}`} />;
 
   if (refusal)
     return (
@@ -133,37 +188,142 @@ export function StateMachineInstancePage() {
       </>
     );
 
+  const leaving = definition?.transitions.filter((t) => t.from === state) ?? [];
+  const commands = leaving.filter((t) => t.kind === "COMMAND");
+  const timers = leaving.filter((t) => t.kind === "TIMER");
+  const outcomes = leaving.filter((t) => t.kind === "OUTCOME");
   const runs = instance.invokedRuns;
+  // While the feed is ahead of the read, the timer and run belong to the state it left.
+  const settled = !fresher;
+
   return (
     <div>
       {back}
       {header(instance.machine)}
 
+      {live?.deleted && (
+        <div className="bg-warn-soft border border-warn-line text-warn-fg rounded-lg p-4 text-sm mb-6">
+          This instance was deleted or has expired. What is shown is how it was last seen.
+        </div>
+      )}
       {actionError && (
         <div className="bg-danger-soft border border-danger-line text-danger-fg rounded-lg p-4 text-sm mb-6">
           {actionError}
         </div>
       )}
 
+      <section aria-label="Where it is" className="bg-surface rounded-lg border border-line p-5 mb-6">
+        <h2 className="text-sm font-semibold text-fg mb-3">Where it is</h2>
+        {definition ? (
+          <MachineDiagram machine={definition} current={state} />
+        ) : machines.error ? (
+          <p className="text-sm text-danger-fg">{machines.error.message}</p>
+        ) : machines.data ? (
+          <p className="text-sm text-muted">This host no longer registers {machine}, so its states cannot be drawn.</p>
+        ) : null}
+        <div className="mt-4">
+          <Fields
+            rows={[
+              [
+                "State",
+                <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-accent-fg">{state}</span>,
+              ],
+              ["Last changed", formatTime(fresher ? live.updatedAt : instance.inStateSince)],
+              [
+                "Timer due",
+                settled && instance.dueAt ? (
+                  <span className="inline-flex items-center gap-1">
+                    {formatTime(instance.dueAt)}
+                    {instance.overdue && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-warn-soft text-warn-fg">Overdue</span>
+                    )}
+                  </span>
+                ) : (
+                  "No timer in this state"
+                ),
+              ],
+              [
+                "Waiting on",
+                settled && instance.waitingOn ? <WaitingOn run={instance.waitingOn} /> : "No run",
+              ],
+              [
+                "Stuck",
+                settled && instance.stuck ? (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-danger-soft text-danger-fg">
+                    {instance.overdue ? "Yes: its timer should have fired" : "Yes: the run it waits on ended"}
+                  </span>
+                ) : (
+                  "No"
+                ),
+              ],
+            ]}
+          />
+        </div>
+      </section>
+
+      {definition && definition.graphUnavailableReason == null && (
+        <section aria-label="What moves it on" className="bg-surface rounded-lg border border-line p-5 mb-6">
+          <h2 className="text-sm font-semibold text-fg mb-1">Commands it accepts</h2>
+          <p className="text-xs text-muted mb-3">
+            What the application that owns this machine can send it in {state}. The console shows them and sends
+            none.
+          </p>
+          {commands.length === 0 ? (
+            <p className="text-sm text-muted">No command moves it on from {state}.</p>
+          ) : (
+            <ul aria-label="Commands it accepts" className="space-y-1 text-sm">
+              {commands.map((t) => (
+                <li key={`${t.command}|${t.to}`}>
+                  <span className="font-mono text-fg">{t.command}</span>
+                  <span className="text-muted"> moves it to </span>
+                  <span className="text-fg">{t.to}</span>
+                  {t.guard && <span className="text-muted"> when: {t.guard}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {(timers.length > 0 || outcomes.length > 0) && (
+            <ul aria-label="What else moves it on" className="mt-3 space-y-1 text-sm text-fg-2">
+              {timers.map((t) => (
+                <li key={`${t.command}|${t.to}`}>
+                  After {delayWords(t.after)} in {state} it moves to {t.to}
+                  {settled && instance.dueAt && <>, at {formatTime(instance.dueAt)}</>}.
+                </li>
+              ))}
+              {outcomes.map((t) => (
+                <li key={`${t.command}|${t.to}`}>
+                  When the run {state} started is {outcomeOf(t)}, it moves to {t.to}.
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {/* Its transition history goes here, once an instance's transitions are recorded. */}
+      <section aria-label="Transition history" className="bg-surface rounded-lg border border-line p-5 mb-6">
+        <h2 className="text-sm font-semibold text-fg mb-1">Transition history</h2>
+        <p className="text-sm text-muted">
+          Not recorded yet: Trax keeps the state an instance is in, not the states it came through.
+        </p>
+      </section>
+
       {/* No context: an operator sees where an instance is, never what it holds. */}
       <DetailPanel title="Details">
         <Fields
           rows={[
-            ["Machine", instance.machine],
+            [
+              "Machine",
+              <Link to={machinePath(instance.machine)} className="text-accent-fg hover:underline">
+                {instance.machine}
+              </Link>,
+            ],
             ["Id", instance.id],
             ["Owner", instance.ownerKind === "SYSTEM" ? "System" : "A user"],
             ["Row", instance.rowId],
-            [
-              "State",
-              <span className="text-xs px-2 py-0.5 rounded-full bg-info-soft text-info-fg">{instance.state}</span>,
-            ],
             ["Machine version", instance.version],
-            [
-              "Waiting on a run",
-              instance.hasLiveInvokedRun ? "Yes: its state invoked a train run and waits for its outcome" : "No",
-            ],
             ["Created at", formatTime(instance.createdAt, "Not recorded")],
-            ["Updated at", formatTime(instance.updatedAt)],
+            ["Updated at", formatTime(fresher ? live.updatedAt : instance.updatedAt)],
           ]}
         />
       </DetailPanel>

@@ -39,7 +39,8 @@ export const SystemInstance: Story = {
     expect(await c.findByRole("heading", { name: "source-partition" })).toBeInTheDocument();
     expect(field(c, "Owner")).toHaveTextContent("System");
     expect(field(c, "State")).toHaveTextContent("Ingesting");
-    expect(field(c, "Waiting on a run")).toHaveTextContent(/^Yes/);
+    expect(field(c, "Waiting on")).toHaveTextContent("Run 7101");
+    expect(field(c, "Stuck")).toHaveTextContent("No");
     expect(c.queryByText(/context/i, { selector: "dt" })).not.toBeInTheDocument();
     expect(runs(c).getByRole("link", { name: "7101" })).toHaveAttribute("href", "/runs/7101");
     const rows = runs(c).getAllByRole("row").slice(1);
@@ -94,9 +95,56 @@ export const IdleInstance: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByRole("heading", { name: "source-partition" })).toBeInTheDocument();
-    expect(field(c, "Waiting on a run")).toHaveTextContent("No");
+    expect(field(c, "Waiting on")).toHaveTextContent("No run");
     expect(c.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(runs(c).getByText("Showing the newest 1 runs; the instance invoked more.")).toBeInTheDocument();
+  },
+};
+
+// The machine drawn with the instance's state lit, and the commands that state accepts listed,
+// read-only: the console sends none.
+export const WhereItIs: Story = {
+  parameters: { route: system(MACHINE_IDS.idle) },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await c.findByRole("group", { name: "States of source-partition" });
+    await waitFor(() =>
+      expect(graph.querySelector('[aria-current="step"]')?.firstChild?.textContent).toBe("Ingested"),
+    );
+    expect(c.getByText("No command moves it on from Ingested.")).toBeInTheDocument();
+    expect(c.getByRole("region", { name: "Transition history" })).toBeInTheDocument();
+  },
+};
+
+// A draft whose timer should have fired: its due time, overdue, and stuck; the commands its state
+// accepts with the guard, and the timer that moves it on.
+export const OverdueTimer: Story = {
+  parameters: { route: `/machines/topic-map/user/${MACHINE_IDS.draftIdle}?row=22` },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    expect(await c.findByRole("heading", { name: "topic-map" })).toBeInTheDocument();
+    expect(field(c, "Timer due")).toHaveTextContent("Overdue");
+    expect(field(c, "Stuck")).toHaveTextContent("its timer should have fired");
+    const commands = await c.findByRole("list", { name: "Commands it accepts" });
+    expect(within(commands).getByText("Build")).toBeInTheDocument();
+    expect(within(commands).getByText(/Choose a range of at least one day/)).toBeInTheDocument();
+    expect(c.getByText(/After 1 day in ChoosingRange it moves to Expired/)).toBeInTheDocument();
+  },
+};
+
+// An instance whose queued run is still waiting links its queue entry and shows where it is.
+export const WaitingOnAQueuedRun: Story = {
+  parameters: { route: system(MACHINE_IDS.queued) },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await c.findByRole("heading", { name: "source-partition" });
+    const waiting = field(c, "Waiting on")!;
+    expect(within(waiting as HTMLElement).getByRole("link", { name: "Queue entry 7201" })).toHaveAttribute(
+      "href",
+      "/runs/queued/7201",
+    );
+    expect(waiting).toHaveTextContent("Pending");
+    expect(c.getByText("When the run Ingesting started is done, it moves to Ingested.")).toBeInTheDocument();
   },
 };
 

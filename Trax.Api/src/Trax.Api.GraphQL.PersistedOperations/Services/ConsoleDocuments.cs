@@ -44,6 +44,7 @@ internal static class ConsoleDocuments
         "onTrainStateChanged",
         "onDataChanged",
         "onJunctionEvent",
+        "onMachineInstanceChanged",
     };
 
     /// <summary>Whether <paramref name="id"/> is under the reserved prefix.</summary>

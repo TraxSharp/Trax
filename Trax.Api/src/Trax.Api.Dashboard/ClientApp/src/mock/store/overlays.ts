@@ -1541,4 +1541,5 @@ export const mockedSubscriptions = new Set<string>([
   "OnTrainStateChanged",
   "OnDataChanged",
   "OnJunctionEvent",
+  "OnMachineInstanceChanged",
 ]);

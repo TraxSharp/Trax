@@ -63,3 +63,23 @@ export const ON_JUNCTION_EVENT = gql`
     }
   }
 `;
+
+// Every machine instance as it is written (or one machine's): its state, when it was written and
+// whether it waits on a run, and once more with deleted set when it is deleted or expires; never its
+// context or its owner. reload means writes may have been missed: read what the page shows again.
+export const ON_MACHINE_INSTANCE_CHANGED = gql`
+  subscription OnMachineInstanceChanged($machine: String) {
+    onMachineInstanceChanged(machine: $machine) {
+      rowId
+      machine
+      ownerKind
+      id
+      state
+      updatedAt
+      hasLiveInvokedRun
+      revision
+      deleted
+      reload
+    }
+  }
+`;

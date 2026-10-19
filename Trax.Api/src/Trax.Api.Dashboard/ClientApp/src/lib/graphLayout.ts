@@ -24,6 +24,8 @@ export interface GraphNodeSpec {
   /** A machine's initial state is drawn with an entry marker, a final one with a double border. */
   initial?: boolean;
   final?: boolean;
+  /** Where something is now (an instance's state): announced as the current step. */
+  current?: boolean;
 }
 
 export interface GraphEdgeSpec {

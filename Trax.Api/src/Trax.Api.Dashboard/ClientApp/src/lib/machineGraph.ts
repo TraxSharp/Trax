@@ -98,6 +98,7 @@ export function machineGraph(
       badges: badges.length > 0 ? badges : undefined,
       initial: s.isInitial,
       final: s.isFinal,
+      current: current != null && s.name === current,
     };
   });
   const edges = machine.transitions.map<GraphEdgeSpec>((t, i) => ({

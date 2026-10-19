@@ -250,6 +250,22 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         );
     }
 
+    /// <summary>A <see cref="GateMachine"/> instance of its own, closed; <see cref="OpenGateAsync"/> opens it.</summary>
+    public async Task<(MachineInstance Instance, MachineKey Key)> ClosedGateAsync()
+    {
+        var key = MachineKey.Of(NewKey("lane"));
+        var instance = await InScope<IMachineInstances, MachineInstance>(m =>
+            m.Start<GateMachine>(key)
+        );
+        return (instance, key);
+    }
+
+    /// <summary>Opens the gate <paramref name="key"/> names, as the application that owns it would.</summary>
+    public Task OpenGateAsync(MachineKey key) =>
+        InScope<IMachineInstances, AdvanceOutcome>(m =>
+            m.Advance<GateMachine>(key, nameof(GateTrigger.Open))
+        );
+
     /// <summary>A manifest the operator disabled: it stays listed and does not run.</summary>
     public async Task<Manifest> DisabledManifestAsync()
     {
