@@ -125,9 +125,9 @@ export function Layout() {
   // Persisted operations appear only on a host that serves their management to this caller
   // (UsePersistedOperations with GateManagement), as in the Blazor sidebar.
   const persistedOps = usePersistedOperationsAvailable().available;
-  // Every host has state machines in the Blazor sidebar; only the demo, before its recordings hold
-  // them, cannot show the page (lib/answerable.ts).
-  const stateMachines = useAnswers("MachineInstances");
+  // Every host has machines; only the demo, before its recordings hold them, cannot show the page
+  // (lib/answerable.ts).
+  const stateMachines = useAnswers("Machines");
   const shown = (i: NavItem) =>
     i.feature === "persistedOperations" ? persistedOps : i.feature === "stateMachines" ? stateMachines : true;
   const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter(shown) })).filter((g) => g.items.length > 0);

@@ -204,8 +204,8 @@ public sealed class GateMachine : Machine<GateState, GateTrigger>
     protected override void Configure(IMachineBuilder<GateState, GateTrigger> m)
     {
         m.Id(Id).Version(1).StartsAt(GateState.Closed, () => new JsonObject());
-        m.In(GateState.Closed).On(GateTrigger.Open).To(GateState.Open);
-        m.In(GateState.Open).On(GateTrigger.Close).To(GateState.Closed);
+        m.In(GateState.Closed).Context().On(GateTrigger.Open).To(GateState.Open);
+        m.In(GateState.Open).Context().On(GateTrigger.Close).To(GateState.Closed);
         m.SystemOwned();
     }
 }
@@ -280,11 +280,12 @@ public sealed class ReminderMachine : Machine<ReminderState, ReminderTrigger>
     {
         m.Id(Id).Version(1).StartsAt(ReminderState.Pending, () => new JsonObject());
         m.In(ReminderState.Pending)
+            .Context()
             .After(Wait)
             .GoTo(ReminderState.Reminded)
             .On(ReminderTrigger.Dismiss)
             .To(ReminderState.Reminded);
-        m.In(ReminderState.Reminded);
+        m.In(ReminderState.Reminded).Context();
         m.SystemOwned();
     }
 }

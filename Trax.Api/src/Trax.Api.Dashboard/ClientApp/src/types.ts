@@ -833,6 +833,88 @@ export interface MachineInstanceCount {
   count: number;
 }
 
+/** A count by state with how many of them are stuck (MACHINE_INSTANCE_STUCK_COUNTS). */
+export interface MachineInstanceStuckCount extends MachineInstanceCount {
+  stuck: number;
+}
+
+/** The run an instance's state waits on, and where that run is. */
+export interface MachineInstanceWaitingRun {
+  // Null while the run is still queued and has no run id yet.
+  executionId: number | null;
+  // PENDING while queued, CANCELLED when its entry was cancelled; null when neither is found.
+  trainState: TrainState | null;
+  workQueueEntryId: number | null;
+}
+
+/** What says an instance needs attention (MACHINE_INSTANCES_ATTENTION and MACHINE_INSTANCE). */
+export interface MachineInstanceAttention {
+  // When its state's timer fires; null when that state has no timer.
+  dueAt: string | null;
+  // The timer is past due by more than the host's poll: it has not fired.
+  overdue: boolean;
+  waitingOn: MachineInstanceWaitingRun | null;
+  // When it last changed, until a transition log exists; show it as "last changed".
+  inStateSince: string;
+  // Overdue, or waiting on a run that failed or was cancelled.
+  stuck: boolean;
+}
+
+export type MachineInstanceAttentionRow = Pick<
+  MachineInstance,
+  "machine" | "ownerKind" | "id" | "rowId" | "state" | "updatedAt"
+> &
+  MachineInstanceAttention;
+
+export type MachineTransitionKind = "COMMAND" | "TIMER" | "OUTCOME";
+
+export interface MachineDefinitionState {
+  name: string;
+  isInitial: boolean;
+  isFinal: boolean;
+  isCommitted: boolean;
+  // The train the state invokes on entry (its interface's full name).
+  invokesTrain: string | null;
+  // The machine the state spawns on entry.
+  spawnsMachine: string | null;
+}
+
+export interface MachineDefinitionTransition {
+  from: string;
+  // A command's name, the timer's trigger, or an outcome trigger ("Building.done").
+  command: string;
+  to: string;
+  kind: MachineTransitionKind;
+  guard: string | null;
+  effect: string | null;
+  // For a timer: ISO-8601, or a context field with its bounds.
+  after: string | null;
+}
+
+export interface MachineDefinitionTimer {
+  state: string;
+  command: string;
+  target: string;
+  after: string | null;
+  field: string | null;
+  min: string | null;
+  max: string | null;
+}
+
+/** A machine the host registers (operations.machines), with or without instances. */
+export interface MachineDefinition {
+  name: string;
+  version: number;
+  systemOwned: boolean;
+  schemaHash: string | null;
+  initialState: string | null;
+  // Why it has no graph; null when it has one.
+  graphUnavailableReason: string | null;
+  states: MachineDefinitionState[];
+  transitions: MachineDefinitionTransition[];
+  timers: MachineDefinitionTimer[];
+}
+
 export interface MachineInstanceInvokedRun {
   id: number;
   externalId: string;

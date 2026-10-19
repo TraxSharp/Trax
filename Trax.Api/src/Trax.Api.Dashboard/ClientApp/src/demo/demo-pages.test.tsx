@@ -45,7 +45,7 @@ const LIST_PAGES = [
   "/system/logs",
   "/api-admin/persisted-operations",
   // Offered once the recordings hold it (harness.tsx, NOT_RECORDED_YET).
-  ...(notOfferedYet("MachineInstances") ? [] : ["/machines"]),
+  ...(notOfferedYet("Machines") ? [] : ["/machines"]),
 ];
 const OTHER_PAGES = ["/", "/trains", "/system/hosts", "/system/live", "/preferences", "/system/scheduler", "/system/effects"];
 
@@ -153,12 +153,12 @@ describe("what the recordings do not hold yet", () => {
   // Nothing in the demo leads to a read no recording answers: the page parts that need one are not
   // offered (lib/answerable.ts) until the recorder records it.
   test("the sidebar offers no State machines page and a run page draws no run graph", async () => {
-    if (!notOfferedYet("MachineInstances") && !notOfferedYet("RunGraph")) return;
+    if (!notOfferedYet("Machines") && !notOfferedYet("RunGraph")) return;
     const ledger = newLedger();
     const { container, unmount } = renderDemo("/", ledger);
     await settle();
     expect(within(container).queryByRole("link", { name: "Machines" }) == null).toBe(
-      notOfferedYet("MachineInstances"),
+      notOfferedYet("Machines"),
     );
     unmount();
     for (const id of recordedIds("ExecutionDetail", "id").slice(0, 10)) {

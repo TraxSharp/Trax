@@ -10,6 +10,7 @@ import { WorkQueuePage } from "./pages/WorkQueuePage";
 import { DeadLettersPage } from "./pages/DeadLettersPage";
 import { LogsPage } from "./pages/LogsPage";
 import { StateMachinesPage } from "./pages/StateMachinesPage";
+import { MachinePage } from "./pages/MachinePage";
 import { StateMachineInstancePage } from "./pages/StateMachineInstancePage";
 import { ManifestsPage } from "./pages/ManifestsPage";
 import { ManifestGroupsPage } from "./pages/ManifestGroupsPage";
@@ -42,6 +43,7 @@ export function AppRoutes() {
         <Route path="/trains" element={<TrainsPage />} />
         <Route path="/trains/:name" element={<TrainDetailPage />} />
         <Route path="/machines" element={<StateMachinesPage />} />
+        <Route path="/machines/:name" element={<MachinePage />} />
         <Route path="/machines/:machine/:owner/:id" element={<StateMachineInstancePage />} />
         <Route path="/schedules" element={<ManifestsPage />} />
         <Route path="/schedules/groups" element={<ManifestGroupsPage />} />

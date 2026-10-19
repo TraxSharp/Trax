@@ -120,11 +120,11 @@ public class HarnessBrowserTests : ConsoleTest
         var machines = new MachinesPage(Console);
         await machines.OpenAsync(Caller.Operator);
         await Assertions
-            .Expect(machines.CountsByState)
-            .ToContainTextAsync(ReminderMachine.Id, new() { Timeout = Render });
+            .Expect(machines.Machine(ReminderMachine.Id))
+            .ToBeVisibleAsync(new() { Timeout = Render });
         await Assertions
-            .Expect(machines.CountsByState)
-            .ToContainTextAsync(RelayMachine.Id, new() { Timeout = Render });
+            .Expect(machines.Machine(RelayMachine.Id))
+            .ToBeVisibleAsync(new() { Timeout = Render });
     }
 
     [Test]

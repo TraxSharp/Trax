@@ -82,6 +82,11 @@ public class ApiDashboardBrowserTests : ConsoleTest
         "text=Total runs"
     )]
     [TestCase("machines", "Machines", "text=browser-gate")]
+    [TestCase(
+        "machines/browser-gate",
+        "browser-gate",
+        "[aria-label='States of browser-gate'] .react-flow__node"
+    )]
     [TestCase("machines/browser-gate/system/{gate}", "browser-gate", "text=All state machines")]
     public async Task Each_page_draws_under_the_CSP_when_loaded_from_its_own_URL(
         string route,

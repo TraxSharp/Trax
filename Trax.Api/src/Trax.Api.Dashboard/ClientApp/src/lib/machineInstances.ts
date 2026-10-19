@@ -1,11 +1,16 @@
 import type { MachineInstance, SnapshotOwnerKind } from "../types";
 
-// The State machines pages' paths, as the Blazor dashboard's MachineInstanceRoutes builds them. An
+// The Machines pages' paths, as the Blazor dashboard's MachineInstanceRoutes builds them. An
 // instance's path names its owner kind, so a user's draft and a system instance under the same id
 // never share one, and a user's draft carries its row id, because several users can each hold a
 // draft under one id.
 
 export const MACHINE_INSTANCES_PATH = "/machines";
+
+/** The page of one machine: its diagram and its instances. */
+export function machinePath(machine: string): string {
+  return `${MACHINE_INSTANCES_PATH}/${encodeURIComponent(machine)}`;
+}
 
 /** The path segment for an owner kind. */
 export function ownerSegment(ownerKind: SnapshotOwnerKind): "system" | "user" {

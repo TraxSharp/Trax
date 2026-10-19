@@ -121,9 +121,12 @@ export async function everyPage(page: HTMLElement) {
 export const NOT_RECORDED_YET = [
   "RunGraph",
   "RunLinks",
+  "Machines",
   "MachineInstanceCounts",
   "MachineInstances",
   "MachineInstance",
+  "MachineInstancesAttention",
+  "MachineInstanceStuckCounts",
   // The decision controls show everywhere until the recordings hold which trains ask.
   "TrainsAskingDecisions",
   // No page reads bulk operations yet.

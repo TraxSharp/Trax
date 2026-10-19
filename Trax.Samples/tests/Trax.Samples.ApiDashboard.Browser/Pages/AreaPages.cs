@@ -147,11 +147,69 @@ public sealed class DeadLettersPage(ConsolePage console)
 public sealed class ManifestsPage(ConsolePage console)
     : AreaPage(console, "schedules", "Manifests");
 
-/// <summary>State machines: instance counts by state and the instance list.</summary>
+/// <summary>Machines: every machine the host registers, with its instance and stuck counts.</summary>
 public sealed class MachinesPage(ConsolePage console) : AreaPage(console, "machines", "Machines")
 {
-    public ILocator CountsByState =>
-        Page.GetByRole(AriaRole.Region, new() { Name = "Instances by state" });
+    public ILocator List => Page.GetByRole(AriaRole.Region, new() { Name = "Registered machines" });
+
+    /// <summary>The row of one machine, by the link to its page.</summary>
+    public ILocator Machine(string name) =>
+        List.GetByRole(AriaRole.Row)
+            .Filter(
+                new() { Has = Page.GetByRole(AriaRole.Link, new() { Name = name, Exact = true }) }
+            );
+}
+
+/// <summary>One machine: its diagram, each state badged with its counts, and its instances under it.</summary>
+public sealed class MachinePage : AreaPage
+{
+    private readonly string machine;
+
+    public MachinePage(ConsolePage console, string machine)
+        : base(console, $"machines/{Uri.EscapeDataString(machine)}", machine) =>
+        this.machine = machine;
+
+    public ILocator Diagram =>
+        Page.GetByRole(AriaRole.Group, new() { Name = $"States of {machine}", Exact = true });
+
+    /// <summary>A state's node: a button named by the state, then its badges.</summary>
+    public ILocator State(string state) =>
+        Diagram.GetByRole(
+            AriaRole.Button,
+            new()
+            {
+                NameRegex = new System.Text.RegularExpressions.Regex(
+                    $"^{System.Text.RegularExpressions.Regex.Escape(state)}\\b"
+                ),
+            }
+        );
+
+    /// <summary>A badge on a state's node: <c>Instances</c> or <c>Stuck</c>.</summary>
+    public ILocator Badge(string state, string badge) =>
+        State(state)
+            .GetByLabel(
+                new System.Text.RegularExpressions.Regex(
+                    $"^{System.Text.RegularExpressions.Regex.Escape(badge)}: \\d+$"
+                )
+            );
+
+    public ILocator Instances => Page.GetByRole(AriaRole.Region, new() { Name = "Instances" });
+
+    public ILocator StuckOnly => Page.GetByRole(AriaRole.Checkbox, new() { Name = "Stuck only" });
+
+    /// <summary>The row of one instance, by the link its id is.</summary>
+    public ILocator Instance(Guid id) =>
+        Instances
+            .GetByRole(AriaRole.Row)
+            .Filter(
+                new()
+                {
+                    Has = Page.GetByRole(AriaRole.Link, new() { Name = $"{id}", Exact = true }),
+                }
+            );
+
+    /// <summary>What the page says when the machine's rules cannot be drawn.</summary>
+    public ILocator NoDiagram => Page.GetByText($"{machine} has no diagram");
 }
 
 /// <summary>Persisted operations, served only to a caller who may manage them.</summary>
