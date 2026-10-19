@@ -16,6 +16,7 @@ public class RunPageBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/runs/:id")]
     public async Task A_failed_run_opens_at_the_failed_step_with_its_error_in_the_panel()
     {
         var failed = await Seed.FailedRunWithCheckpointAsync();
@@ -40,6 +41,7 @@ public class RunPageBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs/:id")]
     public async Task The_timeline_and_the_graph_select_the_same_step()
     {
         var failed = await Seed.FailedRunWithCheckpointAsync();
@@ -72,6 +74,8 @@ public class RunPageBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs/:id")]
+    [Covers("mutation:ResumeExecution")]
     public async Task Resume_from_the_failed_step_queues_a_resume_there_and_opens_its_entry()
     {
         var failed = await Seed.FailedRunWithCheckpointAsync();
@@ -99,6 +103,7 @@ public class RunPageBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs/:id")]
     public async Task A_run_a_machine_invoked_links_to_the_instance_that_started_it()
     {
         var (instance, run) = await Seed.RunInvokedByMachineAsync();

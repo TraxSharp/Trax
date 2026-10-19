@@ -17,6 +17,8 @@ public class SystemBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/system/scheduler")]
+    [Covers("mutation:UpdateScheduler")]
     public async Task A_paused_dispatcher_is_resumed_with_one_confirmed_mutation_and_the_header_badge_goes()
     {
         await Seed.PausedDispatcherAsync();
@@ -60,6 +62,8 @@ public class SystemBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/system/scheduler")]
+    [Covers("mutation:UpdateScheduler")]
     public async Task A_section_saves_only_its_own_fields()
     {
         var before = Config();
@@ -106,6 +110,7 @@ public class SystemBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/system/hosts")]
     public async Task The_hosts_page_shows_this_host_online_running_the_dispatcher_and_its_process()
     {
         // A host reports the dispatcher at each beat, and only while it is switched on; a test before this one
@@ -135,6 +140,7 @@ public class SystemBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/system/logs")]
     public async Task The_logs_page_reads_its_filters_from_the_url()
     {
         await Console.OpenAsync("system/logs?level=WARNING", Caller.Operator);
@@ -151,6 +157,7 @@ public class SystemBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/preferences")]
     public async Task Preferences_names_this_browsers_switches_apart_from_the_schedulers()
     {
         var preferences = new PreferencesPage(Console);

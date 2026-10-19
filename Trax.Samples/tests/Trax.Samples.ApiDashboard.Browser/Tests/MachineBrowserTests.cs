@@ -16,6 +16,7 @@ public class MachineBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/machines")]
     public async Task The_machines_list_names_a_machine_with_no_instance()
     {
         var machines = new MachinesPage(Console);
@@ -39,6 +40,7 @@ public class MachineBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/machines/:name")]
     public async Task An_overdue_timer_is_counted_stuck_on_its_state_and_listed_by_it()
     {
         var overdue = await Seed.OverdueTimerAsync();
@@ -71,6 +73,7 @@ public class MachineBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/machines/:name")]
     public async Task An_instance_waiting_on_an_ended_run_is_listed_under_stuck_only_with_that_run()
     {
         var (waiting, entry) = await Seed.InstanceWaitingOnAnEndedRunAsync();
@@ -121,6 +124,7 @@ public class MachineBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/machines/:machine/:owner/:id")]
     public async Task An_instance_page_lights_its_state_and_lists_what_it_accepts_and_its_overdue_timer()
     {
         var overdue = await Seed.OverdueTimerAsync();
@@ -147,6 +151,7 @@ public class MachineBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/machines/:machine/:owner/:id")]
     public async Task An_instance_page_shows_the_ended_run_it_waits_on()
     {
         var (waiting, entry) = await Seed.InstanceWaitingOnAnEndedRunAsync();
@@ -175,6 +180,8 @@ public class MachineBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/machines/:machine/:owner/:id")]
+    [Covers("subscription:OnMachineInstanceChanged")]
     public async Task An_instance_page_follows_the_instance_through_the_live_feed()
     {
         var (gate, key) = await Seed.ClosedGateAsync();

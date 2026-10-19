@@ -16,6 +16,7 @@ public class ScheduleBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/schedules")]
     public async Task A_nightly_manifest_reads_in_words_with_its_next_run()
     {
         var nightly = await Seed.NightlyManifestAsync();
@@ -36,6 +37,7 @@ public class ScheduleBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/schedules/:id")]
     public async Task A_disabled_manifest_has_no_next_run_and_its_switch_is_off()
     {
         var disabled = await Seed.DisabledManifestAsync();
@@ -52,6 +54,8 @@ public class ScheduleBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/schedules/:id")]
+    [Covers("mutation:DisableManifest")]
     public async Task The_switch_disables_a_manifest_after_asking_and_the_next_runs_go()
     {
         var nightly = await Seed.NightlyManifestAsync();
@@ -83,6 +87,7 @@ public class ScheduleBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/schedules/:id")]
     public async Task A_manifests_run_history_counts_its_failed_run()
     {
         var deadLetter = await Seed.DeadLetterAsync();
@@ -100,6 +105,7 @@ public class ScheduleBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/schedules/groups")]
     public async Task The_group_graph_says_which_group_is_off_and_which_failed()
     {
         var off = await Seed.DisabledGroupAsync();

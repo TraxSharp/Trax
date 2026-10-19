@@ -18,6 +18,7 @@ public class HarnessBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/runs/dead-letters")]
     public async Task Two_dead_letters_that_failed_alike_are_one_group_naming_the_train_its_manifests_and_the_reason()
     {
         var (first, second) = await Seed.DeadLettersSharingAReasonAsync();
@@ -61,6 +62,7 @@ public class HarnessBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs")]
     public async Task A_failed_run_with_a_checkpoint_and_a_run_a_machine_invoked_are_listed()
     {
         var failed = await Seed.FailedRunWithCheckpointAsync();
@@ -85,6 +87,7 @@ public class HarnessBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs/queued")]
     public async Task A_staged_and_a_blocked_entry_wait_in_the_queue()
     {
         var staged = await Seed.StagedQueueEntryAsync();
@@ -104,6 +107,7 @@ public class HarnessBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/machines")]
     public async Task An_overdue_timer_and_an_instance_waiting_on_an_ended_run_stay_where_they_are()
     {
         var overdue = await Seed.OverdueTimerAsync();
@@ -128,6 +132,8 @@ public class HarnessBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/schedules")]
+    [Covers("route:/system/scheduler")]
     public async Task A_disabled_manifest_and_a_paused_dispatcher_are_shown()
     {
         var disabled = await Seed.DisabledManifestAsync();
@@ -150,6 +156,7 @@ public class HarnessBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/api-admin/persisted-operations")]
     public async Task A_persisted_operation_is_listed_for_its_managers_only()
     {
         var operation = await Seed.PersistedOperationAsync();
@@ -167,6 +174,7 @@ public class HarnessBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs/dead-letters")]
     public async Task A_caller_the_operations_gate_refuses_is_shown_the_refusal()
     {
         var deadLetter = await Seed.DeadLetterAsync();

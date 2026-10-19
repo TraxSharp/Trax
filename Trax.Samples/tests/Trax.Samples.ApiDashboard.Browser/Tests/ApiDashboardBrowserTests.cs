@@ -38,6 +38,7 @@ public class ApiDashboardBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs")]
     public async Task The_app_boots_under_its_CSP_and_connects_to_GraphQL_with_the_operators_key()
     {
         await Console.GotoAsync("runs");
@@ -92,6 +93,12 @@ public class ApiDashboardBrowserTests : ConsoleTest
         "browser-gate",
         "[aria-label='States of browser-gate'] [aria-current='step']"
     )]
+    [Covers("route:/")]
+    [Covers("route:/schedules/groups")]
+    [Covers("route:/trains/:name")]
+    [Covers("route:/machines")]
+    [Covers("route:/machines/:name")]
+    [Covers("route:/machines/:machine/:owner/:id")]
     public async Task Each_page_draws_under_the_CSP_when_loaded_from_its_own_URL(
         string route,
         string landmark,

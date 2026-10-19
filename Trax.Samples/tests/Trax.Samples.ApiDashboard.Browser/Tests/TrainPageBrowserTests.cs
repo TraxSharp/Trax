@@ -15,6 +15,7 @@ public class TrainPageBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/trains/:name")]
     public async Task A_train_that_never_ran_draws_its_chain_and_offers_Run_and_Queue()
     {
         var page = new TrainPage(Console, typeof(IAuditLedgerTrain));
@@ -43,6 +44,7 @@ public class TrainPageBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/trains/:name")]
     public async Task A_failed_run_is_drawn_on_the_step_it_stopped_at()
     {
         var failed = await Seed.FailedRunWithCheckpointAsync();
@@ -68,6 +70,7 @@ public class TrainPageBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/trains/:name")]
     public async Task A_scheduled_train_says_when_its_manifest_runs_next()
     {
         var page = new TrainPage(Console, typeof(IRefreshRatesTrain));
@@ -88,6 +91,7 @@ public class TrainPageBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/trains/:name")]
     public async Task A_train_a_machine_state_invokes_names_that_state()
     {
         var page = new TrainPage(Console, typeof(IRelayParcelTrain));

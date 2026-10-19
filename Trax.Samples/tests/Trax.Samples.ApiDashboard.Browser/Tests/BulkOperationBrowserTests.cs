@@ -19,6 +19,10 @@ public class BulkOperationBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/runs")]
+    [Covers("route:/system/operations/:id")]
+    [Covers("route:/system/operations")]
+    [Covers("mutation:StartBulkOperation")]
     public async Task A_bulk_cancel_over_a_filter_shows_its_operation_with_the_right_counts()
     {
         var held = await Seed.HeldRunsAsync(3);

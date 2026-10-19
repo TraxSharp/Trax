@@ -17,6 +17,9 @@ public class RunsViewsBrowserTests : ConsoleTest
     private static readonly float Render = BrowserTimeouts.Render.Ms();
 
     [Test]
+    [Covers("route:/runs")]
+    [Covers("route:/runs/queued")]
+    [Covers("route:/runs/dead-letters")]
     public async Task The_tab_strip_moves_between_the_four_views_and_Failed_lists_the_failed_run()
     {
         var failed = await Seed.FailedRunWithCheckpointAsync();
@@ -55,6 +58,8 @@ public class RunsViewsBrowserTests : ConsoleTest
     }
 
     [Test]
+    [Covers("route:/runs/queued")]
+    [Covers("route:/runs/queued/:id")]
     public async Task A_blocked_entry_links_itself_and_its_page_links_the_entry_it_waits_on()
     {
         var staged = await Seed.StagedQueueEntryAsync();
