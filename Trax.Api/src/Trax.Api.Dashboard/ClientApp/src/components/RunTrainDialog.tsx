@@ -66,9 +66,8 @@ export function RunTrainDialog({
             data-testid="run-subject-bypass-warning"
             className="text-sm rounded-lg border border-warn-line bg-warn-soft text-warn-fg p-3 mb-4"
           >
-            Run skips the queue. This train runs one piece of queued work per subject at a time, and a run started
-            here does not wait its turn: it may run alongside queued or running work for the same subject. Use{" "}
-            <strong>Queue</strong> instead to wait for the subject to be free.
+            This train runs one piece of queued work per subject at a time, so it can only be queued: a run started
+            now could not wait its turn, and the server refuses it. Use <strong>Queue</strong> instead.
           </div>
         )}
 
@@ -89,7 +88,7 @@ export function RunTrainDialog({
           </button>
           <button
             onClick={submit}
-            disabled={!form.trainName || busy}
+            disabled={!form.trainName || busy || Boolean(form.selected?.hasQueueSubjectKey)}
             className="px-4 py-2 text-sm rounded-lg bg-accent text-on-accent hover:bg-accent-hover disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             {busy && <Spinner />}

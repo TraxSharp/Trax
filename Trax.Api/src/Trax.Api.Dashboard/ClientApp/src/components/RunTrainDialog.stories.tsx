@@ -24,9 +24,8 @@ export const RunsAndCloses: Story = {
     expect(submit).toBeDisabled();
     const select = c.getByRole("combobox", { name: "Train" });
     await waitFor(() => expect(within(select).getAllByRole("option").length).toBeGreaterThan(1));
-    await userEvent.selectOptions(select, "Trax.Trains.ZebraTrain");
-    await userEvent.type(c.getByLabelText("Field playerId"), "player-7");
-    await userEvent.selectOptions(c.getByRole("combobox", { name: "Field tier" }), "Silver");
+    // A train with no subject key: one with a key can only be queued from the console.
+    await userEvent.selectOptions(select, "Trax.Trains.MangoTrain");
     await userEvent.click(submit);
     await waitFor(() => expect(args.onClose).toHaveBeenCalled());
   },
@@ -64,8 +63,10 @@ export const SubjectKeyWarning: Story = {
     expect(c.queryByTestId("run-subject-bypass-warning")).not.toBeInTheDocument();
     await userEvent.selectOptions(select, "Trax.Trains.ZebraTrain");
     expect(c.getByTestId("run-subject-bypass-warning")).toHaveTextContent(
-      "Run skips the queue. This train runs one piece of queued work per subject at a time",
+      "This train runs one piece of queued work per subject at a time, so it can only be queued",
     );
+    // The server refuses to run it now from the console, so the dialog does not offer to.
+    expect(c.getByRole("button", { name: "Run train" })).toBeDisabled();
     await userEvent.selectOptions(select, "Trax.Trains.AlphaTrain");
     expect(c.queryByTestId("run-subject-bypass-warning")).not.toBeInTheDocument();
   },
