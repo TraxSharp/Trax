@@ -206,6 +206,18 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     DbSet<Effect.Models.HostHeartbeat.HostHeartbeat> HostHeartbeats =>
         ((DbContext)this).Set<Effect.Models.HostHeartbeat.HostHeartbeat>();
 
+    /// <summary>
+    /// The <c>trax.snapshot_transition</c> table: a state-machine instance's history, one row for every snapshot
+    /// Trax.Effect.StateMachine.Persistence writes, with the revision, command, kind, actor and states of that write.
+    /// Deleted with the instance's row.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default keeps an implementation
+    /// written before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    DbSet<Effect.Models.SnapshotTransition.SnapshotTransition> SnapshotTransitions =>
+        ((DbContext)this).Set<Effect.Models.SnapshotTransition.SnapshotTransition>();
+
     #endregion
 
     /// <summary>

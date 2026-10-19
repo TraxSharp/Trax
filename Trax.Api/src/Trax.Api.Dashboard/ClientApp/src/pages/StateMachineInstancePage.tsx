@@ -22,6 +22,7 @@ import type {
   MachineInstanceDetail,
 } from "../types";
 import { confirmAction } from "../lib/confirm";
+import { TransitionHistory } from "../components/TransitionHistory";
 
 interface InstanceData {
   operations: { machineInstance: MachineInstanceDetail | null };
@@ -300,13 +301,13 @@ export function StateMachineInstancePage() {
         </section>
       )}
 
-      {/* Its transition history goes here, once an instance's transitions are recorded. */}
-      <section aria-label="Transition history" className="bg-surface rounded-lg border border-line p-5 mb-6">
-        <h2 className="text-sm font-semibold text-fg mb-1">Transition history</h2>
-        <p className="text-sm text-muted">
-          Not recorded yet: Trax keeps the state an instance is in, not the states it came through.
-        </p>
-      </section>
+      {/* Every transition it made, newest first; read again whenever its revision moves. */}
+      {ownerKind && (
+        <TransitionHistory
+          key={instance.updatedAt}
+          instance={{ machine: instance.machine, ownerKind, id: instance.id, rowId: instance.rowId }}
+        />
+      )}
 
       {/* No context: an operator sees where an instance is, never what it holds. */}
       <DetailPanel title="Details">

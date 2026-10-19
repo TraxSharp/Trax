@@ -76,7 +76,7 @@ instance does, and polls only while that feed is not connected.
 |---|---|
 | **Where it is** | The machine's diagram with the instance's state lit; its state, when it last changed, its timer (and **Overdue**), the run it waits on, and whether it is stuck and why |
 | **Commands it accepts** | Each command that moves it on from its state, the state it moves to, and its guard. Then the timers, each with its delay, its target state and when it is due, and the run outcomes that move it. |
-| **Transition history** | Not recorded yet: Trax keeps the state an instance is in, not the states it came through |
+| **History** | Every transition, newest first: what moved it (a command, a timer, a run's outcome, a save or its start), the states it moved between, who did it (its owner, host code or the machine), when, how long it had been in the state before, and the run or child machine it started, each linked. **Load older** pages back. |
 | **Details** | Machine, id, owner, row, machine version, created and updated |
 | **Invoked runs** | The runs it invoked, newest first, up to 50: id, train, state (the one its state waits on marked **Live**), times, failure class, external id. A user's draft lists only the run its state waits on. While that run is still queued, its queue entry is linked. |
 
@@ -88,6 +88,7 @@ moves through the state's `OnCancelled` edge. It calls
 [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance).
 A draft offers no Cancel.
 
-A record of each transition (the command, the states it moved between, who sent it, how long the
-instance was in the state before, and the runs it started) is being added to the store and to this
-page. Until it is, the page cannot say how an instance reached its state.
+The history is kept from the upgrade that added it
+([089](/docs/reference/schema-migrations#state-machine-instance-history-089-sqlite-048)); an instance
+written before then starts its history at its next transition. It is deleted with the instance, and
+it never holds the instance's context or which user sent a command.

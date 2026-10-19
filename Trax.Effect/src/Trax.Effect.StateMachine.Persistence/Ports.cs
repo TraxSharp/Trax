@@ -305,6 +305,8 @@ internal interface IRowReportingSnapshotStore
     /// <summary>
     /// <see cref="ISnapshotStore.UpdateWithRequest"/> guarded by the token <paramref name="read"/> was read with,
     /// reporting the row it left: <paramref name="read"/>'s next revision, and the due time the write gave it.
+    /// <paramref name="note"/> is what the instance's history records for it; null records a command when
+    /// <paramref name="request"/> names one, else a save.
     /// </summary>
     Task<WrittenRow?> UpdateWithRequest(
         string userKey,
@@ -312,7 +314,8 @@ internal interface IRowReportingSnapshotStore
         Snapshot snapshot,
         StoredSnapshot read,
         AppliedRequest? request,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        TransitionNote? note = null
     );
 }
 

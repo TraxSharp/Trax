@@ -120,6 +120,7 @@ namespace Trax.Effect.Data.Services.DataContext
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotTransition.SnapshotTransition> SnapshotTransitions { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; set; }
         public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction() { }
         public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel) { }
@@ -153,6 +154,7 @@ namespace Trax.Effect.Data.Services.DataContext
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotTransition.SnapshotTransition> SnapshotTransitions { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; }
         System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction();
         System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel);

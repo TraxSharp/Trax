@@ -127,6 +127,7 @@ public static class BulkSeeder
             // A seed from before decisions were seeded gets them without reseeding the rest.
             await SeedDecisionsAsync(conn, profile, log, ct);
             await SeedSnapshotDraftsAsync(conn, profile, log, ct);
+            await SeedSnapshotTransitionsAsync(conn, profile, log, ct);
             return;
         }
 
@@ -292,6 +293,7 @@ public static class BulkSeeder
 
         await SeedDecisionsAsync(conn, profile, log, ct);
         await SeedSnapshotDraftsAsync(conn, profile, log, ct);
+        await SeedSnapshotTransitionsAsync(conn, profile, log, ct);
 
         // VACUUM (not just ANALYZE) so the visibility map is set and the metrics
         // covering indexes serve heap-free Index Only Scans immediately, the way
@@ -450,7 +452,8 @@ public static class BulkSeeder
         // The row_id sequence is never restarted: a row_id names one incarnation of an instance, and a reused one
         // would look to a client still watching the old row like the row it holds. TRUNCATE sends no change notices,
         // so this runs before any host watches the table.
-        await Exec(conn, "TRUNCATE trax.snapshot_draft", ct);
+        // An instance's history references its row, so the two go together.
+        await Exec(conn, "TRUNCATE trax.snapshot_transition, trax.snapshot_draft", ct);
         await SeedTable(
             conn,
             profile.SnapshotDrafts,
@@ -469,6 +472,71 @@ public static class BulkSeeder
             ct
         );
         await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.snapshot_draft", ct);
+    }
+
+    /// <summary>How many rows of history each instance that has one is seeded with.</summary>
+    public const int TransitionsPerInstance = 4;
+
+    /// <summary>
+    /// Seeds a history for half of every machine's instances (row id modulo 12 below 6): <see cref="TransitionsPerInstance"/> rows each (a start, then commands
+    /// that walk the seeded states), written over the hour before the instance's last write, with every fiftieth row
+    /// naming a run it started. Skipped when the table already holds about that many.
+    /// </summary>
+    private static async Task SeedSnapshotTransitionsAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Action<string> log,
+        CancellationToken ct
+    )
+    {
+        if (profile.SnapshotDrafts <= 0)
+            return;
+        var expected = profile.SnapshotDrafts / 2 * TransitionsPerInstance;
+        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.snapshot_transition", ct);
+        // Every machine's rows are spread over row ids modulo 6, so the modulo-12 split gives each machine histories.
+        var spread = await ScalarLong(
+            conn,
+            "SELECT count(*) FROM (SELECT 1 FROM trax.snapshot_transition WHERE draft_row_id % 12 = 1 LIMIT 1) s",
+            ct
+        );
+        if (existing >= expected * 0.95 && spread > 0)
+            return;
+
+        log($"Seeding {expected:N0} snapshot_transition...");
+        await Exec(conn, "TRUNCATE trax.snapshot_transition", ct);
+        var low = await ScalarLong(
+            conn,
+            "SELECT coalesce(min(row_id), 0) FROM trax.snapshot_draft",
+            ct
+        );
+        var high = await ScalarLong(
+            conn,
+            "SELECT coalesce(max(row_id), 0) FROM trax.snapshot_draft",
+            ct
+        );
+        for (var lo = low; lo <= high; lo += ChunkSize)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "INSERT INTO trax.snapshot_transition (draft_row_id, revision, kind, trigger, actor, "
+                + "from_state, to_state, occurred_at, invoke_token) "
+                + "SELECT d.row_id, r, "
+                + "       CASE WHEN r = 1 THEN 'start'::trax.snapshot_transition_kind ELSE 'command'::trax.snapshot_transition_kind END, "
+                + "       CASE WHEN r = 1 THEN NULL ELSE 'Step' || r END, "
+                + "       CASE WHEN d.owner_kind = 'system' THEN 'host'::trax.snapshot_transition_actor ELSE 'owner'::trax.snapshot_transition_actor END, "
+                + "       CASE WHEN r = 1 THEN NULL ELSE 'State' || (r - 1) END, "
+                + $"       CASE WHEN r = {TransitionsPerInstance} THEN d.state ELSE 'State' || r END, "
+                + $"       d.updated_at - (({TransitionsPerInstance} - r) * interval '15 minutes'), "
+                + "       CASE WHEN (d.row_id + r) % 50 = 0 THEN 'stress-history-run-' || d.row_id || '-' || r ELSE NULL END "
+                + "FROM trax.snapshot_draft d "
+                + $"CROSS JOIN generate_series(1, {TransitionsPerInstance}) r "
+                + "WHERE d.row_id BETWEEN @lo AND @hi AND d.row_id % 12 < 6";
+            cmd.CommandTimeout = 1200;
+            cmd.Parameters.AddWithValue("lo", lo);
+            cmd.Parameters.AddWithValue("hi", lo + ChunkSize - 1);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.snapshot_transition", ct);
     }
 
     private static async Task<bool> AlreadySeeded(

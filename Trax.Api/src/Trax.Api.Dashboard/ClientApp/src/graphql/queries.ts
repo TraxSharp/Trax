@@ -1483,3 +1483,45 @@ export const BULK_OPERATION = gql`
     }
   }
 `;
+
+// One instance's history, newest first, paged by revision: the instance page's History panel.
+export const MACHINE_INSTANCE_TRANSITIONS = gql`
+  query MachineInstanceTransitions(
+    $machine: String!
+    $ownerKind: SnapshotOwnerKind!
+    $id: UUID!
+    $rowId: Long
+    $first: Int!
+    $after: Long
+  ) {
+    operations {
+      machineInstance(machine: $machine, ownerKind: $ownerKind, id: $id, rowId: $rowId) {
+        rowId
+        transitions(first: $first, after: $after) {
+          nextCursor
+          items {
+            revision
+            kind
+            trigger
+            actor
+            fromState
+            toState
+            at
+            previousAt
+            startedRun {
+              executionId
+              trainState
+              workQueueEntryId
+            }
+            startedChild {
+              machine
+              ownerKind
+              id
+              rowId
+            }
+          }
+        }
+      }
+    }
+  }
+`;

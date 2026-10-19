@@ -578,7 +578,8 @@ internal sealed class InvokeOutcomeReconciler(
                     leaving: machine.Entering(current.State) is not null
                         && next.State != current.State,
                     entering: machine.Entering(next.State),
-                    cancellationToken
+                    cancellationToken,
+                    trigger
                 );
                 switch (write)
                 {

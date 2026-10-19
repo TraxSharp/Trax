@@ -314,3 +314,80 @@ public record MachineInstanceCancelResult(
                 or MachineInstanceCancelOutcome.RunCancelled
                 or MachineInstanceCancelOutcome.CancelRequested;
 }
+
+/// <summary>
+/// One transition in a state-machine instance's history, as an operator reads it: what moved it, from where to where,
+/// who and when, and what it started. Never the instance's context, its owner's key or a run's token. See
+/// <see cref="IOperationsService.GetMachineInstanceTransitionsAsync"/>.
+/// </summary>
+/// <param name="Revision">The revision the write gave the instance.</param>
+/// <param name="Kind">What wrote it: a start, a command, a save, a timer or a run's outcome.</param>
+/// <param name="Trigger">
+/// The command that moved it (an event, a timer's event, or <c>State.done</c>, <c>State.failed</c> or
+/// <c>State.cancelled</c> for a run's outcome), or null for a creation, a save, or an outcome that could not be applied.
+/// </param>
+/// <param name="Actor">Who made it: the owner, host code, or the machine itself. Never which user.</param>
+/// <param name="FromState">The state it left, or null for its creation.</param>
+/// <param name="ToState">The state it entered.</param>
+/// <param name="At">When it was written.</param>
+public record MachineInstanceTransitionRecord(
+    long Revision,
+    SnapshotTransitionKind Kind,
+    string? Trigger,
+    SnapshotTransitionActor Actor,
+    string? FromState,
+    string ToState,
+    DateTimeOffset At
+)
+{
+    /// <summary>
+    /// When the transition before it was written, so <see cref="At"/> minus this is how long the instance spent in
+    /// <see cref="FromState"/> since it was last written; null for the oldest recorded transition.
+    /// </summary>
+    public DateTimeOffset? PreviousAt { get; init; }
+
+    /// <summary>The train run entering <see cref="ToState"/> queued, or null when it queued none.</summary>
+    public MachineInstanceStartedRun? StartedRun { get; init; }
+
+    /// <summary>The child machine instance entering <see cref="ToState"/> spawned, or null when it spawned none.</summary>
+    public MachineInstanceStartedChild? StartedChild { get; init; }
+}
+
+/// <summary>
+/// The train run one transition queued, as an operator reads it: which run, and where it is now. Never its token.
+/// </summary>
+/// <param name="ExecutionId">The run's id, or null while it is still queued and has no run yet.</param>
+/// <param name="TrainState">
+/// Where the run is: its state once dispatched, <c>Pending</c> while its entry is queued, <c>Cancelled</c> when its
+/// entry was cancelled before it started; null when neither the run nor its entry is found any more.
+/// </param>
+/// <param name="WorkQueueEntryId">The run's work queue entry, or null when none is found.</param>
+public record MachineInstanceStartedRun(
+    long? ExecutionId,
+    TrainState? TrainState,
+    long? WorkQueueEntryId
+);
+
+/// <summary>The child machine instance one transition spawned, named as a lookup of it names it. Never its owner.</summary>
+/// <param name="Machine">The child's machine.</param>
+/// <param name="OwnerKind">Who owns the child: the parent's owner.</param>
+/// <param name="Id">The child's id.</param>
+/// <param name="RowId">The child's row.</param>
+public record MachineInstanceStartedChild(
+    string Machine,
+    SnapshotOwnerKind OwnerKind,
+    Guid Id,
+    long RowId
+);
+
+/// <summary>A page of a state-machine instance's history, newest first.</summary>
+/// <param name="Items">The transitions on this page.</param>
+/// <param name="Take">The page size used, after clamping.</param>
+/// <param name="NextCursor">
+/// The revision to pass as the next page's <c>beforeRevision</c>, or null when this page reaches the oldest one.
+/// </param>
+public record MachineInstanceTransitionPage(
+    IReadOnlyList<MachineInstanceTransitionRecord> Items,
+    int Take,
+    long? NextCursor
+);

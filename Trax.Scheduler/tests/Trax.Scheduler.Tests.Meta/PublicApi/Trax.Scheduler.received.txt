@@ -655,6 +655,7 @@ namespace Trax.Scheduler.Services.Operations
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceRecord?> GetMachineInstanceAsync(Trax.Scheduler.Services.Operations.MachineInstanceKey key, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceRuns?> GetMachineInstanceRunsAsync(Trax.Scheduler.Services.Operations.MachineInstanceKey key, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MachineInstanceStateCount>> GetMachineInstanceStateCountsAsync(string? machine, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceTransitionPage?> GetMachineInstanceTransitionsAsync(Trax.Scheduler.Services.Operations.MachineInstanceKey key, long? beforeRevision, int take, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstancePage> GetMachineInstancesAsync(Trax.Scheduler.Services.Operations.MachineInstanceQuery query, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MachineDescription>> GetMachinesAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestExecutionStats> GetManifestExecutionStatsAsync(long manifestId, System.Threading.CancellationToken ct);
@@ -845,6 +846,21 @@ namespace Trax.Scheduler.Services.Operations
         public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MachineInstanceRun> Items { get; init; }
         public long? QueuedEntryId { get; init; }
     }
+    public class MachineInstanceStartedChild : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceStartedChild>
+    {
+        public MachineInstanceStartedChild(string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, long RowId) { }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long RowId { get; init; }
+    }
+    public class MachineInstanceStartedRun : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceStartedRun>
+    {
+        public MachineInstanceStartedRun(long? ExecutionId, Trax.Effect.Enums.TrainState? TrainState, long? WorkQueueEntryId) { }
+        public long? ExecutionId { get; init; }
+        public Trax.Effect.Enums.TrainState? TrainState { get; init; }
+        public long? WorkQueueEntryId { get; init; }
+    }
     public class MachineInstanceStateCount : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceStateCount>
     {
         public MachineInstanceStateCount(string Machine, string State, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, long Count) { }
@@ -859,6 +875,27 @@ namespace Trax.Scheduler.Services.Operations
         public MachineInstanceTotal(int Count, bool Capped) { }
         public bool Capped { get; init; }
         public int Count { get; init; }
+    }
+    public class MachineInstanceTransitionPage : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceTransitionPage>
+    {
+        public MachineInstanceTransitionPage(System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MachineInstanceTransitionRecord> Items, int Take, long? NextCursor) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MachineInstanceTransitionRecord> Items { get; init; }
+        public long? NextCursor { get; init; }
+        public int Take { get; init; }
+    }
+    public class MachineInstanceTransitionRecord : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceTransitionRecord>
+    {
+        public MachineInstanceTransitionRecord(long Revision, Trax.Effect.Enums.SnapshotTransitionKind Kind, string? Trigger, Trax.Effect.Enums.SnapshotTransitionActor Actor, string? FromState, string ToState, System.DateTimeOffset At) { }
+        public Trax.Effect.Enums.SnapshotTransitionActor Actor { get; init; }
+        public System.DateTimeOffset At { get; init; }
+        public string? FromState { get; init; }
+        public Trax.Effect.Enums.SnapshotTransitionKind Kind { get; init; }
+        public System.DateTimeOffset? PreviousAt { get; init; }
+        public long Revision { get; init; }
+        public Trax.Scheduler.Services.Operations.MachineInstanceStartedChild? StartedChild { get; init; }
+        public Trax.Scheduler.Services.Operations.MachineInstanceStartedRun? StartedRun { get; init; }
+        public string ToState { get; init; }
+        public string? Trigger { get; init; }
     }
     public class MachineInstanceWaitingOn : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceWaitingOn>
     {
@@ -1040,6 +1077,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceRecord?> GetMachineInstanceAsync(Trax.Scheduler.Services.Operations.MachineInstanceKey key, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceRuns?> GetMachineInstanceRunsAsync(Trax.Scheduler.Services.Operations.MachineInstanceKey key, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MachineInstanceStateCount>> GetMachineInstanceStateCountsAsync(string? machine, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceTransitionPage?> GetMachineInstanceTransitionsAsync(Trax.Scheduler.Services.Operations.MachineInstanceKey key, long? beforeRevision, int take, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstancePage> GetMachineInstancesAsync(Trax.Scheduler.Services.Operations.MachineInstanceQuery query, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.MachineDescription>> GetMachinesAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestExecutionStats> GetManifestExecutionStatsAsync(long manifestId, System.Threading.CancellationToken ct) { }

@@ -3,6 +3,7 @@ import { operationFixtures } from "./fixtures";
 import {
   attentionNeedsWork,
   lookupMatches,
+  machineInstanceDetailResolvers,
   machineQueryResolvers,
   manifestScheduleResolvers,
   metricSeriesResolvers,
@@ -136,5 +137,6 @@ export const devMockSeed: MockSchemaOverrides = {
       attention: () => attentionNeedsWork,
     },
     ...trainChainResolvers,
+    ...machineInstanceDetailResolvers,
   }),
 };

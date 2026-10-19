@@ -195,6 +195,54 @@ query {
 The one operator action on an instance is
 [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance).
 
+### transitions
+
+The instance's history, newest first: one `MachineInstanceTransition` for every write of its snapshot Trax recorded,
+its creation, each command, save, timer and run outcome. It reads through
+`IOperationsService.GetMachineInstanceTransitionsAsync`, the history the console's instance page shows, and only when
+selected. The history is the row's (`rowId`), so a user's draft shows only its own, and it starts with the first write
+after the upgrade that added it ([089](/docs/reference/schema-migrations#state-machine-instance-history-089-sqlite-048)).
+
+```graphql
+query {
+  operations {
+    machineInstance(machine: "fulfilment", ownerKind: SYSTEM, id: "6f9619ff-8b86-d011-b42d-00c04fc964ff") {
+      transitions(first: 25) {
+        items {
+          revision kind trigger actor fromState toState at previousAt
+          startedRun { executionId trainState workQueueEntryId }
+          startedChild { machine ownerKind id rowId }
+        }
+        nextCursor
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `first` | `Int!` | `25` | The page size, clamped to 1 through 500 |
+| `after` | `Long` | `null` | Only transitions older than this revision: the previous page's `nextCursor` |
+
+**Returns**: `MachineInstanceTransitions!`: `items`, the transitions on this page, and `nextCursor`, the revision to
+pass as `after` for the next page, or null on the last. Each `MachineInstanceTransition` has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `revision` | `Long!` | The revision the write gave the instance. A write that left the snapshot alone, or one made around Trax's store, has none, so revisions can skip |
+| `kind` | `SnapshotTransitionKind!` | `START` (created: a start, a save that created a draft, or a parent spawning it), `COMMAND` (an event moved it, or an effect it bound ran), `SAVE` (an autosave, or host code writing the snapshot), `TIMER` (its state's timer fired) or `OUTCOME` (a run it invoked ended) |
+| `trigger` | `String` | The command: the event's name, the timer's event, or `State.done`, `State.failed` or `State.cancelled` for an outcome. Null for a creation, a save, and an outcome that could not be applied, which leaves the instance where it was |
+| `actor` | `SnapshotTransitionActor!` | `OWNER` (a client acting for a user's instance), `HOST` (host code driving a system instance) or `MACHINE` (a timer, an outcome, a spawn). Never which user |
+| `fromState` | `String` | The state it left; null for its creation |
+| `toState` | `String!` | The state it entered |
+| `at` | `DateTime!` | When it was written |
+| `previousAt` | `DateTime` | When the transition before it was written, so `at` minus `previousAt` is the time spent in `fromState` since then; null for the oldest |
+| `startedRun` | `MachineInstanceTransitionRun` | The run entering `toState` queued: `executionId` (null while queued), `trainState` (`PENDING` while queued, `CANCELLED` if its entry was cancelled first) and `workQueueEntryId`. Never its token |
+| `startedChild` | `MachineInstanceTransitionChild` | The [child](/docs/statemachine/spawning-child-machines) it spawned: `machine`, `ownerKind`, `id` and `rowId`, as `machineInstance` takes them |
+
+No transition carries the instance's context or its owner's key. The history is deleted with the instance.
+
 ## machineInstanceCounts
 
 How many instances each machine has in each state, for each owner kind, ordered by machine, state

@@ -1447,6 +1447,93 @@ export const MACHINE_DEFINITIONS = [
   },
 ];
 
+// Each instance's history, newest first, as machineInstance { transitions } pages it. ...0001 has
+// retried its ingest many times, so its history takes more than one page; the others are short.
+type TransitionRow = {
+  revision: number;
+  kind: "START" | "COMMAND" | "SAVE" | "TIMER" | "OUTCOME";
+  trigger: string | null;
+  actor: "OWNER" | "HOST" | "MACHINE";
+  fromState: string | null;
+  toState: string;
+  at: string;
+  previousAt: string | null;
+  startedRun: { executionId: number | null; trainState: string | null; workQueueEntryId: number | null } | null;
+  startedChild: { machine: string; ownerKind: string; id: string; rowId: number } | null;
+};
+
+const transitionAt = (minutesAfterTen: number) => new Date(Date.UTC(2026, 6, 7, 10, 0, 0) + minutesAfterTen * 60_000).toISOString();
+
+/** Builds a history oldest first, then serves it newest first with each one's previousAt. */
+function transitionHistory(steps: Omit<TransitionRow, "revision" | "previousAt">[]): TransitionRow[] {
+  return steps
+    .map((step, i) => ({ ...step, revision: i + 1, previousAt: i === 0 ? null : steps[i - 1].at }))
+    .reverse();
+}
+
+const transitionStep = (
+  kind: TransitionRow["kind"],
+  trigger: string | null,
+  actor: TransitionRow["actor"],
+  fromState: string | null,
+  toState: string,
+  minute: number,
+  startedRun: TransitionRow["startedRun"] = null,
+): Omit<TransitionRow, "revision" | "previousAt"> => ({ kind, trigger, actor, fromState, toState, at: transitionAt(minute), startedRun, startedChild: null });
+
+function retries(): Omit<TransitionRow, "revision" | "previousAt">[] {
+  const steps = [
+    transitionStep("START", null, "HOST", null, "Pending", 0),
+    transitionStep("COMMAND", "Ingest", "HOST", "Pending", "Ingesting", 1, { executionId: 7001, trainState: "FAILED", workQueueEntryId: 7151 }),
+  ];
+  for (let i = 0; i < 18; i++) {
+    steps.push(transitionStep("OUTCOME", "Ingesting.failed", "MACHINE", "Ingesting", "Failed", 2 + i * 3));
+    const run = i === 17 ? { executionId: 7101, trainState: "IN_PROGRESS", workQueueEntryId: 7191 } : { executionId: 7002 + i, trainState: "FAILED", workQueueEntryId: 7152 + i };
+    steps.push(transitionStep("COMMAND", "Retry", "HOST", "Failed", "Ingesting", 3 + i * 3, run));
+  }
+  return steps;
+}
+
+export const MACHINE_TRANSITIONS: Record<string, TransitionRow[]> = {
+  [MACHINE_IDS.dispatched]: transitionHistory(retries()),
+  [MACHINE_IDS.queued]: transitionHistory([
+    transitionStep("START", null, "HOST", null, "Pending", 50),
+    transitionStep("COMMAND", "Ingest", "HOST", "Pending", "Ingesting", 56, { executionId: null, trainState: "PENDING", workQueueEntryId: 7201 }),
+  ]),
+  [MACHINE_IDS.idle]: transitionHistory([
+    transitionStep("START", null, "HOST", null, "Pending", 20),
+    transitionStep("COMMAND", "Ingest", "HOST", "Pending", "Ingesting", 30, { executionId: 7050, trainState: "COMPLETED", workQueueEntryId: 7140 }),
+    transitionStep("OUTCOME", "Ingesting.done", "MACHINE", "Ingesting", "Ingested", 54),
+  ]),
+  [MACHINE_IDS.draftBuilding]: transitionHistory([
+    transitionStep("START", null, "OWNER", null, "ChoosingRange", 10),
+    transitionStep("SAVE", null, "OWNER", "ChoosingRange", "ChoosingRange", 12),
+    transitionStep("COMMAND", "Build", "OWNER", "ChoosingRange", "Building", 20, { executionId: 7100, trainState: "FAILED", workQueueEntryId: 7180 }),
+    transitionStep("OUTCOME", "Building.failed", "MACHINE", "Building", "ChoosingRange", 31),
+    transitionStep("COMMAND", "Build", "OWNER", "ChoosingRange", "Building", 117, { executionId: 7110, trainState: "IN_PROGRESS", workQueueEntryId: 7192 }),
+  ]),
+  [MACHINE_IDS.draftIdle]: transitionHistory([
+    transitionStep("START", null, "OWNER", null, "ChoosingRange", 5),
+    transitionStep("SAVE", null, "OWNER", "ChoosingRange", "ChoosingRange", 115),
+  ]),
+};
+
+/** One page of an instance's history, newest first, older than `after` when given. */
+export function machineTransitionsPage(instanceId: string, args: Args) {
+  const all = MACHINE_TRANSITIONS[instanceId] ?? [];
+  const first = Math.min(Math.max(Number(args.first ?? 25), 1), 500);
+  const older = args.after == null ? all : all.filter((t) => t.revision < Number(args.after));
+  const items = older.slice(0, first);
+  return { items, nextCursor: older.length > first ? items[items.length - 1].revision : null };
+}
+
+/** The MachineInstanceDetail resolvers of {@link machineScenario}: its history, read when selected. */
+export const machineInstanceDetailResolvers = {
+  MachineInstanceDetail: {
+    transitions: (root: { id: string }, args: Args) => machineTransitionsPage(root.id, args),
+  },
+};
+
 /** The OperationsQueries resolvers of {@link machineScenario}. */
 export const machineQueryResolvers = {
   machineInstanceCounts: (_root: unknown, args: Args) =>
@@ -1457,7 +1544,7 @@ export const machineQueryResolvers = {
 };
 
 export const machineScenario: MockSchemaOverrides = {
-  resolvers: () => ({ OperationsQueries: machineQueryResolvers }),
+  resolvers: () => ({ OperationsQueries: machineQueryResolvers, ...machineInstanceDetailResolvers }),
 };
 
 /** More instances match than the API counts: the total stops at 10,000. */

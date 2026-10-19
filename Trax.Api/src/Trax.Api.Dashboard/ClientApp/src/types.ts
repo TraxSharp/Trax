@@ -1000,6 +1000,32 @@ export interface MachineInstanceChange {
   reload: boolean;
 }
 
+/** What wrote one row of an instance's history (`SnapshotTransitionKind`). */
+export type SnapshotTransitionKind = "START" | "COMMAND" | "SAVE" | "TIMER" | "OUTCOME";
+
+/** Who made one transition: the owner, host code, or the machine itself. Never which user. */
+export type SnapshotTransitionActor = "OWNER" | "HOST" | "MACHINE";
+
+/** One transition in an instance's history, as `machineInstance { transitions }` serves it. */
+export interface MachineInstanceTransition {
+  revision: number;
+  kind: SnapshotTransitionKind;
+  trigger: string | null;
+  actor: SnapshotTransitionActor;
+  fromState: string | null;
+  toState: string;
+  at: string;
+  previousAt: string | null;
+  startedRun: { executionId: number | null; trainState: TrainState | null; workQueueEntryId: number | null } | null;
+  startedChild: { machine: string; ownerKind: SnapshotOwnerKind; id: string; rowId: number } | null;
+}
+
+/** A page of an instance's history, newest first; `nextCursor` is the next page's `after`. */
+export interface MachineInstanceTransitions {
+  items: MachineInstanceTransition[];
+  nextCursor: number | null;
+}
+
 export type MachineInstanceCancelOutcome =
   | "CANCEL_REQUESTED"
   | "MOVED"

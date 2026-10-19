@@ -694,3 +694,27 @@ on the current chain and a run whose node ids still match a changed one would ot
 
 Nothing is backfilled: a run from before this migration, or from a host on the previous version during a rolling
 deploy, has no hash, and its graph is drawn with nothing to compare it to.
+
+## State-machine instance history (089, SQLite 048)
+
+`089_snapshot_transition.sql` (SQLite `048`) adds `trax.snapshot_transition`, `SnapshotTransition` on the model and
+`IDataContext.SnapshotTransitions`: one row for every snapshot of a state-machine instance the store writes, in the
+same transaction as the write. Each row holds the instance's row (`draft_row_id`), the `revision` the write gave it,
+its `kind` (`start`, `command`, `save`, `timer` or `outcome`, the Postgres enum `trax.snapshot_transition_kind`;
+an integer on SQLite), the command's name (`trigger`), the `actor` (`owner`, `host` or `machine`, the enum
+`trax.snapshot_transition_actor`), `from_state` and `to_state`, `occurred_at`, and the server-only `invoke_token` of
+the run or child the write started. It holds no context and no owner key. The operator reads it as
+[`machineInstance { transitions }`](/docs/sdk-reference/graphql-api/queries/machine-instances#transitions).
+
+An `AFTER DELETE` trigger on `trax.snapshot_draft`, `snapshot_draft_history` (statement-level on Postgres, per row
+on SQLite), deletes an instance's history with it, whoever deletes it: a discard, the expiry sweep or host code. It is
+a trigger rather than a foreign key because a foreign key would depend on `pk_snapshot_draft`, which 051 drops and
+rebuilds when it runs again. `TRUNCATE` fires no delete trigger, so truncate both tables together.
+`uq_snapshot_transition_draft_revision` on `(draft_row_id, revision)` holds one row per revision and serves both the
+trigger's delete and the newest-first read. A write
+that leaves the snapshot alone (a pending effect's mark, a run's token) adds no row, and neither does a writer that goes
+around the store, so revisions can skip.
+
+The table is new and starts empty: an instance's history begins with its first write after the upgrade. A host on the
+previous version writes snapshots without history, so during a rolling deploy the rows it writes are missing from the
+history of the instances it moves.

@@ -112,7 +112,7 @@ export const WhereItIs: Story = {
       expect(graph.querySelector('[aria-current="step"]')?.firstChild?.textContent).toBe("Ingested"),
     );
     expect(c.getByText("No command moves it on from Ingested.")).toBeInTheDocument();
-    expect(c.getByRole("region", { name: "Transition history" })).toBeInTheDocument();
+    expect(c.getByRole("region", { name: "History" })).toBeInTheDocument();
   },
 };
 

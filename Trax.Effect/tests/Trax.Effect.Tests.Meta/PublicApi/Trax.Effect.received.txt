@@ -240,6 +240,20 @@ namespace Trax.Effect.Enums
         User = 0,
         System = 1,
     }
+    public enum SnapshotTransitionActor
+    {
+        Owner = 0,
+        Host = 1,
+        Machine = 2,
+    }
+    public enum SnapshotTransitionKind
+    {
+        Start = 0,
+        Command = 1,
+        Save = 2,
+        Timer = 3,
+        Outcome = 4,
+    }
     public enum TrainState
     {
         Pending = 0,
@@ -1167,6 +1181,33 @@ namespace Trax.Effect.Models.SnapshotDraft
         public string? UserKey { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("version")]
         public int Version { get; set; }
+    }
+}
+namespace Trax.Effect.Models.SnapshotTransition
+{
+    public class SnapshotTransition
+    {
+        public SnapshotTransition() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("actor")]
+        public Trax.Effect.Enums.SnapshotTransitionActor Actor { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("occurred_at")]
+        public System.DateTimeOffset At { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("draft_row_id")]
+        public long DraftRowId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("from_state")]
+        public string? FromState { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoke_token")]
+        public string? InvokeToken { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("kind")]
+        public Trax.Effect.Enums.SnapshotTransitionKind Kind { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("revision")]
+        public long Revision { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("to_state")]
+        public string ToState { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("trigger")]
+        public string? Trigger { get; set; }
     }
 }
 namespace Trax.Effect.Models.WorkQueue.DTOs

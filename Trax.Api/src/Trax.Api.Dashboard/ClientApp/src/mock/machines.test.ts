@@ -2,7 +2,9 @@ import { expect, test } from "vitest";
 import { createMockClient } from "./client";
 import { createMockStore } from "./store/mock-store";
 import { devMockSeed } from "./seeds";
-import { MACHINES, MACHINE_INSTANCES_ATTENTION, MACHINE_INSTANCE_STUCK_COUNTS } from "../graphql/queries";
+import { MACHINES, MACHINE_INSTANCES_ATTENTION, MACHINE_INSTANCE_STUCK_COUNTS, MACHINE_INSTANCE_TRANSITIONS } from "../graphql/queries";
+import { MACHINE_IDS } from "./scenarios";
+import type { MachineInstanceTransitions } from "../types";
 
 // The machine reads the console's machine pages will make, answered in mock mode.
 
@@ -41,4 +43,24 @@ test("mock mode marks the overdue instance stuck, lists it under stuck: true and
   const rows = (counts.data as { operations: { machineInstanceCounts: { state: string; stuck: number }[] } }).operations.machineInstanceCounts;
   expect(rows.find((r) => r.state === "ChoosingRange")?.stuck).toBe(1);
   expect(rows.find((r) => r.state === "Ingesting")?.stuck).toBe(0);
+});
+
+test("mock mode pages an instance's history newest first by revision, with what each started", async () => {
+  const c = client();
+  const vars = { machine: "source-partition", ownerKind: "SYSTEM", id: MACHINE_IDS.dispatched, first: 25 };
+  const read = async (after: number | null) => {
+    const result = await c.query(MACHINE_INSTANCE_TRANSITIONS, { ...vars, after }).toPromise();
+    expect(result.error).toBeUndefined();
+    return (result.data as { operations: { machineInstance: { transitions: MachineInstanceTransitions } } }).operations
+      .machineInstance.transitions;
+  };
+  const first = await read(null);
+  expect(first.items).toHaveLength(25);
+  expect(first.items[0]).toMatchObject({ revision: 38, kind: "COMMAND", trigger: "Retry", actor: "HOST", startedRun: { executionId: 7101 } });
+  expect(first.items[0].previousAt).toBe(first.items[1].at);
+  expect(first.nextCursor).toBe(14);
+  const older = await read(first.nextCursor);
+  expect(older.items.map((t) => t.revision)).toEqual([13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+  expect(older.items.at(-1)).toMatchObject({ kind: "START", fromState: null, toState: "Pending", previousAt: null });
+  expect(older.nextCursor).toBeNull();
 });

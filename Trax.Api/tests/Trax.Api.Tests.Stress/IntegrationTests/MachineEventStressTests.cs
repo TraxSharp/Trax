@@ -197,6 +197,98 @@ public class MachineEventStressTests
         perEvent.Should().BeLessThan(PerEventBudget, "an event's cost is bounded");
     }
 
+    private const int ConcurrentInstances = 20;
+
+    private const int EventsPerInstance = 25;
+
+    /// <summary>
+    /// The history's write path under concurrency: many instances moved at once, each by a run of events, and every
+    /// event's history row is there, in revision order with no gap, kind and command matching, read back through the
+    /// operations service the console's instance page reads. Enforces
+    /// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+    /// </summary>
+    [Test]
+    public async Task Every_event_writes_one_history_row_in_order_when_instances_move_at_once()
+    {
+        var ids = new List<Guid>();
+        for (var i = 0; i < ConcurrentInstances; i++)
+            ids.Add(await StartAsync());
+
+        var clock = Stopwatch.StartNew();
+        await Task.WhenAll(
+                ids.Select(id =>
+                    Task.Run(async () =>
+                    {
+                        for (var e = 0; e < EventsPerInstance; e++)
+                            await EventAsync(id, e % 2 == 0 ? "close" : "open");
+                    })
+                )
+            )
+            .WaitAsync(TimeSpan.FromMinutes(5));
+        clock.Stop();
+        var perEvent = clock.Elapsed / (ConcurrentInstances * EventsPerInstance);
+
+        var read = Stopwatch.StartNew();
+        foreach (var id in ids)
+        {
+            await using var scope = _host.Services.CreateAsyncScope();
+            var page = await scope
+                .ServiceProvider.GetRequiredService<IOperationsService>()
+                .GetMachineInstanceTransitionsAsync(
+                    new MachineInstanceKey(
+                        "stress-toggle",
+                        Trax.Effect.Enums.SnapshotOwnerKind.User,
+                        id,
+                        await RowIdAsync(id)
+                    ),
+                    null,
+                    100,
+                    CancellationToken.None
+                );
+            var oldestFirst = page!.Items.Reverse().ToList();
+            oldestFirst
+                .Select(t => t.Revision)
+                .Should()
+                .Equal(
+                    Enumerable.Range(1, EventsPerInstance + 1).Select(r => (long)r),
+                    "every event adds one row at its revision, none lost or doubled under load, per "
+                        + "Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md"
+                );
+            oldestFirst[0].Kind.Should().Be(Trax.Effect.Enums.SnapshotTransitionKind.Start);
+            oldestFirst
+                .Skip(1)
+                .Select(t => t.Trigger)
+                .Should()
+                .Equal(
+                    Enumerable
+                        .Range(0, EventsPerInstance)
+                        .Select(e => e % 2 == 0 ? "Close" : "Open")
+                );
+        }
+        read.Stop();
+
+        TestContext.Out.WriteLine(
+            $"{ConcurrentInstances} instances x {EventsPerInstance} events at once: {clock.Elapsed.TotalMilliseconds:F0} ms, "
+                + $"{perEvent.TotalMilliseconds:F2} ms per event; {ConcurrentInstances} histories read in "
+                + $"{read.Elapsed.TotalMilliseconds:F0} ms"
+        );
+        perEvent
+            .Should()
+            .BeLessThan(PerEventBudget, "the history row keeps an event's cost bounded");
+    }
+
+    private static async Task<long> RowIdAsync(Guid id)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT row_id FROM trax.snapshot_draft WHERE machine = 'stress-toggle' AND id = @id",
+            connection
+        );
+        command.Parameters.AddWithValue("id", id);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
     private async Task<Guid> StartAsync()
     {
         var data = await ExecuteAsync(

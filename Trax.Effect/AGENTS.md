@@ -41,6 +41,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `MapTraxTrainEventHub`, or the SignalR sink's default client payload | [0016](./docs/adr/0016-the-train-event-hub-carries-the-hosts-authorization.md), the hub is mapped with an authorization posture or the host does not start, and the default payload leaves the failure reason out |
 | a state-machine draft's `requestId` replay, or `ISnapshotStore.UpdateWithRequest` | [0013](./docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md), an id replays only for the request it recorded, wherever the draft is now |
 | what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
+| `trax.snapshot_transition`, `IDataContext.SnapshotTransitions`, or a new path that writes a state-machine snapshot | [0022](./docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md), every snapshot write through the store adds one history row in its transaction, and the history goes with the instance |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
 index lists them by folder. Thirty-one name `effect`, three of them superseded: executable guards, the

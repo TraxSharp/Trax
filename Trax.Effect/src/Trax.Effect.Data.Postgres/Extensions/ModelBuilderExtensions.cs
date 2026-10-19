@@ -54,6 +54,8 @@ public static class ModelBuilderExtensions
         modelBuilder.HasPostgresEnum<JunctionRunKind>(schema: "trax");
         modelBuilder.HasPostgresEnum<JunctionRunState>(schema: "trax");
         modelBuilder.HasPostgresEnum<SnapshotOwnerKind>(schema: "trax");
+        modelBuilder.HasPostgresEnum<SnapshotTransitionKind>(schema: "trax");
+        modelBuilder.HasPostgresEnum<SnapshotTransitionActor>(schema: "trax");
 
         return modelBuilder;
     }
@@ -100,6 +102,8 @@ public static class ModelBuilderExtensions
         npgsqlDataSourceBuilder.MapEnum<JunctionRunKind>("trax.junction_run_kind");
         npgsqlDataSourceBuilder.MapEnum<JunctionRunState>("trax.junction_run_state");
         npgsqlDataSourceBuilder.MapEnum<SnapshotOwnerKind>("trax.snapshot_owner_kind");
+        npgsqlDataSourceBuilder.MapEnum<SnapshotTransitionKind>("trax.snapshot_transition_kind");
+        npgsqlDataSourceBuilder.MapEnum<SnapshotTransitionActor>("trax.snapshot_transition_actor");
 
         configure?.Invoke(npgsqlDataSourceBuilder);
 

@@ -157,6 +157,8 @@ public static class ServiceExtensions
                             o.MapEnum<JunctionRunKind>("junction_run_kind", "trax");
                             o.MapEnum<JunctionRunState>("junction_run_state", "trax");
                             o.MapEnum<SnapshotOwnerKind>("snapshot_owner_kind", "trax");
+                            o.MapEnum<SnapshotTransitionKind>("snapshot_transition_kind", "trax");
+                            o.MapEnum<SnapshotTransitionActor>("snapshot_transition_actor", "trax");
                         }
                     )
                     .UseLoggerFactory(new NullLoggerFactory())

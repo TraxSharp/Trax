@@ -32,6 +32,7 @@ The Postgres and Sqlite data providers create these tables in the `trax` schema 
 | `effect_claim` | `EffectClaim` | An idempotency claim for an exactly-once side effect, with a lease and fence token |
 | `runner_nonce` | `RunnerNonce` | Nonces a runner accepted on signed requests, so instances sharing the database accept a request once |
 | `snapshot_draft` | `SnapshotDraft` | State machine instance drafts, used by `Trax.Effect.StateMachine.Persistence` |
+| `snapshot_transition` | `SnapshotTransition` | Each state-machine instance's history, one row per snapshot write, deleted with the instance |
 | `persisted_operation` | `PersistedOperation` | Stored GraphQL operations served by id |
 | `persisted_operation_history` | `PersistedOperationHistory` | One row per change to a persisted operation |
 

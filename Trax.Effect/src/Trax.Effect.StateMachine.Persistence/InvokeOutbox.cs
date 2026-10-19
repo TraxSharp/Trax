@@ -123,7 +123,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
 
     /// <summary>
     /// Writes <paramref name="next"/> over <paramref name="owner"/>'s row, guarded by <paramref name="expectedToken"/>,
-    /// cancelling <paramref name="leavingToken"/>'s run and queueing <paramref name="entering"/>'s.
+    /// cancelling <paramref name="leavingToken"/>'s run and queueing <paramref name="entering"/>'s. The instance's
+    /// history records <paramref name="trigger"/>, the command that moved it.
     /// </summary>
     public async Task<InvokeWrite> Advance(
         DraftOwner owner,
@@ -133,7 +134,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         AppliedRequest? request,
         string? leavingToken,
         EnteringInvoke? entering,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? trigger = null
     ) =>
         await InTransaction(
             async (context, store) =>
@@ -158,13 +160,15 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 var run = launch as Prepared;
 
                 // The snapshot first: it is the one write that can lose a race, and losing it writes nothing else.
-                var wrote = await store.Update(
+                // The store is always StoreOver's, which records the command in the instance's history.
+                var wrote = await ((EfSnapshotStore)store).Update(
                     owner,
                     id,
                     next,
                     expectedToken,
                     request,
                     new InvokeTokenWrite(run?.Token),
+                    TransitionNote.Command(owner, trigger ?? request?.Trigger),
                     cancellationToken
                 );
                 if (!wrote)
@@ -232,7 +236,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
     /// <paramref name="invokeToken"/> and <paramref name="expectedToken"/> (<c>UPDATE ... WHERE invoke_token =</c>),
     /// replacing the token with the run <paramref name="entering"/> queues, or clearing it. The finished run needs
     /// no cancel. <see cref="InvokeWrite.Conflict"/> when the row no longer holds both tokens: the outcome was
-    /// applied already, the state was left, or the row changed since it was read.
+    /// applied already, the state was left, or the row changed since it was read. The instance's history records
+    /// <paramref name="trigger"/>, the outcome applied.
     /// </summary>
     public async Task<InvokeWrite> Deliver(
         DraftOwner owner,
@@ -241,7 +246,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         Snapshot next,
         Guid expectedToken,
         EnteringInvoke? entering,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? trigger = null
     ) =>
         await InTransaction(
             async (context, store) =>
@@ -283,11 +289,12 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 // The conditional update is the one write that can lose, to another host applying the same
                 // outcome or to the state being left; losing it writes nothing else.
                 if (
-                    !await store.ApplyByInvokeToken(
+                    !await ((EfSnapshotStore)store).ApplyOutcome(
                         invokeToken,
                         next,
                         run?.Token,
                         expectedToken,
+                        trigger,
                         cancellationToken
                     )
                 )
@@ -677,7 +684,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         Snapshot next,
         bool leaving,
         EnteringInvoke? entering,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? trigger = null
     )
     {
         var owner = new DraftOwner(due.OwnerKind, due.UserKey);
@@ -704,7 +712,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 due,
                 next,
                 leaving || run is not null ? new InvokeTokenWrite(run?.Token) : null,
-                cancellationToken
+                cancellationToken,
+                trigger
             )
         )
             return new InvokeWrite.Conflict();

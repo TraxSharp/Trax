@@ -929,6 +929,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         Snapshot snapshot,
         StoredSnapshot stored,
         AppliedRequest? request,
+        TransitionNote note,
         CancellationToken cancellationToken
     )
     {
@@ -940,7 +941,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     snapshot,
                     stored,
                     request,
-                    cancellationToken
+                    cancellationToken,
+                    note
                 )
                     is { } row
                 ? new Written(true, stored.Revision + 1, stored.RowId, row.DueAt)
@@ -1515,6 +1517,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     ok.Snapshot,
                     stored,
                     stored.LastRequest,
+                    TransitionNote.Save(DraftOwner.User(userKey)),
                     cancellationToken
                 );
                 return await Persisted(wrote, userKey, id, ok.Snapshot, stored.Json);
@@ -1996,6 +1999,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
                 leaving,
                 enteringInvoke,
+                trigger,
                 cancellationToken
             );
 
@@ -2005,6 +2009,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             next,
             stored,
             Recorded(stored, requestId, fingerprint, trigger, current.State, wire),
+            TransitionNote.Command(DraftOwner.User(userKey), trigger),
             cancellationToken
         );
         if (!updated.Ok)
@@ -2039,6 +2044,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         AppliedRequest? request,
         bool leaving,
         bool entering,
+        string trigger,
         CancellationToken cancellationToken
     )
     {
@@ -2067,7 +2073,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     Spawn = Invoke(next.State).Spawn,
                 }
                 : null,
-            cancellationToken
+            cancellationToken,
+            trigger
         );
 
         switch (write)

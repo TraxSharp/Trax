@@ -576,6 +576,41 @@ namespace Trax.Api.DTOs
         public System.DateTime StartTime { get; init; }
         public Trax.Effect.Enums.TrainState TrainState { get; init; }
     }
+    public class MachineInstanceTransition : System.IEquatable<Trax.Api.DTOs.MachineInstanceTransition>
+    {
+        public MachineInstanceTransition(long Revision, Trax.Effect.Enums.SnapshotTransitionKind Kind, string? Trigger, Trax.Effect.Enums.SnapshotTransitionActor Actor, string? FromState, string ToState, System.DateTimeOffset At) { }
+        public Trax.Effect.Enums.SnapshotTransitionActor Actor { get; init; }
+        public System.DateTimeOffset At { get; init; }
+        public string? FromState { get; init; }
+        public Trax.Effect.Enums.SnapshotTransitionKind Kind { get; init; }
+        public System.DateTimeOffset? PreviousAt { get; init; }
+        public long Revision { get; init; }
+        public Trax.Api.DTOs.MachineInstanceTransitionChild? StartedChild { get; init; }
+        public Trax.Api.DTOs.MachineInstanceTransitionRun? StartedRun { get; init; }
+        public string ToState { get; init; }
+        public string? Trigger { get; init; }
+    }
+    public class MachineInstanceTransitionChild : System.IEquatable<Trax.Api.DTOs.MachineInstanceTransitionChild>
+    {
+        public MachineInstanceTransitionChild(string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, long RowId) { }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long RowId { get; init; }
+    }
+    public class MachineInstanceTransitionRun : System.IEquatable<Trax.Api.DTOs.MachineInstanceTransitionRun>
+    {
+        public MachineInstanceTransitionRun(long? ExecutionId, Trax.Effect.Enums.TrainState? TrainState, long? WorkQueueEntryId) { }
+        public long? ExecutionId { get; init; }
+        public Trax.Effect.Enums.TrainState? TrainState { get; init; }
+        public long? WorkQueueEntryId { get; init; }
+    }
+    public class MachineInstanceTransitions : System.IEquatable<Trax.Api.DTOs.MachineInstanceTransitions>
+    {
+        public MachineInstanceTransitions(System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineInstanceTransition> Items, long? NextCursor) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineInstanceTransition> Items { get; init; }
+        public long? NextCursor { get; init; }
+    }
     public class MachineInstanceWaitingRun : System.IEquatable<Trax.Api.DTOs.MachineInstanceWaitingRun>
     {
         public MachineInstanceWaitingRun(long? ExecutionId, Trax.Effect.Enums.TrainState? TrainState, long? WorkQueueEntryId) { }

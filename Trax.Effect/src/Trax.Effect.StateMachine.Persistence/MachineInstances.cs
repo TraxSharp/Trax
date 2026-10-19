@@ -617,7 +617,8 @@ internal sealed class MachineInstances(
             request: null,
             moved && internals.Entering(current.State) is not null ? stored.InvokeToken : null,
             moved ? internals.Entering(next.State) : null,
-            cancellationToken
+            cancellationToken,
+            trigger
         );
         // A system instance another one spawned tells its parent when this advance ends it.
         if (write is InvokeWrite.Written && internals.Ends.ContainsKey(next.State))

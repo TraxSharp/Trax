@@ -187,6 +187,106 @@ public class OperatorMachineInstancesE2ETests
     }
 
     [Test]
+    public async Task An_operator_reads_the_drafts_history_as_the_service_lists_it_and_nobody_else_does()
+    {
+        using var list = await _host.PostAsync(List, apiKey: OperatorKey);
+        var rowId = list
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("machineInstances")
+            .GetProperty("items")[0]
+            .GetProperty("rowId")
+            .GetInt64();
+        var history = $$"""
+            { operations { machineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}", rowId: {{rowId}}) {
+                transitions(first: 10) {
+                  nextCursor
+                  items { revision kind trigger actor fromState toState at previousAt
+                    startedRun { executionId } startedChild { id } }
+                }
+            } } }
+            """;
+
+        using var asOperator = await _host.PostAsync(history, apiKey: OperatorKey);
+        asOperator
+            .RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse(asOperator.RootElement.GetRawText());
+        var page = asOperator
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("machineInstance")
+            .GetProperty("transitions");
+        var items = page.GetProperty("items").EnumerateArray().ToList();
+
+        PageOf(items)
+            .Should()
+            .Equal(
+                [
+                    (2L, "COMMAND", "Coin", "OWNER", "Locked", "Unlocked"),
+                    (1L, "START", null, "OWNER", null, "Locked"),
+                ],
+                "the save created the draft and the advance moved it, newest first"
+            );
+        page.GetProperty("nextCursor").ValueKind.Should().Be(JsonValueKind.Null);
+
+        // The console reads the field; the field reads the service. Both list the same rows.
+        using (var scope = _host.Services.CreateScope())
+        {
+            var served = await scope
+                .ServiceProvider.GetRequiredService<IOperationsService>()
+                .GetMachineInstanceTransitionsAsync(
+                    new MachineInstanceKey(
+                        "turnstile",
+                        Trax.Effect.Enums.SnapshotOwnerKind.User,
+                        _draftId,
+                        rowId
+                    ),
+                    null,
+                    10,
+                    CancellationToken.None
+                );
+            served!
+                .Items.Select(t => t.Revision)
+                .Should()
+                .Equal(items.Select(i => i.GetProperty("revision").GetInt64()));
+            served
+                .Items.Select(t => t.At)
+                .Should()
+                .Equal(items.Select(i => i.GetProperty("at").GetDateTimeOffset()));
+        }
+
+        asOperator
+            .RootElement.GetRawText()
+            .Should()
+            .NotContain("paidWith")
+            .And.NotContain("dollar", "no transition carries the context")
+            .And.NotContain("shopper", "no transition names the user");
+
+        using var asShopper = await _host.PostAsync(history, apiKey: ShopperKey);
+        ErrorCodes(asShopper).Should().Contain("TRAX_AUTHORIZATION");
+        NoOperationsData(asShopper).Should().BeTrue(asShopper.RootElement.GetRawText());
+        using var anonymous = await _host.PostAsync(history);
+        NoOperationsData(anonymous).Should().BeTrue(anonymous.RootElement.GetRawText());
+    }
+
+    private static List<(long, string?, string?, string?, string?, string?)> PageOf(
+        List<JsonElement> items
+    ) =>
+        items
+            .Select(i =>
+                (
+                    i.GetProperty("revision").GetInt64(),
+                    i.GetProperty("kind").GetString(),
+                    i.GetProperty("trigger").GetString(),
+                    i.GetProperty("actor").GetString(),
+                    i.GetProperty("fromState").GetString(),
+                    i.GetProperty("toState").GetString()
+                )
+            )
+            .ToList();
+
+    [Test]
     public async Task A_user_cannot_cancel_and_an_operator_cannot_cancel_a_users_draft()
     {
         var cancel = $$"""

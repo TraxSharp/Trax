@@ -7,6 +7,7 @@ using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.StateMachine;
 using SnapshotDraft = Trax.Effect.Models.SnapshotDraft.SnapshotDraft;
+using SnapshotTransition = Trax.Effect.Models.SnapshotTransition.SnapshotTransition;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -20,6 +21,13 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <para>Every <see cref="ISnapshotStore"/> member filters on <c>owner_kind = user</c> as well as the user's key,
 /// so no user path reads, writes, lists or expires a system-owned instance, even one under the same id. System
 /// rows and invoke tokens are reached only through the store's internal, owner-aware members.</para>
+///
+/// <para>Every write of a snapshot also writes one row of the instance's history (<see cref="IDataContext.SnapshotTransitions"/>),
+/// with the revision the write gave it, in the same transaction: the caller's when it holds one, else one of the
+/// store's own. A write that leaves the snapshot alone writes none. The history row is saved through the data context,
+/// so a change host code tracked on the same context and has not saved yet is saved with it, as it is by
+/// <see cref="Insert(string, Guid, Snapshot, CancellationToken)"/> and <see cref="Upsert"/>. See
+/// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.</para>
 /// </summary>
 /// <param name="db">The data context the table is reached through.</param>
 /// <param name="dialect">
@@ -228,9 +236,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         else
         {
             // The InMemory provider has no set-based delete: the row is read and removed.
+            // It runs no trigger either, so the row's history is removed with it here.
             var record = await target.FirstOrDefaultAsync(CancellationToken.None);
             if (record is not null)
+            {
                 db.SnapshotDrafts.Remove(record);
+                await RemoveHistory(record.RowId);
+            }
             deleted = record is not null && await Save(record, CancellationToken.None);
         }
         if (!deleted)
@@ -292,6 +304,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         // and the trigger moves it to the same next value; on InMemory, which has no trigger, this is the bump.
         record.Revision += 1;
         var due = DueFor(snapshot);
+        var before = record.State;
         record.DueAt = due.Resolve(
             record.State,
             record.DueAt,
@@ -299,7 +312,18 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             await DueValue(due, cancellationToken)
         );
         Apply(record, snapshot);
-        return await Save(record, cancellationToken) ? Written(record) : null;
+        // One save writes the row and its history, in the transaction it opens or the caller's.
+        var transition = History(
+            record.RowId,
+            record.Revision,
+            before,
+            snapshot.State,
+            record.UpdatedAt,
+            TransitionNote.Save(DraftOwner.User(userKey)),
+            invokeToken: null
+        );
+        db.SnapshotTransitions.Add(transition);
+        return await Save(record, cancellationToken, transition) ? Written(record) : null;
     }
 
     /// <summary>
@@ -363,7 +387,15 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         string spawnedBy,
         CancellationToken cancellationToken
     ) =>
-        await InsertOwned(owner, id, snapshot, cancellationToken, spawnedBy: spawnedBy) is not null;
+        await InsertOwned(
+            owner,
+            id,
+            snapshot,
+            cancellationToken,
+            spawnedBy: spawnedBy,
+            note: TransitionNote.Spawned
+        )
+            is not null;
 
     private async Task<WrittenRow?> InsertOwned(
         DraftOwner owner,
@@ -372,7 +404,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         CancellationToken cancellationToken,
         string? invokeToken = null,
         StartRequest? start = null,
-        string? spawnedBy = null
+        string? spawnedBy = null,
+        TransitionNote? note = null
     )
     {
         // The owner's unique index refuses a second row, and the dialect reads that as a lost race. A provider
@@ -401,9 +434,36 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         };
         Apply(record, snapshot);
         record.CreatedAt = record.UpdatedAt;
+
+        // The row and the first row of its history commit together. The history needs the row id the insert reads
+        // back, so they are two saves, in the caller's transaction or one of the store's own.
+        var context = (DbContext)db;
+        using var transaction =
+            context.Database.IsRelational() && context.Database.CurrentTransaction is null
+                ? await db.BeginTransaction(cancellationToken)
+                : null;
         db.SnapshotDrafts.Add(record);
         // A new row starts at revision 1; its row id is the database's, read back by the insert.
-        return await Save(record, cancellationToken) ? Written(record) : null;
+        if (!await Save(record, cancellationToken))
+            return null;
+        await Log(
+            History(
+                record.RowId,
+                record.Revision,
+                fromState: null,
+                record.State,
+                record.UpdatedAt,
+                note ?? TransitionNote.Start(owner),
+                invokeToken
+            ),
+            cancellationToken
+        );
+        if (transaction is not null)
+        {
+            await transaction.Commit();
+            Writes?.Written();
+        }
+        return Written(record);
     }
 
     private static WrittenRow Written(SnapshotDraft record) =>
@@ -426,7 +486,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         record.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    private async Task<bool> Save(SnapshotDraft record, CancellationToken cancellationToken)
+    private async Task<bool> Save(
+        SnapshotDraft record,
+        CancellationToken cancellationToken,
+        SnapshotTransition? transition = null
+    )
     {
         try
         {
@@ -452,8 +516,55 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             ((DbContext)db)
                 .Entry(record)
                 .State = EntityState.Detached;
+            if (transition is not null)
+                ((DbContext)db).Entry(transition).State = EntityState.Detached;
         }
     }
+
+    // One row of an instance's history, for the write that gave row rowId revision revision.
+    private static SnapshotTransition History(
+        long rowId,
+        long revision,
+        string? fromState,
+        string toState,
+        DateTimeOffset at,
+        TransitionNote note,
+        string? invokeToken
+    ) =>
+        new()
+        {
+            DraftRowId = rowId,
+            Revision = revision,
+            Kind = note.Kind,
+            Trigger = note.Trigger,
+            Actor = note.Actor,
+            FromState = fromState,
+            ToState = toState,
+            At = at,
+            InvokeToken = invokeToken,
+        };
+
+    // Saves one row of history on its own, in the transaction the snapshot's write is in. The row is not left tracked.
+    private async Task Log(SnapshotTransition transition, CancellationToken cancellationToken)
+    {
+        db.SnapshotTransitions.Add(transition);
+        try
+        {
+            await ((DbContext)db).SaveChangesAsync(cancellationToken);
+        }
+        finally
+        {
+            ((DbContext)db).Entry(transition).State = EntityState.Detached;
+        }
+    }
+
+    // The InMemory provider runs no trigger, so a row's history is removed with it by hand.
+    private async Task RemoveHistory(long rowId) =>
+        db.SnapshotTransitions.RemoveRange(
+            await db
+                .SnapshotTransitions.Where(t => t.DraftRowId == rowId)
+                .ToListAsync(CancellationToken.None)
+        );
 
     /// <summary>
     /// Conditional update that records <paramref name="requestId"/> alone and clears the stored trigger and
@@ -507,12 +618,23 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     ) =>
         Write(
             Updated(DraftOwner.User(userKey), id, snapshot, expectedToken),
-            UpdateWrite(snapshot, request, invokeToken: null) with
+            UpdateWrite(
+                snapshot,
+                request,
+                invokeToken: null,
+                NoteOf(DraftOwner.User(userKey), request)
+            ) with
             {
                 ForgetsUnstatedServerRecord = true,
             },
             cancellationToken
         );
+
+    // What a write that names no note records: a command when its request names one, else a save.
+    private static TransitionNote NoteOf(DraftOwner owner, AppliedRequest? request) =>
+        request?.Trigger is { } trigger
+            ? TransitionNote.Command(owner, trigger)
+            : TransitionNote.Save(owner);
 
     Task<bool> IMachineInstanceStore.Update(
         DraftOwner owner,
@@ -522,7 +644,42 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         AppliedRequest? request,
         InvokeTokenWrite? invokeToken,
         CancellationToken cancellationToken
-    ) => UpdateOwned(owner, id, snapshot, expectedToken, request, invokeToken, cancellationToken);
+    ) =>
+        UpdateOwned(
+            owner,
+            id,
+            snapshot,
+            expectedToken,
+            request,
+            invokeToken,
+            NoteOf(owner, request),
+            cancellationToken
+        );
+
+    /// <summary>
+    /// <see cref="IMachineInstanceStore.Update"/>, recording <paramref name="note"/> in the instance's history: the
+    /// write of a command, whose name the request does not always carry.
+    /// </summary>
+    internal Task<bool> Update(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        Guid expectedToken,
+        AppliedRequest? request,
+        InvokeTokenWrite? invokeToken,
+        TransitionNote note,
+        CancellationToken cancellationToken
+    ) =>
+        UpdateOwned(
+            owner,
+            id,
+            snapshot,
+            expectedToken,
+            request,
+            invokeToken,
+            note,
+            cancellationToken
+        );
 
     async Task<WrittenRow?> IRowReportingSnapshotStore.UpdateWithRequest(
         string userKey,
@@ -530,10 +687,20 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Snapshot snapshot,
         StoredSnapshot read,
         AppliedRequest? request,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        TransitionNote? note
     )
     {
-        var write = UpdateWrite(snapshot, request, invokeToken: null);
+        // The token guard pins the revision read, so the history is written from the row as read.
+        var write = UpdateWrite(
+            snapshot,
+            request,
+            invokeToken: null,
+            note ?? NoteOf(DraftOwner.User(userKey), request)
+        ) with
+        {
+            Known = KnownRow.Of(read, DraftOwner.User(userKey)),
+        };
         if (
             !await Write(
                 Updated(DraftOwner.User(userKey), id, snapshot, read.Token),
@@ -572,11 +739,12 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Guid expectedToken,
         AppliedRequest? request,
         InvokeTokenWrite? invokeToken,
+        TransitionNote note,
         CancellationToken cancellationToken
     ) =>
         Write(
             Updated(owner, id, snapshot, expectedToken),
-            UpdateWrite(snapshot, request, invokeToken),
+            UpdateWrite(snapshot, request, invokeToken, note),
             cancellationToken
         );
 
@@ -599,11 +767,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     private RowWrite UpdateWrite(
         Snapshot snapshot,
         AppliedRequest? request,
-        InvokeTokenWrite? invokeToken
+        InvokeTokenWrite? invokeToken,
+        TransitionNote note
     ) =>
         new RowWrite
         {
             Snapshot = snapshot,
+            Note = note,
             IrHash = IrHashOf(snapshot.Machine),
             Due = DueFor(snapshot),
             WritesRequest = true,
@@ -661,6 +831,27 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         string? nextInvokeToken,
         Guid? expectedToken,
         CancellationToken cancellationToken
+    ) =>
+        ApplyOutcome(
+            invokeToken,
+            snapshot,
+            nextInvokeToken,
+            expectedToken,
+            trigger: null,
+            cancellationToken
+        );
+
+    /// <summary>
+    /// <see cref="IMachineInstanceStore.ApplyByInvokeToken"/>, recording in the instance's history the outcome
+    /// <paramref name="trigger"/> applied (<c>State.done</c>, <c>State.failed</c> or <c>State.cancelled</c>).
+    /// </summary>
+    internal Task<bool> ApplyOutcome(
+        string invokeToken,
+        Snapshot snapshot,
+        string? nextInvokeToken,
+        Guid? expectedToken,
+        string? trigger,
+        CancellationToken cancellationToken
     )
     {
         var machineId = snapshot.Machine;
@@ -677,6 +868,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 Snapshot = snapshot,
                 IrHash = IrHashOf(snapshot.Machine),
                 Due = DueFor(snapshot),
+                Note = TransitionNote.Outcome(trigger),
                 InvokeToken = new InvokeTokenWrite(nextInvokeToken),
                 Stranded = StrandedWrite.Clear,
                 // An invoked train's outcome is the server's write.
@@ -705,6 +897,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                 Snapshot = snapshot,
                 IrHash = IrHashOf(snapshot.Machine),
                 Due = DueFor(snapshot),
+                // No outcome could be applied: the instance stays where it is, with no run.
+                Note = TransitionNote.Outcome(null),
                 InvokeToken = new InvokeTokenWrite(null),
                 Stranded = StrandedWrite.Mark,
             },
@@ -740,6 +934,13 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
 
         // The snapshot to write, or null to leave version, state, context and the IR hash alone.
         public Snapshot? Snapshot { get; init; }
+
+        // What the row of history a snapshot write adds records; null records a save by the row's owner.
+        public TransitionNote? Note { get; init; }
+
+        // The row as the caller read it, when the write's own guard already pins that revision (a concurrency token
+        // read with it): the history is written from it without reading the row again. Null reads it first.
+        public KnownRow? Known { get; init; }
 
         public string? IrHash { get; init; }
 
@@ -777,6 +978,15 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         // Whether a write that states no record clears the row's (host code writing through the store) rather than
         // leaving it (a timer, which carries the record over).
         public bool ForgetsUnstatedServerRecord { get; init; }
+    }
+
+    // A row's id, revision, state and owner as a caller read them.
+    private sealed record KnownRow(long RowId, long Revision, string? State, DraftOwner Owner)
+    {
+        public static KnownRow? Of(StoredSnapshot read, DraftOwner owner) =>
+            read.RowId is { } rowId && read.Revision is { } revision
+                ? new KnownRow(rowId, revision, StateOf(read.Json), owner)
+                : null;
     }
 
     // What one write does to the pending-effect columns: marks the row with a claimant, its event, its request and its
@@ -905,6 +1115,9 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         if (!((DbContext)db).Database.IsRelational())
             return await WriteTracked(target, write, cancellationToken);
 
+        if (write.Snapshot is not null)
+            return await WriteWithHistory(target, write, cancellationToken);
+
         try
         {
             var updated =
@@ -918,6 +1131,86 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         {
             return false;
         }
+    }
+
+    // A write of a snapshot and the row of history it adds, in one transaction: the caller's, or the store's own. The
+    // row is read first for the state it leaves and the revision it is at, unless the caller read it under the same
+    // guard (Known), and the update is guarded by that revision as well, so the history names exactly the write that landed. Every write that reaches here is guarded already
+    // (by a concurrency token, a revision or a pending effect's claimant), and each of those moves with the revision,
+    // so the extra guard loses no write the old one would have let through.
+    private async Task<bool> WriteWithHistory(
+        IQueryable<SnapshotDraft> target,
+        RowWrite write,
+        CancellationToken cancellationToken
+    )
+    {
+        var snapshot = write.Snapshot!;
+        var context = (DbContext)db;
+        using var transaction = context.Database.CurrentTransaction is null
+            ? await db.BeginTransaction(cancellationToken)
+            : null;
+
+        var row =
+            write.Known
+            ?? (
+                await target
+                    .AsNoTracking()
+                    .Select(x => new
+                    {
+                        x.RowId,
+                        x.Revision,
+                        x.State,
+                        x.OwnerKind,
+                        x.UserKey,
+                    })
+                    .Take(2)
+                    .ToListAsync(cancellationToken)
+            ) switch
+            {
+                [var only] => new KnownRow(
+                    only.RowId,
+                    only.Revision,
+                    only.State,
+                    new DraftOwner(only.OwnerKind, only.UserKey)
+                ),
+                _ => null,
+            };
+        if (row is null)
+            return false;
+
+        bool updated;
+        try
+        {
+            updated =
+                await target
+                    .Where(x => x.RowId == row.RowId && x.Revision == row.Revision)
+                    .ExecuteUpdateAsync(setters => Setters(setters, write), cancellationToken) == 1;
+        }
+        catch (Exception ex) when (IsUniqueViolation(ex))
+        {
+            return false;
+        }
+        if (!updated)
+            return false;
+
+        await Log(
+            History(
+                row.RowId,
+                row.Revision + 1,
+                row.State,
+                snapshot.State,
+                write.Now,
+                write.Note ?? TransitionNote.Save(row.Owner),
+                write.InvokeToken?.Value
+            ),
+            cancellationToken
+        );
+        if (transaction is not null)
+        {
+            await transaction.Commit();
+            Writes?.Written();
+        }
+        return true;
     }
 
     private static void Setters(UpdateSettersBuilder<SnapshotDraft> setters, RowWrite write)
@@ -1094,7 +1387,21 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             StrandedWrite.ClearUnlessSameState when before != record.State => null,
             _ => record.InvokeStrandedState,
         };
-        return await Save(record, cancellationToken);
+        SnapshotTransition? transition = null;
+        if (write.Snapshot is { } written)
+        {
+            transition = History(
+                record.RowId,
+                record.Revision,
+                before,
+                written.State,
+                write.Now,
+                write.Note ?? TransitionNote.Save(new DraftOwner(record.OwnerKind, record.UserKey)),
+                write.InvokeToken?.Value
+            );
+            db.SnapshotTransitions.Add(transition);
+        }
+        return await Save(record, cancellationToken, transition);
     }
 
     /// <summary>
@@ -1410,7 +1717,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         DueRow due,
         Snapshot next,
         InvokeTokenWrite? invokeToken,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? trigger = null
     ) =>
         Write(
             db.SnapshotDrafts.Where(x =>
@@ -1419,6 +1727,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             new RowWrite
             {
                 Snapshot = next,
+                Note = TransitionNote.Timer(trigger),
                 IrHash = IrHashOf(next.Machine),
                 Due = DueFor(next),
                 InvokeToken = invokeToken,
@@ -1561,8 +1870,16 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     )
     {
         var machineId = snapshot.Machine;
-        var write = UpdateWrite(snapshot, request, invokeToken: null) with
+        // The effect's event, which the row's mark recorded, moved it; its owner sent it.
+        var write = UpdateWrite(
+            snapshot,
+            request,
+            invokeToken: null,
+            TransitionNote.Command(owner, read.Effect?.Trigger ?? request?.Trigger)
+        ) with
         {
+            // Only the claimant writes a row its effect is pending on, so the row is still the one read under the mark.
+            Known = KnownRow.Of(read, owner),
             EffectOwner = token,
             Effect = EffectWrite.Cleared,
             ServerRecord = true,

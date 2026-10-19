@@ -146,6 +146,7 @@ export const NOT_RECORDED_YET = [
   "MetricSeries",
   "GroupGraphStatus",
   "Attention",
+  "MachineInstanceTransitions",
 ];
 
 /** The read each write not recorded yet is offered from: no read, no write. */

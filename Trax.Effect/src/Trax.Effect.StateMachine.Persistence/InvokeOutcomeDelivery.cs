@@ -578,7 +578,8 @@ internal sealed class InvokeOutcomeDelivery(
                     planned,
                     row.Snapshot.Token,
                     entering,
-                    cancellationToken
+                    cancellationToken,
+                    $"{current.State}.{OutcomeTriggers.Suffix(outcome.Kind)}"
                 );
                 switch (write)
                 {

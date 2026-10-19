@@ -56,6 +56,7 @@ public interface IOperationsService
     Task<OperationResult> UpdateManifestGroupAsync(long id, UpdateManifestGroupInput input, CancellationToken ct);
     Task<OperationResult> UpdateSchedulerConfigAsync(UpdateSchedulerConfigInput input, CancellationToken ct);
     Task<MachineInstanceRuns?> GetMachineInstanceRunsAsync(MachineInstanceKey key, CancellationToken ct);
+    Task<MachineInstanceTransitionPage?> GetMachineInstanceTransitionsAsync(MachineInstanceKey key, long? beforeRevision, int take, CancellationToken ct);
     Task<MachineInstanceCancelResult> CancelMachineInstanceAsync(MachineInstanceKey key, CancellationToken ct);
     IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstancesAsync(string? machine, CancellationToken ct);
     Task<IReadOnlyList<MachineDescription>> GetMachinesAsync(CancellationToken ct);
@@ -78,7 +79,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | [Batch actions](#batch-actions) | `CancelExecutionsAsync`, `CancelWorkQueueEntriesAsync`, `CancelWorkQueueEntryAsync`, `SetManifestsEnabledAsync`, `SetManifestsReplayDecisionsOnRetryAsync`, `SetManifestGroupsEnabledAsync`, `SetAllManifestGroupsEnabledAsync`, `CancelManifestGroupsAsync`, `TriggerManifestAsync`, `TriggerManifestsAsync`, `TriggerManifestGroupsAsync`, `UpdateManifestAsync` |
 | [Settings](#settings) | `UpdateManifestGroupAsync`, `GetSchedulerConfig`, `UpdateSchedulerConfigAsync` |
 | [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetUpcomingRunsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetMetricSeriesAsync`, `GetAttentionAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
-| [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `CancelMachineInstanceAsync` |
+| [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `GetMachineInstanceTransitionsAsync`, `CancelMachineInstanceAsync` |
 | [State-machine definitions](#state-machine-definitions) | `GetMachinesAsync` |
 
 ## Queueing and running
@@ -733,6 +734,25 @@ public record MachineInstanceCancelResult(
 ### GetMachineInstanceRunsAsync
 
 The runs the instance invoked, newest first, at most `OperationsService.MachineInstanceRunCap` (50), with the one its state waits on marked `IsLive`; `QueuedEntryId` is that run's work queue entry while it is still queued. `null` when no row matches. A system instance lists every run linked to it (read through `ix_metadata_invoking_instance`); a user's draft lists only the run its own invoke token names, because a run does not record which user's draft queued it. Never a run's input or output.
+
+### GetMachineInstanceTransitionsAsync
+
+One page of the instance's history, newest first: a `MachineInstanceTransitionRecord` for every snapshot write Trax
+recorded (`trax.snapshot_transition`), or `null` when no row matches. Each carries the `Revision`, the `Kind`
+(`SnapshotTransitionKind`: `Start`, `Command`, `Save`, `Timer`, `Outcome`), the `Trigger`, the `Actor`
+(`SnapshotTransitionActor`: `Owner`, `Host`, `Machine`, never which user), `FromState`, `ToState`, `At`,
+`PreviousAt` (the transition before it), and what it started: `StartedRun` (`MachineInstanceStartedRun`, with
+`ExecutionId`, `TrainState` and `WorkQueueEntryId`, never the token) or `StartedChild`
+(`MachineInstanceStartedChild`, with `Machine`, `OwnerKind`, `Id` and `RowId`). `take` is clamped to 1 through 500;
+pass the page's `NextCursor` as `beforeRevision` for older ones, null on the last page. The history is the row's, so a
+user's draft shows only its own. It is read by row id through `uq_snapshot_transition_draft_revision`, so a page costs
+its rows whatever the history's length. The API serves it as
+[`machineInstance { transitions }`](/docs/sdk-reference/graphql-api/queries/machine-instances#transitions).
+
+```csharp fragment
+public record MachineInstanceTransitionPage(
+    IReadOnlyList<MachineInstanceTransitionRecord> Items, int Take, long? NextCursor);
+```
 
 ### CancelMachineInstanceAsync
 

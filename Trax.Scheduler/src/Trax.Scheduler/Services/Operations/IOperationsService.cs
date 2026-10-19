@@ -671,6 +671,28 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(GetMachineInstanceRunsAsync));
 
     /// <summary>
+    /// One page of a state-machine instance's history, newest first: one transition for every snapshot write
+    /// Trax recorded (its creation, each command, save, timer and run outcome), with who made it, the states it moved
+    /// between, when, and the run or child machine it started; or <c>null</c> when no row matches
+    /// <paramref name="key"/>. Never the instance's context or its owner's key. The history is the row's
+    /// (<see cref="MachineInstanceKey.RowId"/>), so a user's draft shows only its own. The dashboard's instance page
+    /// and the API's <c>machineInstance { transitions }</c> both read it here.
+    /// </summary>
+    /// <param name="key">The instance, named as for <see cref="GetMachineInstanceAsync"/>.</param>
+    /// <param name="beforeRevision">Only transitions older than this revision (a page's <c>NextCursor</c>); null starts at the newest.</param>
+    /// <param name="take">The page size, clamped to 1 through <c>OperationsService.MaxPageSize</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="key"/> names a user's draft without a row id, or names no machine.
+    /// </exception>
+    Task<MachineInstanceTransitionPage?> GetMachineInstanceTransitionsAsync(
+        MachineInstanceKey key,
+        long? beforeRevision,
+        int take,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstanceTransitionsAsync));
+
+    /// <summary>
     /// The live feed of state-machine instances as an operator reads them: each instance once
     /// whenever it is written, by any path on any host, with its state, revision and whether it
     /// waits on a run it invoked, and once more with <see cref="MachineInstanceRecord.Deleted"/>

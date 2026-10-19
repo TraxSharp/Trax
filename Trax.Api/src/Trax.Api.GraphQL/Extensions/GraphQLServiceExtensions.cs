@@ -368,6 +368,8 @@ public static class GraphQLServiceExtensions
             graphqlBuilder.AddTypeExtension(ManifestScheduleFields.Detail());
             // The operator's live feed of state-machine instances, behind the operations gate.
             graphqlBuilder.AddTypeExtension(MachineInstanceFeed.Extension());
+            // An instance's history, a field of the instance its lookup returns.
+            graphqlBuilder.AddTypeExtension(MachineInstanceTransitionsField.Extension());
             graphqlBuilder.AddTypeExtension(
                 new ObjectTypeExtension(d =>
                 {
