@@ -362,6 +362,10 @@ public static class GraphQLServiceExtensions
             graphqlBuilder.AddType(new ObjectType<ConfigQueries>());
             graphqlBuilder.AddType<RunGraphType>();
             graphqlBuilder.AddType<TrainInfoType>();
+            // When each manifest runs next, batched per request.
+            services.AddDataLoader<ManifestUpcomingRunsLoader>();
+            graphqlBuilder.AddTypeExtension(ManifestScheduleFields.Summary());
+            graphqlBuilder.AddTypeExtension(ManifestScheduleFields.Detail());
             // The operator's live feed of state-machine instances, behind the operations gate.
             graphqlBuilder.AddTypeExtension(MachineInstanceFeed.Extension());
             graphqlBuilder.AddTypeExtension(

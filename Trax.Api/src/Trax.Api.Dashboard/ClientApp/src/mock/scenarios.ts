@@ -135,6 +135,31 @@ const ADMIN_MANIFEST_ROW = { id: 805, externalId: "man-805", name: "Trax.Schedul
 // group id at or above DELETED_ID_FLOOR (overlays.ts) as gone, so it is skipped with a note.
 export const RETIRED_MANIFEST_ROW = { id: 1_000_001, externalId: "man-retired", name: "Trax.Demo.Manifests.RetiredManifest", isEnabled: false, scheduleType: "NONE", cronExpression: null, intervalSeconds: null, maxRetries: 1, timeoutSeconds: null, lastSuccessfulRun: null, manifestGroupId: 2, dependsOnManifestId: null, priority: 0, replayDecisionsOnRetry: true };
 
+// scheduleText and nextRuns(count:) for a manifest row, as the API reads them: the schedule in
+// words, and the next times it runs (none for a disabled manifest or one with no time).
+const MANIFEST_SCHEDULE_TEXT: Record<number, string> = {
+  801: "Every 5 minutes",
+  802: "Every minute",
+  803: "Only when triggered",
+  804: "Every hour at :00",
+  805: "Every 5 seconds",
+};
+
+const MANIFEST_RUN_STEP_SECONDS: Record<number, number> = { 801: 300, 802: 60, 804: 3600, 805: 5 };
+
+type ScheduledRow = { id: number; isEnabled: boolean };
+
+export const manifestScheduleResolvers = {
+  scheduleText: (row: ScheduledRow) => MANIFEST_SCHEDULE_TEXT[row.id] ?? "Only when triggered",
+  nextRuns: (row: ScheduledRow, args: Args) => {
+    const step = MANIFEST_RUN_STEP_SECONDS[row.id];
+    if (!row.isEnabled || step == null) return [];
+    const count = Math.min(Math.max((args.count as number | undefined) ?? 5, 0), 10);
+    const first = Date.parse("2026-07-07T12:05:00.000Z");
+    return Array.from({ length: count }, (_, i) => new Date(first + i * step * 1000).toISOString());
+  },
+};
+
 function manifestsResolver(extra: Record<string, unknown>[] = []) {
   return (_root: unknown, args: Args) => {
     let rows = [...MANIFEST_ROWS, ...extra] as (typeof MANIFEST_ROWS)[number][];
@@ -149,6 +174,8 @@ function manifestsResolver(extra: Record<string, unknown>[] = []) {
 
 export const manifestScenario: MockSchemaOverrides = {
   resolvers: () => ({
+    ManifestSummary: manifestScheduleResolvers,
+    ManifestDetail: manifestScheduleResolvers,
     OperationsQueries: {
       manifests: manifestsResolver(),
       // The detail query ManifestDetailPage reads, keyed by id.
@@ -167,6 +194,7 @@ export const manifestScenarioWithRetired: MockSchemaOverrides = {
 // Manifest detail page: the manifest plus its stat cards, exclusion windows, and recent runs.
 export const manifestDetailScenario: MockSchemaOverrides = {
   resolvers: () => ({
+    ManifestDetail: manifestScheduleResolvers,
     OperationsQueries: {
       manifestDetail: (_root: unknown, args: Args) => manifestDetail(args.id as number) ?? manifestDetail(801),
       manifestStats: (_root: unknown, args: Args) => ({

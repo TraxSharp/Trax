@@ -41,6 +41,7 @@ public interface IOperationsService
     Task<OperationResult> CancelManifestGroupsAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct);
     Task<ManifestExecutionStats> GetManifestExecutionStatsAsync(long manifestId, CancellationToken ct);
     Task<IReadOnlyList<ManifestGroupExecutionStats>> GetManifestGroupExecutionStatsAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct);
+    Task<IReadOnlyList<ManifestUpcomingRuns>> GetUpcomingRunsAsync(IReadOnlyCollection<long> manifestIds, int count, CancellationToken ct);
     Task<LogPage> GetLogsAsync(LogQuery query, CancellationToken ct);
     Task<int> CountLogsAsync(LogQuery query, CancellationToken ct);
     Task<LogCount> CountLogsCappedAsync(LogQuery query, CancellationToken ct);
@@ -74,7 +75,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | [Queueing and running](#queueing-and-running) | `QueueTrainAsync`, `RunTrainAsync`, `RequeueExecutionAsync`, `ResumeExecutionAsync` |
 | [Batch actions](#batch-actions) | `CancelExecutionsAsync`, `CancelWorkQueueEntriesAsync`, `CancelWorkQueueEntryAsync`, `SetManifestsEnabledAsync`, `SetManifestsReplayDecisionsOnRetryAsync`, `SetManifestGroupsEnabledAsync`, `SetAllManifestGroupsEnabledAsync`, `CancelManifestGroupsAsync`, `TriggerManifestAsync`, `TriggerManifestsAsync`, `TriggerManifestGroupsAsync`, `UpdateManifestAsync` |
 | [Settings](#settings) | `UpdateManifestGroupAsync`, `GetSchedulerConfig`, `UpdateSchedulerConfigAsync` |
-| [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
+| [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetUpcomingRunsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
 | [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `CancelMachineInstanceAsync` |
 | [State-machine definitions](#state-machine-definitions) | `GetMachinesAsync` |
 
@@ -409,6 +410,7 @@ run's recorded decisions, a work queue entry's page and the State Machines pages
 |--------|---------|
 | [`GetManifestExecutionStatsAsync(manifestId, ct)`](#getmanifestexecutionstatsasync) | `ManifestExecutionStats` |
 | [`GetManifestGroupExecutionStatsAsync(groupIds, ct)`](#getmanifestgroupexecutionstatsasync) | `IReadOnlyList<ManifestGroupExecutionStats>` |
+| [`GetUpcomingRunsAsync(manifestIds, count, ct)`](#getupcomingrunsasync) | `IReadOnlyList<ManifestUpcomingRuns>` |
 | [`GetLogsAsync(LogQuery, ct)`](#getlogsasync) | `LogPage` |
 | [`CountLogsAsync(LogQuery, ct)`](#countlogsasync) | `int` |
 | [`CountLogsCappedAsync(LogQuery, ct)`](#countlogscappedasync) | `LogCount` |
@@ -425,6 +427,19 @@ run's recorded decisions, a work queue entry's page and the State Machines pages
 ### GetManifestGroupExecutionStatsAsync
 
 One `ManifestGroupExecutionStats` per distinct id, in the order given: manifest count, run counts and the latest run. Zeros for a group with no manifests or runs; an empty list for no ids; more than 1000 ids throws `ArgumentOutOfRangeException`.
+
+### GetUpcomingRunsAsync
+
+When each manifest runs next, one `ManifestUpcomingRuns` per distinct id that names a manifest, in the order given:
+
+| Field | Meaning |
+|-------|---------|
+| `ManifestId` | The manifest. |
+| `ScheduleText` | The schedule in plain words: `Daily at 02:00 UTC`, `Every 5 minutes`, `Weekdays at 09:00 UTC`, `After nightly-import succeeds`, `On demand`. A cron with no plain reading reads `Cron 0 9-17 * * 1-5 (UTC)`. A variance adds `, up to 2 minutes late`. |
+| `NextRuns` | The next `count` times the manifest manager will find the manifest due, earliest first, in UTC. The first is now when it is due already. |
+| `RunsAfterManifestId`, `RunsAfterManifestExternalId` | For a dependent that can run, the manifest whose success starts it; null otherwise. |
+
+The times come from the manager's own due-ness check, so the two cannot disagree: exclusion windows are skipped the way the manager skips them, which under the default `FireOnceNow` misfire policy means one catch-up run as the window ends (see [Exclusion Windows](/docs/scheduler/exclusions#interaction-with-misfire-policies)). Each run is assumed to succeed when it is due; a retry's backoff, the jitter a variance adds after the next run, and the manager's polling interval are not shown. `NextRuns` is empty for a manual, on-demand, dependent or dormant dependent manifest, and for one that is disabled, sits in a disabled group, or has a dead letter awaiting intervention. `count` is clamped to 0 through `OperationsService.MaxUpcomingRuns` (10). An empty list for no ids; more than 1000 ids throws `ArgumentOutOfRangeException`.
 
 ### GetLogsAsync
 

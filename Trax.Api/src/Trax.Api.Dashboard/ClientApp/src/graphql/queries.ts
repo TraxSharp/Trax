@@ -430,6 +430,37 @@ export const MANIFEST_DETAIL = gql`
   }
 `;
 
+// When each manifest of a page runs next, read from the manifest manager's own due-ness check,
+// and its schedule in plain words ("Daily at 02:00 UTC"). nextRuns is empty for a manifest that
+// has no time (scheduleText says what starts it) or will not run; count is at most 10.
+export const MANIFEST_SCHEDULES = gql`
+  query ManifestSchedules($take: Int!, $afterId: Long, $manifestGroupId: Long, $count: Int! = 5) {
+    operations {
+      manifests(take: $take, afterId: $afterId, manifestGroupId: $manifestGroupId) {
+        items {
+          id
+          scheduleText
+          nextRuns(count: $count)
+        }
+        nextCursor
+      }
+    }
+  }
+`;
+
+// One manifest's upcoming runs and its schedule in words, for its detail page.
+export const MANIFEST_SCHEDULE = gql`
+  query ManifestSchedule($id: Long!, $count: Int! = 5) {
+    operations {
+      manifestDetail(id: $id) {
+        id
+        scheduleText
+        nextRuns(count: $count)
+      }
+    }
+  }
+`;
+
 // Manifest groups, newest first.
 export const MANIFEST_GROUPS = gql`
   query ManifestGroups($take: Int!, $afterId: Long, $nameContains: String) {

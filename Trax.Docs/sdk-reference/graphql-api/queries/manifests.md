@@ -82,6 +82,23 @@ query {
 | `manifestGroupName` | `String` | Name of the parent group |
 | `replayDecisionsOnRetry` | `Boolean!` | Whether a retry of the manifest's failed run, automatic or a requeue of its dead letter, replays the decisions that run recorded. Set with [`ScheduleOptions.ReplayDecisionsOnRetry`](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions); see [Retries replay decisions](/docs/scheduler/how-retries-work#retries-replay-decisions) |
 
+| `scheduleText` | `String!` | The schedule in plain words: `Daily at 02:00 UTC`, `Every 5 minutes`, `After nightly-import succeeds`, `On demand`. A cron with no plain reading is shown as itself, in UTC |
+| `nextRuns(count: Int! = 5)` | `[DateTime!]!` | The next times the scheduler will run the manifest, earliest first, in UTC; `count` is clamped to 0 through 10. See [When a manifest runs next](#when-a-manifest-runs-next) |
+
+### When a manifest runs next
+
+`nextRuns` and `scheduleText` read [`IOperationsService.GetUpcomingRunsAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#getupcomingrunsasync), which asks the manifest manager's own due-ness check, so the times are the ones the manager will act on: exclusion windows are skipped as the manager skips them (under the default `FIRE_ONCE_NOW` misfire policy, one catch-up run as the window ends), and each run is assumed to succeed when it is due. The first time is now when the manifest is due already. The list is empty for a manual, on-demand, dependent or dormant dependent manifest, where `scheduleText` says what starts it, and for a manifest that is disabled, in a disabled group, or has a dead letter awaiting intervention. Every manifest a request shows is read in one batch, so a full page costs one query.
+
+```graphql
+query {
+  operations {
+    manifests(take: 25) {
+      items { id scheduleText nextRuns(count: 3) }
+    }
+  }
+}
+```
+
 A manifest's `properties` (the train input it runs with) are not on this type. Read them from
 [`manifestDetail`](#manifestdetail), one manifest at a time.
 

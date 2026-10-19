@@ -146,6 +146,31 @@ public class ReadFieldStressTests : StressTestSetup
     }
 
     [Test]
+    public async Task ManifestNextRuns_FullPage_WithinBudget()
+    {
+        // A full manifests page asks for every row's upcoming runs in one batch: each manifest's
+        // latest cancelled run (ix_metadata_manifest_state) and dead letters, then the times in
+        // memory.
+        var ids = Enumerable
+            .Range(1, (int)Math.Min(Profile.Manifests, OperationsQueriesPageSize))
+            .Select(i => (long)i)
+            .ToList();
+        await MeasureAsync(
+            "operations.manifests { nextRuns scheduleText } (500 manifests)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var upcoming = await Operations(sp)
+                    .GetUpcomingRunsAsync(ids, OperationsService.MaxUpcomingRuns, ct);
+                upcoming.Should().HaveCount(ids.Count);
+                upcoming.Should().OnlyContain(u => u.ScheduleText.Length > 0);
+            }
+        );
+    }
+
+    private const int OperationsQueriesPageSize = 500;
+
+    [Test]
     public async Task ManifestDetail_WithinBudget()
     {
         await MeasureAsync(

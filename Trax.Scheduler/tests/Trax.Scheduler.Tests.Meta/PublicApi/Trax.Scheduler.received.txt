@@ -598,6 +598,7 @@ namespace Trax.Scheduler.Services.Operations
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.RecordedDecisionPage> GetRecordedDecisionsAsync(long metadataId, long? afterId, int take, System.Threading.CancellationToken ct);
         Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig();
         Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
+        System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ManifestUpcomingRuns>> GetUpcomingRunsAsync(System.Collections.Generic.IReadOnlyCollection<long> manifestIds, int count, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.LookupMatch>> LookupAsync(string text, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct);
@@ -868,6 +869,15 @@ namespace Trax.Scheduler.Services.Operations
         public long ManifestCount { get; init; }
         public long TotalExecutions { get; init; }
     }
+    public sealed class ManifestUpcomingRuns : System.IEquatable<Trax.Scheduler.Services.Operations.ManifestUpcomingRuns>
+    {
+        public ManifestUpcomingRuns(long ManifestId, string ScheduleText, System.Collections.Generic.IReadOnlyList<System.DateTime> NextRuns, long? RunsAfterManifestId, string? RunsAfterManifestExternalId) { }
+        public long ManifestId { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.DateTime> NextRuns { get; init; }
+        public string? RunsAfterManifestExternalId { get; init; }
+        public long? RunsAfterManifestId { get; init; }
+        public string ScheduleText { get; init; }
+    }
     public class ManifestUpdate : System.IEquatable<Trax.Scheduler.Services.Operations.ManifestUpdate>
     {
         public ManifestUpdate(bool? IsEnabled = default, int? MaxRetries = default, int? Priority = default, int? TimeoutSeconds = default, bool ClearTimeout = false, Trax.Effect.Enums.ScheduleType? ScheduleType = default, string? CronExpression = null, int? IntervalSeconds = default) { }
@@ -902,6 +912,7 @@ namespace Trax.Scheduler.Services.Operations
         public const int MachineInstanceRunCap = 50;
         public const int MaxBatchSize = 1000;
         public const int MaxPageSize = 500;
+        public const int MaxUpcomingRuns = 10;
         public const string NoDispatcherMessage = @"Nothing on this host can dispatch a queued run: it has no database provider, so its store is in this process's memory and no job dispatcher runs. Nothing was queued. Run the train now instead (runTrain), or configure a database provider such as UsePostgres() so the scheduler dispatches the work queue.";
         public const string UserOwnedCancelRefusal = "Operators can cancel only a system-owned instance. A user-owned instance is read-" +
             "only to operators: its run is cancelled when its user leaves the state through o" +
@@ -935,6 +946,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.RecordedDecisionPage> GetRecordedDecisionsAsync(long metadataId, long? afterId, int take, System.Threading.CancellationToken ct) { }
         public Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig() { }
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.ManifestUpcomingRuns>> GetUpcomingRunsAsync(System.Collections.Generic.IReadOnlyCollection<long> manifestIds, int count, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.LookupMatch>> LookupAsync(string text, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct) { }

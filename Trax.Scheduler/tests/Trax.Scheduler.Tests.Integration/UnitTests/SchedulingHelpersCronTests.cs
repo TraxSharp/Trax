@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;
@@ -192,6 +193,47 @@ public class SchedulingHelpersCronTests
         var now = new DateTime(2026, 3, 2, 10, 0, 0, DateTimeKind.Utc);
 
         SchedulingHelpers.ShouldRunNow(manifest, now, _config, _logger).Should().BeFalse();
+    }
+
+    // ── Upcoming runs over an exclusion window ───────────────────────
+
+    [Test]
+    public void UpcomingRuns_ADailyCronExcludedTomorrow_SkipsTomorrowAndSaysDailyAt0200()
+    {
+        // Ran today at 02:00; tomorrow (3 March) is excluded. The default misfire policy fires
+        // once as the excluded day ends, as the manager does, then runs at 02:00 again.
+        var manifest = CreateCronManifest("0 2 * * *");
+        manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 2, 0, 0, DateTimeKind.Utc);
+        manifest.SetExclusions([Exclude.Dates(new DateOnly(2026, 3, 3))]);
+        var now = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
+
+        var runs = SchedulingHelpers.UpcomingRuns(manifest, 2, now, _config);
+
+        runs.Should()
+            .Equal(
+                new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 4, 2, 0, 0, DateTimeKind.Utc)
+            );
+        runs.Should().NotContain(r => r.Date == new DateTime(2026, 3, 3));
+        ScheduleText.Describe(manifest).Should().Be("Daily at 02:00 UTC");
+    }
+
+    [Test]
+    public void UpcomingRuns_ADailyCronExcludedTomorrowThatDoesNotCatchUp_RunsAtTheNextTwo0200s()
+    {
+        var manifest = CreateCronManifest("0 2 * * *");
+        manifest.MisfirePolicy = MisfirePolicy.DoNothing;
+        manifest.LastSuccessfulRun = new DateTime(2026, 3, 2, 2, 0, 0, DateTimeKind.Utc);
+        manifest.SetExclusions([Exclude.Dates(new DateOnly(2026, 3, 3))]);
+        var now = new DateTime(2026, 3, 2, 12, 0, 0, DateTimeKind.Utc);
+
+        SchedulingHelpers
+            .UpcomingRuns(manifest, 2, now, _config)
+            .Should()
+            .Equal(
+                new DateTime(2026, 3, 4, 2, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 5, 2, 0, 0, DateTimeKind.Utc)
+            );
     }
 
     // ── Helpers ─────────────────────────────────────────────────────

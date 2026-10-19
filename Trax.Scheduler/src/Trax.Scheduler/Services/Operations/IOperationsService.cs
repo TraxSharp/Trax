@@ -496,6 +496,29 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(GetManifestGroupExecutionStatsAsync));
 
     /// <summary>
+    /// When each of the given manifests runs next, and its schedule in plain words, one row per
+    /// distinct id that names a manifest, in the order given. The times come from the manifest
+    /// manager's own due-ness check, exclusion windows and misfire policy included, so they are
+    /// the times the manager will find each manifest due, assuming each run succeeds when it is
+    /// due (a retry's backoff and a variance's jitter after the next run are not shown). Batched
+    /// so a list page reads its visible manifests in one call.
+    /// </summary>
+    /// <param name="manifestIds">The manifests, at most <c>OperationsService.MaxBatchSize</c>.</param>
+    /// <param name="count">
+    /// How many times to list per manifest, clamped to 0 through
+    /// <c>OperationsService.MaxUpcomingRuns</c>.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// More than <c>OperationsService.MaxBatchSize</c> distinct ids.
+    /// </exception>
+    Task<IReadOnlyList<ManifestUpcomingRuns>> GetUpcomingRunsAsync(
+        IReadOnlyCollection<long> manifestIds,
+        int count,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetUpcomingRunsAsync));
+
+    /// <summary>
     /// A page of log entries, filtered by run, minimum level, exact category, and text the message
     /// or the category contains, newest first unless <see cref="LogQuery.Order"/> says oldest
     /// first. Pages by keyset when <see cref="LogQuery.AfterId"/> is set, in the chosen order,

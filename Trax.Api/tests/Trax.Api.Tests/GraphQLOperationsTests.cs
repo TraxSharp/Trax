@@ -155,6 +155,92 @@ public class GraphQLOperationsTests
         operationResult!.Errors.Should().BeNullOrEmpty();
     }
 
+    [Test]
+    public async Task ManifestNextRunsAndScheduleText_ReadEveryManifestOfTheRequestInOneCall()
+    {
+        var executor = await BuildExecutor();
+        var factory =
+            _serviceProvider.GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>();
+        long groupId;
+        long manifestId;
+        await using (var db = await factory.CreateDbContextAsync(default))
+        {
+            var group = new Trax.Effect.Models.ManifestGroup.ManifestGroup { Name = "nightly" };
+            await db.Track(group);
+            await db.SaveChanges(default);
+            var manifest = Trax.Effect.Models.Manifest.Manifest.Create(
+                new Trax.Effect.Models.Manifest.DTOs.CreateManifest { Name = typeof(object) }
+            );
+            manifest.ExternalId = "nightly-report";
+            manifest.ManifestGroupId = group.Id;
+            await db.Track(manifest);
+            await db.SaveChanges(default);
+            groupId = group.Id;
+            manifestId = manifest.Id;
+        }
+
+        var t0 = new DateTime(2026, 10, 19, 2, 0, 0, DateTimeKind.Utc);
+        var times = Enumerable.Range(0, 10).Select(d => t0.AddDays(d)).ToList();
+        _operations
+            .GetUpcomingRunsAsync(
+                Arg.Any<IReadOnlyCollection<long>>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(ci =>
+                ci.Arg<IReadOnlyCollection<long>>()
+                    .Select(id => new Trax.Scheduler.Services.Operations.ManifestUpcomingRuns(
+                        id,
+                        "Daily at 02:00 UTC",
+                        times,
+                        null,
+                        null
+                    ))
+                    .ToList()
+            );
+
+        var result = await executor.ExecuteAsync(
+            $$"""
+            {
+                operations {
+                    manifests(manifestGroupId: {{groupId}}) {
+                        items { id scheduleText nextRuns(count: 2) many: nextRuns(count: 500) }
+                    }
+                    manifestDetail(id: {{manifestId}}) { scheduleText nextRuns }
+                }
+            }
+            """
+        );
+
+        var operationResult = (OperationResult)result;
+        operationResult.Errors.Should().BeNullOrEmpty();
+        var data = System.Text.Json.JsonDocument.Parse(operationResult.ToJson()).RootElement;
+        var row = data.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("manifests")
+            .GetProperty("items")[0];
+        row.GetProperty("scheduleText").GetString().Should().Be("Daily at 02:00 UTC");
+        row.GetProperty("nextRuns").GetArrayLength().Should().Be(2);
+        row.GetProperty("nextRuns")[0].GetDateTime().ToUniversalTime().Should().Be(t0);
+        row.GetProperty("many")
+            .GetArrayLength()
+            .Should()
+            .Be(Trax.Scheduler.Services.Operations.OperationsService.MaxUpcomingRuns);
+        var detail = data.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("manifestDetail");
+        detail.GetProperty("nextRuns").GetArrayLength().Should().Be(5);
+
+        // Four fields over one manifest, one batch, at the most times any field can ask for.
+        await _operations
+            .Received(1)
+            .GetUpcomingRunsAsync(
+                Arg.Is<IReadOnlyCollection<long>>(ids => ids.SequenceEqual(new[] { manifestId })),
+                Trax.Scheduler.Services.Operations.OperationsService.MaxUpcomingRuns,
+                Arg.Any<CancellationToken>()
+            );
+    }
+
     #endregion
 
     #region Mutation Tests

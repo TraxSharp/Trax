@@ -51,6 +51,183 @@ internal static class SchedulingHelpers
         };
     }
 
+    /// <summary>The most upcoming runs one call lists.</summary>
+    internal const int MaxUpcomingRuns = 10;
+
+    /// <summary>
+    /// How many instants <see cref="UpcomingRuns"/> evaluates before it gives up, so a schedule
+    /// that every exclusion covers ends the search instead of walking midnights for ever.
+    /// </summary>
+    private const int MaxUpcomingCandidates = 20_000;
+
+    /// <summary>
+    /// When a time-scheduled manifest runs next, the next <paramref name="count"/> times, read
+    /// from <see cref="ShouldRunNow"/> itself: each is the first instant at or after the one
+    /// before (or <paramref name="after"/>) at which the manager would find the manifest due, so
+    /// this list and the manager cannot disagree. An occurrence inside an exclusion window is
+    /// skipped the way the manager skips it, which under <see cref="MisfirePolicy.FireOnceNow"/>
+    /// means a catch-up run as the window ends.
+    /// </summary>
+    /// <remarks>
+    /// Each run is assumed to succeed at the moment it is due, so the next is counted from it.
+    /// A retry's backoff, a variance's jitter after the first run, a run still in progress and
+    /// the manager's polling interval are not modelled. Cron, Interval and Once manifests have
+    /// times; every other schedule type, and a disabled manifest, has none (a dependent runs
+    /// after its parent, which is not a time). The first time can be <paramref name="after"/>
+    /// itself when the manifest is already due.
+    /// </remarks>
+    /// <param name="manifest">The manifest. It is not changed.</param>
+    /// <param name="count">How many times to list, at most <see cref="MaxUpcomingRuns"/>.</param>
+    /// <param name="after">The instant to look from, in UTC.</param>
+    /// <param name="config">The scheduler's configuration, for the default misfire threshold.</param>
+    /// <param name="lastCancelledRun">As for <see cref="ShouldRunNow"/>.</param>
+    internal static IReadOnlyList<DateTime> UpcomingRuns(
+        Manifest manifest,
+        int count,
+        DateTime after,
+        SchedulerConfiguration config,
+        DateTime? lastCancelledRun = null
+    )
+    {
+        count = Math.Min(count, MaxUpcomingRuns);
+        if (
+            count <= 0
+            || !manifest.IsEnabled
+            || manifest.ScheduleType
+                is not (ScheduleType.Cron or ScheduleType.Interval or ScheduleType.Once)
+        )
+            return [];
+
+        after = DateTime.SpecifyKind(after, DateTimeKind.Utc);
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+        var parsedCron =
+            manifest.ScheduleType == ScheduleType.Cron
+            && !string.IsNullOrEmpty(manifest.CronExpression)
+                ? CronParser.TryParse(manifest.CronExpression)
+                : null;
+
+        // A copy holding only what due-ness reads, advanced as each listed run "succeeds".
+        var state = new Manifest
+        {
+            ScheduleType = manifest.ScheduleType,
+            CronExpression = manifest.CronExpression,
+            IntervalSeconds = manifest.IntervalSeconds,
+            MisfirePolicy = manifest.MisfirePolicy,
+            MisfireThresholdSeconds = manifest.MisfireThresholdSeconds,
+            ScheduledAt = AsUtc(manifest.ScheduledAt),
+            Exclusions = manifest.Exclusions,
+            LastSuccessfulRun = AsUtc(manifest.LastSuccessfulRun),
+            NextScheduledRun = AsUtc(manifest.NextScheduledRun),
+            IsEnabled = true,
+        };
+        var exclusions = manifest.GetExclusions();
+        var cancelled = AsUtc(lastCancelledRun);
+
+        var runs = new List<DateTime>(count);
+        var cursor = after;
+        for (
+            var evaluated = 0;
+            runs.Count < count && evaluated < MaxUpcomingCandidates;
+            evaluated++
+        )
+        {
+            if (ShouldRunNow(state, cursor, config, logger, cancelled))
+            {
+                runs.Add(cursor);
+                if (state.ScheduleType == ScheduleType.Once)
+                    break;
+                state.LastSuccessfulRun = cursor;
+                state.NextScheduledRun = null;
+                cancelled = null;
+                continue;
+            }
+
+            // Between two candidates nothing due-ness reads changes, so the first instant the
+            // manager would find the manifest due is the cursor or one of these. While excluded,
+            // only an exclusion boundary can change the answer.
+            var next = NextExclusionBoundary(exclusions, cursor);
+            if (!exclusions.Any(e => e.IsExcluded(cursor)))
+                next = Earliest(next, NextNaturalOccurrence(state, parsedCron, cancelled, cursor));
+
+            if (next is null)
+                break;
+            cursor = DateTime.SpecifyKind(next.Value, DateTimeKind.Utc);
+        }
+
+        return runs;
+    }
+
+    /// <summary>
+    /// The first instant after <paramref name="cursor"/> at which the schedule itself, leaving
+    /// exclusions aside, could next be due: its recorded next run, the next cron occurrence, the
+    /// next interval boundary, or a one-off's time.
+    /// </summary>
+    private static DateTime? NextNaturalOccurrence(
+        Manifest state,
+        Cronos.CronExpression? parsedCron,
+        DateTime? lastCancelledRun,
+        DateTime cursor
+    )
+    {
+        var anchor = ScheduleAnchor.For(state, lastCancelledRun);
+        DateTime? recorded = anchor.NextScheduledRun > cursor ? anchor.NextScheduledRun : null;
+
+        switch (state.ScheduleType)
+        {
+            case ScheduleType.Cron:
+                return Earliest(recorded, parsedCron?.GetNextOccurrence(cursor, TimeZoneInfo.Utc));
+
+            case ScheduleType.Interval
+                when state.IntervalSeconds is > 0 && anchor.LastRun is { } last:
+                var interval = (long)state.IntervalSeconds.Value * TimeSpan.TicksPerSecond;
+                var elapsed = Math.Max(0, cursor.Ticks - last.Ticks);
+                var boundary = last.AddTicks((elapsed / interval + 1) * interval);
+                return Earliest(recorded, boundary);
+
+            case ScheduleType.Once:
+                return state.ScheduledAt > cursor ? state.ScheduledAt : null;
+
+            default:
+                return recorded;
+        }
+    }
+
+    /// <summary>
+    /// The next instant after <paramref name="cursor"/> at which any exclusion could start or
+    /// stop matching: midnight for the day-based kinds, a time window's start and end.
+    /// </summary>
+    private static DateTime? NextExclusionBoundary(List<Exclusion> exclusions, DateTime cursor)
+    {
+        if (exclusions.Count == 0)
+            return null;
+
+        DateTime? next = cursor.Date.AddDays(1);
+        foreach (var exclusion in exclusions)
+        {
+            if (exclusion.Type != ExclusionType.TimeWindow)
+                continue;
+            foreach (var time in new[] { exclusion.StartTime, exclusion.EndTime })
+            {
+                if (time is not { } t)
+                    continue;
+                var today = cursor.Date + t.ToTimeSpan();
+                next = Earliest(next, today > cursor ? today : today.AddDays(1));
+            }
+        }
+
+        return next;
+    }
+
+    // A time read back from the database can come without a kind; Cronos takes only UTC.
+    private static DateTime? AsUtc(DateTime? value) =>
+        value is { } v ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : null;
+
+    private static DateTime? Earliest(DateTime? a, DateTime? b) =>
+        a is null ? b
+        : b is null ? a
+        : a < b ? a
+        : b;
+
     /// <summary>
     /// The run a schedule is evaluated from: the manifest's last successful run, or its last
     /// cancelled run when that is later. <see cref="NextScheduledRun"/> is the manifest's

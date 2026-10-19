@@ -154,6 +154,92 @@ public class OperationsServiceReadModelTests : TestSetup
 
     #endregion
 
+    #region Upcoming runs
+
+    [Test]
+    public async Task Upcoming_runs_are_listed_only_for_manifests_the_manager_would_run()
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
+        var paused = await CreateAndSaveManifestGroup(
+            DataContext,
+            $"paused-{Guid.NewGuid():N}",
+            isEnabled: false
+        );
+        var every = await SeedManifest(group);
+        var inPausedGroup = await SeedManifest(paused);
+        var deadLettered = await SeedManifest(group);
+        var dependent = await SeedManifest(
+            group,
+            m =>
+            {
+                m.ScheduleType = ScheduleType.Dependent;
+                m.IntervalSeconds = null;
+                m.DependsOnManifestId = every.Id;
+            }
+        );
+        await DataContext.Track(
+            Trax.Effect.Models.DeadLetter.DeadLetter.Create(
+                new Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter
+                {
+                    Manifest = deadLettered,
+                    Reason = "test",
+                    RetryCount = 1,
+                }
+            )
+        );
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var before = DateTime.UtcNow;
+        var upcoming = await _operations.GetUpcomingRunsAsync(
+            [dependent.Id, every.Id, inPausedGroup.Id, deadLettered.Id, every.Id, 424242],
+            3,
+            CancellationToken.None
+        );
+        var after = DateTime.UtcNow;
+
+        upcoming
+            .Select(u => u.ManifestId)
+            .Should()
+            .Equal(dependent.Id, every.Id, inPausedGroup.Id, deadLettered.Id);
+
+        var dependentRow = upcoming[0];
+        dependentRow.NextRuns.Should().BeEmpty();
+        dependentRow.RunsAfterManifestId.Should().Be(every.Id);
+        dependentRow.RunsAfterManifestExternalId.Should().Be(every.ExternalId);
+        dependentRow.ScheduleText.Should().Be($"After {every.ExternalId} succeeds");
+
+        // Never run, so due at once, then every 60 seconds.
+        var everyRow = upcoming[1];
+        everyRow.ScheduleText.Should().Be("Every minute");
+        everyRow.NextRuns.Should().HaveCount(3);
+        everyRow.NextRuns[0].Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+        everyRow.NextRuns[1].Should().Be(everyRow.NextRuns[0].AddSeconds(60));
+        everyRow.NextRuns[2].Should().Be(everyRow.NextRuns[0].AddSeconds(120));
+        everyRow.RunsAfterManifestId.Should().BeNull();
+
+        upcoming[2].NextRuns.Should().BeEmpty("its group is disabled");
+        upcoming[2].ScheduleText.Should().Be("Every minute");
+        upcoming[3].NextRuns.Should().BeEmpty("a dead letter awaits an operator");
+    }
+
+    [Test]
+    public async Task Upcoming_runs_count_is_clamped_and_no_ids_is_empty()
+    {
+        var group = await CreateAndSaveManifestGroup(DataContext, $"g-{Guid.NewGuid():N}");
+        var manifest = await SeedManifest(group);
+
+        (await _operations.GetUpcomingRunsAsync([], 3, CancellationToken.None)).Should().BeEmpty();
+        var upcoming = await _operations.GetUpcomingRunsAsync(
+            [manifest.Id],
+            1_000,
+            CancellationToken.None
+        );
+        upcoming.Single().NextRuns.Should().HaveCount(OperationsService.MaxUpcomingRuns);
+    }
+
+    #endregion
+
     #region Logs
 
     [Test]
@@ -458,7 +544,10 @@ public class OperationsServiceReadModelTests : TestSetup
 
     #region Helpers
 
-    private async Task<Manifest> SeedManifest(ManifestGroup group)
+    private async Task<Manifest> SeedManifest(
+        ManifestGroup group,
+        Action<Manifest>? configure = null
+    )
     {
         var manifest = Manifest.Create(
             new CreateManifest
@@ -471,6 +560,7 @@ public class OperationsServiceReadModelTests : TestSetup
             }
         );
         manifest.ManifestGroupId = group.Id;
+        configure?.Invoke(manifest);
         await DataContext.Track(manifest);
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();

@@ -1,6 +1,14 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import { operationFixtures } from "./fixtures";
-import { lookupMatches, machineQueryResolvers, runGraph, servedRunGraph, trainChainResolvers, type ServedRunGraph } from "./scenarios";
+import {
+  lookupMatches,
+  machineQueryResolvers,
+  manifestScheduleResolvers,
+  runGraph,
+  servedRunGraph,
+  trainChainResolvers,
+  type ServedRunGraph,
+} from "./scenarios";
 import { hashVariables } from "./variables-hash";
 import type { RunGraphNode } from "../types";
 
@@ -116,6 +124,8 @@ function devRunGraph(metadataId: number): ServedRunGraph {
 /** The `dev:mock` overrides for what the captured fixtures do not hold. */
 export const devMockSeed: MockSchemaOverrides = {
   resolvers: () => ({
+    ManifestSummary: manifestScheduleResolvers,
+    ManifestDetail: manifestScheduleResolvers,
     OperationsQueries: {
       ...machineQueryResolvers,
       runGraph: (_root: unknown, args: Record<string, unknown>) => devRunGraph(args.metadataId as number),
