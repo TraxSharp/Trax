@@ -124,6 +124,10 @@ Queue a run that resumes a failed or cancelled execution from a checkpoint. [ope
 
 Cancel a system-owned state machine instance's live run. [operations: machine instance mutations](/docs/sdk-reference/graphql-api/mutations/machine-instances#cancelmachineinstance)
 
+### startBulkOperation
+
+Cancel, requeue, acknowledge, trigger, enable or disable every row a list filter matches, in the background, tracked. [operations: bulk operations](/docs/sdk-reference/graphql-api/mutations/bulk-operations#startbulkoperation)
+
 ### setEffectEnabled
 
 Turn an effect on or off in the API process. [operations: effect mutations](/docs/sdk-reference/graphql-api/mutations/effects#seteffectenabled)

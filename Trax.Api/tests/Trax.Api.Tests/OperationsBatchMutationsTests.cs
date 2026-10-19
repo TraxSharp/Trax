@@ -1,8 +1,15 @@
+using System.Security.Claims;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using Trax.Api.Auth;
+using Trax.Api.DTOs;
+using Trax.Api.GraphQL.Audit;
+using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Mutations;
+using Trax.Api.Services.BulkOperations;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -26,9 +33,13 @@ namespace Trax.Api.Tests;
 /// skips and refuses exactly what the same batch from the dashboard would. Runs against
 /// Postgres, where the service writes each batch as one statement. A refused batch is a failed
 /// payload, per <c>docs/adr/0028-an-operations-mutation-returns-a-refusal-and-throws-a-failure.md</c>.
+/// A bulk operation over a filter runs its batches through the same methods, and refuses a
+/// snapshot that is not the count the operator confirmed, per
+/// <c>docs/adr/0045-a-bulk-operation-applies-to-a-confirmed-snapshot-of-a-filter.md</c>.
 /// </summary>
 [TestFixture]
 [Property("adr", "docs/adr/0028-an-operations-mutation-returns-a-refusal-and-throws-a-failure.md")]
+[Property("adr", "docs/adr/0045-a-bulk-operation-applies-to-a-confirmed-snapshot-of-a-filter.md")]
 public class OperationsBatchMutationsTests
 {
     private static readonly string ConnectionString =
@@ -482,6 +493,233 @@ public class OperationsBatchMutationsTests
 
         response.Success.Should().BeFalse();
         response.Count.Should().Be(0);
+    }
+
+    private const string BulkAdr =
+        "docs/adr/0045-a-bulk-operation-applies-to-a-confirmed-snapshot-of-a-filter.md";
+
+    private const string BulkTrain = "Trax.X.BulkTarget";
+
+    /// <summary>
+    /// A container holding what a bulk operation's batches resolve, with the API's audit
+    /// observer writing into <paramref name="channel"/>.
+    /// </summary>
+    private ServiceProvider BulkHost(out TraxAuditChannel channel)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(_factory);
+        services.AddScoped(_ => Operations);
+        services.AddSingleton(Options.Create(new TraxAuditOptions()));
+        services.AddSingleton<TraxAuditChannel>();
+        services.AddSingleton<IBulkOperationObserver, TraxBulkOperationAudit>();
+        services.AddSingleton<BulkOperationJobs>();
+        var provider = services.BuildServiceProvider();
+        channel = provider.GetRequiredService<TraxAuditChannel>();
+        return provider;
+    }
+
+    private async Task<long[]> SeedRuns(int count, TrainState state)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var runs = new List<Metadata>();
+        for (var i = 0; i < count; i++)
+        {
+            var meta = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = BulkTrain,
+                    ExternalId = Guid.NewGuid().ToString("N"),
+                    Input = null,
+                }
+            );
+            meta.TrainState = state;
+            await db.Track(meta);
+            runs.Add(meta);
+        }
+        await db.SaveChanges(default);
+        return runs.Select(r => r.Id).ToArray();
+    }
+
+    private static ClaimsPrincipal Operator() =>
+        new(
+            new ClaimsIdentity(
+                [
+                    new Claim(TraxAuthClaimTypes.PrincipalId, "apikey:ops-1"),
+                    new Claim(ClaimTypes.Name, "Ops One"),
+                ],
+                "ApiKey"
+            )
+        );
+
+    private static BulkOperationFilter BulkRuns() =>
+        new() { Executions = new BulkExecutionFilter { TrainName = BulkTrain } };
+
+    [Test]
+    public async Task StartBulkOperation_ACancelOver250Runs_ThreeOfWhichFinishFirst_FailsThoseThreeWithAReason()
+    {
+        var ids = await SeedRuns(250, TrainState.InProgress);
+        var finishedFirst = ids.Take(3).ToArray();
+        await using var host = BulkHost(out var channel);
+        var jobs = host.GetRequiredService<BulkOperationJobs>();
+        // The three end between the snapshot and their batch, as a run finishing on its own does.
+        jobs.BeforeFirstBatch = async ct =>
+        {
+            await using var db = await _factory.CreateDbContextAsync(ct);
+            await ((DbContext)db)
+                .Set<Metadata>()
+                .Where(m => finishedFirst.Contains(m.Id))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(m => m.TrainState, TrainState.Completed),
+                    ct
+                );
+        };
+
+        var started = await new OperationsMutations().StartBulkOperation(
+            BulkOperationKind.Cancel,
+            BulkRuns(),
+            expectedCount: 250,
+            new TraxApplicationServices(host),
+            Operator(),
+            default
+        );
+        started.Success.Should().BeTrue(started.Message);
+        started.Operation!.Status.Should().Be(BulkOperationStatus.Running);
+        await jobs.Current;
+
+        var operation = jobs.Get(started.Operation.Id)!;
+        operation.Status.Should().Be(BulkOperationStatus.Finished, operation.Message);
+        operation.Total.Should().Be(250);
+        operation.Done.Should().Be(247);
+        operation.Failed.Should().Be(3);
+        operation.Actor.Should().Be("apikey:ops-1", $"the caller is recorded ({BulkAdr})");
+        operation
+            .GetFailures()
+            .Should()
+            .BeEquivalentTo(
+                finishedFirst.Select(id => new BulkOperationFailure(
+                    id,
+                    "It had already ended (completed)."
+                ))
+            );
+        operation
+            .FailureReasons.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new BulkOperationFailureReason("It had already ended (completed).", 3));
+
+        await using (var db = await _factory.CreateDbContextAsync(default))
+            (await db.Metadatas.CountAsync(m => m.CancellationRequested)).Should().Be(247);
+
+        channel
+            .Reader.TryRead(out var entry)
+            .Should()
+            .BeTrue($"the outcome is audited ({BulkAdr})");
+        entry!.PrincipalId.Should().Be("apikey:ops-1");
+        entry.OperationName.Should().Be("bulkOperation");
+        entry.Success.Should().BeTrue();
+        entry.Metadata!["done"].Should().Be("247");
+        entry.Metadata["failed"].Should().Be("3");
+        entry.Document.Should().BeEmpty("the filter is a value the caller sent");
+    }
+
+    [Test]
+    public async Task StartBulkOperation_ACountOtherThanTheConfirmedOne_IsRefusedAndChangesNothing()
+    {
+        await SeedRuns(5, TrainState.Pending);
+        await using var host = BulkHost(out _);
+
+        var response = await new OperationsMutations().StartBulkOperation(
+            BulkOperationKind.Cancel,
+            BulkRuns(),
+            expectedCount: 4,
+            new TraxApplicationServices(host),
+            Operator(),
+            default
+        );
+
+        response
+            .Success.Should()
+            .BeFalse($"the snapshot must match the confirmed count ({BulkAdr})");
+        response.Matched.Should().Be(5);
+        response.Operation.Should().BeNull();
+        response.Message.Should().Contain("matches 5 run(s) now, not the 4 confirmed");
+        host.GetRequiredService<BulkOperationJobs>().List().Should().BeEmpty();
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (await db.Metadatas.AnyAsync(m => m.CancellationRequested)).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task StartBulkOperation_AFilterForAnotherList_IsRefused()
+    {
+        await using var host = BulkHost(out _);
+
+        var response = await new OperationsMutations().StartBulkOperation(
+            BulkOperationKind.Disable,
+            BulkRuns(),
+            expectedCount: 0,
+            new TraxApplicationServices(host),
+            Operator(),
+            default
+        );
+
+        response.Success.Should().BeFalse();
+        response.Message.Should().Be("DISABLE applies to manifests: give filter.manifests.");
+    }
+
+    [Test]
+    public async Task StartBulkOperation_DisableEveryManifestOfAGroup_DisablesThemAll()
+    {
+        var group = await SeedGroup(enabled: true);
+        await SeedManifest(group, enabled: true);
+        await SeedManifest(group, enabled: false);
+        var outside = await SeedManifest(await SeedGroup(enabled: true), enabled: true);
+        await using var host = BulkHost(out _);
+        var jobs = host.GetRequiredService<BulkOperationJobs>();
+
+        var started = await new OperationsMutations().StartBulkOperation(
+            BulkOperationKind.Disable,
+            new BulkOperationFilter
+            {
+                Manifests = new BulkManifestFilter { ManifestGroupId = group },
+            },
+            expectedCount: 2,
+            new TraxApplicationServices(host),
+            null,
+            default
+        );
+        started.Success.Should().BeTrue(started.Message);
+        await jobs.Current;
+
+        var operation = jobs.Get(started.Operation!.Id)!;
+        operation.Done.Should().Be(2, "a manifest already disabled is in the state asked for");
+        operation.Failed.Should().Be(0);
+        operation.Actor.Should().Be("<anonymous>");
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (await db.Manifests.Where(m => m.IsEnabled).Select(m => m.Id).ToListAsync())
+            .Should()
+            .BeEquivalentTo([outside]);
+    }
+
+    [Test]
+    public void RequeueBatches_KeepEachManifestsDeadLettersInOneBatch()
+    {
+        // 300 of manifest 1, 300 of manifest 2, 700 of manifest 3, 1200 of manifest 4, 10 of 5.
+        var manifests = Enumerable
+            .Repeat(1L, 300)
+            .Concat(Enumerable.Repeat(2L, 300))
+            .Concat(Enumerable.Repeat(3L, 700))
+            .Concat(Enumerable.Repeat(4L, 1200))
+            .Concat(Enumerable.Repeat(5L, 10))
+            .ToList();
+
+        BulkOperationTargets
+            .RequeueBatches(manifests)
+            .Should()
+            .Equal(
+                [300, 600, 1300, 2300, 2500, 2510],
+                $"a manifest split across batches would leave its second half awaiting ({BulkAdr})"
+            );
     }
 
     private async Task<long> SeedRunOf(long manifestId, TrainState state)

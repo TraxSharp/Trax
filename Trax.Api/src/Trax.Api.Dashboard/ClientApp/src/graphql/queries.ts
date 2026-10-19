@@ -1183,3 +1183,81 @@ export const MACHINE_INSTANCE = gql`
     }
   }
 `;
+
+// The bulk operations this node knows, newest first; each read on the node that started it.
+export const BULK_OPERATIONS = gql`
+  query BulkOperations {
+    operations {
+      bulkOperations {
+        id
+        kind
+        status
+        actor
+        askAfresh
+        startedAt
+        finishedAt
+        total
+        done
+        failed
+        message
+      }
+    }
+  }
+`;
+
+// One bulk operation with its filter and what did not take; null once this node no longer knows it.
+export const BULK_OPERATION = gql`
+  query BulkOperation($id: UUID!, $failuresAfter: Long, $failuresTake: Int! = 100) {
+    operations {
+      bulkOperation(id: $id) {
+        id
+        kind
+        status
+        actor
+        askAfresh
+        startedAt
+        finishedAt
+        total
+        done
+        failed
+        message
+        filter {
+          executions {
+            trainState
+            trainName
+            startedAfter
+            startedBefore
+            manifestId
+            manifestGroupId
+            hideAdminTrains
+            failureClass
+            externalId
+            parentId
+            hostName
+            failureReasonContains
+            failureJunction
+          }
+          deadLetters {
+            status
+            manifestId
+          }
+          manifests {
+            isEnabled
+            scheduleType
+            nameContains
+            manifestGroupId
+            hideAdminTrains
+          }
+        }
+        failureReasons {
+          reason
+          count
+        }
+        failures(take: $failuresTake, afterId: $failuresAfter) {
+          id
+          reason
+        }
+      }
+    }
+  }
+`;

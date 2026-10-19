@@ -122,6 +122,14 @@ One instance with the runs it invoked. [operations: machine queries](/docs/sdk-r
 
 Instance counts by machine, state and owner kind. [operations: machine queries](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstancecounts)
 
+### bulkOperations
+
+The bulk operations this node knows, newest first. [operations: bulk operations](/docs/sdk-reference/graphql-api/mutations/bulk-operations#bulkoperations-and-bulkoperation)
+
+### bulkOperation
+
+One bulk operation, with its failures. [operations: bulk operations](/docs/sdk-reference/graphql-api/mutations/bulk-operations#bulkoperations-and-bulkoperation)
+
 ## deadLetters (nested under operations)
 
 `deadLetters`, `deadLetter` and `requeueAllJob`: [operations.deadLetters queries](/docs/sdk-reference/graphql-api/queries/dead-letters).

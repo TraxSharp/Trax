@@ -186,6 +186,7 @@ namespace Trax.Api.GraphQL.Mutations
         public Trax.Api.DTOs.OperationResponse SetEffectEnabled(string fullName, bool enabled, [HotChocolate.Service] Trax.Scheduler.Services.Effects.IEffectSettingsService effectSettings) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> SetManifestsEnabled(long[] ids, bool enabled, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> SetManifestsReplayDecisionsOnRetry(long[] ids, bool replay, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Api.DTOs.StartBulkOperationResponse> StartBulkOperation(Trax.Api.DTOs.BulkOperationKind kind, Trax.Api.DTOs.BulkOperationFilter filter, int expectedCount, [HotChocolate.Service] Trax.Api.GraphQL.Extensions.TraxApplicationServices applicationServices, [HotChocolate.GlobalState("ClaimsPrincipal")] System.Security.Claims.ClaimsPrincipal? user, System.Threading.CancellationToken ct, bool askAfresh = false, string? note = null) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> TriggerGroup(long groupId, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct) { }
         [HotChocolate.GraphQLIgnore]
         public System.Threading.Tasks.Task<Trax.Api.DTOs.OperationResponse> TriggerGroup(long groupId, [HotChocolate.Service] Trax.Scheduler.Services.TraxScheduler.ITraxScheduler scheduler, System.Threading.CancellationToken ct) { }
@@ -263,6 +264,8 @@ namespace Trax.Api.GraphQL.Queries
         public Trax.Api.GraphQL.Queries.ConfigQueries Config() { }
         public Trax.Api.GraphQL.Queries.DeadLetterQueries DeadLetters() { }
         public System.Collections.Generic.IReadOnlyList<string> GetAdminTrainNames() { }
+        public Trax.Api.DTOs.BulkOperation? GetBulkOperation(System.Guid id, [HotChocolate.Service] Trax.Api.GraphQL.Extensions.TraxApplicationServices applicationServices) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.BulkOperation> GetBulkOperations([HotChocolate.Service] Trax.Api.GraphQL.Extensions.TraxApplicationServices applicationServices) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.DecisionPage> GetDecisions(long metadataId, [HotChocolate.Service] Trax.Scheduler.Services.Operations.IOperationsService operationsService, System.Threading.CancellationToken ct, long? afterId = default, int take = 50) { }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.EffectInfo> GetEffects([HotChocolate.Service] Trax.Scheduler.Services.Effects.IEffectSettingsService effectSettings) { }
         public System.Threading.Tasks.Task<Trax.Api.DTOs.PagedResult<Trax.Api.DTOs.ExecutionSummary>> GetExecutionChildren(long parentId, [HotChocolate.Service] Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, System.Threading.CancellationToken ct, int take = 25, long? afterId = default) { }

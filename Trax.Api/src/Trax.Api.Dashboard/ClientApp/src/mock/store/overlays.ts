@@ -1344,6 +1344,72 @@ export function userDraftRunsOverlay(runIds: number[], entryIds: number[] = []):
   };
 }
 
+// ── Bulk operations ────────────────────────────────────────────────────────
+// StartBulkOperation -> BulkOperations / BulkOperation. The mock has no rows behind a filter, so
+// it takes the confirmed count as the match and answers with an operation that has already
+// finished, every id done, the way requeueAllDeadLetters answers with a finished job.
+
+const BULK_KEY = "bulkOperations";
+type MockBulkOperation = Rec & { id: string };
+
+const EMPTY_BULK_FILTER = { executions: null, deadLetters: null, manifests: null };
+
+function bulkFilter(filter: unknown): Rec {
+  const given = asRecord(filter) ?? {};
+  return { ...EMPTY_BULK_FILTER, ...given };
+}
+
+const startBulkOperation: MutationOverlay = (variables, store) => {
+  const existing = readDelta<MockBulkOperation[]>(store, BULK_KEY, []);
+  const total = Math.max(0, Number(variables.expectedCount ?? 0));
+  const kind = String(variables.kind ?? "CANCEL");
+  if (total === 0)
+    return wrap("operations.startBulkOperation", {
+      success: false,
+      message: "The filter matches nothing, so nothing was started.",
+      matched: 0,
+      operation: null,
+    });
+  const operation: MockBulkOperation = {
+    id: `00000000-0000-4000-9000-${String(existing.length + 1).padStart(12, "0")}`,
+    kind,
+    status: "FINISHED",
+    actor: "apikey:operator",
+    askAfresh: Boolean(variables.askAfresh),
+    startedAt: nowIso(),
+    finishedAt: nowIso(),
+    total,
+    done: total,
+    failed: 0,
+    message: `${kind} applied to ${total} of ${total}; 0 did not take.`,
+    filter: bulkFilter(variables.filter),
+    failureReasons: [],
+    failures: [],
+  };
+  store.update("StartBulkOperation", (draft) => {
+    draft[BULK_KEY] = [operation, ...existing];
+  });
+  return wrap("operations.startBulkOperation", {
+    success: true,
+    message: `Started: ${total}.`,
+    matched: total,
+    operation,
+  });
+};
+
+const readBulkOperations: QueryOverlay = (data, store) => {
+  const operations = readDelta<MockBulkOperation[]>(store, BULK_KEY, []);
+  const root = asRecord(asRecord(data)?.operations) ?? {};
+  return { ...asRecord(data), operations: { ...root, bulkOperations: operations } };
+};
+
+const readBulkOperation: QueryOverlay = (data, store, variables) => {
+  const operations = readDelta<MockBulkOperation[]>(store, BULK_KEY, []);
+  const root = asRecord(asRecord(data)?.operations) ?? {};
+  const found = operations.find((o) => o.id === variables.id) ?? null;
+  return { ...asRecord(data), operations: { ...root, bulkOperation: found } };
+};
+
 // ── Registration ───────────────────────────────────────────────────────────
 
 export const workQueueOverlay: StatefulOverlay = {
@@ -1449,7 +1515,13 @@ export const noLogLevelServiceOverlay: StatefulOverlay = {
 };
 
 /** The overlays applied by default. */
+export const bulkOperationOverlay: StatefulOverlay = {
+  mutations: { StartBulkOperation: startBulkOperation },
+  queries: { BulkOperations: readBulkOperations, BulkOperation: readBulkOperation },
+};
+
 export const defaultOverlays: StatefulOverlay[] = [
+  bulkOperationOverlay,
   workQueueOverlay,
   deadLetterOverlay,
   executionOverlay,

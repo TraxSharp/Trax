@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Validation;
 using Trax.Api.Services.HealthCheck;
+using Trax.Api.Services.Lists;
 using Trax.Api.Services.Runs;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
@@ -344,25 +345,18 @@ public partial class OperationsQueries
             .Manifests.AsNoTracking()
             .OrderByDescending(m => m.Id);
 
-        if (isEnabled.HasValue)
-            baseQuery = baseQuery.Where(m => m.IsEnabled == isEnabled.Value);
-        if (scheduleType.HasValue)
-            baseQuery = baseQuery.Where(m => m.ScheduleType == scheduleType.Value);
-        if (!string.IsNullOrWhiteSpace(nameContains))
-            baseQuery = baseQuery.Where(m => m.Name.Contains(nameContains));
-        if (manifestGroupId.HasValue)
-            baseQuery = baseQuery.Where(m => m.ManifestGroupId == manifestGroupId.Value);
-        // A manifest's Name is its train's interface FullName, the form AdminTrains.FullNames
-        // holds; the dashboard's manifests page hides the same rows.
-        if (hideAdminTrains)
-            baseQuery = baseQuery.Where(m => !AdminTrains.FullNames.Contains(m.Name));
-
-        var hasFilter =
-            isEnabled.HasValue
-            || scheduleType.HasValue
-            || !string.IsNullOrWhiteSpace(nameContains)
-            || manifestGroupId.HasValue
-            || hideAdminTrains;
+        var filter = new BulkManifestFilter
+        {
+            IsEnabled = isEnabled,
+            ScheduleType = scheduleType,
+            NameContains = nameContains,
+            ManifestGroupId = manifestGroupId,
+            HideAdminTrains = hideAdminTrains,
+        };
+        // The filter a bulk operation over this list applies too (ListFilters). The dashboard's
+        // manifests page hides the admin trains' rows the same way.
+        baseQuery = ListFilters.Manifests(baseQuery, filter);
+        var hasFilter = ListFilters.Narrows(filter);
 
         // A filtered total is exact; an unfiltered one may be estimated. The cursor never
         // changes it: totalCount is the size of the whole list, whichever page this is.
@@ -667,72 +661,27 @@ public partial class OperationsQueries
 
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
 
-        IQueryable<Effect.Models.Metadata.Metadata> filtered = db.Metadatas.AsNoTracking();
-
-        if (trainState.HasValue)
-            filtered = filtered.Where(m => m.TrainState == trainState.Value);
-        if (failureClass.HasValue)
-            filtered = filtered.Where(m => m.FailureClass == failureClass.Value);
-        if (!string.IsNullOrWhiteSpace(trainName))
-            filtered = filtered.Where(m => m.Name == trainName);
-        // metadata.Name stores the interface FullName (per CLAUDE.md), which is what
-        // AdminTrains.FullNames holds. EF translates the list Contains to a SQL IN.
-        if (hideAdminTrains)
-            filtered = filtered.Where(m => !AdminTrains.FullNames.Contains(m.Name));
-        if (startedAfter.HasValue)
-            filtered = filtered.Where(m => m.StartTime >= startedAfter.Value);
-        if (startedBefore.HasValue)
-            filtered = filtered.Where(m => m.StartTime <= startedBefore.Value);
-        if (manifestId.HasValue)
-            filtered = filtered.Where(m => m.ManifestId == manifestId.Value);
-        // Each of these three seeks an index of its own: ix_metadata_external_id,
-        // ix_metadata_parent_id and ix_metadata_host_name.
-        if (!string.IsNullOrWhiteSpace(externalId))
-            filtered = filtered.Where(m => m.ExternalId == externalId);
-        if (parentId.HasValue)
-            filtered = filtered.Where(m => m.ParentId == parentId.Value);
-        if (!string.IsNullOrWhiteSpace(hostName))
-            filtered = filtered.Where(m => m.HostName == hostName);
-        // ix_metadata_failure_junction holds only the runs that failed, in id order under each
-        // junction, so a page of one junction's failures reads just that page.
-        if (!string.IsNullOrWhiteSpace(failureJunction))
-            filtered = filtered.Where(m => m.FailureJunction == failureJunction);
-        // Lowered, with the term's wildcards escaped: the expression
-        // ix_metadata_failure_reason_trgm is built over, so a rare term reads only its matches.
-        var textFilter = !string.IsNullOrEmpty(failureReasonContains);
-        if (textFilter)
+        var filter = new BulkExecutionFilter
         {
-            var pattern = LikePattern.Contains(failureReasonContains!);
-            filtered = filtered.Where(m =>
-                EF.Functions.Like(m.FailureReason!.ToLower(), pattern, LikePattern.Escape)
-            );
-        }
-        if (manifestGroupId.HasValue)
-        {
-            // Executions for a group = executions of any manifest in that group. The subquery
-            // stays index-friendly: manifest.manifest_group_id is indexed, and the resulting
-            // manifest ids seek ix_metadata_manifest_state on the metadata side.
-            var groupManifestIds = db
-                .Manifests.AsNoTracking()
-                .Where(mf => mf.ManifestGroupId == manifestGroupId.Value)
-                .Select(mf => (long?)mf.Id);
-            filtered = filtered.Where(m => groupManifestIds.Contains(m.ManifestId));
-        }
-
-        var hasFilter =
-            trainState.HasValue
-            || !string.IsNullOrWhiteSpace(trainName)
-            || startedAfter.HasValue
-            || startedBefore.HasValue
-            || manifestId.HasValue
-            || manifestGroupId.HasValue
-            || hideAdminTrains
-            || failureClass.HasValue
-            || !string.IsNullOrWhiteSpace(externalId)
-            || parentId.HasValue
-            || !string.IsNullOrWhiteSpace(hostName)
-            || !string.IsNullOrWhiteSpace(failureJunction)
-            || textFilter;
+            TrainState = trainState,
+            TrainName = trainName,
+            StartedAfter = startedAfter,
+            StartedBefore = startedBefore,
+            ManifestId = manifestId,
+            ManifestGroupId = manifestGroupId,
+            HideAdminTrains = hideAdminTrains,
+            FailureClass = failureClass,
+            ExternalId = externalId,
+            ParentId = parentId,
+            HostName = hostName,
+            FailureReasonContains = failureReasonContains,
+            FailureJunction = failureJunction,
+        };
+        // The filter a bulk operation over this list applies too (ListFilters), so the two match
+        // the same runs.
+        var filtered = ListFilters.Executions(db, db.Metadatas.AsNoTracking(), filter);
+        var textFilter = ListFilters.HasFailureText(filter);
+        var hasFilter = ListFilters.Narrows(filter);
 
         // A text filter counts up to FailureTextCountCap matches and no further, so a common term
         // never counts every failed run; every other filtered total is exact, and an unfiltered

@@ -118,12 +118,23 @@ export async function everyPage(page: HTMLElement) {
  * no resume. Once the recordings hold one, it is checked like every other read; drop it from here
  * when they all do.
  */
-export const NOT_RECORDED_YET = ["RunGraph", "MachineInstanceCounts", "MachineInstances", "MachineInstance", "TrainsAskingDecisions"];
+export const NOT_RECORDED_YET = [
+  "RunGraph",
+  "MachineInstanceCounts",
+  "MachineInstances",
+  "MachineInstance",
+  // The decision controls show everywhere until the recordings hold which trains ask.
+  "TrainsAskingDecisions",
+  // No page reads bulk operations yet.
+  "BulkOperations",
+  "BulkOperation",
+];
 
 /** The read each write not recorded yet is offered from: no read, no write. */
 export const WRITES_OFFERED_FROM: Record<string, string> = {
   ResumeExecution: "RunGraph",
   CancelMachineInstance: "MachineInstance",
+  StartBulkOperation: "BulkOperations",
 };
 
 /** True when the demo does not offer `op` because its recordings do not hold it yet. */

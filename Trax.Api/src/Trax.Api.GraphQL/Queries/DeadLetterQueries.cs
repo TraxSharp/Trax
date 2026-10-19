@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
+using Trax.Api.Services.Lists;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 
@@ -41,11 +42,11 @@ public class DeadLetterQueries
 
         IQueryable<Effect.Models.DeadLetter.DeadLetter> query = baseQuery;
 
-        if (status.HasValue)
-            query = query.Where(dl => dl.Status == status.Value);
-
-        if (manifestId.HasValue)
-            query = query.Where(dl => dl.ManifestId == manifestId.Value);
+        // The filter a bulk operation over this list applies too (ListFilters).
+        query = ListFilters.DeadLetters(
+            query,
+            new BulkDeadLetterFilter { Status = status, ManifestId = manifestId }
+        );
 
         // The total is every record the filter matches, whatever page this is, so it is counted
         // before the cursor narrows the query.

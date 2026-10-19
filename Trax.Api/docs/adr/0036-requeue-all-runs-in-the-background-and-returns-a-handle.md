@@ -83,6 +83,8 @@ behind a load balancer that spreads requests sees `null` from the others.
 
 ## Changelog
 
+- **2026-10-18**: [0045](./0045-a-bulk-operation-applies-to-a-confirmed-snapshot-of-a-filter.md)
+  generalises this to any list filter and kind (`startBulkOperation`); requeue-all is unchanged.
 - **2026-10-05**: The job moved to Trax.Scheduler's `IDeadLetterRequeueJobs`, which the
   dashboard's Requeue All now starts too; the GraphQL contract is unchanged.
 - **2026-10-01**: Recorded.

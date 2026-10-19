@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Api.Services.BulkOperations;
 
 namespace Trax.Api.GraphQL.Audit;
 
@@ -52,6 +53,8 @@ public static class TraxGraphQLBuilderAuditExtensions
         services.AddSingleton<TraxGraphQLAuditListener>();
         // A socket refused at connection_init never reaches the listener.
         services.AddSingleton<ISocketRefusalObserver, TraxSocketRefusalAudit>();
+        // A bulk operation's batches run after the request that started it has been audited.
+        services.AddSingleton<IBulkOperationObserver, TraxBulkOperationAudit>();
         services.AddSingleton<IHostedService, TraxAuditWriter>();
 
         // The options pattern's startup validation: an out-of-range value refuses the host

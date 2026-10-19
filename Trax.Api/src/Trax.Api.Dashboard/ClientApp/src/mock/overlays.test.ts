@@ -2,6 +2,8 @@ import { expect, test } from "vitest";
 import { createMockClient } from "./client";
 import { createMockStore } from "./store/mock-store";
 import {
+  BULK_OPERATION,
+  BULK_OPERATIONS,
   DEAD_LETTERS,
   DEAD_LETTER_DETAIL,
   EXECUTION_DETAIL,
@@ -10,6 +12,7 @@ import {
   SCHEDULER_CONFIG,
 } from "../graphql/queries";
 import {
+  START_BULK_OPERATION,
   ACKNOWLEDGE_DEAD_LETTER,
   CANCEL_EXECUTION,
   UPDATE_MANIFEST,
@@ -80,4 +83,25 @@ test("cancel execution -> detail shows cancellationRequested", async () => {
   await c.mutation(CANCEL_EXECUTION, { id: 1 }).toPromise();
   const detail = await c.query(EXECUTION_DETAIL, { id: 1 }, NET).toPromise();
   expect(get(detail.data, "operations.executionDetail.cancellationRequested")).toBe(true);
+});
+
+test("start bulk operation -> bulkOperations and bulkOperation read it back", async () => {
+  const c = client();
+  const started = await c
+    .mutation(START_BULK_OPERATION, {
+      kind: "CANCEL",
+      filter: { executions: { trainState: "IN_PROGRESS" } },
+      expectedCount: 12,
+    })
+    .toPromise();
+  expect(get(started.data, "operations.startBulkOperation.success")).toBe(true);
+  const id = get(started.data, "operations.startBulkOperation.operation.id") as string;
+
+  const list = await c.query(BULK_OPERATIONS, {}, NET).toPromise();
+  const rows = get(list.data, "operations.bulkOperations") as Record<string, unknown>[];
+  expect(rows.map((r) => r.id)).toEqual([id]);
+
+  const one = await c.query(BULK_OPERATION, { id }, NET).toPromise();
+  expect(get(one.data, "operations.bulkOperation.done")).toBe(12);
+  expect(get(one.data, "operations.bulkOperation.filter.executions.trainState")).toBe("IN_PROGRESS");
 });

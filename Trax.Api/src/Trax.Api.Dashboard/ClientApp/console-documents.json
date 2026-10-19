@@ -18,6 +18,14 @@
       "text": "query AdminTrainNames {\n  operations {\n    adminTrainNames\n    __typename\n  }\n}"
     },
     {
+      "name": "BulkOperation",
+      "text": "query BulkOperation($id: UUID!, $failuresAfter: Long, $failuresTake: Int! = 100) {\n  operations {\n    bulkOperation(id: $id) {\n      id\n      kind\n      status\n      actor\n      askAfresh\n      startedAt\n      finishedAt\n      total\n      done\n      failed\n      message\n      filter {\n        executions {\n          trainState\n          trainName\n          startedAfter\n          startedBefore\n          manifestId\n          manifestGroupId\n          hideAdminTrains\n          failureClass\n          externalId\n          parentId\n          hostName\n          failureReasonContains\n          failureJunction\n          __typename\n        }\n        deadLetters {\n          status\n          manifestId\n          __typename\n        }\n        manifests {\n          isEnabled\n          scheduleType\n          nameContains\n          manifestGroupId\n          hideAdminTrains\n          __typename\n        }\n        __typename\n      }\n      failureReasons {\n        reason\n        count\n        __typename\n      }\n      failures(take: $failuresTake, afterId: $failuresAfter) {\n        id\n        reason\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "BulkOperations",
+      "text": "query BulkOperations {\n  operations {\n    bulkOperations {\n      id\n      kind\n      status\n      actor\n      askAfresh\n      startedAt\n      finishedAt\n      total\n      done\n      failed\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "CancelExecution",
       "text": "mutation CancelExecution($id: Long!) {\n  operations {\n    cancelExecution(id: $id) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
     },
@@ -256,6 +264,10 @@
     {
       "name": "SetManifestsReplayDecisionsOnRetry",
       "text": "mutation SetManifestsReplayDecisionsOnRetry($ids: [Long!]!, $replay: Boolean!) {\n  operations {\n    setManifestsReplayDecisionsOnRetry(ids: $ids, replay: $replay) {\n      success\n      count\n      message\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "StartBulkOperation",
+      "text": "mutation StartBulkOperation($kind: BulkOperationKind!, $filter: BulkOperationFilterInput!, $expectedCount: Int!, $askAfresh: Boolean! = false, $note: String) {\n  operations {\n    startBulkOperation(\n      kind: $kind\n      filter: $filter\n      expectedCount: $expectedCount\n      askAfresh: $askAfresh\n      note: $note\n    ) {\n      success\n      message\n      matched\n      operation {\n        id\n        kind\n        status\n        actor\n        startedAt\n        total\n        done\n        failed\n        message\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "TrainChains",

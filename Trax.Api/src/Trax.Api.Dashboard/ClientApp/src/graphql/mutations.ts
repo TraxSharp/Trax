@@ -552,3 +552,42 @@ export const RESTORE_PERSISTED_OPERATION = gql`
     }
   }
 `;
+
+// A bulk operation applies one action to every row a list filter matches. The server reads the
+// matching ids once and refuses when there are not exactly expectedCount of them, the number the
+// operator confirmed; otherwise it runs in batches in the background and BULK_OPERATION reads it
+// back until its status is no longer RUNNING.
+export const START_BULK_OPERATION = gql`
+  mutation StartBulkOperation(
+    $kind: BulkOperationKind!
+    $filter: BulkOperationFilterInput!
+    $expectedCount: Int!
+    $askAfresh: Boolean! = false
+    $note: String
+  ) {
+    operations {
+      startBulkOperation(
+        kind: $kind
+        filter: $filter
+        expectedCount: $expectedCount
+        askAfresh: $askAfresh
+        note: $note
+      ) {
+        success
+        message
+        matched
+        operation {
+          id
+          kind
+          status
+          actor
+          startedAt
+          total
+          done
+          failed
+          message
+        }
+      }
+    }
+  }
+`;

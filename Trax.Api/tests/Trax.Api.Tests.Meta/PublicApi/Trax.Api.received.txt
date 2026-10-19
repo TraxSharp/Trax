@@ -18,6 +18,90 @@ namespace Trax.Api.DTOs
         public bool Success { get; init; }
         public int TooLateToAskAfresh { get; init; }
     }
+    public sealed class BulkDeadLetterFilter : System.IEquatable<Trax.Api.DTOs.BulkDeadLetterFilter>
+    {
+        public BulkDeadLetterFilter() { }
+        public long? ManifestId { get; init; }
+        public Trax.Effect.Enums.DeadLetterStatus? Status { get; init; }
+    }
+    public sealed class BulkExecutionFilter : System.IEquatable<Trax.Api.DTOs.BulkExecutionFilter>
+    {
+        public BulkExecutionFilter() { }
+        public string? ExternalId { get; init; }
+        public Trax.Core.Exceptions.FailureClass? FailureClass { get; init; }
+        public string? FailureJunction { get; init; }
+        public string? FailureReasonContains { get; init; }
+        public bool? HideAdminTrains { get; init; }
+        public string? HostName { get; init; }
+        public long? ManifestGroupId { get; init; }
+        public long? ManifestId { get; init; }
+        public long? ParentId { get; init; }
+        public System.DateTime? StartedAfter { get; init; }
+        public System.DateTime? StartedBefore { get; init; }
+        public string? TrainName { get; init; }
+        public Trax.Effect.Enums.TrainState? TrainState { get; init; }
+    }
+    public sealed class BulkManifestFilter : System.IEquatable<Trax.Api.DTOs.BulkManifestFilter>
+    {
+        public BulkManifestFilter() { }
+        public bool? HideAdminTrains { get; init; }
+        public bool? IsEnabled { get; init; }
+        public long? ManifestGroupId { get; init; }
+        public string? NameContains { get; init; }
+        public Trax.Effect.Enums.ScheduleType? ScheduleType { get; init; }
+    }
+    public sealed class BulkOperation
+    {
+        public string Actor { get; }
+        public bool AskAfresh { get; }
+        public int Done { get; }
+        public int Failed { get; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.BulkOperationFailureReason> FailureReasons { get; }
+        public Trax.Api.DTOs.BulkOperationFilter Filter { get; }
+        public System.DateTime? FinishedAt { get; }
+        public System.Guid Id { get; }
+        public Trax.Api.DTOs.BulkOperationKind Kind { get; }
+        public string Message { get; }
+        public System.DateTime StartedAt { get; }
+        public Trax.Api.DTOs.BulkOperationStatus Status { get; }
+        public int Total { get; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.BulkOperationFailure> GetFailures(int take = 100, long? afterId = default) { }
+    }
+    public sealed class BulkOperationFailure : System.IEquatable<Trax.Api.DTOs.BulkOperationFailure>
+    {
+        public BulkOperationFailure(long Id, string Reason) { }
+        public long Id { get; init; }
+        public string Reason { get; init; }
+    }
+    public sealed class BulkOperationFailureReason : System.IEquatable<Trax.Api.DTOs.BulkOperationFailureReason>
+    {
+        public BulkOperationFailureReason(string Reason, int Count) { }
+        public int Count { get; init; }
+        public string Reason { get; init; }
+    }
+    public sealed class BulkOperationFilter : System.IEquatable<Trax.Api.DTOs.BulkOperationFilter>
+    {
+        public BulkOperationFilter() { }
+        public Trax.Api.DTOs.BulkDeadLetterFilter? DeadLetters { get; init; }
+        public Trax.Api.DTOs.BulkExecutionFilter? Executions { get; init; }
+        public Trax.Api.DTOs.BulkManifestFilter? Manifests { get; init; }
+    }
+    public enum BulkOperationKind
+    {
+        Cancel = 0,
+        Requeue = 1,
+        Acknowledge = 2,
+        Trigger = 3,
+        Enable = 4,
+        Disable = 5,
+    }
+    public enum BulkOperationStatus
+    {
+        Running = 0,
+        Finished = 1,
+        Failed = 2,
+        Canceled = 3,
+    }
     public class ConfigureEffectResponse : System.IEquatable<Trax.Api.DTOs.ConfigureEffectResponse>
     {
         public ConfigureEffectResponse(bool Success, int Count, string Message, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.EffectSettingError> Errors) { }
@@ -709,6 +793,14 @@ namespace Trax.Api.DTOs
     {
         Newest = 0,
         Oldest = 1,
+    }
+    public sealed class StartBulkOperationResponse : System.IEquatable<Trax.Api.DTOs.StartBulkOperationResponse>
+    {
+        public StartBulkOperationResponse(bool Success, string Message, int? Matched, Trax.Api.DTOs.BulkOperation? Operation) { }
+        public int? Matched { get; init; }
+        public string Message { get; init; }
+        public Trax.Api.DTOs.BulkOperation? Operation { get; init; }
+        public bool Success { get; init; }
     }
     public class TrainExecutionStats : System.IEquatable<Trax.Api.DTOs.TrainExecutionStats>
     {
