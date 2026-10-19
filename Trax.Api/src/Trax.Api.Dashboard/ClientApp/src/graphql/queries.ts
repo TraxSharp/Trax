@@ -1085,6 +1085,53 @@ export const MACHINE_INSTANCES = gql`
   }
 `;
 
+// What says an instance needs attention: its timer's due time and whether it is overdue, the run
+// it waits on and where that run is, and whether it is stuck (overdue, or waiting on a run that
+// failed or was cancelled). inStateSince is when the instance last changed until a transition log
+// exists: label it "last changed". stuck: true lists only the stuck ones.
+export const MACHINE_INSTANCES_ATTENTION = gql`
+  query MachineInstancesAttention($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $stuck: Boolean, $skip: Int!, $take: Int!) {
+    operations {
+      machineInstances(machine: $machine, state: $state, ownerKind: $ownerKind, stuck: $stuck, skip: $skip, take: $take) {
+        items {
+          machine
+          ownerKind
+          id
+          rowId
+          state
+          updatedAt
+          inStateSince
+          dueAt
+          overdue
+          stuck
+          waitingOn {
+            executionId
+            trainState
+            workQueueEntryId
+          }
+        }
+        totalCount
+        isCountCapped
+      }
+    }
+  }
+`;
+
+// The counts by state with how many in each are stuck, for the diagram's per-state badges.
+export const MACHINE_INSTANCE_STUCK_COUNTS = gql`
+  query MachineInstanceStuckCounts($machine: String) {
+    operations {
+      machineInstanceCounts(machine: $machine) {
+        machine
+        state
+        ownerKind
+        count
+        stuck
+      }
+    }
+  }
+`;
+
 // One instance with the runs it invoked (newest first, at most 50). A user's draft is named by its
 // rowId too, because several users can each hold a draft under one id.
 export const MACHINE_INSTANCE = gql`

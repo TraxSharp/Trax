@@ -94,6 +94,7 @@ query {
 | `ownerKind` | `SnapshotOwnerKind` | `null` | `SYSTEM` for instances created from code, `USER` for users' drafts; null for both |
 | `skip` | `Int!` | `0` | Offset; above 10,000 is refused with `TRAX_SKIP_TOO_DEEP`, and the service the dashboard reads through refuses it too |
 | `take` | `Int!` | `25` | Page size, from 1 to 500 |
+| `stuck` | `Boolean` | `null` | `true` for only the [stuck](#needing-attention) instances, `false` for only the others; null for both |
 
 **Returns**: `PagedResultOfMachineInstance!`. There is no keyset cursor (`nextCursor` is always
 null), because the list is ordered by a time that moves as instances advance: page with `skip`. The
@@ -114,6 +115,21 @@ each page, filtered or not, reads in a few milliseconds.
 | `createdAt` | `DateTime` | When it was created; null for one written before Trax recorded it |
 | `updatedAt` | `DateTime!` | When it was last written |
 | `hasLiveInvokedRun` | `Boolean!` | `true` while its state has [invoked a train](/docs/statemachine/invoking-trains) and waits for the run's outcome |
+| `dueAt` | `DateTime` | When its state's timer fires; null when that state has no timer |
+| `overdue` | `Boolean!` | `dueAt` is past by more than the host's timer poll, so the timer should have fired and has not |
+| `waitingOn` | `MachineInstanceWaitingRun` | The run its state waits on: `executionId` (null while still queued), `trainState` (`PENDING` while queued, `CANCELLED` for an entry cancelled before it started) and `workQueueEntryId`. Null when it waits on none |
+| `inStateSince` | `DateTime!` | When it entered its state, as far as Trax records it. No transition log is kept yet, so this is `updatedAt`, and a write that kept the state moves it: show it as "last changed" |
+| `stuck` | `Boolean!` | It cannot move on its own; see [needing attention](#needing-attention) |
+
+### Needing attention
+
+An instance is **stuck** when its timer is `overdue`, or when the run it waits on failed or was
+cancelled and its outcome was never applied: a run that ended more than one timer poll ago, or an
+entry cancelled while still queued. The poll is the host's
+`StateMachineOptions.InvokeOutcomeSweepInterval` (5 seconds by default), the pace at which the
+reconciler fires timers and applies outcomes, so an instance is never stuck only because a sweep has
+not come round yet. How long an instance has sat in its state is shown (`inStateSince`) and never
+counted: a state some instances wait in for days is not a fault.
 
 No field carries an instance's context, and none names the user who owns a draft. The context is an
 untyped JSON object, so nothing could mask the sensitive parts of it; an operator sees where an
@@ -198,7 +214,8 @@ query {
 | `machine` | `String` | `null` | Only this machine's counts; null for every machine |
 
 **Returns**: `[MachineInstanceCount!]!`, each with `machine: String!`, `state: String!`,
-`ownerKind: SnapshotOwnerKind!` and `count: Long!`. On Postgres the counts are read from the
+`ownerKind: SnapshotOwnerKind!`, `count: Long!` and `stuck: Long!`, how many of them are
+[stuck](#needing-attention). On Postgres the counts are read from the
 listing's index alone: about 120 ms over two million instances. Each host keeps the counts it read
 for 5 seconds, per `machine` filter, and callers asking meanwhile share that read, so every
 dashboard and API client polling them costs one read, not one each; a count can be that old.

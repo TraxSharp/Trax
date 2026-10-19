@@ -61,8 +61,14 @@ public partial class OperationsService
         var skip = Math.Max(query.Skip, 0);
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-        var items = await MachineInstancePageQuery(db, query, skip, take).ToListAsync(ct);
-        return new MachineInstancePage(items, skip, take);
+        var overdueBefore = OverdueBefore();
+        var items = await MachineInstancePageQuery(db, query, skip, take, overdueBefore)
+            .ToListAsync(ct);
+        return new MachineInstancePage(
+            await WithAttentionAsync(db, items, overdueBefore, ct),
+            skip,
+            take
+        );
     }
 
     /// <inheritdoc />
@@ -75,7 +81,12 @@ public partial class OperationsService
 
         // One match past the cap tells a capped count from an exact one, and the database stops
         // reading once it has found that many.
-        var count = await FilterMachineInstances(db.SnapshotDrafts.AsNoTracking(), query)
+        var count = await FilterMachineInstances(
+                db,
+                db.SnapshotDrafts.AsNoTracking(),
+                query,
+                OverdueBefore()
+            )
             .Take(MachineInstanceCountCap + 1)
             .CountAsync(ct);
         return count > MachineInstanceCountCap
@@ -92,7 +103,12 @@ public partial class OperationsService
         ValidateLookup(key);
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-        return await InstanceRows(db, key).Select(ToMachineInstanceRecord).FirstOrDefaultAsync(ct);
+        var record = await InstanceRows(db, key)
+            .Select(ToMachineInstanceRecord)
+            .FirstOrDefaultAsync(ct);
+        return record is null
+            ? null
+            : (await WithAttentionAsync(db, [record], OverdueBefore(), ct))[0];
     }
 
     /// <summary>
@@ -438,11 +454,34 @@ public partial class OperationsService
             })
             .ToListAsync(ct);
 
+        // The stuck instances are few and found through the partial indexes on due_at and invoke_token, so they
+        // are counted on their own rather than by a condition over every row.
+        var stuck = (
+            await rows.Where(StuckPredicate(db, OverdueBefore()))
+                .GroupBy(x => new
+                {
+                    x.Machine,
+                    x.State,
+                    x.OwnerKind,
+                })
+                .Select(g => new
+                {
+                    g.Key.Machine,
+                    g.Key.State,
+                    g.Key.OwnerKind,
+                    Count = g.LongCount(),
+                })
+                .ToListAsync(ct)
+        ).ToDictionary(c => (c.Machine, c.State, c.OwnerKind), c => c.Count);
+
         return counts
             .OrderBy(c => c.Machine, StringComparer.Ordinal)
             .ThenBy(c => c.State, StringComparer.Ordinal)
             .ThenBy(c => c.OwnerKind)
-            .Select(c => new MachineInstanceStateCount(c.Machine, c.State, c.OwnerKind, c.Count))
+            .Select(c => new MachineInstanceStateCount(c.Machine, c.State, c.OwnerKind, c.Count)
+            {
+                Stuck = stuck.GetValueOrDefault((c.Machine, c.State, c.OwnerKind)),
+            })
             .ToList();
     }
 
@@ -547,9 +586,15 @@ public partial class OperationsService
         IDataContext db,
         MachineInstanceQuery query,
         int skip,
-        int take
+        int take,
+        DateTimeOffset? overdueBefore = null
     ) =>
-        FilterMachineInstances(db.SnapshotDrafts.AsNoTracking(), query)
+        FilterMachineInstances(
+                db,
+                db.SnapshotDrafts.AsNoTracking(),
+                query,
+                overdueBefore ?? DateTimeOffset.UtcNow - DefaultTimerGrace
+            )
             .OrderByDescending(x => x.UpdatedAt)
             .ThenByDescending(x => x.RowId)
             .Skip(skip)
@@ -557,14 +602,28 @@ public partial class OperationsService
             .Select(ToMachineInstanceRecord);
 
     private static IQueryable<SnapshotDraft> FilterMachineInstances(
+        IDataContext db,
         IQueryable<SnapshotDraft> rows,
-        MachineInstanceQuery query
+        MachineInstanceQuery query,
+        DateTimeOffset overdueBefore
     )
     {
         if (!string.IsNullOrWhiteSpace(query.Machine))
             rows = rows.Where(x => x.Machine == query.Machine);
         if (!string.IsNullOrWhiteSpace(query.State))
             rows = rows.Where(x => x.State == query.State);
+        if (query.Stuck is { } stuck)
+        {
+            var predicate = StuckPredicate(db, overdueBefore);
+            rows = stuck
+                ? rows.Where(predicate)
+                : rows.Where(
+                    Expression.Lambda<Func<SnapshotDraft, bool>>(
+                        Expression.Not(predicate.Body),
+                        predicate.Parameters
+                    )
+                );
+        }
         return query.OwnerKind is { } kind ? OfOwnerKind(rows, kind) : rows;
     }
 
@@ -593,5 +652,145 @@ public partial class OperationsService
     )
     {
         Revision = x.Revision,
+        DueAt = x.DueAt,
     };
+
+    /// <summary>
+    /// How long past its due time a timer may go unfired before its instance is overdue when the host registers no
+    /// state machines and so names no poll: the default of <c>StateMachineOptions.InvokeOutcomeSweepInterval</c>.
+    /// </summary>
+    internal static readonly TimeSpan DefaultTimerGrace = TimeSpan.FromSeconds(5);
+
+    // A timer due before this instant should have fired: the reconciler that fires timers sweeps at least every
+    // InvokeOutcomeSweepInterval, so a due time older than one sweep means no host is firing it.
+    private DateTimeOffset OverdueBefore() =>
+        (_services?.GetService<TimeProvider>() ?? TimeProvider.System).GetUtcNow()
+        - (
+            _services?.GetService<StateMachineOptions>()?.InvokeOutcomeSweepInterval
+            ?? DefaultTimerGrace
+        );
+
+    /// <summary>
+    /// The rows that cannot move on their own: a timer overdue, or a live run that failed or was cancelled and whose
+    /// outcome was never applied. A run that ended within the grace is not stuck yet, since its outcome is on its
+    /// way. An entry cancelled while still queued records no time, so it counts at once.
+    /// </summary>
+    internal static Expression<Func<SnapshotDraft, bool>> StuckPredicate(
+        IDataContext db,
+        DateTimeOffset overdueBefore
+    )
+    {
+        var endedBefore = overdueBefore.UtcDateTime;
+        return x =>
+            (x.DueAt != null && x.DueAt < overdueBefore)
+            || (
+                x.InvokeToken != null
+                && (
+                    db.Metadatas.Any(m =>
+                        m.ExternalId == x.InvokeToken
+                        && (
+                            m.TrainState == TrainState.Failed
+                            || m.TrainState == TrainState.Cancelled
+                        )
+                        && (m.EndTime == null || m.EndTime < endedBefore)
+                    )
+                    || db.WorkQueues.Any(w =>
+                        w.ExternalId == x.InvokeToken && w.Status == WorkQueueStatus.Cancelled
+                    )
+                )
+            );
+    }
+
+    // Adds what the operator needs to see whether an instance needs attention: whether its timer is overdue, the run
+    // it waits on and where that run is, and whether it is stuck. One read of the tokens, one of their runs and one
+    // of their queue entries, for the rows that hold a token only; never the token itself.
+    private static async Task<IReadOnlyList<MachineInstanceRecord>> WithAttentionAsync(
+        IDataContext db,
+        IReadOnlyList<MachineInstanceRecord> records,
+        DateTimeOffset overdueBefore,
+        CancellationToken ct
+    )
+    {
+        var waiting = records.Where(r => r.HasLiveInvokedRun).Select(r => r.RowId).ToList();
+        Dictionary<long, string> tokens = [];
+        Dictionary<string, (long Id, TrainState State, DateTime? EndTime)> runs = new(
+            StringComparer.Ordinal
+        );
+        Dictionary<string, (long Id, WorkQueueStatus Status)> entries = new(StringComparer.Ordinal);
+        if (waiting.Count > 0)
+        {
+            tokens = await db
+                .SnapshotDrafts.AsNoTracking()
+                .Where(x => waiting.Contains(x.RowId) && x.InvokeToken != null)
+                .Select(x => new { x.RowId, x.InvokeToken })
+                .ToDictionaryAsync(x => x.RowId, x => x.InvokeToken!, ct);
+            var held = tokens.Values.Distinct().ToList();
+            if (held.Count > 0)
+            {
+                foreach (
+                    var run in await db
+                        .Metadatas.AsNoTracking()
+                        .Where(m => held.Contains(m.ExternalId))
+                        .Select(m => new
+                        {
+                            m.ExternalId,
+                            m.Id,
+                            m.TrainState,
+                            m.EndTime,
+                        })
+                        .ToListAsync(ct)
+                )
+                    runs[run.ExternalId] = (run.Id, run.TrainState, run.EndTime);
+                foreach (
+                    var entry in await db
+                        .WorkQueues.AsNoTracking()
+                        .Where(w => held.Contains(w.ExternalId))
+                        .Select(w => new
+                        {
+                            w.ExternalId,
+                            w.Id,
+                            w.Status,
+                        })
+                        .ToListAsync(ct)
+                )
+                    entries[entry.ExternalId] = (entry.Id, entry.Status);
+            }
+        }
+
+        var endedBefore = overdueBefore.UtcDateTime;
+        return records
+            .Select(r =>
+            {
+                var overdue = r.DueAt is { } due && due < overdueBefore;
+                MachineInstanceWaitingOn? waitingOn = null;
+                var failedRun = false;
+                if (tokens.TryGetValue(r.RowId, out var token))
+                {
+                    var hasRun = runs.TryGetValue(token, out var run);
+                    var hasEntry = entries.TryGetValue(token, out var entry);
+                    TrainState? state =
+                        hasRun ? run.State
+                        : hasEntry
+                            ? entry.Status == WorkQueueStatus.Cancelled ? TrainState.Cancelled
+                                : TrainState.Pending
+                        : null;
+                    waitingOn = new MachineInstanceWaitingOn(
+                        hasRun ? run.Id : null,
+                        state,
+                        hasEntry ? entry.Id : null
+                    );
+                    failedRun = hasRun
+                        ? run.State is TrainState.Failed or TrainState.Cancelled
+                            && (run.EndTime is null || run.EndTime < endedBefore)
+                        : hasEntry && entry.Status == WorkQueueStatus.Cancelled;
+                }
+                return r with
+                {
+                    Overdue = overdue,
+                    WaitingOn = waitingOn,
+                    Stuck = overdue || failedRun,
+                };
+            })
+            .ToList();
+    }
 }

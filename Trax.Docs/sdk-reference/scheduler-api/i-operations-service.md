@@ -587,7 +587,10 @@ read through these four methods, and one instance's runs and its cancel through 
 ```csharp fragment
 public record MachineInstanceQuery(
     string? Machine = null, string? State = null, SnapshotOwnerKind? OwnerKind = null,
-    int Skip = 0, int Take = 25);
+    int Skip = 0, int Take = 25)
+{
+    public bool? Stuck { get; init; }
+}
 
 public record MachineInstanceKey(string Machine, SnapshotOwnerKind OwnerKind, Guid Id, long? RowId = null);
 
@@ -597,7 +600,12 @@ public record MachineInstanceRecord(
 
 public record MachineInstancePage(IReadOnlyList<MachineInstanceRecord> Items, int Skip, int Take);
 public record MachineInstanceTotal(int Count, bool Capped);
-public record MachineInstanceStateCount(string Machine, string State, SnapshotOwnerKind OwnerKind, long Count);
+public record MachineInstanceStateCount(string Machine, string State, SnapshotOwnerKind OwnerKind, long Count)
+{
+    public long Stuck { get; init; }
+}
+
+public record MachineInstanceWaitingOn(long? ExecutionId, TrainState? TrainState, long? WorkQueueEntryId);
 ```
 
 | Method | Returns |
@@ -632,6 +640,18 @@ The live feed of instances: each instance once whenever any path on any host wri
 `MachineInstanceRecord` also carries `Revision`, the instance's revision, as an init-only property: 1
 when the row was created and one more for every write since, bumped by the database; and `Deleted`, set
 only on the live feed, on the instance as it was last seen before it was deleted or expired.
+
+The list and the lookup also say whether an instance needs attention (the live feed leaves these
+unset): `DueAt`, when its state's timer fires; `Overdue`, when that is past by more than
+`StateMachineOptions.InvokeOutcomeSweepInterval`, the reconciler's pace; `WaitingOn`, the run its
+state waits on as a `MachineInstanceWaitingOn` (its `ExecutionId`, null while still queued, its
+`TrainState`, `Pending` while queued and `Cancelled` for an entry cancelled before it started, and
+its `WorkQueueEntryId`), never the invoke token; `Stuck`, when it is overdue or its run failed or was
+cancelled and the outcome was never applied (a run that ended more than one sweep ago, or an entry
+cancelled while queued); and `InStateSince`, which is `UpdatedAt` until a transition log is kept.
+`MachineInstanceQuery.Stuck` lists only the stuck instances (`true`) or only the others (`false`),
+and `MachineInstanceStateCount.Stuck` counts them per state, in a second grouped read of the stuck
+rows alone, kept in the same five-second cache as the counts.
 
 A record never carries the snapshot's context or the owning user's key. The context is an untyped
 JSON object, so nothing could mask its sensitive parts; an operator sees where an instance is and

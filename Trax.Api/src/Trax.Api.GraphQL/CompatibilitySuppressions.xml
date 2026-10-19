@@ -20,6 +20,13 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Queries.OperationsQueries.GetMachineInstances(Trax.Scheduler.Services.Operations.IOperationsService,System.Threading.CancellationToken,System.String,System.String,System.Nullable{Trax.Effect.Enums.SnapshotOwnerKind},System.Int32,System.Int32)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Trax.Api.GraphQL.Queries.OperationsQueries.GetManifest(System.Int64,Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,System.Threading.CancellationToken)</Target>
     <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
     <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>

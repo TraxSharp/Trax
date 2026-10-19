@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.StateMachine.E2E;
@@ -236,6 +237,80 @@ public class OperatorMachineFeedE2ETests
             "onMachineInstanceChanged"
         );
         while (!change.GetProperty("reload").GetBoolean());
+    }
+
+    [Test]
+    public async Task An_instance_whose_timer_is_due_while_no_poller_fires_it_is_overdue_and_counted_stuck()
+    {
+        var approving = await _host.WizardInApprovingAsync(E2EHost.AliceKey);
+        var poller = _host.Services.GetRequiredService<InvokeOutcomeReconciler>();
+        await poller.StopAsync(CancellationToken.None);
+        try
+        {
+            await E2ESql.ExecuteAsync(
+                Database,
+                "UPDATE trax.snapshot_draft SET due_at = now() - interval '1 hour' "
+                    + "WHERE machine = @machine AND id = @id",
+                ("machine", WizardMachine.MachineId),
+                ("id", approving.Id)
+            );
+
+            using var doc = await _host.PostAsync(
+                $$"""
+                { operations {
+                    machineInstances(machine: "{{WizardMachine.MachineId}}", stuck: true, take: 500) {
+                      items { id state dueAt overdue stuck inStateSince updatedAt waitingOn { executionId trainState } }
+                    }
+                    machineInstanceCounts(machine: "{{WizardMachine.MachineId}}") { state ownerKind count stuck }
+                } }
+                """,
+                apiKey: E2EHost.OperatorKey
+            );
+            doc.RootElement.TryGetProperty("errors", out _)
+                .Should()
+                .BeFalse(doc.RootElement.GetRawText());
+            var operations = doc.RootElement.GetProperty("data").GetProperty("operations");
+
+            var item = operations
+                .GetProperty("machineInstances")
+                .GetProperty("items")
+                .EnumerateArray()
+                .Single(i => i.GetProperty("id").GetString() == approving.Id.ToString());
+            item.GetProperty("state").GetString().Should().Be(nameof(WizardState.Approving));
+            item.GetProperty("dueAt").ValueKind.Should().Be(JsonValueKind.String);
+            item.GetProperty("overdue")
+                .GetBoolean()
+                .Should()
+                .BeTrue("its timer is an hour past due and nothing fired it");
+            item.GetProperty("stuck").GetBoolean().Should().BeTrue();
+            item.GetProperty("waitingOn").ValueKind.Should().Be(JsonValueKind.Null);
+            item.GetProperty("inStateSince")
+                .GetString()
+                .Should()
+                .Be(item.GetProperty("updatedAt").GetString(), "no transition log is kept yet");
+
+            operations
+                .GetProperty("machineInstanceCounts")
+                .EnumerateArray()
+                .Single(c =>
+                    c.GetProperty("state").GetString() == nameof(WizardState.Approving)
+                    && c.GetProperty("ownerKind").GetString() == "USER"
+                )
+                .GetProperty("stuck")
+                .GetInt64()
+                .Should()
+                .BeGreaterThanOrEqualTo(1, "the overdue instance is counted stuck in its state");
+        }
+        finally
+        {
+            await E2ESql.ExecuteAsync(
+                Database,
+                "DELETE FROM trax.snapshot_draft WHERE machine = @machine AND id = @id",
+                ("machine", WizardMachine.MachineId),
+                ("id", approving.Id)
+            );
+            await poller.StartAsync(CancellationToken.None);
+        }
     }
 
     // graphql-transport-ws sends no ack for subscribe, so the feed is live only once a write reaches it, and a write

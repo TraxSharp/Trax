@@ -40,6 +40,24 @@ public record MachineInstance(
     /// <summary>The instance's revision: 1 when it was created, one more for every write since.</summary>
     public long? Revision { get; init; }
 
+    /// <summary>When the timer of its state fires, or <c>null</c> when that state has no timer.</summary>
+    public DateTimeOffset? DueAt { get; init; }
+
+    /// <summary>True when <see cref="DueAt"/> is past by more than the host's timer poll: the timer has not fired.</summary>
+    public bool Overdue { get; init; }
+
+    /// <summary>The run its state waits on and where that run is, or <c>null</c> when it waits on none.</summary>
+    public MachineInstanceWaitingRun? WaitingOn { get; init; }
+
+    /// <summary>
+    /// When it entered its state, as far as Trax records it: until a transition log is kept, when it last
+    /// changed (<c>updatedAt</c>). Show it as "last changed".
+    /// </summary>
+    public DateTimeOffset InStateSince { get; init; }
+
+    /// <summary>True when it cannot move on its own: <see cref="Overdue"/>, or its run failed or was cancelled.</summary>
+    public bool Stuck { get; init; }
+
     /// <summary>The list item for <paramref name="record"/>.</summary>
     internal static MachineInstance From(MachineInstanceRecord record) =>
         new(
@@ -55,7 +73,34 @@ public record MachineInstance(
         )
         {
             Revision = record.Revision,
+            DueAt = record.DueAt,
+            Overdue = record.Overdue,
+            WaitingOn = MachineInstanceWaitingRun.From(record.WaitingOn),
+            InStateSince = record.InStateSince,
+            Stuck = record.Stuck,
         };
+}
+
+/// <summary>
+/// The train run a state-machine instance's state waits on: which run, and where it is. Never the
+/// instance's invoke token.
+/// </summary>
+/// <param name="ExecutionId">The run's id, or <c>null</c> while it is queued and has no run yet.</param>
+/// <param name="TrainState">
+/// Where the run is: its state once dispatched, <c>PENDING</c> while its entry is queued,
+/// <c>CANCELLED</c> when the entry was cancelled before it started; <c>null</c> when neither is found.
+/// </param>
+/// <param name="WorkQueueEntryId">The run's work queue entry, or <c>null</c> when none is found.</param>
+public record MachineInstanceWaitingRun(
+    long? ExecutionId,
+    TrainState? TrainState,
+    long? WorkQueueEntryId
+)
+{
+    internal static MachineInstanceWaitingRun? From(MachineInstanceWaitingOn? waiting) =>
+        waiting is null
+            ? null
+            : new(waiting.ExecutionId, waiting.TrainState, waiting.WorkQueueEntryId);
 }
 
 /// <summary>
@@ -168,6 +213,24 @@ public record MachineInstanceDetail(
     /// </summary>
     public long? QueuedInvokedRunEntryId { get; init; }
 
+    /// <summary>When the timer of its state fires, or <c>null</c> when that state has no timer.</summary>
+    public DateTimeOffset? DueAt { get; init; }
+
+    /// <summary>True when <see cref="DueAt"/> is past by more than the host's timer poll: the timer has not fired.</summary>
+    public bool Overdue { get; init; }
+
+    /// <summary>The run its state waits on and where that run is, or <c>null</c> when it waits on none.</summary>
+    public MachineInstanceWaitingRun? WaitingOn { get; init; }
+
+    /// <summary>
+    /// When it entered its state, as far as Trax records it: until a transition log is kept, when it last
+    /// changed (<c>updatedAt</c>). Show it as "last changed".
+    /// </summary>
+    public DateTimeOffset InStateSince { get; init; }
+
+    /// <summary>True when it cannot move on its own: <see cref="Overdue"/>, or its run failed or was cancelled.</summary>
+    public bool Stuck { get; init; }
+
     /// <summary>The detail for <paramref name="record"/>, with the runs <paramref name="runs"/> lists.</summary>
     internal static MachineInstanceDetail From(
         MachineInstanceRecord record,
@@ -189,6 +252,11 @@ public record MachineInstanceDetail(
             IsInvokedRunsCapped = runs?.Capped ?? false,
             QueuedInvokedRunEntryId = runs?.QueuedEntryId,
             Revision = record.Revision,
+            DueAt = record.DueAt,
+            Overdue = record.Overdue,
+            WaitingOn = MachineInstanceWaitingRun.From(record.WaitingOn),
+            InStateSince = record.InStateSince,
+            Stuck = record.Stuck,
         };
 }
 
@@ -260,4 +328,8 @@ public record MachineInstanceCount(
     string State,
     SnapshotOwnerKind OwnerKind,
     long Count
-);
+)
+{
+    /// <summary>How many of them are stuck: a timer overdue, or waiting on a run that failed or was cancelled.</summary>
+    public long Stuck { get; init; }
+}

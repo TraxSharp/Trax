@@ -126,8 +126,16 @@
       "text": "query MachineInstanceCounts {\n  operations {\n    machineInstanceCounts {\n      machine\n      state\n      ownerKind\n      count\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
+      "name": "MachineInstanceStuckCounts",
+      "text": "query MachineInstanceStuckCounts($machine: String) {\n  operations {\n    machineInstanceCounts(machine: $machine) {\n      machine\n      state\n      ownerKind\n      count\n      stuck\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
       "name": "MachineInstances",
       "text": "query MachineInstances($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $skip: Int!, $take: Int!) {\n  operations {\n    machineInstances(\n      machine: $machine\n      state: $state\n      ownerKind: $ownerKind\n      skip: $skip\n      take: $take\n    ) {\n      items {\n        machine\n        ownerKind\n        id\n        rowId\n        state\n        version\n        createdAt\n        updatedAt\n        hasLiveInvokedRun\n        __typename\n      }\n      totalCount\n      isCountCapped\n      __typename\n    }\n    __typename\n  }\n}"
+    },
+    {
+      "name": "MachineInstancesAttention",
+      "text": "query MachineInstancesAttention($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $stuck: Boolean, $skip: Int!, $take: Int!) {\n  operations {\n    machineInstances(\n      machine: $machine\n      state: $state\n      ownerKind: $ownerKind\n      stuck: $stuck\n      skip: $skip\n      take: $take\n    ) {\n      items {\n        machine\n        ownerKind\n        id\n        rowId\n        state\n        updatedAt\n        inStateSince\n        dueAt\n        overdue\n        stuck\n        waitingOn {\n          executionId\n          trainState\n          workQueueEntryId\n          __typename\n        }\n        __typename\n      }\n      totalCount\n      isCountCapped\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "Machines",

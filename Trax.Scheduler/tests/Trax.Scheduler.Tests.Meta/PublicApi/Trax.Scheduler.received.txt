@@ -734,6 +734,7 @@ namespace Trax.Scheduler.Services.Operations
         public Trax.Effect.Enums.SnapshotOwnerKind? OwnerKind { get; init; }
         public int Skip { get; init; }
         public string? State { get; init; }
+        public bool? Stuck { get; init; }
         public int Take { get; init; }
     }
     public class MachineInstanceRecord : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceRecord>
@@ -741,16 +742,21 @@ namespace Trax.Scheduler.Services.Operations
         public MachineInstanceRecord(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun) { }
         public System.DateTimeOffset? CreatedAt { get; init; }
         public bool Deleted { get; init; }
+        public System.DateTimeOffset? DueAt { get; init; }
         public bool HasLiveInvokedRun { get; init; }
         public System.Guid Id { get; init; }
+        public System.DateTimeOffset InStateSince { get; }
         public string Machine { get; init; }
+        public bool Overdue { get; init; }
         public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
         public bool Reload { get; init; }
         public long? Revision { get; init; }
         public long RowId { get; init; }
         public string State { get; init; }
+        public bool Stuck { get; init; }
         public System.DateTimeOffset UpdatedAt { get; init; }
         public int Version { get; init; }
+        public Trax.Scheduler.Services.Operations.MachineInstanceWaitingOn? WaitingOn { get; init; }
     }
     public class MachineInstanceRun : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceRun>
     {
@@ -779,12 +785,20 @@ namespace Trax.Scheduler.Services.Operations
         public string Machine { get; init; }
         public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
         public string State { get; init; }
+        public long Stuck { get; init; }
     }
     public class MachineInstanceTotal : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceTotal>
     {
         public MachineInstanceTotal(int Count, bool Capped) { }
         public bool Capped { get; init; }
         public int Count { get; init; }
+    }
+    public class MachineInstanceWaitingOn : System.IEquatable<Trax.Scheduler.Services.Operations.MachineInstanceWaitingOn>
+    {
+        public MachineInstanceWaitingOn(long? ExecutionId, Trax.Effect.Enums.TrainState? TrainState, long? WorkQueueEntryId) { }
+        public long? ExecutionId { get; init; }
+        public Trax.Effect.Enums.TrainState? TrainState { get; init; }
+        public long? WorkQueueEntryId { get; init; }
     }
     public class MachineStateDescription : System.IEquatable<Trax.Scheduler.Services.Operations.MachineStateDescription>
     {

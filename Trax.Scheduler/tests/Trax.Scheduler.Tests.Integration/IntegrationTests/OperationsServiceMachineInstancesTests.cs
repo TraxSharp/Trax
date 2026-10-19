@@ -303,6 +303,115 @@ public class OperationsServiceMachineInstancesTests : TestSetup
             );
     }
 
+    [Test]
+    public async Task An_instance_waiting_on_a_failed_or_cancelled_run_or_an_overdue_timer_is_stuck()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var failedToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
+        var runningToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
+        var cancelledToken = Guid.NewGuid().ToString("N"); // a run's external id is 32 characters
+        var failed = await Seed(SnapshotOwnerKind.System, "Waiting", now, invokeToken: failedToken);
+        var running = await Seed(
+            SnapshotOwnerKind.System,
+            "Waiting",
+            now,
+            invokeToken: runningToken
+        );
+        var cancelled = await Seed(
+            SnapshotOwnerKind.System,
+            "Waiting",
+            now,
+            invokeToken: cancelledToken
+        );
+        var overdue = await Seed(SnapshotOwnerKind.System, "Timed", now);
+        var notYetDue = await Seed(SnapshotOwnerKind.System, "Timed", now);
+        var db = (DbContext)DataContext;
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, failure_class)
+            VALUES ({failedToken}, 'Ops.IWaitedTrain', 'failed', now() - interval '2 minutes', now() - interval '1 minute', 'unclassified'),
+                   ({runningToken}, 'Ops.IWaitedTrain', 'in_progress', now() - interval '2 minutes', NULL, 'unclassified')
+            """
+        );
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at)
+            VALUES ({cancelledToken}, 'Ops.IWaitedTrain', 'cancelled', 0, now())
+            """
+        );
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE trax.snapshot_draft SET due_at = now() - interval '1 hour' WHERE row_id = {overdue.RowId}"
+        );
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE trax.snapshot_draft SET due_at = now() + interval '1 hour' WHERE row_id = {notYetDue.RowId}"
+        );
+
+        try
+        {
+            var page = await _operations.GetMachineInstancesAsync(
+                new MachineInstanceQuery(Machine: _machine),
+                CancellationToken.None
+            );
+            var byRow = page.Items.ToDictionary(i => i.RowId);
+
+            byRow[failed.RowId]
+                .Stuck.Should()
+                .BeTrue("its run failed and the outcome never moved it");
+            byRow[failed.RowId].WaitingOn!.TrainState.Should().Be(TrainState.Failed);
+            byRow[failed.RowId].WaitingOn!.ExecutionId.Should().NotBeNull();
+            byRow[running.RowId].Stuck.Should().BeFalse("its run is still in progress");
+            byRow[running.RowId].WaitingOn!.TrainState.Should().Be(TrainState.InProgress);
+            byRow[cancelled.RowId]
+                .Stuck.Should()
+                .BeTrue("its entry was cancelled before it started");
+            byRow[cancelled.RowId].WaitingOn!.TrainState.Should().Be(TrainState.Cancelled);
+            byRow[cancelled.RowId].WaitingOn!.ExecutionId.Should().BeNull();
+            byRow[cancelled.RowId].WaitingOn!.WorkQueueEntryId.Should().NotBeNull();
+            byRow[overdue.RowId].Overdue.Should().BeTrue();
+            byRow[overdue.RowId].Stuck.Should().BeTrue();
+            byRow[overdue.RowId].WaitingOn.Should().BeNull();
+            byRow[notYetDue.RowId].Overdue.Should().BeFalse();
+            byRow[notYetDue.RowId].DueAt.Should().NotBeNull();
+            byRow[notYetDue.RowId].Stuck.Should().BeFalse();
+            byRow[notYetDue.RowId].InStateSince.Should().Be(byRow[notYetDue.RowId].UpdatedAt);
+
+            var stuck = await _operations.GetMachineInstancesAsync(
+                new MachineInstanceQuery(Machine: _machine) { Stuck = true },
+                CancellationToken.None
+            );
+            stuck
+                .Items.Select(i => i.RowId)
+                .Should()
+                .BeEquivalentTo([failed.RowId, cancelled.RowId, overdue.RowId]);
+            (
+                await _operations.CountMachineInstancesAsync(
+                    new MachineInstanceQuery(Machine: _machine) { Stuck = false },
+                    CancellationToken.None
+                )
+            )
+                .Count.Should()
+                .Be(2);
+
+            var counts = await _operations.GetMachineInstanceStateCountsAsync(
+                _machine,
+                CancellationToken.None
+            );
+            counts
+                .Select(c => (c.State, c.Count, c.Stuck))
+                .Should()
+                .Equal(("Timed", 2L, 1L), ("Waiting", 3L, 2L));
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM trax.metadata WHERE external_id IN ({failedToken}, {runningToken})"
+            );
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM trax.work_queue WHERE external_id = {cancelledToken}"
+            );
+        }
+    }
+
     private async Task<SnapshotDraft> Seed(
         SnapshotOwnerKind owner,
         string state,

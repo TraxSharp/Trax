@@ -279,6 +279,67 @@ public class MachineInstanceStressTests : StressTestSetup
                 )
         ).Items.Single();
 
+    // How many instances the stuck tests make overdue: a handful among millions, as a real host
+    // has when one machine's timers stop being fired.
+    private const int OverdueInstances = 200;
+
+    private Task MakeOverdueAsync() =>
+        ExecSqlAsync(
+            "UPDATE trax.snapshot_draft SET due_at = now() - interval '1 hour' WHERE row_id IN "
+                + $"(SELECT row_id FROM trax.snapshot_draft WHERE machine = '{SystemMachine}' "
+                + $"ORDER BY row_id LIMIT {OverdueInstances})"
+        );
+
+    private Task ClearDueAsync() =>
+        ExecSqlAsync("UPDATE trax.snapshot_draft SET due_at = NULL WHERE due_at IS NOT NULL");
+
+    [Test]
+    public async Task StuckOnly_FirstPage_ThroughTheSchema_WithinBudget()
+    {
+        await MeasureWriteAsync(
+            "operations.machineInstances (stuck: true, through the schema)",
+            ListBudget,
+            prepare: MakeOverdueAsync,
+            action: async (_, ct) =>
+            {
+                var page = await OperationsFieldAsync(
+                    "{ operations { machineInstances(stuck: true, take: 100) { totalCount isCountCapped "
+                        + "items { rowId machine state dueAt overdue stuck inStateSince "
+                        + "waitingOn { executionId trainState workQueueEntryId } } } } }",
+                    ct
+                );
+                page.GetProperty("totalCount").GetInt32().Should().Be(OverdueInstances);
+                page.GetProperty("items")
+                    .EnumerateArray()
+                    .Should()
+                    .OnlyContain(i =>
+                        i.GetProperty("stuck").GetBoolean() && i.GetProperty("overdue").GetBoolean()
+                    );
+            },
+            restore: ClearDueAsync
+        );
+    }
+
+    [Test]
+    public async Task FirstPage_WithAttention_ThroughTheSchema_WithinBudget()
+    {
+        // The unfiltered first page with every attention field: one instance in a hundred holds an
+        // invoke token, so the page reads its runs and queue entries too.
+        await MeasureAsync(
+            "operations.machineInstances (attention fields, through the schema)",
+            ListBudget,
+            async (_, ct) =>
+            {
+                var page = await OperationsFieldAsync(
+                    "{ operations { machineInstances(take: 500) { items { rowId hasLiveInvokedRun dueAt "
+                        + "overdue stuck inStateSince waitingOn { executionId trainState workQueueEntryId } } } } }",
+                    ct
+                );
+                page.GetProperty("items").GetArrayLength().Should().Be(500);
+            }
+        );
+    }
+
     [Test]
     public async Task CountsByState_WithinBudget()
     {

@@ -1021,16 +1021,44 @@ function machineRow(
   state: string,
   hasLiveInvokedRun: boolean,
   minute: number,
+  attention: { dueAt?: string; overdue?: boolean; stuck?: boolean; waitingOn?: { executionId: number | null; trainState: string | null; workQueueEntryId: number | null } } = {},
 ) {
   const updatedAt = `2026-07-07T11:${String(minute).padStart(2, "0")}:00.000Z`;
-  return { machine, ownerKind, id, rowId, state, version: 1, createdAt: "2026-07-07T10:00:00.000Z", updatedAt, hasLiveInvokedRun };
+  return {
+    machine,
+    ownerKind,
+    id,
+    rowId,
+    state,
+    version: 1,
+    createdAt: "2026-07-07T10:00:00.000Z",
+    updatedAt,
+    hasLiveInvokedRun,
+    // No transition log yet: the time it entered its state is when it last changed.
+    inStateSince: updatedAt,
+    dueAt: attention.dueAt ?? null,
+    overdue: attention.overdue ?? false,
+    stuck: attention.stuck ?? false,
+    waitingOn: attention.waitingOn ?? null,
+  };
 }
 
 export const MACHINE_ROWS = [
-  machineRow("source-partition", "SYSTEM", MACHINE_IDS.dispatched, 11, "Ingesting", true, 58),
-  machineRow("topic-map", "USER", MACHINE_IDS.draftBuilding, 21, "Building", true, 57),
-  machineRow("source-partition", "SYSTEM", MACHINE_IDS.queued, 12, "Ingesting", true, 56),
-  machineRow("topic-map", "USER", MACHINE_IDS.draftIdle, 22, "ChoosingRange", false, 55),
+  machineRow("source-partition", "SYSTEM", MACHINE_IDS.dispatched, 11, "Ingesting", true, 58, {
+    waitingOn: { executionId: 7101, trainState: "IN_PROGRESS", workQueueEntryId: 7191 },
+  }),
+  machineRow("topic-map", "USER", MACHINE_IDS.draftBuilding, 21, "Building", true, 57, {
+    waitingOn: { executionId: 7110, trainState: "IN_PROGRESS", workQueueEntryId: 7192 },
+  }),
+  machineRow("source-partition", "SYSTEM", MACHINE_IDS.queued, 12, "Ingesting", true, 56, {
+    waitingOn: { executionId: null, trainState: "PENDING", workQueueEntryId: 7201 },
+  }),
+  // Its 24-hour timer was due an hour ago and nothing fired it: overdue, so stuck.
+  machineRow("topic-map", "USER", MACHINE_IDS.draftIdle, 22, "ChoosingRange", false, 55, {
+    dueAt: "2026-07-07T10:55:00.000Z",
+    overdue: true,
+    stuck: true,
+  }),
   machineRow("source-partition", "SYSTEM", MACHINE_IDS.idle, 13, "Ingested", false, 54),
 ];
 
@@ -1078,11 +1106,12 @@ export function machineInstanceDetail(args: Args) {
 }
 
 function machineCounts(rows: typeof MACHINE_ROWS) {
-  const counts = new Map<string, { machine: string; state: string; ownerKind: string; count: number }>();
+  const counts = new Map<string, { machine: string; state: string; ownerKind: string; count: number; stuck: number }>();
   for (const r of rows) {
     const key = `${r.machine}|${r.state}|${r.ownerKind}`;
-    const c = counts.get(key) ?? { machine: r.machine, state: r.state, ownerKind: r.ownerKind, count: 0 };
+    const c = counts.get(key) ?? { machine: r.machine, state: r.state, ownerKind: r.ownerKind, count: 0, stuck: 0 };
     c.count++;
+    if (r.stuck) c.stuck++;
     counts.set(key, c);
   }
   return [...counts.values()];
@@ -1093,6 +1122,7 @@ function machineInstancesPage(args: Args, capped = false) {
   if (args.machine != null) rows = rows.filter((r) => r.machine === args.machine);
   if (args.state != null) rows = rows.filter((r) => r.state === args.state);
   if (args.ownerKind != null) rows = rows.filter((r) => r.ownerKind === args.ownerKind);
+  if (args.stuck != null) rows = rows.filter((r) => r.stuck === args.stuck);
   const skip = Number(args.skip ?? 0);
   const take = Number(args.take ?? 25);
   return {

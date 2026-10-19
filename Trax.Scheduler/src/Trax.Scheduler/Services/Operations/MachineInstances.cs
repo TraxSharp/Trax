@@ -22,7 +22,14 @@ public record MachineInstanceQuery(
     SnapshotOwnerKind? OwnerKind = null,
     int Skip = 0,
     int Take = 25
-);
+)
+{
+    /// <summary>
+    /// True for only the instances that are stuck (see <see cref="MachineInstanceRecord.Stuck"/>), false for only
+    /// those that are not; null for both.
+    /// </summary>
+    public bool? Stuck { get; init; }
+}
 
 /// <summary>
 /// Names one row of <c>trax.snapshot_draft</c> for an operator: the machine, the owner kind and
@@ -100,12 +107,61 @@ public record MachineInstanceRecord(
     public bool Deleted { get; init; }
 
     /// <summary>
+    /// When the timer of the state the instance is in fires, or null when that state has no timer. Read by the list
+    /// and the lookup; null on the live feed.
+    /// </summary>
+    public DateTimeOffset? DueAt { get; init; }
+
+    /// <summary>
+    /// True when <see cref="DueAt"/> is past by more than the host's timer poll
+    /// (<c>StateMachineOptions.InvokeOutcomeSweepInterval</c>): the timer should have fired and has not. Read by the
+    /// list and the lookup; false on the live feed.
+    /// </summary>
+    public bool Overdue { get; init; }
+
+    /// <summary>
+    /// The run the instance's state waits on, or null when it waits on none. Read by the list and the lookup; null on
+    /// the live feed.
+    /// </summary>
+    public MachineInstanceWaitingOn? WaitingOn { get; init; }
+
+    /// <summary>
+    /// True when the instance cannot move on its own: it is <see cref="Overdue"/>, or the run it waits on failed or
+    /// was cancelled and its outcome was never applied. How long an instance has sat in its state is not counted.
+    /// Read by the list and the lookup; false on the live feed.
+    /// </summary>
+    public bool Stuck { get; init; }
+
+    /// <summary>
+    /// When the instance entered its state, as far as Trax records it. No transition log is kept yet, so this is
+    /// <see cref="UpdatedAt"/>, when the instance last changed: a write that kept the state moves it too. Show it as
+    /// "last changed".
+    /// </summary>
+    public DateTimeOffset InStateSince => UpdatedAt;
+
+    /// <summary>
     /// True on the live feed (<see cref="IOperationsService.WatchMachineInstancesAsync"/>) when writes may have been
     /// missed (the host's change listener started, reconnected, or the reader fell behind): the record names no
     /// instance, and the reader reads what it shows again. Always false on a read.
     /// </summary>
     public bool Reload { get; init; }
 }
+
+/// <summary>
+/// The train run a state-machine instance's current state waits on, as an operator reads it: which run, and where
+/// it is. Never the instance's invoke token.
+/// </summary>
+/// <param name="ExecutionId">The run's id, or null while it is still queued and has no run yet.</param>
+/// <param name="TrainState">
+/// Where the run is: its state once dispatched, <c>Pending</c> while its entry is queued, <c>Cancelled</c> when its
+/// entry was cancelled before it started; null when neither the run nor its entry is found.
+/// </param>
+/// <param name="WorkQueueEntryId">The run's work queue entry, or null when none is found.</param>
+public record MachineInstanceWaitingOn(
+    long? ExecutionId,
+    TrainState? TrainState,
+    long? WorkQueueEntryId
+);
 
 /// <summary>A page of state-machine instances, newest first by when each was last written.</summary>
 /// <param name="Items">The instances on this page.</param>
@@ -137,7 +193,11 @@ public record MachineInstanceStateCount(
     string State,
     SnapshotOwnerKind OwnerKind,
     long Count
-);
+)
+{
+    /// <summary>How many of them are stuck (see <see cref="MachineInstanceRecord.Stuck"/>).</summary>
+    public long Stuck { get; init; }
+}
 
 /// <summary>
 /// One train run a state-machine instance invoked, as an operator reads it: the fields the run

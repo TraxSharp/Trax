@@ -30,6 +30,10 @@ public partial class OperationsQueries
     /// <param name="ownerKind">Only instances a user owns, or only those the system owns.</param>
     /// <param name="skip">How many instances to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
+    /// <param name="stuck">
+    /// True for only the stuck instances (a timer overdue, or waiting on a run that failed or was
+    /// cancelled), false for only the others; omitted, both.
+    /// </param>
     public async Task<PagedResult<MachineInstance>> GetMachineInstances(
         [Service] IOperationsService operationsService,
         CancellationToken ct,
@@ -37,7 +41,8 @@ public partial class OperationsQueries
         string? state = null,
         SnapshotOwnerKind? ownerKind = null,
         int skip = 0,
-        int take = 25
+        int take = 25,
+        bool? stuck = null
     )
     {
         var query = new MachineInstanceQuery(
@@ -46,7 +51,10 @@ public partial class OperationsQueries
             ownerKind,
             OperationsPageBounds.Skip(skip),
             OperationsPageBounds.Take(take)
-        );
+        )
+        {
+            Stuck = stuck,
+        };
 
         var page = await operationsService.GetMachineInstancesAsync(query, ct);
         var total = await operationsService.CountMachineInstancesAsync(query, ct);
@@ -126,7 +134,7 @@ public partial class OperationsQueries
 
     /// <summary>
     /// How many instances each machine has in each state, for each owner kind, ordered by machine,
-    /// state and owner kind. Exact. Read through the call the dashboard's State machines page
+    /// state and owner kind, and how many of them are stuck. Exact. Read through the call the dashboard's State machines page
     /// makes for its counts, which each host keeps for 5 seconds per machine filter, so every
     /// caller polling them shares one read and a count can be that old.
     /// </summary>
@@ -139,6 +147,9 @@ public partial class OperationsQueries
         string? machine = null
     ) =>
         (await operationsService.GetMachineInstanceStateCountsAsync(machine, ct))
-            .Select(c => new MachineInstanceCount(c.Machine, c.State, c.OwnerKind, c.Count))
+            .Select(c => new MachineInstanceCount(c.Machine, c.State, c.OwnerKind, c.Count)
+            {
+                Stuck = c.Stuck,
+            })
             .ToList();
 }
