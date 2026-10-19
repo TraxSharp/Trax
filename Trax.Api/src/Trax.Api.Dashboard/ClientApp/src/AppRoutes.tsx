@@ -25,6 +25,7 @@ import { WorkQueueDetailPage } from "./pages/WorkQueueDetailPage";
 import { DeadLetterDetailPage } from "./pages/DeadLetterDetailPage";
 import { ManifestDetailPage } from "./pages/ManifestDetailPage";
 import { MockOverlayPage } from "./pages/dev/MockOverlayPage";
+import { BulkOperationPage, BulkOperationsPage } from "./pages/BulkOperationsPage";
 
 // The console's routes follow its navigation (api/0043): Runs (with its Queued and Dead letter views),
 // Trains, Machines, Schedules, System, API admin. The routes before it moved keep working as
@@ -54,6 +55,8 @@ export function AppRoutes() {
         <Route path="/system/effects" element={<EffectsSettingsPage />} />
         <Route path="/system/logs" element={<LogsPage />} />
         <Route path="/system/live" element={<RealTimePage />} />
+        <Route path="/system/operations" element={<BulkOperationsPage />} />
+        <Route path="/system/operations/:id" element={<BulkOperationPage />} />
         <Route path="/api-admin/persisted-operations" element={<PersistedOperationsPage />} />
         <Route path="/api-admin/persisted-operations/:id" element={<PersistedOperationDetailPage />} />
         <Route path="/preferences" element={<UserSettingsPage />} />

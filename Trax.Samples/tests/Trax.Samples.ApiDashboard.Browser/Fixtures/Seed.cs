@@ -203,6 +203,27 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
     }
 
     /// <summary>
+    /// <paramref name="count"/> runs of <see cref="IReconcileAccountTrain"/> in progress, each about a key of its own
+    /// and held until this seed is disposed, so a cancel requested of them stays visible as requested.
+    /// </summary>
+    public async Task<IReadOnlyList<Metadata>> HeldRunsAsync(int count)
+    {
+        var runs = new List<Metadata>();
+        for (var i = 0; i < count; i++)
+        {
+            var key = NewKey("ledger");
+            Holds.Hold(key);
+            _undo.Push(() =>
+            {
+                Holds.Release(key);
+                return Task.CompletedTask;
+            });
+            runs.Add(await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress));
+        }
+        return runs;
+    }
+
+    /// <summary>
     /// A <see cref="ReminderMachine"/> instance whose timer is past due and has not fired: the machine sweep that
     /// fires timers is stopped until this seed is disposed, which then fires it.
     /// </summary>

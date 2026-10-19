@@ -9,6 +9,7 @@ import {
   Inbox,
   KeyRound,
   Layers,
+  ListChecks,
   LayoutDashboard,
   MailX,
   Network,
@@ -44,7 +45,7 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   // Shown only when the host exposes the feature (see Layout).
-  feature?: "persistedOperations" | "stateMachines";
+  feature?: "persistedOperations" | "stateMachines" | "bulkOperations";
 }
 interface NavGroup {
   label: string;
@@ -89,6 +90,7 @@ const GROUPS: NavGroup[] = [
       { path: "/system/effects", label: "Effects", icon: Sparkles },
       { path: "/system/logs", label: "Logs", icon: ScrollText },
       { path: "/system/live", label: "Live events", icon: Radio },
+      { path: "/system/operations", label: "Bulk operations", icon: ListChecks, feature: "bulkOperations" },
     ],
   },
   {
@@ -128,8 +130,16 @@ export function Layout() {
   // Every host has machines; only the demo, before its recordings hold them, cannot show the page
   // (lib/answerable.ts).
   const stateMachines = useAnswers("Machines");
+  // The demo lists bulk operations once its recordings hold them.
+  const bulkOperations = useAnswers("BulkOperations");
   const shown = (i: NavItem) =>
-    i.feature === "persistedOperations" ? persistedOps : i.feature === "stateMachines" ? stateMachines : true;
+    i.feature === "persistedOperations"
+      ? persistedOps
+      : i.feature === "stateMachines"
+        ? stateMachines
+        : i.feature === "bulkOperations"
+          ? bulkOperations
+          : true;
   const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter(shown) })).filter((g) => g.items.length > 0);
 
   return (

@@ -32,6 +32,10 @@ export const TERMS = {
     means: "A record that moves between named states when it receives commands, and can start trains as it goes.",
   },
   effect: { name: "effect", means: "Something that runs around every train run, such as recording it to the database or logging." },
+  bulkOperation: {
+    name: "bulk operation",
+    means: "One action applied to every row a list's filter matched when it started, in batches, with what did not take and why.",
+  },
   decider: { name: "decider", means: "What answers a train's questions, such as a model. Its answers are recorded and can be replayed." },
 } satisfies Record<string, Term>;
 

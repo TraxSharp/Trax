@@ -22,6 +22,7 @@ import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
 import { RunsTabs } from "../components/RunsTabs";
+import { ApplyToAllMatching } from "../components/ApplyToAllMatching";
 import { BatchBar, EmptyState, ListView, MaybeIdLink, type Column } from "../components/ListView";
 import { useKeyset } from "../lib/useKeyset";
 
@@ -359,6 +360,35 @@ function RunsList() {
             <button onClick={onBulkCancel} className="text-danger-fg font-medium hover:underline">
               Cancel selected
             </button>
+            <ApplyToAllMatching
+              total={page?.totalCount}
+              // The list read's filter, as its variables send it.
+              filter={{
+                executions: {
+                  trainState: trainState || null,
+                  trainName: trainName || null,
+                  startedAfter: after ? new Date(after).toISOString() : null,
+                  startedBefore: before ? new Date(before).toISOString() : null,
+                  hideAdminTrains: hideAdmin,
+                  failureClass: failureClass || null,
+                  externalId: externalId.trim() || null,
+                  parentId: parentId ? Number(parentId) : null,
+                  hostName: hostName.trim() || null,
+                },
+              }}
+              unavailable={
+                ACTIVE_STATES.has(trainState as TrainState)
+                  ? undefined
+                  : "Show only Pending or In progress runs to cancel all matching."
+              }
+              actions={[
+                {
+                  kind: "CANCEL",
+                  explain: "A queued run never starts; a running one stops at its next junction.",
+                  danger: true,
+                },
+              ]}
+            />
           </BatchBar>
 
           <ListView

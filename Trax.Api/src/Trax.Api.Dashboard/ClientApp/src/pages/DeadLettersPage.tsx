@@ -20,6 +20,7 @@ import type { DeadLetterStatus, DeadLetterSummary, PagedResult } from "../types"
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
+import { ApplyToAllMatching } from "../components/ApplyToAllMatching";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
 import { useAnswers } from "../lib/answerable";
 import { enumLabel, formatTime, shortName } from "../lib/format";
@@ -391,6 +392,19 @@ export function DeadLettersPage() {
         >
           Acknowledge selected
         </button>
+        <ApplyToAllMatching
+          total={page?.totalCount}
+          filter={{
+            deadLetters: { status: status || null, manifestId: manifestId ? Number(manifestId) : null },
+          }}
+          unavailable={
+            status === "AWAITING_INTERVENTION" ? undefined : "Show only Awaiting intervention to act on all matching."
+          }
+          actions={[
+            { kind: "REQUEUE", explain: "A new run of each one's manifest is queued.", danger: false },
+            { kind: "ACKNOWLEDGE", explain: "Each is closed with the note, without a retry." },
+          ]}
+        />
       </BatchBar>
 
       {view === "groups" && page && page.totalCount > items.length && (

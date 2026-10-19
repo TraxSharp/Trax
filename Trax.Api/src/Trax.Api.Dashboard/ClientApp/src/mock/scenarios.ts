@@ -1,5 +1,6 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import type { ChainStepKind, RunGraph, RunGraphNode, RunGraphStep, RunNodeState } from "../types";
+import type { StatefulOverlay } from "./store/overlays";
 import { GraphQLError } from "graphql";
 import { flattenRunGraph } from "../lib/runGraphTree";
 
@@ -1500,4 +1501,80 @@ export const lookupScenario: MockSchemaOverrides = {
   resolvers: () => ({
     OperationsQueries: { lookup: (_root: unknown, args: Args) => lookupMatches(args) },
   }),
+};
+
+// ── Bulk operations ──────────────────────────────────────────────────────
+// One running cancel with failures of two reasons, one finished acknowledge, one that stopped on a
+// refused batch. Served by an overlay (the default one reads only what the session started), so a
+// story passes `overlays: [bulkOperationsOverlay]`.
+const EMPTY_BULK_FILTER = { executions: null, deadLetters: null, manifests: null };
+const BULK_EXECUTION_FILTER = {
+  trainState: "IN_PROGRESS", trainName: "Trax.Demo.Trains.ImportTrain", startedAfter: "2026-07-07T02:00:00.000Z",
+  startedBefore: null, manifestId: null, manifestGroupId: null, hideAdminTrains: true, failureClass: null,
+  externalId: null, parentId: null, hostName: null, failureReasonContains: null, failureJunction: null,
+};
+const BULK_FAILURES = [
+  ...Array.from({ length: 9 }, (_, i) => ({ id: 88_100 + i, reason: "It had already ended (completed)." })),
+  ...Array.from({ length: 3 }, (_, i) => ({ id: 88_200 + i, reason: "It no longer exists." })),
+];
+export const BULK_OPERATION_IDS = {
+  running: "0f8e2c1a-6d1b-4c3e-9a57-1b2d3c4e5f60",
+  finished: "1a2b3c4d-0000-4000-9000-000000000002",
+  failed: "1a2b3c4d-0000-4000-9000-000000000003",
+};
+export const BULK_OPERATION_ROWS = [
+  {
+    id: BULK_OPERATION_IDS.running, kind: "CANCEL", status: "RUNNING", actor: "apikey:operator", askAfresh: false,
+    startedAt: "2026-07-07T11:58:00.000Z", finishedAt: null, total: 312, done: 180, failed: 12,
+    message: "192 of 312 attempted; 12 did not take.",
+    filter: { ...EMPTY_BULK_FILTER, executions: BULK_EXECUTION_FILTER },
+    failureReasons: [
+      { reason: "It had already ended (completed).", count: 9 },
+      { reason: "It no longer exists.", count: 3 },
+    ],
+    failures: BULK_FAILURES,
+  },
+  {
+    id: BULK_OPERATION_IDS.finished, kind: "ACKNOWLEDGE", status: "FINISHED", actor: "oidc:ops@example.com", askAfresh: false,
+    startedAt: "2026-07-07T10:00:00.000Z", finishedAt: "2026-07-07T10:00:04.000Z", total: 40, done: 40, failed: 0,
+    message: "ACKNOWLEDGE applied to 40 of 40; 0 did not take.",
+    filter: { ...EMPTY_BULK_FILTER, deadLetters: { status: "AWAITING_INTERVENTION", manifestId: 41 } },
+    failureReasons: [], failures: [],
+  },
+  {
+    id: BULK_OPERATION_IDS.failed, kind: "TRIGGER", status: "FAILED", actor: "apikey:operator", askAfresh: true,
+    startedAt: "2026-07-07T09:00:00.000Z", finishedAt: "2026-07-07T09:00:02.000Z", total: 10, done: 4, failed: 1,
+    message: "Stopped after 5 of 10: the server refused a batch.",
+    filter: { ...EMPTY_BULK_FILTER, manifests: { isEnabled: true, scheduleType: "CRON", nameContains: "Order", manifestGroupId: null, hideAdminTrains: true } },
+    failureReasons: [{ reason: "It no longer exists.", count: 1 }],
+    failures: [{ id: 1_000_001, reason: "It no longer exists." }],
+  },
+];
+
+// What the list reads of each: everything but the filter and the failures.
+function bulkSummary(row: (typeof BULK_OPERATION_ROWS)[number]) {
+  const { id, kind, status, actor, askAfresh, startedAt, finishedAt, total, done, failed, message } = row;
+  return { id, kind, status, actor, askAfresh, startedAt, finishedAt, total, done, failed, message };
+}
+
+export const bulkOperationsOverlay: StatefulOverlay = {
+  queries: {
+    BulkOperations: (data) => ({
+      ...(data as Record<string, unknown>),
+      operations: { bulkOperations: BULK_OPERATION_ROWS.map(bulkSummary) },
+    }),
+    BulkOperation: (data, _store, variables) => {
+      const row = BULK_OPERATION_ROWS.find((r) => r.id === variables.id);
+      const after = (variables.failuresAfter as number | null | undefined) ?? null;
+      const take = (variables.failuresTake as number | undefined) ?? 100;
+      return {
+        ...(data as Record<string, unknown>),
+        operations: {
+          bulkOperation: row
+            ? { ...row, failures: row.failures.filter((f) => after == null || f.id > after).slice(0, take) }
+            : null,
+        },
+      };
+    },
+  },
 };

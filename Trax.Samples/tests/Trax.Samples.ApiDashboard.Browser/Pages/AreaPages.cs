@@ -80,6 +80,38 @@ public sealed class RunsPage(ConsolePage console) : AreaPage(console, "runs", "R
     }
 }
 
+/// <summary>The runs list filtered through its URL, as a link to a filtered view opens it.</summary>
+public sealed class FilteredRunsPage(ConsolePage console, string query)
+    : AreaPage(console, $"runs?{query}", "Runs")
+{
+    /// <summary>The batch bar's button that cancels every run the filter matches.</summary>
+    public ILocator CancelAllMatching(int count) =>
+        Page.GetByRole(
+            AriaRole.Button,
+            new() { Name = $"Cancel all {count} matching", Exact = true }
+        );
+}
+
+/// <summary>The bulk operations this host ran, under System.</summary>
+public sealed class BulkOperationsPage(ConsolePage console)
+    : AreaPage(console, "system/operations", "Bulk operations")
+{
+    public ILocator Operation(string title) => Console.RowLinked(title);
+}
+
+/// <summary>One bulk operation: its status, its counts, why ids did not take, and the filter it ran over.</summary>
+public sealed class BulkOperationPage(ConsolePage console)
+    : AreaPage(console, "system/operations", "Bulk operation")
+{
+    public ILocator Counts => Page.GetByRole(AriaRole.Region, new() { Name = "Counts" });
+
+    /// <summary>The count labelled <paramref name="label"/> (Matched, Done, Failed, Not attempted).</summary>
+    public ILocator Count(string label) =>
+        Counts.GetByRole(AriaRole.Group, new() { Name = label, Exact = true });
+
+    public ILocator Filter => Page.GetByRole(AriaRole.Region, new() { Name = "Filter" });
+}
+
 /// <summary>The work queue: queued, staged and dispatched entries.</summary>
 public sealed class WorkQueuePage(ConsolePage console) : AreaPage(console, "runs/queued", "Queued")
 {

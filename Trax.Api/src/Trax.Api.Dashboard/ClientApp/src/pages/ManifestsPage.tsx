@@ -23,6 +23,7 @@ import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { ManifestSummary, PagedResult, ScheduleType } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
+import { ApplyToAllMatching } from "../components/ApplyToAllMatching";
 import { TermHelp } from "../components/TermHelp";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
 
@@ -250,6 +251,23 @@ export function ManifestsPage() {
           >
             Disable selected
           </button>
+          <ApplyToAllMatching
+            total={page?.totalCount}
+            // The list read's filter, as its variables send it.
+            filter={{
+              manifests: {
+                isEnabled: enabled === "" ? null : enabled === "true",
+                scheduleType: scheduleType || null,
+                nameContains: name || null,
+                hideAdminTrains: hideAdmin,
+              },
+            }}
+            actions={[
+              { kind: "TRIGGER", explain: "A run of each is queued now.", danger: false },
+              { kind: "ENABLE", explain: "Each runs on its schedule again.", danger: false },
+              { kind: "DISABLE", explain: "None runs on its schedule until it is enabled." },
+            ]}
+          />
           {selectedAsk && (
             <button
               disabled={busy}
