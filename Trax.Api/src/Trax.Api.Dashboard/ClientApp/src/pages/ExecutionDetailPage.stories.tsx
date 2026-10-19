@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { ExecutionDetailPage } from "./ExecutionDetailPage";
-import { executionDetailScenario } from "../mock/scenarios";
+import { MACHINE_IDS, executionDetailScenario } from "../mock/scenarios";
 import { getGlobalMockStore } from "../mock/global-store";
 import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
 import type { MockSchemaOverrides } from "../mock/build-mock-schema";
@@ -19,6 +19,11 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+// Opens one of the tabs under the graph.
+async function openTab(c: ReturnType<typeof within>, name: string) {
+  await userEvent.click(await c.findByRole("tab", { name }));
+}
 
 function acceptConfirm() {
   setAutoConfirm(true);
@@ -121,27 +126,46 @@ export const RequeueTerminal: Story = {
   },
 };
 
+// A run a machine's invoking state queued names that instance, linked to its page, and the queue
+// entry it ran from.
+export const StartedByMachineInstance: Story = {
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const instance = await c.findByRole("link", { name: `Machine instance source-partition ${MACHINE_IDS.dispatched}` });
+    expect(instance).toHaveAttribute("href", `/machines/source-partition/system/${MACHINE_IDS.dispatched}`);
+    expect(c.getByRole("link", { name: "Queue entry 504" })).toHaveAttribute("href", "/runs/queued/504");
+  },
+};
+
 // An execution with children renders the child tree.
 export const ChildTree: Story = {
   parameters: { route: "/runs/800" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await openTab(c, "Related");
     await waitFor(() => expect(c.getByText("Child runs (3)")).toBeInTheDocument());
     // the child rows come from a separate async query.
     await waitFor(() => expect(c.getByText("ChildOne")).toBeInTheDocument());
   },
 };
 
-// A failed run shows its failure class, scheduled time, executor, parent and the run whose
-// decisions it replays (both links), and the host's instance id and labels.
+// A failed run shows its failure class and its train and parent in the header; under Related its
+// scheduled time, executor, parent and the run whose decisions it replays (both links), and the
+// host's instance id and labels.
 export const FailedRunFields: Story = {
   parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
     expect(c.getByTitle("Failure class")).toHaveTextContent("Transient");
+    expect(c.getByRole("link", { name: "Trax.Exec.BetaJob" })).toHaveAttribute("href", "/trains/Trax.Exec.BetaJob");
+    expect(c.getByRole("link", { name: "Parent run 800" })).toHaveAttribute("href", "/runs/800");
+    await openTab(c, "Related");
     expect(c.getByText("Executor").nextElementSibling).toHaveTextContent("JobRunner");
-    expect(c.getByText("Parent ID").nextElementSibling!.querySelector("a")).toHaveAttribute("href", "/runs/800");
+    expect(c.getByText("Parent run", { selector: "dt" }).nextElementSibling!.querySelector("a")).toHaveAttribute(
+      "href",
+      "/runs/800",
+    );
     expect(c.getByText("Replays decisions of").nextElementSibling!.querySelector("a")).toHaveAttribute(
       "href",
       "/runs/899",
@@ -158,8 +182,10 @@ export const NoReplayLink: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "DeltaJob" })).toBeInTheDocument());
+    expect(c.getByText("Started by").nextElementSibling).toHaveTextContent("Started directly");
+    await openTab(c, "Related");
     expect(c.queryByText("Replays decisions of")).not.toBeInTheDocument();
-    expect(c.getByText("Parent ID").nextElementSibling).toHaveTextContent("—");
+    expect(c.getByText("Parent run", { selector: "dt" }).nextElementSibling).toHaveTextContent("—");
   },
 };
 
@@ -186,7 +212,7 @@ export const JunctionTimelineSteps: Story = {
 };
 
 // A running run: a withheld answer, a withheld step name on another step's track, the step still
-// in progress ("so far"), and the junction progress panel.
+// in progress ("so far"), and the step running now in the header.
 export const JunctionTimelineWithheldAndRunning: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
@@ -197,8 +223,7 @@ export const JunctionTimelineWithheldAndRunning: Story = {
     expect(t.getAllByText("withheld").length).toBe(2); // the route's answer + step 3's name
     expect(t.getByText("on track of step #1")).toBeInTheDocument();
     expect(t.getByText(/so far$/)).toBeInTheDocument();
-    expect(c.getByText("Junction progress")).toBeInTheDocument();
-    expect(c.getByText("Currently running").nextElementSibling).toHaveTextContent("ProcessStep");
+    expect(c.getByText("Running now").nextElementSibling).toHaveTextContent("ProcessStep");
   },
 };
 
@@ -338,6 +363,7 @@ export const Decisions: Story = {
   parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await openTab(c, "Decisions");
     const table = await c.findByRole("table", { name: "Decisions" });
     const t = within(table);
     const fraud = within(t.getByTestId("decision-1"));
@@ -365,6 +391,7 @@ export const DecisionDetails: Story = {
   parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await openTab(c, "Decisions");
     const table = await c.findByRole("table", { name: "Decisions" });
     await userEvent.click(within(within(table).getByTestId("decision-1")).getByRole("button", { name: "Details" }));
     expect(c.getByText(/"Is this order fraudulent\?"/)).toBeInTheDocument();
@@ -380,6 +407,7 @@ export const DecisionDetails: Story = {
 export const RefusedReplayedDecision: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await openTab(c, "Decisions");
     const row = within(await c.findByTestId("decision-5"));
     expect(row.getByText("Refused")).toBeInTheDocument();
     expect(row.getAllByText("Replayed").length).toBeGreaterThan(0);
@@ -391,6 +419,7 @@ export const DecisionsPaged: Story = {
   parameters: { route: "/runs/950" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await openTab(c, "Decisions");
     await c.findByText("question-1");
     expect(c.queryByText("question-26")).not.toBeInTheDocument();
     const panel = c.getByRole("table", { name: "Decisions" }).parentElement as HTMLElement;
@@ -406,6 +435,7 @@ export const NoDecisions: Story = {
   parameters: { route: "/runs/900" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await openTab(c, "Decisions");
     expect(await c.findByText("This run recorded no decisions.")).toBeInTheDocument();
   },
 };
@@ -416,6 +446,9 @@ export const ReplayAbandoned: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     expect(await c.findByText("Replay abandoned")).toBeInTheDocument();
+    expect(await c.findByRole("link", { name: "Retries dead letter 31" })).toHaveAttribute("href", "/runs/dead-letters/31");
+    expect(c.getByRole("link", { name: "Queue entry 505" })).toHaveAttribute("href", "/runs/queued/505");
+    await openTab(c, "Related");
     expect(c.getByText("Abandoned: it could not be honoured, so the run asked afresh")).toBeInTheDocument();
     expect(c.getByRole("link", { name: "902" })).toHaveAttribute("href", "/runs/902");
   },
@@ -426,6 +459,7 @@ export const RunLogOldestFirst: Story = {
   parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await openTab(c, "Logs");
     const table = await c.findByRole("table", { name: "Log entries" });
     await waitFor(() => expect(within(table).getAllByRole("row").length).toBe(5));
     expect(within(within(table).getAllByRole("row")[1]).getByText("Charging card for order 42")).toBeInTheDocument();
@@ -438,26 +472,51 @@ export const RunLogOldestFirst: Story = {
 // ── Run graph, checkpoints and resume ────────────────────────────────────
 
 const graphOf = async (c: ReturnType<typeof within>) => c.findByRole("region", { name: "Run graph" });
-const nodeOf = (graph: HTMLElement, id: string) => graph.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+// A node as the shared Graph draws it: React Flow's node, by the step's id.
+const nodeOf = (graph: HTMLElement, id: string) =>
+  graph.querySelector(`.react-flow__node[data-id="${id}"]`) as HTMLElement | null;
+const selectNode = async (graph: HTMLElement, id: string) => {
+  await waitFor(() => expect(nodeOf(graph, id)).not.toBeNull());
+  await userEvent.click(within(nodeOf(graph, id)!).getByRole("button"));
+};
+const panelOf = (graph: HTMLElement) => graph.querySelector("aside[data-node-id]") as HTMLElement | null;
 
-// A failed run after a checkpoint: the checkpoint is marked (never what it holds), the failed step
-// shows its failure, the routing step's tracks sit under it, and the steps it can resume at offer
-// "Resume from here".
+// A failed run after a checkpoint: one graph, opened at the step that failed with its error in the
+// panel; the checkpoint is marked (never what it holds), the routing step's tracks branch from it,
+// and the steps it can resume at offer "Resume from here" in their panel.
 export const RunGraphCheckpoints: Story = {
   parameters: { route: "/runs/902" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
-    await waitFor(() => expect(nodeOf(graph, "Findings#1")).toBeInTheDocument());
-    const g = within(graph);
-    expect(within(nodeOf(graph, "Findings#1")).getByText("checkpoint")).toBeInTheDocument();
-    expect(nodeOf(graph, "Findings#1")).toHaveAttribute("data-kind", "CHECKPOINT");
-    expect(within(nodeOf(graph, "Summarize#2")).getByText("failed")).toBeInTheDocument();
-    expect(within(nodeOf(graph, "Summarize#2")).getByText("Transient · TimeoutException")).toBeInTheDocument();
-    expect(g.getByRole("list", { name: "Tracks of Route#3" })).toBeInTheDocument();
-    expect(g.getAllByRole("button", { name: "Resume from here" })).toHaveLength(2);
-    expect(within(nodeOf(graph, "Fetch#0")).queryByRole("button")).not.toBeInTheDocument();
+    await waitFor(() => expect(panelOf(graph)).toHaveAttribute("data-node-id", "Summarize#2"));
+    const panel = within(panelOf(graph)!);
+    expect(panel.getByText("Transient · TimeoutException")).toBeInTheDocument();
+    expect(panel.getByRole("button", { name: "Resume from here" })).toBeInTheDocument();
+    expect(within(nodeOf(graph, "Findings#1")!).getByLabelText(/checkpoint/)).toBeInTheDocument();
+    expect(within(nodeOf(graph, "Summarize#2")!).getByRole("button")).toHaveAttribute("aria-pressed", "true");
+    expect(within(graph).getByText("Short")).toBeInTheDocument();
+    expect(within(graph).getByText("Long")).toBeInTheDocument();
+    await selectNode(graph, "Fetch#0");
+    expect(panelOf(graph)).toHaveAttribute("data-node-id", "Fetch#0");
+    expect(within(panelOf(graph)!).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
     expect(c.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+    expect(c.queryByRole("region", { name: "Junction progress" })).not.toBeInTheDocument();
+  },
+};
+
+// Selecting a node highlights its bar in the timeline, and pressing a bar selects its node.
+export const TimelineFollowsTheGraph: Story = {
+  parameters: { route: "/runs/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    const timeline = await c.findByRole("region", { name: "Junction timeline" });
+    await waitFor(() => expect(timeline.querySelector('[data-position="2"]')).toHaveAttribute("data-selected", "true"));
+    await userEvent.click(within(timeline).getByRole("button", { name: "Step #0 ValidateOrder" }));
+    await waitFor(() => expect(panelOf(graph)).toHaveAttribute("data-node-id", "Fetch#0"));
+    expect(timeline.querySelector('[data-position="0"]')).toHaveAttribute("data-selected", "true");
+    expect(timeline.querySelector('[data-position="2"]')).not.toHaveAttribute("data-selected");
   },
 };
 
@@ -484,8 +543,8 @@ export const ResumeFromNode: Story = {
     const restore = acceptConfirm();
     try {
       const graph = await graphOf(c);
-      await waitFor(() => expect(nodeOf(graph, "Publish#4")).toBeInTheDocument());
-      await userEvent.click(within(nodeOf(graph, "Publish#4")).getByRole("button", { name: "Resume from here" }));
+      await selectNode(graph, "Publish#4");
+      await userEvent.click(within(panelOf(graph)!).getByRole("button", { name: "Resume from here" }));
       expect(await c.findByText("Run queued to resume.")).toBeInTheDocument();
     } finally {
       restore();
@@ -527,20 +586,21 @@ export const ResumeRefused: Story = {
 };
 
 // The run that resumed: the steps before its resume point are restored, a Parallel step's branches
-// sit side by side, and a completed run offers no resume.
+// leave it side by side, and a completed run offers no resume.
 export const ResumedRunRestored: Story = {
   parameters: { route: "/runs/952" },
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
-    await waitFor(() => expect(nodeOf(graph, "Fetch#0")).toBeInTheDocument());
-    expect(nodeOf(graph, "Fetch#0")).toHaveAttribute("data-state", "RESTORED");
-    expect(within(nodeOf(graph, "Findings#1")).getByText("restored")).toBeInTheDocument();
-    expect(within(graph).getByRole("list", { name: "Branches of Signals#4, run side by side" })).toBeInTheDocument();
-    expect(graph.querySelector('[data-track="Short"]')).toHaveAttribute("data-taken", "true");
+    await waitFor(() => expect(nodeOf(graph, "Fetch#0")).not.toBeNull());
+    expect(within(nodeOf(graph, "Fetch#0")!).getByRole("button")).toHaveTextContent("Restored");
+    expect(within(graph).getByText("Citations")).toBeInTheDocument();
+    expect(within(graph).getByText("Recency")).toBeInTheDocument();
     expect(within(graph).getByText("LegacyStep")).toBeInTheDocument();
+    expect(panelOf(graph)).toBeNull();
     expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
-    expect(within(graph).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
+    await selectNode(graph, "Summarize#2");
+    expect(within(panelOf(graph)!).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
   },
 };
 
@@ -550,6 +610,7 @@ export const ResumedRunNamesItsSource: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    await openTab(c, "Related");
     const resumes = c.getByText("Resumes", { selector: "dt" }).nextElementSibling as HTMLElement;
     expect(within(resumes).getByRole("link", { name: "902" })).toHaveAttribute("href", "/runs/902");
     expect(resumes).toHaveTextContent("902 at Summarize#2");
@@ -579,6 +640,7 @@ export const ResumedAfterLatestCheckpoint: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    await openTab(c, "Related");
     const resumes = c.getByText("Resumes", { selector: "dt" }).nextElementSibling as HTMLElement;
     expect(resumes).toHaveTextContent("902 after its latest checkpoint");
   },
@@ -590,6 +652,7 @@ export const NotResumedHasNoResumesField: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    await openTab(c, "Related");
     expect(c.queryByText("Resumes", { selector: "dt" })).not.toBeInTheDocument();
   },
 };
@@ -601,8 +664,8 @@ export const NoInputNoResume: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
     const graph = await graphOf(c);
-    await waitFor(() => expect(nodeOf(graph, "Findings#1")).toBeInTheDocument());
-    expect(within(nodeOf(graph, "Findings#1")).getByText("checkpoint")).toBeInTheDocument();
+    await waitFor(() => expect(panelOf(graph)).toHaveAttribute("data-node-id", "Summarize#2"));
+    expect(within(nodeOf(graph, "Findings#1")!).getByLabelText(/checkpoint/)).toBeInTheDocument();
     expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(within(graph).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
   },
@@ -620,9 +683,9 @@ export const NoDeclaredGraph: Story = {
 };
 
 // A run whose routing nests deeper than a query can follow nested tracks: every node is drawn, at
-// any depth, under the track it sits on, and the failed step six tracks deep offers "Resume from
-// here". A Parallel step's branches are lanes side by side, and a step the host stopped mid-junction
-// shows as interrupted.
+// any depth, and the page opens at the failed step six tracks deep, which offers "Resume from
+// here". A Parallel step's branches both leave it, and a step the host stopped mid-junction shows
+// as interrupted.
 export const DeepRunGraph: Story = {
   parameters: { route: "/runs/956" },
   play: async ({ canvasElement }) => {
@@ -630,22 +693,16 @@ export const DeepRunGraph: Story = {
     const graph = await graphOf(c);
     const lanes = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0";
     const leaf = `${lanes}/Left/Check#0/Open/Pick#0/Deep/Leaf#0`;
-    await waitFor(() => expect(nodeOf(graph, leaf)).toBeInTheDocument());
-    // The leaf sits under the Deep track of Pick, under the Open track of Check, in the Left lane.
-    const pick = nodeOf(graph, `${lanes}/Left/Check#0/Open/Pick#0`);
-    expect(pick.querySelector('[data-track="Deep"]')!.contains(nodeOf(graph, leaf))).toBe(true);
-    expect(nodeOf(graph, leaf)).toHaveAttribute("data-can-resume", "true");
-    expect(within(nodeOf(graph, leaf)).getByRole("button", { name: "Resume from here" })).toBeInTheDocument();
-    // The Parallel step's branches, as lanes.
-    const parallel = nodeOf(graph, lanes);
-    const branches = [...parallel.querySelectorAll(":scope > ul > [data-branch]")].map((b) => b.getAttribute("data-branch"));
-    expect(branches).toEqual(["Left", "Right"]);
-    expect(within(parallel).getByRole("list", { name: "Branches of Lanes#0, run side by side" })).toBeInTheDocument();
-    const right = nodeOf(graph, `${lanes}/Right/Tally#0`);
-    expect(right).toHaveAttribute("data-state", "INTERRUPTED");
-    expect(within(right).getByText("interrupted")).toBeInTheDocument();
-    // The track the run did not take, dimmed.
-    expect(graph.querySelector('[data-track="Slow"]')).toHaveAttribute("data-taken", "false");
+    await waitFor(() => expect(panelOf(graph)).toHaveAttribute("data-node-id", leaf));
+    const panel = within(panelOf(graph)!);
+    expect(panel.getByText("Deep", { selector: "dd" })).toBeInTheDocument();
+    expect(panel.getByRole("button", { name: "Resume from here" })).toBeInTheDocument();
+    for (const id of [lanes, `${lanes}/Left/Check#0`, `${lanes}/Right/Tally#0`, "Plan#1/Slow/Wait#0"])
+      expect(nodeOf(graph, id)).not.toBeNull();
+    expect(within(nodeOf(graph, `${lanes}/Right/Tally#0`)!).getByRole("button")).toHaveTextContent("Interrupted");
+    expect(within(nodeOf(graph, "Plan#1/Slow/Wait#0")!).getByRole("button")).toHaveTextContent("Skipped");
+    expect(within(graph).getByText("Left")).toBeInTheDocument();
+    expect(within(graph).getByText("Right")).toBeInTheDocument();
   },
 };
 
@@ -658,8 +715,8 @@ export const ResumeFromDeepNode: Story = {
     const leaf = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0";
     try {
       const graph = await graphOf(c);
-      await waitFor(() => expect(nodeOf(graph, leaf)).toBeInTheDocument());
-      await userEvent.click(within(nodeOf(graph, leaf)).getByRole("button", { name: "Resume from here" }));
+      await waitFor(() => expect(panelOf(graph)).toHaveAttribute("data-node-id", leaf));
+      await userEvent.click(within(panelOf(graph)!).getByRole("button", { name: "Resume from here" }));
       expect(await c.findByText("Run queued to resume.")).toBeInTheDocument();
       expect(getGlobalMockStore()!.getState().executionResumes).toHaveProperty("956");
     } finally {

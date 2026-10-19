@@ -120,6 +120,7 @@ export async function everyPage(page: HTMLElement) {
  */
 export const NOT_RECORDED_YET = [
   "RunGraph",
+  "RunLinks",
   "MachineInstanceCounts",
   "MachineInstances",
   "MachineInstance",

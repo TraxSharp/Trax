@@ -3,7 +3,7 @@ import { flattenRunGraph, runGraphTree } from "./runGraphTree";
 import type { ChainStepKind, RunGraphFlatNode, RunGraphNode } from "../types";
 
 function node(id: string, kind: ChainStepKind, tracks: RunGraphNode["tracks"] = []): RunGraphNode {
-  return { id, kind, opaque: false, replayed: false, checkpointed: false, canResume: false, state: "NOT_REACHED", steps: [], tracks };
+  return { id, kind, junction: null, in: null, out: null, opaque: false, replayed: false, checkpointed: false, canResume: false, state: "NOT_REACHED", steps: [], tracks };
 }
 
 // A deterministic pseudo-random tree: up to `depth` levels of routing and Parallel steps, each with

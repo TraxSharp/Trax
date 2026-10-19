@@ -1,5 +1,5 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
-import type { ChainStepKind, RunGraph, RunGraphNode, RunNodeState } from "../types";
+import type { ChainStepKind, RunGraph, RunGraphNode, RunGraphStep, RunNodeState } from "../types";
 import { GraphQLError } from "graphql";
 import { flattenRunGraph } from "../lib/runGraphTree";
 
@@ -488,6 +488,9 @@ function graphNode(id: string, kind: ChainStepKind, state: RunNodeState, fields:
   return {
     id,
     kind,
+    junction: kind === "CHAIN" ? id.replace(/^.*\//, "").replace(/#\d+$/, "") : null,
+    in: null,
+    out: null,
     opaque: false,
     replayed: false,
     checkpointed: false,
@@ -495,6 +498,29 @@ function graphNode(id: string, kind: ChainStepKind, state: RunNodeState, fields:
     state,
     steps: [],
     tracks: [],
+    ...fields,
+  };
+}
+
+// One step a node recorded, at its position in the run; a junction that completed unless told otherwise.
+function graphStep(position: number, fields: Partial<RunGraphStep> = {}): RunGraphStep {
+  return {
+    position,
+    kind: "JUNCTION",
+    name: `Step${position}`,
+    nameWithheld: false,
+    state: "COMPLETED",
+    startedAt: new Date(Date.parse("2026-07-07T11:55:00.000Z") + position * 2000).toISOString(),
+    durationMs: 1500,
+    attempt: null,
+    failureClass: null,
+    failureException: null,
+    questionKey: null,
+    answer: null,
+    answerWithheld: false,
+    confidence: null,
+    decider: null,
+    replayed: false,
     ...fields,
   };
 }
@@ -526,7 +552,7 @@ function oneNodeTrack(name: string, taken: boolean, node: RunGraphNode) {
 function deepRunGraph(metadataId: number): DeclaredRunGraph {
   const leaf = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0", "CHAIN", "FAILED", {
     canResume: true,
-    steps: [{ state: "FAILED", failureClass: "TRANSIENT", failureException: "TimeoutException" }],
+    steps: [graphStep(4, { name: "Leaf", state: "FAILED", failureClass: "TRANSIENT", failureException: "TimeoutException" })],
   });
   const pick = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0", "DECIDE", "FAILED", {
     tracks: [oneNodeTrack("Deep", true, leaf)],
@@ -582,11 +608,21 @@ function declaredRunGraph(metadataId: number): DeclaredRunGraph {
       moreSteps: false,
       canResume: true,
       nodes: [
-        graphNode("Fetch#0", "CHAIN", "COMPLETED", { steps: [{ state: "COMPLETED", failureClass: null, failureException: null }] }),
+        graphNode("Fetch#0", "CHAIN", "COMPLETED", { in: "Order", out: "Order", steps: [graphStep(0, { name: "ValidateOrder", attempt: 2 })] }),
         graphNode("Findings#1", "CHECKPOINT", "COMPLETED", { checkpointed: true }),
         graphNode("Summarize#2", "CHAIN", "FAILED", {
           canResume: true,
-          steps: [{ state: "FAILED", failureClass: "TRANSIENT", failureException: "TimeoutException" }],
+          in: "Findings",
+          out: "Summary",
+          steps: [
+            graphStep(2, {
+              name: "ChargeCard",
+              state: "FAILED",
+              attempt: 2,
+              failureClass: "TRANSIENT",
+              failureException: "TimeoutException",
+            }),
+          ],
         }),
         graphNode("Route#3", "DECIDE", "NOT_REACHED", {
           tracks: [
@@ -608,7 +644,7 @@ function declaredRunGraph(metadataId: number): DeclaredRunGraph {
       nodes: [
         graphNode("Fetch#0", "CHAIN", "RESTORED"),
         graphNode("Findings#1", "CHECKPOINT", "RESTORED", { checkpointed: true }),
-        graphNode("Summarize#2", "CHAIN", "COMPLETED", { steps: [{ state: "COMPLETED", failureClass: null, failureException: null }] }),
+        graphNode("Summarize#2", "CHAIN", "COMPLETED", { steps: [graphStep(0, { name: "Summarize" })] }),
         graphNode("Route#3", "DECIDE", "COMPLETED", {
           tracks: [
             { name: "Short", description: "A summary under a page", isFallback: false, taken: true, nodes: [graphNode("Route#3/Short/Trim#0", "CHAIN", "COMPLETED")] },

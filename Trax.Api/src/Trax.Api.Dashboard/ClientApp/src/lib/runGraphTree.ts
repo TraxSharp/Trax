@@ -55,6 +55,9 @@ function treeNode(flat: RunGraphFlatNode): RunGraphNode {
   return {
     id: flat.id,
     kind: flat.kind,
+    junction: flat.junction,
+    in: flat.in,
+    out: flat.out,
     opaque: flat.opaque,
     replayed: flat.replayed,
     checkpointed: flat.checkpointed,

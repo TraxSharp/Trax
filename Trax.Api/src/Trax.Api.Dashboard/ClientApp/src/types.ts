@@ -676,7 +676,25 @@ export type RunNodeState =
   | "INTERRUPTED";
 
 // The steps a node recorded, as far as the run graph draws them.
-export type RunGraphStep = Pick<JunctionStep, "state" | "failureClass" | "failureException">;
+export type RunGraphStep = Pick<
+  JunctionStep,
+  | "position"
+  | "kind"
+  | "name"
+  | "nameWithheld"
+  | "state"
+  | "startedAt"
+  | "durationMs"
+  | "attempt"
+  | "failureClass"
+  | "failureException"
+  | "questionKey"
+  | "answer"
+  | "answerWithheld"
+  | "confidence"
+  | "decider"
+  | "replayed"
+>;
 
 // One declared step of a run's train, with where the run left it (operations.runGraph). A node
 // says whether a checkpoint is stored at it and whether resumeExecution can resume there; never
@@ -684,6 +702,11 @@ export type RunGraphStep = Pick<JunctionStep, "state" | "failureClass" | "failur
 export interface RunGraphNode {
   id: string;
   kind: ChainStepKind;
+  // The junction or decider the step names, and the types it takes from and adds to Memory; null
+  // where the step names none. Types only: what a step read or wrote is never recorded.
+  junction: string | null;
+  in: string | null;
+  out: string | null;
   opaque: boolean;
   replayed: boolean;
   checkpointed: boolean;

@@ -148,6 +148,8 @@ public sealed class ConsoleHost : IAsyncDisposable
                         .SaveTrainParameters()
                         .AddDecisionRecording()
                         .AddJunctionProgress()
+                        // A run's steps, so the run page places them on its graph and timeline.
+                        .AddJunctionEvents()
                 )
                 .AddStateMachines(typeof(GateMachine).Assembly)
                 .AddMediator(typeof(ConsoleHost).Assembly)

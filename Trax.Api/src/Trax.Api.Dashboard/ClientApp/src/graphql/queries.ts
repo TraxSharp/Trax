@@ -995,15 +995,31 @@ export const PERSISTED_OPERATION_DETAIL = gql`
 const RUN_GRAPH_NODE = `
   id
   kind
+  junction
+  in
+  out
   opaque
   replayed
   checkpointed
   canResume
   state
   steps {
+    position
+    kind
+    name
+    nameWithheld
     state
+    startedAt
+    durationMs
+    attempt
     failureClass
     failureException
+    questionKey
+    answer
+    answerWithheld
+    confidence
+    decider
+    replayed
   }
 `;
 

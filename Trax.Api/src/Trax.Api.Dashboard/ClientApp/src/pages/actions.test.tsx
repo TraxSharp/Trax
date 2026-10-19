@@ -89,10 +89,10 @@ test("Resume from here sends the node, at any depth", async () => {
   const leaf = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0";
   const { named } = renderAt("/runs/956", executionDetailScenario);
   const graph = await screen.findByRole("region", { name: "Run graph" });
-  await waitFor(() => expect(graph.querySelector(`[data-node-id="${leaf}"]`)).not.toBeNull());
-  const node = graph.querySelector(`[data-node-id="${leaf}"]`) as HTMLElement;
-  // The node's own button, not one of a node nested under it.
-  fireEvent.click(within(node.firstElementChild as HTMLElement).getByRole("button", { name: "Resume from here" }));
+  // The page opens at the step that failed, six tracks deep; its panel offers the resume.
+  await waitFor(() => expect(graph.querySelector(`aside[data-node-id="${leaf}"]`)).not.toBeNull());
+  const panel = graph.querySelector(`aside[data-node-id="${leaf}"]`) as HTMLElement;
+  fireEvent.click(within(panel).getByRole("button", { name: "Resume from here" }));
   await waitFor(() => expect(screen.getByTestId("where").textContent).toMatch(/^\/runs\/queued\/\d+$/));
   expect(named("mutation", "ResumeExecution").map((op) => op.variables)).toEqual([{ id: 956, from: leaf }]);
 });

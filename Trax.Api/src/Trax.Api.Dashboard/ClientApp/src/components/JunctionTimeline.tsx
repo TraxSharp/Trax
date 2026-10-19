@@ -33,17 +33,28 @@ interface JunctionRunsData {
  * AddJunctionEvents) and kept current by onJunctionEvent. The first read loads up to 500 steps;
  * later reads are incremental (afterPosition from the first step still in progress), and a gap in
  * the event sequence or a socket reconnect triggers one. Mirrors the Blazor JunctionTimeline.
+ *
+ * On the run page it follows the graph: the steps of the node selected there are highlighted, and
+ * a step that belongs to a node selects that node when pressed.
  */
 export function JunctionTimeline({
   metadataId,
   startTime,
   endTime,
   trainState,
+  selected,
+  canSelect,
+  onSelect,
 }: {
   metadataId: number;
   startTime: string;
   endTime: string | null;
   trainState: TrainState;
+  /** The positions of the steps to highlight. */
+  selected?: ReadonlySet<number>;
+  /** Whether pressing the step at a position selects something. */
+  canSelect?: (position: number) => boolean;
+  onSelect?: (position: number) => void;
 }) {
   const client = useClient();
   const [steps, setSteps] = useState<JunctionStep[]>([]);
@@ -170,12 +181,19 @@ export function JunctionTimeline({
             {rows.map(({ step, left, width, isPoint, duration }) => {
               const withheldName = step.nameWithheld;
               const failure = stepFailure(step);
+              const isSelected = selected?.has(step.position) ?? false;
+              const pressable = onSelect != null && (canSelect?.(step.position) ?? true);
+              const label =
+                step.kind !== "JUNCTION" ? kindLabel(step.kind) : withheldName ? "withheld" : step.name;
               return (
                 <li
                   key={step.position}
                   data-position={step.position}
                   data-state={step.state}
-                  className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 items-center text-sm"
+                  data-selected={isSelected ? "true" : undefined}
+                  className={`grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 items-center text-sm rounded px-1 -mx-1 ${
+                    isSelected ? "bg-accent-soft ring-1 ring-accent" : ""
+                  }`}
                 >
                   <div className="min-w-0">
                     <div
@@ -188,19 +206,27 @@ export function JunctionTimeline({
                       <span className="text-xs text-muted">
                         #{step.position}
                       </span>
-                      <span
-                        className={`font-medium truncate ${
-                          withheldName && step.kind === "JUNCTION"
-                            ? "italic text-muted"
-                            : "text-fg"
-                        }`}
-                      >
-                        {step.kind !== "JUNCTION"
-                          ? kindLabel(step.kind)
-                          : withheldName
-                            ? "withheld"
-                            : step.name}
-                      </span>
+                      {pressable ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelect(step.position)}
+                          aria-pressed={isSelected}
+                          aria-label={`Step #${step.position} ${label}`}
+                          className={`font-medium truncate text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent ${
+                            withheldName && step.kind === "JUNCTION" ? "italic text-muted" : "text-fg"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ) : (
+                        <span
+                          className={`font-medium truncate ${
+                            withheldName && step.kind === "JUNCTION" ? "italic text-muted" : "text-fg"
+                          }`}
+                        >
+                          {label}
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
                       {step.trackPosition != null && (
