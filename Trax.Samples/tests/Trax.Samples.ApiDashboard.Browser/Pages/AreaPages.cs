@@ -42,8 +42,8 @@ public abstract class AreaPage(ConsolePage console, string route, string heading
         within.GetByRole(AriaRole.Button, new() { Name = name, Exact = true });
 }
 
-/// <summary>Runs: the console's execution list.</summary>
-public sealed class RunsPage(ConsolePage console) : AreaPage(console, "executions", "Executions")
+/// <summary>Runs: every run the host has recorded.</summary>
+public sealed class RunsPage(ConsolePage console) : AreaPage(console, "runs", "Runs")
 {
     public ILocator ExternalIdFilter => Page.GetByLabel("External id", new() { Exact = true });
 
@@ -66,12 +66,11 @@ public sealed class RunsPage(ConsolePage console) : AreaPage(console, "execution
 }
 
 /// <summary>The work queue: queued, staged and dispatched entries.</summary>
-public sealed class WorkQueuePage(ConsolePage console)
-    : AreaPage(console, "work-queue", "Work queue");
+public sealed class WorkQueuePage(ConsolePage console) : AreaPage(console, "runs/queued", "Queued");
 
 /// <summary>Dead letters, with their requeue and acknowledge actions.</summary>
 public sealed class DeadLettersPage(ConsolePage console)
-    : AreaPage(console, "dead-letters", "Dead letters")
+    : AreaPage(console, "runs/dead-letters", "Dead letters")
 {
     public ILocator StatusFilter => Page.GetByRole(AriaRole.Combobox);
 
@@ -81,21 +80,20 @@ public sealed class DeadLettersPage(ConsolePage console)
             new SelectOptionValue { Label = "Awaiting intervention" }
         );
 
-    /// <summary>Requeues one dead letter from its row, accepting the confirmation.</summary>
+    /// <summary>Requeues one dead letter from its row, confirming in the console's dialog.</summary>
     public async Task RequeueAsync(long id)
     {
-        Console.AcceptNextConfirm($"Requeue dead letter #{id}?");
         await Button(Row(id), "Requeue").ClickAsync();
+        await Console.ConfirmAsync("Requeue dead letter", $"Requeue dead letter #{id}?");
     }
 }
 
 /// <summary>Manifests: what runs on a schedule, and whether it is enabled.</summary>
 public sealed class ManifestsPage(ConsolePage console)
-    : AreaPage(console, "manifests", "Manifests");
+    : AreaPage(console, "schedules", "Manifests");
 
 /// <summary>State machines: instance counts by state and the instance list.</summary>
-public sealed class MachinesPage(ConsolePage console)
-    : AreaPage(console, "state-machines", "State machines")
+public sealed class MachinesPage(ConsolePage console) : AreaPage(console, "machines", "Machines")
 {
     public ILocator CountsByState =>
         Page.GetByRole(AriaRole.Region, new() { Name = "Instances by state" });
@@ -103,17 +101,17 @@ public sealed class MachinesPage(ConsolePage console)
 
 /// <summary>Persisted operations, served only to a caller who may manage them.</summary>
 public sealed class PersistedOperationsPage(ConsolePage console)
-    : AreaPage(console, "persisted-operations", "Persisted operations")
+    : AreaPage(console, "api-admin/persisted-operations", "Persisted operations")
 {
     public ILocator Operation(string id) => Console.RowLinked(id);
 
     /// <summary>What a caller outside the management gate is told instead of the list.</summary>
-    public ILocator NotServed => Page.GetByText("outside its management gate");
+    public ILocator NotServed => Page.GetByText("your account may not manage them");
 }
 
 /// <summary>The scheduler's settings, where the dispatcher is switched on and off.</summary>
 public sealed class SchedulerSettingsPage(ConsolePage console)
-    : AreaPage(console, "settings/server", "Scheduler settings")
+    : AreaPage(console, "system/scheduler", "Scheduler settings")
 {
     public ILocator DispatcherEnabled =>
         Page.GetByRole(AriaRole.Checkbox, new() { Name = "Job dispatcher enabled" });

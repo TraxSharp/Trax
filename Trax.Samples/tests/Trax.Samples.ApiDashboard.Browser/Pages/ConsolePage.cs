@@ -82,16 +82,17 @@ public class ConsolePage(IPage page, Uri origin)
         return await ConnectAsync(caller);
     }
 
-    /// <summary>Accepts the next confirmation the page asks, checking it says <paramref name="contains"/>.</summary>
-    public void AcceptNextConfirm(string contains)
+    /// <summary>
+    /// Confirms in the console's own dialog: the one titled <paramref name="title"/>, checking it says
+    /// <paramref name="contains"/>, by its confirming button, which carries the action's name.
+    /// </summary>
+    public async Task ConfirmAsync(string title, string contains)
     {
-        void Handler(object? _, IDialog dialog)
-        {
-            Page.Dialog -= Handler;
-            dialog.Message.Should().Contain(contains);
-            _ = dialog.AcceptAsync();
-        }
-        Page.Dialog += Handler;
+        var dialog = Page.GetByRole(AriaRole.Dialog, new() { Name = title, Exact = true });
+        await Assertions
+            .Expect(dialog)
+            .ToContainTextAsync(contains, new() { Timeout = BrowserTimeouts.Render.Ms() });
+        await dialog.GetByRole(AriaRole.Button, new() { Name = title, Exact = true }).ClickAsync();
     }
 }
 
