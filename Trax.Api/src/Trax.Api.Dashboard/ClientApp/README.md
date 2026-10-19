@@ -90,15 +90,17 @@ then run `npm test` here.
 
 **How it answers** (`src/demo/lookup.ts`, `client.ts`, `replay.ts`):
 
-- A query is answered with the recording for exactly its variables. The only exceptions are
-  what a person types, which no recording can enumerate: a train name, an external id, a time
+- A query is answered with the recording for exactly its variables. A time a page counts back
+  from the minute it loaded (a train page's last 24 hours) is matched by its distance from now:
+  the recording read the same range back from when the hosts stopped. The only other exceptions
+  are what a person types, which no recording can enumerate: a train name, an external id, a time
   range, a name or message filter. Those are answered from the recorded list without that filter,
   filtered here the way the API filters it. A query nothing answers gets an error saying so; the
   demo never falls back to invented data, and it does not carry the auto-mock schema.
-- A page part whose read no recording holds is not offered (`src/lib/answerable.ts`): until the
-  recorder records the run graph and the state machines (`NOT_RECORDED_YET` in
-  `src/demo/harness.tsx`), the demo shows no run graph, so no resume, and no State machines page.
-  Once the recordings hold them they appear, and the strict check covers them.
+- A page part whose read no recording holds is not offered (`src/lib/answerable.ts`). The
+  recorder records every read a page sends today, so `NOT_RECORDED_YET` in `src/demo/harness.tsx`
+  is empty; a new read goes there until the recorder records it, and its page part is hidden in the
+  demo meanwhile.
 - A write goes through the mock's overlays (`src/mock/store/overlays.ts`), so the change reads
   back on every page until the tab reloads. Its answer is the host's: a write recorded with the
   same variables against the rows as the recording shows them answers with that recording, a
@@ -175,7 +177,7 @@ carry no embedded schema, no mock store, no recordings and no demo banner.
 |---|---|
 | `npm run dev:mock` | dev server against the mock |
 | `npm run build:demo` | the demo build, on the recordings (see [The demo](#the-demo)) |
-| `npm run mock:schema` | re-export the SDL from a running devhost (introspection) |
+| `npm run mock:schema` | re-export the SDL from a running host (introspection); `TRAX_API_URL` and `TRAX_API_KEY` point it at a sample host, see the script's header |
 | `npm run mock:capture` | re-capture fixtures from a running devhost |
 | `npm run test` | vitest: overlay read-after-write + every story renders |
 | `npm run storybook` | stories against the mock; a story's `parameters.real` runs it against the devhost |

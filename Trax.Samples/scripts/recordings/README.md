@@ -51,6 +51,11 @@ sent to a real host. It takes about four minutes.
 TRAX_PG_PORT=5433 node dashboard.mjs --copy-to ../../../Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/demo/data
 ```
 
+Where the database is not a local container (the recorder and a Postgres in one podman pod, say), `TRAX_PSQL=psql`
+makes it create the databases with a psql of its own on `TRAX_PG_HOST` (default `localhost`) and `TRAX_PG_PORT`.
+Record there, then write the copy from the checkout with `--copy-only`: the footer's version is the latest release
+tag, which the scrubber reads with git.
+
 The website's copy combines the three hosts as one cluster on one database would show them; the script's header says
 how, and what it changes (ids renumbered, the machine's name and paths replaced). After re-recording, run the
 dashboard's `npm test` in `Trax.Api/src/Trax.Api.Dashboard/ClientApp`: its strict check opens every page, filter and row

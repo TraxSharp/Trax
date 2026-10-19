@@ -114,40 +114,12 @@ export async function everyPage(page: HTMLElement) {
 
 /**
  * Reads the recorder (Trax.Samples scripts/recordings/dashboard.mjs) does not record yet. The demo
- * does not offer what needs them (lib/answerable.ts): no State machines page, no run graph and so
- * no resume. Once the recordings hold one, it is checked like every other read; drop it from here
- * when they all do.
+ * does not offer what needs them (lib/answerable.ts). Once the recordings hold one, it is checked like
+ * every other read; drop it from here when they do. Empty: the recorder records every read a page
+ * sends. Two documents no page sends (MachineInstanceCounts, MachineInstances) and the search's
+ * Lookup, which answers what a visitor types, are not recorded and need no entry here.
  */
-export const NOT_RECORDED_YET = [
-  "RunGraph",
-  "RunLinks",
-  "Machines",
-  "MachineInstanceCounts",
-  "MachineInstances",
-  "MachineInstance",
-  "MachineInstancesAttention",
-  "MachineInstanceStuckCounts",
-  // The decision controls show everywhere until the recordings hold which trains ask.
-  "TrainsAskingDecisions",
-  // The train page's chain, the range's series (and the failures it places on steps), its
-  // manifests' schedules and the machines that start it.
-  "TrainChains",
-  "MetricSeries",
-  "ManifestSchedule",
-  "Machines",
-  // No page reads bulk operations yet.
-  "BulkOperations",
-  "BulkOperation",
-  // The dead letters page groups from a 500-row window; the recordings hold 25-row pages.
-  "DeadLetterGroups",
-  "ServerProcess",
-  "ManifestSchedules",
-  "ManifestSchedule",
-  "MetricSeries",
-  "GroupGraphStatus",
-  "Attention",
-  "MachineInstanceTransitions",
-];
+export const NOT_RECORDED_YET: string[] = [];
 
 /** The read each write not recorded yet is offered from: no read, no write. */
 export const WRITES_OFFERED_FROM: Record<string, string> = {

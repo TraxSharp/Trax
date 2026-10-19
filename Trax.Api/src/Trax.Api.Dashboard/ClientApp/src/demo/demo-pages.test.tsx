@@ -10,6 +10,7 @@ import {
   everyPage,
   everySelect,
   newLedger,
+  NOT_RECORDED_YET,
   notOfferedYet,
   pageOf,
   recordedIds,
@@ -44,10 +45,18 @@ const LIST_PAGES = [
   "/schedules/groups",
   "/system/logs",
   "/api-admin/persisted-operations",
-  // Offered once the recordings hold it (harness.tsx, NOT_RECORDED_YET).
-  ...(notOfferedYet("Machines") ? [] : ["/machines"]),
+  "/machines",
 ];
-const OTHER_PAGES = ["/", "/trains", "/system/hosts", "/system/live", "/preferences", "/system/scheduler", "/system/effects"];
+const OTHER_PAGES = [
+  "/",
+  "/trains",
+  "/system/hosts",
+  "/system/live",
+  "/system/operations",
+  "/preferences",
+  "/system/scheduler",
+  "/system/effects",
+];
 
 describe("every page, filter, sort and page of every list", () => {
   for (const hideAdmin of [true, false]) {
@@ -149,25 +158,24 @@ describe("every link leads to a recorded page", () => {
   }, 600_000);
 });
 
-describe("what the recordings do not hold yet", () => {
-  // Nothing in the demo leads to a read no recording answers: the page parts that need one are not
-  // offered (lib/answerable.ts) until the recorder records it.
-  test("the sidebar offers no State machines page and a run page draws no run graph", async () => {
-    if (!notOfferedYet("Machines") && !notOfferedYet("RunGraph")) return;
+describe("the reads the console added", () => {
+  test("every read a page sends is recorded, so the demo holds none back", () => {
+    expect(NOT_RECORDED_YET).toEqual([]);
+  });
+
+  test("the sidebar offers the Machines page and a run page draws its run graph", async () => {
     const ledger = newLedger();
     const { container, unmount } = renderDemo("/", ledger);
     await settle();
-    expect(within(container).queryByRole("link", { name: "Machines" }) == null).toBe(
-      notOfferedYet("Machines"),
-    );
+    expect(within(container).queryByRole("link", { name: "Machines" })).not.toBeNull();
     unmount();
     for (const id of recordedIds("ExecutionDetail", "id").slice(0, 10)) {
       const page = renderDemo(`/runs/${id}`, ledger);
       await settle();
-      expect(within(page.container).queryByRole("region", { name: "Run graph" }) == null).toBe(notOfferedYet("RunGraph"));
+      expect(within(page.container).queryByRole("region", { name: "Run graph" })).not.toBeNull();
       page.unmount();
     }
-    expect(served(ledger, "missing")).toEqual([]);
+    expectAllRecorded(ledger);
   });
 });
 

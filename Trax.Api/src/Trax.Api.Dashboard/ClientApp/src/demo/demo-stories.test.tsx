@@ -51,8 +51,9 @@ afterAll(() => {
 
 afterEach(cleanup);
 
-// The variables that name one row.
-const ROW_VARIABLES = ["id", "metadataId", "parentId", "manifestId", "manifestGroupId", "trainName"];
+// The variables that name one row: a run, manifest or group by id, a train by name (a series names it
+// `name`), a state machine by `machine`.
+const ROW_VARIABLES = ["id", "metadataId", "parentId", "manifestId", "manifestGroupId", "trainName", "name", "machine"];
 
 /** True when the query names a row (by id or train) that no recording of any query names. */
 function scenarioRow(variables: Record<string, unknown>): boolean {

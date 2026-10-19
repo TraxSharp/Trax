@@ -1,3 +1,5 @@
+import { hashVariables } from "../mock/variables-hash";
+
 // The demo's data: what three Trax sample hosts answered to every request the dashboard can send,
 // recorded by Trax.Samples' scripts/recordings/dashboard.mjs into data/dashboard-recordings.json.
 // See that script's header for what was recorded and how the hosts were combined.
@@ -48,7 +50,7 @@ function rehydrate(value: unknown, objects: unknown[]): unknown {
   return value;
 }
 
-const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+export const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 // Move every timestamp by `deltaMs`, keeping the precision the host sent (some are whole seconds).
 function shift(value: unknown, deltaMs: number): unknown {
@@ -65,6 +67,20 @@ function shift(value: unknown, deltaMs: number): unknown {
   return value;
 }
 
+// A read whose variables hold a time (the train page's range, which starts a day before the minute it
+// loaded) is keyed by that time: move it with the data, so it is the read the page sends now.
+function shiftKeys(queries: Recordings["queries"], deltaMs: number): Recordings["queries"] {
+  const out: Recordings["queries"] = {};
+  for (const [op, byHash] of Object.entries(queries)) {
+    out[op] = {};
+    for (const [key, value] of Object.entries(byHash)) {
+      const timed = /"\d{4}-\d{2}-\d{2}T/.test(key);
+      out[op][timed ? hashVariables(shift(JSON.parse(key), deltaMs) as Record<string, unknown>) : key] = value;
+    }
+  }
+  return out;
+}
+
 /**
  * The recordings as the demo serves them: references resolved, and every time moved forward by
  * whole minutes so the last moment recorded is about `now` (minute and hour buckets stay aligned).
@@ -74,7 +90,7 @@ export function prepareRecordings(file: RecordingsFile, now: number = Date.now()
   const objects = shift(file.objects, deltaMs) as unknown[];
   return {
     recordedAt: new Date(Date.parse(file.recordedAt) + deltaMs).toISOString(),
-    queries: rehydrate(shift(file.queries, deltaMs), objects) as Recordings["queries"],
+    queries: shiftKeys(rehydrate(shift(file.queries, deltaMs), objects) as Recordings["queries"], deltaMs),
     mutations: shift(file.mutations, deltaMs) as Recordings["mutations"],
     subscriptions: shift(file.subscriptions, deltaMs) as Recordings["subscriptions"],
   };

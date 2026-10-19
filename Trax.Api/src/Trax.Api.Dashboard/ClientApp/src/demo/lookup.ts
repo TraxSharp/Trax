@@ -1,9 +1,10 @@
 import { hashVariables } from "../mock/variables-hash";
-import type { Recordings } from "./recordings";
+import { ISO, type Recordings } from "./recordings";
 
 // How the demo answers a query from the recordings.
 //
-//   recorded  the host's answer for exactly these variables.
+//   recorded  the host's answer for exactly these variables, or, for a time the page counts back
+//             from the minute it loaded, for the same time counted back from when recording stopped.
 //   derived   a text, time or id filter typed into a list, which no recording can enumerate: the
 //             recorded list without that filter, filtered here the way the API filters it.
 //   created   a detail for a row this session created (a queued train, a run): the API's "not
@@ -146,6 +147,54 @@ function derivePersistedOperations(recordings: Recordings, vars: Rec): Rec | und
   return setAt(path, { ...page, items: items.slice(skip, skip + Number(vars.take)), totalCount: items.length });
 }
 
+const MINUTE = 60_000;
+
+/** The variables with every time written as its distance from `base`; null when they hold no time. */
+function relativeKey(vars: Rec, base: number): string | null {
+  let timed = false;
+  const visit = (v: unknown): unknown => {
+    if (typeof v === "string" && ISO.test(v)) {
+      timed = true;
+      return `@${Date.parse(v) - base}`;
+    }
+    if (Array.isArray(v)) return v.map(visit);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, visit(x)]));
+    return v;
+  };
+  const relative = visit(vars) as Rec;
+  return timed ? hashVariables(relative) : null;
+}
+
+const relativeIndexes = new WeakMap<Recordings, Map<string, Map<string, unknown>>>();
+
+/**
+ * A read keyed by a time the page counts back from the minute it loaded (the train page's last 24
+ * hours): the recording of the same range counted back from when the hosts stopped. The recordings
+ * are moved to the minute they were prepared in, so a page loaded minutes later asks a later time.
+ */
+function relativeMatch(recordings: Recordings, op: string, vars: Rec): unknown {
+  let indexes = relativeIndexes.get(recordings);
+  if (!indexes) relativeIndexes.set(recordings, (indexes = new Map()));
+  let index = indexes.get(op);
+  if (!index) {
+    index = new Map();
+    const stopped = Date.parse(recordings.recordedAt);
+    for (const [key, data] of Object.entries(recordings.queries[op] ?? {})) {
+      const relative = relativeKey(JSON.parse(key) as Rec, stopped);
+      if (relative) index.set(relative, data);
+    }
+    indexes.set(op, index);
+  }
+  if (index.size === 0) return undefined;
+  const minute = Math.floor(Date.now() / MINUTE) * MINUTE;
+  // The page may have loaded in the minute before it asked.
+  for (const base of [minute, minute - MINUTE]) {
+    const key = relativeKey(vars, base);
+    if (key && index.has(key)) return index.get(key);
+  }
+  return undefined;
+}
+
 function idsIn(vars: Rec): number[] {
   return ["id", "metadataId", "parentId", "manifestId"]
     .map((k) => vars[k])
@@ -158,6 +207,8 @@ export function lookupQuery(recordings: Recordings, op: string, variables: Rec):
   const byHash = recordings.queries[op];
   const exact = byHash?.[hashVariables(vars)];
   if (exact !== undefined) return { served: "recorded", data: structuredClone(exact) as Rec };
+  const relative = relativeMatch(recordings, op, vars);
+  if (relative !== undefined) return { served: "recorded", data: structuredClone(relative) as Rec };
 
   const derived = op === "PersistedOperations" ? derivePersistedOperations(recordings, vars) : deriveList(recordings, op, vars);
   if (derived) return { served: "derived", data: derived };

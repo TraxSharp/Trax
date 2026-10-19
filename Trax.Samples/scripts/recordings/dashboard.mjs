@@ -8,25 +8,31 @@
 // ../../../Trax.Api/src/Trax.Api.Dashboard/ClientApp), so what it records is exactly what the dashboard sends.
 //
 // Three samples feed it, each on a private port and a fresh database it creates in the Postgres container
-// (TRAX_PG_CONTAINER, default trax_database, published on TRAX_PG_PORT, default 5432):
+// (TRAX_PG_CONTAINER, default trax_database, published on TRAX_PG_PORT, default 5432). Beside the database in
+// one pod or network, TRAX_PSQL=psql creates them with a psql of its own instead, on TRAX_PG_HOST:TRAX_PG_PORT.
 //
 //   Scheduling           interval, cron, one-off, dependent and dormant manifests, a group per manifest and the
 //                        dependency graph between them, a supplier outage long enough for three dead letters (one
 //                        requeued, one acknowledged, one left awaiting), the work queue, trains' logs, the
 //                        scheduler settings, runtime log levels and effects. It is the host the dashboard is
 //                        connected to.
-//   Recovery             runs that ask a model, crash and retry: junction steps, recorded decisions (one asked
-//                        afresh after its data changed, one whose state holds a sensitive value), and a requeue
-//                        that replays a run's decisions.
+//   Recovery             runs that ask a model, crash and retry: junction steps, run graphs, recorded decisions
+//                        (one asked afresh after its data changed, one whose state holds a sensitive value), and a
+//                        requeue that replays a run's decisions. And its three state machines: the six
+//                        system-owned index partitions discovery starts (one held for review), three food orders
+//                        (delivered, cancelled by a closed restaurant, left in its cart with its timer due) and two
+//                        topic map drafts (built, and one left choosing its years), each with its history.
 //   PersistedOperations  the store the dashboard manages: uploads, a hot-fix with history, a refused shape change,
 //                        a deactivated operation and a tenant's own copy.
 //
 // The run has four phases. Drive: the hosts run and are driven for about three minutes while every
 // onTrainStateChanged, onDataChanged and onJunctionEvent frame is written down with the time it arrived. Freeze:
 // both schedulers' manifest manager and dispatcher are switched off (the dashboard's own updateScheduler), so the
-// data stops moving, and two entries are queued that will now wait. Snapshot: every list the dashboard can show is
-// walked to its end, once for each filter, sort and scope a control offers, and every detail, stats and timeline
-// is read for every row. Mutations: every write the dashboard offers is sent to a real host, so the demo can say
+// data stops moving, two entries are queued that will now wait, and two bulk operations disable and enable the
+// refresh train's manifests. Snapshot, of the next whole minute: every list the dashboard can show is walked to its
+// end, once for each filter, sort and scope a control offers, and every detail, stats, timeline, run graph, series
+// and schedule is read for every row, as is every state machine's instance list under each filter, and every
+// instance's page and history. Mutations: every write the dashboard offers is sent to a real host, so the demo can say
 // what Trax says, refusals included.
 //
 // The demo shows one Trax cluster, so the hosts are combined as if they shared a database: what a database holds
@@ -44,7 +50,7 @@
 // rewrites it from out/ without starting anything. The copy differs from what the hosts sent in four ways: ids are
 // renumbered as above; the machine's name, process ids and file paths are replaced (hosts are named after the
 // sample they ran, and stack traces start at the repository); the version the footer shows is the Trax.Api version
-// this repository pins, where a local build reports 1.99.99; and rows that repeat across pages are stored once.
+// this repository last released, where a local build reports 1.99.99; and rows that repeat across pages are stored once.
 
 import { createClient } from "graphql-ws";
 import { execFileSync, spawn } from "node:child_process";
@@ -69,7 +75,13 @@ const dashboardDir = argValue("--dashboard") ?? resolve(repo, "../Trax.Api/src/T
 const copyTo = argValue("--copy-to");
 
 const PG_CONTAINER = process.env.TRAX_PG_CONTAINER ?? "trax_database";
+const PG_HOST = process.env.TRAX_PG_HOST || "localhost";
 const PG_PORT = process.env.TRAX_PG_PORT || "5432";
+// How to reach psql: through the container by default, or a psql of its own (TRAX_PSQL=psql, which then connects
+// to TRAX_PG_HOST:TRAX_PG_PORT), as when the recorder runs beside the database in one pod.
+const PSQL = process.env.TRAX_PSQL
+  ? [...process.env.TRAX_PSQL.split(" "), "-h", PG_HOST, "-p", PG_PORT]
+  : ["docker", "exec", PG_CONTAINER, "psql"];
 
 // The order is the order ids are interleaved in when two rows have no time to compare.
 const HOSTS = {
@@ -88,7 +100,9 @@ const HOSTS = {
     port: 5392,
     database: "trax_dashboard_recording_recovery",
     key: "recovery-operator-key-do-not-use-in-production",
-    env: {},
+    // The recorder sends the dashboard's documents and the sample's own mutations as text, which the host refuses
+    // unless it is told to take documents it has not registered.
+    env: { Recovery__RequirePersistedOperations: "false" },
   },
   persisted: {
     alias: "persisted-operations",
@@ -101,6 +115,19 @@ const HOSTS = {
 };
 const PRIMARY = "scheduling";
 const SCHEDULER_HOSTS = ["scheduling", "recovery"];
+// The hosts that register state machines.
+const MACHINE_HOSTS = ["recovery"];
+
+// Page sizes and ranges the console asks for, where the recorder reads a page part by part (see TAKES for lists).
+const MACHINE_PAGE = 20; // pages/MachinePage.tsx
+const TRANSITIONS_PAGE = 25; // components/TransitionHistory.tsx
+const BULK_FAILURES_PAGE = 50; // pages/BulkOperationsPage.tsx
+const SCHEDULES_COUNT = 3; // pages/ManifestsPage.tsx, next runs per row
+const DEAD_LETTER_GROUP_WINDOW = 500; // pages/DeadLettersPage.tsx
+const GROUP_STATUS_IDS = 1000; // lib/schedules.ts
+const SERIES_RANGES = ["LAST24_HOURS", "LAST7_DAYS"];
+// The train page's ranges: the failed runs it places on steps start this long before the minute it loaded.
+const TRAIN_RANGE_MS = { LAST24_HOURS: 24 * 3600_000, LAST7_DAYS: 7 * 24 * 3600_000 };
 
 // ── The dashboard's documents ────────────────────────────────────────────────
 
@@ -127,13 +154,15 @@ function readDocuments() {
 // ── Hosts ────────────────────────────────────────────────────────────────────
 
 function psql(sql) {
-  execFileSync("docker", ["exec", PG_CONTAINER, "psql", "-q", "-U", "trax", "-d", "trax", "-c", sql], {
+  const [command, ...rest] = PSQL;
+  execFileSync(command, [...rest, "-q", "-U", "trax", "-d", "trax", "-c", sql], {
     stdio: ["ignore", "ignore", "inherit"],
+    env: { ...process.env, PGPASSWORD: process.env.PGPASSWORD ?? "trax123" },
   });
 }
 
 function connectionString(database) {
-  return `Host=localhost;Port=${PG_PORT};Database=${database};Username=trax;Password=trax123`;
+  return `Host=${PG_HOST};Port=${PG_PORT};Database=${database};Username=trax;Password=trax123`;
 }
 
 const children = [];
@@ -236,11 +265,13 @@ async function drive(name, query, variables = {}) {
 
 const raw = {
   recordedAt: null,
+  home: homedir(), // the recording machine's home directory, which a host's log can name
   hosts: {},
   queries: [], // { host, op, vars, data }
   walks: [], // { host, op, vars, items, envelope }
   mutations: [], // { host, op, vars, response, phase }
   frames: [], // { host, op, vars, t, data }
+  attentionBeforeFreeze: {}, // host -> Attention, read while the schedulers still ran
 };
 
 /** Sends one of the dashboard's mutations and records what the host answered, errors and refusals included. */
@@ -266,6 +297,7 @@ const PAGES = {
   DeadLetters: (d) => d.operations.deadLetters.deadLetters,
   Logs: (d) => d.operations.logs.logs,
   Manifests: (d) => d.operations.manifests,
+  ManifestSchedules: (d) => d.operations.manifests,
   ManifestGroups: (d) => d.operations.manifestGroups.groups,
 };
 const PAGE_PATHS = {
@@ -275,6 +307,7 @@ const PAGE_PATHS = {
   DeadLetters: ["operations", "deadLetters", "deadLetters"],
   Logs: ["operations", "logs", "logs"],
   Manifests: ["operations", "manifests"],
+  ManifestSchedules: ["operations", "manifests"],
   ManifestGroups: ["operations", "manifestGroups", "groups"],
 };
 const WALK_TAKE = 100;
@@ -422,6 +455,85 @@ async function drivePersistedOperations() {
   );
 }
 
+// The Recovery sample's machines, driven the way its page and an operator do: discovery starts one system-owned
+// instance per index partition (one of them ends up held for review), and the operator's own orders and topic map
+// drafts are user-owned. Every answer type here is the sample's, not the dashboard's.
+const MACHINE_DRIVE = {
+  discover: `mutation { dispatch { discoverPartitions(input: {}) { output { instancesStarted instancesSentToIngest } } } }`,
+  orderTrouble: `mutation ($trouble: OrderTrouble!) { dispatch { orderTrouble(input: { trouble: $trouble }) { output { trouble } } } }`,
+  orderStart: `mutation ($requestId: String!) { machines { order { start(requestId: $requestId) { id state problem { code message } } } } }`,
+  orderAdd: `mutation ($id: UUID!, $input: NewItemInput!, $requestId: String!) { machines { order {
+    addItem(id: $id, input: $input, requestId: $requestId) { id state problem { code message } } } } }`,
+  orderPlace: `mutation ($id: UUID!, $requestId: String!) { machines { order {
+    placeOrder(id: $id, requestId: $requestId) { id state problem { code message } } } } }`,
+  orderGet: `query ($id: UUID!) { machines { order { get(id: $id) { state } } } }`,
+  mapStart: `mutation ($requestId: String!) { machines { topicMap { start(requestId: $requestId) { id state problem { code message } } } } }`,
+  mapFields: `mutation ($id: UUID!, $input: FieldsChoiceInput!, $requestId: String!) { machines { topicMap {
+    chooseFields(id: $id, input: $input, requestId: $requestId) { id state problem { code message } } } } }`,
+  mapBuild: `mutation ($id: UUID!, $input: RangeChoiceInput!, $requestId: String!) { machines { topicMap {
+    build(id: $id, input: $input, requestId: $requestId) { id state problem { code message } } } } }`,
+  mapGet: `query ($id: UUID!) { machines { topicMap { get(id: $id) { state } } } }`,
+};
+let requests = 0;
+const requestId = (what) => `dashboard-recording-${what}-${++requests}`;
+
+function answered(what, answer) {
+  if (answer.problem) throw new Error(`${what} was refused: ${JSON.stringify(answer.problem)}`);
+  return answer;
+}
+
+async function driveMachines() {
+  const r = "recovery";
+  const found = (await drive(r, MACHINE_DRIVE.discover)).dispatch.discoverPartitions.output;
+  log(`recovery partitions: ${found.instancesStarted} started, ${found.instancesSentToIngest} sent to ingest`);
+
+  const order = async (trouble, end) => {
+    if (trouble) await drive(r, MACHINE_DRIVE.orderTrouble, { trouble });
+    const { id } = answered("order start", (await drive(r, MACHINE_DRIVE.orderStart, { requestId: requestId("start") })).machines.order.start);
+    answered(
+      "addItem",
+      (await drive(r, MACHINE_DRIVE.orderAdd, { id, input: { item: "Margherita" }, requestId: requestId("add") })).machines.order.addItem,
+    );
+    if (!end) return log(`order ${id} left in its cart`);
+    answered("placeOrder", (await drive(r, MACHINE_DRIVE.orderPlace, { id, requestId: requestId("place") })).machines.order.placeOrder);
+    await waitFor(`order ${id} to reach ${end}`, async () => (await drive(r, MACHINE_DRIVE.orderGet, { id })).machines.order.get?.state === end);
+    log(`order ${id} ${end}`);
+  };
+  await order("NONE", "Delivered");
+  await order("RESTAURANT_CLOSED", "Cancelled");
+  // Its timer clears the cart half an hour after the snapshot, so the instance page shows when.
+  await order(null, null);
+
+  const map = async (build) => {
+    const { id } = answered("topic map start", (await drive(r, MACHINE_DRIVE.mapStart, { requestId: requestId("map") })).machines.topicMap.start);
+    answered(
+      "chooseFields",
+      (await drive(r, MACHINE_DRIVE.mapFields, { id, input: { fields: ["Hydrology"] }, requestId: requestId("fields") })).machines.topicMap
+        .chooseFields,
+    );
+    if (!build) return log(`topic map ${id} left choosing its years`);
+    answered(
+      "build",
+      (await drive(r, MACHINE_DRIVE.mapBuild, { id, input: { fromYear: 2016, toYear: 2025 }, requestId: requestId("build") })).machines
+        .topicMap.build,
+    );
+    const state = await waitFor(`topic map ${id} to build`, async () => {
+      const s = (await drive(r, MACHINE_DRIVE.mapGet, { id })).machines.topicMap.get?.state;
+      return s && s !== "Building" ? s : null;
+    });
+    log(`topic map ${id} ${state}`);
+  };
+  await map(true);
+  await map(false);
+
+  await waitFor("every partition to finish ingesting", async () => {
+    const page = (await call(r, "MachineInstancesAttention", { machine: "source-partition", skip: 0, take: 100 })).operations
+      .machineInstances;
+    return page.items.length > 0 && page.items.every((i) => !["Discovered", "Ingesting"].includes(i.state));
+  });
+  log("recovery machines done");
+}
+
 async function driveAll() {
   const ws = {};
   for (const name of SCHEDULER_HOSTS) {
@@ -465,7 +577,7 @@ async function driveAll() {
     log("recovery runs done");
   })();
 
-  await Promise.all([driveScheduling(), recovery, drivePersistedOperations()]);
+  await Promise.all([driveScheduling(), recovery, driveMachines(), drivePersistedOperations()]);
   // A last stretch of ordinary traffic, so the live feed has a steady minute to replay.
   log("recording a minute of steady traffic");
   await sleep(60_000);
@@ -476,6 +588,8 @@ async function driveAll() {
 
 async function freeze() {
   for (const name of SCHEDULER_HOSTS) await record(name, "SchedulerConfig");
+  // What needs attention says whether the schedulers run; the demo shows them running, as the settings do.
+  for (const name of SCHEDULER_HOSTS) raw.attentionBeforeFreeze[name] = await call(name, "Attention");
   for (const name of SCHEDULER_HOSTS)
     await mutate(name, "UpdateScheduler", { input: { manifestManagerEnabled: false, jobDispatcherEnabled: false } }, "freeze");
   // Let what was running finish, then wait for the cleanup and pollers to have nothing left to write.
@@ -509,6 +623,20 @@ async function freeze() {
     },
   }, "freeze");
   await mutate("scheduling", "CancelWorkQueueEntry", { id: cancelled.data.operations.workQueue.queueTrain.id }, "freeze");
+
+  // Two bulk operations an operator ran from the schedules list, which leave the manifests as they were: every
+  // manifest of the refresh train disabled, then enabled again. A host knows only the operations it ran.
+  const filter = { manifests: { nameContains: "Refresh", hideAdminTrains: true } };
+  const matching = (await call("scheduling", "Manifests", { take: 100, ...filter.manifests })).operations.manifests.items.length;
+  for (const kind of ["DISABLE", "ENABLE"]) {
+    const started = await mutate("scheduling", "StartBulkOperation", { kind, filter, expectedCount: matching, askAfresh: false }, "freeze");
+    const id = started.data?.operations?.startBulkOperation?.operation?.id;
+    if (!id) throw new Error(`the bulk ${kind} did not start: ${JSON.stringify(started)}`);
+    await waitFor(`the bulk ${kind} to finish`, async () => {
+      const op = (await call("scheduling", "BulkOperation", { id, failuresTake: BULK_FAILURES_PAGE })).operations.bulkOperation;
+      return op && op.status !== "RUNNING";
+    });
+  }
 }
 
 // ── Snapshot ─────────────────────────────────────────────────────────────────
@@ -548,6 +676,21 @@ async function snapshot() {
     for (const op of ["EnvironmentName", "ServerVersion", "LogLevels", "Effects", "AdminTrainNames", "GroupDependencyGraph"])
       await record(name, op);
     if (name !== PRIMARY) await record(name, "SchedulerConfig");
+    else await record(name, "ServerProcess");
+    await record(name, "Attention");
+    await record(name, "TrainsAskingDecisions");
+    await record(name, "TrainChains", { hideAdmin: false });
+    // The bulk operations this host ran, each with its failures page by page.
+    for (const op of (await record(name, "BulkOperations")).operations.bulkOperations) {
+      let failuresAfter = null;
+      for (let i = 0; i < 100; i++) {
+        const detail = (await record(name, "BulkOperation", { id: op.id, failuresAfter, failuresTake: BULK_FAILURES_PAGE })).operations
+          .bulkOperation;
+        const failures = detail?.failures ?? [];
+        if (failures.length < BULK_FAILURES_PAGE) break;
+        failuresAfter = failures[failures.length - 1].id;
+      }
+    }
   }
   await record("persisted", "PersistedOperationsAvailable");
 
@@ -623,11 +766,15 @@ async function snapshot() {
     await walk(name, "DeadLetters", {});
     for (const status of ["AWAITING_INTERVENTION", "RETRIED", "ACKNOWLEDGED"]) await walk(name, "DeadLetters", { status });
 
-    for (const hideAdminTrains of [true, false]) {
-      await walk(name, "Manifests", { hideAdminTrains });
-      for (const isEnabled of [true, false]) await walk(name, "Manifests", { isEnabled, hideAdminTrains });
-      for (const scheduleType of SCHEDULE_TYPES) await walk(name, "Manifests", { scheduleType, hideAdminTrains });
-      for (const nameContains of PRESETS.manifestName) await walk(name, "Manifests", { nameContains, hideAdminTrains });
+    // The schedules list, and its rows' schedules in words and next runs, read for the same filters.
+    for (const op of ["Manifests", "ManifestSchedules"]) {
+      const extra = op === "ManifestSchedules" ? { count: SCHEDULES_COUNT } : {};
+      for (const hideAdminTrains of [true, false]) {
+        await walk(name, op, { hideAdminTrains, ...extra });
+        for (const isEnabled of [true, false]) await walk(name, op, { isEnabled, hideAdminTrains, ...extra });
+        for (const scheduleType of SCHEDULE_TYPES) await walk(name, op, { scheduleType, hideAdminTrains, ...extra });
+        for (const nameContains of PRESETS.manifestName) await walk(name, op, { nameContains, hideAdminTrains, ...extra });
+      }
     }
 
     await walk(name, "ManifestGroups", {});
@@ -641,6 +788,8 @@ async function snapshot() {
     // Every run: its page, timeline, decisions, log (the run's own, oldest first, and the Logs page's run filter).
     for (const e of a.executions) {
       const detail = await record(name, "ExecutionDetail", { id: e.id });
+      await record(name, "RunGraph", { metadataId: e.id });
+      await record(name, "RunLinks", { id: e.id });
       await walk(name, "Logs", { metadataId: e.id, order: "OLDEST" }, { scope: "owner" });
       await walk(name, "Logs", { metadataId: e.id, order: "NEWEST" }, { scope: "owner" });
       await record(name, "JunctionRuns", { metadataId: e.id, take: 500 });
@@ -659,28 +808,85 @@ async function snapshot() {
       await record(name, "ManifestDetail", { id: m.id });
       await record(name, "ManifestStats", { manifestId: m.id });
       await record(name, "ManifestExclusions", { manifestId: m.id });
+      // The manifest page's schedule, and a train page's one-line row for it.
+      for (const count of [5, 1]) await record(name, "ManifestSchedule", { id: m.id, count });
+      for (const range of SERIES_RANGES) await record(name, "MetricSeries", { scope: "MANIFEST", range, id: m.id });
     }
     for (const g of a.groups) {
-      await record(name, "ManifestGroupDetail", { id: g.id });
+      const detail = await record(name, "ManifestGroupDetail", { id: g.id });
       await record(name, "ManifestGroupStats", { groupIds: [g.id] });
+      for (const range of SERIES_RANGES) await record(name, "MetricSeries", { scope: "GROUP", range, id: g.id });
+      const nodes = detail.operations.manifestGroups.graph?.nodes ?? [];
+      if (nodes.length) await record(name, "GroupGraphStatus", { groupIds: nodes.slice(0, GROUP_STATUS_IDS).map((n) => n.id) });
     }
-    for (const trainName of new Set([...trainNames, ...registered])) await record(name, "TrainStats", { trainName });
+    const graph = (await call(name, "GroupDependencyGraph")).operations.manifestGroups.dependencyGraph;
+    if (graph.nodes.length)
+      await record(name, "GroupGraphStatus", { groupIds: graph.nodes.slice(0, GROUP_STATUS_IDS).map((n) => n.id) });
+    for (const trainName of new Set([...trainNames, ...registered])) {
+      await record(name, "TrainStats", { trainName });
+      // A train's page: its runs over each range, the failed runs it places on the chain's steps, and its manifests.
+      for (const range of SERIES_RANGES) {
+        await record(name, "MetricSeries", { scope: "TRAIN", range, name: trainName });
+        const startedAfter = new Date(Date.parse(raw.recordedAt) - TRAIN_RANGE_MS[range]).toISOString();
+        await walk(name, "Executions", { trainName, trainState: "FAILED", startedAfter, order: "NEWEST" });
+      }
+      await walk(name, "Manifests", { nameContains: trainName, hideAdminTrains: false });
+      // The Overview's failing-train link: the Runs page filtered to the train's failed runs.
+      for (const hideAdminTrains of [true, false])
+        await walk(name, "Executions", { order: "NEWEST", hideAdminTrains, trainState: "FAILED", trainName });
+    }
     log(`${name}: snapshot read`);
+  }
+
+  // The state machines: every machine, its counts, its instances under every filter its page offers, and every
+  // instance's page and history. A user's draft is named by its row too; nothing here reads a context or an owner.
+  for (const name of MACHINE_HOSTS) {
+    const machines = (await record(name, "Machines")).operations.machines;
+    await record(name, "MachineInstanceStuckCounts", {});
+    const instances = new Map();
+    for (const m of machines) {
+      const counts = (await record(name, "MachineInstanceStuckCounts", { machine: m.name })).operations.machineInstanceCounts;
+      const states = [null, ...new Set([...m.states.map((s) => s.name), ...counts.map((c) => c.state)])];
+      for (const state of states)
+        for (const ownerKind of [null, "SYSTEM", "USER"])
+          for (const stuck of [null, true])
+            for (let skip = 0; ; skip += MACHINE_PAGE) {
+              const page = (
+                await record(name, "MachineInstancesAttention", { machine: m.name, state, ownerKind, stuck, skip, take: MACHINE_PAGE })
+              ).operations.machineInstances;
+              for (const i of page.items) instances.set(`${i.machine}\u0000${i.ownerKind}\u0000${i.id}\u0000${i.rowId}`, i);
+              if (skip + MACHINE_PAGE >= page.totalCount) break;
+            }
+    }
+    for (const i of instances.values()) {
+      // The console names a system instance by its id alone, and a user's draft by its row as well.
+      const key = { machine: i.machine, ownerKind: i.ownerKind, id: i.id, rowId: i.ownerKind === "USER" ? i.rowId : null };
+      const instance = (await record(name, "MachineInstance", key)).operations.machineInstance;
+      // The history names the instance by the row the instance page read, a system instance's too.
+      const history = { ...key, rowId: instance?.rowId ?? key.rowId };
+      let after = null;
+      for (let n = 0; n < 100; n++) {
+        const page = (await record(name, "MachineInstanceTransitions", { ...history, first: TRANSITIONS_PAGE, after })).operations
+          .machineInstance?.transitions;
+        if (!page || page.nextCursor == null) break;
+        after = page.nextCursor;
+      }
+    }
+    log(`${name}: ${machines.length} machines, ${instances.size} instances`);
   }
 
   // The persisted-operations store, under every filter the page offers.
   const listed = new Map();
   for (const isActive of [null, true, false])
     for (const tenantKey of [null, "", "acme"])
-      for (const idStartsWith of [null, "greet", "lookup"]) {
-        const data = await record("persisted", "PersistedOperations", {
-          filter: { isActive, tenantKey, idStartsWith },
-          skip: 0,
-          take: 25,
-        });
-        for (const op of data.persistedOperations.persistedOperations.items)
-          listed.set(`${op.tenantKey}\u0000${op.id}`, op);
-      }
+      for (const idStartsWith of [null, "greet", "lookup"])
+        for (let skip = 0; ; skip += 25) {
+          const page = (
+            await record("persisted", "PersistedOperations", { filter: { isActive, tenantKey, idStartsWith }, skip, take: 25 })
+          ).persistedOperations.persistedOperations;
+          for (const op of page.items) listed.set(`${op.tenantKey}\u0000${op.id}`, op);
+          if (skip + 25 >= page.totalCount) break;
+        }
   for (const op of listed.values())
     // The page reads the tenant from its URL and sends the default tenant ("") as none.
     await record("persisted", "PersistedOperationDetail", { id: op.id, tenantKey: op.tenantKey || null, historyTake: 100 });
@@ -787,6 +993,33 @@ async function recordMutations() {
   const recoveryDone = recoveryRuns.find((r) => r.trainState === "COMPLETED");
   if (recoveryDone) await mutate("recovery", "RequeueExecution", { id: recoveryDone.id, askAfresh: true });
 
+  // Resume a run from its graph: a failed attempt from where it stopped and from a named step, and a run that
+  // completed, which has nothing to resume.
+  const recoveryFailed = (await call("recovery", "Executions", { take: 50, trainState: "FAILED", hideAdminTrains: true })).operations
+    .executions.items;
+  for (const run of recoveryFailed.slice(0, 2)) {
+    await mutate("recovery", "ResumeExecution", { id: run.id });
+    const graph = (await call("recovery", "RunGraph", { metadataId: run.id })).operations.runGraph;
+    const from = graph?.allNodes.find((n) => n.canResume)?.id;
+    if (from) await mutate("recovery", "ResumeExecution", { id: run.id, from });
+  }
+  if (recoveryDone) await mutate("recovery", "ResumeExecution", { id: recoveryDone.id });
+
+  // The operator's one action on an instance: a user's order (refused, it is not the system's) and a partition.
+  for (const machine of ["order", "source-partition"]) {
+    const page = (await call("recovery", "MachineInstancesAttention", { machine, skip: 0, take: MACHINE_PAGE })).operations
+      .machineInstances;
+    const instance = page.items[0];
+    if (instance)
+      await mutate("recovery", "CancelMachineInstance", { machine, ownerKind: instance.ownerKind, id: instance.id });
+  }
+
+  // Bulk operations from a list's "all matching": one refused because the list moved under it, one that runs.
+  const schedules = (await call(s, "Manifests", { take: 100, hideAdminTrains: true })).operations.manifests.items;
+  const all = { manifests: { hideAdminTrains: true } };
+  await mutate(s, "StartBulkOperation", { kind: "DISABLE", filter: all, expectedCount: schedules.length + 1, askAfresh: false });
+  await mutate(s, "StartBulkOperation", { kind: "ENABLE", filter: all, expectedCount: schedules.length, askAfresh: false });
+
   const p = "persisted";
   const stored = (await call(p, "PersistedOperationDetail", { id: "greet_v1", historyTake: 1 })).persistedOperations
     .persistedOperation;
@@ -833,6 +1066,35 @@ const ID_FIELDS = {
   RunTrain: { id: "metadata" },
   TriggerManifests: { id: "manifest" },
   TriggerGroups: { id: "group" },
+  ResumeExecution: { id: "workQueue" },
+  RunGraph: { metadataId: "metadata" },
+  RunLinks: {
+    id: "metadata",
+    manifestId: "manifest",
+    parentId: "metadata",
+    replayDecisionsOf: "metadata",
+    workQueueEntryId: "workQueue",
+    deadLetterId: "deadLetter",
+  },
+  ManifestSchedule: { id: "manifest" },
+  ManifestSchedules: { id: "manifest" },
+  GroupGraphStatus: { groupId: "group" },
+  MachineInstancesAttention: { executionId: "metadata", workQueueEntryId: "workQueue" },
+  // An instance's own id is a UUID; the numeric id is its invoked runs'.
+  MachineInstance: { id: "metadata", executionId: "metadata", workQueueEntryId: "workQueue", queuedInvokedRunEntryId: "workQueue" },
+  MachineInstanceTransitions: { executionId: "metadata", workQueueEntryId: "workQueue" },
+  // A bulk operation's id is a UUID; its failures' ids are rows of the kind it acts on (rowKindOf).
+  BulkOperation: { manifestId: "manifest", manifestGroupId: "group", parentId: "metadata" },
+  StartBulkOperation: { manifestId: "manifest", manifestGroupId: "group", parentId: "metadata" },
+};
+// The rows each bulk operation kind acts on.
+const BULK_ROWS = {
+  CANCEL: "metadata",
+  REQUEUE: "deadLetter",
+  ACKNOWLEDGE: "deadLetter",
+  TRIGGER: "manifest",
+  ENABLE: "manifest",
+  DISABLE: "manifest",
 };
 // Which variables hold an id, and of what kind.
 const ID_VARS = {
@@ -873,11 +1135,18 @@ const ID_VARS = {
   CancelGroup: { groupId: "group" },
   UpdateManifestGroup: { id: "group" },
   SetManifestGroupsEnabled: { ids: "group" },
+  ResumeExecution: { id: "metadata" },
+  RunGraph: { metadataId: "metadata" },
+  RunLinks: { id: "metadata" },
+  ManifestSchedule: { id: "manifest" },
+  ManifestSchedules: { afterId: "manifest", manifestGroupId: "group" },
+  GroupGraphStatus: { groupIds: "group" },
 };
 // The lists each page cuts, and the page sizes it asks for, by the variables that pick them.
 const TAKES = {
   Executions: (v) =>
-    v.manifestId != null && v.trainState === "FAILED" && v.order == null ? [1, 10]
+    v.startedAfter != null ? [500]
+    : v.manifestId != null && v.trainState === "FAILED" && v.order == null ? [1, 10]
     : v.manifestId != null || v.manifestGroupId != null ? [10]
     : [25],
   ExecutionChildren: () => [25],
@@ -885,6 +1154,7 @@ const TAKES = {
   DeadLetters: () => [25],
   Logs: (v) => (v.metadataId != null && v.order === "OLDEST" ? [25] : [50]),
   Manifests: () => [25],
+  ManifestSchedules: () => [25],
   ManifestGroups: () => [25],
 };
 
@@ -940,8 +1210,14 @@ class IdSpace {
   }
 }
 
-function remapData(ids, host, op, value) {
+/** The id fields of one answer: a bulk operation's failures are rows of the kind it acts on. */
+function idFieldsOf(op, data) {
   const fields = ID_FIELDS[op] ?? {};
+  const kind = op === "BulkOperation" ? data?.operations?.bulkOperation?.kind : null;
+  return kind ? { ...fields, id: BULK_ROWS[kind] } : fields;
+}
+
+function remapData(ids, host, op, value, fields = idFieldsOf(op, value)) {
   const visit = (v) => {
     if (Array.isArray(v)) return v.map(visit);
     if (v && typeof v === "object") {
@@ -955,8 +1231,12 @@ function remapData(ids, host, op, value) {
   return visit(value);
 }
 
-function remapVars(ids, host, op, vars) {
-  const kinds = ID_VARS[op] ?? {};
+function remapVars(ids, host, op, vars, data) {
+  const kinds = { ...(ID_VARS[op] ?? {}) };
+  // A series is of a manifest or a group by its scope; a bulk operation's failures page by their rows' ids.
+  if (op === "MetricSeries" && vars.scope !== "TRAIN") kinds.id = vars.scope === "MANIFEST" ? "manifest" : "group";
+  const bulkKind = op === "BulkOperation" ? data?.operations?.bulkOperation?.kind : null;
+  if (bulkKind) kinds.failuresAfter = BULK_ROWS[bulkKind];
   const outVars = {};
   for (const [k, v] of Object.entries(vars)) {
     const kind = kinds[k];
@@ -984,10 +1264,17 @@ function setAt(path, page) {
   return path.reduceRight((acc, key) => ({ [key]: acc }), page);
 }
 
-/** The Trax.Api version this repository pins, which the footer shows instead of a local build's 1.99.99. */
+/**
+ * The Trax version the footer shows instead of a local build's 1.99.99: the latest release tag of this
+ * repository, whose packages are all released under one version.
+ */
 function pinnedApiVersion() {
-  const props = readFileSync(join(repo, "Directory.Packages.props"), "utf8");
-  return /Include="Trax\.Api"\s+Version="([^"]+)"/.exec(props)?.[1] ?? "1.99.99";
+  try {
+    const tag = execFileSync("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], { cwd: repo, encoding: "utf8" });
+    return tag.trim().replace(/^v/, "");
+  } catch {
+    return "1.99.99";
+  }
 }
 
 /** Replaces what names this machine: its name, its processes, its file paths, and the demo keys. */
@@ -998,12 +1285,15 @@ function scrubber(recording) {
     h.instanceIds.forEach((instance, i) => replacements.push([instance, `${HOSTS[name].alias}-${i + 1}`]));
   }
   const user = userInfo().username;
-  const forbidden = [hostname().replace(/\.local$/, ""), homedir(), user, "claude-501"].filter((x) => x && x.length > 2);
+  const home = recording.home ?? homedir();
+  const forbidden = [hostname().replace(/\.local$/, ""), homedir(), home, user, "claude-501"].filter((x) => x && x.length > 2);
   const scrubString = (s, host) => {
     let r = s;
     for (const [from, to] of replacements) r = r.split(from).join(to);
     const machine = recording.hosts[host]?.machine;
     if (machine) r = r.split(machine).join(HOSTS[host].alias);
+    // A path under the home directory the hosts ran in (ASP.NET's key store, say).
+    if (home.length > 2) r = r.split(`${home}/`).join("~/");
     // An absolute path up to the repository it is in: /…/Trax.Scheduler/src/x.cs -> /src/Trax.Scheduler/src/x.cs.
     // Each segment stops at the next "/", so a path splits into segments only one way (no backtracking blow-up).
     r = r.replace(/(?:\/[^\s"'():/]*)+?\/(Trax\.[A-Za-z]+(?:\.[A-Za-z]+)*)\/(?=src\/|samples\/|tests\/)/g, "/src/$1/");
@@ -1076,6 +1366,49 @@ function mergeOverview(parts) {
   }
   // The API reports the rate to one decimal place.
   dash.kpis.successRate = total > 0 ? Math.round((weighted / total) * 10) / 10 : dash.kpis.successRate;
+  return out;
+}
+
+/** A train's series on both hosts, as one database would count it: the buckets of the same start summed. */
+function mergeSeries(parts) {
+  const out = structuredClone(parts[0]);
+  const series = out.operations.metrics.series;
+  const byStart = new Map(series.buckets.map((b) => [b.start, b]));
+  for (const part of parts.slice(1)) {
+    const other = part.operations.metrics.series;
+    if (Date.parse(other.from) < Date.parse(series.from)) series.from = other.from;
+    if (Date.parse(other.to) > Date.parse(series.to)) series.to = other.to;
+    for (const b of other.buckets) {
+      const mine = byStart.get(b.start);
+      if (!mine) byStart.set(b.start, structuredClone(b));
+      else {
+        for (const k of ["completed", "failed", "cancelled"]) mine[k] += b[k];
+        // A percentile of two hosts' runs is not either host's; the slower one is the honest bound.
+        for (const k of ["p50DurationMs", "p95DurationMs"])
+          if (b[k] != null && (mine[k] == null || b[k] > mine[k])) mine[k] = b[k];
+      }
+    }
+  }
+  series.buckets = [...byStart.values()].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  return out;
+}
+
+/** What needs attention on both hosts: their lists together, the queue summed, the oldest entry the older. */
+function mergeAttention(parts) {
+  const out = structuredClone(parts[0]);
+  const a = out.operations.attention;
+  for (const part of parts.slice(1)) {
+    const b = part.operations.attention;
+    for (const k of ["deadLetters", "failingTrains", "stuckInstances", "offlineHosts"]) a[k] = [...a[k], ...structuredClone(b[k])];
+    a.queue.queued += b.queue.queued;
+    if (b.queue.oldestQueuedAt && (!a.queue.oldestQueuedAt || Date.parse(b.queue.oldestQueuedAt) < Date.parse(a.queue.oldestQueuedAt))) {
+      a.queue.oldestQueuedAt = b.queue.oldestQueuedAt;
+      a.queue.oldestAgeSeconds = b.queue.oldestAgeSeconds;
+    }
+    if (Date.parse(b.asOf) > Date.parse(a.asOf)) a.asOf = b.asOf;
+  }
+  a.deadLetters.sort((x, y) => y.count - x.count);
+  a.failingTrains.sort((x, y) => y.lastHourFailureRate - x.lastHourFailureRate);
   return out;
 }
 
@@ -1170,6 +1503,12 @@ function compile(recording) {
     // Every row was read, so the count is exact.
     if ("totalCount" in envelope) envelope.totalCount = items.length;
     if ("isEstimatedCount" in envelope) envelope.isEstimatedCount = false;
+    // The dead letters view groups the newest of the same list, read as one window.
+    if (op === "DeadLetters") {
+      const window = items.slice(0, DEAD_LETTER_GROUP_WINDOW);
+      const cursor = window.length > 0 ? window[window.length - 1].id : null;
+      put("DeadLetterGroups", { ...vars, take: DEAD_LETTER_GROUP_WINDOW }, setAt(PAGE_PATHS.DeadLetters, { ...envelope, items: window, nextCursor: cursor }));
+    }
     for (const take of TAKES[op](vars)) {
       let afterId = null;
       for (let at = 0; ; at += take) {
@@ -1213,15 +1552,36 @@ function compile(recording) {
       },
     }),
     TrainStats: (parts) => mergeTrainStats(parts.map((p) => p.data)),
+    TrainsAskingDecisions: (parts) => ({
+      operations: { trains: unionBy((t) => t.fullName)(parts.map((p) => p.data.operations.trains)) },
+    }),
+    TrainChains: (parts) => ({
+      operations: { trains: unionBy((t) => t.fullName)(parts.map((p) => p.data.operations.trains)) },
+    }),
+    Machines: (parts) => ({
+      operations: { machines: unionBy((m) => m.name)(parts.map((p) => p.data.operations.machines)) },
+    }),
+    MachineInstanceStuckCounts: (parts) => ({
+      operations: { machineInstanceCounts: parts.flatMap((p) => p.data.operations.machineInstanceCounts) },
+    }),
+    BulkOperations: (parts) => ({
+      operations: {
+        bulkOperations: parts
+          .flatMap((p) => p.data.operations.bulkOperations)
+          .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)),
+      },
+    }),
+    MetricSeries: (parts) => mergeSeries(parts.map((p) => p.data)),
+    Attention: (parts) => mergeAttention(parts.map((p) => p.data)),
   };
-  const processOnly = new Set(["SchedulerConfig", "EnvironmentName", "ServerVersion", "LogLevels"]);
+  const processOnly = new Set(["SchedulerConfig", "EnvironmentName", "ServerVersion", "LogLevels", "ServerProcess"]);
   for (const [op, list] of byOp) {
     // The scheduler config read before the freeze is the one the page shows.
     const entries = op === "SchedulerConfig" ? list.filter((q) => q.host === PRIMARY).slice(0, 1) : list;
     const keyed = new Map();
     for (const q of entries) {
       if (processOnly.has(op) && q.host !== PRIMARY) continue;
-      const vars = remapVars(ids, q.host, op, q.vars);
+      const vars = remapVars(ids, q.host, op, q.vars, q.data);
       const data = scrub(remapData(ids, q.host, op, q.data), q.host);
       const key = hashVariables(vars);
       if (!keyed.has(key)) keyed.set(key, { vars, parts: [] });
@@ -1241,6 +1601,23 @@ function compile(recording) {
     if (groupIds.length)
       put("ManifestGroupStats", { groupIds }, { operations: { manifestGroups: { stats: groupIds.map((g) => stats.get(g)).filter(Boolean) } } });
   }
+  // A dependency graph tones its nodes by one read of all their groups: the whole graph spans both hosts.
+  const statuses = new Map();
+  for (const data of Object.values(queries.GroupGraphStatus ?? {}))
+    for (const s of data.operations.manifestGroups.stats) statuses.set(s.groupId, s);
+  const graphs = [
+    ...Object.values(queries.GroupDependencyGraph ?? {}).map((d) => d.operations.manifestGroups.dependencyGraph),
+    ...Object.values(queries.ManifestGroupDetail ?? {}).map((d) => d.operations.manifestGroups.graph),
+  ];
+  for (const graph of graphs.filter(Boolean)) {
+    const groupIds = graph.nodes.slice(0, GROUP_STATUS_IDS).map((n) => n.id);
+    if (groupIds.length)
+      put("GroupGraphStatus", { groupIds }, { operations: { manifestGroups: { stats: groupIds.map((g) => statuses.get(g)).filter(Boolean) } } });
+  }
+  // What needs attention shows the schedulers as they ran before the freeze, as the settings page does.
+  const running = recording.attentionBeforeFreeze?.[PRIMARY]?.operations?.attention?.scheduler;
+  if (running)
+    for (const data of Object.values(queries.Attention ?? {})) data.operations.attention.scheduler = structuredClone(running);
 
   // Writes, keyed like the reads. A write is "current" when the host answered it in the state the
   // snapshot shows: sent after the snapshot, to rows no earlier write had changed. Only a current
@@ -1341,7 +1718,11 @@ async function main() {
   log("freezing both schedulers");
   await freeze();
   for (const client of Object.values(ws)) await client.dispose();
-  raw.recordedAt = new Date().toISOString();
+  // The snapshot is of the next whole minute: the train page reads its failed runs from a minute (the one it
+  // loaded in) back, and the demo moves every time by whole minutes, so the recorded range is the one it asks.
+  const anchor = Math.ceil(Date.now() / 60_000) * 60_000;
+  await sleep(anchor - Date.now());
+  raw.recordedAt = new Date(anchor).toISOString();
   log("reading the snapshot");
   await snapshot();
   log("recording every write");
