@@ -7,6 +7,7 @@ import { useRefreshStatus } from "../lib/refreshStatus";
 import { useNow } from "../lib/useNow";
 import { environmentBadgeColor } from "../lib/environment";
 import { schedulerPaused } from "../lib/scheduler";
+import { Search } from "./Search";
 import { CirclePause, Clock, RotateCw, TriangleAlert } from "lucide-react";
 
 /**
@@ -57,6 +58,7 @@ export function DashboardHeader() {
           {paused}
         </Link>
       )}
+      <Search />
       <div className="ml-auto flex items-center gap-4">
         {lastError && (
           <span
