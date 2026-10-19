@@ -82,6 +82,10 @@ does; this folder's job leaves it out. Locally: `trax-test console-browser`. A t
 `Fixtures/ConsoleTest` (whose teardown fails it on a console error, a CSP violation, an off-origin request or
 document text sent to a host that requires persisted operations), seeds the state it needs through
 `Fixtures/Seed`, signs in as one of `Fixtures/Caller`, and reads the page through the page objects in `Pages/`.
+Each test names what it drives with `[Covers("route:/runs/:id")]`, `[Covers("mutation:RequeueDeadLetter")]` or
+`[Covers("subscription:OnJunctionEvent")]`; `Tests/ConsoleCoverageTests` fails on a route in `ClientApp/src/AppRoutes.tsx`
+or a mutation or subscription the console sends that no test names, and on a name that no longer exists. What no page
+can drive goes in its exclusion list, with the reason.
 
 `tests/Trax.Samples.Recovery.Browser/` drives the Recovery page in chromium with Playwright for .NET.
 It builds the page with vite, so it needs `npm ci` in the page's folder and in
