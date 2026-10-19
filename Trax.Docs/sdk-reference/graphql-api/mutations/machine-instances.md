@@ -21,7 +21,7 @@ The field of `OperationsMutations` that acts on persisted state machine instance
 Cancels a system-owned [state machine instance](/docs/statemachine/invoked-runs#operator-actions)'s
 live train run, and the instance then moves through its state's `OnCancelled` edge. It is the
 GraphQL counterpart of the Cancel button on the dashboard's
-[instance page](/docs/dashboard/pages#state-machines); both call
+[instance page](/docs/dashboard/machines#an-instance); both call
 [`IOperationsService.CancelMachineInstanceAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#state-machine-instances),
 so they refuse the same instances with the same message.
 

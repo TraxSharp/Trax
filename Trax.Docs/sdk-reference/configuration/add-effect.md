@@ -141,7 +141,7 @@ afterwards leave a disabled factory out. `GetToggleable()` lists the switchable 
 A factory that implements `IConfigurableEffectProviderFactory<TConfiguration>` (or
 `IConfigurableJunctionEffectProviderFactory<TConfiguration>`) exposes a configuration object. The default
 implementations of `GetConfiguration()` and `GetConfigurationType()` return `Configuration` and `typeof(TConfiguration)`.
-The dashboard's [Effects page](/docs/dashboard/pages#effects-page) shows a settings button for it and edits that object's
+The operations console's [Effects page](/docs/dashboard/system#effects) shows a settings button for it and edits that object's
 properties in place, so the factory and its providers read the configuration rather than copy it.
 
 ## Examples

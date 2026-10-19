@@ -11,7 +11,9 @@ namespace Trax.Docs.Tests.Tests;
 /// claims its old path in <c>redirect_from</c>, which this accepts, as the site does.</para>
 ///
 /// <para>Scanned: every <c>*.cs</c> under a <c>Trax.*/src/</c> folder (the packages, the analyzer
-/// included), and under <c>Trax.Samples/samples/</c> and <c>Trax.Samples/templates/</c>.</para>
+/// included), and under <c>Trax.Samples/samples/</c> and <c>Trax.Samples/templates/</c>; and every
+/// <c>*.ts</c> and <c>*.tsx</c> of the operations console's app, whose help links and empty states
+/// send an operator to the docs (each term's glossary entry among them).</para>
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0050-docs-pages-are-typed-and-their-code-is-checked-against-the-code.md</c>.</para>
 /// </summary>
@@ -59,6 +61,26 @@ public class CodeLinksToDocsResolveTests
                     + Adr
                     + ". Offenders:\n  "
                     + string.Join("\n  ", offenders)
+            );
+    }
+
+    [Test]
+    public void The_ConsolesGlossaryLinks_AreAmongThoseChecked()
+    {
+        // The console links each Trax term to its own glossary entry (lib/vocabulary.ts). A move
+        // of that file out of the scanned folder would leave those links unchecked.
+        var glossaryLinks = CodeFiles()
+            .Where(f =>
+                f.Path.EndsWith("ClientApp/src/lib/vocabulary.ts", StringComparison.Ordinal)
+            )
+            .SelectMany(f => Links(f.Path, File.ReadAllText(f.Full)))
+            .Where(l => l.Path == "/docs/reference/glossary" && l.Anchor is not null)
+            .ToList();
+
+        glossaryLinks
+            .Should()
+            .NotBeEmpty(
+                "the console's term help links each term's glossary heading, and this guard must read them"
             );
     }
 
@@ -117,8 +139,19 @@ public class CodeLinksToDocsResolveTests
             .Append(Path.Combine(RepoRoot.Monorepo, "Trax.Samples", "samples"))
             .Append(Path.Combine(RepoRoot.Monorepo, "Trax.Samples", "templates"));
 
+        var consoleApp = Path.Combine(
+            RepoRoot.Monorepo,
+            "Trax.Api",
+            "src",
+            "Trax.Api.Dashboard",
+            "ClientApp",
+            "src"
+        );
+
         return roots
             .SelectMany(root => RepoRoot.FilesUnder(root, "*.cs"))
+            .Concat(RepoRoot.FilesUnder(consoleApp, "*.ts"))
+            .Concat(RepoRoot.FilesUnder(consoleApp, "*.tsx"))
             .Select(f => (Path.GetRelativePath(RepoRoot.Monorepo, f).Replace('\\', '/'), f))
             .OrderBy(f => f.Item1, StringComparer.Ordinal);
     }

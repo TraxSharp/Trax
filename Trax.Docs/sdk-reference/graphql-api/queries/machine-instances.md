@@ -62,8 +62,8 @@ the fields below.
 
 The instances of every [persisted state machine](/docs/statemachine) on the host, system-owned and
 users' drafts alike, newest first by when each was last written. It reads through
-`IOperationsService.GetMachineInstancesAsync` and `CountMachineInstancesAsync`, the reads the
-dashboard's [State Machines page](/docs/dashboard/pages#state-machines) makes.
+`IOperationsService.GetMachineInstancesAsync` and `CountMachineInstancesAsync`, which the
+operations console's [Machines pages](/docs/dashboard/machines) make.
 
 ```graphql
 query {

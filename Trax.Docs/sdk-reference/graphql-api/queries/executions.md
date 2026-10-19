@@ -386,7 +386,7 @@ node ids were, after a withheld route, or for a node the chain no longer declare
 steps, so a later node can show as not reached when it ran.
 
 **When the chain has changed.** A run records the hash of its train's chain when it starts (see
-[Run chain hash](/docs/reference/schema-migrations#run-chain-hash-087-sqlite-046)), and `chainChanged`
+[Run chain hash](/docs/reference/schema-migrations#run-chain-hash-088-sqlite-047)), and `chainChanged`
 is true when that hash differs from `hash`, the chain the host declares now. The nodes are still
 the current chain's, so a run whose node ids match a changed chain is placed on nodes it may not
 have run as drawn: a step that moved, a track whose contents changed. Old chains are not stored, so

@@ -1,12 +1,12 @@
 import { CircleHelp } from "lucide-react";
-import { GLOSSARY, TERMS, type TermKey } from "../lib/vocabulary";
+import { TERMS, type TermKey } from "../lib/vocabulary";
 
-/** A small "?" beside a Trax term: what it means on hover, its glossary entry on click. */
+/** A small "?" beside a Trax term: what it means on hover, its own glossary entry on click. */
 export function TermHelp({ term }: { term: TermKey }) {
   const t = TERMS[term];
   return (
     <a
-      href={GLOSSARY}
+      href={t.glossary}
       target="_blank"
       rel="noreferrer"
       title={t.means}

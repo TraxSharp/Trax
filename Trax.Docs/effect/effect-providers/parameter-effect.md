@@ -69,7 +69,7 @@ effects.SaveTrainParameters(configure: cfg =>
 | `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's input. |
 | `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's output. |
 
-The configuration is registered as a singleton and can be modified at runtime via the [Dashboard Effects page](/docs/dashboard/pages#effects-page). Changes take effect on the next train execution scope.
+The configuration is registered as a singleton and can be modified at runtime via the [console's Effects page](/docs/dashboard/system#effects). Changes take effect on the next train execution scope.
 
 ## Bounding what gets stored
 

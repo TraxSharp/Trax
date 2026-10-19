@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { TERMS } from "./vocabulary";
+import { GLOSSARY, TERMS } from "./vocabulary";
 
 // api/0043: the console speaks one vocabulary. A run is a run; one verb per action; no C# API
 // in page text. This refuses the words the console used before it settled them; it cannot show a
@@ -36,6 +36,14 @@ describe("console vocabulary", () => {
       });
     }
     expect(found).toEqual([]);
+  });
+
+  // The anchor is the glossary heading's id (Trax.Docs reference/glossary.md); the docs build checks
+  // each link lands on a heading (CodeLinksToDocsResolveTests).
+  test("every term links its own glossary entry", () => {
+    for (const t of Object.values(TERMS)) expect(t.glossary).toMatch(new RegExp(`^${GLOSSARY}#[a-z0-9-]+$`));
+    const anchors = Object.values(TERMS).map((t) => t.glossary);
+    expect(new Set(anchors).size).toBe(anchors.length);
   });
 
   test("every term has a one-sentence meaning", () => {

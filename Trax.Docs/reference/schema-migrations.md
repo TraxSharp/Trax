@@ -407,7 +407,7 @@ never matches.
 
 `071_snapshot_draft_operator_listing.sql` (SQLite `033`) serves the operator's list of state-machine
 instances (the API's [`machineInstances`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances)
-and the dashboard's [State Machines page](/docs/dashboard/pages#state-machines)), which reads newest first
+and the console's [Machines pages](/docs/dashboard/machines)), which reads newest first
 by `updated_at`. It adds the nullable `trax.snapshot_draft.created_at`, which the store writes when it
 creates a row; a row created before the migration, or by a host still on the previous version, reads
 it as null, since nothing recorded when it began. It replaces the `(machine, state)` index with

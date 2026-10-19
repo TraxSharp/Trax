@@ -18,7 +18,7 @@ Fields of `OperationsMutations` that change the effects registered in the API pr
 
 ## setEffectEnabled
 
-Turns an observational effect on or off in the API process, through `IEffectSettingsService.SetEffectEnabled` in Trax.Scheduler, the call the dashboard's [Effects page](/docs/dashboard/pages#effects-page) makes. The change is in memory: it does not reach the scheduler or worker processes where trains usually run, and a restart restores the configured state.
+Turns an observational effect on or off in the API process, through `IEffectSettingsService.SetEffectEnabled` in Trax.Scheduler, the call the operations console's [Effects page](/docs/dashboard/system#effects) makes. The change is in memory: it does not reach the scheduler or worker processes where trains usually run, and a restart restores the configured state.
 
 ```graphql
 mutation {

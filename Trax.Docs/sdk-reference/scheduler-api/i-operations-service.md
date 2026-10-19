@@ -601,7 +601,7 @@ value is `{"_redacted": true}`.
 ## State-machine instances
 
 The operator's read-only view of `trax.snapshot_draft`: the dashboard's
-[State Machines pages](/docs/dashboard/pages#state-machines) and the API's
+[Machines pages](/docs/dashboard/machines) and the API's
 [`machineInstances`, `machineInstance` and `machineInstanceCounts`](/docs/sdk-reference/graphql-api/queries/machine-instances#machineinstances)
 read through these four methods, and one instance's runs and its cancel through the two after them.
 

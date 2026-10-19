@@ -331,7 +331,7 @@ question and answer, with no confidence), and a failed step's failure class and 
 shown when its rows carry one. It reads at most the first 500 steps and says so when the run
 recorded more. While the run is running it re-reads only new and in-progress steps; once the run
 has finished it reads every step twice more and stops, so a later change shows after a reload. A run with no stored steps shows a hint naming `AddJunctionEvents()`.
-See [Dashboard: Metadata Detail Page](/docs/dashboard/pages#metadata-detail-page).
+See [A run's page in the operations console](/docs/dashboard/a-run#tabs).
 
 ## SDK Reference
 
