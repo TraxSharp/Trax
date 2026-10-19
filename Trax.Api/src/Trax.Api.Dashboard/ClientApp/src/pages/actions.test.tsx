@@ -121,7 +121,7 @@ test("Cancel all matching sends the list's filter and count, and the operation p
           trainName: "Trax.Exec.GammaJob",
           startedAfter: null,
           startedBefore: null,
-          hideAdminTrains: true,
+          hideAdminTrains: false,
           failureClass: null,
           externalId: null,
           parentId: null,

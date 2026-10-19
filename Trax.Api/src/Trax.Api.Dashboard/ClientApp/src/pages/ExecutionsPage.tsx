@@ -84,7 +84,9 @@ function RunsList() {
     hostName !== "";
   // The Failed view is this list filtered to state FAILED (components/RunsTabs.tsx).
   const failedView = trainState === "FAILED";
-  const hideAdmin = useHideAdminTrains();
+  // A filter that names a train asks for that train's runs, a scheduler train's included, so the
+  // "hide scheduler trains" preference does not empty it.
+  const hideAdmin = useHideAdminTrains() && trainName === "";
 
   const [result, reexecuteExecutions] = useQuery<ExecutionsData>({
     query: EXECUTIONS,
