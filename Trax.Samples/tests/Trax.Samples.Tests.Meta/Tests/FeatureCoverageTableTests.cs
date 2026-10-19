@@ -31,7 +31,6 @@ public class FeatureCoverageTableTests
         "Trax.Mediator",
         "Trax.Scheduler",
         "Trax.Api",
-        "Trax.Dashboard",
         "Trax.Cli",
     };
 

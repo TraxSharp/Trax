@@ -28,7 +28,6 @@ const architectures: Architecture[] = [
         )
 );
 
-builder.AddTraxDashboard();
 builder.Services.AddTraxGraphQL();`,
       },
     ],
@@ -54,8 +53,7 @@ builder.Services.AddTraxGraphQL();`,
         .AddScheduler(scheduler => scheduler
             .Schedule<IProcessOrderTrain>(...)
         )
-);
-builder.AddTraxDashboard();`,
+);`,
       },
     ],
   },
@@ -146,8 +144,7 @@ builder.Services.AddTraxWorker(opts => {
             )
             .ThenInclude<IReportingTrain>(...)
         )
-);
-builder.AddTraxDashboard();`,
+);`,
       },
     ],
   },

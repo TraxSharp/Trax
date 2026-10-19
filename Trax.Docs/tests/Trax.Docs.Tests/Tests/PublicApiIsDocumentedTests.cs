@@ -179,17 +179,9 @@ public class PublicApiIsDocumentedTests
         Names(name).Should().Contain(onPage);
 
     [Test]
-    public void DashboardComponents_And_EntityMappings_FollowTheirDocumentedType()
+    public void EntityMappings_FollowTheirDocumentedType()
     {
         const string baseline = """
-            namespace Trax.Dashboard.Components.Pages
-            {
-                [Microsoft.AspNetCore.Components.Route("/trax/x")]
-                public class XPage : Trax.Dashboard.Components.Shared.PollingComponentBase
-                {
-                    public string Undocumented { get; set; }
-                }
-            }
             namespace Trax.Effect.Data.Models
             {
                 public class PersistentCheckpoint : Trax.Effect.Data.Models.BaseModel { }
@@ -198,12 +190,12 @@ public class PublicApiIsDocumentedTests
             """;
 
         Undocumented(
-                "Trax.Dashboard",
+                "Trax.Effect.Data",
                 baseline,
                 new HashSet<string>(StringComparer.Ordinal) { "Checkpoint" }
             )
             .Should()
-            .BeEquivalentTo(["Trax.Dashboard T:PersistentNothing"]);
+            .BeEquivalentTo(["Trax.Effect.Data T:PersistentNothing"]);
     }
 
     /// <summary>
@@ -222,18 +214,6 @@ public class PublicApiIsDocumentedTests
         {
             if (entry.IsType)
             {
-                // The dashboard's Blazor components (its pages, dialogs, grids and layout) are
-                // public because Razor makes them so; nobody calls them, and dashboard.md
-                // documents each by what it shows.
-                if (
-                    assembly == "Trax.Dashboard"
-                    && entry.Rest.Contains("Components.", StringComparison.Ordinal)
-                )
-                {
-                    exemptTypes.Add(entry.Path);
-                    continue;
-                }
-
                 if (entry.Name == "_Imports")
                 {
                     exemptTypes.Add(entry.Path);

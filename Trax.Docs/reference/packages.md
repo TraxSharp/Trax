@@ -48,16 +48,16 @@ Each layer depends on the one before it, and installing a package brings the lay
 | Dispatch by input type, startup chain checks | add `Trax.Mediator` |
 | Cron and interval schedules, retries, dead letters | add `Trax.Scheduler` (needs a data provider; Postgres when several servers share the work) |
 | A GraphQL API over your trains | add `Trax.Api.GraphQL`, plus an auth package such as `Trax.Api.Auth.ApiKey` or `Trax.Api.Auth.Jwt` |
-| The operations console | add `Trax.Api.Dashboard` (a React app the host serves over its GraphQL API). `Trax.Dashboard`, the Blazor dashboard, takes fixes only and is being removed |
+| The operations console | add `Trax.Api.Dashboard` (a React app the host serves over its GraphQL API) |
 
-A typical API host with a scheduler and the dashboard:
+A typical API host with a scheduler and the operations console:
 
 ```bash
 dotnet add package Trax.Effect.Data.Postgres
 dotnet add package Trax.Scheduler
 dotnet add package Trax.Api.GraphQL
 dotnet add package Trax.Api.Auth.ApiKey
-dotnet add package Trax.Dashboard
+dotnet add package Trax.Api.Dashboard
 ```
 
 `Trax.Effect.Data.Postgres` brings `Trax.Effect.Data`, `Trax.Effect` and `Trax.Core`; `Trax.Scheduler` brings `Trax.Mediator`. The `using` lines each method needs are in the tables below.
@@ -128,12 +128,6 @@ dotnet add package Trax.Dashboard
 | [Trax.Api.Auth.Jwt.Testing](https://www.nuget.org/packages/Trax.Api.Auth.Jwt.Testing) | `TestJwksServer` and `TestTokenIssuer`: a local JWKS endpoint and signed tokens for integration tests. See [JWT Testing](/docs/sdk-reference/api-auth/test-jwks-server). | `Trax.Api.Auth.Jwt.Testing` | `Trax.Api.Auth.Jwt`, in a test project. |
 | [Trax.Api.Auth.Jwt.Cognito.Issuer](https://www.nuget.org/packages/Trax.Api.Auth.Jwt.Cognito.Issuer) | `CreateCognitoIssuer()` on `TestJwksServer`: tokens shaped like Cognito's, for testing `UseCognito`. See [Cognito Issuer](/docs/sdk-reference/api-auth/cognito-token-issuer). | `Trax.Api.Auth.Jwt.Cognito.Issuer` | `Trax.Api.Auth.Jwt.Testing` and `Trax.Api.Auth.Jwt.Cognito`, in a test project. |
 
-## Trax.Dashboard
-
-| Package | What it is for | Import | Pairs with |
-|---|---|---|---|
-| [Trax.Dashboard](https://www.nuget.org/packages/Trax.Dashboard) | `AddTraxDashboard(...)` and `UseTraxDashboard()`: the Blazor Server monitoring UI, mounted at `/trax` in your app. See [Dashboard](/docs/dashboard). | `Trax.Dashboard.Extensions` | `Trax.Scheduler` and a data provider (it brings `Trax.Scheduler` with it). |
-
 ## Tools and templates
 
 | Package | What it is for | Install | Pairs with |
@@ -143,4 +137,4 @@ dotnet add package Trax.Dashboard
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard)

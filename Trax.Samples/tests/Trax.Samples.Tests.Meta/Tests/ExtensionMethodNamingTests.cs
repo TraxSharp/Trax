@@ -58,7 +58,7 @@ public class ExtensionMethodNamingTests
                     + "on IServiceCollection / IApplicationBuilder / WebApplication / "
                     + "IEndpointRouteBuilder / WebApplicationBuilder declared in an Extensions/ "
                     + "folder under samples/, lib/ or templates/ to contain 'Trax' in the method "
-                    + "name (e.g. AddTraxApi, UseTraxDashboard, AddScopedTraxRoute). If a method is "
+                    + "name (e.g. AddTraxApi, UseTraxApiDashboard, AddScopedTraxRoute). If a method is "
                     + "intentionally exempt, add it to ExtensionMethodNamingTests.KnownExceptions "
                     + "with a justification. Offenders:\n  "
                     + string.Join("\n  ", offenders)

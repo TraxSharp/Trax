@@ -44,8 +44,8 @@ const layers = [
   {
     rung: "Watch it",
     name: "Dashboard",
-    cmd: "dotnet add package Trax.Dashboard",
-    desc: "Mounts into your ASP.NET app. Every run, schedule and dead letter in one place, with requeue and run-with-new-input from the browser.",
+    cmd: "dotnet add package Trax.Api.Dashboard",
+    desc: "Served by your API host. Every run, schedule and dead letter in one place, with requeue and run-with-new-input from the browser.",
     replaces: "a dashboard per tool",
     href: "/docs/dashboard",
   },

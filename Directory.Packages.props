@@ -11,22 +11,16 @@
          PackageVersion can stand alone: one with no PackageReference anywhere is
          invisible to Dependabot and freezes. See the Tests.Meta pin guard. -->
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <!-- CPM rejects a floating PackageVersion unless this is set (Radzen.Blazor below). -->
-    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Amazon.Lambda.Core" Version="3.3.0" />
     <PackageVersion Include="Amazon.Lambda.Serialization.SystemTextJson" Version="3.0.1" />
     <PackageVersion Include="Amazon.Lambda.SQSEvents" Version="3.0.1" />
     <PackageVersion Include="Amazon.Lambda.TestUtilities" Version="4.2.0" />
-    <!-- bunit pulls AngleSharp transitively; pin it to clear GHSA-pgww-w46g-26qg (mXSS, all
-         versions before 1.5.0). bunit 1.40.0 accepts the whole 1.x range. -->
-    <PackageVersion Include="AngleSharp" Version="1.8.3" />
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
     <PackageVersion Include="AWSSDK.Lambda" Version="4.0.108.2" />
     <PackageVersion Include="AWSSDK.SQS" Version="4.0.100.15" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="bunit" Version="1.40.0" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Cronos" Version="0.13.0" />
     <!-- Property-based tests (Trax.Docs/adr/0044). Test projects only, never a shipped package. -->
@@ -93,10 +87,6 @@
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageVersion Include="PublicApiGenerator" Version="11.5.4" />
     <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
-    <!-- Floats within its major on purpose (Trax.Dashboard/docs/adr/0006). It moves only when
-         the lockfiles are regenerated: CI restores in locked mode, so packages.lock.json holds
-         the version every build uses, and the packed nuspec carries it as its minimum. -->
-    <PackageVersion Include="Radzen.Blazor" Version="11.*" />
     <PackageVersion Include="Scriban" Version="7.5.0" />
     <!-- Referenced directly by the SQLite-using projects rather than pinned transitively: a
          PackageVersion with no PackageReference is invisible to Dependabot and freezes, which

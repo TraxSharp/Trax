@@ -103,10 +103,11 @@ const folders: Folder[] = [
   },
   {
     folder: "Trax.Api",
-    summary: "GraphQL, authentication and the client",
+    summary: "GraphQL, authentication, the client and the operations console",
     packages: [
       { name: "Trax.Api", desc: "Train catalog, health checks and shared types" },
       { name: "Trax.Api.GraphQL", desc: "Typed GraphQL generated from your trains" },
+      { name: "Trax.Api.Dashboard", desc: "The operations console your API host serves" },
       {
         name: "Trax.Api.GraphQL.PersistedOperations",
         desc: "Server-managed persisted operations",
@@ -141,13 +142,6 @@ const folders: Folder[] = [
         desc: "A local JWKS server and token minters for tests",
       },
       { name: "Trax.Api.Auth.Oidc", desc: "OpenID Connect sign-in with PKCE" },
-    ],
-  },
-  {
-    folder: "Trax.Dashboard",
-    summary: "The monitoring UI",
-    packages: [
-      { name: "Trax.Dashboard", desc: "Blazor Server dashboard that mounts into your app" },
     ],
   },
   {

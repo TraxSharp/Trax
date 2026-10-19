@@ -94,7 +94,7 @@ public static class ServiceExtensions
             builder.EffectConfiguration
             ?? new Trax.Effect.Configuration.TraxEffectConfiguration.TraxEffectConfiguration();
 
-        // Marker so AddTraxDashboard() / AddTraxGraphQL() can verify AddTrax() was called
+        // Marker so AddTraxGraphQL() can verify AddTrax() was called
         services.AddSingleton<TraxMarker>();
 
         // Coalesced domain change-signals (the push behind the dashboard's onDataChanged

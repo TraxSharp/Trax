@@ -31,9 +31,9 @@ public class ConfigQueries
 
     /// <summary>
     /// The version of Trax serving this API, such as <c>1.46.0</c>: the Trax.Api.GraphQL
-    /// package's version without its build metadata. It is what the dashboard's footer shows for
-    /// the Trax.Dashboard package, and like it, it says which Trax release the host runs, not the
-    /// host application's own version.
+    /// package's version without its build metadata. It is what the operations console's footer
+    /// shows, and it says which Trax release the host runs, not the host application's own
+    /// version.
     /// </summary>
     public string GetVersion() => TraxVersion;
 

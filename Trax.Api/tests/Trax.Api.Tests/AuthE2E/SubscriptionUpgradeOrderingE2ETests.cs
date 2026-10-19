@@ -83,7 +83,7 @@ public class SubscriptionUpgradeOrderingE2ETests
         app.UseAuthentication();
         app.UseAuthorization();
         if (dashboardShape)
-            // Stands in for UseTraxDashboard()'s MapRazorComponents terminal —
+            // Stands in for a host's MapRazorComponents terminal —
             // an endpoint execution point wired before UseTraxGraphQL.
             app.UseEndpoints(_ => { });
         app.UseTraxGraphQL();

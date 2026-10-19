@@ -92,7 +92,7 @@ public class ExtensionMethodNamingTests
                 "Trax.Docs/contributing/api-conventions.md > Extension method naming requires public Add*/Use* extensions "
                     + "on IServiceCollection / IApplicationBuilder / WebApplication / "
                     + "IEndpointRouteBuilder / WebApplicationBuilder declared in any src/*/Extensions/ "
-                    + "folder to contain 'Trax' in the method name (e.g. AddTraxApi, UseTraxDashboard, "
+                    + "folder to contain 'Trax' in the method name (e.g. AddTraxApi, UseTraxApiDashboard, "
                     + "AddScopedTraxRoute). If a method is intentionally exempt, add it to "
                     + "ExtensionMethodNamingTests.KnownExceptions with a justification. Offenders:\n  "
                     + string.Join("\n  ", offenders)

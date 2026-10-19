@@ -32,12 +32,6 @@
       "adr": { "adr-root": "docs/adr", "known-areas": "graphql,auth,platform,testing", "census-root": "tests/Trax.Api.Tests.Meta" }
     },
     {
-      "folder": "Trax.Dashboard",
-      "upstream": ["Trax.Api"],
-      "dotnet": { "solution": "Trax.Dashboard.slnx", "pack": true, "coverage": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
-      "adr": { "adr-root": "docs/adr", "known-areas": "platform,ui,testing", "census-root": "tests/Trax.Dashboard.Tests.Meta" }
-    },
-    {
       "folder": "Trax.Cli",
       "upstream": ["Trax.Scheduler", "Trax.Api.StateMachine"],
       "dotnet": { "solution": "Trax.Cli.slnx", "state-machine": true, "pack": true, "coverage": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
@@ -45,13 +39,13 @@
     },
     {
       "folder": "Trax.Samples",
-      "upstream": ["Trax.Dashboard", "Trax.Cli"],
+      "upstream": ["Trax.Api", "Trax.Cli"],
       "dotnet": { "solution": "Trax.Samples.slnx", "release-pack": "templates/Trax.Samples.Templates.csproj", "playwright": true, "api-dashboard": true, "pack": false, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["chat_e2e_tests", "energyhub_e2e_tests", "bookworm_e2e_tests", "auth_e2e_tests", "persisted_operations_e2e_tests", "recovery_e2e_tests", "recovery_restart_e2e_tests", "recovery_browser_tests", "scheduling_e2e_tests", "contentshield_e2e_tests", "statemachine_e2e_tests"], "timeout": 15, "test-args": "--filter FullyQualifiedName!~Trax.Samples.ApiDashboard.Browser." },
       "adr": { "adr-root": "docs/adr", "known-areas": "testing,ci,samples", "census-root": "tests/Trax.Samples.Tests.Meta" }
     },
     {
       "folder": "Trax.Docs",
-      "upstream": ["Trax.Dashboard", "Trax.Cli", "Trax.Samples"],
+      "upstream": ["Trax.Api", "Trax.Cli", "Trax.Samples"],
       "dotnet": { "solution": "Trax.Docs.slnx", "pack": false, "coverage": false, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "adr", "known-areas": "testing,platform,packaging,ci,naming,data-model,graphql,docs,migrations,providers", "known-repos": "core,effect,mediator,scheduler,dashboard,api,cli,samples,docs,website", "require-repos-key": "true", "census-root": "tests/Trax.Docs.Tests" }
     },

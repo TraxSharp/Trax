@@ -47,7 +47,6 @@
     <ProjectReference Include="../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../../Trax.Core/src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
     <ProjectReference Include="../../../Trax.Core/src/Trax.Core/Trax.Core.csproj" />
-    <ProjectReference Include="../../../Trax.Dashboard/src/Trax.Dashboard/Trax.Dashboard.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Broadcaster.SignalR/Trax.Effect.Broadcaster.SignalR.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />

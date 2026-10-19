@@ -16,7 +16,7 @@ public class PackagesPageTests
     private const string Adr = "Trax.Docs/adr/0008-documentation-conventions-are-linted.md";
 
     /// <summary>
-    /// Every packable <c>Trax.*</c> project on the eight code repos' <c>main</c>, as of 2026-10-01.
+    /// Every packable <c>Trax.*</c> project on the seven code folders' <c>main</c>, as of 2026-10-01.
     /// </summary>
     private static readonly string[] PublishedPackages =
     [
@@ -66,8 +66,6 @@ public class PackagesPageTests
         "Trax.Api.GraphQL.Client.Typed",
         "Trax.Api.GraphQL.PersistedOperations",
         "Trax.Api.GraphQL.Testing",
-        // Trax.Dashboard
-        "Trax.Dashboard",
         // Trax.Cli
         "Trax.Cli",
         // Trax.Samples

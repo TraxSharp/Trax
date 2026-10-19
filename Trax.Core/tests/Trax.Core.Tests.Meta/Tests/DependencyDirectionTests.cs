@@ -23,7 +23,7 @@ public class DependencyDirectionTests
 {
     // For each repo family, the full set of upstream families it may PackageReference. Its own family is
     // always allowed. Empirically matches the current graph and the chain: Core is the root; Effect -> Core;
-    // Mediator -> Effect; Scheduler -> Mediator; Api -> Scheduler; Dashboard -> Api; Cli -> Scheduler;
+    // Mediator -> Effect; Scheduler -> Mediator; Api -> Scheduler; Cli -> Scheduler;
     // Samples sits at the bottom and may reference everything upstream.
     private static readonly IReadOnlyDictionary<string, string[]> AllowedUpstream = new Dictionary<
         string,
@@ -35,14 +35,6 @@ public class DependencyDirectionTests
         ["Trax.Mediator"] = new[] { "Trax.Core", "Trax.Effect" },
         ["Trax.Scheduler"] = new[] { "Trax.Core", "Trax.Effect", "Trax.Mediator" },
         ["Trax.Api"] = new[] { "Trax.Core", "Trax.Effect", "Trax.Mediator", "Trax.Scheduler" },
-        ["Trax.Dashboard"] = new[]
-        {
-            "Trax.Core",
-            "Trax.Effect",
-            "Trax.Mediator",
-            "Trax.Scheduler",
-            "Trax.Api",
-        },
         ["Trax.Cli"] = new[] { "Trax.Core", "Trax.Effect", "Trax.Mediator", "Trax.Scheduler" },
         ["Trax.Samples"] = new[]
         {
@@ -50,7 +42,6 @@ public class DependencyDirectionTests
             "Trax.Effect",
             "Trax.Mediator",
             "Trax.Scheduler",
-            "Trax.Dashboard",
             "Trax.Api",
             "Trax.Cli",
         },
@@ -62,7 +53,6 @@ public class DependencyDirectionTests
         "Trax.Effect",
         "Trax.Mediator",
         "Trax.Scheduler",
-        "Trax.Dashboard",
         "Trax.Api",
         "Trax.Cli",
         "Trax.Samples",
@@ -99,7 +89,7 @@ public class DependencyDirectionTests
                 if (include is null || !include.StartsWith("Trax.", StringComparison.Ordinal))
                     continue;
 
-                // A Trax package outside the eight core-repo families (e.g. a standalone Trax.Runner.*)
+                // A Trax package outside the seven core-repo families (e.g. a standalone Trax.Runner.*)
                 // is out of scope for this chain guard; skip it rather than flag it.
                 var family = FamilyOf(include);
                 if (family is null)

@@ -16,7 +16,6 @@ const CODE_FOLDERS = [
   "Trax.Mediator",
   "Trax.Scheduler",
   "Trax.Api",
-  "Trax.Dashboard",
   "Trax.Cli",
   "Trax.Samples",
 ];
