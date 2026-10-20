@@ -83,5 +83,5 @@ exist in its package, not to be the one the documented type is in.
 
 ## Changelog
 
-- **2026-10-13**: Recorded.
 - **2026-10-19**: `BookSampleIsTheBookTests` added, with the book's project as a sample.
+- **2026-10-13**: Recorded.

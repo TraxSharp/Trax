@@ -53,6 +53,9 @@ while a machine waits on it. The tests check the machine against its exported de
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <!-- NUnit3TestAdapter pulls these at versions deprecated as Legacy; pin newer ones. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.VSTestBridge" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.1" />
     <PackageVersion Include="NUnit" Version="5.0.0" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
