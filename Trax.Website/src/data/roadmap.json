@@ -239,6 +239,21 @@
       ]
     },
     {
+      "key": "deploy",
+      "status": "building",
+      "title": "Deploy with one command",
+      "points": [
+        "A template to a running HTTPS app on AWS with one command",
+        "A compose stack for any other server from the same app",
+        "Migrations, secrets and sign-in set up as part of the deploy",
+        "The app's own startup checks stop an unsafe deploy"
+      ],
+      "code": {
+        "caption": "Sketch, not final",
+        "text": "$ trax deploy plan --env production\n$ trax deploy --env production\n$ trax deploy --target compose"
+      }
+    },
+    {
       "key": "spec-to-app",
       "status": "later",
       "title": "From a spec to a running app",
