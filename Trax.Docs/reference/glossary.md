@@ -8,15 +8,19 @@ nav_order: 4
 
 # Glossary
 
-The names Trax uses, in the code and in these pages. Each entry says where the type lives; [Packages](/docs/reference/packages) says which package to install for it. Each term is a heading, so a link can name it, as the operations console's help links do: `/docs/reference/glossary#manifest-group`.
+The names Trax uses, in the code and in these pages. Where a term has a familiar equivalent, its entry starts with it (*Roughly:*); the rest of the entry is the exact meaning. Each entry says where the type lives; [Packages](/docs/reference/packages) says which package to install for it. Each term is a heading, so a link can name it, as the operations console's help links do: `/docs/reference/glossary#manifest-group`.
 
 ## Trains and junctions
 
 ### Train
 
+*Roughly:* a workflow, or one use case.
+
 `Train<TIn, TOut>` in `Trax.Core.Train`. A class that takes one input, runs the chain its `Junctions()` method declares, and returns either the output or the exception that stopped it. See [Trains and Junctions](/docs/core/trains-and-junctions).
 
 ### ServiceTrain
+
+*Roughly:* a workflow whose every run is recorded.
 
 `ServiceTrain<TIn, TOut>` in `Trax.Effect.Services.ServiceTrain`. A train that records each run as a **Metadata** row and runs the registered **effects** around it. It implements `IServiceTrain<TIn, TOut>`, and its `Run` is sealed, so what runs is always the declared chain. The base class for trains the mediator, scheduler and API can run.
 
@@ -26,6 +30,8 @@ The names Trax uses, in the code and in these pages. Each entry says where the t
 
 ### Junction
 
+*Roughly:* one step of a workflow.
+
 `Junction<TIn, TOut>` in `Trax.Core.Junction`. One step of a chain: its `Run(TIn)` returns `Task<TOut>`. Trax builds a junction through its single public constructor, taking each argument from **Memory** first and the DI container second.
 
 ### EffectJunction
@@ -33,6 +39,8 @@ The names Trax uses, in the code and in these pages. Each entry says where the t
 `EffectJunction<TIn, TOut>` in `Trax.Effect.Services.EffectJunction`. A junction whose runs the junction effects (the junction logger, junction progress) can see. It works only inside a ServiceTrain and throws a `TrainException` in any other train.
 
 ### Chain
+
+*Roughly:* the steps, in order.
 
 The sequence of junctions a train declares in `Junctions()`, written with `Chain<TJunction>()`, `ShortCircuit<TJunction>()` and `Resolve()`. See [Building Chains](/docs/core/building-chains).
 
@@ -42,27 +50,39 @@ The check `AddMediator` registers: at host startup it replays every registered t
 
 ### Memory
 
+*Roughly:* the values a run has so far, looked up by type.
+
 The values a running train holds, keyed by type. It starts with the train's input, and each junction's output is added to it. A junction's input, and each constructor argument Memory can supply, is taken from it by type. See [Memory](/docs/core/memory).
 
 ### Right track / left track
+
+*Roughly:* the success path and the failure path.
 
 A chain's two outcomes, as Trax.Core's `Either<Exception, T>`. Right carries the value on to the next junction; left carries the exception past every remaining junction to the train's result.
 
 ### Checkpoint
 
+*Roughly:* a save point a later run resumes from.
+
 `Checkpoint<TState>()` in a chain: stores a state the chain declares, so a later run of the same input resumes after it instead of running every step before it again. See [Checkpoint](/docs/sdk-reference/train-methods/checkpoint).
 
 ### Decider
 
+*Roughly:* whatever answers a branching question: a rule, a lookup, a model.
+
 `IDecider` in `Trax.Core.Decisions`: what answers a train's typed questions (`Decide`) about a value in Memory, such as a model. With decision recording on, each answer is stored, and a requeued run replays it rather than asking again. See [Decisions](/docs/core/decisions).
 
 ### ShortCircuit
+
+*Roughly:* an early return.
 
 A chain step that ends the train early with its output when it succeeds, and lets the chain continue when it throws. See [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit).
 
 ## Effects and recording
 
 ### Effect
+
+*Roughly:* middleware around every run.
 
 Something that runs alongside every ServiceTrain run without being part of its chain. An effect provider (`IEffectProvider` in `Trax.Effect.Services.EffectProvider`) tracks the run's models and persists them when the train saves. Effects are added on the `AddEffects` builder: a data provider, `AddJson()`, `SaveTrainParameters()`. See [Effect Providers](/docs/effect/effect-providers).
 
@@ -75,6 +95,8 @@ An effect that runs before and after each EffectJunction rather than around the 
 The effect that stores runs: `UsePostgres(...)`, `UseSqlite(...)` or `UseInMemory()`, one package each. The scheduler, junction progress and state machines refuse to start without one.
 
 ### Metadata
+
+*Roughly:* the record of one run.
 
 `Metadata` in `Trax.Effect.Models.Metadata`, a row of `trax.metadata`. One per ServiceTrain run: the train's name, its `TrainState` (`Pending`, `InProgress`, `Completed`, `Failed`, `Cancelled`), start and end times, input and output when `SaveTrainParameters()` stores them, and on failure the junction, exception, reason and stack trace. `ParentId` links a run to the run that started it. See [Metadata](/docs/effect/metadata).
 
@@ -102,6 +124,8 @@ A row of `trax.log`: one `ILogger` message captured by `AddDataContextLogging`. 
 
 ### Mediator
 
+*Roughly:* a dispatcher from an input type to the train that handles it.
+
 What `AddMediator(...)` registers: it discovers the trains in the assemblies you name, so callers can run a train without referencing its class. See [Mediator](/docs/mediator).
 
 ### TrainBus
@@ -112,6 +136,8 @@ What `AddMediator(...)` registers: it discovers the trains in the assemblies you
 
 ### Manifest
 
+*Roughly:* a saved schedule entry, like one line of a crontab.
+
 `Manifest` in `Trax.Effect.Models.Manifest`, a row of `trax.manifest`. A job definition: which train to run, the input to run it with, when (cron, interval, once, after a parent manifest succeeds, or only when triggered), and its retry and timeout policy. Each run of a manifest creates a Metadata row. See [Scheduling](/docs/scheduler).
 
 ### IManifestProperties
@@ -120,9 +146,13 @@ The marker interface in `Trax.Effect.Models.Manifest` (package `Trax.Effect`, no
 
 ### Manifest group
 
+*Roughly:* a concurrency pool for scheduled jobs.
+
 A row of `trax.manifest_group`: settings shared by the manifests in it, `MaxActiveJobs` (how many may run at once), `Priority` (dispatch order between groups) and `IsEnabled`. See [Concurrency](/docs/scheduler/concurrency).
 
 ### Work queue
+
+*Roughly:* runs waiting to start.
 
 `trax.work_queue`: runs that have been asked for but not yet dispatched. Every source of a run (a due manifest, a trigger, a dashboard re-run) adds an entry, and the job dispatcher takes entries from it. An entry is `Queued`, `Dispatched` or `Cancelled`.
 
@@ -160,6 +190,8 @@ Where a dispatched job runs. Local workers are threads in the scheduler's own pr
 
 ### Dependent train
 
+*Roughly:* a job that runs after another one succeeds.
+
 A manifest with `ScheduleType.Dependent`: rather than running on a timer, it runs after its parent manifest's latest success. See [Dependent Trains](/docs/scheduler/dependent-trains).
 
 ## API and state machines
@@ -173,5 +205,7 @@ An EF entity marked `[TraxQueryModel]` (in `Trax.Effect.Attributes`), which `Add
 `TraxPrincipal` in `Trax.Api.Auth`: the authenticated caller as Trax sees it, with a scheme-qualified id such as `TraxApiKey:alice`, its roles and its claims. See [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal).
 
 ### State machine
+
+*Roughly:* a long-lived record that moves between named states.
 
 A machine deriving `Machine<TState, TTrigger>` in `Trax.Effect.StateMachine.Persistence`: states, triggers and a context record, stored as a language-neutral snapshot that the C# engine and its TypeScript twin both read. See [State Machines](/docs/statemachine).

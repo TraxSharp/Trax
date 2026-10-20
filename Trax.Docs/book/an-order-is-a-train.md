@@ -11,7 +11,8 @@ nav_order: 11
 
 In this chapter we start Shopfront and write its most important piece of work, placing an order, as
 a train. By the end, `POST /orders` prices a cart, reserves stock, takes a payment and confirms the
-order, and the log shows each of those steps as it happens.
+order, and the log shows each of those steps as it happens. When a Trax name is new, the
+[Glossary](/docs/reference/glossary) gives its plain equivalent.
 
 Every C# block on this page is compiled in CI against the release this site was published from.
 

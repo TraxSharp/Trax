@@ -13,6 +13,8 @@ snippet_context: none
 In this tutorial we build one application from an empty folder: a train that greets someone, run
 in-process first, then recorded in Postgres, scheduled, and called over GraphQL and watched from the
 operations console. Each step shows every file it changes in full, and what you should see when you run it.
+The [Glossary](/docs/reference/glossary) says what each Trax name means in plain terms: a train is a
+workflow, a junction one of its steps.
 
 Every C# block on this page is compiled in CI against the package versions in the project file below.
 
