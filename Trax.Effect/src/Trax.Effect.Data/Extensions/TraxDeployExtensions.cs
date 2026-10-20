@@ -38,7 +38,9 @@ public static class TraxDeployExtensions
     }
 
     /// <summary>
-    /// Runs the host, as <c>host.RunAsync()</c> does, unless the process was started with <c>--trax-migrate</c>. Then
+    /// Runs the host, as <c>host.RunAsync()</c> does, unless the process was started with
+    /// <c>--trax-export-deploy &lt;path&gt;</c>, which runs the host's startup checks, writes its
+    /// <see cref="DeployManifest"/> to the path and returns without serving, or with <c>--trax-migrate</c>. Then
     /// Trax's schema has already been migrated while services were registered; this applies the migrations of every
     /// context named with <see cref="MigrateOnDeploy{TContext}"/>, in the order they were named, logs what each did,
     /// and returns without starting the host, so no hosted service runs and nothing listens.
@@ -53,6 +55,21 @@ public static class TraxDeployExtensions
     )
     {
         ArgumentNullException.ThrowIfNull(host);
+        var exportPath = args is null ? TraxDeployExport.Path : TraxDeployExport.PathIn(args);
+        if (exportPath is not null)
+        {
+            await DeployManifestExport
+                .WriteAsync(host, exportPath, cancellationToken)
+                .ConfigureAwait(false);
+            host.Services.GetService<ILoggerFactory>()
+                ?.CreateLogger(typeof(TraxDeployExtensions))
+                .LogInformation(
+                    "Wrote the deploy manifest to {Path}.",
+                    Path.GetFullPath(exportPath)
+                );
+            return;
+        }
+
         var migrate = args is null ? TraxMigrate.Requested : TraxMigrate.RequestedIn(args);
         if (!migrate)
         {

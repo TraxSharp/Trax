@@ -136,6 +136,45 @@ namespace Trax.Effect.Configuration.ClientExport
 }
 namespace Trax.Effect.Configuration.Deploy
 {
+    public sealed class DeployAuthenticationScheme
+    {
+        public DeployAuthenticationScheme() { }
+        public string Handler { get; set; }
+        public string Name { get; set; }
+    }
+    public sealed class DeployDatabase
+    {
+        public DeployDatabase() { }
+        public bool MigratesOnStart { get; set; }
+        public string Provider { get; set; }
+    }
+    public sealed class DeployEndpoints
+    {
+        public DeployEndpoints() { }
+        public string? Console { get; set; }
+        public string? GraphQL { get; set; }
+        public string? Health { get; set; }
+    }
+    public sealed class DeployManifest
+    {
+        public const int CurrentVersion = 1;
+        public DeployManifest() { }
+        public System.Collections.Generic.List<Trax.Effect.Configuration.Deploy.DeployAuthenticationScheme> Authentication { get; set; }
+        public Trax.Effect.Configuration.Deploy.DeployDatabase? Database { get; set; }
+        public Trax.Effect.Configuration.Deploy.DeployEndpoints Endpoints { get; set; }
+        public System.Collections.Generic.List<string> Roles { get; set; }
+        public System.Collections.Generic.List<string> Transports { get; set; }
+        public int Version { get; set; }
+        public string Write() { }
+        public static Trax.Effect.Configuration.Deploy.DeployManifest Read(string json) { }
+    }
+    public static class TraxDeployExport
+    {
+        public const string Argument = "--trax-export-deploy";
+        public static string? Path { get; }
+        public static bool Requested { get; }
+        public static string? PathIn(System.Collections.Generic.IReadOnlyList<string> args) { }
+    }
     public static class TraxMigrate
     {
         public const string Argument = "--trax-migrate";

@@ -46,7 +46,16 @@ public static class ServiceExtensions
     {
         // A process started to export its client manifest opens no database, and refuses to serve if it is not
         // exporting after all (TraxClientExport).
-        var export = TraxClientExport.SkipsDatabase(configurationBuilder.ServiceCollection);
+        // The same holds for a process exporting what it needs from its deployment (TraxDeployExport).
+        var export =
+            TraxClientExport.SkipsDatabase(configurationBuilder.ServiceCollection)
+            | TraxDeployExport.SkipsDatabase(configurationBuilder.ServiceCollection);
+        DeployFact.Add(configurationBuilder.ServiceCollection, DeployFact.Database, "sqlite");
+        DeployFact.Add(
+            configurationBuilder.ServiceCollection,
+            DeployFact.MigratesOnStart,
+            configurationBuilder.MigrationsDisabled ? "false" : "true"
+        );
 
         // Run migrations unless SkipMigrations() or TRAX_MIGRATIONS=skip says not to; a process started with
         // --trax-migrate always does (TraxMigrate).
