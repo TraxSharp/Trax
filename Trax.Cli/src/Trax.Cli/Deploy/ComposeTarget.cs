@@ -66,6 +66,8 @@ internal static class ComposeTarget
         y.AppendLine("    healthcheck:");
         y.AppendLine($"      test: [\"CMD\", \"pg_isready\", \"-U\", \"{file.App}\"]");
         y.AppendLine("      interval: 5s");
+        y.AppendLine("    security_opt:");
+        y.AppendLine("      - no-new-privileges:true");
         y.AppendLine("    restart: unless-stopped");
 
         if (rabbit)
@@ -79,6 +81,8 @@ internal static class ComposeTarget
             y.AppendLine("    healthcheck:");
             y.AppendLine("      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]");
             y.AppendLine("      interval: 5s");
+            y.AppendLine("    security_opt:");
+            y.AppendLine("      - no-new-privileges:true");
             y.AppendLine("    restart: unless-stopped");
         }
 
@@ -90,6 +94,7 @@ internal static class ComposeTarget
         y.AppendLine($"    image: {Image(file, migrator)}");
         y.AppendLine($"    command: [\"{TraxMigrate.Argument}\"]");
         y.AppendLine("    environment: *trax");
+        Hardened(y);
         y.AppendLine("    depends_on:");
         y.AppendLine("      database:");
         y.AppendLine("        condition: service_healthy");
@@ -107,9 +112,13 @@ internal static class ComposeTarget
             y.AppendLine($"      {TraxMigrate.Variable}: {TraxMigrate.SkipValue}");
             if (export.Endpoints.GraphQL is not null || export.Endpoints.Health is not null)
             {
+                // Loopback only: whatever puts the app in front of people (a reverse proxy, tailscale serve)
+                // decides who reaches it, not the machine's network.
                 y.AppendLine("    ports:");
-                y.AppendLine($"      - \"{port++}:8080\"");
+                y.AppendLine($"      - \"127.0.0.1:{service.Port ?? port}:8080\"");
+                port = (service.Port ?? port) + 1;
             }
+            Hardened(y);
             if (service.Count > 1)
             {
                 y.AppendLine("    deploy:");
@@ -147,6 +156,15 @@ internal static class ComposeTarget
 
     private static string Image(DeployFile file, string service) =>
         $"{ImageName(file, service)}:${{TRAX_IMAGE_TAG:-latest}}";
+
+    /// <summary>A Trax service needs no Linux capability and never gains one.</summary>
+    private static void Hardened(StringBuilder y)
+    {
+        y.AppendLine("    cap_drop:");
+        y.AppendLine("      - ALL");
+        y.AppendLine("    security_opt:");
+        y.AppendLine("      - no-new-privileges:true");
+    }
 
     private static string Required(string name) => $"${{{name}:?set {name}}}";
 
