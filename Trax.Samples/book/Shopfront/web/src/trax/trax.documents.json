@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "documents": [
+    {
+      "name": "Catalogue",
+      "source": "src/graphql/Catalogue.graphql",
+      "text": "query Catalogue {\n  discover {\n    products(order: {sku: ASC}) {\n      nodes {\n        sku\n        name\n        price\n        stock\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "MyOrders",
+      "source": "src/graphql/MyOrders.graphql",
+      "text": "query MyOrders {\n  discover {\n    orders {\n      nodes {\n        id\n        total\n        placedAt\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "PlaceOrder",
+      "source": "src/graphql/PlaceOrder.graphql",
+      "text": "mutation PlaceOrder($input: PlaceOrderInput!) {\n  dispatch {\n    placeOrder(input: $input) {\n      externalId\n      output {\n        orderId\n        total\n      }\n    }\n  }\n}\n"
+    }
+  ]
+}

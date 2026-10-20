@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Shopfront</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The host tests start the hub. -->
+    <InternalsVisibleTo Include="Shopfront.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The storefront's documents, registered at start. trax client writes the file. -->
+    <None
+      Include="..\web\src\trax\trax.documents.json"
+      Link="trax.documents.json"
+      CopyToOutputDirectory="PreserveNewest"
+      Condition="Exists('..\web\src\trax\trax.documents.json')"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shopfront.Core\Shopfront.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Api.Auth.Jwt" />
+    <PackageReference Include="Trax.Api.Dashboard" />
+    <PackageReference Include="Trax.Api.GraphQL" />
+    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
+    <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" />
+    <PackageReference Include="Trax.Scheduler" />
+  </ItemGroup>
+</Project>

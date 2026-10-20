@@ -27,3 +27,7 @@ This chapter starts from the end of [chapter 16](/docs/book/checkout-in-the-brow
 ## SDK Reference
 
 > [Turn on persisted operations](/docs/api/turn-on-persisted-operations) | [Persisted operations](/docs/persisted-operations) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
+
+---
+
+Next: [17.1 What the hub registers](/docs/book/require-persisted-operations/what-the-hub-registers)

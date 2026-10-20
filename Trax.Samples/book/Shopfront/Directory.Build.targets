@@ -1,0 +1,24 @@
+<Project>
+  <!--
+    Not part of the book. The book's projects reference Trax as packages, at the version the book
+    was written against. Here they build against the code in the same commit, like every other
+    project in this repository: each PackageReference to a Trax package that a folder's src/ builds
+    is swapped for a ProjectReference to that csproj. Outside the repository (a container build, a
+    copy of this folder) the glob finds nothing and the packages restore from nuget.org.
+    Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md
+  -->
+  <ItemGroup>
+    <_TraxSourceProject
+      Include="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/*.csproj"
+      Exclude="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/bin/**;$(MSBuildThisFileDirectory)../../../Trax.*/src/**/obj/**"
+      ProjectPath="%(FullPath)"
+    />
+    <!-- The same projects keyed by package id, which is the csproj file name. -->
+    <_TraxSourceById Include="@(_TraxSourceProject->'%(Filename)')" />
+    <_TraxNotReferenced Include="@(_TraxSourceById)" Exclude="@(PackageReference)" />
+    <_TraxReferenced Include="@(_TraxSourceById)" Exclude="@(_TraxNotReferenced)" />
+
+    <PackageReference Remove="@(_TraxReferenced)" />
+    <ProjectReference Include="@(_TraxReferenced->'%(ProjectPath)')" />
+  </ItemGroup>
+</Project>

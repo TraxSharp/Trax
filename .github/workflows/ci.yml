@@ -276,7 +276,9 @@ jobs:
   # beside that job instead of behind it. The folder's job builds, formats and lock-checks the
   # whole folder and leaves this project's tests out with its test-args filter; this job restores,
   # builds and tests the one project. It runs whenever the folder's job does for a change upstream
-  # (or to the project), so the checks the folder's job makes cover it too.
+  # (or to the project), so the checks the folder's job makes cover it too. A suite may name its
+  # own Postgres and RabbitMQ users (the book's sample logs in as the book does), and a web folder
+  # whose npm tests and build run after the .NET tests.
   suite:
     needs: changes
     if: needs.changes.outputs.suites != '[]'
@@ -293,21 +295,24 @@ jobs:
       postgres:
         image: ${{ matrix.suite.postgres != '' && 'postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527' || '' }}
         env:
-          POSTGRES_USER: trax
-          POSTGRES_PASSWORD: trax123
+          POSTGRES_USER: ${{ matrix.suite['postgres-user'] || 'trax' }}
+          POSTGRES_PASSWORD: ${{ matrix.suite['postgres-password'] || 'trax123' }}
           POSTGRES_DB: ${{ matrix.suite.postgres }}
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U trax"
+          --health-cmd="pg_isready -U ${{ matrix.suite['postgres-user'] || 'trax' }}"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
       rabbitmq:
         image: ${{ matrix.suite.rabbitmq && 'rabbitmq:4-management@sha256:dbaf95088210b885b305e338e846d8d2ce7a2659d4b4005da8da02b885a71671' || '' }}
         env:
-          RABBITMQ_DEFAULT_USER: trax
-          RABBITMQ_DEFAULT_PASS: trax123
+          RABBITMQ_DEFAULT_USER: ${{ matrix.suite['rabbitmq-user'] || 'trax' }}
+          RABBITMQ_DEFAULT_PASS: ${{ matrix.suite['rabbitmq-password'] || 'trax123' }}
+          # RabbitMQ lets guest in from loopback only, and the runner reaches the container through
+          # the port mapping, so a suite that logs in as guest lifts that restriction.
+          RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: ${{ matrix.suite['rabbitmq-user'] == 'guest' && '-rabbit loopback_users []' || '' }}
         ports:
           - 5672:5672
           - 15672:15672
@@ -365,7 +370,7 @@ jobs:
         working-directory: ${{ matrix.suite.folder }}
         run: dotnet restore "$PROJECT" --locked-mode
       - name: Setup Node
-        if: matrix.suite['api-dashboard']
+        if: matrix.suite['api-dashboard'] || matrix.suite.web
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '24'
@@ -384,12 +389,13 @@ jobs:
       - name: Create test databases
         if: matrix.suite.databases[0] != null
         env:
-          PGPASSWORD: trax123
+          PGUSER: ${{ matrix.suite['postgres-user'] || 'trax' }}
+          PGPASSWORD: ${{ matrix.suite['postgres-password'] || 'trax123' }}
           POSTGRES_DB: ${{ matrix.suite.postgres }}
           DATABASES: ${{ join(matrix.suite.databases, ' ') }}
         run: |
           for db in $DATABASES; do
-            psql -h localhost -U trax -d "$POSTGRES_DB" -c "CREATE DATABASE \"$db\";"
+            psql -h localhost -d "$POSTGRES_DB" -c "CREATE DATABASE \"$db\";"
           done
       - name: Test
         working-directory: ${{ matrix.suite.folder }}
@@ -399,6 +405,16 @@ jobs:
           # Word splitting is the point: TEST_ARGS is a list of flags from packages.json.
           # shellcheck disable=SC2086
           dotnet test "$PROJECT" --configuration Release --no-build $TEST_ARGS
+      - name: Install the web folder (locked, no install scripts)
+        if: matrix.suite.web
+        working-directory: ${{ matrix.suite.folder }}/${{ matrix.suite.web }}
+        run: npm ci --ignore-scripts
+      - name: Test and build the web folder
+        if: matrix.suite.web
+        working-directory: ${{ matrix.suite.folder }}/${{ matrix.suite.web }}
+        run: |
+          npm test
+          npm run build
 
   # The Codecov token is kept out of the jobs that run restore, build and tests, so
   # nothing those leave running can read it. This job runs no project code.

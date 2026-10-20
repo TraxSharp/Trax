@@ -1,0 +1,12 @@
+query Catalogue {
+  discover {
+    products(order: { sku: ASC }) {
+      nodes {
+        sku
+        name
+        price
+        stock
+      }
+    }
+  }
+}

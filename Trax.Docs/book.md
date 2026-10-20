@@ -195,4 +195,7 @@ needs.
 
 ## Where to go next
 
+- [1.1 Requirements](/docs/book/an-order-is-a-train/requirements): start the book.
+- [Shopfront](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/book/Shopfront): the project
+  the book ends with, every file as the last chapter leaves it, with its tests run in CI.
 - [Samples](/docs/samples): complete applications that use the same pieces in other shapes.

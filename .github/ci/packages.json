@@ -1,5 +1,5 @@
 {
-  "_comment": "One entry per folder CI builds. 'upstream' names the folders whose change can break this one; the change detector runs a folder when it or anything upstream of it changes. 'dotnet' configures the .NET job (absent for a folder with no .NET build; 'release-pack' names the one project a release packs instead of the solution; 'state-machine' installs Trax.Api.StateMachine's npm packages first, for tests that run its generators under node; 'playwright' installs chromium, and the npm packages of Trax.Api.StateMachine and the Recovery page, which the browser tests build, Trax.Docs/adr/0049; 'api-dashboard' installs the npm packages of Trax.Api.Dashboard's React app before the build, which compiles it into the package); 'adr' configures the ADR guard over that folder's corpus. 'suites' are test projects carved out of a folder into a job of their own: one runs when anything in its 'upstream' (closed over like a folder's) or under one of its 'paths' changed, its folder's own job leaves it out with that row's 'test-args' filter, and its 'dotnet' takes the same keys as a folder's, with 'chromium' to install the browser.",
+  "_comment": "One entry per folder CI builds. 'upstream' names the folders whose change can break this one; the change detector runs a folder when it or anything upstream of it changes. 'dotnet' configures the .NET job (absent for a folder with no .NET build; 'release-pack' names the one project a release packs instead of the solution; 'state-machine' installs Trax.Api.StateMachine's npm packages first, for tests that run its generators under node; 'playwright' installs chromium, and the npm packages of Trax.Api.StateMachine and the Recovery page, which the browser tests build, Trax.Docs/adr/0049; 'api-dashboard' installs the npm packages of Trax.Api.Dashboard's React app before the build, which compiles it into the package); 'adr' configures the ADR guard over that folder's corpus. 'suites' are test projects carved out of a folder into a job of their own: one runs when anything in its 'upstream' (closed over like a folder's) or under one of its 'paths' changed, its folder's own job leaves it out with that row's 'test-args' filter, and its 'dotnet' takes the same keys as a folder's, with 'chromium' to install the browser, 'postgres-user'/'postgres-password' and 'rabbitmq-user'/'rabbitmq-password' for services that log in as someone other than trax, and 'web' for an npm folder (relative to the folder) whose tests and build run after the .NET tests.",
   "packages": [
     {
       "folder": "Trax.Core",
@@ -60,6 +60,14 @@
       "upstream": ["Trax.Api"],
       "paths": ["Trax.Samples/tests/Trax.Samples.ApiDashboard.Browser/", "Trax.Samples/lib/Trax.Samples.Shared.Testing/", "Trax.Samples/Directory.Build.props", "Trax.Samples/.config/"],
       "dotnet": { "api-dashboard": true, "chromium": true, "postgres": "trax", "rabbitmq": false, "databases": ["api_dashboard_browser_tests"], "timeout": 15, "test-args": "--blame-hang-timeout 5m --blame-hang-dump-type none" }
+    },
+    {
+      "name": "book-sample",
+      "folder": "Trax.Samples",
+      "project": "book/Shopfront/Shopfront.slnx",
+      "upstream": ["Trax.Api"],
+      "paths": ["Trax.Samples/book/"],
+      "dotnet": { "api-dashboard": true, "web": "book/Shopfront/web", "postgres": "shopfront", "postgres-user": "postgres", "postgres-password": "shopfront", "rabbitmq": true, "rabbitmq-user": "guest", "rabbitmq-password": "guest", "databases": [], "timeout": 15, "test-args": "" }
     }
   ]
 }

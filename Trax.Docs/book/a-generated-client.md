@@ -32,3 +32,7 @@ needs Node.js 22 or later, as `trax machine generate` already did.
 ## SDK Reference
 
 > [Generated clients](/docs/statemachine/call-a-machine-from-typescript) | [trax client](/docs/reference/cli) | [Client manifest](/docs/sdk-reference/statemachine-api/client-manifest) | [Fetch only what a component needs](/docs/api/fetch-only-what-a-component-needs) | [Run progress](/docs/sdk-reference/graphql-api/run-progress)
+
+---
+
+Next: [15.1 How it fits together](/docs/book/a-generated-client/how-it-fits-together)

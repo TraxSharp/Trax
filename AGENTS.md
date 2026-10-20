@@ -68,7 +68,8 @@ A Trax package is always a `ProjectReference` to its csproj, never a `PackageRef
 build compiles against the same commit (`Trax.Docs/adr/0042`). `DependencyDirectionTests` and
 `TraxReferencesAreProjectReferencesTests` in each folder's `Tests.Meta` enforce both. The only
 Trax `PackageReference`s are in `Trax.Samples/templates/content/`, which is scaffolded outside the
-repository; in the repository a `Directory.Build.targets` swaps them for project references.
+repository, and `Trax.Samples/book/Shopfront/`, the book's project as a reader writes it; in the
+repository a `Directory.Build.targets` swaps them for project references.
 
 Third-party versions are pinned once, in the root `Directory.Packages.props`, under Central
 Package Management with transitive pinning; a `PackageReference` carries no `Version`.

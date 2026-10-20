@@ -1,0 +1,62 @@
+# Shopfront as it runs deployed: one hub, two workers, Postgres and RabbitMQ. Every secret comes
+# from the environment, or from a .env file beside this one that is never committed.
+
+# What the hub and the workers both need.
+x-shopfront: &shopfront
+  ConnectionStrings__Shopfront: Host=database;Database=shopfront;Username=shopfront;Password=${POSTGRES_PASSWORD}
+  ConnectionStrings__RabbitMq: amqp://shopfront:${RABBITMQ_PASSWORD}@rabbitmq:5672
+
+services:
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: shopfront
+      POSTGRES_USER: shopfront
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "shopfront"]
+      interval: 5s
+
+  rabbitmq:
+    image: rabbitmq:4
+    environment:
+      RABBITMQ_DEFAULT_USER: shopfront
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+
+  hub:
+    build:
+      context: .
+      dockerfile: Shopfront.Hub/Dockerfile
+    environment:
+      <<: *shopfront
+      # The identity provider whose tokens the hub accepts, and where the storefront is served.
+      Auth__Authority: ${AUTH_AUTHORITY:?set AUTH_AUTHORITY}
+      Auth__Audience: ${AUTH_AUDIENCE:?set AUTH_AUDIENCE}
+      Storefront__Origin: ${STOREFRONT_ORIGIN:?set STOREFRONT_ORIGIN}
+    ports:
+      - "8080:8080"
+    depends_on:
+      database:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Shopfront.Worker/Dockerfile
+    environment: *shopfront
+    deploy:
+      replicas: 2
+    # The hub migrates the shop's schema before it serves.
+    depends_on:
+      hub:
+        condition: service_started
+
+volumes:
+  database:

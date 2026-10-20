@@ -29,3 +29,7 @@ This chapter starts from the end of [chapter 6](/docs/book/customers-and-staff).
 ## SDK Reference
 
 > [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [Query models](/docs/sdk-reference/graphql-api/query-models) | [Run progress](/docs/sdk-reference/graphql-api/run-progress) | [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | [dispatch mutations](/docs/sdk-reference/graphql-api/mutations/dispatch)
+
+---
+
+Next: [7.1 Packages](/docs/book/serve-it-over-graphql/packages)

@@ -68,6 +68,8 @@ is the point; the fix is to re-copy the lines or move the `#region` markers.
 - `CompiledSnippetsTests` compiles `compile` fences with the layered context, and keeps Trax usings
   out of the shared layers.
 - `SampleExcerptsMatchSourceTests` holds every `from=` fence to the file it names.
+- `BookSampleIsTheBookTests` holds `Trax.Samples/book/Shopfront` to the files the book's last page
+  leaves the reader with, so the sample's suite runs the book's own tests.
 - `SdkReferenceFrontMatterTests` checks an SDK reference page's package, namespace and source, and
   the names its signatures declare, against the checkout and the baselines.
 - `RedirectsTests` checks `redirect_from` claims; `CodeLinksToDocsResolveTests` resolves every
@@ -82,3 +84,4 @@ exist in its package, not to be the one the documented type is in.
 ## Changelog
 
 - **2026-10-13**: Recorded.
+- **2026-10-19**: `BookSampleIsTheBookTests` added, with the book's project as a sample.

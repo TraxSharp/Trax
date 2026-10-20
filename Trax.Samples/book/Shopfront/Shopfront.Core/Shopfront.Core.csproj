@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Shopfront</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The junctions are internal; their tests are the one project that may see them. -->
+    <InternalsVisibleTo Include="Shopfront.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The two the web project's implicit usings gave the code that moved here. -->
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Trax.Api.Auth" />
+    <PackageReference Include="Trax.Core" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" />
+    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
+    <PackageReference Include="Trax.Mediator" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Each machine's committed corpus, which it replays to check itself. -->
+    <EmbeddedResource
+      Include="..\machines\checkout\differential.json"
+      LogicalName="machines/checkout/differential.json"
+      Condition="Exists('..\machines\checkout\differential.json')"
+    />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Shopfront.Tests/Shopfront.Tests.csproj" />
+  </Folder>
+  <Project Path="Shopfront.Core/Shopfront.Core.csproj" />
+  <Project Path="Shopfront.Hub/Shopfront.Hub.csproj" />
+  <Project Path="Shopfront.Worker/Shopfront.Worker.csproj" />
+</Solution>

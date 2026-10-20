@@ -28,3 +28,7 @@ This chapter starts from the end of [chapter 8](/docs/book/the-operations-consol
 ## SDK Reference
 
 > [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [Scheduling helpers](/docs/sdk-reference/scheduler-api/scheduling-helpers) | [Exclusions](/docs/scheduler/exclusions) | [Scheduling options](/docs/scheduler/scheduling-options) | [Dependent trains](/docs/scheduler/dependent-trains)
+
+---
+
+Next: [9.1 A schedule is a manifest](/docs/book/scheduled-work/a-schedule-is-a-manifest)

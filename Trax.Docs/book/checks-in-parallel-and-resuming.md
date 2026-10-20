@@ -32,3 +32,7 @@ This chapter starts from the end of [chapter 13](/docs/book/the-machine-places-t
 ## SDK Reference
 
 > [Parallel](/docs/sdk-reference/train-methods/parallel) | [Checkpoint](/docs/sdk-reference/train-methods/checkpoint) | [Checkpoints and branches](/docs/core/checkpoints-and-branches) | [resumeExecution](/docs/sdk-reference/graphql-api/mutations/executions#resumeexecution) | [runGraph](/docs/sdk-reference/graphql-api/queries/executions#rungraph)
+
+---
+
+Next: [14.1 The new chain](/docs/book/checks-in-parallel-and-resuming/the-new-chain)

@@ -1,0 +1,3 @@
+# The book's project is held to the book, file for file (BookSampleIsTheBookTests in
+# Trax.Docs); it is formatted as the book prints it, and the migrations as dotnet ef writes them.
+book/

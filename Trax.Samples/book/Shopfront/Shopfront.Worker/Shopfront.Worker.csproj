@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Shopfront</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shopfront.Core\Shopfront.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" />
+    <PackageReference Include="Trax.Scheduler" />
+  </ItemGroup>
+</Project>

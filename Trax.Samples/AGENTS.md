@@ -103,9 +103,16 @@ before the build, which embeds the app, and the same chromium.
 This folder has no `PublicApiSurfaceTests`, which is right: the samples are applications, and
 the one package it does ship, `Trax.Samples.Templates`, is template content with no API
 surface. The samples reference Trax as projects, which `TraxReferencesAreProjectReferencesTests`
-checks. The template content under `templates/content/` is the one place with Trax
-`PackageReference`s: its `Directory.Build.targets` swaps them for project references inside the
-repository, and the pack stamps the release version into the template.
+checks. The template content under `templates/content/` and the book's project under `book/` are
+the two places with Trax `PackageReference`s: a `Directory.Build.targets` swaps them for project
+references inside the repository, and the pack stamps the release version into the template.
+
+`book/Shopfront/` is the project [the Trax book](https://traxsharp.net/docs/book) builds, every
+file as its last page leaves it. `BookSampleIsTheBookTests` in Trax.Docs holds it to the pages, so
+change a page and this folder together. It has a solution of its own, outside `Trax.Samples.slnx`,
+because its tests log in to Postgres and RabbitMQ as the book does: CI runs it in the `book-sample`
+suite (locally `trax-test book-sample`). The folder's own guards do not scan it, and
+`.csharpierignore` leaves it as the book prints it.
 
 `tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs` is the consumer adoption
 path for the shipped guard packages, and has no test bodies by design.

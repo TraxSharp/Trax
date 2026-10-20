@@ -1,0 +1,11 @@
+mutation PlaceOrder($input: PlaceOrderInput!) {
+  dispatch {
+    placeOrder(input: $input) {
+      externalId
+      output {
+        orderId
+        total
+      }
+    }
+  }
+}

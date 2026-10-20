@@ -37,6 +37,19 @@ public class SuitesRunOnceTests
         var problems = new List<string>();
         foreach (var project in suites)
         {
+            // A solution of its own is not in this folder's solution, so the folder's job never
+            // runs it; it only has to exist and share no project with the folder's solution.
+            if (project.EndsWith(".slnx", StringComparison.Ordinal))
+            {
+                if (!File.Exists(RepoRoot.Combine(project)))
+                    problems.Add($"{project}: no such solution.");
+                else if (SharedProjects(project) is { Count: > 0 } shared)
+                    problems.Add(
+                        $"{project}: shares {string.Join(", ", shared)} with Trax.Samples.slnx, "
+                            + "whose job would run its tests too."
+                    );
+                continue;
+            }
             var name = Path.GetFileName(project);
             if (!File.Exists(RepoRoot.Combine(project, name + ".csproj")))
                 problems.Add($"{project}: no {name}.csproj there.");
@@ -49,4 +62,19 @@ public class SuitesRunOnceTests
 
         problems.Should().BeEmpty(string.Join("\n", problems));
     }
+
+    private static List<string> SharedProjects(string solution)
+    {
+        var dir = Path.GetDirectoryName(RepoRoot.Combine(solution))!;
+        var own = ProjectsIn(RepoRoot.Combine(solution), dir);
+        var folders = ProjectsIn(RepoRoot.Combine("Trax.Samples.slnx"), RepoRoot.Path);
+        return own.Intersect(folders).Select(RepoRoot.Relative).ToList();
+    }
+
+    private static HashSet<string> ProjectsIn(string solution, string dir) =>
+        System
+            .Xml.Linq.XDocument.Load(solution)
+            .Descendants("Project")
+            .Select(p => Path.GetFullPath(Path.Combine(dir, (string)p.Attribute("Path")!)))
+            .ToHashSet(StringComparer.Ordinal);
 }

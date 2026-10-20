@@ -22,6 +22,8 @@ it ended, and which junction failed with what. Trax is MIT licensed and targets 
 
 ### Learn
 
+- [The Trax book](/docs/book): build one shop from an empty folder to a deployed hub, workers and a
+  React storefront, one feature per chapter.
 - [Getting Started](/docs/getting-started): build a server with one train, record its runs in
   Postgres, schedule it, open the dashboard and call it over GraphQL.
 

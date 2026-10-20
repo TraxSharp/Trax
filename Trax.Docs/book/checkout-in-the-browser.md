@@ -28,3 +28,7 @@ This chapter starts from the end of [chapter 15](/docs/book/a-generated-client).
 ## SDK Reference
 
 > [Call a machine from TypeScript](/docs/statemachine/call-a-machine-from-typescript) | [The TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package)
+
+---
+
+Next: [16.1 The twin and the hook](/docs/book/checkout-in-the-browser/the-twin-and-the-hook)

@@ -31,3 +31,7 @@ This chapter starts from the end of [chapter 9](/docs/book/scheduled-work).
 ## SDK Reference
 
 > [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [How retries work](/docs/scheduler/how-retries-work) | [Resolve a dead letter](/docs/scheduler/dead-letters-and-cleanup) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook)
+
+---
+
+Next: [10.1 What is retried](/docs/book/failures-retries-and-dead-letters/what-is-retried)

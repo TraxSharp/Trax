@@ -32,3 +32,7 @@ same Postgres container.
 ## SDK Reference
 
 > [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context) | [EnsureSchemaCreatedAsync](/docs/effect/domain-schema-bootstrap) | [Add a domain data context](/docs/effect/effect-providers/domain-data-contexts) | [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | [Architecture guards](/docs/reference/architecture-guards)
+
+---
+
+Next: [4.1 One context, one schema](/docs/book/the-shops-own-data/one-context-one-schema)

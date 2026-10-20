@@ -1,0 +1,7977 @@
+{
+  "machine": "checkout",
+  "version": 1,
+  "generated": "GENERATED differential corpus. Do not hand-edit; regenerate with UPDATE_DIFFERENTIAL=1. TypeScript is the oracle; every runtime replays and must reproduce each outcome.",
+  "cases": [
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Abandoned",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Payment\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Payment\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Address",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Address\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "GUARD_FAILED"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Abandoned\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Address\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "GUARD_FAILED"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Abandoned\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Address\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "GUARD_FAILED"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Abandoned\",\"context\":{\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "GUARD_FAILED"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "GUARD_FAILED"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}]}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Cart",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Abandoned\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Delivered",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Placing\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Failed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Address\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Placing\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Payment",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Shipping\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"orderId\":\"3179f9c4-07ba-4f64-ac64-e7026995cc89\",\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placed",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Failed\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "INVALID_INPUT"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Placed\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"orderId\":\"3179f9c4-07ba-4f64-ac64-e7026995cc89\",\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Failed\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Placing",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Back"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {
+          "paymentToken": "tok_visa"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "ChoosePayment",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "PlaceOrder"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": "1 Main St"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetAddress",
+        "input": {
+          "address": ""
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "SetLines",
+        "input": {
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "StartOver"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Track"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.done",
+        "input": {
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "total": 24,
+          "transactionId": "tx_sample"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Placing.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.cancelled"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Placed\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"orderId\":\"3179f9c4-07ba-4f64-ac64-e7026995cc89\",\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.done"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Delivered\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"orderId\":\"3179f9c4-07ba-4f64-ac64-e7026995cc89\",\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Shipping.failed"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Placed\",\"context\":{\"address\":\"1 Main St\",\"lines\":[{\"quantity\":2,\"sku\":\"MUG\"}],\"orderId\":\"3179f9c4-07ba-4f64-ac64-e7026995cc89\",\"paymentToken\":\"tok_visa\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "checkout",
+        "version": 1,
+        "state": "Shipping",
+        "context": {
+          "address": "1 Main St",
+          "lines": [
+            {
+              "quantity": 2,
+              "sku": "MUG"
+            }
+          ],
+          "orderId": "3179f9c4-07ba-4f64-ac64-e7026995cc89",
+          "paymentToken": "tok_visa"
+        }
+      },
+      "when": {
+        "trigger": "Cart.after"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "NO_TRANSITION"
+      }
+    }
+  ]
+}

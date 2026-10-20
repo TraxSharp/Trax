@@ -1,0 +1,11 @@
+query MyOrders {
+  discover {
+    orders {
+      nodes {
+        id
+        total
+        placedAt
+      }
+    }
+  }
+}

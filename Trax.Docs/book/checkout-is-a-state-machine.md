@@ -32,3 +32,7 @@ This chapter starts from the end of [chapter 11](/docs/book/a-separate-worker).
 ## SDK Reference
 
 > [Machine](/docs/sdk-reference/statemachine-api/machine) | [Rules](/docs/sdk-reference/statemachine-api/rules) | [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines) | [Machines over GraphQL](/docs/sdk-reference/graphql-api/machines) | [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [trax CLI](/docs/reference/cli)
+
+---
+
+Next: [12.1 The flow](/docs/book/checkout-is-a-state-machine/the-flow)

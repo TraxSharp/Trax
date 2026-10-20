@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Not part of the book. Shopfront is the project the Trax book builds, file for file, and a reader's
+    copy has no Directory.Build.props: this one stops Trax.Samples/Directory.Build.props applying, so
+    the projects build here as they do there. It adds only what every project in this repository
+    does: a committed lockfile, restored in locked mode.
+  -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>

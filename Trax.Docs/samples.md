@@ -19,6 +19,10 @@ Features without a sample of their own are proven by a test in their own package
 [feature-coverage table](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples#feature-coverage) lists every major feature and
 the test class that proves it.
 
+The project [the Trax book](/docs/book) builds is in
+[Trax.Samples/book/Shopfront](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/book/Shopfront): every file as the
+last chapter leaves it, held to the book's pages in CI, with the book's tests run against it.
+
 Starting a new server rather than learning one feature? The [project templates](/docs/reference/templates)
 (`trax-hub`, `trax-api`, `trax-scheduler`) scaffold a runnable host with a README and a test project:
 `dotnet new install Trax.Samples.Templates && dotnet new trax-hub -n MyApp`.

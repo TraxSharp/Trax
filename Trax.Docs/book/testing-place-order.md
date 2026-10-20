@@ -32,3 +32,7 @@ this page is compiled in CI together with the chapters before it.
 ## SDK Reference
 
 > [ITrainBus](/docs/sdk-reference/mediator-api/i-train-bus) | [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [Metadata](/docs/effect/metadata) | [Mediator testing](/docs/sdk-reference/testing/mediator-testing) | [Architecture guards](/docs/reference/architecture-guards)
+
+---
+
+Next: [2.1 Three kinds of test](/docs/book/testing-place-order/three-kinds-of-test)

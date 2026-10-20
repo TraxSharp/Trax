@@ -34,3 +34,7 @@ This chapter starts from the end of [chapter 10](/docs/book/failures-retries-and
 ## SDK Reference
 
 > [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service) | [Queued work](/docs/mediator/queued-work) | [Job submission](/docs/scheduler/job-submission) | [Structuring your application](/docs/reference/project-layout) | [Host tracking](/docs/effect/host-tracking)
+
+---
+
+Next: [11.1 One library, two processes](/docs/book/a-separate-worker/one-library-two-processes)

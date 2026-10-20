@@ -45,6 +45,9 @@ Each sample is a complete app under `samples/` that proves one major Trax featur
 | [Recovery](https://github.com/TraxSharp/Trax/blob/main/Trax.Samples/samples/Recovery/README.md) | A train asks a model, a later step crashes, and the manifest's retry replays the recorded decisions instead of asking again, or resumes from a checkpoint after them, shown live on a React page from junction events; a topic map runs three signals in parallel branches and crashes one; two state machines run trains, one system-owned instance per index partition and a user's topic map wizard | Postgres |
 | [Scheduling](https://github.com/TraxSharp/Trax/blob/main/Trax.Samples/samples/Scheduling/README.md) | Interval, cron, one-off, dependent and dormant manifests; a train that retries with backoff, dead-letters, and runs again when its dead letter is requeued over GraphQL | Postgres |
 
+[`book/Shopfront`](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/book/Shopfront) is the shop
+[the Trax book](https://traxsharp.net/docs/book) builds, as its last chapter leaves it, with the book's tests.
+
 Every Postgres sample has a database of its own (`trax_auth`, `trax_bookworm`, `trax_contentshield`, `trax_energyhub`,
 `trax_persisted_operations`, `trax_recovery`, `trax_scheduling`, `trax_statemachine`), because a scheduler polls every
 manifest and job in its database and would fail another sample's. `docker compose up -d` creates them on a fresh

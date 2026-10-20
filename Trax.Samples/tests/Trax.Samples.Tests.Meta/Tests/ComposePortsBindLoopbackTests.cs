@@ -27,6 +27,10 @@ public class ComposePortsBindLoopbackTests
             || path.Contains($"{s}bin{s}", StringComparison.Ordinal)
             || path.Contains($"{s}obj{s}", StringComparison.Ordinal)
             || path.Contains($"{s}.git{s}", StringComparison.Ordinal)
+            // The book's deployed shape: it writes no password, every secret comes from the
+            // environment, and it publishes the hub on purpose. It is held to the book instead
+            // (BookSampleIsTheBookTests in Trax.Docs).
+            || path.Contains($"{s}book{s}Shopfront{s}", StringComparison.Ordinal)
         )
             return false;
         var name = Path.GetFileName(path);

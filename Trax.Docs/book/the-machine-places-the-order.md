@@ -30,3 +30,7 @@ This chapter starts from the end of [chapter 12](/docs/book/checkout-is-a-state-
 ## SDK Reference
 
 > [Invoke a train from a state](/docs/statemachine/invoking-trains) | [Invoked runs](/docs/statemachine/invoked-runs) | [Spawn a child machine](/docs/statemachine/spawning-child-machines) | [Machine](/docs/sdk-reference/statemachine-api/machine)
+
+---
+
+Next: [13.1 The flow from Placing](/docs/book/the-machine-places-the-order/the-flow-from-placing)

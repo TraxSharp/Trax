@@ -29,3 +29,7 @@ This chapter starts from the end of [chapter 7](/docs/book/serve-it-over-graphql
 ## SDK Reference
 
 > [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Queries](/docs/sdk-reference/graphql-api/queries)
+
+---
+
+Next: [8.1 The console reads through GraphQL](/docs/book/the-operations-console/the-console-reads-through-graphql)

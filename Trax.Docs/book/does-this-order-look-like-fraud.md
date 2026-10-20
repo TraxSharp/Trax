@@ -33,3 +33,7 @@ This chapter starts from the end of [chapter 4](/docs/book/the-shops-own-data).
 ## SDK Reference
 
 > [Gate](/docs/sdk-reference/train-methods/gate) | [Decide](/docs/sdk-reference/train-methods/decide) | [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | [Write a decider](/docs/core/write-a-decider) | [Try a decider in shadow](/docs/core/try-a-decider-in-shadow) | [Test a train's decisions](/docs/core/test-train-decisions)
+
+---
+
+Next: [5.1 A question, not an if](/docs/book/does-this-order-look-like-fraud/a-question-not-an-if)
