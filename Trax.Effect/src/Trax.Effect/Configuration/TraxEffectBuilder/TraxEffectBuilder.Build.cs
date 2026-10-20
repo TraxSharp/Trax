@@ -16,7 +16,8 @@ public partial class TraxEffectBuilder
                     + "          .UsePostgres(connectionString) // or .UseSqlite(connectionString) / .UseInMemory()\n"
                     + "          .AddJunctionProgress()\n"
                     + "      )\n"
-                    + "  );\n"
+                    + "  );\n\n"
+                    + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#addjunctionprogress-requires-a-data-provider-usepostgres-usesqlite-or-useinmemory"
             );
         }
 

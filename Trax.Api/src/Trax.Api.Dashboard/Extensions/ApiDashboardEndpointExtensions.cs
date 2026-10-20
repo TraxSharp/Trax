@@ -97,7 +97,8 @@ public static class ApiDashboardEndpointExtensions
                     + "of the dashboard reads, and AddTraxGraphQL() does not expose it. Call "
                     + "ExposeOperationQueries() on the GraphQL builder, and "
                     + "ExposeOperationMutations() for the dashboard's actions, with the gate the "
-                    + "builder then asks for (RequireAuthorization() or GateOperations(...))."
+                    + "builder then asks for (RequireAuthorization() or GateOperations(...)). See "
+                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#usetraxapidashboard-requires-the-graphql-operations-namespace"
             );
 
         var assets = services.GetService<DashboardAssets>() ?? DashboardAssets.Embedded;

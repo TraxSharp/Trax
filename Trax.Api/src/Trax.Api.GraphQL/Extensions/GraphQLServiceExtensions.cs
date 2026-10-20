@@ -111,7 +111,8 @@ public static class GraphQLServiceExtensions
         if (!services.Any(sd => sd.ServiceType == typeof(TraxMarker)))
             throw new InvalidOperationException(
                 "AddTraxGraphQL() requires AddTrax() to be called first. "
-                    + "Call services.AddTrax(trax => ...) before services.AddTraxGraphQL()."
+                    + "Call services.AddTrax(trax => ...) before services.AddTraxGraphQL(). See "
+                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#addtraxgraphql-requires-addtrax-to-be-called-first"
             );
 
         var builder = new TraxGraphQLBuilder(services);

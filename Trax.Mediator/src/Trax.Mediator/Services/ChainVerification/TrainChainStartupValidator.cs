@@ -123,6 +123,8 @@ internal sealed class TrainChainStartupValidator(
                 $"{failedTrains} of {checkedTrains} registered trains cannot run:"
                     + Environment.NewLine
                     + string.Join(Environment.NewLine, problems.Select(p => "  - " + p))
+                    + Environment.NewLine
+                    + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
             );
 
         logger?.LogDebug("Verified the chains of {TrainCount} trains.", checkedTrains);

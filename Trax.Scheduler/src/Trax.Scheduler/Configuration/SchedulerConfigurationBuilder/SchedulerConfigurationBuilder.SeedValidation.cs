@@ -149,7 +149,7 @@ public partial class SchedulerConfigurationBuilder
                     + $"(prefix '{longer.Prefix}'). Each start, one batch would delete the other's "
                     + "manifests and their history.\n\n"
                     + "Give the batches names where neither plus '-' starts the other, or put them "
-                    + "in different groups."
+                    + "in different groups. See https://traxsharp.net/docs/cross-cutting/troubleshooting#batch-x-prunes-manifests-whose-external-id-starts-with-"
             );
         }
 
@@ -176,7 +176,8 @@ public partial class SchedulerConfigurationBuilder
                     + $"Give '{single.ExternalId}' an external ID that does not start with "
                     + $"'{prune.Prefix}'"
                     + (prune.ScopedToGroup ? ", put it in a different group," : "")
-                    + " or make it one of the batch's items."
+                    + " or make it one of the batch's items. See "
+                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#batch-x-prunes-manifests-whose-external-id-starts-with-"
             );
         }
     }
@@ -203,7 +204,8 @@ public partial class SchedulerConfigurationBuilder
                 + $"{Describe(value(conflicting))} by {conflicting.DeclaredBy}. "
                 + "Every start writes a group setting a member states, so the value in force "
                 + "would depend on seeding order.\n\n"
-                + $"State {setting} on one member of the group, or the same value on each."
+                + $"State {setting} on one member of the group, or the same value on each. See "
+                + "https://traxsharp.net/docs/cross-cutting/troubleshooting#manifest-group-x-is-given-two-different-y-values"
         );
     }
 

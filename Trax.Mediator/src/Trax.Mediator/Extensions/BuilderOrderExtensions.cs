@@ -21,7 +21,8 @@ namespace Trax.Mediator.Extensions;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class BuilderOrderExtensions
 {
-    internal const string AddEffectsFirst = "Call AddEffects(...) before AddMediator(...).";
+    internal const string AddEffectsFirst =
+        "Call AddEffects(...) before AddMediator(...). See https://traxsharp.net/docs/cross-cutting/troubleshooting#call-addeffects-before-addmediator";
 
     internal const string AddMediatorOnce =
         "AddMediator(...) is already called. Call it once and configure everything in that call.";

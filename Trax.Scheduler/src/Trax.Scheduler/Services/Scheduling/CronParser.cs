@@ -40,7 +40,8 @@ internal static class CronParser
         var format =
             DetectFormat(expression)
             ?? throw new FormatException(
-                $"Invalid cron expression: '{expression}'. Expected 5 or 6 space-separated fields."
+                $"Invalid cron expression: '{expression}'. Expected 5 or 6 space-separated fields. "
+                    + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#invalid-cron-expression-x-expected-5-or-6-space-separated-fields"
             );
 
         return CronExpression.Parse(expression, format);

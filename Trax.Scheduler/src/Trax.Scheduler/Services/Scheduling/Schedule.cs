@@ -71,7 +71,8 @@ public record Schedule
             throw new ArgumentOutOfRangeException(
                 nameof(interval),
                 interval,
-                "A schedule interval must be at least one second."
+                "A schedule interval must be at least one second. See "
+                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#a-schedule-interval-must-be-at-least-one-second"
             );
 
         return new() { Type = ScheduleType.Interval, Interval = interval };
@@ -110,7 +111,8 @@ public record Schedule
             throw new FormatException(
                 $"Cron expression '{expression}' never fires: it has no occurrence in the next "
                     + $"{CronSearchWindowYears} years. Check the day of the month against the months "
-                    + "it names (February has no 30th, April no 31st)."
+                    + "it names (February has no 30th, April no 31st). See "
+                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#cron-expression-x-never-fires-it-has-no-occurrence-in-the-next-10-years"
             );
 
         return new() { Type = ScheduleType.Cron, CronExpression = expression };

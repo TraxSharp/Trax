@@ -43,5 +43,5 @@ public class NoTrainForInputException : InvalidOperationException
                 : ""
         )
         + "Add a train that takes this input type, or add the assembly that holds its train to "
-        + "ScanAssemblies(...).";
+        + "ScanAssemblies(...). See https://traxsharp.net/docs/cross-cutting/troubleshooting#could-not-find-train-with-input-type-x";
 }

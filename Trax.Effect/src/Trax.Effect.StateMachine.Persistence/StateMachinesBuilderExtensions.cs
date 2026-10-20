@@ -56,7 +56,8 @@ public static class StateMachinesBuilderExtensions
             throw new InvalidOperationException(
                 "AddStateMachines() requires a data provider. Configure one in AddEffects() first: "
                     + ".UsePostgres(connectionString), .UseSqlite(connectionString), or .UseInMemory(). "
-                    + "The snapshot store needs a database to persist drafts and effect claims."
+                    + "The snapshot store needs a database to persist drafts and effect claims. See "
+                    + "https://traxsharp.net/docs/cross-cutting/troubleshooting#addstatemachines-requires-a-data-provider"
             );
 
         if (builder.Root.MediatorConfigured)

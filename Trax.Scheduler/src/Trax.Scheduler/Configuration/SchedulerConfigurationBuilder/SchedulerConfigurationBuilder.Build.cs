@@ -376,7 +376,8 @@ public partial class SchedulerConfigurationBuilder
                     + "      .AddEffects(effects => effects.UsePostgres(connectionString)) // or .UseSqlite(connectionString) / .UseInMemory()\n"
                     + "      .AddMediator(assemblies)\n"
                     + "      .AddScheduler(scheduler => ...)\n"
-                    + "  );\n"
+                    + "  );\n\n"
+                    + "See https://traxsharp.net/docs/cross-cutting/troubleshooting#addscheduler-requires-a-data-provider-usepostgres-usesqlite-or-useinmemory"
             );
         }
     }

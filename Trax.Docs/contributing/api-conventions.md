@@ -129,7 +129,7 @@ compiler then reports CS0619 with the instruction as its text:
 
 ```
 error CS0619: 'BuilderOrderExtensions.AddMediator(TraxBuilder, params Assembly[])' is obsolete:
-'Call AddEffects(...) before AddMediator(...).'
+'Call AddEffects(...) before AddMediator(...). See https://traxsharp.net/docs/cross-cutting/troubleshooting#call-addeffects-before-addmediator'
 ```
 
 Trax.Mediator's are in `BuilderOrderExtensions`:

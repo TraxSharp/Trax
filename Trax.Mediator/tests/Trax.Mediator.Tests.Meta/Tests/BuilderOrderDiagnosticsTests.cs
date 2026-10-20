@@ -36,19 +36,23 @@ public class BuilderOrderDiagnosticsTests
     {
         yield return new TestCaseData(
             "trax.AddMediator(assembly)",
-            "Call AddEffects(...) before AddMediator(...)."
+            "Call AddEffects(...) before AddMediator(...). See "
+                + "https://traxsharp.net/docs/cross-cutting/troubleshooting#call-addeffects-before-addmediator"
         ).SetName("AddMediator(assemblies) before AddEffects");
         yield return new TestCaseData(
             "trax.AddMediator()",
-            "Call AddEffects(...) before AddMediator(...)."
+            "Call AddEffects(...) before AddMediator(...). See "
+                + "https://traxsharp.net/docs/cross-cutting/troubleshooting#call-addeffects-before-addmediator"
         ).SetName("AddMediator() before AddEffects");
         yield return new TestCaseData(
             "trax.AddMediator(assemblies: [assembly])",
-            "Call AddEffects(...) before AddMediator(...)."
+            "Call AddEffects(...) before AddMediator(...). See "
+                + "https://traxsharp.net/docs/cross-cutting/troubleshooting#call-addeffects-before-addmediator"
         ).SetName("AddMediator(assemblies: [...]) before AddEffects");
         yield return new TestCaseData(
             "trax.AddMediator(mediator => mediator.ScanAssemblies(assembly))",
-            "Call AddEffects(...) before AddMediator(...)."
+            "Call AddEffects(...) before AddMediator(...). See "
+                + "https://traxsharp.net/docs/cross-cutting/troubleshooting#call-addeffects-before-addmediator"
         ).SetName("AddMediator(configure) before AddEffects");
         yield return new TestCaseData(
             "trax.AddEffects().AddMediator(assembly).AddMediator(assembly)",

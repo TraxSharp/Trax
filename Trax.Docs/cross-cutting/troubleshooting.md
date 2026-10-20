@@ -12,7 +12,8 @@ redirect_from:
 
 Each error entry is headed by the message Trax raises, quoted as it appears in the source, with
 the names it fills in shown as `X`, `Y` and `Z`. Search this page for a distinctive phrase from
-the message you have. Problems that raise no error are at the end.
+the message you have; a startup error ends with a link to its entry here. Problems that raise no
+error are at the end.
 
 ## "Could not find train with input type (X)"
 

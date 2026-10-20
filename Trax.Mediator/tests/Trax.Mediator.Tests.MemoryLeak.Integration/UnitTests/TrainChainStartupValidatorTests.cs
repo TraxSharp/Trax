@@ -386,6 +386,18 @@ public class TrainChainStartupValidatorTests
     }
 
     [Test]
+    public async Task Startup_WhenAChainCannotRun_TheRefusalLinksItsTroubleshootingEntry()
+    {
+        var failure = await Start<IBrokenFlowTrain, BrokenFlowTrain>();
+
+        failure!
+            .Message.Should()
+            .EndWith(
+                "See https://traxsharp.net/docs/cross-cutting/troubleshooting#n-of-m-registered-trains-cannot-run"
+            );
+    }
+
+    [Test]
     public async Task Startup_WhenAChainReadsItsInput_RefusesToStart()
     {
         var failure = await Start<IReadsInputTrain, ReadsInputTrain>();

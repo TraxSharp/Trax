@@ -85,9 +85,11 @@ namespace Trax.Mediator.Extensions
 {
     public static class BuilderOrderExtensions
     {
-        [System.Obsolete("Call AddEffects(...) before AddMediator(...).", true)]
+        [System.Obsolete("Call AddEffects(...) before AddMediator(...). See https://traxsharp.net/docs/cros" +
+            "s-cutting/troubleshooting#call-addeffects-before-addmediator", true)]
         public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
-        [System.Obsolete("Call AddEffects(...) before AddMediator(...).", true)]
+        [System.Obsolete("Call AddEffects(...) before AddMediator(...). See https://traxsharp.net/docs/cros" +
+            "s-cutting/troubleshooting#call-addeffects-before-addmediator", true)]
         public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, params System.Reflection.Assembly[] assemblies) { }
         [System.Obsolete("AddMediator(...) is already called. Call it once and configure everything in that" +
             " call.", true)]
