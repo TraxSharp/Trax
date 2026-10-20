@@ -387,7 +387,7 @@ Never add a line to one of them: fix the page instead.
 ## Agent skills
 
 `skills/<name>/SKILL.md` holds a skill for coding agents working in an app built on Trax. It is not
-a page: a release publishes it to [TraxSharp/skills](https://github.com/TraxSharp/skills), stamped
+a page: a release publishes it to the [`skills` branch](https://github.com/TraxSharp/Trax/tree/skills), stamped
 with the release's version, and agents install it from there (`Trax.Docs/adr/0056`). A skill says
 what to decide first, which pages to read and which mistakes are known, and links to the page for
 the detail rather than repeating it.

@@ -19,7 +19,7 @@ name: Release
 #
 # Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
 # build (packs from the tag, read-only) -> publish (verifies, attests, publishes) -> skills
-# (commits the agent skills build staged to TraxSharp/skills). Publishing the site is not part
+# (commits the agent skills build staged to the `skills` branch). Publishing the site is not part
 # of a release: dispatch website.yml with the new tag afterwards.
 on:
   workflow_dispatch:
@@ -265,11 +265,9 @@ jobs:
           retention-days: 1
 
       - name: Stage the agent skills
-        # Trax.Docs/adr/0056: the skills under Trax.Docs/skills/ go to TraxSharp/skills with this
+        # Trax.Docs/adr/0056: the skills under Trax.Docs/skills/ go to the `skills` branch with this
         # release's version stamped in. Staging builds a .NET tool, so it runs here, where nothing
-        # can write; the skills job only commits what this step staged. Off until the repository
-        # variable SKILLS_APP_ID names the GitHub App that may write TraxSharp/skills.
-        if: vars.SKILLS_APP_ID != ''
+        # can write; the skills job only commits what this step staged.
         id: skills
         env:
           PKG_VERSION: ${{ needs.release.outputs.version }}
@@ -279,7 +277,6 @@ jobs:
             stage --skills Trax.Docs/skills --version "$PKG_VERSION" --license LICENSE --out skills
           echo "digests=$(cd skills && find . -type f -printf '%P\n' | LC_ALL=C sort | xargs -d '\n' sha256sum -- | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload skills artifact
-        if: vars.SKILLS_APP_ID != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: skills
@@ -484,24 +481,23 @@ jobs:
         run: dotnet nuget push "nupkg/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
   # ---------------------------------------------------------------------------
-  # Skills zone. Commits the agent skills build staged to TraxSharp/skills and tags them
-  # (Trax.Docs/adr/0056). A skill is instructions agents follow in other people's repositories,
-  # so this job holds the only credential that can write there: a GitHub App token scoped to
-  # that one repository, contents only. It runs no build, only git, gh and jq, and only after
-  # the packages it describes are on nuget.org.
-  #
-  # Setup, once: the repository exists with a first commit on main and a ruleset requiring
-  # verified signatures and blocking direct pushes, with the App as the only bypass actor; the
-  # App is installed on that repository alone with contents: write; SKILLS_APP_ID is a
-  # repository variable and SKILLS_APP_PRIVATE_KEY a secret of the `release` environment.
+  # Skills zone. Commits the agent skills build staged to the `skills` branch and tags the commit
+  # skills-v<version> (Trax.Docs/adr/0056). A skill is instructions agents follow in other people's
+  # repositories, so the branch takes updates from release jobs only: the `skills` ruleset
+  # restricts updates, deletion and force pushes, with GitHub Actions as its only bypass. This job
+  # runs no build, only git, gh and jq, after the packages it describes are on nuget.org, and its
+  # token can write contents and nothing else. The commit goes through the API, so GitHub signs it.
+  # The branch was created once, by hand, with a signed commit; createCommitOnBranch cannot start
+  # one.
   # ---------------------------------------------------------------------------
   skills:
     needs: [release, build, publish]
-    if: needs.release.outputs.released == 'true' && vars.SKILLS_APP_ID != ''
+    if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: release
-    permissions: {}
+    permissions:
+      contents: write       # the skills branch and its skills-v* tag
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
@@ -535,17 +531,8 @@ jobs:
             exit 1
           fi
           (cd skills && sha256sum --check --strict "$RUNNER_TEMP/expected-skills.sha256")
-      - name: Token for TraxSharp/skills
-        id: token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
-        with:
-          app-id: ${{ vars.SKILLS_APP_ID }}
-          private-key: ${{ secrets.SKILLS_APP_PRIVATE_KEY }}
-          owner: TraxSharp
-          repositories: skills
-          permission-contents: write
       - name: Commit and tag
         env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           PKG_VERSION: ${{ needs.release.outputs.version }}
-        run: .github/scripts/publish-skills.sh skills "$PKG_VERSION" TraxSharp/skills
+        run: .github/scripts/publish-skills.sh skills "$GITHUB_REPOSITORY" skills "skills-v$PKG_VERSION" "Trax $PKG_VERSION"

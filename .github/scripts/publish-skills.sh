@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
-# Commits a staged skills tree to the default branch of TraxSharp/skills and tags it
+# Commits a staged skills tree to a branch and tags it
 # (Trax.Docs/adr/0056-agent-skills-are-written-in-the-docs-and-published-from-a-release.md).
 #
-#   publish-skills.sh <staged dir> <version> <owner/repo>
+#   publish-skills.sh <staged dir> <owner/repo> <branch> <tag> <commit headline>
 #
-# GH_TOKEN must be a token that can write that repository's contents and nothing else. The
-# commit goes through GraphQL createCommitOnBranch, so GitHub signs it and the repository's
-# verified-signatures rule holds without a key in this job. The tree replaces what is there:
-# a file the release no longer stages is deleted. A re-run of the same release finds the tree
-# unchanged and the tag in place, and does nothing.
+# The branch must exist: it is created once, by hand, with a signed commit. GH_TOKEN must be
+# able to write the repository's contents. The commit goes through GraphQL createCommitOnBranch,
+# so GitHub signs it and the repository's verified-signatures rule holds without a key in this
+# job. The tree replaces what is there: a file the release no longer stages is deleted. A re-run
+# of the same release finds the tree unchanged and the tag in place, and does nothing.
 set -euo pipefail
 
 dir=$1
-version=$2
-repo=$3
-tag="v$version"
+repo=$2
+branch=$3
+tag=$4
+headline=$5
 work=$(mktemp -d)
 
-head=$(gh api "repos/$repo/git/ref/heads/main" --jq .object.sha)
+if ! head=$(gh api "repos/$repo/git/ref/heads/$branch" --jq .object.sha 2>/dev/null); then
+  echo "::error::$repo has no $branch branch. Create it once with a signed commit (see the ADR) and re-run this job."
+  exit 1
+fi
 tree=$(gh api "repos/$repo/git/commits/$head" --jq .tree.sha)
 
 gh api "repos/$repo/git/trees/$tree?recursive=1" \
@@ -27,7 +31,7 @@ gh api "repos/$repo/git/trees/$tree?recursive=1" \
 done) > "$work/staged"
 
 if cmp -s "$work/existing" "$work/staged"; then
-  echo "$repo main already holds this tree."
+  echo "$repo $branch already holds this tree."
   commit=$head
 else
   cut -f1 "$work/staged" | while IFS= read -r f; do
@@ -37,12 +41,12 @@ else
     | jq -R '{path: .}' | jq -s . > "$work/deletions.json"
 
   jq -n \
-    --arg repo "$repo" --arg head "$head" --arg headline "Trax $version" \
+    --arg repo "$repo" --arg branch "$branch" --arg head "$head" --arg headline "$headline" \
     --slurpfile additions "$work/additions.json" --slurpfile deletions "$work/deletions.json" \
     '{
       query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
       variables: { input: {
-        branch: { repositoryNameWithOwner: $repo, branchName: "main" },
+        branch: { repositoryNameWithOwner: $repo, branchName: $branch },
         expectedHeadOid: $head,
         message: { headline: $headline },
         fileChanges: { additions: $additions[0], deletions: $deletions[0] }
@@ -54,7 +58,7 @@ else
     echo "::error::createCommitOnBranch returned no commit for $repo."
     exit 1
   fi
-  echo "Committed $commit to $repo main."
+  echo "Committed $commit to $repo $branch."
 fi
 
 if existing_tag=$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.sha 2>/dev/null); then

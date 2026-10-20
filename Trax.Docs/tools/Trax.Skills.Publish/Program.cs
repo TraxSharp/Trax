@@ -4,7 +4,14 @@ const string usage = """
     Usage:
       trax-skills check --skills <dir>
       trax-skills stage --skills <dir> --version <x.y.z> --license <file> --out <dir>
+      trax-skills marketplace     (prints .claude-plugin/marketplace.json as main holds it)
     """;
+
+if (args is ["marketplace"])
+{
+    Console.Write(Stager.MarketplaceJson());
+    return 0;
+}
 
 if (args.Length == 0 || args[0] is not ("check" or "stage") || args.Length % 2 == 0)
     return Fail("expected a command and pairs of options");
