@@ -13,11 +13,11 @@ try {
   ({ default: Ajv2020 } = await import("ajv/dist/2020.js"));
 } catch (err) {
   if (!invokedDirectly) throw err;
-  console.error("ajv is not installed: run npm ci in Trax.Api.StateMachine.");
+  console.error("ajv is not installed: run npm ci in Trax.StateMachine/ts.");
   process.exit(MISSING_DEPENDENCIES);
 }
 
-const schemaPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "conformance", "ir.schema.json");
+const schemaPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "conformance", "ir.schema.json");
 
 /**
  * Compiles conformance/ir.schema.json once and returns a function that checks one IR document, answering the

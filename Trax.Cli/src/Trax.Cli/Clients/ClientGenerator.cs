@@ -40,7 +40,7 @@ internal sealed partial class ClientGenerator
 {
     /// <summary>
     /// The client format this generator writes, held equal to the runtime's <c>clientFormat</c>
-    /// (<c>Trax.Api.StateMachine/src/clientFormat.ts</c>) by <c>ClientFormatParityTests</c>.
+    /// (<c>Trax.StateMachine/ts/src/clientFormat.ts</c>) by <c>ClientFormatParityTests</c>.
     /// </summary>
     public const int ClientFormat = 2;
 

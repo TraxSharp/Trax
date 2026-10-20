@@ -44,7 +44,7 @@ namespace Trax.Cli.Tests.Fakes
 
     /// <summary>
     /// A machine whose <c>Fetching</c> state invokes a train, identical to the committed <c>ingest</c> machine in
-    /// Trax.Api.StateMachine, so the CLI's IR, twin and corpus for a machine with outcome triggers can be
+    /// Trax.StateMachine/ts, so the CLI's IR, twin and corpus for a machine with outcome triggers can be
     /// byte-compared against the committed artifacts.
     /// </summary>
     public sealed class DeclarativeIngestMachine : Machine<IngestState, IngestTrigger>

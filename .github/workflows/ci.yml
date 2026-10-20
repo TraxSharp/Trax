@@ -164,16 +164,16 @@ jobs:
         working-directory: ${{ matrix.package.folder }}
         run: ../.github/scripts/check-deprecated-packages.sh
       - name: Setup Node
-        # Tests that drive Trax.Api.StateMachine's generators run them under node, packing Trax.Cli
+        # Tests that drive the TypeScript engine's generators (Trax.StateMachine/ts) run them under node, packing Trax.Cli
         # bundles them into it, the browser tests build the page they drive with vite, and building
         # Trax.Api.Dashboard compiles its React app. Before the build for that last reason.
         if: matrix.package['state-machine'] || matrix.package.playwright || matrix.package['api-dashboard']
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '24'
-      - name: Install Trax.Api.StateMachine (locked, no install scripts)
+      - name: Install Trax.StateMachine/ts (locked, no install scripts)
         if: matrix.package['state-machine'] || matrix.package.playwright
-        working-directory: Trax.Api.StateMachine
+        working-directory: Trax.StateMachine/ts
         run: npm ci --ignore-scripts
       - name: Install the API dashboard (locked, no install scripts)
         # With its packages installed, building Trax.Api.Dashboard compiles the app and embeds it,
@@ -200,7 +200,7 @@ jobs:
         run: dotnet pack "$SOLUTION" --configuration Release --no-build --output "$RUNNER_TEMP/nupkg"
       - name: Install the Recovery page (locked, no install scripts)
         # The browser tests build the page with vite before they open it; it compiles the engine
-        # from Trax.Api.StateMachine/src, installed above.
+        # from Trax.StateMachine/ts/src, installed above.
         if: matrix.package.playwright
         working-directory: Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client
         run: npm ci --ignore-scripts
@@ -621,7 +621,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   # The Recovery sample's page (Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client), its own
-  # npm project. It builds the engine from Trax.Api.StateMachine/src, which is upstream of
+  # npm project. It builds the engine from Trax.StateMachine/ts/src, which is upstream of
   # Trax.Samples through Trax.Cli, so it runs whenever the Samples job does. Besides its lint, tests
   # and build, it regenerates the topic map's twin and differential corpus from the C# machine with
   # `trax machine generate`, as the sample's README says to, and fails when that changes a file: a
@@ -671,9 +671,9 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '24'
-      - name: Install Trax.Api.StateMachine (locked, no install scripts)
+      - name: Install Trax.StateMachine/ts (locked, no install scripts)
         # The twin generator runs under node from this folder's tools.
-        working-directory: Trax.Api.StateMachine
+        working-directory: Trax.StateMachine/ts
         run: npm ci --ignore-scripts
       - name: Install the API dashboard (locked, no install scripts)
         # The Recovery host serves the console, and a build without the app refuses to start, so
@@ -706,7 +706,7 @@ jobs:
             --assembly Trax.Samples/samples/Recovery/Trax.Samples.Recovery/bin/Release/net10.0/Trax.Samples.Recovery.dll \
             --machine Trax.Samples.Recovery.Machines.TopicMapMachine \
             --ir-out "$out" --twin-out "$out" --corpus-out "$out" \
-            --engine-src Trax.Api.StateMachine/src --import-style specifier
+            --engine-src Trax.StateMachine/ts/src --import-style specifier
           # Only the generated files: the folder also holds the page's own hook.
           if [ -n "$(git status --porcelain -- "$out/topic-map.*" "$out/differential.json")" ]; then
             git --no-pager diff -- "$out/topic-map.*" "$out/differential.json"
@@ -718,7 +718,7 @@ jobs:
         run: |
           api=Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Api
           dotnet restore "$api" --locked-mode
-          node Trax.Api.StateMachine/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
+          node Trax.StateMachine/ts/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
           (cd "$api" && ConnectionStrings__TraxDatabase="Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none" \
             dotnet run --no-restore -- --trax-export-client "$RUNNER_TEMP/manifest.json")
           # From the page's folder, so the documents' sources are the paths trax.documents.json records.
@@ -730,7 +730,7 @@ jobs:
 
   # The StateMachine sample's page (Trax.Samples/samples/StateMachine/web), its own npm project on
   # the client `trax client` generated from the host. It builds the engine from
-  # Trax.Api.StateMachine/src, as the Recovery page does. Besides its build, it exports the host's
+  # Trax.StateMachine/ts/src, as the Recovery page does. Besides its build, it exports the host's
   # client manifest and runs `trax client --check` over the committed client, and fails when they
   # differ: a client out of step with the host sends ids the host answers CLIENT_OUTDATED.
   statemachine-client:
@@ -778,9 +778,9 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '24'
-      - name: Install Trax.Api.StateMachine (locked, no install scripts)
+      - name: Install Trax.StateMachine/ts (locked, no install scripts)
         # The page builds the engine from its source, and the twin generator is bundled from it.
-        working-directory: Trax.Api.StateMachine
+        working-directory: Trax.StateMachine/ts
         run: npm ci --ignore-scripts
       - name: Install (locked, no install scripts)
         working-directory: ${{ env.WEB }}
@@ -801,7 +801,7 @@ jobs:
           api=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine.Api
           dotnet restore "$api" --locked-mode
           dotnet restore Trax.Cli/src/Trax.Cli --locked-mode
-          node Trax.Api.StateMachine/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
+          node Trax.StateMachine/ts/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
           dotnet run --project "$api" --no-restore -- --trax-export-client "$RUNNER_TEMP/manifest.json"
           cli="$PWD/Trax.Cli/src/Trax.Cli"
           (cd "$WEB" && dotnet run --project "$cli" --no-restore -- client \
@@ -814,14 +814,14 @@ jobs:
   # folders list it upstream.
   state-machine:
     needs: changes
-    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Api.StateMachine')
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.StateMachine')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     defaults:
       run:
-        working-directory: Trax.Api.StateMachine
+        working-directory: Trax.StateMachine/ts
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1

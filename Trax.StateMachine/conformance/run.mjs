@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { canonical, kitCases } from "./kit.mjs";
 
 const USAGE =
-  "Usage: node tools/conformance/run.mjs [--only <prefix>] (--testee <command> [args...] | --stdio)\n" +
+  "Usage: node conformance/run.mjs [--only <prefix>] (--testee <command> [args...] | --stdio)\n" +
   "See conformance/PROTOCOL.md.";
 
 /**

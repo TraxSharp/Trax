@@ -13,6 +13,7 @@ namespace Trax.Effect.StateMachine.Tests.Conformance;
 public class IrSchemaTests
 {
     [Test]
+    [Category(Categories.CrossEngine)]
     public void Every_IR_the_exporter_writes_for_the_test_machines_validates()
     {
         var irs = ExportedIrs();

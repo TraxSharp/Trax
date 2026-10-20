@@ -128,7 +128,7 @@ reads, saying whether to upgrade the package or regenerate. An IR without `irFor
 ## The schema
 
 The format is also written as a JSON Schema (draft 2020-12),
-[`conformance/ir.schema.json`](https://github.com/TraxSharp/Trax/blob/main/Trax.Api.StateMachine/conformance/ir.schema.json),
+[`conformance/ir.schema.json`](https://github.com/TraxSharp/Trax/blob/main/Trax.StateMachine/conformance/ir.schema.json),
 and the schema is normative: an engine reads every document it accepts, and the exporter writes nothing it refuses.
 Every object in it is closed, so a field it does not name is refused rather than ignored. Both runtimes' tests check
 every IR the exporter writes against it, so a field added to the IR without the schema fails them.

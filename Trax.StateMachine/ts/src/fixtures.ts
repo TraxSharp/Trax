@@ -10,13 +10,10 @@ import { fileURLToPath } from "node:url";
 function machinesRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 10; i++) {
-    // The repo root is the directory that holds both package.json and the shared machines/ tree —
-    // this disambiguates it from the src/machines/ code directory of the same shape.
-    if (
-      fs.existsSync(path.join(dir, "package.json")) &&
-      fs.existsSync(path.join(dir, "machines"))
-    ) {
-      return path.join(dir, "machines");
+    // The folder that holds the conformance kit, whose machines/ tree is the shared one; src/machines/
+    // is the code directory of the same name.
+    if (fs.existsSync(path.join(dir, "conformance", "machines"))) {
+      return path.join(dir, "conformance", "machines");
     }
     const parent = path.dirname(dir);
     if (parent === dir) break;
@@ -64,6 +61,6 @@ export function rehydrateInput(fixture: Record<string, unknown>): string {
   if (typeof fixture.raw === "string") return fixture.raw;
   return JSON.stringify(fixture.json);
 }
-/** A file of the engine-neutral conformance kit, `conformance/` beside `machines/`. */
+/** A file of the engine-neutral conformance kit, `conformance/`, which holds `machines/`. */
 export const conformanceFile = (...parts: string[]): string =>
-  path.join(path.dirname(machinesRoot()), "conformance", ...parts);
+  path.join(path.dirname(machinesRoot()), ...parts);

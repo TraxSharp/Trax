@@ -155,7 +155,7 @@ dotnet run --project Trax.Cli/src/Trax.Cli -- machine generate \
   --ir-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
   --twin-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
   --corpus-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
-  --engine-src Trax.Api.StateMachine/src --import-style specifier
+  --engine-src Trax.StateMachine/ts/src --import-style specifier
 ```
 
 The topic map is marked `[TraxMachine]`, so it is served as its own typed operations

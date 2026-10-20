@@ -5,9 +5,8 @@ import { fileURLToPath } from "node:url";
 // The conformance kit as requests: every case in machines/ and conformance/, each a request for the testee and the
 // answer it must give (conformance/PROTOCOL.md). Engine-independent: nothing here imports the engine.
 
-const root = fileURLToPath(new URL("../..", import.meta.url));
-const machinesDir = join(root, "machines");
-const conformanceDir = join(root, "conformance");
+const conformanceDir = fileURLToPath(new URL(".", import.meta.url));
+const machinesDir = join(conformanceDir, "machines");
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 

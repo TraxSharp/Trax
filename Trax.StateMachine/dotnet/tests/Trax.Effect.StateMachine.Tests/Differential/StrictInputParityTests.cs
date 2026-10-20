@@ -13,6 +13,7 @@ namespace Trax.Effect.StateMachine.Tests.Differential;
 /// refuse though the CLR reads it says why, and is checked to be one the CLR does read.
 /// </summary>
 [Property("adr", Adr)]
+[Category(Categories.CrossEngine)]
 public class StrictInputParityTests
 {
     private const string Adr =

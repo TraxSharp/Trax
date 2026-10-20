@@ -453,7 +453,7 @@ public class SdkReferenceFrontMatterTests
 
         var typescript = Check(
             FrontMatter.Of(
-                "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.Api.StateMachine\n---\n"
+                "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.StateMachine/ts\n---\n"
             ),
             npm
         );

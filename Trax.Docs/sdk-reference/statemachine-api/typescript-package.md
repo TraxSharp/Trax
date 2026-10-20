@@ -9,15 +9,15 @@ nav_order: 14
 surface: typescript
 package: "@traxsharp/state-machine"
 source:
-  - Trax.Api.StateMachine/src/index.ts
-  - Trax.Api.StateMachine/src/client/index.ts
-  - Trax.Api.StateMachine/src/react.ts
-  - Trax.Api.StateMachine/package.json
+  - Trax.StateMachine/ts/src/index.ts
+  - Trax.StateMachine/ts/src/client/index.ts
+  - Trax.StateMachine/ts/src/react.ts
+  - Trax.StateMachine/ts/package.json
 ---
 
 # TypeScript package
 
-`@traxsharp/state-machine` is the TypeScript twin of `Trax.Effect.StateMachine`, published from `Trax.Api.StateMachine`.
+`@traxsharp/state-machine` is the TypeScript twin of `Trax.Effect.StateMachine`, published from `Trax.StateMachine/ts`.
 Its exports are pinned by a committed baseline (`src/exports.test.ts`).
 
 ```bash

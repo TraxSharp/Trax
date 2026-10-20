@@ -22,13 +22,13 @@
     "resolveJsonModule": true,
     "paths": {
       "@traxsharp/state-machine": [
-        "../../../../Trax.Api.StateMachine/src/index.ts"
+        "../../../../Trax.StateMachine/ts/src/index.ts"
       ],
       "@traxsharp/state-machine/client": [
-        "../../../../Trax.Api.StateMachine/src/client/index.ts"
+        "../../../../Trax.StateMachine/ts/src/client/index.ts"
       ],
       "@traxsharp/state-machine/react": [
-        "../../../../Trax.Api.StateMachine/src/react.ts"
+        "../../../../Trax.StateMachine/ts/src/react.ts"
       ]
     }
   },

@@ -80,12 +80,12 @@ describe('build job', () => {
   it('packs the engine at the released version, without re-running the tests CI ran', () => {
     const pack = step(build, 'Pack the TypeScript engine');
 
-    assert.equal(pack['working-directory'], 'Trax.Api.StateMachine');
+    assert.equal(pack['working-directory'], 'Trax.StateMachine/ts');
     assert.equal(pack.env.PKG_VERSION, '${{ needs.release.outputs.version }}');
     assert.match(pack.run, /npm ci --ignore-scripts/);
     assert.doesNotMatch(pack.run, /npm test|npm run typecheck/);
     assert.match(pack.run, /npm version "\$PKG_VERSION" --no-git-tag-version/);
-    assert.match(pack.run, /npm pack --pack-destination \.\.\/npm/);
+    assert.match(pack.run, /npm pack --pack-destination \.\.\/\.\.\/npm/);
   });
 
   it('versions the engine before the NuGet packs, which bundle it into Trax.Cli', () => {

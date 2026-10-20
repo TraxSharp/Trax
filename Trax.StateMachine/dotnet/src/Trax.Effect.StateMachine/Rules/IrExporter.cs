@@ -16,7 +16,7 @@ public static class IrExporter
     /// The IR format this exporter writes: the contract the TypeScript engine reads it by. A twin generated with
     /// specifier imports records it, and the installed <c>@traxsharp/state-machine</c> refuses a format it cannot
     /// read. It is not written into the IR, so it moves no committed <c>ir.json</c> and no schema hash. Bump it,
-    /// with <c>irFormatVersion</c> in <c>Trax.Api.StateMachine/src/rules/irFormat.ts</c>, when the IR gains
+    /// with <c>irFormatVersion</c> in <c>Trax.StateMachine/ts/src/rules/irFormat.ts</c>, when the IR gains
     /// something an engine reading the previous format would misread or ignore; <c>IrFormatParityTests</c> holds
     /// the two equal.
     /// </summary>

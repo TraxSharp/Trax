@@ -1,7 +1,8 @@
 namespace Trax.Effect.StateMachine.Tests.Helpers;
 
 /// <summary>
-/// Locates the shared, language-neutral fixtures in <c>Trax.Api.StateMachine/machines</c>, which both engines drive.
+/// Locates the shared, language-neutral fixtures in <c>Trax.StateMachine/conformance/machines</c>, which both engines
+/// drive, and the TypeScript engine beside them in <c>Trax.StateMachine/ts</c>.
 /// The folder is part of the repository, so a build that cannot find it is broken: every member throws rather than
 /// letting the conformance tests skip, which would report green without comparing the engines.
 /// </summary>
@@ -30,8 +31,13 @@ public static class FixturePaths
     /// The engine-neutral conformance kit beside <c>machines/</c>: tables and cases any engine, in any language,
     /// replays.
     /// </summary>
-    public static string ConformanceRoot =>
-        Path.Combine(Directory.GetParent(MachinesRoot)!.FullName, "conformance");
+    public static string ConformanceRoot => Directory.GetParent(MachinesRoot)!.FullName;
+
+    /// <summary>The folder that holds the conformance kit and every engine, <c>Trax.StateMachine/</c>.</summary>
+    public static string FolderRoot => Directory.GetParent(ConformanceRoot)!.FullName;
+
+    /// <summary>The TypeScript engine, <c>Trax.StateMachine/ts</c>.</summary>
+    public static string TypeScriptEngineRoot => Path.Combine(FolderRoot, "ts");
 
     /// <summary>The shared migration golden for a machine: stored older-version snapshots and the exact
     /// canonical wire each must become after forward migration.</summary>
@@ -40,7 +46,7 @@ public static class FixturePaths
 
     /// <summary>
     /// Walks up from <paramref name="start"/> to the first directory holding
-    /// <c>Trax.Api.StateMachine/machines/turnstile/fixtures</c>, and throws, naming every directory it tried, when
+    /// <c>Trax.StateMachine/conformance/machines/turnstile/fixtures</c>, and throws, naming every directory it tried, when
     /// there is none.
     /// </summary>
     public static string Find(string start)
@@ -49,7 +55,7 @@ public static class FixturePaths
         var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir.FullName, "Trax.Api.StateMachine", "machines");
+            var candidate = Path.Combine(dir.FullName, "Trax.StateMachine", "conformance", "machines");
             if (Directory.Exists(Path.Combine(candidate, "turnstile", "fixtures")))
                 return candidate;
             searched.Add(candidate);
@@ -57,7 +63,7 @@ public static class FixturePaths
         }
 
         throw new DirectoryNotFoundException(
-            "The shared state-machine fixtures (Trax.Api.StateMachine/machines) were not found. They are part of the "
+            "The shared state-machine fixtures (Trax.StateMachine/conformance/machines) were not found. They are part of the "
                 + "repository, so the build or the copy that ran these tests left them out. Searched: "
                 + string.Join(", ", searched)
         );

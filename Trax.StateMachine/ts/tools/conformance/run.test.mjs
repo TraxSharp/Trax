@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { kitCases } from "./kit.mjs";
-import { report, runCases } from "./run.mjs";
+import { kitCases } from "../../../conformance/kit.mjs";
+import { report, runCases } from "../../../conformance/run.mjs";
 import { createTestee, loadEngine } from "./testee-ts.mjs";
 
 // The conformance runner over the TypeScript engine: the kit passes through the engine's public exports, both
@@ -10,6 +10,7 @@ import { createTestee, loadEngine } from "./testee-ts.mjs";
 // fails with that case named.
 
 const here = (file) => fileURLToPath(new URL(file, import.meta.url));
+const runner = here("../../../conformance/run.mjs");
 const cases = kitCases();
 let engine;
 
@@ -58,7 +59,7 @@ describe("the conformance kit", () => {
   it("drives a spawned testee over the protocol", () => {
     const run = spawnSync(
       process.execPath,
-      [here("run.mjs"), "--testee", process.execPath, here("testee-ts.mjs")],
+      [runner, "--testee", process.execPath, here("testee-ts.mjs")],
       { encoding: "utf8", timeout: 120_000 },
     );
     expect(run.stderr).toContain(`${cases.length} of ${cases.length} cases passed.`);

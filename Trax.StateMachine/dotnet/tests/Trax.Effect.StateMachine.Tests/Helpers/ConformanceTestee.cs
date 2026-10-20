@@ -4,7 +4,7 @@ using Trax.Effect.StateMachine.Tests.Fakes;
 namespace Trax.Effect.StateMachine.Tests.Helpers;
 
 /// <summary>
-/// The C# engine as a conformance testee (<c>Trax.Api.StateMachine/conformance/PROTOCOL.md</c>). It cannot build a
+/// The C# engine as a conformance testee (<c>Trax.StateMachine/conformance/PROTOCOL.md</c>). It cannot build a
 /// machine from an IR, so it serves the test machines whose IRs the kit holds, by name, and a <c>load</c> checks that
 /// the IR it is given is the one its machine exports, apart from the test-only <c>differential</c> block: a committed IR
 /// that drifted from its C# source fails there.

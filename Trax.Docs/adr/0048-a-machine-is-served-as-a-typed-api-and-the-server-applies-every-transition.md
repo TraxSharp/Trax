@@ -510,7 +510,7 @@ In `Trax.Scheduler.Tests.Integration`:
 - `TimerVersionChangeTests`: `A_v2_without_the_timer_clears_a_stale_due_at_and_does_not_fire`, `A_changed_duration_keeps_the_due_at_set_at_entry`, `A_v1_host_does_not_fire_a_row_written_by_v2`, `A_migrated_snapshot_keeps_its_due_at_when_the_state_survives`
 - `TimersModelTests`: `Generated_events_fires_and_races_keep_due_at_revision_and_row_id_in_step_with_the_model`
 
-In `Trax.Api.StateMachine` (vitest; each was written `it.fails` and is now an ordinary test):
+In `Trax.StateMachine/ts` (vitest; each was written `it.fails` and is now an ordinary test):
 - `src/rules/interpreter.input.test.ts`: `validateInput refuses` a missing required field, a number sent as a string, an
   unknown field, a PascalCase field, a non-object input, a constraint broken by the input, unknown fields on a trigger
   without input, a fraction in an integer field, a number beyond double range, a lone surrogate, a nested record.
@@ -536,7 +536,7 @@ golden is committed, as it is).
 ## Exemplars
 
 **Enforced elsewhere:** the tests listed under *Tests*, in each folder's test projects and in
-`Trax.Api.StateMachine`; `InteractionMatrixTests` in `Trax.Core.Tests.Meta`, which requires the `After` row of the
+`Trax.StateMachine/ts`; `InteractionMatrixTests` in `Trax.Core.Tests.Meta`, which requires the `After` row of the
 machine-features table and the *Machine API features* table to name a test for every cell; and the startup refusals
 themselves (an undeclared event, an unexposed raw-delegate machine, the opt-in without a policy), which stop a host
 that breaks the rule from starting.

@@ -84,7 +84,7 @@ database, never a delay, and `TraxInvariants` is checked after every one:
 | `A_placed_order_is_delivered_and_its_run_followed_by_its_owner` | A placed order's delivery run is the one the order's answer names (`invokedRun`), followed to its end, with nothing under `operations` |
 | `Built_bundle_holds_no_operator_key` | The built page holds no operator key and no retired `recovery_*` id |
 
-They need the page's npm packages (`npm ci` in `Trax.Samples.Recovery.Client` and in `Trax.Api.StateMachine`) and
+They need the page's npm packages (`npm ci` in `Trax.Samples.Recovery.Client` and in `Trax.StateMachine/ts`) and
 chromium (`pwsh tests/Trax.Samples.Recovery.Browser/bin/Debug/net10.0/playwright.ps1 install chromium` after a
 build):
 

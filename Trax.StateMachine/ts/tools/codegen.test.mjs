@@ -17,9 +17,10 @@ import { generateTwin } from "./generate-twin.mjs";
 // equals what the engine's own tests produce.
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const engineSrc = join(repoRoot, "src");
+// The shared corpus and fixtures, beside the engines in the folder's conformance kit.
+const machinesRoot = join(repoRoot, "..", "conformance", "machines");
 const turnstileIr = join(
-  repoRoot,
-  "machines",
+  machinesRoot,
   "turnstile",
   "turnstile.ir.json",
 );
@@ -38,8 +39,7 @@ const committedMachine = join(
   "turnstile.machine.g.ts",
 );
 const committedCorpus = join(
-  repoRoot,
-  "machines",
+  machinesRoot,
   "turnstile",
   "differential.json",
 );
@@ -48,7 +48,7 @@ const read = (path) => readFileSync(path, "utf8");
 
 // A machine whose state invokes a train: its IR carries outcome triggers, which the twin and the corpus
 // generators must carry through to the committed artifacts unchanged.
-const ingestIr = join(repoRoot, "machines", "ingest", "ingest.ir.json");
+const ingestIr = join(machinesRoot, "ingest", "ingest.ir.json");
 const ingestTwin = join(repoRoot, "src", "machines", "ingest");
 
 describe("generate-twin entrypoint", () => {
@@ -175,7 +175,7 @@ describe("generate-corpus entrypoint", () => {
     const outPath = join(out, "differential.json");
     await generateCorpus({ irPath: ingestIr, engineSrc, outPath });
     expect(read(outPath)).toBe(
-      read(join(repoRoot, "machines", "ingest", "differential.json")),
+      read(join(machinesRoot, "ingest", "differential.json")),
     );
     expect(read(outPath)).toContain(`"trigger": "Fetching.done"`);
   });

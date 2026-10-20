@@ -13,6 +13,7 @@ namespace Trax.Effect.StateMachine.Tests.UnitTests;
 /// well, and gets the same verdict there.
 /// </summary>
 [Property("adr", TriggerInputValidationTests.Adr)]
+[Category(Categories.CrossEngine)]
 public class TriggerInputPropertyTests
 {
     private const string Adr = TriggerInputValidationTests.Adr;

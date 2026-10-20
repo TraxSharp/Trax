@@ -1,16 +1,20 @@
 # The conformance runner and its testee protocol
 
-`tools/conformance/run.mjs` turns every case in `machines/` and `conformance/` into requests, sends them to one
+`run.mjs`, in this directory, turns every case in `machines/` and the tables beside it into requests, sends them to one
 engine, the **testee**, and compares what it answers with what the case expects. An engine in any language joins by
 implementing the testee side of this protocol over its public API, not over its internals, so a bug in how a binding
 marshals a value is caught too. Only codes and wire bytes are compared; messages are never sent.
 
 ## Running it
 
+From `Trax.StateMachine/`:
+
 ```bash
-node tools/conformance/run.mjs --testee node tools/conformance/testee-ts.mjs   # spawn a testee command
-node tools/conformance/run.mjs --stdio                                          # be spawned by one
+node conformance/run.mjs --testee node ts/tools/conformance/testee-ts.mjs   # spawn a testee command
+node conformance/run.mjs --stdio                                            # be spawned by one
 ```
+
+The runner and `kit.mjs` use only node's own modules, so they run without an `npm ci`.
 
 With `--testee`, the runner starts the command and talks to it over the command's stdin and stdout. With `--stdio`,
 the roles on the pipes are reversed: the runner writes requests on its own stdout and reads answers on its stdin, so a

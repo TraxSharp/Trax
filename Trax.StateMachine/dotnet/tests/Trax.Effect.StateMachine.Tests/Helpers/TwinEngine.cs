@@ -6,7 +6,7 @@ using AwesomeAssertions;
 namespace Trax.Effect.StateMachine.Tests.Helpers;
 
 /// <summary>
-/// The TypeScript twin, run from a C# test: <c>Trax.Api.StateMachine/tools/replay-sequences.mjs</c> bundles the
+/// The TypeScript twin, run from a C# test: <c>Trax.StateMachine/ts/tools/replay-sequences.mjs</c> bundles the
 /// engine's source with esbuild and replays one-step-or-longer sequences against a machine built from its IR,
 /// answering each step's outcome, reason and canonical wire. When node, the engine's source or its installed
 /// dependencies are missing, the test is skipped on a developer's machine and fails under CI (the <c>CI</c>
@@ -114,16 +114,16 @@ public static class TwinEngine
     }
 
     /// <summary>
-    /// Runs the conformance runner (<c>tools/conformance/run.mjs --stdio</c>) with <paramref name="answer"/> as its
+    /// Runs the conformance runner (<c>conformance/run.mjs --stdio</c>) with <paramref name="answer"/> as its
     /// testee: each request line the runner writes is answered with the line <paramref name="answer"/> returns.
     /// Returns the runner's exit code (0 when every case passed) and its report.
     /// </summary>
     public static (int ExitCode, string Report) RunConformance(Func<string, string> answer)
     {
-        var engineRoot = EngineRoot();
-        var start = new ProcessStartInfo("node", "tools/conformance/run.mjs --stdio")
+        EngineRoot();
+        var start = new ProcessStartInfo("node", "conformance/run.mjs --stdio")
         {
-            WorkingDirectory = engineRoot,
+            WorkingDirectory = FixturePaths.FolderRoot,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -144,7 +144,7 @@ public static class TwinEngine
         if (!conversation.Wait(NodeTimeout) || !process.WaitForExit(NodeTimeout))
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail($"tools/conformance/run.mjs did not finish within {NodeTimeout}.");
+            Assert.Fail($"conformance/run.mjs did not finish within {NodeTimeout}.");
         }
         return (process.ExitCode, stderr.GetAwaiter().GetResult());
     }
@@ -153,7 +153,7 @@ public static class TwinEngine
     {
         if (!NodeIsAvailable())
             Unavailable("node is not on PATH.");
-        return Directory.GetParent(FixturePaths.MachinesRoot)!.FullName;
+        return FixturePaths.TypeScriptEngineRoot;
     }
 
     // Skips the test on a developer's machine; fails it under CI, where the engine is always installed.
@@ -161,7 +161,7 @@ public static class TwinEngine
     {
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
             Assert.Fail(
-                $"The TypeScript twin cannot run: {why} CI installs it (npm ci in Trax.Api.StateMachine), so a "
+                $"The TypeScript twin cannot run: {why} CI installs it (npm ci in Trax.StateMachine/ts), so a "
                     + "parity test that skips there proves nothing."
             );
         Assert.Ignore($"The TypeScript twin cannot run: {why} Skipping the cross-engine check.");
@@ -191,7 +191,7 @@ public static class TwinEngine
         }
 
         if (process.ExitCode == MissingDependencies)
-            Unavailable("its dependencies are not installed (npm ci in Trax.Api.StateMachine).");
+            Unavailable("its dependencies are not installed (npm ci in Trax.StateMachine/ts).");
         process.ExitCode.Should().Be(0, $"{script} failed: {stderr.GetAwaiter().GetResult()}");
         return stdout.GetAwaiter().GetResult();
     }

@@ -6,7 +6,7 @@ using Trax.Effect.StateMachine.Persistence;
 namespace Trax.Cli.Tests.IntegrationTests;
 
 /// <summary>
-/// End-to-end byte-parity: the CLI, running real node against the sibling Trax.Api.StateMachine engine, must
+/// End-to-end byte-parity: the CLI, running real node against the sibling Trax.StateMachine/ts engine, must
 /// reproduce the committed turnstile artifacts exactly. This is the whole point of the tool, so it is proven
 /// against the real generators, not a fake. Skipped at runtime when node is unavailable or the sibling engine is
 /// not checked out beside this repo, except under CI, where that fails the test.
@@ -29,7 +29,7 @@ public class MachineGeneratorNodeTests
         var engineRoot = FindEngineRoot();
         if (engineRoot is null)
             NodePrerequisite.Missing(
-                "Trax.Api.StateMachine is not checked out beside Trax.Cli; skipping byte-parity test."
+                "Trax.StateMachine/ts is not checked out beside Trax.Cli; skipping byte-parity test."
             );
 
         _engineSrc = Path.Combine(engineRoot!, "src");
@@ -146,9 +146,10 @@ public class MachineGeneratorNodeTests
         );
 
         var engineRoot = Directory.GetParent(_engineSrc)!.FullName;
+        var machinesRoot = Path.Combine(engineRoot, "..", "conformance", "machines");
         FilesShouldMatch(
             Path.Combine(irOut, $"{id}.ir.json"),
-            Path.Combine(engineRoot, "machines", id, $"{id}.ir.json")
+            Path.Combine(machinesRoot, id, $"{id}.ir.json")
         );
         FilesShouldMatch(
             Path.Combine(twinOut, $"{id}.contexts.g.ts"),
@@ -160,7 +161,7 @@ public class MachineGeneratorNodeTests
         );
         FilesShouldMatch(
             Path.Combine(corpusOut, "differential.json"),
-            Path.Combine(engineRoot, "machines", id, "differential.json")
+            Path.Combine(machinesRoot, id, "differential.json")
         );
     }
 
@@ -201,7 +202,7 @@ public class MachineGeneratorNodeTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir.FullName, "Trax.Api.StateMachine");
+            var candidate = Path.Combine(dir.FullName, "Trax.StateMachine", "ts");
             if (Directory.Exists(Path.Combine(candidate, "src", "rules")))
                 return candidate;
             dir = dir.Parent;

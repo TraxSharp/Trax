@@ -28,11 +28,11 @@ public class MachineGenerateFromPackedToolTests
             );
         if (
             !Directory.Exists(
-                Path.Combine(RepoFolder("Trax.Api.StateMachine"), "node_modules", "esbuild")
+                Path.Combine(RepoFolder(Path.Combine("Trax.StateMachine", "ts")), "node_modules", "esbuild")
             )
         )
             NodePrerequisite.Missing(
-                "Trax.Api.StateMachine has no node_modules; run `npm ci` there to pack the tool."
+                "Trax.StateMachine/ts has no node_modules; run `npm ci` there to pack the tool."
             );
 
         _root = Path.Combine(Path.GetTempPath(), $"trax-packed-tool-{Guid.NewGuid():N}");
@@ -90,7 +90,7 @@ public class MachineGenerateFromPackedToolTests
     public void The_published_engine_and_tool_typecheck_together_in_an_empty_project()
     {
         var tool = PackAndUnpackTheTool();
-        var work = OutsideProject(RepoFolder("Trax.Api.StateMachine"));
+        var work = OutsideProject(RepoFolder(Path.Combine("Trax.StateMachine", "ts")));
 
         var (generated, generateOutput) = Run(
             "dotnet",
@@ -196,7 +196,7 @@ public class MachineGenerateFromPackedToolTests
     public void The_generated_client_typechecks_under_a_vite_react_ts_tsconfig()
     {
         var tool = PackAndUnpackTheTool();
-        var work = OutsideProject(RepoFolder("Trax.Api.StateMachine"));
+        var work = OutsideProject(RepoFolder(Path.Combine("Trax.StateMachine", "ts")));
         GenerateClient(tool, work);
         File.WriteAllText(
             Path.Combine(work, "main.ts"),
@@ -261,7 +261,7 @@ public class MachineGenerateFromPackedToolTests
     public void The_generated_hooks_behave_in_an_outside_project()
     {
         var tool = PackAndUnpackTheTool();
-        var engine = RepoFolder("Trax.Api.StateMachine");
+        var engine = RepoFolder(Path.Combine("Trax.StateMachine", "ts"));
         var work = OutsideProject(
             engine,
             $"react-dom@{EngineDevDependency(engine, "react-dom")}",

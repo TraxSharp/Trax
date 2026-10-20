@@ -28,7 +28,7 @@ public enum IngestTrigger
 /// One stage of an ingest: <c>Fetching</c> invokes <see cref="IFetchTrain"/>, a sure output goes to
 /// <c>Fetched</c>, an unsure one to <c>NeedsReview</c>, a failure to <c>FetchFailed</c> (retried by entering
 /// <c>Fetching</c> again) and a cancel to <c>Cancelled</c>. Its IR is committed under
-/// <c>Trax.Api.StateMachine/machines/ingest/</c>, and the TypeScript twin's differential corpus of it is replayed
+/// <c>Trax.StateMachine/conformance/machines/ingest/</c>, and the TypeScript twin's differential corpus of it is replayed
 /// here.
 /// </summary>
 public static class IngestMachine

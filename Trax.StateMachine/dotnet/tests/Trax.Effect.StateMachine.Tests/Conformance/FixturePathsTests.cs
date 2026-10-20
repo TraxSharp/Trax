@@ -4,7 +4,7 @@ using Trax.Effect.StateMachine.Tests.Helpers;
 namespace Trax.Effect.StateMachine.Tests.Conformance;
 
 /// <summary>
-/// The conformance tests read <c>Trax.Api.StateMachine/machines</c>, which is part of the repository. A build that
+/// The conformance tests read <c>Trax.StateMachine/conformance/machines</c>, which is part of the repository. A build that
 /// cannot find it must fail them rather than skip them, or every cross-engine check reports green unchecked.
 /// </summary>
 public class FixturePathsTests
@@ -20,7 +20,7 @@ public class FixturePathsTests
 
             find.Should()
                 .Throw<DirectoryNotFoundException>()
-                .WithMessage($"*{Path.Combine(start, "Trax.Api.StateMachine", "machines")}*");
+                .WithMessage($"*{Path.Combine(start, "Trax.StateMachine", "conformance", "machines")}*");
         }
         finally
         {

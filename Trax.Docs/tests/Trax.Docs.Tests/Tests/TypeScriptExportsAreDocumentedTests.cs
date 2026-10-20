@@ -7,7 +7,7 @@ namespace Trax.Docs.Tests.Tests;
 /// <para>The .NET packages are held to this by <c>PublicApiIsDocumentedTests</c>; the npm package has no public API
 /// baseline that test reads, so an export, a type above all, could ship with nowhere to learn it but its
 /// <c>.d.ts</c>. The exports are read from the package's committed snapshot
-/// (<c>Trax.Api.StateMachine/src/__snapshots__/exports.test.ts.snap</c>), which its own
+/// (<c>Trax.StateMachine/ts/src/__snapshots__/exports.test.ts.snap</c>), which its own
 /// <c>exports.test.ts</c> keeps equal to what each entry point exports. An export counts as documented when its name
 /// is a word inside a code span on that page. That proves the name appears, not that the page describing it is
 /// right.</para>
@@ -38,7 +38,8 @@ public class TypeScriptExportsAreDocumentedTests
         var snapshot = File.ReadAllText(
             System.IO.Path.Combine(
                 RepoRoot.Monorepo,
-                "Trax.Api.StateMachine",
+                "Trax.StateMachine",
+                "ts",
                 "src",
                 "__snapshots__",
                 "exports.test.ts.snap"

@@ -66,7 +66,7 @@ prediction at once and replaces it with what the server stored. The same machine
 
 ## Contributing
 
-Read [AGENTS.md](https://github.com/TraxSharp/Trax/blob/main/Trax.Api.StateMachine/AGENTS.md) before changing code.
+Read [AGENTS.md](https://github.com/TraxSharp/Trax/blob/main/Trax.StateMachine/ts/AGENTS.md) before changing code.
 Report vulnerabilities privately as described in [SECURITY.md](https://github.com/TraxSharp/Trax/blob/main/SECURITY.md).
 
 ## License

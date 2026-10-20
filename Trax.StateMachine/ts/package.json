@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TraxSharp/Trax.git",
-    "directory": "Trax.Api.StateMachine"
+    "directory": "Trax.StateMachine/ts"
   },
   "bugs": {
     "url": "https://github.com/TraxSharp/Trax/issues"
@@ -44,7 +44,7 @@
   "scripts": {
     "build": "tsup",
     "bundle:cli": "node tools/bundle-cli.mjs",
-    "prepack": "npm run build && node -e \"require('node:fs').copyFileSync('../LICENSE', 'LICENSE')\"",
+    "prepack": "npm run build && node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
     "postpack": "node -e \"require('node:fs').rmSync('LICENSE', { force: true })\"",
     "test": "vitest run",
     "test:watch": "vitest",

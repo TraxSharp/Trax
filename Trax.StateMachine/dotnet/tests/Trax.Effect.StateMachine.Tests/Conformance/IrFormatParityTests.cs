@@ -6,17 +6,18 @@ namespace Trax.Effect.StateMachine.Tests.Conformance;
 
 /// <summary>
 /// The IR format is the contract between the IR this engine exports and the TypeScript engine that reads it. A twin
-/// records the TypeScript side's <c>irFormatVersion</c> (in <c>Trax.Api.StateMachine/src/rules/irFormat.ts</c>), and
+/// records the TypeScript side's <c>irFormatVersion</c> (in <c>Trax.StateMachine/ts/src/rules/irFormat.ts</c>), and
 /// an installed engine refuses a format it cannot read, so the two sides must name the same format: a change to
 /// what <see cref="IrExporter"/> writes that bumps one bumps both.
 /// </summary>
+[Category(Categories.CrossEngine)]
 public partial class IrFormatParityTests
 {
     [Test]
     public void The_TypeScript_engine_reads_the_IR_format_this_engine_exports()
     {
         var irFormatTs = Path.Combine(
-            Directory.GetParent(FixturePaths.MachinesRoot)!.FullName,
+            FixturePaths.TypeScriptEngineRoot,
             "src",
             "rules",
             "irFormat.ts"

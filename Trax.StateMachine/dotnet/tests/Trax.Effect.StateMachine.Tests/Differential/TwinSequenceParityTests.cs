@@ -11,11 +11,12 @@ namespace Trax.Effect.StateMachine.Tests.Differential;
 
 /// <summary>
 /// Random sequences of events, outcomes and timers, run through the C# engine here and through the TypeScript
-/// twin by <c>Trax.Api.StateMachine/tools/replay-sequences.mjs</c>: the canonical snapshot and the answer agree
+/// twin by <c>Trax.StateMachine/ts/tools/replay-sequences.mjs</c>: the canonical snapshot and the answer agree
 /// after every step, and both engines refuse an outcome or a timer trigger sent through <c>advance</c>. Skipped
 /// at runtime when node, or the engine's installed dependencies, are absent.
 /// </summary>
 [Property("adr", UnitTests.TriggerInputValidationTests.Adr)]
+[Category(Categories.CrossEngine)]
 public class TwinSequenceParityTests
 {
     private const string Adr = UnitTests.TriggerInputValidationTests.Adr;
@@ -241,7 +242,7 @@ public class TwinSequenceParityTests
         if (!NodeIsAvailable())
             Unavailable("node is not on PATH.");
         var machinesRoot = FixturePaths.MachinesRoot;
-        var engineRoot = Directory.GetParent(machinesRoot)!.FullName;
+        var engineRoot = FixturePaths.TypeScriptEngineRoot;
 
         // An empty request first: it skips the test when the engine's dependencies are absent, which cannot be
         // done from inside a sample.
@@ -389,7 +390,7 @@ public class TwinSequenceParityTests
 
         if (process.ExitCode == MissingDependencies)
             Unavailable(
-                "The engine's dependencies are not installed (npm ci in Trax.Api.StateMachine)."
+                "The engine's dependencies are not installed (npm ci in Trax.StateMachine/ts)."
             );
         process
             .ExitCode.Should()

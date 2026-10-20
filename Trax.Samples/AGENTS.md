@@ -89,10 +89,10 @@ can drive goes in its exclusion list, with the reason.
 
 `tests/Trax.Samples.Recovery.Browser/` drives the Recovery page in chromium with Playwright for .NET.
 It builds the page with vite, so it needs `npm ci` in the page's folder and in
-`Trax.Api.StateMachine`, and chromium installed with the `playwright.ps1` beside its build output.
+`Trax.StateMachine/ts`, and chromium installed with the `playwright.ps1` beside its build output.
 
 `samples/StateMachine/web` runs vitest (`npm test`) over its committed twins, after `npm ci` there and in
-`Trax.Api.StateMachine`.
+`Trax.StateMachine/ts`.
 
 `tests/Trax.Samples.ApiDashboard.Browser/` opens the dashboard Trax.Api.Dashboard serves in
 chromium, against a host it builds in-process on the in-memory provider, and fails on any

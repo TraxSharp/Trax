@@ -5,9 +5,10 @@ namespace Trax.Effect.StateMachine.Tests.Conformance;
 
 /// <summary>
 /// The C# engine through the conformance runner, the same runner and the same cases every other engine is checked
-/// with (<c>Trax.Api.StateMachine/conformance/PROTOCOL.md</c>). The runner is started with <c>--stdio</c> and this
+/// with (<c>Trax.StateMachine/conformance/PROTOCOL.md</c>). The runner is started with <c>--stdio</c> and this
 /// process answers its requests, so no separate C# executable is needed.
 /// </summary>
+[Category(Categories.CrossEngine)]
 public class ConformanceRunnerTests
 {
     [Test]
