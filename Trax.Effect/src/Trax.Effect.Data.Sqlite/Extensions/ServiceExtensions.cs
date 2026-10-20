@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Effect.Configuration.ClientExport;
+using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.FeatureDbConfigurator;
@@ -47,8 +48,9 @@ public static class ServiceExtensions
         // exporting after all (TraxClientExport).
         var export = TraxClientExport.SkipsDatabase(configurationBuilder.ServiceCollection);
 
-        // Run migrations unless explicitly skipped
-        if (!configurationBuilder.MigrationsDisabled && !export)
+        // Run migrations unless SkipMigrations() or TRAX_MIGRATIONS=skip says not to; a process started with
+        // --trax-migrate always does (TraxMigrate).
+        if (!export && TraxMigrate.ShouldMigrate(configurationBuilder))
             DatabaseMigrator.Migrate(connectionString).Wait();
 
         // Enable WAL mode for better concurrent read/write performance
