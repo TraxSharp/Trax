@@ -65,12 +65,20 @@ export function JunctionTimeline({
   useEffect(() => {
     stepsRef.current = steps;
   });
+  // The steps pushed live, numbered as they arrive. A read answers with the rows as they were when
+  // it was sent, so a step pushed while it was in flight is applied again on top of its answer;
+  // otherwise a slow first read would put a step that has ended back to running.
+  const live = useRef<{ count: number; recent: { n: number; step: JunctionStep }[] }>({
+    count: 0,
+    recent: [],
+  });
 
   // full: read from the beginning (first load, and once the run has finished); otherwise read only
   // what can have changed.
   const read = useCallback(
     async (full: boolean) => {
       const held = full ? [] : stepsRef.current;
+      const sentAfter = live.current.count;
       const after = full ? null : incrementalCursor(held);
       const kept = after == null ? 0 : held.filter((s) => s.position <= after).length;
       const take = MAX_JUNCTION_STEPS - kept;
@@ -88,7 +96,8 @@ export function JunctionTimeline({
       }
       setError(null);
       const rows = r.data?.operations?.junctionRuns ?? [];
-      const next = mergeSteps(full ? [] : stepsRef.current, rows);
+      const pushedSince = live.current.recent.filter((e) => e.n > sentAfter).map((e) => e.step);
+      const next = mergeSteps(mergeSteps(full ? [] : stepsRef.current, rows), pushedSince);
       stepsRef.current = next;
       setSteps(next);
       setLoaded(true);
@@ -127,6 +136,10 @@ export function JunctionTimeline({
         if (!event || event.metadataId !== metadataId) return;
         const gap = lastSequence != null && event.sequence > lastSequence + 1;
         lastSequence = event.sequence;
+        const n = ++live.current.count;
+        live.current.recent = [...live.current.recent, { n, step: event.junction }].slice(
+          -MAX_JUNCTION_STEPS,
+        );
         const held = stepsRef.current;
         const fits =
           held.length < MAX_JUNCTION_STEPS ||
