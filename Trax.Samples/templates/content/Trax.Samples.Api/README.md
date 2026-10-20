@@ -1,7 +1,9 @@
 # Trax.Samples.Api
 
-A [Trax](https://traxsharp.net/docs) GraphQL API over your trains. It runs with no database: the
-in-memory provider keeps every run in this process and loses it on restart. It has no scheduler
+A [Trax](https://traxsharp.net/docs) GraphQL API over your trains. In Development it runs with no
+database: the in-memory provider keeps every run in this process and loses it on restart. Set
+`ConnectionStrings__Trax` to a Postgres connection string to keep them; anywhere but Development it
+refuses to start without one, unless `Trax:AllowInMemory` is `true`. It has no scheduler
 and no dashboard; `trax-hub` is the same API with both, in one process.
 
 | Path | What it is |
@@ -127,23 +129,10 @@ docker run -d --name trax-db -p 127.0.0.1:5432:5432 \
   -e POSTGRES_USER=trax -e POSTGRES_PASSWORD=trax123 -e POSTGRES_DB=trax postgres:17
 ```
 
-Add the provider at the same version as `Trax.Effect` in `Directory.Packages.props`; `dotnet add
-package` writes the version there for you:
-
-```bash
-dotnet add package Trax.Effect.Data.Postgres --version <the Trax.Effect version>
-```
-
-In `appsettings.Development.json` (create it), add
-`"ConnectionStrings": { "TraxDatabase": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123" }`,
-then in `Program.cs` add `using Trax.Effect.Data.Postgres.Extensions;` and replace `UseInMemory()`:
-
-```csharp
-effects.UsePostgres(
-    builder.Configuration.GetConnectionString("TraxDatabase")
-        ?? throw new InvalidOperationException("Set ConnectionStrings:TraxDatabase.")
-)
-```
+Point the project at it. `ConnectionStrings:Trax` set means Postgres; unset means in memory, which
+the project allows only in Development. In `appsettings.Development.json` (create it), add
+`"ConnectionStrings": { "Trax": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123" }`,
+or set `ConnectionStrings__Trax` in the environment. The Postgres provider is already referenced.
 
 Trax creates and migrates its `trax` schema at startup, and keeps every run there across restarts. See
 [Data Persistence](https://traxsharp.net/docs/effect/effect-providers/data-persistence).

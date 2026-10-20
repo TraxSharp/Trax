@@ -186,6 +186,7 @@ public class ScaffoldedTemplateTests
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ASPNETCORE_URLS"] = url,
+                ["Trax__AllowInMemory"] = "true",
             },
             "Application started",
             "run",

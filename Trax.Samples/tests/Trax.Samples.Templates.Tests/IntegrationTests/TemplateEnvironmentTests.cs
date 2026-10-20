@@ -27,9 +27,42 @@ public class TemplateEnvironmentTests
         "see docs/adr/0003-templates-serve-the-dashboard-only-in-development.md";
 
     // Any public type in the template's assembly locates its entry point.
-    private static WebApplicationFactory<T> Start<T>(string environment)
+    // Outside Development a template refuses the in-memory store unless told it is meant, as these starts are.
+    private static WebApplicationFactory<T> Start<T>(string environment, bool allowInMemory = true)
         where T : class =>
-        new WebApplicationFactory<T>().WithWebHostBuilder(b => b.UseEnvironment(environment));
+        new WebApplicationFactory<T>().WithWebHostBuilder(b =>
+        {
+            b.UseEnvironment(environment);
+            if (allowInMemory)
+                b.UseSetting("Trax:AllowInMemory", "true");
+        });
+
+    [Test]
+    public void The_hub_template_refuses_to_start_outside_Development_without_a_database() =>
+        RefusesWithoutADatabase<Hub.Data.AppDbContext>();
+
+    [Test]
+    public void The_scheduler_template_refuses_to_start_outside_Development_without_a_database() =>
+        RefusesWithoutADatabase<Scheduler.Trains.HelloWorld.HelloWorldInput>();
+
+    [Test]
+    public void The_api_template_refuses_to_start_outside_Development_without_a_database() =>
+        RefusesWithoutADatabase<Api.Data.AppDbContext>();
+
+    private static void RefusesWithoutADatabase<T>()
+        where T : class
+    {
+        using var factory = Start<T>("Production", allowInMemory: false);
+
+        var act = () => factory.CreateClient();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                "*ConnectionStrings:Trax*",
+                "a template outside Development refuses the in-memory provider, which loses every run on restart"
+            );
+    }
 
     [Test]
     public async Task The_hub_template_serves_no_dashboard_outside_Development()

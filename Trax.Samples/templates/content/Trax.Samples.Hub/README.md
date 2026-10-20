@@ -1,8 +1,10 @@
 # Trax.Samples.Hub
 
 A [Trax](https://traxsharp.net/docs) server in one process: a GraphQL API over your trains, a
-scheduler that runs them on a timer, and the Trax operations console. It runs with no database: the
-in-memory provider keeps every run in this process and loses it on restart.
+scheduler that runs them on a timer, and the Trax operations console. In Development it runs with no
+database: the in-memory provider keeps every run in this process and loses it on restart. Set
+`ConnectionStrings__Trax` to a Postgres connection string to keep them; anywhere but Development it
+refuses to start without one, unless `Trax:AllowInMemory` is `true`.
 
 | Path | What it is |
 |---|---|
@@ -127,23 +129,10 @@ docker run -d --name trax-db -p 127.0.0.1:5432:5432 \
   -e POSTGRES_USER=trax -e POSTGRES_PASSWORD=trax123 -e POSTGRES_DB=trax postgres:17
 ```
 
-Add the provider at the same version as `Trax.Effect` in `Directory.Packages.props`; `dotnet add
-package` writes the version there for you:
-
-```bash
-dotnet add package Trax.Effect.Data.Postgres --version <the Trax.Effect version>
-```
-
-In `appsettings.Development.json` (create it), add
-`"ConnectionStrings": { "TraxDatabase": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123" }`,
-then in `Program.cs` add `using Trax.Effect.Data.Postgres.Extensions;` and replace `UseInMemory()`:
-
-```csharp
-effects.UsePostgres(
-    builder.Configuration.GetConnectionString("TraxDatabase")
-        ?? throw new InvalidOperationException("Set ConnectionStrings:TraxDatabase.")
-)
-```
+Point the project at it. `ConnectionStrings:Trax` set means Postgres; unset means in memory, which
+the project allows only in Development. In `appsettings.Development.json` (create it), add
+`"ConnectionStrings": { "Trax": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123" }`,
+or set `ConnectionStrings__Trax` in the environment. The Postgres provider is already referenced.
 
 Trax creates and migrates its `trax` schema at startup. With Postgres the scheduler queues work in
 the database and runs it on local workers, so `[TraxMutation]` without `GraphQLOperation.Run` (which

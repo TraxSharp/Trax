@@ -21,12 +21,14 @@ The test project references the host project and `Microsoft.AspNetCore.Mvc.Testi
 
 `WebApplicationFactory<Program>` starts the host in memory with all its hosted services. The
 top-level `Program` class is public in .NET 10, so `Program.cs` needs nothing added. Pick the
-environment with `UseEnvironment` and call the host with the factory's `HttpClient`:
+environment with `UseEnvironment` and call the host with the factory's `HttpClient`. A template
+refuses to start outside Development without a database, so its tests set `Trax:AllowInMemory`:
 
 ```csharp from=Trax.Samples/templates/content/Trax.Samples.Hub/tests/Trax.Samples.Hub.Tests/IntegrationTests/HostTests.cs
+    // Outside Development the host refuses the in-memory store unless told it is meant, as here.
     private static WebApplicationFactory<Program> Start(string environment) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
-            host.UseEnvironment(environment)
+            host.UseEnvironment(environment).UseSetting("Trax:AllowInMemory", "true")
         );
 // ...
     [Test]

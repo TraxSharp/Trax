@@ -9,8 +9,9 @@ nav_order: 2
 # Project Templates
 
 Trax ships three `dotnet new` templates in the `Trax.Samples.Templates` package. Each one runs
-with `dotnet run` and nothing else: they use the in-memory data provider, so no database is needed
-until you choose one. Each also ships a README, a `.gitignore` and an NUnit test project.
+with `dotnet run` and nothing else: in Development they use the in-memory data provider, so no
+database is needed until you set `ConnectionStrings:Trax`, which switches them to Postgres. Outside
+Development they refuse to start without it, unless `Trax:AllowInMemory` is `true`. Each also ships a README, a `.gitignore` and an NUnit test project.
 
 | Template | Short name | What it is | URL in Development |
 |----------|------------|------------|------|
@@ -23,9 +24,9 @@ until you choose one. Each also ships a README, a `.gitignore` and an NUnit test
 ### Which one to start from
 
 A [state machine that invokes trains](/docs/statemachine/invoking-trains) needs a scheduler, `AddJunctionProgress()`
-and a database. Start it from `trax-hub`, which has the first two, and switch it from `UseInMemory()` to `UseSqlite()`
-(package `Trax.Effect.Data.Sqlite`) or `UsePostgres()` (package `Trax.Effect.Data.Postgres`;
-[Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres)). `trax-api` has no scheduler.
+and a database. Start it from `trax-hub`, which has the first two, and give it a database with `ConnectionStrings:Trax`
+([Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres)). `trax-api` has
+no scheduler.
 
 Machines [written as features](/docs/statemachine/write-machines-as-features) are served from `trax-hub` too, after
 a few additions: a database, `AddStateMachines(o => o.ServeFeatures(...))` between `AddEffects` and `AddMediator`,
@@ -118,7 +119,7 @@ error its removal causes:
 |---|---|---|
 | `AddTraxApiKeyAuth(...)`, Development only | The demo key `demo-key-do-not-use-in-production`, holding the `User` role, and the operator key `operator-key-do-not-use-in-production`, holding `Operator` | Every operation is refused, as it is in Production |
 | `AddAuthentication()`, `AddAuthorization()` | ASP.NET Core authentication and authorization | Outside Development, `UseAuthentication()` throws at startup: `Unable to resolve service for type 'IAuthenticationSchemeProvider'` (`AddTraxApiKeyAuth` registers it in Development) |
-| `AddTrax(...)` with `UseInMemory().SaveTrainParameters().AddJunctionProgress()` | Records every run in memory, with its input and output, and the junction it is on | `AddTraxGraphQL()` throws: `AddTraxGraphQL() requires AddTrax() to be called first` |
+| `AddTrax(...)` with `UsePostgres` or `UseInMemory`, `SaveTrainParameters()` and `AddJunctionProgress()` | Records every run in Postgres when `ConnectionStrings:Trax` is set, in memory otherwise (Development only), with its input and output and the junction it is on | `AddTraxGraphQL()` throws: `AddTraxGraphQL() requires AddTrax() to be called first` |
 | `.AddMediator(typeof(Program).Assembly)` | Registers every train in the project under its interface | The trains do not exist; `Schedule<IHelloWorldTrain>` refuses to start: `No train implements IServiceTrain<HelloWorldInput, TOut>` |
 | `.AddScheduler(...)` with `Schedule<IHelloWorldTrain>("hello-world", ..., Every.Seconds(20))` | Stores the manifest at startup and runs it every 20 seconds | The `operations` namespace has none of the services it reads, so the host refuses to start |
 | `AddDbContextFactory<AppDbContext>(...)` | Your own EF Core context, on an in-memory database | The `EnsureCreated()` bootstrap throws: `No service for type 'IDbContextFactory<AppDbContext>' has been registered` |
@@ -144,7 +145,7 @@ startup. [Switch to Postgres](/docs/reference/switch-a-template-to-postgres) bef
 The junctions derive `EffectJunction<TIn, TOut>`, because `AddJunctionProgress()` only sees
 junctions of that type. See [Junction Progress](/docs/effect/effect-providers/junction-progress).
 
-**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
+**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Data.Postgres`, `Trax.Effect.Provider.Parameter`,
 `Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Api.Dashboard`,
 `Trax.Api`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL`.
 
@@ -152,14 +153,14 @@ junctions of that type. See [Junction Progress](/docs/effect/effect-providers/ju
 
 The `Auth/`, `Data/`, `Trains/` and `tests/` of `trax-hub`, in a host with no scheduler and no
 console. `Program.cs` registers the demo key, `AddTrax` with
-`UseInMemory().SaveTrainParameters()` and `AddMediator`, the application context, GraphQL and the
+the store `ConnectionStrings:Trax` chooses, `SaveTrainParameters()` and `AddMediator`, the application context, GraphQL and the
 health check. The tests have no console checks.
 
 The API runs every train itself, when it is called. Running trains on a timer, or queueing them
 for another process, needs a scheduler with the same trains registered and a database both
 processes share; `trax-hub` is the one-process version.
 
-**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
+**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Data.Postgres`, `Trax.Effect.Provider.Parameter`,
 `Trax.Mediator`, `Trax.Api`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL`.
 
 ### trax-scheduler
@@ -191,13 +192,13 @@ MyCompany.Scheduler/
             └── HostTests.cs
 ```
 
-`Program.cs` registers `AddTrax` with `UseInMemory().SaveTrainParameters().AddJunctionProgress()`,
+`Program.cs` registers `AddTrax` with the store `ConnectionStrings:Trax` chooses, `SaveTrainParameters()` and `AddJunctionProgress()`,
 `AddMediator`, `AddScheduler` with the `hello-world` manifest every 20 seconds, the operator key
 `operator-key-do-not-use-in-production` in Development only, `AddTraxGraphQL` exposing only the
 `operations` namespace behind `GateOperations(roles: "Operator")`, and the operations console with
 `AllowAnonymousShell()` in Development only. It exposes no train of its own over GraphQL.
 
-**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
+**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Data.Postgres`, `Trax.Effect.Provider.Parameter`,
 `Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Api.Auth.ApiKey`,
 `Trax.Api.GraphQL`, `Trax.Api.Dashboard`.
 
