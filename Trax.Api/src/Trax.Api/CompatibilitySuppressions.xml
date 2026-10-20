@@ -18,4 +18,46 @@
     <Right>lib/net10.0/Trax.Api.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.HostInfo.#ctor(System.String,System.String,System.String,System.DateTime,System.Int64,System.Int32)</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.HostInfo.Deconstruct(System.String@,System.String@,System.String@,System.DateTime@,System.Int64@,System.Int32@)</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.HostInfo.get_LastSeen</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.HostInfo.get_TotalExecutions</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.HostInfo.set_LastSeen(System.DateTime)</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.HostInfo.set_TotalExecutions(System.Int64)</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>

@@ -659,6 +659,11 @@ jobs:
         # The twin generator runs under node from this folder's tools.
         working-directory: Trax.Api.StateMachine
         run: npm ci --ignore-scripts
+      - name: Install the API dashboard (locked, no install scripts)
+        # The Recovery host serves the console, and a build without the app refuses to start, so
+        # exporting its client manifest below needs the app embedded.
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
+        run: npm ci --ignore-scripts
       - name: Install (locked, no install scripts)
         working-directory: ${{ env.CLIENT }}
         run: npm ci --ignore-scripts
