@@ -170,7 +170,7 @@ public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPr
 ```
 
 A request with no user key is refused as `UNAUTHENTICATED`. Authentication itself is the host's: see
-[Secure a GraphQL host](/docs/api-security).
+[Secure a GraphQL host](/docs/security/secure-a-graphql-host).
 
 ## 4. Register the machine in the host
 
@@ -201,7 +201,7 @@ builder.Services.AddTraxGraphQL(graphql =>
 ```
 
 `SingleNode()` suits one process; more than one node uses `UseRabbitMqInvalidation(connectionString)`, as
-[Turn on persisted operations](/docs/persisted-operations) describes. Host options (draft expiry, the per-user draft
+[Turn on persisted operations](/docs/api/persisted-operations) describes. Host options (draft expiry, the per-user draft
 cap, the change feed) are under [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines#options).
 The rules for which registered machines are served, and the refusals for a marked subclass or a duplicate id, are
 under [Serving a machine](/docs/sdk-reference/statemachine-api/add-state-machines#serving-a-machine).

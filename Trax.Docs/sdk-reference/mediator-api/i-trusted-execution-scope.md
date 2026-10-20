@@ -13,7 +13,7 @@ source:
   - Trax.Mediator/src/Trax.Mediator/Services/TrustedExecution/TrustedExecutionScope.cs
 ---
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/security/secure-a-graphql-host).
 
 # ITrustedExecutionScope
 
@@ -105,6 +105,6 @@ public class NightlyImportJob(ITrustedExecutionScope trust, ITrainExecutionServi
 
 ## See also
 
-- [Authorization: Fail-Closed Behavior](/docs/authorization#fail-closed-behavior)
+- [Authorization: Fail-Closed Behavior](/docs/security/authorization-rules#fail-closed-behavior)
 - [ITrainExecutionService](/docs/sdk-reference/mediator-api/i-train-execution-service)
 - [`[TraxAuthorize]`](/docs/sdk-reference/attributes/trax-authorize)

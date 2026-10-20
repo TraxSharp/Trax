@@ -46,7 +46,7 @@ For each operation:
 1. If the document came from the store (the request named a persisted id): execute it.
 2. If the request carries HotChocolate's `AllowNonPersistedOperation()` override, which only host code building its own request can set: execute it.
 3. Otherwise the document is inline:
-   - **Allowlist match** (operation name in `AllowOperations` or matching a predicate; the document id when there is no name): execute it. Both keys are chosen by the caller and the document is not inspected, so the allowlist is a convenience for trusted networks, not a control. See [Allowlist and dev carve-outs](/docs/persisted-operations#allowlist-and-dev-carve-outs).
+   - **Allowlist match** (operation name in `AllowOperations` or matching a predicate; the document id when there is no name): execute it. Both keys are chosen by the caller and the document is not inspected, so the allowlist is a convenience for trusted networks, not a control. See [Allowlist and dev carve-outs](/docs/api/persisted-operations#allowlist-and-dev-carve-outs).
    - **Management surface** (every operation selects `persistedOperations { ... }` at the root and nothing else): execute it. Authorization still applies.
    - **Introspection** (the parsed document's top-level selections are all `__schema`, `__type` or `__typename`): execute it unless `DisableIntrospection()` was called.
    - **Enforcement off** (`RequirePersisted(false)`): execute it, logging at Information when `LogNonPersistedRequests(true)`.

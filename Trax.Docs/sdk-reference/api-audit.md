@@ -10,9 +10,9 @@ nav_order: 9
 
 # API Audit
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
-Reference for the request-level audit pipeline of a Trax GraphQL host. How it fits together is in [Audit pipeline](/docs/api-security#3-write-the-audit-sink).
+Reference for the request-level audit pipeline of a Trax GraphQL host. How it fits together is in [Audit pipeline](/docs/security/secure-a-graphql-host#3-write-the-audit-sink).
 
 ## Trax.Api.GraphQL.Audit
 

@@ -111,7 +111,7 @@ by introspection, and a Trax server answers introspection only in Development un
 and so the two servers it starts in-process, in Development; started in Production, the servers refuse
 introspection and the Gateway stops with `GraphQLSchemaIntrospectionException`. Against a production
 server the client uses `UseFileSchema` or `UseAssemblySchema` instead, or the server admits only the
-callers it trusts. See [GraphQL Client: Schema Providers](/docs/api-graphql-client#schema-providers).
+callers it trusts. See [GraphQL Client: Schema Providers](/docs/api/call-another-graphql-server#schema-providers).
 
 ### Two keyed clients in one container
 

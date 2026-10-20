@@ -6,6 +6,8 @@ area: api
 nav_order: 4
 source:
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations
+redirect_from:
+  - /docs/persisted-operations
 ---
 
 # Persisted operations

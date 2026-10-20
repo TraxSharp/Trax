@@ -48,4 +48,4 @@ than a 401 or 403.
 3. Keep `[TraxAuthorize]` on the trains you add. Mark one `[TraxAllowAnonymous]` only when anyone
    who can reach the host may call it.
 
-[Secure a GraphQL host](/docs/api-security) covers the rest of a production posture.
+[Secure a GraphQL host](/docs/security/secure-a-graphql-host) covers the rest of a production posture.

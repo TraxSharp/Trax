@@ -14,7 +14,7 @@ source:
 
 # OidcDefaults
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 The constants of the Trax OpenID Connect scheme that [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth) registers.
 

@@ -48,7 +48,7 @@ through it, so an open namespace lets any caller change scheduled work. Mutation
 train and input the caller chose (`requeueExecution`, `resumeExecution`, `workQueue.queueTrain`)
 also apply that train's `[TraxAuthorize]` requirements. Mutations that enqueue what a manifest fixed
 (`triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, dead-letter requeues) answer to the
-gate alone. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+gate alone. See [Authorization: The Operations Surface](/docs/security/authorization-rules#the-operations-surface).
 
 The fields directly under `operations`, each on the page that documents it:
 

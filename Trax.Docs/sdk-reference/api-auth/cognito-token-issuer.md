@@ -20,7 +20,7 @@ redirect_from:
 
 # CognitoTokenIssuer
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Mints RS256 access and ID tokens with the claims Amazon Cognito user pools emit, for a local Cognito stand-in or for tests. It is the minting counterpart of `Trax.Api.Auth.Jwt.Cognito`, which validates such tokens; a host that only validates does not reference this package. Refresh tokens are on [IRefreshTokenStore](/docs/sdk-reference/api-auth/i-refresh-token-store).
 

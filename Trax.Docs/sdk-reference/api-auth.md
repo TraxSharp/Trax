@@ -10,9 +10,9 @@ nav_order: 8
 
 # API Auth
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
-Reference for the Trax authentication packages. How they fit into a secured host is in [API Security](/docs/api-security).
+Reference for the Trax authentication packages. How they fit into a secured host is in [API Security](/docs/security/secure-a-graphql-host).
 
 ## Trax.Api.Auth
 

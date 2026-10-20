@@ -213,7 +213,7 @@ What changed:
 
 ## SDK Reference
 
-> [Turn on persisted operations](/docs/api/turn-on-persisted-operations) | [Persisted operations](/docs/persisted-operations) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
+> [Turn on persisted operations](/docs/api/turn-on-persisted-operations) | [Persisted operations](/docs/api/persisted-operations) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
 
 ---
 

@@ -12,4 +12,4 @@ Only the site as deployed at [traxsharp.net](https://traxsharp.net), built from 
 
 ## Supply-chain posture
 
-The site builds through SHA-pinned actions, installs from the committed lockfile with install scripts disabled in CI, and fails a build whose runtime dependencies carry a high-severity advisory. The docs pages are rendered from [Trax.Docs](https://github.com/TraxSharp/Trax/tree/main/Trax.Docs) `main`. See the [Supply Chain Security](https://traxsharp.net/docs/supply-chain-security) guide.
+The site builds through SHA-pinned actions, installs from the committed lockfile with install scripts disabled in CI, and fails a build whose runtime dependencies carry a high-severity advisory. The docs pages are rendered from [Trax.Docs](https://github.com/TraxSharp/Trax/tree/main/Trax.Docs) `main`. See the [Supply Chain Security](https://traxsharp.net/docs/security/supply-chain) guide.

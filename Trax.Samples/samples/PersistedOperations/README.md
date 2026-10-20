@@ -68,4 +68,4 @@ The suite runs against the `persisted_operations_e2e_tests` database on port 543
 ## Docs
 
 [Persisted Operations sample](https://traxsharp.net/docs/samples/persisted-operations) and
-[Persisted Operations](https://traxsharp.net/docs/persisted-operations).
+[Persisted Operations](https://traxsharp.net/docs/api/persisted-operations).

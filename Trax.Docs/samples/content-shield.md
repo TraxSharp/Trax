@@ -8,7 +8,7 @@ nav_order: 11
 
 # Content Shield
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 `samples/EphemeralWorkers` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) is a content
 moderation API whose trains all run somewhere else: on a runner that is an AWS Lambda function in

@@ -12,7 +12,7 @@ source:
 
 These steps take a Trax GraphQL host from accepting any query to running only documents stored
 under an id. What the contract is and why the host asks how changes reach each node is in
-[Persisted operations](/docs/persisted-operations). The
+[Persisted operations](/docs/api/persisted-operations). The
 [Persisted Operations sample](/docs/samples/persisted-operations) is a working host.
 
 ## 1. Check the prerequisites
@@ -60,7 +60,7 @@ builder.Services.AddTraxGraphQL(graphql =>
 - `GateManagement` serves the management fields, `persistedOperations { ... }` at the root, to a
   role or policy. Without it they are not in the schema. It is a gate of its own: the uploader
   needs this role and nothing under `operations`, which `UsePersistedOperations` does not expose.
-  The other choices are in [Authorization rules](/docs/authorization).
+  The other choices are in [Authorization rules](/docs/security/authorization-rules).
 - `RequirePersisted(false)` without `LogNonPersistedRequests(true)` does nothing, and the host
   refuses to start.
 
@@ -161,7 +161,7 @@ builder.Services.AddTraxGraphQL(graphql =>
 ```
 
 The allowlist matches the name the caller sends, not the document, so keep it to networks you
-trust; see [Allowlist and dev carve-outs](/docs/persisted-operations#allowlist-and-dev-carve-outs).
+trust; see [Allowlist and dev carve-outs](/docs/api/persisted-operations#allowlist-and-dev-carve-outs).
 
 ## 6. Run more than one node
 

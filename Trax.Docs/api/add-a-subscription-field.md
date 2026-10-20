@@ -65,7 +65,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscrip
   schema.
 - **Declare a posture on the field.** A field on a root type inherits no gate, so the host refuses
   to start when the field carries neither `[TraxAuthorize]` nor `[TraxAllowAnonymous]` (see
-  [Fields Added by a Type Extension](/docs/authorization#fields-added-by-a-type-extension)).
+  [Fields Added by a Type Extension](/docs/security/authorization-rules#fields-added-by-a-type-extension)).
 - **Check the record in the subscribe resolver.** `[TraxAuthorize]` decides who may use the field;
   which topic a caller may listen to (their own room, their own orders) is the resolver's job. It
   runs once, when the client subscribes, and a refusal reaches the client as an `error` message for

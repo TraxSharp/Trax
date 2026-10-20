@@ -38,7 +38,7 @@ var builder = WebApplication.CreateBuilder(args);
 // refuses to start a host outside Development with a key containing
 // "do-not-use-in-production" registered. Anywhere else, register real credentials (AddHashed
 // keys from a secret store, or AddTraxJwtAuth) before removing the IsDevelopment() check:
-// https://traxsharp.net/docs/api-security.
+// https://traxsharp.net/docs/security/secure-a-graphql-host.
 // AddAuthentication() stays outside the check. AddTraxApiKeyAuth registers authentication
 // itself, so without this line a start outside Development fails in UseAuthentication().
 if (builder.Environment.IsDevelopment())

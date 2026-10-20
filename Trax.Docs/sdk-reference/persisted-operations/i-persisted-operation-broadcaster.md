@@ -75,4 +75,4 @@ await serviceProvider.GetRequiredService<IPersistedOperationBroadcaster>().Publi
 
 - [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
 - [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions)
-- [One node or many](/docs/persisted-operations#one-node-or-many)
+- [One node or many](/docs/api/persisted-operations#one-node-or-many)

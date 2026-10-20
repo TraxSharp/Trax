@@ -8,7 +8,7 @@ nav_order: 2
 
 # Chat Service
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 `samples/ChatService` is a chat server whose messages reach the other participants over GraphQL
 subscriptions. Chat mutations are ordinary Trax trains. When one completes, a lifecycle hook

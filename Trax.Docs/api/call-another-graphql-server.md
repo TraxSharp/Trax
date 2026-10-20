@@ -8,6 +8,8 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL.Client
   - Trax.Api/src/Trax.Api.GraphQL.Client.Trax
   - Trax.Api/src/Trax.Api.GraphQL.Client.Typed
+redirect_from:
+  - /docs/api-graphql-client
 ---
 
 # Call another GraphQL server

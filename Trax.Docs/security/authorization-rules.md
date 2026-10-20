@@ -13,11 +13,13 @@ source:
   - Trax.Api/src/Trax.Api.GraphQL/Configuration/TypeExtensionExposureRule.cs
   - Trax.Api/src/Trax.Api.GraphQL/Authorization/TraxHttpAuthenticationInterceptor.cs
   - Trax.Mediator/src/Trax.Mediator/Services/TrainAuthorization/ITrainAuthorizationService.cs
+redirect_from:
+  - /docs/authorization
 ---
 
 # Authorization rules
 
-> **Security notice.** NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [Secure a GraphQL host](/docs/api-security).
+> **Security notice.** NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [Secure a GraphQL host](/docs/security/secure-a-graphql-host).
 
 Every surface the Trax GraphQL endpoint exposes declares who may reach it, and a host whose
 declarations are missing or contradictory does not start. This page lists the rules. Why they are
@@ -474,7 +476,7 @@ the union of every attribute's roles; it does not say which attributes they came
 
 - [Where Trax checks authorization](/docs/security/where-authorization-is-checked)
 - [Startup refusals](/docs/security/startup-refusals)
-- [Secure a GraphQL host](/docs/api-security)
+- [Secure a GraphQL host](/docs/security/secure-a-graphql-host)
 - [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize),
   [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous),
   [ITrustedExecutionScope](/docs/sdk-reference/mediator-api/i-trusted-execution-scope),

@@ -16,7 +16,7 @@ source:
 
 # TraxPrincipal
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 The identity record an [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver) returns, independent of any authentication framework. `TraxPrincipalExtensions` projects it to an ASP.NET Core `ClaimsPrincipal` and back; `TraxPrincipalId` builds the scheme-qualified id the claims carry.
 

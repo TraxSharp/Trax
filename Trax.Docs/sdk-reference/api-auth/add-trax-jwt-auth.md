@@ -18,7 +18,7 @@ source:
 
 # AddTraxJwtAuth
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Extension methods on `IServiceCollection`, declared on `JwtAuthServiceCollectionExtensions`, that register a Trax JWT bearer authentication scheme. `JwtBearerHandler` validates the token's signature, issuer, audience and lifetime; an `ITraxPrincipalResolver<JwtTokenInput>` then maps the validated token to a `TraxPrincipal`.
 
@@ -194,6 +194,6 @@ app.MapGet("/internal", () => Results.Ok()).RequireAuthorization(TraxAuthClaimTy
 
 ## See also
 
-- [JWT bearer authentication](/docs/api-security#1-write-the-host)
+- [JWT bearer authentication](/docs/security/secure-a-graphql-host#1-write-the-host)
 - [Write a JWT principal resolver](/docs/security/write-a-jwt-principal-resolver), [Sign development JWTs](/docs/security/sign-development-jwts), [Test JWT authentication](/docs/security/test-jwt-authentication)
 - [JwtProviderExtensions](/docs/sdk-reference/api-auth/jwt-provider-extensions), [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher), [UseCognito](/docs/sdk-reference/api-auth/use-cognito), [JwtDefaults](/docs/sdk-reference/api-auth/jwt-defaults)

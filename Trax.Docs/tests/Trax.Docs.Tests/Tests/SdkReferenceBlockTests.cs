@@ -68,7 +68,7 @@ public class SdkReferenceBlockTests
         "reference/comparison.md",
         "contributing/releases.md",
         // Only code block is a `gh attestation verify` CLI command, no SDK calls.
-        "supply-chain-security.md",
+        "security/supply-chain.md",
         // Convention pages whose code is directory trees, SQL, csproj fragments or test code
         // rather than SDK calls. There is no SDK method for a folder layout to link to.
         "reference/project-layout.md",

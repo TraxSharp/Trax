@@ -169,7 +169,7 @@ list type, and an effect's settings are on
 `operations` namespace, so whatever gates it (`RequireAuthorization()` or `GateOperations(...)`, see
 [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)) decides who reads them. There is
 no separate field-level gate: a caller who can read one execution's input can read a manifest's
-properties too. [Authorization](/docs/authorization#the-operations-surface) explains the choice.
+properties too. [Authorization](/docs/security/authorization-rules#the-operations-surface) explains the choice.
 
 A member marked [`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields)
 is masked in all three, written as `{"_redacted": true}`. An execution's `input` is recorded that

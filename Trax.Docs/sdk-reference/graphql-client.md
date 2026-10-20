@@ -12,7 +12,7 @@ nav_order: 12
 
 The outbound client validates hand-written GraphQL queries against a server's schema and runs them. It
 ships in three packages. For the concepts (query modes, schema sources, keyed clients), see
-[GraphQL Client](/docs/api-graphql-client).
+[GraphQL Client](/docs/api/call-another-graphql-server).
 
 ```csharp compile
 services

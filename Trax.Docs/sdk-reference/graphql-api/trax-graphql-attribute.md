@@ -95,7 +95,7 @@ The mutation's `externalId` is the external id the dispatched run carries, so a 
 The train must declare its authorization posture: `[TraxAuthorize]` to gate it or
 `[TraxAllowAnonymous]` to open it. A train with neither fails at host startup (`AddTraxGraphQL`),
 unless the endpoint is gated with `RequireAuthorization()`. See
-[Authorization: Required Exposure Posture](/docs/authorization#required-exposure-posture).
+[Authorization: Required Exposure Posture](/docs/security/authorization-rules#required-exposure-posture).
 
 ### Input type requirements
 

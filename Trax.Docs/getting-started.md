@@ -505,7 +505,7 @@ serves it over GraphQL and shows it in the operations console.
 
 - [Put a sign-in in front of the console](/docs/dashboard/add-the-console-to-a-host) before it runs
   outside Development.
-- [Secure a GraphQL host](/docs/api-security) with real credentials, and expose a train as a
+- [Secure a GraphQL host](/docs/security/secure-a-graphql-host) with real credentials, and expose a train as a
   mutation with [TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute).
 - [Start from a project template](/docs/reference/templates): `trax-hub` scaffolds this same shape
   with a test project.

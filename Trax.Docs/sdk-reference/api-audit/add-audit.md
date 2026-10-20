@@ -14,7 +14,7 @@ source:
 
 # AddAudit
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Extension method on `TraxGraphQLBuilder`, declared on `TraxGraphQLBuilderAuditExtensions`, that registers the GraphQL audit pipeline: a bounded channel, a background writer, a HotChocolate diagnostic listener, the sink `TSink` and a redactor.
 
@@ -78,7 +78,7 @@ services.AddTraxGraphQL(graphql =>
 
 ## See also
 
-- [Audit pipeline](/docs/api-security#3-write-the-audit-sink): what an entry records, drops and shutdown.
+- [Audit pipeline](/docs/security/secure-a-graphql-host#3-write-the-audit-sink): what an entry records, drops and shutdown.
 - [Tune the audit pipeline](/docs/security/tune-the-audit-pipeline)
 - [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options), [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink), [ITraxAuditRedactor](/docs/sdk-reference/api-audit/i-trax-audit-redactor)
 - The [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth) stores entries in a table and serves them to auditors as a gated query model.

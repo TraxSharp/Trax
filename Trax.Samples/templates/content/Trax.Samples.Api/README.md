@@ -156,7 +156,7 @@ operation is refused.
 
 - Replace the demo key with real credentials (`keys.AddHashed(...)` from a secret store, or
   `AddTraxJwtAuth`), then remove the `IsDevelopment()` check around `AddTraxApiKeyAuth`. See
-  [API Security](https://traxsharp.net/docs/api-security).
+  [API Security](https://traxsharp.net/docs/security/secure-a-graphql-host).
 - Outside `dotnet run` the URL comes from `ASPNETCORE_URLS` (or `ASPNETCORE_HTTP_PORTS`), not
   `launchSettings.json`.
 

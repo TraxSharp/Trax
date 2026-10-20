@@ -8,7 +8,7 @@ nav_order: 1
 
 # The GraphQL API
 
-> **Security.** Trax ships authentication (`Trax.Api.Auth.*`) and audit (`Trax.Api.GraphQL.Audit`) packages alongside this library. NO WARRANTY. See [Secure a GraphQL host](/docs/api-security) before deploying to production.
+> **Security.** Trax ships authentication (`Trax.Api.Auth.*`) and audit (`Trax.Api.GraphQL.Audit`) packages alongside this library. NO WARRANTY. See [Secure a GraphQL host](/docs/security/secure-a-graphql-host) before deploying to production.
 
 `Trax.Api.GraphQL` puts a GraphQL endpoint in front of the trains a host registers. A train opts in
 with [`[TraxQuery]` or `[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute)
@@ -81,8 +81,8 @@ says whether it is gated or public, and a host where one does not is refused at 
 exposes it, and exposing it requires a gate. Authentication is pluggable (API keys, JWTs, OIDC),
 and every scheme feeds the same principal.
 
-- [Secure a GraphQL host](/docs/api-security) puts the pieces together in one `Program.cs`.
-- [Authorization rules](/docs/authorization) lists what gates each surface.
+- [Secure a GraphQL host](/docs/security/secure-a-graphql-host) puts the pieces together in one `Program.cs`.
+- [Authorization rules](/docs/security/authorization-rules) lists what gates each surface.
 - [Startup refusals](/docs/security/startup-refusals) lists what stops a host.
 
 ## A named schema
@@ -113,8 +113,8 @@ which capabilities to enable.
 
 ## See also
 
-- [Call another GraphQL server](/docs/api-graphql-client), for the other direction.
-- [Persisted operations](/docs/persisted-operations), to serve only documents the host knows.
+- [Call another GraphQL server](/docs/api/call-another-graphql-server), for the other direction.
+- [Persisted operations](/docs/api/persisted-operations), to serve only documents the host knows.
 - [Add the dashboard to a host](/docs/dashboard), for a monitoring UI over the same data.
 
 ## SDK Reference

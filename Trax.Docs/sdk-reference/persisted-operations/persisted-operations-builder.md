@@ -80,12 +80,12 @@ public sealed class CacheOptions
 
 ## Behavior
 
-- Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required. See [One node or many](/docs/persisted-operations#one-node-or-many).
+- Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required. See [One node or many](/docs/api/persisted-operations#one-node-or-many).
 - `GateManagement` throws `InvalidOperationException` with neither a policy nor roles, or with a role list that holds only separators. A policy it names that is not registered with `AddAuthorization` fails startup.
 - `ClientDocuments` throws `ArgumentException` for a blank path.
 - `UseRabbitMqInvalidation` throws `ArgumentException` for a blank connection string; `WithCacheMaxAge` and `KeepOlderMachineDocumentsFor` throw `ArgumentOutOfRangeException` for a value that is not positive; a second `WithInMemoryCache` throws `InvalidOperationException`.
 - The remaining checks run when `UsePersistedOperations` builds the options and throw `InvalidOperationException`; the [UsePersistedOperations validation table](/docs/sdk-reference/persisted-operations/use-persisted-operations#validation) lists them.
-- What the allowlist does and does not protect: [Allowlist and dev carve-outs](/docs/persisted-operations#allowlist-and-dev-carve-outs).
+- What the allowlist does and does not protect: [Allowlist and dev carve-outs](/docs/api/persisted-operations#allowlist-and-dev-carve-outs).
 
 ## Example
 
@@ -108,4 +108,4 @@ services.AddTraxGraphQL(graphql => graphql
 
 - [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
 - [PersistedOperationsOptions](/docs/sdk-reference/persisted-operations/persisted-operations-options)
-- [Persisted Operations](/docs/persisted-operations)
+- [Persisted Operations](/docs/api/persisted-operations)

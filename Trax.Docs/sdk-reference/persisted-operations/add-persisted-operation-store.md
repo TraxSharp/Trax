@@ -108,4 +108,4 @@ services.AddPersistedOperationStore(store =>
 
 - [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store)
 - [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service)
-- [One node or many](/docs/persisted-operations#one-node-or-many)
+- [One node or many](/docs/api/persisted-operations#one-node-or-many)

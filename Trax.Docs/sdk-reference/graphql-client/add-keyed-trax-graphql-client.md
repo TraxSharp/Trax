@@ -85,4 +85,4 @@ public class OrderSync(
 
 - [AddTraxGraphQLClient](/docs/sdk-reference/graphql-client/add-trax-graphql-client)
 - [GraphQLClientAttribute](/docs/sdk-reference/graphql-client/graphql-client-attribute)
-- [GraphQL Client](/docs/api-graphql-client)
+- [GraphQL Client](/docs/api/call-another-graphql-server)

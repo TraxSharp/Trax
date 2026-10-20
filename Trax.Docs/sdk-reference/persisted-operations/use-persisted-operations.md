@@ -39,7 +39,7 @@ The same `TraxGraphQLBuilder`.
 ## Behavior
 
 Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required; see
-[One node or many](/docs/persisted-operations#one-node-or-many). The options are checked when
+[One node or many](/docs/api/persisted-operations#one-node-or-many). The options are checked when
 `UsePersistedOperations` runs (see [Validation](#validation)).
 
 ### Generated documents
@@ -165,4 +165,4 @@ services.AddTraxGraphQL(graphql => graphql
 - [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement), for the decision each request goes through
 - [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations)
 - [AddPersistedOperationStore](/docs/sdk-reference/persisted-operations/add-persisted-operation-store), for a host with no GraphQL server
-- [Persisted Operations](/docs/persisted-operations)
+- [Persisted Operations](/docs/api/persisted-operations)

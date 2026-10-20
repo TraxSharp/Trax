@@ -114,7 +114,7 @@ The same naming applies to arguments, so `URLPath` binds `$urlPath`.
 
 ## See also
 
-- [Call another GraphQL server](/docs/api-graphql-client)
+- [Call another GraphQL server](/docs/api/call-another-graphql-server)
 - [How the GraphQL client checks queries](/docs/api/graphql-client-validation)
 - [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request)
 

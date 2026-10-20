@@ -845,7 +845,7 @@ since a machine's definition does not change while the host runs. It reads no ta
 
 ### Authorization
 
-Neither method decides authorization itself: both leave it to the mediator, `QueueTrainAsync` and `RequeueExecutionAsync` through `QueueAsync`, and `RunTrainAsync` through `PrepareAsync`. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)).
+Neither method decides authorization itself: both leave it to the mediator, `QueueTrainAsync` and `RequeueExecutionAsync` through `QueueAsync`, and `RunTrainAsync` through `PrepareAsync`. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/security/authorization-rules#the-operations-surface)).
 
 ### Effects and log levels
 
@@ -881,4 +881,4 @@ public class ReportQueue(IOperationsService operations)
 
 - [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler), the scheduler API it builds on
 - [Dashboard](/docs/dashboard) and the GraphQL [mutations](/docs/sdk-reference/graphql-api/mutations), its two callers
-- [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)
+- [Authorization: The Operations Surface](/docs/security/authorization-rules#the-operations-surface)

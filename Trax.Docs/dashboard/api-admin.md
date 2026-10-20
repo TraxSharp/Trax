@@ -11,7 +11,7 @@ source:
 
 # API admin
 
-Shown only when the host serves [persisted operations](/docs/persisted-operations) management to
+Shown only when the host serves [persisted operations](/docs/api/persisted-operations) management to
 this caller: it turns on persisted operations, declares the management gate (`GateManagement`), and
 the caller meets it. Every read and write goes through the `persistedOperations` fields, behind that
 gate, so the console refuses what the API refuses, with the same message. Turning it on is in

@@ -17,7 +17,7 @@ source:
 
 # AddTraxOidcAuth
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Extension methods on `IServiceCollection`, declared on `OidcAuthServiceCollectionExtensions`, that register the Trax OpenID Connect authorization-code scheme (`OidcDefaults.SchemeName`) and its session cookie (`OidcDefaults.CookieSchemeName`). A challenge against the OIDC scheme redirects the browser to the identity provider; on the callback the handler validates the id-token, an `ITraxPrincipalResolver<OidcTokenInput>` maps it to a `TraxPrincipal`, and the user is signed into the cookie scheme. For API clients that send tokens, the scheme is [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth).
 
@@ -128,7 +128,7 @@ Returns `null`, failing the sign-in, when the id-token has no subject.
 
 ### Policies
 
-`OidcDefaults.PolicyName` authenticates against the cookie scheme and is satisfied only by a caller the OIDC session signed in. The cookie scheme joins `TraxAuthClaimTypes.TraxAuthPolicy`. On the Trax GraphQL endpoint, the builder's `RequireAuthorization(...)` is the gate the startup checks for the `operations` namespace and `[TraxAllowAnonymous]` see; a convention on the route is an extra layer those checks do not count. See [Authorization](/docs/authorization#combining-with-endpoint-level-auth).
+`OidcDefaults.PolicyName` authenticates against the cookie scheme and is satisfied only by a caller the OIDC session signed in. The cookie scheme joins `TraxAuthClaimTypes.TraxAuthPolicy`. On the Trax GraphQL endpoint, the builder's `RequireAuthorization(...)` is the gate the startup checks for the `operations` namespace and `[TraxAllowAnonymous]` see; a convention on the route is an extra layer those checks do not count. See [Authorization](/docs/security/authorization-rules#combining-with-endpoint-level-auth).
 
 ### Subscriptions
 
@@ -190,5 +190,5 @@ public sealed class EntraOidcResolver : ITraxPrincipalResolver<OidcTokenInput>
 
 ## See also
 
-- [OpenID Connect authentication](/docs/api-security#1-write-the-host)
+- [OpenID Connect authentication](/docs/security/secure-a-graphql-host#1-write-the-host)
 - [OidcDefaults](/docs/sdk-reference/api-auth/oidc-defaults), [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)

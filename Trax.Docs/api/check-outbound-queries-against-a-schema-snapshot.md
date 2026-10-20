@@ -78,7 +78,7 @@ signals.
 
 ## See also
 
-- [GraphQL Client](/docs/api-graphql-client)
+- [GraphQL Client](/docs/api/call-another-graphql-server)
 
 ## SDK Reference
 

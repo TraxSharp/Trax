@@ -65,7 +65,7 @@ the server logs the failure under; the answer carries no exception text, SQL or 
 
 ## Behavior
 
-Exposing a machine requires [persisted operations](/docs/persisted-operations): each machine's operations are
+Exposing a machine requires [persisted operations](/docs/api/persisted-operations): each machine's operations are
 served as [persisted documents](#persisted-documents) that carry its version, and a node orders a machine's versions
 across a rolling deploy through them. A host that exposes a machine without `UsePersistedOperations` refuses to start,
 naming the machines and the call to add. `SingleNode()` suits one process; more than one node uses

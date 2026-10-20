@@ -57,12 +57,12 @@ Pages to look things up in. Per-type and per-method pages are in the
 
 ## GraphQL API and dashboard
 
-- [GraphQL Client](/docs/api-graphql-client): the outbound GraphQL client.
+- [GraphQL Client](/docs/api/call-another-graphql-server): the outbound GraphQL client.
 - [Operations console](/docs/dashboard): the operations console and its pages.
 
 ## Security
 
-- [Authorization](/docs/authorization): endpoint policies, `TraxAuthorize`, `TraxAllowAnonymous` and startup validation.
+- [Authorization](/docs/security/authorization-rules): endpoint policies, `TraxAuthorize`, `TraxAllowAnonymous` and startup validation.
 - [Security policy](/docs/SECURITY): reporting a vulnerability and supported versions.
 
 ## Tooling

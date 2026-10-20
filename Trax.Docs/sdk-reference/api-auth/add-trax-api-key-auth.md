@@ -17,7 +17,7 @@ source:
 
 # AddTraxApiKeyAuth
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Extension methods on `IServiceCollection`, declared on `ApiKeyAuthServiceCollectionExtensions`, that register the Trax API-key authentication scheme. One overload takes a static key set built with `ApiKeyBuilder`; the other takes a resolver from DI.
 
@@ -198,7 +198,7 @@ public sealed class DirectoryApiKeyResolver(IUserDirectory users) : ITraxPrincip
 
 ## See also
 
-- [API-key authentication](/docs/api-security#1-write-the-host)
+- [API-key authentication](/docs/security/secure-a-graphql-host#1-write-the-host)
 - [HashedApiKeyResolver](/docs/sdk-reference/api-auth/hashed-api-key-resolver), [ApiKeyAuthenticationOptions](/docs/sdk-reference/api-auth/api-key-authentication-options), [ApiKeyDefaults](/docs/sdk-reference/api-auth/api-key-defaults)
-- [Authorization](/docs/authorization#combining-with-endpoint-level-auth)
+- [Authorization](/docs/security/authorization-rules#combining-with-endpoint-level-auth)
 - The [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth) registers keys conditionally.

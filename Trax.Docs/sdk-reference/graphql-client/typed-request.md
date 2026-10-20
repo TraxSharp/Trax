@@ -127,4 +127,4 @@ query GetPlayer($id: String!) {
 
 - [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request)
 - [IGraphQLClientExecutor](/docs/sdk-reference/graphql-client/i-graphql-client-executor)
-- [GraphQL Client](/docs/api-graphql-client)
+- [GraphQL Client](/docs/api/call-another-graphql-server)

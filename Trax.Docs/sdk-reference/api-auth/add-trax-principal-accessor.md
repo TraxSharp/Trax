@@ -15,7 +15,7 @@ source:
 
 # AddTraxPrincipalAccessor
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Extension method on `IServiceCollection`, declared on `TraxAuthServiceCollectionExtensions`, that registers the current request's [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) and [TraxCaller](/docs/sdk-reference/api-auth/trax-caller) as injectable services. Every `AddTrax*Auth` call runs it.
 

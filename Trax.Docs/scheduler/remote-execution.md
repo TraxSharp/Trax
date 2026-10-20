@@ -167,7 +167,7 @@ must not kill running trains, and Kubernetes or ECS services scaled on their own
 Two things stay on the scheduler. A standalone worker has no API to register an authorization
 service on, and only runs work that passed the check where it was submitted, so a worker with
 `[TraxAuthorize]` trains declares that with `AllowMissingAuthorizationService()` (see
-[Authorization: Opting Out for Scheduler-Only Hosts](/docs/authorization#opting-out-for-scheduler-only-hosts)).
+[Authorization: Opting Out for Scheduler-Only Hosts](/docs/security/authorization-rules#opting-out-for-scheduler-only-hosts)).
 And synchronous work is still answered by the process that receives the request: a `[TraxQuery]`
 or a `RUN` mutation does not reach a worker, so mutations that should always run on one are
 declared `GraphQLOperation.Queue`. The [Energy Hub sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers) runs every

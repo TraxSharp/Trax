@@ -94,7 +94,7 @@ The hook itself is described under
 
 ## See also
 
-- [Secure a GraphQL host](/docs/api-security): where these limits sit among a host's other guards.
+- [Secure a GraphQL host](/docs/security/secure-a-graphql-host): where these limits sit among a host's other guards.
 - [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration): the properties.
 - [Concurrency limiting](/docs/sdk-reference/mediator-api/concurrency-limiting): per-train and
   global limits.

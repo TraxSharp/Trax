@@ -15,7 +15,7 @@ source:
 
 # IRefreshTokenStore
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 The operations a Cognito-compatible auth server needs for opaque refresh tokens: issue, validate, rotate and revoke. Tokens belong to rotation chains bound to a `(sub, clientId)` pair. `InMemoryRefreshTokenStore` implements it in process memory.
 

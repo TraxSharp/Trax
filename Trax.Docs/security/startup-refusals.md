@@ -37,7 +37,7 @@ A refusal is raised at one of these points:
 
 A surface is exposed when it is a `[TraxQuery]` or `[TraxMutation]` train, a `[TraxBroadcast]`
 train, a `[TraxQueryModel]` entity, an entity a query model reaches, or a field a type extension
-adds. The rule behind these refusals is [Required exposure posture](/docs/authorization#required-exposure-posture).
+adds. The rule behind these refusals is [Required exposure posture](/docs/security/authorization-rules#required-exposure-posture).
 
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
@@ -48,7 +48,7 @@ adds. The rule behind these refusals is [Required exposure posture](/docs/author
 | `[TraxAuthorize]` with an empty or whitespace `Policy`, or a `Roles` list that holds no role, on a query model | `AddTraxGraphQL` | `[TraxAuthorize] on '<type>' has an empty or whitespace Policy value.` or `[TraxAuthorize(Roles="...")] on '<type>' parsed to zero roles ...` | Name a policy or a role, or drop the argument |
 | The same, on a train or one of its interfaces | Host start | As above | As above |
 | An entity a query model reaches (a navigation, or a method returning an entity) that is not a query model and declares neither marker, on an endpoint without `RequireAuthorization()` | Host start | `<n> entit(y/ies) reached from a [TraxQueryModel] declare no usable authorization posture ...`, naming every schema coordinate that reaches it | A marker on the entity class, the navigation left out of the model's field set (`BindFields = Explicit` or `ExposeAs`), or an endpoint gate |
-| A field a type extension adds to a parent that gives it no gate (a `[TraxAllowAnonymous]` type, a root type, a namespace reached from the root, the `operations` namespace under `AllowAnonymousOperations()`), with no marker of its own | Host start | `<n> GraphQL field(s) or type extension(s) cannot be served as declared:` | `[TraxAuthorize]` or `[TraxAllowAnonymous]` on the resolver method or the extension class. See [Fields added by a type extension](/docs/authorization#fields-added-by-a-type-extension) |
+| A field a type extension adds to a parent that gives it no gate (a `[TraxAllowAnonymous]` type, a root type, a namespace reached from the root, the `operations` namespace under `AllowAnonymousOperations()`), with no marker of its own | Host start | `<n> GraphQL field(s) or type extension(s) cannot be served as declared:` | `[TraxAuthorize]` or `[TraxAllowAnonymous]` on the resolver method or the extension class. See [Fields added by a type extension](/docs/security/authorization-rules#fields-added-by-a-type-extension) |
 | Both markers on such a field | Host start | As above | Remove one |
 | HotChocolate's `[Authorize]` or `[AllowAnonymous]` on a field a type extension adds, or on the extension class | Host start | As above, then `GraphQL field '<Type.field>' (<resolver>) declares its authorization posture with [Authorize], which Trax does not read. ...` | `[TraxAuthorize]` or `[TraxAllowAnonymous]` |
 | The `@authorize` directive Trax put on a gated query model, its entry field or a gated reached entity is missing from the built schema, or one is present on a `[TraxAllowAnonymous]` entity | Host start | `... ConfigureSchema callback has ...` | Remove the `ConfigureSchema` override that replaced the type or directive |
@@ -82,7 +82,7 @@ Roles are never checked at startup: Trax has no list of the roles that can exist
 
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
-| A registered train carries `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered | Host start | `One or more registered trains declare [TraxAuthorize] but no ITrainAuthorizationService is registered in the DI container. ...`, ending with the trains | `AddTraxGraphQL()` or `AddTraxApi()` registers the default; a host that serves no submissions calls [`AllowMissingAuthorizationService()`](/docs/authorization#opting-out-for-scheduler-only-hosts) |
+| A registered train carries `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered | Host start | `One or more registered trains declare [TraxAuthorize] but no ITrainAuthorizationService is registered in the DI container. ...`, ending with the trains | `AddTraxGraphQL()` or `AddTraxApi()` registers the default; a host that serves no submissions calls [`AllowMissingAuthorizationService()`](/docs/security/authorization-rules#opting-out-for-scheduler-only-hosts) |
 | A junction takes `TraxPrincipal` in its constructor and nothing registers it (every `AddTrax*Auth` call was skipped) | Host start | `<n> of <m> registered trains cannot run:`, naming the junction and `Trax.Api.Auth.TraxPrincipal` | `services.AddTraxPrincipalAccessor()`. See [Injecting TraxPrincipal](/docs/security/inject-the-current-principal) |
 
 ## Credentials
@@ -130,7 +130,7 @@ A remote worker's entry points refuse to start without an authorization posture 
 
 ## See also
 
-- [Authorization rules](/docs/authorization): the rules these refusals enforce.
+- [Authorization rules](/docs/security/authorization-rules): the rules these refusals enforce.
 - [Where Trax checks authorization](/docs/security/where-authorization-is-checked): why the host
   refuses rather than serves open.
-- [Secure a GraphQL host](/docs/api-security): a host that passes every check.
+- [Secure a GraphQL host](/docs/security/secure-a-graphql-host): a host that passes every check.

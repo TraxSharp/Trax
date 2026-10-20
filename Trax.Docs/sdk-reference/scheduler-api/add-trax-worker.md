@@ -135,7 +135,7 @@ builder.Services.AddTrax(trax => trax
 builder.Services.AddTraxWorker();
 ```
 
-See [Authorization: Opting Out for Scheduler-Only Hosts](/docs/authorization#opting-out-for-scheduler-only-hosts). The [Energy Hub sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers) runs this way.
+See [Authorization: Opting Out for Scheduler-Only Hosts](/docs/security/authorization-rules#opting-out-for-scheduler-only-hosts). The [Energy Hub sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers) runs this way.
 
 Worker options:
 

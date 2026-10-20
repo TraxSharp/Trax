@@ -21,7 +21,7 @@ The full disclaimer, including the consumer responsibility checklist, ships in t
 | `Trax.Api.Auth.Jwt.Cognito.Issuer` | Mints Cognito-shaped RS256 tokens, with a refresh-token store contract. | [Cognito issuer](https://traxsharp.net/docs/sdk-reference/api-auth/cognito-token-issuer) |
 | `Trax.Api.Auth.Jwt.Testing` | A self-hosted JWKS server and token minters for integration tests. | [JWT testing](https://traxsharp.net/docs/sdk-reference/api-auth/test-jwks-server) |
 | `Trax.Api.Auth.Oidc` | OpenID Connect code flow with PKCE and a session cookie, for browser sign-in. | [AddTraxOidcAuth](https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-oidc-auth) |
-| `Trax.Api.GraphQL.Audit` | Records each GraphQL request to your `ITraxAuditSink` from a bounded channel and a background writer. | [API Security](https://traxsharp.net/docs/api-security) |
+| `Trax.Api.GraphQL.Audit` | Records each GraphQL request to your `ITraxAuditSink` from a bounded channel and a background writer. | [API Security](https://traxsharp.net/docs/security/secure-a-graphql-host) |
 
 ## Installation
 
@@ -85,11 +85,11 @@ public sealed class MyAuditSink : ITraxAuditSink
 }
 ```
 
-Per-train authorization uses `[TraxAuthorize]` on the train class; see [Authorization](https://traxsharp.net/docs/authorization). Subscriptions carry credentials in the `connection_init` payload; see [API Security](https://traxsharp.net/docs/api-security).
+Per-train authorization uses `[TraxAuthorize]` on the train class; see [Authorization](https://traxsharp.net/docs/security/authorization-rules). Subscriptions carry credentials in the `connection_init` payload; see [API Security](https://traxsharp.net/docs/security/secure-a-graphql-host).
 
 ## Documentation
 
-- [API Security](https://traxsharp.net/docs/api-security): every scheme, subscription auth, auditing and hardening defaults
+- [API Security](https://traxsharp.net/docs/security/secure-a-graphql-host): every scheme, subscription auth, auditing and hardening defaults
 - [API Auth reference](https://traxsharp.net/docs/sdk-reference/api-auth)
 - [Trax documentation](https://traxsharp.net/docs)
 - Source: [github.com/TraxSharp/Trax/tree/main/Trax.Api](https://github.com/TraxSharp/Trax/tree/main/Trax.Api)

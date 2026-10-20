@@ -17,7 +17,7 @@ source:
 
 # AddTraxJwtDispatcher
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Extension method on `IServiceCollection`, declared on `JwtAuthServiceCollectionExtensions`, that registers a policy authentication scheme. It reads the `iss` claim of the request's Bearer token and forwards authentication to the JWT scheme, registered with [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth), that the issuer maps to.
 

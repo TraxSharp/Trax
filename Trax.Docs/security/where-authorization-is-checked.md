@@ -9,7 +9,7 @@ nav_order: 1
 # Where Trax checks authorization
 
 Trax authorizes GraphQL work in a few places and deliberately not in others. The rules themselves
-are on [Authorization rules](/docs/authorization); this page is about why they are shaped the way
+are on [Authorization rules](/docs/security/authorization-rules); this page is about why they are shaped the way
 they are, and what each choice costs.
 
 ## Nothing is public by accident

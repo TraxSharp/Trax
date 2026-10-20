@@ -14,7 +14,7 @@ source:
 
 # TraxAuditChannel
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 The bounded queue between the audit listener, which offers entries, and the background writer, which drains them. `AddAudit` registers it as a singleton. It owns the `Trax.Audit` meter and its `trax.audit.dropped` counter.
 

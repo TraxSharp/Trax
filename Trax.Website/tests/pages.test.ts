@@ -28,8 +28,8 @@ async function renderPage(file: string): Promise<string> {
   return render(matter(raw).content);
 }
 
-test("api-security renders its disclaimer as a blockquote and its anchor as an element", async () => {
-  const html = await renderPage("api-security.md");
+test("secure-a-graphql-host renders its disclaimer as a blockquote and its anchor as an element", async () => {
+  const html = await renderPage("security/secure-a-graphql-host.md");
   // Booleans rather than assert.match, which would print the whole page.
   assert.ok(/<blockquote>\s*<p>NO WARRANTY/.test(html), "no <blockquote> for the disclaimer");
   assert.ok(html.includes('<a id="no-warranty"></a>'), 'no element with id "no-warranty"');

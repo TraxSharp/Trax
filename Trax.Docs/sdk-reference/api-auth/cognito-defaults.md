@@ -14,7 +14,7 @@ source:
 
 # CognitoDefaults
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 The claim names and values of Amazon Cognito user pool tokens, as [UseCognito](/docs/sdk-reference/api-auth/use-cognito), `CognitoJwtPrincipalResolver` and [CognitoTokenIssuer](/docs/sdk-reference/api-auth/cognito-token-issuer) use them.
 

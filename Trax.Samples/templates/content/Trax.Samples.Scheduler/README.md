@@ -142,7 +142,7 @@ the trains still run on schedule, every operation is refused, and `/trax/dashboa
 
 - Replace the operator key with real credentials (`keys.AddHashed(...)` from a secret store, or
   `AddTraxJwtAuth`), then remove the `IsDevelopment()` check around `AddTraxApiKeyAuth`. See
-  [API Security](https://traxsharp.net/docs/api-security).
+  [API Security](https://traxsharp.net/docs/security/secure-a-graphql-host).
 - Add a sign-in the browser carries (a cookie or OpenID Connect), choose who may load the console,
   `RequirePolicy("<policy>")` or `RequireRoles("<role>")`, in place of `AllowAnonymousShell()`,
   then remove the `IsDevelopment()` check around it. See

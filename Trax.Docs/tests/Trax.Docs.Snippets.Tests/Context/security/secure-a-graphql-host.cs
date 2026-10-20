@@ -1,4 +1,4 @@
-// What the compiled examples on api-security.md take as given: the invoicing trains' interfaces,
+// What the compiled examples on security/secure-a-graphql-host.md take as given: the invoicing trains' interfaces,
 // inputs, outputs and junctions.
 using Trax.Core.Junction;
 using Trax.Effect.Services.ServiceTrain;

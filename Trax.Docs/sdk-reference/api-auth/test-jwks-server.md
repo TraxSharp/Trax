@@ -17,7 +17,7 @@ redirect_from:
 
 # TestJwksServer
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 An in-process Kestrel host that serves an OIDC discovery document and a JWKS, for tests of Trax JWT authentication that do not reach a real identity provider. It generates an RSA key pair at startup and publishes the public key. The package is for test projects. Tokens are minted with [TestTokenIssuer](/docs/sdk-reference/api-auth/test-token-issuer).
 

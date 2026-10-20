@@ -14,7 +14,7 @@ source:
 
 # JwtProviderExtensions
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Extension methods on `IServiceCollection` that call [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth)`(authority, audience)` with the authority URL of a common identity provider. Each has a `<TResolver>` overload that passes the resolver through.
 

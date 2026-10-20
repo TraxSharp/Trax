@@ -14,7 +14,7 @@ source:
 
 # TestTokenIssuer
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Mints signed JWTs for tests: RS256 through [TestJwksServer.CreateIssuer](/docs/sdk-reference/api-auth/test-jwks-server), HS256 through `Symmetric`, or any `SigningCredentials` through the constructor. `TestTokenBuilder` sets each token's claims.
 

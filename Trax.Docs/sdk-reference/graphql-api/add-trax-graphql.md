@@ -61,7 +61,7 @@ Every method on `TraxGraphQLBuilder` returns the builder.
 | Method | Description |
 |--------|-------------|
 | `AddDbContext<TDbContext>()` | Registers a DbContext whose `DbSet<T>` entities marked with `[TraxQueryModel]` are exposed as GraphQL queries. See [query models](/docs/sdk-reference/graphql-api/query-models). |
-| `AddTypeModule<TTypeModule>()` | Registers an additional HotChocolate `TypeModule` on the Trax schema. The module can add resolvers, DataLoader-backed relationship fields, or `ObjectTypeExtension`s on entities registered by `[TraxQueryModel]`. The module is registered as a singleton in DI. A field it contributes follows the [type-extension posture rule](/docs/authorization#fields-added-by-a-type-extension): `[TraxAuthorize]` on its resolver is a gate, and a field on a root or anonymous parent must declare one. |
+| `AddTypeModule<TTypeModule>()` | Registers an additional HotChocolate `TypeModule` on the Trax schema. The module can add resolvers, DataLoader-backed relationship fields, or `ObjectTypeExtension`s on entities registered by `[TraxQueryModel]`. The module is registered as a singleton in DI. A field it contributes follows the [type-extension posture rule](/docs/security/authorization-rules#fields-added-by-a-type-extension): `[TraxAuthorize]` on its resolver is a gate, and a field on a root or anonymous parent must declare one. |
 | `AddFilterType<TEntity, TFilter>()` | Overrides the auto-generated `FilterInputType` for a specific entity. `TFilter` must extend `FilterInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
 | `AddSortType<TEntity, TSort>()` | Overrides the auto-generated `SortInputType` for a specific entity. `TSort` must extend `SortInputType<TEntity>`. See [custom filter and sort types](/docs/sdk-reference/graphql-api/query-models#custom-filter-and-sort-types). |
 | `ConfigureFiltering(Func<TraxFilterBuilder, TraxFilterBuilder>)` | Layers opt-in operators onto HotChocolate's filter convention. Today: `AddCaseInsensitiveStringOperations()` adds `icontains` and `ieq` to every string filter input. Stock filtering is the default; nothing changes unless this is called. See [configure filtering](/docs/sdk-reference/graphql-api/configure-filtering). |
@@ -271,5 +271,5 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 - [Queries](/docs/sdk-reference/graphql-api/queries), [Mutations](/docs/sdk-reference/graphql-api/mutations), [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions)
 - [Query models](/docs/sdk-reference/graphql-api/query-models)
 - [Configure filtering](/docs/sdk-reference/graphql-api/configure-filtering)
-- [Authorization](/docs/authorization)
-- [API security](/docs/api-security)
+- [Authorization](/docs/security/authorization-rules)
+- [API security](/docs/security/secure-a-graphql-host)

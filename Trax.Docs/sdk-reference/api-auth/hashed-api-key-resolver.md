@@ -14,7 +14,7 @@ source:
 
 # HashedApiKeyResolver
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 An `ITraxPrincipalResolver<string>` over a fixed set of salted SHA-256 key hashes. `AddTraxApiKeyAuth(keys => ...)` builds one from the keys `ApiKeyBuilder` collected and registers it as a singleton.
 

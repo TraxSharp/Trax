@@ -4,6 +4,8 @@ description: "Build a Trax GraphQL host with API-key and JWT authentication, gat
 type: how-to
 area: security
 nav_order: 1
+redirect_from:
+  - /docs/api-security
 ---
 
 # Secure a GraphQL host
@@ -19,7 +21,7 @@ sample's E2E suite proves each gate.
 
 The defaults are closed. Until a surface declares who may reach it, the host does not start, and a
 caller with no credential reaches nothing but what you mark public. The rules are on
-[Authorization rules](/docs/authorization) and the reasoning on
+[Authorization rules](/docs/security/authorization-rules) and the reasoning on
 [Where Trax checks authorization](/docs/security/where-authorization-is-checked).
 
 Packages: `Trax.Effect.Data.Postgres`, `Trax.Effect.Provider.Json`, `Trax.Mediator`,
@@ -101,7 +103,7 @@ What each part does, and where it can differ:
   browser sign-in, [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth). Every
   `AddTrax*Auth` call adds its scheme to one combined policy and none becomes the default scheme;
   Trax tries each registered scheme on a GraphQL request
-  ([how](/docs/authorization#which-scheme-authenticates-a-graphql-request)).
+  ([how](/docs/security/authorization-rules#which-scheme-authenticates-a-graphql-request)).
 - **`AddAuthentication()` and `AddTraxPrincipalAccessor()`.** Needed only because the auth calls are
   conditional. With neither branch configured, the host still starts and every gated surface
   refuses every caller.
@@ -156,7 +158,7 @@ entity it reaches through a navigation; its context goes on the builder with
 `.AddDbContext<T>()`. `[TraxAuthorize]` decides who may read the type, not which rows: to scope the
 rows a caller sees, add a query filter that reads the caller (see
 [Owner-scoped contexts](/docs/effect/effect-providers/domain-data-contexts#owner-scoped-contexts)).
-The rules for each kind of surface are on [Authorization rules](/docs/authorization).
+The rules for each kind of surface are on [Authorization rules](/docs/security/authorization-rules).
 
 ## 3. Write the audit sink
 
@@ -358,7 +360,7 @@ Trax does none of these for you:
 
 ## See also
 
-- [Authorization rules](/docs/authorization)
+- [Authorization rules](/docs/security/authorization-rules)
 - [Where Trax checks authorization](/docs/security/where-authorization-is-checked)
 - [Startup refusals](/docs/security/startup-refusals)
 - [Injecting TraxPrincipal](/docs/security/inject-the-current-principal): reading the

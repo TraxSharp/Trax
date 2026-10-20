@@ -14,7 +14,7 @@ source:
 
 # TraxCaller
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 The current caller, as a scoped service that never throws. Where an injected [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal) throws `TraxPrincipalNotAvailableException` for an anonymous caller, `TraxCaller` reports `null`, so it fits code that runs for anonymous and authenticated callers alike: row-level query filters, subscription resolvers, junctions shared by gated and ungated trains.
 
@@ -45,7 +45,7 @@ public sealed class TraxCaller
 
 On a subscription the socket's principal is set on the connection's `HttpContext.User` at `connection_init`, so a `TraxCaller` injected into a subscribe resolver sees the subscriber.
 
-`IsTrusted` is true for whatever a scheduler runner's posture admits, so a filter that lets trusted execution see every row treats that caller as the scheduler. See [The scheduler and remote workers are trusted](/docs/authorization#the-scheduler-and-remote-workers-are-trusted).
+`IsTrusted` is true for whatever a scheduler runner's posture admits, so a filter that lets trusted execution see every row treats that caller as the scheduler. See [The scheduler and remote workers are trusted](/docs/security/authorization-rules#the-scheduler-and-remote-workers-are-trusted).
 
 `TraxCaller` is registered scoped by [AddTraxPrincipalAccessor](/docs/sdk-reference/api-auth/add-trax-principal-accessor), which every `AddTrax*Auth` call runs. A host with no scheme registered in some environment calls `AddTraxPrincipalAccessor()` itself, or `TraxCaller` does not resolve there.
 

@@ -12,7 +12,7 @@ grand_parent: SDK Reference
 nav_order: 2
 ---
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/security/secure-a-graphql-host).
 
 # TraxAllowAnonymous
 
@@ -71,6 +71,6 @@ public class LookupAnnouncementTrain
 
 ## See also
 
-- [Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous) and [Required Exposure Posture](/docs/authorization#required-exposure-posture)
+- [Anonymous Access via TraxAllowAnonymous](/docs/security/authorization-rules#anonymous-access-via-traxallowanonymous) and [Required Exposure Posture](/docs/security/authorization-rules#required-exposure-posture)
 - [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize)
 

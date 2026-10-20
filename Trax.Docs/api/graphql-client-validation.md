@@ -15,7 +15,7 @@ written by hand, as a string, an embedded `.graphql` file or a POCO the query is
 and the client checks each one against the server's schema before it sends it. There are no
 generated `.graphql.cs` files in the repository and no build step that needs the server, and the
 check still catches a query the server would refuse. The steps are in
-[Call another GraphQL server](/docs/api-graphql-client).
+[Call another GraphQL server](/docs/api/call-another-graphql-server).
 
 ## Three ways to write a request, one executor
 

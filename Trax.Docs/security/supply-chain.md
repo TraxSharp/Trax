@@ -2,8 +2,10 @@
 title: Supply Chain Security
 description: "How every Trax package gets from source to nuget.org and npm: pinned dependencies, split release jobs, keyless publishing, provenance and gated releases."
 type: explanation
-area: general
+area: security
 nav_order: 4
+redirect_from:
+  - /docs/supply-chain-security
 ---
 
 # Supply Chain Security

@@ -110,7 +110,7 @@ Two refusals happen when a request is executed, not when an operation is stored,
 | `extensions.code` | When |
 |---|---|
 | `PERSISTED_OPERATION_REQUIRED` | Enforcement refuses an inline document. See [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement). |
-| `PERSISTED_OPERATION_ID_MISMATCH` | The request sends a persisted operation id and a document, and the id is not the document's own hash under the executor's hash algorithm. Send the id alone to run the stored operation, or the document alone to run it inline. See [Persisted Operations](/docs/persisted-operations). |
+| `PERSISTED_OPERATION_ID_MISMATCH` | The request sends a persisted operation id and a document, and the id is not the document's own hash under the executor's hash algorithm. Send the id alone to run the stored operation, or the document alone to run it inline. See [Persisted Operations](/docs/api/persisted-operations). |
 
 Every code the endpoint returns is listed in [Error Codes](/docs/sdk-reference/graphql-api/error-codes).
 

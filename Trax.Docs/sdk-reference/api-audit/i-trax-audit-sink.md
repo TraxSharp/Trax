@@ -14,7 +14,7 @@ source:
 
 # ITraxAuditSink
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 The destination for audit entries, implemented by the host (a database table, a log pipeline, object storage) and registered with `AddAudit<TSink>()`.
 

@@ -11,7 +11,7 @@ nav_order: 11
 # Persisted Operations
 
 Reference for `Trax.Api.GraphQL.PersistedOperations`. For what the feature does and how to roll it
-out, see [Persisted Operations](/docs/persisted-operations).
+out, see [Persisted Operations](/docs/api/persisted-operations).
 
 ## Registration
 

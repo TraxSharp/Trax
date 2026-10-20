@@ -14,7 +14,7 @@ source:
 
 # TraxAuditEntry
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/security/secure-a-graphql-host).
 
 Immutable record of one audited GraphQL request, including one the endpoint policy refused and a subscription refused when it subscribed. Two more kinds of entry describe something other than a whole request: a socket refused at `connection_init`, and one failed event of an accepted subscription. The listener builds entries and the writer passes them in batches to [ITraxAuditSink.WriteAsync](/docs/sdk-reference/api-audit/i-trax-audit-sink).
 
@@ -63,5 +63,5 @@ A host that replaces Trax's socket interceptor through `ConfigureSchema` gets no
 
 ## See also
 
-- [What an entry records](/docs/api-security#what-an-entry-records)
+- [What an entry records](/docs/security/secure-a-graphql-host#what-an-entry-records)
 - [AddAudit](/docs/sdk-reference/api-audit/add-audit), [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options), [ITraxAuditRedactor](/docs/sdk-reference/api-audit/i-trax-audit-redactor)

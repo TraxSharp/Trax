@@ -134,7 +134,7 @@ resolver with `[Parent(requires: ...)]`, which is enforced by the
 A surface that declares its posture with `HotChocolate.Authorization.Authorize` or
 `HotChocolate.Authorization.AllowAnonymous` refuses host startup, with a message naming the Trax
 attribute to use instead. Trax reads only its own attributes; why is in
-[Authorization](/docs/authorization).
+[Authorization](/docs/security/authorization-rules).
 
 | Replace | With |
 |---|---|

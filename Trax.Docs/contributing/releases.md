@@ -64,7 +64,7 @@ release is intended; describe a breaking change in the pull request instead.
    carries that one version. It uploads the packages as an artifact.
 5. The `publish` job, also gated on the `release` environment, attests the packages and pushes them
    to nuget.org with a short-lived Trusted Publishing key. See
-   [Supply Chain Security](/docs/supply-chain-security).
+   [Supply Chain Security](/docs/security/supply-chain).
 6. The site is not part of the release. Dispatch **Website** with the new tag (`v1.61.0`); its job,
    gated on the `website-deploy` environment, moves the `website` branch to the tag, which publishes
    the site for that release.

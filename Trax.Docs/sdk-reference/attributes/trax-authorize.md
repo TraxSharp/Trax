@@ -12,7 +12,7 @@ grand_parent: SDK Reference
 nav_order: 1
 ---
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/security/secure-a-graphql-host).
 
 # TraxAuthorize
 
@@ -101,7 +101,7 @@ The caller must pass `MustBeInternal` and hold `Admin` or `Manager`.
 
 ## See also
 
-- [Authorization](/docs/authorization), the full model and the exposure posture every GraphQL surface declares
+- [Authorization](/docs/security/authorization-rules), the full model and the exposure posture every GraphQL surface declares
 - [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) and [TraxAuthorization](/docs/sdk-reference/attributes/trax-authorization)
 - [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth), each form on a running host
 

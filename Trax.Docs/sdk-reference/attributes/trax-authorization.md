@@ -12,7 +12,7 @@ grand_parent: SDK Reference
 nav_order: 6
 ---
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/api-security).
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible. See [API Security](/docs/security/secure-a-graphql-host).
 
 # TraxAuthorization
 
@@ -93,4 +93,4 @@ public static class PostureCheck
 ## See also
 
 - [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) and [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous)
-- [Authorization](/docs/authorization)
+- [Authorization](/docs/security/authorization-rules)

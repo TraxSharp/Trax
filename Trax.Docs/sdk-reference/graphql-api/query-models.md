@@ -125,7 +125,7 @@ what it is. Put `[TraxAuthorize]` or `[TraxAllowAnonymous]` on the resolver meth
 a method and Trax emits the matching directive. HotChocolate's `[Authorize]` and
 `[AllowAnonymous]` are refused in their place. A field on a `[TraxAuthorize]` entity inherits that
 gate and needs nothing. See
-[Fields Added by a Type Extension](/docs/authorization#fields-added-by-a-type-extension).
+[Fields Added by a Type Extension](/docs/security/authorization-rules#fields-added-by-a-type-extension).
 
 `ExtensionResolversDeclareParentRequirements` in `Trax.Api.GraphQL.Testing` fails the build when
 a resolver reads an undeclared property. See
@@ -220,7 +220,7 @@ The configuration is validated at `Build()` time. Each failure mode throws `Inva
 
 ### Authorization
 
-A `[TraxQueryModel]` entity is exposed via GraphQL, so it must declare its authorization posture explicitly: `[TraxAuthorize]` to gate it or `[TraxAllowAnonymous]` to open it. An entity with neither fails at `TraxGraphQLBuilder.Build()` (unless the endpoint is gated with `RequireAuthorization()`, which covers it). See [Authorization guide - Required Exposure Posture](/docs/authorization#required-exposure-posture).
+A `[TraxQueryModel]` entity is exposed via GraphQL, so it must declare its authorization posture explicitly: `[TraxAuthorize]` to gate it or `[TraxAllowAnonymous]` to open it. An entity with neither fails at `TraxGraphQLBuilder.Build()` (unless the endpoint is gated with `RequireAuthorization()`, which covers it). See [Authorization guide - Required Exposure Posture](/docs/security/authorization-rules#required-exposure-posture).
 
 Apply `[TraxAuthorize]` to a `[TraxQueryModel]` entity to gate access. The directive attaches at GraphQL type level *and* at the entry field, so the gate enforces uniformly:
 
@@ -236,11 +236,11 @@ public class Article { ... }
 
 Combinator semantics, exact case-sensitive role matching, and inheritance behavior match the per-train `[TraxAuthorize]` surface. Policy names referenced by a `[TraxQueryModel]` entity must be registered with `services.AddAuthorization(...)`; a `QueryModelAuthorizationValidator` hosted service throws at host start if any policy is missing.
 
-The inverse opt-in, `[TraxAllowAnonymous]`, opens an entity to unauthenticated reads. It is mutually exclusive with `[TraxAuthorize]` and does not cascade through navigation properties to gated children. See [Authorization guide - Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous).
+The inverse opt-in, `[TraxAllowAnonymous]`, opens an entity to unauthenticated reads. It is mutually exclusive with `[TraxAuthorize]` and does not cascade through navigation properties to gated children. See [Authorization guide - Anonymous Access via TraxAllowAnonymous](/docs/security/authorization-rules#anonymous-access-via-traxallowanonymous).
 
-An entity a query model reaches through a navigation, that is not itself a `[TraxQueryModel]`, declares its posture the same way, with `[TraxAuthorize]` or `[TraxAllowAnonymous]` on its class; the host refuses to start naming the navigation when it does not, unless the endpoint is gated with `RequireAuthorization()`. A class EF Core maps as owned is part of its owner and needs no marker. See [Authorization guide - Entities a Query Model Reaches](/docs/authorization#entities-a-query-model-reaches).
+An entity a query model reaches through a navigation, that is not itself a `[TraxQueryModel]`, declares its posture the same way, with `[TraxAuthorize]` or `[TraxAllowAnonymous]` on its class; the host refuses to start naming the navigation when it does not, unless the endpoint is gated with `RequireAuthorization()`. A class EF Core maps as owned is part of its owner and needs no marker. See [Authorization guide - Entities a Query Model Reaches](/docs/security/authorization-rules#entities-a-query-model-reaches).
 
-See the [Authorization guide - Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (a property cannot be gated on its own, though a resolver method can; no row-level filtering).
+See the [Authorization guide - Per-Model Authorization](/docs/security/authorization-rules#per-model-authorization) for the full semantics table and limitations (a property cannot be gated on its own, though a resolver method can; no row-level filtering).
 
 ### Name derivation
 
@@ -501,4 +501,4 @@ query {
 - [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
 - [ConfigureFiltering](/docs/sdk-reference/graphql-api/configure-filtering)
 - [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders)
-- [Authorization: Per-Model Authorization](/docs/authorization#per-model-authorization)
+- [Authorization: Per-Model Authorization](/docs/security/authorization-rules#per-model-authorization)

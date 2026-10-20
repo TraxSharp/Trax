@@ -1,4 +1,4 @@
-// What the compiled examples on authorization.md take as given: the trains' interfaces, inputs,
+// What the compiled examples on security/authorization-rules.md take as given: the trains' interfaces, inputs,
 // outputs and junctions, and the entity the type-extension example extends.
 using Trax.Core.Functional;
 using Trax.Core.Junction;
