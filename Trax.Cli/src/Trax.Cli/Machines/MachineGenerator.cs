@@ -1,4 +1,4 @@
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
 
@@ -434,7 +434,7 @@ internal sealed partial class MachineGenerator
             throw new InvalidOperationException(
                 $"Generating {what} needs the TypeScript engine, and this trax has none bundled ({bundled} is "
                     + "missing): it was built from source, not installed from its package. Pass --engine-src "
-                    + "with the engine's src/ directory (Trax.Api.StateMachine/src, after `npm ci` there)."
+                    + "with the engine's src/ directory (Trax.StateMachine/ts/src, after `npm ci` there)."
             );
         return bundled;
     }

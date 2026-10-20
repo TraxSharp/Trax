@@ -21,9 +21,6 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using Trax.Effect.StateMachine.Persistence.Mutations;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -31,7 +28,10 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using Trax.StateMachine.Persistence.Mutations;
+using static Trax.StateMachine.Rules;
 using OperationResult = HotChocolate.Execution.OperationResult;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
@@ -205,7 +205,7 @@ public class MachineEventStressTests
     /// The history's write path under concurrency: many instances moved at once, each by a run of events, and every
     /// event's history row is there, in revision order with no gap, kind and command matching, read back through the
     /// operations service the console's instance page reads. Enforces
-    /// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+    /// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
     /// </summary>
     [Test]
     public async Task Every_event_writes_one_history_row_in_order_when_instances_move_at_once()
@@ -252,7 +252,7 @@ public class MachineEventStressTests
                 .Equal(
                     Enumerable.Range(1, EventsPerInstance + 1).Select(r => (long)r),
                     "every event adds one row at its revision, none lost or doubled under load, per "
-                        + "Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md"
+                        + "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md"
                 );
             oldestFirst[0].Kind.Should().Be(Trax.Effect.Enums.SnapshotTransitionKind.Start);
             oldestFirst

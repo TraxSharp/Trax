@@ -6,11 +6,11 @@ using HotChocolate.Resolvers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Attributes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using Trax.Effect.StateMachine.Persistence.Mutations;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.Api.GraphQL.TypeModules;
 

@@ -147,6 +147,7 @@ public class TestExcerptsNameTheirPagesTests
         Directory
             .EnumerateDirectories(RepoRoot.Monorepo, "Trax.*")
             .Where(folder => Path.GetFileName(folder) is not ("Trax.Samples" or "Trax.Docs"))
+            .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
             .Select(folder => Path.Combine(folder, "tests"))
             .Where(Directory.Exists)
             .SelectMany(tests =>

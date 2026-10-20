@@ -5,9 +5,9 @@ type: reference
 area: machines
 nav_order: 22
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Mutations/GenericContracts.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Mutations/GenericTrains.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/StateMachineOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/GenericContracts.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Mutations/GenericTrains.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineOptions.cs
 ---
 
 # Generic state-machine mutations

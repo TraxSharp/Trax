@@ -4,7 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
 using Trax.Effect.Configuration.ClientExport;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
 

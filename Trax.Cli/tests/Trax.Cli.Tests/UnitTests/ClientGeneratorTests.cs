@@ -4,7 +4,7 @@ using AwesomeAssertions;
 using Trax.Cli.Clients;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -792,11 +792,11 @@ public partial class ClientGeneratorTests
             dir = dir.Parent
         )
         {
-            var candidate = Path.Combine(dir.FullName, "Trax.Api.StateMachine", "src");
+            var candidate = Path.Combine(dir.FullName, "Trax.StateMachine", "ts", "src");
             if (Directory.Exists(candidate))
                 return candidate;
         }
-        Assert.Ignore("Trax.Api.StateMachine not found (isolated build).");
+        Assert.Ignore("Trax.StateMachine/ts not found (isolated build).");
         return "";
     }
 

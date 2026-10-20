@@ -5,9 +5,9 @@ type: explanation
 area: machines
 nav_order: 2
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/IrExporter.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/CorpusReplay.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Testing
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/IrExporter.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/CorpusReplay.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Testing
 ---
 
 # The codegen pipeline

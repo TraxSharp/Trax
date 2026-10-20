@@ -22,7 +22,7 @@
     <PackageReference Include="coverlet.collector" />
     <ProjectReference Include="../../../Trax.Core/src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
-    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
   </ItemGroup>
 
   <ItemGroup>

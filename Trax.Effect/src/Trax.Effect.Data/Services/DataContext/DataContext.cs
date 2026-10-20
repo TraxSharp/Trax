@@ -136,12 +136,12 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     public DbSet<Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; set; }
 
     /// <summary>
-    /// Gets or sets the DbSet for the state-machine drafts Trax.Effect.StateMachine.Persistence stores.
+    /// Gets or sets the DbSet for the state-machine drafts Trax.StateMachine.Persistence stores.
     /// </summary>
     public DbSet<Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; set; }
 
     /// <summary>
-    /// Gets or sets the DbSet for the exactly-once effect claims Trax.Effect.StateMachine.Persistence records.
+    /// Gets or sets the DbSet for the exactly-once effect claims Trax.StateMachine.Persistence records.
     /// </summary>
     public DbSet<Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
 

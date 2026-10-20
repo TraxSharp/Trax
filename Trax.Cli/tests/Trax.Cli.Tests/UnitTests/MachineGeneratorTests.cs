@@ -2,8 +2,8 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.UnitTests;
 

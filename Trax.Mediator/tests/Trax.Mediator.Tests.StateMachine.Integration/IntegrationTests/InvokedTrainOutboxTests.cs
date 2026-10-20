@@ -9,11 +9,11 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.SnapshotDraft;
-using Trax.Effect.StateMachine.Persistence;
-using Trax.Effect.StateMachine.Persistence.Mutations;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
+using Trax.StateMachine.Persistence;
+using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.IntegrationTests;
 

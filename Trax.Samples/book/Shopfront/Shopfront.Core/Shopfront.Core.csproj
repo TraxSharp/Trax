@@ -28,7 +28,7 @@
     <PackageReference Include="Trax.Core" />
     <PackageReference Include="Trax.Effect" />
     <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
+    <PackageReference Include="Trax.StateMachine.Persistence" />
     <PackageReference Include="Trax.Mediator" />
   </ItemGroup>
 

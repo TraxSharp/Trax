@@ -24,7 +24,7 @@ const folders: Folder[] = [
   },
   {
     folder: "Trax.Effect",
-    summary: "Run recording, storage, decisions and state machines",
+    summary: "Run recording, storage and decisions",
     packages: [
       {
         name: "Trax.Effect",
@@ -60,16 +60,22 @@ const folders: Folder[] = [
         name: "Trax.Effect.Broadcaster.SignalR",
         desc: "Lifecycle events pushed to Blazor and JavaScript clients",
       },
+    ],
+  },
+  {
+    folder: "Trax.StateMachine",
+    summary: "State machines in C# and TypeScript",
+    packages: [
       {
-        name: "Trax.Effect.StateMachine",
+        name: "Trax.StateMachine",
         desc: "Portable snapshot state-machine engine",
       },
       {
-        name: "Trax.Effect.StateMachine.Persistence",
+        name: "Trax.StateMachine.Persistence",
         desc: "Postgres snapshot store and run-once effects",
       },
       {
-        name: "Trax.Effect.StateMachine.Testing",
+        name: "Trax.StateMachine.Testing",
         desc: "Conformance tests between the C# and TypeScript engines",
       },
     ],

@@ -10,7 +10,7 @@ namespace Trax.Effect.Models.SnapshotDraft;
 /// </summary>
 /// <remarks>
 /// <para>EF Core mapping lives in <c>Trax.Effect.Data.Models.SnapshotDraft.PersistentSnapshotDraft</c> (in
-/// Trax.Effect.Data). The table ships in the core migration set, and Trax.Effect.StateMachine.Persistence reaches
+/// Trax.Effect.Data). The table ships in the core migration set, and Trax.StateMachine.Persistence reaches
 /// it through <c>IDataContext.SnapshotDrafts</c> rather than through a context or SQL of its own.</para>
 ///
 /// <para><b>Identity names the owner kind.</b> A user's draft is unique by <c>(user_key, machine, id)</c>: its

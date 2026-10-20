@@ -34,10 +34,10 @@ using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Samples.StateMachine;
 using Trax.Samples.StateMachine.Api;
+using Trax.StateMachine.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 

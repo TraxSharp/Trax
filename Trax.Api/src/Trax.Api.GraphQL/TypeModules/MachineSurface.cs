@@ -2,8 +2,8 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.TypeModules;
 

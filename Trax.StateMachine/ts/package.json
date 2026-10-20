@@ -1,0 +1,79 @@
+{
+  "name": "@traxsharp/state-machine",
+  "version": "0.0.0",
+  "description": "Portable, resumable snapshot state-machine engine — the TypeScript twin of Trax.StateMachine. Represents a multi-step flow's state as language-neutral JSON so a client and a C# backend agree on it, with illegal (state, context) pairs unrepresentable and every operation total.",
+  "license": "MIT",
+  "homepage": "https://traxsharp.net",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TraxSharp/Trax.git",
+    "directory": "Trax.StateMachine/ts"
+  },
+  "bugs": {
+    "url": "https://github.com/TraxSharp/Trax/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js",
+      "require": "./dist/react.cjs"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js",
+      "require": "./dist/client/index.cjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "bundle:cli": "node tools/bundle-cli.mjs",
+    "prepack": "npm run build && node -e \"require('node:fs').copyFileSync('../../LICENSE', 'LICENSE')\"",
+    "postpack": "node -e \"require('node:fs').rmSync('LICENSE', { force: true })\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "graphql-ws": ">=6",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "graphql-ws": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.19.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "ajv": "^8.18.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^25.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsup": "^8.3.5",
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.11"
+  }
+}

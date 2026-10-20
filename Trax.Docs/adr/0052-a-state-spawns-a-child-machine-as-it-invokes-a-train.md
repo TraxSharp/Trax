@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [effect, api]
+repos: [effect, statemachine, api]
 areas: [platform, data-model]
 status: accepted
 ---
@@ -68,11 +68,11 @@ draft; once the parent has moved on it is an ordinary instance.
 
 ## Exemplars
 
-**Enforced elsewhere:** `SpawnedChildTests` in `Trax.Effect.StateMachine.Persistence.Integration` drives the flow on
+**Enforced elsewhere:** `SpawnedChildTests` in `Trax.StateMachine.Persistence.Integration` drives the flow on
 Postgres and SQLite (the child is created for the parent's owner, its end and its failure move the parent, leaving
 removes it and what it waits on, the sweep delivers an end its write did not and a child that disappeared, and a
 waiting parent's child cannot be discarded, saved or answered for by a forged outcome); `SpawnsStartupValidatorTests`
-in the same project pins the startup refusals; `SpawnDeclarationTests` in `Trax.Effect.StateMachine.Tests` pins the
+in the same project pins the startup refusals; `SpawnDeclarationTests` in `Trax.StateMachine.Tests` pins the
 builder and the IR export.
 
 - [Spawn a child machine from a state](/docs/statemachine/spawning-child-machines) is the rule as published.

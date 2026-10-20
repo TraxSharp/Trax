@@ -1,11 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using Ingest.Contracts;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
-// The train's contract is declared as in Trax.Effect.StateMachine.Tests, so both describe the same machine and
+// The train's contract is declared as in Trax.StateMachine.Tests, so both describe the same machine and
 // export the one committed ingest.ir.json.
 namespace Ingest.Contracts
 {
@@ -44,7 +44,7 @@ namespace Trax.Cli.Tests.Fakes
 
     /// <summary>
     /// A machine whose <c>Fetching</c> state invokes a train, identical to the committed <c>ingest</c> machine in
-    /// Trax.Api.StateMachine, so the CLI's IR, twin and corpus for a machine with outcome triggers can be
+    /// Trax.StateMachine/ts, so the CLI's IR, twin and corpus for a machine with outcome triggers can be
     /// byte-compared against the committed artifacts.
     /// </summary>
     public sealed class DeclarativeIngestMachine : Machine<IngestState, IngestTrigger>

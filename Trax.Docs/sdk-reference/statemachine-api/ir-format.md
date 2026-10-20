@@ -6,12 +6,12 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 5
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/IrExporter.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/SchemaReflection.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/ValueFormats.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/IrExporter.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/SchemaReflection.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ValueFormats.cs
 ---
 
 # IR format
@@ -25,7 +25,7 @@ transition's guard and reducer as data. The per-language generators read it. The
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine;
+namespace Trax.StateMachine;
 
 public static class IrExporter
 {
@@ -128,7 +128,7 @@ reads, saying whether to upgrade the package or regenerate. An IR without `irFor
 ## The schema
 
 The format is also written as a JSON Schema (draft 2020-12),
-[`conformance/ir.schema.json`](https://github.com/TraxSharp/Trax/blob/main/Trax.Api.StateMachine/conformance/ir.schema.json),
+[`conformance/ir.schema.json`](https://github.com/TraxSharp/Trax/blob/main/Trax.StateMachine/conformance/ir.schema.json),
 and the schema is normative: an engine reads every document it accepts, and the exporter writes nothing it refuses.
 Every object in it is closed, so a field it does not name is refused rather than ignored. Both runtimes' tests check
 every IR the exporter writes against it, so a field added to the IR without the schema fails them.

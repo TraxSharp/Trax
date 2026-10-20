@@ -1,0 +1,15 @@
+<Project>
+  <!-- MSBuild reads only the nearest Directory.Build.props, so this one imports the folder's own first. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- [Red] runs a test written before its code with an inverted verdict, so it runs in CI without
+       failing the build until the code arrives. Every test project of this folder compiles the one copy. -->
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <Compile
+      Include="$(MSBuildThisFileDirectory)RedAttribute.cs"
+      Link="RedAttribute.cs"
+      Visible="false"
+    />
+    <Using Include="Trax.Testing.Red" />
+  </ItemGroup>
+</Project>

@@ -4,8 +4,8 @@ using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.TypeModules;
-using Trax.Effect.StateMachine;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.StateMachine;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 

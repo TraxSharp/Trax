@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Npgsql;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.IntegrationTests;
 

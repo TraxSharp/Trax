@@ -18,6 +18,7 @@ each package had its own version, so older guides name the package too.
 
 | Guide | Applies from |
 |---|---|
+| [Move to the Trax.StateMachine packages](/docs/migration-guides/trax-statemachine-packages) | The release after Trax 1.67.0 |
 | [Reach trains through your own documents](/docs/migration-guides/reach-trains-through-your-own-documents) | Trax 1.67.0 |
 | [Adapt to the machine wire changes](/docs/migration-guides/machine-wire-changes) | Trax 1.64.0 |
 | [Regenerate twins after the trax machine generate defaults changed](/docs/migration-guides/trax-machine-generate-defaults) | Trax 1.63.1 |

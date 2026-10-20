@@ -3,10 +3,10 @@ using CsCheck;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Testing;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Tests.Integration.Fakes.Timers;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests.Timers;
 

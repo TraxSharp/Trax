@@ -334,7 +334,7 @@ public static class ServiceExtensions
             // machines; AddStateMachines' startup check refuses a machine that invokes trains
             // without it.
             .AddScoped<
-                Trax.Effect.StateMachine.Persistence.IInvokedTrainLauncher,
+                Trax.StateMachine.Persistence.IInvokedTrainLauncher,
                 Services.InvokedTrains.InvokedTrainLauncher
             >()
             .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);

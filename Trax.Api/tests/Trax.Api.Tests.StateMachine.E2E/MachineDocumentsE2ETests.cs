@@ -8,8 +8,8 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
 

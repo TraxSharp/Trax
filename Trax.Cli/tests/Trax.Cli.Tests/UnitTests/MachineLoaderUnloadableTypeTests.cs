@@ -89,8 +89,8 @@ public class MachineLoaderUnloadableTypeTests
             : "";
         var source = $$"""
             using System.Text.Json.Nodes;
-            using Trax.Effect.StateMachine;
-            using Trax.Effect.StateMachine.Persistence;
+            using Trax.StateMachine;
+            using Trax.StateMachine.Persistence;
             namespace Consumer;
             public class PlayersController : Missing.ControllerBase { }
             {{machine}}

@@ -1,7 +1,7 @@
 using Trax.Effect.Services.EffectJunction;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Machines;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Recovery.Trains.PartitionAction.Junctions;
 

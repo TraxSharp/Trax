@@ -40,10 +40,10 @@ using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.DeadLetterRequeue;
 using Trax.Scheduler.Services.Effects;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.Extensions;
 

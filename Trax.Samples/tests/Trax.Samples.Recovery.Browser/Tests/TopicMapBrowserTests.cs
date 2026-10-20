@@ -2,11 +2,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Playwright;
-using Trax.Effect.StateMachine;
 using Trax.Samples.Recovery.Browser.Factories;
 using Trax.Samples.Recovery.Browser.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.Samples.Shared.Testing;
+using Trax.StateMachine;
 using static Microsoft.Playwright.Assertions;
 
 namespace Trax.Samples.Recovery.Browser.Tests;

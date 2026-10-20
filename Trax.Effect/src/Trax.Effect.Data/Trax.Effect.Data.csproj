@@ -30,7 +30,7 @@
   </ItemGroup>
   <!-- The invoked-run listener a provider registers and the state machine's outcome reconciler hears. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
+    <InternalsVisibleTo Include="Trax.StateMachine.Persistence" />
   </ItemGroup>
   <!-- A run closed outside a train publishes its outcome through the same helper wherever it was closed. -->
   <ItemGroup>
@@ -40,6 +40,6 @@
   </ItemGroup>
   <!-- The change feed's startup check is tested against a notice source that reports a given switch. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+    <InternalsVisibleTo Include="Trax.StateMachine.Persistence.Integration" />
   </ItemGroup>
 </Project>

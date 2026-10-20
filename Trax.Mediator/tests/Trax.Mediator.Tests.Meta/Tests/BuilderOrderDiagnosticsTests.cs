@@ -19,7 +19,7 @@ public class BuilderOrderDiagnosticsTests
         using System.Reflection;
         using Microsoft.Extensions.DependencyInjection;
         using Trax.Effect.Extensions;
-        using Trax.Effect.StateMachine.Persistence;
+        using Trax.StateMachine.Persistence;
         using Trax.Mediator.Extensions;
 
         public static class Host

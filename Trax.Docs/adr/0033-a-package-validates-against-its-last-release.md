@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [core, effect, mediator, scheduler, api, dashboard]
+repos: [core, effect, statemachine, mediator, scheduler, api, dashboard]
 areas: [packaging, ci]
 status: accepted
 ---

@@ -19,12 +19,12 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.Scheduling;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.ApiDashboard.Browser.Factories;
 

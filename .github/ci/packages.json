@@ -1,5 +1,5 @@
 {
-  "_comment": "One entry per folder CI builds. 'upstream' names the folders whose change can break this one; the change detector runs a folder when it or anything upstream of it changes. 'dotnet' configures the .NET job (absent for a folder with no .NET build; 'release-pack' names the one project a release packs instead of the solution; 'state-machine' installs Trax.Api.StateMachine's npm packages first, for tests that run its generators under node; 'playwright' installs chromium, and the npm packages of Trax.Api.StateMachine and the Recovery page, which the browser tests build, Trax.Docs/adr/0049; 'api-dashboard' installs the npm packages of Trax.Api.Dashboard's React app before the build, which compiles it into the package); 'adr' configures the ADR guard over that folder's corpus. 'suites' are test projects carved out of a folder into a job of their own: one runs when anything in its 'upstream' (closed over like a folder's) or under one of its 'paths' changed, its folder's own job leaves it out with that row's 'test-args' filter, and its 'dotnet' takes the same keys as a folder's, with 'chromium' to install the browser, 'postgres-user'/'postgres-password' and 'rabbitmq-user'/'rabbitmq-password' for services that log in as someone other than trax, and 'web' for an npm folder (relative to the folder) whose tests and build run after the .NET tests.",
+  "_comment": "One entry per folder CI builds. 'upstream' names the folders whose change can break this one; the change detector runs a folder when it or anything upstream of it changes. 'dotnet' configures the .NET job (absent for a folder with no .NET build; 'release-pack' names the one project a release packs instead of the solution; 'state-machine' installs the npm packages of Trax.StateMachine/ts, the TypeScript engine, first, for tests that run its generators under node; 'playwright' installs chromium, and the npm packages of Trax.StateMachine/ts and the Recovery page, which the browser tests build, Trax.Docs/adr/0049; 'api-dashboard' installs the npm packages of Trax.Api.Dashboard's React app before the build, which compiles it into the package); 'adr' configures the ADR guard over that folder's corpus. 'suites' are jobs of their own beside the folders' jobs: one runs when anything in its 'upstream' (closed over like a folder's) or under one of its 'paths' changed. A suite with 'dotnet' restores, builds and tests its 'project' (a test project or a solution) from its 'folder', and its 'dotnet' takes the same keys as a folder's, with 'chromium' to install the browser, 'postgres-user'/'postgres-password' and 'rabbitmq-user'/'rabbitmq-password' for services that log in as someone other than trax, 'web' for an npm folder (relative to the folder) whose tests and build run after the .NET tests, 'checks' for a suite that is a folder's whole solution and so gets the folder job's formatting, lock and deprecation checks (and the Dependabot lockfile workflow's regeneration), 'pack' to pack it with package validation (the release packs it too), and 'conformance' to run the conformance kit through the TypeScript engine after the tests. A test project carved out of a folder's own job is left out of that job with the row's 'test-args' filter. A suite with no 'dotnet' is an npm folder with a job of its own in ci.yml (state-machine-ts). Trax.StateMachine has no folder job: its C#, TypeScript and cross-engine checks are three suites, so a change to one language does not rebuild the other.",
   "packages": [
     {
       "folder": "Trax.Core",
@@ -9,13 +9,18 @@
     },
     {
       "folder": "Trax.Effect",
-      "upstream": ["Trax.Core", "Trax.Api.StateMachine"],
-      "dotnet": { "solution": "Trax.Effect.slnx", "state-machine": true, "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": true, "databases": [], "timeout": 15, "test-args": "" },
+      "upstream": ["Trax.Core"],
+      "dotnet": { "solution": "Trax.Effect.slnx", "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": true, "databases": [], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "docs/adr", "known-areas": "migrations,providers,data-model,testing,platform,auth", "census-root": "tests/Trax.Effect.Tests.Meta" }
     },
     {
-      "folder": "Trax.Mediator",
+      "folder": "Trax.StateMachine",
       "upstream": ["Trax.Effect"],
+      "adr": { "adr-root": "docs/adr", "test-roots": "dotnet/tests", "known-areas": "platform,data-model,testing,auth", "census-root": "dotnet/tests/Trax.StateMachine.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Mediator",
+      "upstream": ["Trax.StateMachine"],
       "dotnet": { "solution": "Trax.Mediator.slnx", "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "docs/adr", "known-areas": "auth,platform,testing", "census-root": "tests/Trax.Mediator.Tests.Meta" }
     },
@@ -33,7 +38,7 @@
     },
     {
       "folder": "Trax.Cli",
-      "upstream": ["Trax.Scheduler", "Trax.Api.StateMachine"],
+      "upstream": ["Trax.Scheduler", "Trax.StateMachine"],
       "dotnet": { "solution": "Trax.Cli.slnx", "state-machine": true, "pack": true, "coverage": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "docs/adr", "known-areas": "tooling,platform,testing", "census-root": "tests/Trax.Cli.Tests.Meta" }
     },
@@ -47,10 +52,9 @@
       "folder": "Trax.Docs",
       "upstream": ["Trax.Api", "Trax.Cli", "Trax.Samples"],
       "dotnet": { "solution": "Trax.Docs.slnx", "pack": false, "coverage": false, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
-      "adr": { "adr-root": "adr", "known-areas": "testing,platform,packaging,ci,naming,data-model,graphql,docs,migrations,providers", "known-repos": "core,effect,mediator,scheduler,dashboard,api,cli,samples,docs,website", "require-repos-key": "true", "census-root": "tests/Trax.Docs.Tests" }
+      "adr": { "adr-root": "adr", "known-areas": "testing,platform,packaging,ci,naming,data-model,graphql,docs,migrations,providers", "known-repos": "core,effect,statemachine,mediator,scheduler,dashboard,api,cli,samples,docs,website", "require-repos-key": "true", "census-root": "tests/Trax.Docs.Tests" }
     },
-    { "folder": "Trax.Website", "upstream": ["Trax.Docs", "Trax.Api"] },
-    { "folder": "Trax.Api.StateMachine", "upstream": [] }
+    { "folder": "Trax.Website", "upstream": ["Trax.Docs", "Trax.Api"] }
   ],
   "suites": [
     {
@@ -68,6 +72,28 @@
       "upstream": ["Trax.Api"],
       "paths": ["Trax.Samples/book/"],
       "dotnet": { "api-dashboard": true, "web": "book/Shopfront/web", "postgres": "shopfront", "postgres-user": "postgres", "postgres-password": "shopfront", "rabbitmq": true, "rabbitmq-user": "guest", "rabbitmq-password": "guest", "databases": [], "timeout": 15, "test-args": "" }
+    },
+    {
+      "name": "state-machine-dotnet",
+      "folder": "Trax.StateMachine/dotnet",
+      "project": "Trax.StateMachine.slnx",
+      "upstream": ["Trax.Effect"],
+      "paths": ["Trax.StateMachine/dotnet/", "Trax.StateMachine/conformance/"],
+      "dotnet": { "checks": true, "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "--filter TestCategory!=CrossEngine" }
+    },
+    {
+      "name": "state-machine-ts",
+      "folder": "Trax.StateMachine/ts",
+      "upstream": [],
+      "paths": ["Trax.StateMachine/ts/", "Trax.StateMachine/conformance/"]
+    },
+    {
+      "name": "state-machine-conformance",
+      "folder": "Trax.StateMachine/dotnet",
+      "project": "tests/Trax.StateMachine.Tests/Trax.StateMachine.Tests.csproj",
+      "upstream": ["Trax.Effect"],
+      "paths": ["Trax.StateMachine/"],
+      "dotnet": { "state-machine": true, "conformance": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "--filter TestCategory=CrossEngine" }
     }
   ]
 }

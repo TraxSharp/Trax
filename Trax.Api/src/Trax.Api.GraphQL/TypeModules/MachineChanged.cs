@@ -8,8 +8,8 @@ using HotChocolate.Resolvers;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Authorization;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.TypeModules;
 

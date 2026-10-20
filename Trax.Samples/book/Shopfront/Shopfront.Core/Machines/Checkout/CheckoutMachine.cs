@@ -6,9 +6,9 @@ using Shopfront.Machines.Parcel.Models;
 using Shopfront.Trains.PlaceOrder;
 using Shopfront.Trains.PlaceOrder.Models;
 using Trax.Effect.Attributes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
 namespace Shopfront.Machines.Checkout;
 

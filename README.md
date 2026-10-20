@@ -48,13 +48,13 @@ folder depends only on folders above it in this table; take the layers you need,
 | Folder | What it adds |
 |---|---|
 | [Trax.Core](Trax.Core) | Trains, junctions and the chain, with no database and no DI container |
-| [Trax.Effect](Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine |
+| [Trax.Effect](Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers |
+| [Trax.StateMachine](Trax.StateMachine) | State machines a page drives and the server applies, in C# and TypeScript, held to one conformance kit |
 | [Trax.Mediator](Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
 | [Trax.Scheduler](Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
 | [Trax.Api](Trax.Api) | GraphQL generated from your trains and machines: a mutation per machine event, authorization checked on the server, persisted operations, audit, live subscriptions and the operations console your host serves |
 | [Trax.Cli](Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
 | [Trax.Samples](Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
-| [Trax.Api.StateMachine](Trax.Api.StateMachine) | `@traxsharp/state-machine`, the TypeScript twin of the state-machine engine |
 | [Trax.Docs](Trax.Docs) | The documentation published at [traxsharp.net/docs](https://traxsharp.net/docs), and the decision records |
 | [Trax.Website](Trax.Website) | The source of [traxsharp.net](https://traxsharp.net) |
 
@@ -64,7 +64,7 @@ history is here, under each folder.
 ### The coloured squares
 
 Release notes, pull requests and the docs mark each change with the parts of Trax it touches. The parts are concepts,
-not folders: `Trax.Effect` alone holds data, plumbing, trains and state machines. A change that crosses several shows
+not folders: `Trax.Effect` alone holds data, plumbing and trains. A change that crosses several shows
 several squares, innermost first.
 
 | | Part | What it covers |

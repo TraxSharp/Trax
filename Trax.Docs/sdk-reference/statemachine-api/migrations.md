@@ -6,12 +6,12 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 6
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/SnapshotMachine.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/MachineDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/SnapshotMachine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineDefinition.cs
 ---
 
 # Migrations
@@ -55,7 +55,7 @@ the current definition's schema. Every path that reads a snapshot rehydrates it:
 A draft whose version has no migration path to the current definition, or is newer than it, rehydrates as
 [`VERSION_MISMATCH`](/docs/sdk-reference/statemachine-api/result-codes).
 
-The machines in `Trax.Api.StateMachine/machines/` pin a migration with a migration golden,
+The machines in `Trax.StateMachine/conformance/machines/` pin a migration with a migration golden,
 `machines/<machine>/migration.json`: a committed set of stored older-version snapshots and the exact
 [canonical wire](/docs/statemachine/canonical-wire) each must become. The tests of both runtimes replay it, so a migration that drops, renames or reorders a surviving field fails, and the two runtimes
 cannot upgrade the same draft differently.

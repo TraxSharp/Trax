@@ -192,18 +192,18 @@ jobs:
         # into this checkout only, and never committed. prepack builds dist/ from this tree.
         # build-test already typechecked and tested this commit's engine. It runs before the
         # NuGet packs because packing Trax.Cli bundles the generators from this install.
-        working-directory: Trax.Api.StateMachine
+        working-directory: Trax.StateMachine/ts
         env:
           PKG_VERSION: ${{ needs.release.outputs.version }}
         run: |
           npm ci --ignore-scripts
           npm version "$PKG_VERSION" --no-git-tag-version
-          mkdir -p ../npm
-          npm pack --pack-destination ../npm
+          mkdir -p ../../npm
+          npm pack --pack-destination ../../npm
 
           # Exactly one tarball, at the released version.
-          if [ "$(cd ../npm && ls)" != "traxsharp-state-machine-$PKG_VERSION.tgz" ]; then
-            echo "::error::Expected only traxsharp-state-machine-$PKG_VERSION.tgz, packed: $(ls ../npm)"
+          if [ "$(cd ../../npm && ls)" != "traxsharp-state-machine-$PKG_VERSION.tgz" ]; then
+            echo "::error::Expected only traxsharp-state-machine-$PKG_VERSION.tgz, packed: $(ls ../../npm)"
             exit 1
           fi
       - name: Install the API dashboard (locked, no install scripts)
@@ -213,14 +213,16 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Pack every package
         # One version for every package. A folder packs its solution, or the one project
-        # packages.json names under release-pack (Trax.Samples ships only its templates).
+        # packages.json names under release-pack (Trax.Samples ships only its templates), and
+        # a suite marked pack packs its own (Trax.StateMachine's C# engine has no folder job).
         env:
           # Bind the version to env and reference the shell var (it is pipeline-
           # controlled, but this is the pattern to use for any ${{ }} value).
           PKG_VERSION: ${{ needs.release.outputs.version }}
         run: |
-          jq -r '.packages[] | select(.dotnet)
-                 | .folder + "/" + (.dotnet["release-pack"] // (if .dotnet.pack then .dotnet.solution else empty end))' \
+          jq -r '(.packages[] | select(.dotnet)
+                  | .folder + "/" + (.dotnet["release-pack"] // (if .dotnet.pack then .dotnet.solution else empty end))),
+                 ((.suites // [])[] | select(.dotnet.pack) | .folder + "/" + .project)' \
             .github/ci/packages.json > "$RUNNER_TEMP/pack-list"
           while IFS= read -r project; do
             echo "::group::$project"

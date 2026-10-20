@@ -6,12 +6,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Tests.Integration.Fakes.Timers;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests.Timers;
 

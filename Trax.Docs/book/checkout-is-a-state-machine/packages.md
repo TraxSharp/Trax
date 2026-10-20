@@ -12,7 +12,7 @@ follows: book/checkout-is-a-state-machine/where-it-lives
 
 # 12.3 Packages
 
-The library takes `Trax.Effect.StateMachine.Persistence`, which holds machines and stores their
+The library takes `Trax.StateMachine.Persistence`, which holds machines and stores their
 instances. The hub serves them, which needs persisted operations, and reports a run's progress
 while a machine waits on it. The tests check the machine against its exported definition.
 
@@ -38,8 +38,8 @@ while a machine waits on it. The tests check the machine against its exported de
     <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine.Testing" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Persistence" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Scheduler" Version="1.61.0" />
@@ -93,7 +93,7 @@ while a machine waits on it. The tests check the machine against its exported de
     <PackageReference Include="Trax.Core" />
     <PackageReference Include="Trax.Effect" />
     <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
+    <PackageReference Include="Trax.StateMachine.Persistence" />
     <PackageReference Include="Trax.Mediator" />
   </ItemGroup>
 
@@ -163,7 +163,7 @@ while a machine waits on it. The tests check the machine against its exported de
     <PackageReference Include="Trax.Core.Testing" />
     <PackageReference Include="Trax.Effect.Data.InMemory" />
     <PackageReference Include="Trax.Effect.Data.Testing" />
-    <PackageReference Include="Trax.Effect.StateMachine.Testing" />
+    <PackageReference Include="Trax.StateMachine.Testing" />
     <PackageReference Include="Trax.Mediator.Testing" />
   </ItemGroup>
 </Project>

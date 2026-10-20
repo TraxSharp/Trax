@@ -30,7 +30,7 @@
     <PackageReference Include="Trax.Core.Testing" />
     <PackageReference Include="Trax.Effect.Data.InMemory" />
     <PackageReference Include="Trax.Effect.Data.Testing" />
-    <PackageReference Include="Trax.Effect.StateMachine.Testing" />
+    <PackageReference Include="Trax.StateMachine.Testing" />
     <PackageReference Include="Trax.Mediator.Testing" />
   </ItemGroup>
 </Project>

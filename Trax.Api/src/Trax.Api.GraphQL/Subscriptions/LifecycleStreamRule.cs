@@ -47,12 +47,12 @@ internal sealed class LifecycleStreamRule
         StringComparer.Ordinal
     )
     {
-        typeof(Trax.Effect.StateMachine.Persistence.Mutations.ISaveSnapshot).FullName!,
-        typeof(Trax.Effect.StateMachine.Persistence.Mutations.IAdvanceSnapshot).FullName!,
-        typeof(Trax.Effect.StateMachine.Persistence.Mutations.ILoadSnapshot).FullName!,
-        typeof(Trax.Effect.StateMachine.Persistence.Mutations.ISendSnapshot).FullName!,
-        typeof(Trax.Effect.StateMachine.Persistence.Mutations.IStartSnapshot).FullName!,
-        typeof(Trax.Effect.StateMachine.Persistence.Mutations.IDiscardSnapshot).FullName!,
+        typeof(Trax.StateMachine.Persistence.Mutations.ISaveSnapshot).FullName!,
+        typeof(Trax.StateMachine.Persistence.Mutations.IAdvanceSnapshot).FullName!,
+        typeof(Trax.StateMachine.Persistence.Mutations.ILoadSnapshot).FullName!,
+        typeof(Trax.StateMachine.Persistence.Mutations.ISendSnapshot).FullName!,
+        typeof(Trax.StateMachine.Persistence.Mutations.IStartSnapshot).FullName!,
+        typeof(Trax.StateMachine.Persistence.Mutations.IDiscardSnapshot).FullName!,
     };
 
     /// <summary>Whether events of the train named <paramref name="trainName"/> are published.</summary>

@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [core, effect, mediator, scheduler, dashboard, api, cli, samples, docs]
+repos: [core, effect, statemachine, mediator, scheduler, dashboard, api, cli, samples, docs]
 areas: [ci]
 status: superseded-by-0042
 ---

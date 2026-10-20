@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 // The state-machine engine, @traxsharp/state-machine, built from its source in this repository. The generated client
 // in src/trax imports it. The engine's source imports react from beside it, so react is deduplicated: the page and
 // the engine share one copy.
-const engine = fileURLToPath(new URL("../../../../Trax.Api.StateMachine/src", import.meta.url));
+const engine = fileURLToPath(new URL("../../../../Trax.StateMachine/ts/src", import.meta.url));
 
 export default defineConfig({
   plugins: [react()],

@@ -1,5 +1,5 @@
 using Npgsql;
-using Trax.Effect.StateMachine.Persistence.Mutations;
+using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.Api.StateMachine.E2E;
 

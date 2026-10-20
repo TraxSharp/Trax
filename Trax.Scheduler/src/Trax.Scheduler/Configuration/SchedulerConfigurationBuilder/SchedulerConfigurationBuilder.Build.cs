@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using Trax.Effect.Data.Services.HostHeartbeats;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DeadLetterRequeue;
@@ -31,6 +30,7 @@ using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 using Trax.Scheduler.Trains.MetadataCleanup;
 using Trax.Scheduler.Utilities;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Configuration;
 

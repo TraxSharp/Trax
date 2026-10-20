@@ -29,7 +29,7 @@ says how, in one class.
 
 ```csharp compile=app file=Shopfront.Hub/Auth/TraxCallerSnapshotPrincipal.cs
 using Trax.Api.Auth;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Shopfront.Auth;
 
@@ -65,7 +65,7 @@ using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;

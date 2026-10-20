@@ -12,11 +12,11 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
 

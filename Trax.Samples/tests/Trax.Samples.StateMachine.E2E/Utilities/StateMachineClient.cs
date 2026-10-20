@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
 

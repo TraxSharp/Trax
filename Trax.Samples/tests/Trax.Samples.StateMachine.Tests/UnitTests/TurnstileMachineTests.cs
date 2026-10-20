@@ -1,5 +1,5 @@
-using Trax.Effect.StateMachine;
 using Trax.Samples.StateMachine.Tests.Fakes;
+using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.Tests.UnitTests;
 

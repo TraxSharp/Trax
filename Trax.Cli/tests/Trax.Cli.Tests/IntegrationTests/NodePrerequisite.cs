@@ -11,7 +11,7 @@ internal static class NodePrerequisite
     {
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
             Assert.Fail(
-                $"{why} CI installs node and runs `npm ci` in Trax.Api.StateMachine for this folder, so a "
+                $"{why} CI installs node and runs `npm ci` in Trax.StateMachine/ts for this folder, so a "
                     + "test that skipped here would prove nothing."
             );
         Assert.Ignore(why);

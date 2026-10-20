@@ -80,12 +80,12 @@ describe('build job', () => {
   it('packs the engine at the released version, without re-running the tests CI ran', () => {
     const pack = step(build, 'Pack the TypeScript engine');
 
-    assert.equal(pack['working-directory'], 'Trax.Api.StateMachine');
+    assert.equal(pack['working-directory'], 'Trax.StateMachine/ts');
     assert.equal(pack.env.PKG_VERSION, '${{ needs.release.outputs.version }}');
     assert.match(pack.run, /npm ci --ignore-scripts/);
     assert.doesNotMatch(pack.run, /npm test|npm run typecheck/);
     assert.match(pack.run, /npm version "\$PKG_VERSION" --no-git-tag-version/);
-    assert.match(pack.run, /npm pack --pack-destination \.\.\/npm/);
+    assert.match(pack.run, /npm pack --pack-destination \.\.\/\.\.\/npm/);
   });
 
   it('versions the engine before the NuGet packs, which bundle it into Trax.Cli', () => {
@@ -97,6 +97,17 @@ describe('build job', () => {
     assert.equal(install['working-directory'], 'Trax.Api/src/Trax.Api.Dashboard/ClientApp');
     assert.equal(install.run, 'npm ci --ignore-scripts');
     assert.ok(indexOf(build, 'Install the API dashboard (locked, no install scripts)') < indexOf(build, 'Pack every package'));
+  });
+
+  it('packs every folder solution and every suite marked pack, the C# state-machine engine among them', () => {
+    const run = step(build, 'Pack every package').run;
+    const program = run.match(/jq -r '([\s\S]*?)' \\/)[1];
+    const packages = join(dirname(workflowPath), '..', 'ci', 'packages.json');
+    const list = execFileSync('jq', ['-r', program, packages], { encoding: 'utf8' }).trim().split('\n');
+
+    assert.ok(list.includes('Trax.Effect/Trax.Effect.slnx'));
+    assert.ok(list.includes('Trax.StateMachine/dotnet/Trax.StateMachine.slnx'));
+    assert.equal(new Set(list).size, list.length);
   });
 
   it('hands publish the packages and their digests', () => {

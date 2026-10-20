@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Services.Authorization;
 

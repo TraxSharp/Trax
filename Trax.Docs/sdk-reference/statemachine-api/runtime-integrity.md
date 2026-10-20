@@ -6,12 +6,12 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 10
-package: Trax.Effect.StateMachine.Persistence
-namespace: Trax.Effect.StateMachine.Persistence
+package: Trax.StateMachine.Persistence
+namespace: Trax.StateMachine.Persistence
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotSelfCheck.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotMachineRegistry.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Machine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotSelfCheck.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotMachineRegistry.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Machine.cs
 ---
 
 # Runtime integrity

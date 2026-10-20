@@ -1,6 +1,6 @@
 using System.Reflection;
-using Trax.Effect.StateMachine;
 using Trax.Samples.Recovery.Machines;
+using Trax.StateMachine;
 
 namespace Trax.Samples.Recovery.E2E.Utilities;
 

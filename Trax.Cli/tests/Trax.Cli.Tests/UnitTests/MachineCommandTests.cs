@@ -254,9 +254,7 @@ public class MachineCommandTests
             MachineCommand.RunNew("checkout", _tempDir, "MyApp.Machines", false, false)
         );
 
-        stdout
-            .Should()
-            .Contain("dotnet add package Trax.Effect.StateMachine.Persistence --version ");
+        stdout.Should().Contain("dotnet add package Trax.StateMachine.Persistence --version ");
         stdout.Should().Contain("--assembly").And.Contain("Node.js 22").And.Contain("--engine-src");
     }
 

@@ -6,12 +6,12 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 15
-package: Trax.Effect.StateMachine.Testing
-namespace: Trax.Effect.StateMachine.Testing
+package: Trax.StateMachine.Testing
+namespace: Trax.StateMachine.Testing
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Testing/MachineConformance.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Testing/DifferentialCorpus.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/CorpusReplay.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Testing/MachineConformance.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Testing/DifferentialCorpus.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/CorpusReplay.cs
 ---
 
 # MachineConformance
@@ -23,7 +23,7 @@ test framework.
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine.Testing;
+namespace Trax.StateMachine.Testing;
 
 public static class MachineConformance
 {
@@ -57,13 +57,13 @@ public static class DifferentialCorpus
 
 - The comparisons ignore a trailing newline: committed files carry one, the in-memory forms do not.
 - `Replay` compares reason codes and canonical wire, never rejection detail. `CorpusReplay.Replay` in
-  `Trax.Effect.StateMachine` is the same replay, shipped in the engine so a host can run it at startup;
+  `Trax.StateMachine` is the same replay, shipped in the engine so a host can run it at startup;
   `IMachine.SelfCheck()` calls it.
 
 ## Example
 
 ```csharp compile
-using Trax.Effect.StateMachine.Testing;
+using Trax.StateMachine.Testing;
 
 var problems = MachineConformance.Check(
     new CheckoutMachine(),

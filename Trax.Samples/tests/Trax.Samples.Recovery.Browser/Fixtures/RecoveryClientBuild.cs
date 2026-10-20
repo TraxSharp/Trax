@@ -5,7 +5,7 @@ namespace Trax.Samples.Recovery.Browser.Fixtures;
 
 /// <summary>
 /// The Recovery page, built once per run with <c>vite build</c> into this project's output, as a deploy would
-/// build it. Its npm packages must be installed (<c>npm ci</c> in the client and in Trax.Api.StateMachine, whose
+/// build it. Its npm packages must be installed (<c>npm ci</c> in the client and in Trax.StateMachine/ts, whose
 /// engine source the page compiles); CI installs them before the tests.
 /// </summary>
 public static class RecoveryClientBuild
@@ -26,13 +26,14 @@ public static class RecoveryClientBuild
             "..",
             "..",
             "..",
-            "Trax.Api.StateMachine",
+            "Trax.StateMachine",
+            "ts",
             "node_modules"
         );
         if (!File.Exists(vite) || !Directory.Exists(engineModules))
             throw new InvalidOperationException(
                 "The Recovery page's npm packages are not installed. Run `npm ci --ignore-scripts` in "
-                    + $"{ClientFolder} and in Trax.Api.StateMachine before the browser tests."
+                    + $"{ClientFolder} and in Trax.StateMachine/ts before the browser tests."
             );
 
         var output = Path.Combine(AppContext.BaseDirectory, "recovery-client");

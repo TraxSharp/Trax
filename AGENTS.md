@@ -39,20 +39,25 @@ published from releases, not from `main` (`Trax.Docs/adr/0043`).
 
 ```
 Trax.Core/              Core utilities, the chain, the guard engines (Trax.Core.Testing)
-Trax.Effect/            Effect system, data providers, state machine
+Trax.Effect/            Effect system, data providers, the tables the state machines are stored in
+Trax.StateMachine/      The state machines, by language: dotnet/ (Trax.StateMachine*), ts/
+                        (@traxsharp/state-machine) and the conformance/ kit both are held to
 Trax.Mediator/          Mediator pattern, train bus, train authorization
 Trax.Scheduler/         Job scheduling, manifests, remote runners
 Trax.Api/               GraphQL API layer, and the React operations console it ships (Trax.Docs/adr/0055)
 Trax.Cli/               The `trax` tool
 Trax.Samples/           Sample applications and the dotnet new templates
-Trax.Api.StateMachine/  @traxsharp/state-machine, the TypeScript twin of the state-machine engine
 Trax.Docs/              Documentation content, the central ADRs, the ADR guard
 Trax.Website/           Next.js site for traxsharp.net
 .github/                CI, release, Dependabot; per-folder CI settings in .github/ci/packages.json
 ```
 
-Each .NET folder has its own `.slnx`, `Directory.Build.props`, `docs/adr/` and `AGENTS.md`. The
-root holds `global.json`, `nuget.config` (nuget.org only) and `Directory.Packages.props`.
+Each .NET folder has its own `.slnx`, `Directory.Build.props`, `docs/adr/` and `AGENTS.md`. A
+folder that holds more than .NET (Trax.StateMachine) keeps its .NET build in `dotnet/`, which is
+laid out like any other .NET folder (`.slnx`, `Directory.Build.props`, `.config/`, `src/`,
+`tests/` with its `Tests.Meta`), and its `docs/adr/` and `AGENTS.md` at the folder's root, since
+they bind every language in it. The root holds `global.json`, `nuget.config` (nuget.org only) and
+`Directory.Packages.props`.
 
 ## Dependencies
 
@@ -60,8 +65,8 @@ Each folder may reference only the folders before it. Trax.Cli and Trax.Api are 
 Trax.Scheduler and neither may reference the other:
 
 ```
-Trax.Core → Trax.Effect → Trax.Mediator → Trax.Scheduler ─┬─→ Trax.Api ─┐
-                                                          └─→ Trax.Cli ─┴─→ Trax.Samples
+Trax.Core → Trax.Effect → Trax.StateMachine → Trax.Mediator → Trax.Scheduler ─┬─→ Trax.Api ─┐
+                                                                              └─→ Trax.Cli ─┴─→ Trax.Samples
 ```
 
 A Trax package is always a `ProjectReference` to its csproj, never a `PackageReference`, so every
@@ -76,8 +81,8 @@ Package Management with transitive pinning; a `PackageReference` carries no `Ver
 
 ## Layers
 
-Trax's layers are concepts, not folders: `Trax.Effect` alone holds data, plumbing, `ServiceTrain`
-and the state machines. Anything written about a change (a PR description, a plan, a work item,
+Trax's layers are concepts, not folders: `Trax.Effect` alone holds data, plumbing and
+`ServiceTrain`, and the tables of the machines whose code is in `Trax.StateMachine`. Anything written about a change (a PR description, a plan, a work item,
 a release note) marks the layers it touches with these squares, inner to outer, several when it
 crosses layers. The square always sits next to words or an id; colour never carries the meaning
 alone.
@@ -91,7 +96,7 @@ title, the body below it. A security change or an open hotspot uses GitHub's `> 
 | 🟨 | Data (`data`) | `Trax.Effect.Data.*` (Postgres, Sqlite, InMemory), migrations, SQL, the run-record tables |
 | 🟫 | Plumbing (`plumbing`) | Effect providers, junction providers, broadcasters (RabbitMQ, SignalR), lifecycle hooks |
 | 🟩 | Trains (`trains`) | `Train` (Core), `ServiceTrain` (Effect), junctions, chains, Memory, decisions, `Parallel` |
-| 🟪 | Machines (`machines`) | `Trax.Effect.StateMachine*` and `@traxsharp/state-machine`, its TypeScript twin |
+| 🟪 | Machines (`machines`) | `Trax.StateMachine/`: the C# engine (`Trax.StateMachine*`), `@traxsharp/state-machine`, its TypeScript twin, and the conformance kit |
 | 🟧 | Dispatch (`dispatch`) | Mediator (train bus, authorization), Scheduler (jobs, manifests, recovery), remote runners, Lambda |
 | 🟦 | Surface (`surface`) | Api (GraphQL, auth, persisted operations, generated clients, the React operations console) |
 | ⬛ | Tooling (`tooling`) | CLI, analyzers, architecture and ADR guards, CI, release, docs |
@@ -126,7 +131,7 @@ session, or the two vocabularies will cross.
 
 ## Building and testing
 
-From a folder:
+From a folder (from `Trax.StateMachine/dotnet` for the C# state machines):
 
 ```bash
 dotnet build          # must be zero warnings (CI builds with -warnaserror)
@@ -150,8 +155,8 @@ return types.
 
 Every project commits a `packages.lock.json`, and CI restores with `--locked-mode`. A modified
 lockfile you did not mean to change is a mistake; regenerate deliberately after a real dependency
-change with `dotnet restore <Folder>/<Folder>.slnx --use-lock-file --force-evaluate`, for every
-folder whose graph moved (a root `Directory.Packages.props` change can move all of them).
+change with `dotnet restore <Folder>/<Folder>.slnx --use-lock-file --force-evaluate`
+(`Trax.StateMachine/dotnet/Trax.StateMachine.slnx` for the machines), for every folder whose graph moved (a root `Directory.Packages.props` change can move all of them).
 
 ### A new runtime version forces itself on you
 
@@ -171,8 +176,11 @@ deprecation checks, build, pack with package validation, tests, the ADR guard), 
 and databases its entry in `.github/ci/packages.json` names. A slow test project can be carved
 out of its folder's job into one of its own, beside it: a `suites` entry there names it, the
 folders it runs for and its paths, and the folder's row leaves its tests out with a `--filter`
-(the console's browser tests, `console-browser`, are one). **`CI result` is the one required
-check.**
+(the console's browser tests, `console-browser`, are one). Trax.StateMachine has no folder job:
+its C# solution, its TypeScript engine and the checks that span both are three suites
+(`state-machine-dotnet`, `state-machine-ts`, `state-machine-conformance`), each with its own
+paths, so a change to one language does not rebuild the other and none of them reruns
+Trax.Effect. **`CI result` is the one required check.**
 
 ## Releases
 

@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Api.Tests.Fakes.Machines;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Tests;
 

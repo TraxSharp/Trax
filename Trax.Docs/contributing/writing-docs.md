@@ -140,7 +140,7 @@ with a full GitHub URL only when `source:` cannot carry it.
 
 | Test | Fails on |
 |---|---|
-| `CodeLinksToDocsResolveTests` | a `https://traxsharp.net/docs/...` link in a `*.cs` file under a `Trax.*/src/` folder, `Trax.Samples/samples/` or `Trax.Samples/templates/` that does not resolve to a published page (or a `redirect_from` of one), or whose anchor names no heading on it |
+| `CodeLinksToDocsResolveTests` | a `https://traxsharp.net/docs/...` link in a `*.cs` file under a `Trax.*/src/` or `Trax.*/dotnet/src/` folder, `Trax.Samples/samples/` or `Trax.Samples/templates/` that does not resolve to a published page (or a `redirect_from` of one), or whose anchor names no heading on it |
 | `SourceLinksBackTests` | an SDK reference page whose `source:` lists C# files, none of which links to the page |
 
 ## SDK reference pages
@@ -158,7 +158,7 @@ source:
 
 | Field | Value |
 |---|---|
-| `package` | The project name of a packable project: a csproj under a `Trax.*/src/` folder that does not set `IsPackable` false. |
+| `package` | The project name of a packable project: a csproj under a `Trax.*/src/` or `Trax.*/dotnet/src/` folder that does not set `IsPackable` false. |
 | `namespace` | The namespace the type is in, or a list of them. Not needed with `surface`. |
 | `source` | The files or directories the page documents, relative to the repository root. |
 | `surface` | `graphql` for the GraphQL schema pages (`package: Trax.Api.GraphQL`), `typescript` for the npm package (`package` then names it, as its `package.json` does). |

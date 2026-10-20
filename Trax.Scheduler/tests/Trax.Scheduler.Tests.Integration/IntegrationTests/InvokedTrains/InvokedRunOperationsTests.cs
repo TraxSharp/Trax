@@ -5,11 +5,11 @@ using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests.InvokedTrains;
 

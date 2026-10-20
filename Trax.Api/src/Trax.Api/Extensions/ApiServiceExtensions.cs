@@ -4,9 +4,9 @@ using Trax.Api.Services.Authorization;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Services.Metrics;
 using Trax.Api.Services.Principal;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.Principal;
 using Trax.Mediator.Services.TrainAuthorization;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Extensions;
 

@@ -163,7 +163,7 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
 
     /// <summary>
     /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft or system-owned instance,
-    /// written by Trax.Effect.StateMachine.Persistence. Filter by <c>OwnerKind</c> and <c>UserKey</c> when querying
+    /// written by Trax.StateMachine.Persistence. Filter by <c>OwnerKind</c> and <c>UserKey</c> when querying
     /// directly, because the draft id alone is unique neither across users nor between a user and the system.
     /// </summary>
     /// <remarks>
@@ -175,7 +175,7 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
 
     /// <summary>
     /// The <c>trax.effect_claim</c> table: one row per exactly-once effect intent, written by
-    /// Trax.Effect.StateMachine.Persistence. A row with a null receipt is in flight; one with a receipt has run.
+    /// Trax.StateMachine.Persistence. A row with a null receipt is in flight; one with a receipt has run.
     /// </summary>
     /// <remarks>
     /// <see cref="DataContext{TDbContext}"/> declares this set. The default here keeps an implementation written
@@ -208,7 +208,7 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
 
     /// <summary>
     /// The <c>trax.snapshot_transition</c> table: a state-machine instance's history, one row for every snapshot
-    /// Trax.Effect.StateMachine.Persistence writes, with the revision, command, kind, actor and states of that write.
+    /// Trax.StateMachine.Persistence writes, with the revision, command, kind, actor and states of that write.
     /// Deleted with the instance's row.
     /// </summary>
     /// <remarks>

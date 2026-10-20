@@ -1,7 +1,7 @@
 using AwesomeAssertions;
-using Trax.Effect.StateMachine;
 using Trax.Samples.Recovery.E2E.Factories;
 using Trax.Samples.Recovery.E2E.Utilities;
+using Trax.StateMachine;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 

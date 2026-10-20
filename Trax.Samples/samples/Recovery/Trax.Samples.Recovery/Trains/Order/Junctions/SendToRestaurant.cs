@@ -1,7 +1,7 @@
 using Trax.Effect.Services.EffectJunction;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Faults;
 using Trax.Samples.Recovery.Orders;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Recovery.Trains.Order.Junctions;
 

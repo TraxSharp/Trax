@@ -1,26 +1,26 @@
 ---
-title: Trax.Effect.StateMachine.Testing
-description: "Reference for Trax.Effect.StateMachine.Testing: MachineConformance, which checks a machine against its committed IR and corpus, and DifferentialCorpus replay."
+title: Trax.StateMachine.Testing
+description: "Reference for Trax.StateMachine.Testing: MachineConformance, which checks a machine against its committed IR and corpus, and DifferentialCorpus replay."
 type: reference
 area: testing
-package: Trax.Effect.StateMachine.Testing
-namespace: Trax.Effect.StateMachine.Testing
+package: Trax.StateMachine.Testing
+namespace: Trax.StateMachine.Testing
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Testing/MachineConformance.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Testing/DifferentialCorpus.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Testing/MachineConformance.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Testing/DifferentialCorpus.cs
 parent: Testing
 grand_parent: SDK Reference
 nav_order: 5
 ---
 
-# Trax.Effect.StateMachine.Testing
+# Trax.StateMachine.Testing
 
 Checks that keep a state machine, its committed artifacts and the TypeScript twin generated from them from drifting apart. Each returns a list of human-readable problems, empty when everything agrees, for any test framework to assert on.
 
 ## Signatures
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine.Testing;
+namespace Trax.StateMachine.Testing;
 
 public static class MachineConformance
 {
@@ -48,13 +48,13 @@ public static class DifferentialCorpus
 | `WriteIr(machine, irPath)` | Writes `machine.ExportIr()` to `irPath`, with a trailing newline |
 | `DifferentialCorpus.Replay(machine, goldenJson)` | Replays a corpus produced by the `@traxsharp/state-machine` oracle through the C# engine and returns one diff per case it does not reproduce. Only reason codes and canonical wire are compared, not rejection detail. |
 
-`IMachine` is in `Trax.Effect.StateMachine.Persistence`; see [State Machine API](/docs/sdk-reference/statemachine-api).
+`IMachine` is in `Trax.StateMachine.Persistence`; see [State Machine API](/docs/sdk-reference/statemachine-api).
 
 ## Example
 
 ```csharp compile
-using Trax.Effect.StateMachine.Persistence;
-using Trax.Effect.StateMachine.Testing;
+using Trax.StateMachine.Persistence;
+using Trax.StateMachine.Testing;
 
 public static class ConformanceCheck
 {

@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 // The state-machine engine, @traxsharp/state-machine, built from its source in this repository. The topic
 // map's generated twin imports it, and so do the draft's server and its React hook. The hook's source imports
 // react from beside it, so react is deduplicated: the page and the hook share one copy.
-const engine = fileURLToPath(new URL("../../../../Trax.Api.StateMachine/src", import.meta.url));
+const engine = fileURLToPath(new URL("../../../../Trax.StateMachine/ts/src", import.meta.url));
 
 export default defineConfig({
   plugins: [react()],

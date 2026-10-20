@@ -1,11 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Api;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 

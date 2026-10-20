@@ -31,7 +31,7 @@ machine what it is, rather than guessing from syntax.
 ## Consequences
 
 **The CLI is version-coupled to the engine, deliberately.** It references
-`Trax.Effect.StateMachine.Persistence` at compile time and loads the machine assembly into
+`Trax.StateMachine.Persistence` at compile time and loads the machine assembly into
 the *default* `AssemblyLoadContext`, not an isolated one, so the machine's reference to that
 package binds by simple name to the copy the CLI already has. Type identity is preserved, and
 a machine built against an older engine than the CLI still unifies with the CLI's own

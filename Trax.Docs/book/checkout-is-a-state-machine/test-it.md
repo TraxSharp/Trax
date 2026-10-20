@@ -19,7 +19,7 @@ a customer would.
 
 ```csharp compile=tests file=tests/Shopfront.Tests/UnitTests/CheckoutMachineTests.cs
 using Shopfront.Machines.Checkout;
-using Trax.Effect.StateMachine.Testing;
+using Trax.StateMachine.Testing;
 
 namespace Shopfront.Tests.UnitTests;
 

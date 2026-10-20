@@ -15,7 +15,7 @@ Reference for authoring and hosting portable snapshot state machines. The concep
 [State machines](/docs/statemachine); the walkthroughs are [Authoring a machine](/docs/statemachine/authoring) and
 [Declarative authoring](/docs/statemachine/declarative-authoring).
 
-## Trax.Effect.StateMachine
+## Trax.StateMachine
 
 - [Rules](/docs/sdk-reference/statemachine-api/rules): the string-free vocabulary for declarative guards and reducers.
 - [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model): `Rule`, `Reduction`, `ContextSchema`, `DeclarativeModel` and the engine definition.
@@ -23,7 +23,7 @@ Reference for authoring and hosting portable snapshot state machines. The concep
 - [Migrations](/docs/sdk-reference/statemachine-api/migrations): `MigrateFrom` and forward-migrating stored drafts.
 - [Result codes](/docs/sdk-reference/statemachine-api/result-codes): the typed outcomes of advance, rehydrate and the draft operations.
 
-## Trax.Effect.StateMachine.Persistence
+## Trax.StateMachine.Persistence
 
 - [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines): discovering machines and wiring the subsystem in one call.
 - [Machine](/docs/sdk-reference/statemachine-api/machine): `Machine<TState, TTrigger>` and its builders.
@@ -34,7 +34,7 @@ Reference for authoring and hosting portable snapshot state machines. The concep
 - [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity): the schema-hash handshake, divergence detection and the self-check.
 - [AddTraxStateMachineSelfCheck](/docs/sdk-reference/statemachine-api/add-trax-state-machine-self-check): the self-check as an ASP.NET Core health check.
 
-## Trax.Effect.StateMachine.Testing
+## Trax.StateMachine.Testing
 
 - [MachineConformance](/docs/sdk-reference/statemachine-api/machine-conformance): checking a machine against its committed IR and corpus in a test.
 

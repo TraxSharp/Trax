@@ -38,9 +38,9 @@ public class PackagesPageTests
         "Trax.Effect.JunctionProvider.Progress",
         "Trax.Effect.Provider.Json",
         "Trax.Effect.Provider.Parameter",
-        "Trax.Effect.StateMachine",
-        "Trax.Effect.StateMachine.Persistence",
-        "Trax.Effect.StateMachine.Testing",
+        "Trax.StateMachine",
+        "Trax.StateMachine.Persistence",
+        "Trax.StateMachine.Testing",
         // Trax.Mediator
         "Trax.Mediator",
         "Trax.Mediator.Testing",

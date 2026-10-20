@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.TypeModules;
 

@@ -9,7 +9,7 @@ namespace Trax.Effect.Models.EffectClaim;
 /// </summary>
 /// <remarks>
 /// EF Core mapping lives in <c>Trax.Effect.Data.Models.EffectClaim.PersistentEffectClaim</c> (in
-/// Trax.Effect.Data). The table ships in the core migration set, and Trax.Effect.StateMachine.Persistence reaches
+/// Trax.Effect.Data). The table ships in the core migration set, and Trax.StateMachine.Persistence reaches
 /// it through <c>IDataContext.EffectClaims</c> rather than through a context or SQL of its own.
 /// </remarks>
 public class EffectClaim

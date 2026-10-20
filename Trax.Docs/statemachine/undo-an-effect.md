@@ -37,9 +37,9 @@ whose one effect is the undo, started from the receipt the first machine recorde
 
    ```csharp compile=refund
    using System.Text.Json.Nodes;
-   using Trax.Effect.StateMachine;
-   using Trax.Effect.StateMachine.Persistence;
-   using static Trax.Effect.StateMachine.Rules;
+   using Trax.StateMachine;
+   using Trax.StateMachine.Persistence;
+   using static Trax.StateMachine.Rules;
 
    public sealed record RefundStart
    {
@@ -103,7 +103,7 @@ whose one effect is the undo, started from the receipt the first machine recorde
    key: Trax runs the refund once per refund instance, and two refund instances for one charge are two instances.
 
    ```csharp compile=refund
-   using Trax.Effect.StateMachine;
+   using Trax.StateMachine;
 
    public sealed class GatewayRefund(IPaymentGateway gateway) : IRefund
    {

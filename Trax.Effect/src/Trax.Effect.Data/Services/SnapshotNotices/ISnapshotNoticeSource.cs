@@ -10,7 +10,7 @@ namespace Trax.Effect.Data.Services.SnapshotNotices;
 /// (migration 080). SQLite and InMemory register none,
 /// and the state-machine change listener polls the table instead.</para>
 ///
-/// <para>Infrastructure for <c>Trax.Effect.StateMachine.Persistence</c>, whose change listener holds the host's one
+/// <para>Infrastructure for <c>Trax.StateMachine.Persistence</c>, whose change listener holds the host's one
 /// subscription; a host does not implement or call it.</para>
 /// </remarks>
 internal interface ISnapshotNoticeSource

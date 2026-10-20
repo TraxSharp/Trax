@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Trax.StateMachine.Testing</AssemblyName>
+    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
+         ships it (Directory.Build.props). -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+    <Description>Cross-runtime differential conformance for Trax .NET state machines: replay a generated differential corpus through the C# engine and get back the cases it fails to reproduce. The corpus is produced by the TypeScript oracle (@traxsharp/state-machine); this proves the two engine ports stay behaviorally identical. Framework-agnostic — returns a diff list you assert on.</Description>
+    <PackageTags>trax;testing;statemachine;conformance;differential</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.StateMachine/Trax.StateMachine.csproj" />
+    <ProjectReference Include="../Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
+  </ItemGroup>
+</Project>

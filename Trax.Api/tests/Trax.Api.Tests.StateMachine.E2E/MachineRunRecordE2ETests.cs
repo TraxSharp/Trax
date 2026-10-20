@@ -2,7 +2,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
-using Trax.Effect.StateMachine.Persistence.Mutations;
+using Trax.StateMachine.Persistence.Mutations;
 
 namespace Trax.Api.StateMachine.E2E;
 

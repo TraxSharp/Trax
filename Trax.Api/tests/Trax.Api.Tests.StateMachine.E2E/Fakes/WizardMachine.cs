@@ -5,9 +5,9 @@ using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
 namespace Trax.Api.StateMachine.E2E.Fakes;
 

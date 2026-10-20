@@ -74,7 +74,7 @@ test project copies it beside the tests.
     <PackageReference Include="Trax.Core.Testing" />
     <PackageReference Include="Trax.Effect.Data.InMemory" />
     <PackageReference Include="Trax.Effect.Data.Testing" />
-    <PackageReference Include="Trax.Effect.StateMachine.Testing" />
+    <PackageReference Include="Trax.StateMachine.Testing" />
     <PackageReference Include="Trax.Mediator.Testing" />
   </ItemGroup>
 </Project>
@@ -90,7 +90,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shopfront.Auth;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Shopfront.Tests.IntegrationTests;
 

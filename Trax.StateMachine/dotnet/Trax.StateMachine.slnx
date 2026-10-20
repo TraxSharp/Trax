@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.StateMachine/Trax.StateMachine.csproj" />
+    <Project Path="src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
+    <Project Path="src/Trax.StateMachine.Testing/Trax.StateMachine.Testing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.StateMachine.Tests/Trax.StateMachine.Tests.csproj" />
+    <Project Path="tests/Trax.StateMachine.Persistence.Integration/Trax.StateMachine.Persistence.Integration.csproj" />
+    <Project Path="tests/Trax.StateMachine.Tests.Stress/Trax.StateMachine.Tests.Stress.csproj" />
+    <Project Path="tests/Trax.StateMachine.Tests.Meta/Trax.StateMachine.Tests.Meta.csproj" />
+  </Folder>
+</Solution>

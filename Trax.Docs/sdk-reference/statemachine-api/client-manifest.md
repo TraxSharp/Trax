@@ -6,10 +6,10 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 16
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/ClientManifest.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/ClientManifest.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/TraxClientExport.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ITraxStartupCheck.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Extensions/TraxClientManifestExtensions.cs
@@ -24,7 +24,7 @@ a frontend's build needs no running server, no database and no credential, and T
 
 ## Members
 
-Three namespaces: `ClientManifest` and its records are in `Trax.Effect.StateMachine`; `TraxClientExport` and
+Three namespaces: `ClientManifest` and its records are in `Trax.StateMachine`; `TraxClientExport` and
 `ITraxStartupCheck` in `Trax.Effect.Configuration.ClientExport`; `RunTraxAsync` in
 `Trax.Api.GraphQL.PersistedOperations.Extensions`.
 

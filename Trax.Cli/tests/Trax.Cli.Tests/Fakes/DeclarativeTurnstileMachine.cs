@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
 namespace Trax.Cli.Tests.Fakes;
 
@@ -20,7 +20,7 @@ public enum TurnstileTrigger
 
 /// <summary>
 /// A declaratively-authored turnstile, identical to the committed <c>turnstile</c> machine in
-/// Trax.Api.StateMachine, so the CLI's generated IR / twin / corpus can be byte-compared against the committed
+/// Trax.StateMachine/ts, so the CLI's generated IR / twin / corpus can be byte-compared against the committed
 /// artifacts. The CLI test points <c>--assembly</c> at this test assembly and loads this machine by reflection,
 /// exercising the exact path a real consumer uses.
 /// </summary>

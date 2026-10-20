@@ -3,11 +3,11 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.Samples.Recovery.Machines;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 

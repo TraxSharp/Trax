@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Trax.Effect.Models.SnapshotDraft;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests.InvokedTrains;
 

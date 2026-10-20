@@ -41,7 +41,7 @@ using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;

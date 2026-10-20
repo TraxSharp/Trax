@@ -1028,38 +1028,13 @@
           "Trax.Effect": "[1.99.99, )"
         }
       },
-      "trax.effect.statemachine": {
-        "type": "Project",
-        "dependencies": {
-          "Trax.Effect": "[1.99.99, )"
-        }
-      },
-      "trax.effect.statemachine.persistence": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
-          "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.0.13, )",
-          "Microsoft.Extensions.Diagnostics.HealthChecks": "[10.0.12, )",
-          "Trax.Effect": "[1.99.99, )",
-          "Trax.Effect.Data": "[1.99.99, )",
-          "Trax.Effect.StateMachine": "[1.99.99, )"
-        }
-      },
-      "trax.effect.statemachine.testing": {
-        "type": "Project",
-        "dependencies": {
-          "Trax.Effect.StateMachine": "[1.99.99, )",
-          "Trax.Effect.StateMachine.Persistence": "[1.99.99, )"
-        }
-      },
       "trax.mediator": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "[10.0.13, )",
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
-          "Trax.Effect.StateMachine.Persistence": "[1.99.99, )"
+          "Trax.StateMachine.Persistence": "[1.99.99, )"
         }
       },
       "trax.samples.recovery": {
@@ -1067,10 +1042,10 @@
         "dependencies": {
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
-          "Trax.Effect.StateMachine": "[1.99.99, )",
-          "Trax.Effect.StateMachine.Persistence": "[1.99.99, )",
           "Trax.Mediator": "[1.99.99, )",
-          "Trax.Scheduler": "[1.99.99, )"
+          "Trax.Scheduler": "[1.99.99, )",
+          "Trax.StateMachine": "[1.99.99, )",
+          "Trax.StateMachine.Persistence": "[1.99.99, )"
         }
       },
       "trax.samples.recovery.api": {
@@ -1109,6 +1084,31 @@
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
           "Trax.Mediator": "[1.99.99, )"
+        }
+      },
+      "trax.statemachine": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "trax.statemachine.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.0.13, )",
+          "Microsoft.Extensions.Diagnostics.HealthChecks": "[10.0.12, )",
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.StateMachine": "[1.99.99, )"
+        }
+      },
+      "trax.statemachine.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.StateMachine": "[1.99.99, )",
+          "Trax.StateMachine.Persistence": "[1.99.99, )"
         }
       },
       "Cronos": {

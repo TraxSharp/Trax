@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Trax.Cli.Clients;
 using Trax.Cli.Commands;
 using Trax.Cli.Tests.Fakes;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Cli.Tests.UnitTests;
 

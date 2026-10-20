@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using GraphQLParser.AST;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
 

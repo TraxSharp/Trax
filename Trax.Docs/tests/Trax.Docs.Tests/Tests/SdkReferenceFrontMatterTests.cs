@@ -453,7 +453,7 @@ public class SdkReferenceFrontMatterTests
 
         var typescript = Check(
             FrontMatter.Of(
-                "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.Api.StateMachine\n---\n"
+                "---\npackage: \"@traxsharp/state-machine\"\nsurface: typescript\nsource:\n  - Trax.StateMachine/ts\n---\n"
             ),
             npm
         );
@@ -548,7 +548,7 @@ public class SdkReferenceFrontMatterTests
             wrong.Add(
                 surface == "typescript"
                     ? $"package {package} is neither a packable project nor an npm package in the repository"
-                    : $"package {package} is not a packable project (a csproj under a Trax.*/src/ folder)"
+                    : $"package {package} is not a packable project (a csproj under a Trax.*/src/ or Trax.*/dotnet/src/ folder)"
             );
 
         var namespaces = frontMatter.List("namespace");

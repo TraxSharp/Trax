@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Attributes;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E.Fakes;
 

@@ -64,15 +64,6 @@ public class PublicApiSurfaceTests
             typeof(Trax.Effect.Provider.Parameter.Configuration.ParameterEffectConfiguration).Assembly
         ).SetName("Trax.Effect.Provider.Parameter");
         yield return new TestCaseData(
-            typeof(Trax.Effect.StateMachine.CorpusReplay).Assembly
-        ).SetName("Trax.Effect.StateMachine");
-        yield return new TestCaseData(
-            typeof(Trax.Effect.StateMachine.Persistence.ISnapshotStore).Assembly
-        ).SetName("Trax.Effect.StateMachine.Persistence");
-        yield return new TestCaseData(
-            typeof(Trax.Effect.StateMachine.Testing.DifferentialCorpus).Assembly
-        ).SetName("Trax.Effect.StateMachine.Testing");
-        yield return new TestCaseData(
             typeof(Trax.Effect.Decisions.SystemOne.SystemOneDecider).Assembly
         ).SetName("Trax.Effect.Decisions.SystemOne");
     }

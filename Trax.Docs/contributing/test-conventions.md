@@ -127,7 +127,7 @@ One survives, on its exceptions list: a Trax.Samples E2E test waiting on an unre
 scheduler feature. Do not read it as precedent for a second.
 
 When CI provides what the test needs (a service in `.github/ci/packages.json`, node and the
-`Trax.Api.StateMachine` packages for `"state-machine": true`), the check fails instead of
+`Trax.StateMachine/ts` packages for `"state-machine": true`), the check fails instead of
 skipping when the `CI` environment variable is set, so a broken job cannot report a skipped
 suite as green. `PersistedOperationCrossNodeTests` and `TwinSequenceParityTests` do this.
 

@@ -1,5 +1,5 @@
-using Trax.Effect.StateMachine.Testing;
 using Trax.Samples.Recovery.E2E.Utilities;
+using Trax.StateMachine.Testing;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 

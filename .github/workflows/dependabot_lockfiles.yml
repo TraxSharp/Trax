@@ -154,7 +154,8 @@ jobs:
 
       - name: Regenerate lockfiles
         if: steps.healed.outputs.skip == 'false'
-        # Every folder's solution, since one root Directory.Packages.props pins the
+        # Every folder's solution, and each suite that is a whole solution of its own
+        # (Trax.StateMachine/dotnet), since one root Directory.Packages.props pins the
         # packages for all of them and a bump can move any folder's lockfiles.
         #
         # NuGetAudit is off for this restore alone. Directory.Build.props
@@ -162,7 +163,8 @@ jobs:
         # would abort the regeneration -- which is exactly the state a security
         # bump arrives in. The PR build still runs the audit with its own gate.
         run: |
-          jq -r '.packages[] | select(.dotnet) | .folder + "/" + .dotnet.solution' .github/ci/packages.json |
+          jq -r '(.packages[] | select(.dotnet) | .folder + "/" + .dotnet.solution),
+                 ((.suites // [])[] | select(.dotnet.checks) | .folder + "/" + .project)' .github/ci/packages.json |
             while IFS= read -r solution; do
               dotnet restore "$solution" --use-lock-file --force-evaluate -p:NuGetAudit=false
             done

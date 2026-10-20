@@ -1,5 +1,5 @@
 using Trax.Api.Auth;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
 

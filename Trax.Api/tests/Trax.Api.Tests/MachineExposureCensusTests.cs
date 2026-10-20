@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Trax.Api.Tests.Fakes.Machines;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Tests;
 
@@ -45,7 +45,7 @@ public class MachineExposureCensusTests
         message
             .Should()
             .NotContain(
-                "Trax.Effect.StateMachine.Persistence.Mutations",
+                "Trax.StateMachine.Persistence.Mutations",
                 "the internal snapshot trains are not what a client reaches"
             );
     }

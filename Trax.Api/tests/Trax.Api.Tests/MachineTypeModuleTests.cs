@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.Validation;
 using Trax.Api.Tests.Fakes.Machines;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Tests;
 
@@ -261,7 +261,7 @@ public class MachineTypeModuleTests
         var entries = MachineCensus.Describe([new ShopMachine()]);
 
         entries
-            .Where(e => e.Kind == nameof(Trax.Effect.StateMachine.TriggerKind.Client))
+            .Where(e => e.Kind == nameof(Trax.StateMachine.TriggerKind.Client))
             .Select(e => e.Name)
             .Should()
             .BeEquivalentTo(

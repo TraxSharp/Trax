@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.Fakes.Timers;
 

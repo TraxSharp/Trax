@@ -12,7 +12,6 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.PersistedOperation;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.TrainEventBroadcaster;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Samples.ApiDashboard.Browser.Factories;
@@ -21,6 +20,7 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Services.TraxScheduler;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.ApiDashboard.Browser.Fixtures;
 

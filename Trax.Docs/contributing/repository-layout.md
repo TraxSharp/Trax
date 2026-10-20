@@ -58,6 +58,22 @@ in-memory provider stores objects rather than tables, so there is no DDL to run.
 A partial class in its own directory, one file per feature area. See
 [API conventions](/docs/contributing/api-conventions#builder-pattern).
 
+## State machines
+
+`Trax.StateMachine/` holds the machines in every language, one directory each, with what spans
+them at the top:
+
+```
+Trax.StateMachine/dotnet/        the C# engine: Trax.StateMachine.slnx, src/, tests/
+Trax.StateMachine/ts/            @traxsharp/state-machine, the TypeScript engine and client
+Trax.StateMachine/conformance/   the cases every engine answers, and the runner that sends them
+Trax.StateMachine/docs/adr/      decisions that bind every language
+```
+
+`dotnet/` is laid out like any other .NET folder. A case both engines must answer the same way
+(a canonical-wire vector, a refusal code, a fixture) goes in `conformance/`, never in one
+engine's tests. The tables a machine is stored in are models in Trax.Effect, as above.
+
 ## Sample applications
 
 Most samples are three or four projects under `Trax.Samples/samples/<Topic>/`:

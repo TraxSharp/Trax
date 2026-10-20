@@ -9,7 +9,6 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.DecisionRecording;
@@ -20,6 +19,7 @@ using Trax.Scheduler.Services.RequestSigning;
 using Trax.Scheduler.Services.RunExecutor;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobRunner;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Extensions;
 

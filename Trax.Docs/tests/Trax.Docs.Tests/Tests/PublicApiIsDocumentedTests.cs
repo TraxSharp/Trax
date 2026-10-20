@@ -462,7 +462,11 @@ public class PublicApiIsDocumentedTests
     private static IEnumerable<(string Assembly, string Path)> Baselines()
     {
         var monorepo = Directory.GetParent(RepoRoot.Path)!.FullName;
-        foreach (var folder in Directory.EnumerateDirectories(monorepo, "Trax.*"))
+        foreach (
+            var folder in Directory
+                .EnumerateDirectories(monorepo, "Trax.*")
+                .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
+        )
         {
             var tests = Path.Combine(folder, "tests");
             if (!Directory.Exists(tests))

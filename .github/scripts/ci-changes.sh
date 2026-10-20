@@ -6,9 +6,10 @@
 # here). A change outside every folder, such as a workflow, global.json or this
 # script, runs everything, and so does any event other than a pull request.
 #
-# A suite (packages.json "suites") is a test project with a job of its own. It runs when a
-# folder it lists upstream is selected (so anything upstream of that folder too), or when a
-# changed file is under one of its paths; on any event but a pull request it always runs.
+# A suite (packages.json "suites") is a test project, a solution or an npm folder with a job of
+# its own. It runs when a folder it lists upstream is selected (so anything upstream of that
+# folder too), or when a changed file is under one of its paths; on any event but a pull
+# request it always runs.
 #
 # Usage, from the repository root: ci-changes.sh <event-name>
 # On a pull request the checkout must be the merge commit with its first parent
@@ -44,19 +45,29 @@ dotnet=$(jq -c --argjson selected "$selected" \
 adr=$(jq -c --argjson selected "$selected" \
   '[.packages[] | select(.adr and (.folder as $f | $selected | index($f))) | {folder} + .adr]' "$config")
 
-suites=$(jq -c --argjson selected "$selected" --argjson files "$changed" --arg event "$event" '
+selected_suites=$(jq -c --argjson selected "$selected" --argjson files "$changed" --arg event "$event" '
   [(.suites // [])[]
    | select($event != "pull_request"
        or any(.upstream[]; . as $u | $selected | index($u))
-       or any(.paths[]; . as $p | $files | any(startswith($p))))
-   | {name, folder, project} + .dotnet]' "$config")
+       or any(.paths[]; . as $p | $files | any(startswith($p))))]' "$config")
+# A suite with a "dotnet" key runs in the suite job; one without (an npm folder) has a job of
+# its own, which reads suite-names.
+suites=$(jq -c '[.[] | select(.dotnet) | {name, folder, project} + .dotnet]' <<<"$selected_suites")
+suite_names=$(jq -c '[.[].name]' <<<"$selected_suites")
+# The coverage each .NET job uploads: a folder's under its folder name, a suite's under its own
+# name, both flagged with the top-level folder they measure.
+coverage=$(jq -c --argjson dotnet "$dotnet" --argjson suites "$suites" -n '
+  [($dotnet[] | select(.coverage) | {artifact: .folder, flag: .folder}),
+   ($suites[] | select(.coverage) | {artifact: .name, flag: (.folder | split("/")[0])})]')
 
 echo "Running: $(jq -r 'join(", ")' <<<"$selected")"
-echo "Suites: $(jq -r 'map(.name) | join(", ")' <<<"$suites")"
+echo "Suites: $(jq -r 'join(", ")' <<<"$suite_names")"
 
 {
   echo "folders=$selected"
   echo "dotnet=$dotnet"
   echo "adr=$adr"
   echo "suites=$suites"
+  echo "suite-names=$suite_names"
+  echo "coverage=$coverage"
 } >>"${GITHUB_OUTPUT:-/dev/stdout}"

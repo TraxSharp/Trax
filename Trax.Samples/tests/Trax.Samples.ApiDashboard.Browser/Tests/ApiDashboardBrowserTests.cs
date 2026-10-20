@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 using Trax.Samples.ApiDashboard.Browser.Host;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.ApiDashboard.Browser.Tests;
 

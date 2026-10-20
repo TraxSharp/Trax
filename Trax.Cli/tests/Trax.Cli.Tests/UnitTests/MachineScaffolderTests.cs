@@ -2,14 +2,14 @@ using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Machines;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
 /// <see cref="MachineScaffolder"/> emits a machine's starter C# file. The scaffold's whole value is that it
 /// compiles and runs through the rest of the pipeline as-is, so beyond the structural assertions these
-/// actually compile the generated source against the real Trax.Effect.StateMachine assemblies.
+/// actually compile the generated source against the real Trax.StateMachine assemblies.
 /// </summary>
 public class MachineScaffolderTests
 {
@@ -152,7 +152,7 @@ public class MachineScaffolderTests
         AssertCompiles(MachineScaffolder.Render("checkout", "Scaffolded", withEffect: true));
     }
 
-    // Compile the generated source against the real Trax.Effect.StateMachine assemblies. This is the honest
+    // Compile the generated source against the real Trax.StateMachine assemblies. This is the honest
     // proof that the scaffold is not just well-shaped text but valid, buildable C#.
     private static void AssertCompiles(string source)
     {
@@ -186,7 +186,7 @@ public class MachineScaffolderTests
             .BeEmpty(because: "the scaffold must compile:\n" + string.Join("\n", errors));
     }
 
-    // Referenced so the Trax.Effect.StateMachine.Persistence assembly is copied to the test output for the
+    // Referenced so the Trax.StateMachine.Persistence assembly is copied to the test output for the
     // compile references above.
     private static readonly Type _keepPersistenceReferenced = typeof(IMachine);
 }

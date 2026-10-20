@@ -1,10 +1,11 @@
 # Trax.Effect
 
-The effect layer: execution metadata, data contexts, effect and junction providers, the
-state machine engine, and the Postgres / Sqlite / InMemory data providers. It sits directly
-above `Trax.Core`, so a change here reaches the five folders downstream of it (Trax.Mediator,
-Trax.Scheduler, Trax.Api, Trax.Cli and Trax.Samples) through project
-references, in the same commit. Trax.Core is upstream and never sees it.
+The effect layer: execution metadata, data contexts, effect and junction providers, and the
+Postgres / Sqlite / InMemory data providers, including the tables the state machines are stored
+in. It sits directly above `Trax.Core`, so a change here reaches the six folders downstream of it
+(Trax.StateMachine, Trax.Mediator, Trax.Scheduler, Trax.Api, Trax.Cli and Trax.Samples) through
+project references, in the same commit. Trax.Core is upstream and never sees it. The state
+machines themselves live in `Trax.StateMachine/`, with their own decisions.
 
 This file is the entry point. It routes; it does not restate the rules.
 
@@ -39,9 +40,6 @@ if your work contradicts one, say so rather than silently overriding it.
 | `AddJunctionProgress`, or any junction effect that writes while a run is going | [0021](./docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md), a run's tracked writes commit once, when it finishes; a junction effect writes only its own columns, through its own context |
 | `AddJunctionEvents`, `IJunctionEventHandler`, the junction event types, `trax.junction_run`, or `[TraxSensitive]` on a question type | [0019](./docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md), junction events are opt-in, reach junction event handlers only, carry names, times, states and failure classes but never run data, and their rows go with their run |
 | `MapTraxTrainEventHub`, or the SignalR sink's default client payload | [0016](./docs/adr/0016-the-train-event-hub-carries-the-hosts-authorization.md), the hub is mapped with an authorization posture or the host does not start, and the default payload leaves the failure reason out |
-| a state-machine draft's `requestId` replay, or `ISnapshotStore.UpdateWithRequest` | [0013](./docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md), an id replays only for the request it recorded, wherever the draft is now |
-| what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
-| `trax.snapshot_transition`, `IDataContext.SnapshotTransitions`, or a new path that writes a state-machine snapshot | [0022](./docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md), every snapshot write through the store adds one history row in its transaction, and the history goes with the instance |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
 index lists them by folder. Thirty-one name `effect`, three of them superseded: executable guards, the
@@ -81,8 +79,8 @@ not to record. The format is
 ## Guards
 
 `tests/Trax.Effect.Tests.Meta/` holds the convention guards. Thirteen of the eighteen are
-shared with other folders and enforce repository-wide rules: ten appear in all eight code
-folders, `PublicApiSurfaceTests` in the seven that publish an API surface,
+shared with other folders and enforce repository-wide rules: ten appear in all nine code
+folders, `PublicApiSurfaceTests` in the eight that publish an API surface,
 `BuilderPartialSplitTests` in three and `BuilderOrderDiagnosticsTests` in two. Five are unique to
 this folder: `MigrationsIntegrityTests`, `ModelPersistentPairingTests`,
 `PostgresMigrationRerunTests`, `ServiceTrainRunIsSealedTests` (`0009`), and
@@ -94,8 +92,8 @@ carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A
 unclassified until you choose, and the build says so. Opting out is a normal answer; a reason
 that reads as a deferral is not.
 
-`tests/Trax.Effect.StateMachine.Persistence.Integration/MigrationSchemaTests.cs` is the
-model-versus-DDL drift guard for the state-machine tables, and `EveryTableIsModelledTests` (Postgres)
+`Trax.StateMachine/dotnet/tests/Trax.StateMachine.Persistence.Integration/MigrationSchemaTests.cs`,
+in the machines' folder, is the model-versus-DDL drift guard for the state-machine tables, and `EveryTableIsModelledTests` (Postgres)
 with `SqliteEveryTableIsModelledTests` is the one for the data context: every migrated table is
 mapped, and every mapped column exists (`0036`). The Postgres ones need a live Postgres. `docker compose up -d` provides one.
 
@@ -109,7 +107,7 @@ entity holding per-user data is filtered through the principal and exposed only 
 run all five without writing a test body. `TraxInvariants.cs` beside them checks a database once
 every host has stopped (no run in progress, no effect claim left without a receipt, no dispatched
 queue entry without its run); `CheckTraxInvariantsAttribute` runs it after every test in
-`Trax.Effect.Tests.Integration` and `Trax.Effect.StateMachine.Persistence.Integration`, and a test
+`Trax.Effect.Tests.Integration` and `Trax.StateMachine.Persistence.Integration`, and a test
 that leaves such a row on purpose says why with `[LeavesStuckRuns]`. `tests/Trax.Effect.Data.Testing.Tests/` is their
 own suite, and `DomainDataLayerGuardFixtureSelfTest` there subclasses the fixture the way a
 consumer would. Changing either file changes what every consumer enforces, so treat

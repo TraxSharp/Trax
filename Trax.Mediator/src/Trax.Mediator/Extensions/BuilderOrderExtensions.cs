@@ -63,7 +63,7 @@ public static class BuilderOrderExtensions
     ) => throw new InvalidOperationException(AddMediatorOnce);
 
     /// <summary>
-    /// Not callable: <c>AddStateMachines</c> (Trax.Effect.StateMachine.Persistence) comes before
+    /// Not callable: <c>AddStateMachines</c> (Trax.StateMachine.Persistence) comes before
     /// <c>AddMediator</c>, which reads the assemblies it contributes.
     /// </summary>
     [Obsolete(AddStateMachinesFirst, error: true)]
@@ -74,7 +74,7 @@ public static class BuilderOrderExtensions
     ) => throw new InvalidOperationException(AddStateMachinesFirst);
 
     /// <summary>
-    /// Not callable: <c>AddStateMachines</c> (Trax.Effect.StateMachine.Persistence) comes before
+    /// Not callable: <c>AddStateMachines</c> (Trax.StateMachine.Persistence) comes before
     /// <c>AddMediator</c>, which reads the assemblies it contributes.
     /// </summary>
     /// <remarks>

@@ -74,8 +74,8 @@ install ([Packages](/docs/reference/packages) has the full list).
 
 | Capability | In plain words | Learn it | Understand it | Package |
 |---|---|---|---|---|
-| State machines | A long-lived flow (a checkout, a form) as named states the server and the browser agree on. | [Chapter 12](/docs/book/checkout-is-a-state-machine) | [State machines](/docs/statemachine) | `Trax.Effect.StateMachine` |
-| A machine runs a train | A state starts a train and moves on with its result. | [Chapter 13](/docs/book/the-machine-places-the-order) | [Train or machine](/docs/statemachine/train-or-machine) | `Trax.Effect.StateMachine` |
+| State machines | A long-lived flow (a checkout, a form) as named states the server and the browser agree on. | [Chapter 12](/docs/book/checkout-is-a-state-machine) | [State machines](/docs/statemachine) | `Trax.StateMachine` |
+| A machine runs a train | A state starts a train and moves on with its result. | [Chapter 13](/docs/book/the-machine-places-the-order) | [Train or machine](/docs/statemachine/train-or-machine) | `Trax.StateMachine` |
 | The browser twin | The same machine in TypeScript, so the browser predicts each move before the server confirms it. | [Chapter 16](/docs/book/checkout-in-the-browser) | [State machines](/docs/statemachine) | `@traxsharp/state-machine` |
 
 ## Ship it
