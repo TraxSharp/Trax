@@ -18,8 +18,9 @@ name: Release
 # 2FA, while the publish job waits (see the "Stage on npm and wait for approval" step).
 #
 # Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
-# build (packs from the tag, read-only) -> publish (verifies, attests, publishes). Publishing the
-# site is not part of a release: dispatch website.yml with the new tag afterwards.
+# build (packs from the tag, read-only) -> publish (verifies, attests, publishes) -> skills
+# (commits the agent skills build staged to TraxSharp/skills). Publishing the site is not part
+# of a release: dispatch website.yml with the new tag afterwards.
 on:
   workflow_dispatch:
 
@@ -143,6 +144,7 @@ jobs:
     outputs:
       digests: ${{ steps.digests.outputs.digests }}
       npm-digests: ${{ steps.npm-digests.outputs.digests }}
+      skills-digests: ${{ steps.skills.outputs.digests }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
@@ -259,6 +261,31 @@ jobs:
         with:
           name: npm
           path: npm/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Stage the agent skills
+        # Trax.Docs/adr/0056: the skills under Trax.Docs/skills/ go to TraxSharp/skills with this
+        # release's version stamped in. Staging builds a .NET tool, so it runs here, where nothing
+        # can write; the skills job only commits what this step staged. Off until the repository
+        # variable SKILLS_APP_ID names the GitHub App that may write TraxSharp/skills.
+        if: vars.SKILLS_APP_ID != ''
+        id: skills
+        env:
+          PKG_VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          dotnet restore Trax.Docs/tools/Trax.Skills.Publish --locked-mode
+          dotnet run --project Trax.Docs/tools/Trax.Skills.Publish --configuration Release --no-restore -- \
+            stage --skills Trax.Docs/skills --version "$PKG_VERSION" --license LICENSE --out skills
+          echo "digests=$(cd skills && find . -type f -printf '%P\n' | LC_ALL=C sort | xargs -d '\n' sha256sum -- | base64 -w0)" >> "$GITHUB_OUTPUT"
+      - name: Upload skills artifact
+        if: vars.SKILLS_APP_ID != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: skills
+          path: skills/
+          # .claude-plugin/ holds the plugin and marketplace manifests.
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
 
@@ -455,3 +482,70 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: dotnet nuget push "nupkg/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  # ---------------------------------------------------------------------------
+  # Skills zone. Commits the agent skills build staged to TraxSharp/skills and tags them
+  # (Trax.Docs/adr/0056). A skill is instructions agents follow in other people's repositories,
+  # so this job holds the only credential that can write there: a GitHub App token scoped to
+  # that one repository, contents only. It runs no build, only git, gh and jq, and only after
+  # the packages it describes are on nuget.org.
+  #
+  # Setup, once: the repository exists with a first commit on main and a ruleset requiring
+  # verified signatures and blocking direct pushes, with the App as the only bypass actor; the
+  # App is installed on that repository alone with contents: write; SKILLS_APP_ID is a
+  # repository variable and SKILLS_APP_PRIVATE_KEY a secret of the `release` environment.
+  # ---------------------------------------------------------------------------
+  skills:
+    needs: [release, build, publish]
+    if: needs.release.outputs.released == 'true' && vars.SKILLS_APP_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions: {}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+      - name: Checkout the tag
+        # For the publish script only; nothing in it is built or run.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: refs/tags/v${{ needs.release.outputs.version }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Download skills artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: skills
+          path: skills
+      - name: Verify the skills are the ones build staged
+        env:
+          DIGESTS: ${{ needs.build.outputs.skills-digests }}
+        run: |
+          echo "$DIGESTS" | base64 -d > "$RUNNER_TEMP/expected-skills.sha256"
+          if [ "$(cd skills && find . -type f -printf '%P\n' | LC_ALL=C sort)" != "$(awk '{print $2}' "$RUNNER_TEMP/expected-skills.sha256")" ]; then
+            echo "::error::The downloaded skills are not the set the build job staged."
+            exit 1
+          fi
+          (cd skills && sha256sum --check --strict "$RUNNER_TEMP/expected-skills.sha256")
+      - name: Token for TraxSharp/skills
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
+        with:
+          app-id: ${{ vars.SKILLS_APP_ID }}
+          private-key: ${{ secrets.SKILLS_APP_PRIVATE_KEY }}
+          owner: TraxSharp
+          repositories: skills
+          permission-contents: write
+      - name: Commit and tag
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PKG_VERSION: ${{ needs.release.outputs.version }}
+        run: .github/scripts/publish-skills.sh skills "$PKG_VERSION" TraxSharp/skills
