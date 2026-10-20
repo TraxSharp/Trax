@@ -12,7 +12,7 @@ type Case = {
   name: string;
   field?: string;
   value?: unknown;
-  expect: { outcome: "transitioned" } | { outcome: "rejected"; reason: string };
+  expect: { outcome: "transitioned"; wire: string } | { outcome: "rejected"; reason: string };
 };
 
 const golden = JSON.parse(
@@ -38,7 +38,7 @@ describe("strict input conformance", () => {
 
     expect(
       result.outcome === "transitioned"
-        ? { outcome: "transitioned" }
+        ? { outcome: "transitioned", wire: machine.serialize(result.snapshot) }
         : { outcome: "rejected", reason: result.reason },
     ).toEqual(c.expect);
   });

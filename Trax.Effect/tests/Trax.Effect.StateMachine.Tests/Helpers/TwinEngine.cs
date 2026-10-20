@@ -113,6 +113,42 @@ public static class TwinEngine
             .ToList();
     }
 
+    /// <summary>
+    /// Runs the conformance runner (<c>tools/conformance/run.mjs --stdio</c>) with <paramref name="answer"/> as its
+    /// testee: each request line the runner writes is answered with the line <paramref name="answer"/> returns.
+    /// Returns the runner's exit code (0 when every case passed) and its report.
+    /// </summary>
+    public static (int ExitCode, string Report) RunConformance(Func<string, string> answer)
+    {
+        var engineRoot = EngineRoot();
+        var start = new ProcessStartInfo("node", "tools/conformance/run.mjs --stdio")
+        {
+            WorkingDirectory = engineRoot,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        using var process = Process.Start(start)!;
+        var stderr = process.StandardError.ReadToEndAsync();
+        var conversation = Task.Run(() =>
+        {
+            while (process.StandardOutput.ReadLine() is { } request)
+            {
+                process.StandardInput.WriteLine(answer(request));
+                process.StandardInput.Flush();
+            }
+        });
+
+        // The test owns its wait (ADR 0014): the runner finishes well within it, or the test fails.
+        if (!conversation.Wait(NodeTimeout) || !process.WaitForExit(NodeTimeout))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail($"tools/conformance/run.mjs did not finish within {NodeTimeout}.");
+        }
+        return (process.ExitCode, stderr.GetAwaiter().GetResult());
+    }
+
     private static string EngineRoot()
     {
         if (!NodeIsAvailable())

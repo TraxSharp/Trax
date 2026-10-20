@@ -15,6 +15,7 @@ This file is the entry point. It routes; it does not restate the rules.
 | `src/server/`, `src/react.ts` | The server-authoritative controller, and `@traxsharp/state-machine/react` (`useServerMachine`, `useRememberedMachine`). |
 | `src/rules/generateTypes.ts` | `generateContextTypes` and `generateMachineFactory`, which turn an IR into a twin. |
 | `tools/` | The node entrypoints the `trax machine` commands shell out to (`generate-twin.mjs`, `generate-corpus.mjs`), and `bundle-cli.mjs`, which bundles them with the engine compiled in for Trax.Cli's package. |
+| `tools/conformance/` | The conformance runner (`run.mjs`), which sends every case of `machines/` and `conformance/` to one engine over the testee protocol in `conformance/PROTOCOL.md`, the TypeScript testee, and the IR schema validator. |
 | `machines/` | The shared fixtures both engines drive: each machine's IR, its generated twin and its differential corpus. |
 | `conformance/` | Engine-neutral tables any engine replays: the IR's JSON Schema (`ir.schema.json`, normative), the canonical-wire vectors, the refusal-code registry, the strict-input cases (written from the CLR by the C# `StrictInputGoldenTests`). A vector goes here, not in one engine's tests. |
 | `docs/design/` | The design notes the codegen was built from. Historical: the published docs are the rule. |
@@ -26,7 +27,7 @@ This file is the entry point. It routes; it does not restate the rules.
   here, so the twin defers to the server on it. See [the codegen pipeline](https://traxsharp.net/docs/statemachine/codegen-pipeline)
   and [the IR format](https://traxsharp.net/docs/sdk-reference/statemachine-api/ir-format).
 - **The two engines agree case for case.** The differential corpus under `machines/<machine>/` is enumerated here
-  and replayed by the C# engine; only result codes are contract, messages may differ. The wire is canonical JSON
+  and replayed by the C# engine, and the conformance runner sends the whole kit to each engine, the C# one included; only result codes are contract, messages may differ. The wire is canonical JSON
   (RFC 8785) in both ([canonical wire](https://traxsharp.net/docs/statemachine/canonical-wire)).
 - **Every operation is total.** The engine and the clients answer a refusal or a transport failure as a value
   (`problem`, `TRANSPORT_ERROR`), never by throwing.

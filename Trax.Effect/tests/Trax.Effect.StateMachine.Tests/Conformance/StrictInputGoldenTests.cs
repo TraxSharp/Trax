@@ -126,7 +126,11 @@ public class StrictInputGoldenTests
     private static JsonObject Answer(AdvanceResult result) =>
         result switch
         {
-            AdvanceResult.Transitioned => new JsonObject { ["outcome"] = "transitioned" },
+            AdvanceResult.Transitioned t => new JsonObject
+            {
+                ["outcome"] = "transitioned",
+                ["wire"] = StrictInputMachine.Machine.Serialize(t.Snapshot),
+            },
             AdvanceResult.Rejected r => new JsonObject
             {
                 ["outcome"] = "rejected",
