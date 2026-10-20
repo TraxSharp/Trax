@@ -27,7 +27,7 @@ mkdir -p "$CACHE_DIR"
 # Everything under Trax.Docs is published EXCEPT the engineering-record trees below.
 # find descends into dotfile directories, so .claude/ must be named explicitly or the
 # agent skill and the ADR format spec get public /docs/ routes. skills/ holds the agent skills
-# for apps built on Trax, which a release publishes to their own repository, not as pages.
+# for apps built on Trax, which a release publishes to the skills branch, not as pages.
 cd "$SOURCE_DIR"
 find . -name "*.md" -not -name "README.md" \
   -not -path "./adr/*" \

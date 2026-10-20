@@ -26,7 +26,7 @@ public class StagerTests
     }
 
     [Test]
-    public void Stage_WritesManifestsAtTheReleaseVersion()
+    public void Stage_WritesThePluginAtTheReleaseVersion_AndNoMarketplace()
     {
         using var skills = new TempSkills().Skill("trax").Skill("trax-upgrade");
 
@@ -37,18 +37,27 @@ public class StagerTests
         )!;
         plugin["name"]!.GetValue<string>().Should().Be("trax");
         plugin["version"]!.GetValue<string>().Should().Be("1.70.0");
-
-        var market = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(skills.Out, ".claude-plugin", "marketplace.json"))
-        )!;
-        market["name"]!.GetValue<string>().Should().Be("traxsharp");
-        market["plugins"]![0]!["source"]!.GetValue<string>().Should().Be("./");
-        market["plugins"]![0]!["version"]!.GetValue<string>().Should().Be("1.70.0");
+        File.Exists(Path.Combine(skills.Out, ".claude-plugin", "marketplace.json"))
+            .Should()
+            .BeFalse("the marketplace lives on main and points at the branch");
 
         File.ReadAllText(Path.Combine(skills.Out, "README.md"))
             .Should()
             .Contain("- `trax`\n- `trax-upgrade`")
-            .And.Contain("tree/v1.70.0/skills/");
+            .And.Contain("tree/skills-v1.70.0")
+            .And.Contain("/plugin install trax@traxsharp");
+    }
+
+    [Test]
+    public void TheMarketplace_PointsTheTraxPluginAtTheSkillsBranch()
+    {
+        var market = Stager.MarketplaceManifest();
+
+        market["name"]!.GetValue<string>().Should().Be("traxsharp");
+        var source = market["plugins"]![0]!["source"]!;
+        source["source"]!.GetValue<string>().Should().Be("github");
+        source["repo"]!.GetValue<string>().Should().Be("TraxSharp/Trax");
+        source["ref"]!.GetValue<string>().Should().Be("skills");
     }
 
     [Test]

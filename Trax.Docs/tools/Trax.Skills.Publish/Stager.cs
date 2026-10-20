@@ -4,15 +4,22 @@ using System.Text.Json.Nodes;
 namespace Trax.Skills.Publish;
 
 /// <summary>
-/// Writes the tree a release commits to <c>TraxSharp/skills</c>: every skill with its source
-/// marker removed and the release's version stamped in, a Claude Code plugin and marketplace
-/// manifest at the root, a README saying where the source is, and the licence.
+/// Writes the tree a release commits to the <c>skills</c> branch of <c>TraxSharp/Trax</c>: every
+/// skill with its source marker removed and the release's version stamped in, the Claude Code
+/// plugin manifest at that version, a README saying where the source is, and the licence. The
+/// marketplace that points Claude Code at the branch is <see cref="MarketplaceManifest"/>, kept at
+/// the root of <c>main</c>.
 /// </summary>
 public static class Stager
 {
     public const string Marketplace = "traxsharp";
     public const string Plugin = "trax";
-    public const string Repository = "https://github.com/TraxSharp/skills";
+    public const string Repository = "TraxSharp/Trax";
+    public const string Branch = "skills";
+
+    /// <summary>The tag on the branch for a release: <c>v*</c> is the packages' and semantic-release's.</summary>
+    public const string TagPrefix = "skills-v";
+
     public const string Source = "https://github.com/TraxSharp/Trax/tree/main/Trax.Docs/skills";
 
     private const string Description = "Agent skills for building apps on Trax .NET";
@@ -66,7 +73,6 @@ public static class Stager
         var manifests = Path.Combine(outDir, ".claude-plugin");
         Directory.CreateDirectory(manifests);
         Write(Path.Combine(manifests, "plugin.json"), PluginManifest(version));
-        Write(Path.Combine(manifests, "marketplace.json"), MarketplaceManifest(version));
         File.WriteAllText(Path.Combine(outDir, "README.md"), Readme(version, folders));
         File.Copy(licenseFile, Path.Combine(outDir, "LICENSE"));
         return [];
@@ -84,11 +90,15 @@ public static class Stager
                 ["url"] = "https://github.com/TraxSharp",
             },
             ["homepage"] = "https://traxsharp.net",
-            ["repository"] = Repository,
+            ["repository"] = $"https://github.com/{Repository}",
             ["license"] = "MIT",
         };
 
-    public static JsonObject MarketplaceManifest(string version) =>
+    /// <summary>
+    /// The marketplace at <c>.claude-plugin/marketplace.json</c> on <c>main</c>. It carries no
+    /// version: the plugin's version is the <c>plugin.json</c> on the branch it points at.
+    /// </summary>
+    public static JsonObject MarketplaceManifest() =>
         new()
         {
             ["name"] = Marketplace,
@@ -97,17 +107,24 @@ public static class Stager
                 ["name"] = "TraxSharp",
                 ["url"] = "https://github.com/TraxSharp",
             },
-            ["metadata"] = new JsonObject { ["description"] = Description, ["version"] = version },
+            ["metadata"] = new JsonObject { ["description"] = Description },
             ["plugins"] = new JsonArray(
                 new JsonObject
                 {
                     ["name"] = Plugin,
-                    ["source"] = "./",
                     ["description"] = Description,
-                    ["version"] = version,
+                    ["source"] = new JsonObject
+                    {
+                        ["source"] = "github",
+                        ["repo"] = Repository,
+                        ["ref"] = Branch,
+                    },
                 }
             ),
         };
+
+    /// <summary>The marketplace as the file on <c>main</c> holds it, newline included.</summary>
+    public static string MarketplaceJson() => MarketplaceManifest().ToJsonString(Indented) + "\n";
 
     private static string Readme(string version, IReadOnlyList<string> folders) =>
         $"""
@@ -116,27 +133,27 @@ public static class Stager
             Skills for coding agents working in an app built on [Trax .NET](https://traxsharp.net),
             as released in Trax {version}.
 
-            **This repository is generated.** Each Trax release writes it from
-            [`Trax.Docs/skills/`]({Source}) and tags it `v{version}`. Pull requests and issues go to
-            [TraxSharp/Trax](https://github.com/TraxSharp/Trax).
+            **This branch is generated.** Each Trax release writes it from
+            [`Trax.Docs/skills/`]({Source}) and tags it `{TagPrefix}{version}`. Change the skills there,
+            on `main`.
 
             ## Install
 
             Claude Code:
 
             ```
-            /plugin marketplace add TraxSharp/skills
+            /plugin marketplace add {Repository}
             /plugin install {Plugin}@{Marketplace}
             ```
 
             Any agent the skills CLI supports:
 
             ```
-            npx skills add TraxSharp/skills
+            npx skills add https://github.com/{Repository}/tree/{Branch}
             ```
 
             To stay on one release, install from its tag:
-            `npx skills add https://github.com/TraxSharp/skills/tree/v{version}/skills/<name>`.
+            `npx skills add https://github.com/{Repository}/tree/{TagPrefix}{version}`.
 
             ## Skills
 

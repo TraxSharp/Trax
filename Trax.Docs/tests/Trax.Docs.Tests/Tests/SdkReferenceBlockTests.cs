@@ -34,7 +34,7 @@ public class SdkReferenceBlockTests
         // is illustrative, and the format spec's code is the ADR template itself.
         "adr/",
         ".claude/",
-        // Agent skills are published to their own repository, not the site, and link to the
+        // Agent skills are published to the skills branch, not the site, and link to the
         // pages they route to inline (Trax.Docs/adr/0056).
         "skills/",
     };

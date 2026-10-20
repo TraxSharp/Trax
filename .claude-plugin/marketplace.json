@@ -1,0 +1,21 @@
+{
+  "name": "traxsharp",
+  "owner": {
+    "name": "TraxSharp",
+    "url": "https://github.com/TraxSharp"
+  },
+  "metadata": {
+    "description": "Agent skills for building apps on Trax .NET"
+  },
+  "plugins": [
+    {
+      "name": "trax",
+      "description": "Agent skills for building apps on Trax .NET",
+      "source": {
+        "source": "github",
+        "repo": "TraxSharp/Trax",
+        "ref": "skills"
+      }
+    }
+  ]
+}
