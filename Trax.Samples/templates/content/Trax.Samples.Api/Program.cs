@@ -24,6 +24,7 @@
 // add real credentials. See "Before deploying" in README.md.
 // ---------------------------------------------------------------------------
 
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
@@ -106,7 +107,29 @@ builder.Services.AddScoped<IAppDbContext>(sp =>
 builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
+// -- Behind a load balancer ----------------------------------------------------
+// A load balancer that ends TLS tells the host the caller's address and scheme in
+// X-Forwarded-For and X-Forwarded-Proto. The host believes them only from the networks in
+// Trax:Proxy:KnownNetworks (CIDR, comma-separated, such as the VPC's 10.0.0.0/16). With none set
+// it reads neither header, since ASP.NET Core trusts every sender when it is given no networks.
+var proxyNetworks = (builder.Configuration["Trax:Proxy:KnownNetworks"] ?? "").Split(
+    ',',
+    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.KnownProxies.Clear();
+    options.KnownIPNetworks.Clear();
+    foreach (var network in proxyNetworks)
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+    options.ForwardedHeaders =
+        proxyNetworks.Length == 0
+            ? ForwardedHeaders.None
+            : ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+
 var app = builder.Build();
+app.UseForwardedHeaders();
 
 // -- Create the application tables (demo bootstrap) ----------------------------
 // Fine for the in-memory database. With Postgres, use EF Core migrations instead.

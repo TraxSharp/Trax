@@ -51,6 +51,23 @@ than a 401 or 403.
 3. Keep `[TraxAuthorize]` on the trains you add. Mark one `[TraxAllowAnonymous]` only when anyone
    who can reach the host may call it.
 
+## Behind a load balancer
+
+A load balancer that ends TLS calls the host over plain HTTP and says who the caller was in
+`X-Forwarded-For` and `X-Forwarded-Proto`. The templates believe those headers only from the
+networks in `Trax:Proxy:KnownNetworks`, comma-separated CIDR ranges:
+
+```bash
+Trax__Proxy__KnownNetworks=10.0.0.0/16
+```
+
+Set it to the network the load balancer sends from, such as the VPC's range. With it unset the host
+reads neither header, so behind a load balancer it sees every request as `http` from the load
+balancer's address: a sign-in redirect is built with `http`, and anything keyed on the caller's
+address sees one caller. The templates do not fall back to believing any sender, which is what
+ASP.NET Core's forwarded headers middleware does when it is given no networks: then any client
+could claim to have arrived over HTTPS, or from any address.
+
 ## Build a container image
 
 Each template publishes as a container image with no Dockerfile:
