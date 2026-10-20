@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Trax.Skills.Publish;
 
 /// <summary>
-/// Writes the tree a release commits to the <c>skills</c> branch of <c>TraxSharp/Trax</c>: every
+/// Writes the tree the <c>Skills</c> workflow commits to the <c>skills</c> branch of <c>TraxSharp/Trax</c>: every
 /// skill with its source marker removed and the release's version stamped in, the Claude Code
 /// plugin manifest at that version, a README saying where the source is, and the licence. The
 /// marketplace that points Claude Code at the branch is <see cref="MarketplaceManifest"/>, kept at
@@ -133,9 +133,9 @@ public static class Stager
             Skills for coding agents working in an app built on [Trax .NET](https://traxsharp.net),
             as released in Trax {version}.
 
-            **This branch is generated.** Each Trax release writes it from
-            [`Trax.Docs/skills/`]({Source}) and tags it `{TagPrefix}{version}`. Change the skills there,
-            on `main`.
+            **This branch is generated.** After each Trax release, an approved run of the Skills workflow
+            writes it from [`Trax.Docs/skills/`]({Source}) and tags it `{TagPrefix}{version}`. Change the
+            skills there, on `main`.
 
             ## Install
 

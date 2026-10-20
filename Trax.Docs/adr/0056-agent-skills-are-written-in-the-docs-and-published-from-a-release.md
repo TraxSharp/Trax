@@ -9,8 +9,8 @@ status: accepted
 
 Coding agents working in an app built on Trax get skills: short instructions an agent loads when a task matches,
 saying what to decide first, which page to read and which mistakes are known. They are written in
-`Trax.Docs/skills/<name>/SKILL.md`, and each release publishes them to the `skills` branch of this repository,
-stamped with the release's version. Nothing serves them from `main`.
+`Trax.Docs/skills/<name>/SKILL.md`, and after each release a maintainer-approved run publishes them to the `skills`
+branch of this repository, stamped with the release's version. Nothing serves them from `main`.
 
 ## Status
 
@@ -27,29 +27,36 @@ stamped with the release's version. Nothing serves them from `main`.
   1.7.4 (2026-10-20): with only the contributor skill in `.claude/skills/` marked internal, the CLI finds no skill in
   its usual places, falls back to a recursive search and offers everything under `Trax.Docs/skills/`; with every
   skill marked, it offers nothing, `--full-depth` included. Claude Code ignores the key.
-- **The release publishes them to the `skills` branch.** One commit per release, tagged `skills-v<version>` (`v*`
-  is the packages' tag), with the marker removed, `metadata.trax-version` stamped in and the Claude Code plugin
-  manifest (`trax`) at that version. A static marketplace (`traxsharp`) at `.claude-plugin/marketplace.json` on `main`
-  names the plugin with the branch as its source, so Claude Code installs with
-  `/plugin marketplace add TraxSharp/Trax` and `/plugin install trax@traxsharp`, and updates follow releases. Other
-  agents install the branch with `npx skills add https://github.com/TraxSharp/Trax/tree/skills`; the skills CLI does
-  not follow a marketplace to another ref (measured). An install from a `skills-v<version>` tree URL records the ref
-  in `skills-lock.json` and stays on it, which is how an app on an older Trax keeps matching skills.
-- **Only the release writes the branch.** A skill is instructions an agent follows in a consumer's repository, so
-  write access to the branch is a way to instruct every consumer's agent. The `skills` ruleset refuses updates,
-  deletion and force pushes to anyone but GitHub Actions, so no person pushes there, and of the workflows only the
-  release's `skills` job, behind the `release` environment, writes it. The other jobs whose token could are the
-  release's own versioning job (tags and the GitHub release) and the Dependabot lockfile heal (`dependabot/**`). The `skills tags` ruleset makes a
-  `skills-v*` tag permanent. The job commits through the API, so GitHub signs each commit without a key in the job.
-  A skill ships markdown only, never a script.
+- **They are published to the `skills` branch, from a release tag, when a maintainer approves.** The `Skills`
+  workflow is dispatched by hand after a release, with its tag, the way `website.yml` publishes the site
+  ([0043](./0043-the-site-is-published-from-a-release.md)). It stages the tree (the marker removed,
+  `metadata.trax-version` stamped in, the Claude Code plugin manifest `trax` at that version), commits it on top of
+  `skills` to `skills-next`, and waits on the `skills-deploy` environment; once approved, it fast-forwards `skills` to
+  that commit and tags it `skills-v<version>` (`v*` is the packages' tag). A static marketplace (`traxsharp`) at
+  `.claude-plugin/marketplace.json` on `main` names the plugin with the branch as its source, so Claude Code installs
+  with `/plugin marketplace add TraxSharp/Trax` and `/plugin install trax@traxsharp`, and updates follow what was
+  approved. Other agents install the branch with `npx skills add https://github.com/TraxSharp/Trax/tree/skills`; the
+  skills CLI does not follow a marketplace to another ref (measured). An install from a `skills-v<version>` tree URL
+  records the ref in `skills-lock.json` and stays on it, which is how an app on an older Trax keeps matching skills.
+- **Only an approved run moves the branch.** A skill is instructions an agent follows in a consumer's repository, so
+  write access to `skills` is a way to instruct every consumer's agent. Its ruleset refuses updates, deletion and
+  force pushes to all but deploy keys, and `skills-v*` tags the same (creation included); the key is a `skills-deploy`
+  environment secret, released only by a maintainer's approval. The commit itself is made through the API, so GitHub
+  signs it; a deploy key cannot push a commit GitHub would verify, which is why the work is split: the workflow token
+  writes the signed commit to `skills-next`, which nobody installs from, and the key only moves `skills` to it. A
+  ruleset cannot name the workflow token as its bypass, so a single job could not be both the writer and the only
+  writer. A skill ships markdown only, never a script.
 
 ## Considered options
 
 **A separate repository, `TraxSharp/skills`, written by a GitHub App.** The first version of this decision. It gives
 non-Claude agents the shortest install (`npx skills add TraxSharp/skills`) and keeps generated history out of this
 repository. Rejected once the internal marker turned out to be needed anyway: with it, `main` serves nothing, so the
-second repository only bought a shorter URL, at the cost of an App, its private key and a repository to keep up. The
-release job already writes this repository's tags, so the branch adds no new holder of write access.
+second repository only bought a shorter URL, at the cost of an App, its private key and a repository to keep up.
+
+**Publishing from the release itself.** Automatic, but nothing a ruleset accepts would then stop any other workflow
+holding `contents: write` from moving the branch, and nobody reviews what changes. Rejected for the approved
+deploy, which matches how the site is published.
 
 **`skills/` at the root of `main`.** The CLI's default place. Rejected: the obvious command would install from `main`,
 ahead of what is on nuget.org.
@@ -65,13 +72,14 @@ project would drift from its own packages after the first bump. Templates point 
 - `SkillsAreWellFormedTests` holds every skill to the release's rules (name, description, the internal marker, no
   stamped version, markdown only, links inside the skill), every docs link in a skill to a published page, and the
   marketplace on `main` to the one the release expects.
-- `Trax.Docs/tools/Trax.Skills.Publish` is the stage the release runs; it applies the same rules and refuses to
+- `Trax.Docs/tools/Trax.Skills.Publish` is the stage the `Skills` workflow runs; it applies the same rules and refuses to
   write a tree that breaks one. Its tests are in `StagerTests.cs` and `SkillRulesTests.cs`.
 - `CompiledSnippetsTests.cs` and `EveryCSharpFenceIsMarkedTests.cs` in Trax.Docs.Snippets.Tests cover a skill's
   fences as they cover a page's.
 
 Not covered: nothing checks a skill's advice is right, only that its code builds and its links land, and nothing here
-checks that only release jobs write the `skills` branch; that is its ruleset.
+checks that only the approved deploy moves the `skills` branch; that is its ruleset and the `skills-deploy`
+environment.
 
 ## Changelog
 
