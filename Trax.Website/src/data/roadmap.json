@@ -203,7 +203,8 @@
     },
     {
       "key": "client-documents",
-      "status": "building",
+      "status": "done",
+      "shipped": "October 2026 · 1.67",
       "title": "Fetch only what a page needs",
       "points": [
         "Write the query a page needs as a .graphql file",
@@ -212,9 +213,30 @@
         "Answers that refer back to themselves no longer stop a server"
       ],
       "code": {
-        "caption": "Building",
+        "caption": "Shipped",
         "text": "query OrderCard($input: FindOrderInput!) {\n  discover {\n    findOrder(input: $input) { title customer { name } }\n  }\n}\n\n$ trax client --manifest web/src/trax/manifest.json --out web/src/trax \\\n    --documents 'web/src/**/*.graphql'"
       }
+    },
+    {
+      "key": "console",
+      "status": "building",
+      "title": "One operations console",
+      "points": [
+        "One dashboard, organised by trains, machines and schedules",
+        "An overview that starts with what needs attention",
+        "A picture of every state machine",
+        "Works where persisted operations are required"
+      ]
+    },
+    {
+      "key": "book",
+      "status": "building",
+      "title": "The Trax book",
+      "points": [
+        "One shop, built from an empty folder to a deployed app",
+        "One Trax feature a chapter, in the order you need them",
+        "Every chapter compiles as the project so far"
+      ]
     },
     {
       "key": "spec-to-app",
