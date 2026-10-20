@@ -42,6 +42,101 @@ internal sealed partial class DeployFile
     /// <summary>Configuration the deployment must set that is secret, as environment names (<c>Stripe__ApiKey</c>).</summary>
     public List<string> Secrets { get; set; } = [];
 
+    /// <summary>The cloud environments this app deploys to, by name (<c>production</c>, <c>staging</c>): one stack each.</summary>
+    public SortedDictionary<string, DeployEnvironment> Environments { get; set; } =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The environment <paramref name="name"/>, checked for a cloud deploy. Throws naming the first problem.
+    /// </summary>
+    public DeployEnvironment Environment(string name)
+    {
+        if (!Environments.TryGetValue(name, out var env))
+            throw new InvalidOperationException(
+                Environments.Count == 0
+                    ? $"{FileName} names no environments. Add one under \"environments\", or run "
+                        + "'trax deploy init --target aws --force'."
+                    : $"{FileName} has no environment '{name}'. It has: {string.Join(", ", Environments.Keys)}."
+            );
+        string Problem(string what) => $"Environment '{name}': {what}";
+        if (!Name().IsMatch(name))
+            throw new InvalidOperationException(
+                Problem(
+                    "its name must be lower case, a letter first, then letters, digits or dashes."
+                )
+            );
+        if (env.Profile is not (DeployEnvironment.Production or DeployEnvironment.Try))
+            throw new InvalidOperationException(
+                Problem($"profile '{env.Profile}' is not production or try.")
+            );
+        if (string.IsNullOrWhiteSpace(env.Region))
+            throw new InvalidOperationException(Problem("it names no region (us-west-2)."));
+        if (env.Profile == DeployEnvironment.Production && string.IsNullOrWhiteSpace(env.Domain))
+            throw new InvalidOperationException(
+                Problem(
+                    "the production profile needs a domain: HTTPS needs a certificate, and a certificate needs a "
+                        + "domain. Name one, or use the try profile, which serves on a CloudFront address."
+                )
+            );
+        if (env.Profile == DeployEnvironment.Try && env.Domain is not null)
+            throw new InvalidOperationException(
+                Problem("the try profile serves on a CloudFront address and takes no domain.")
+            );
+        if (env.Network is { } network)
+        {
+            if (string.IsNullOrWhiteSpace(network.VpcId) || string.IsNullOrWhiteSpace(network.Cidr))
+                throw new InvalidOperationException(
+                    Problem("network needs vpcId and cidr (the VPC's address range).")
+                );
+            if (network.PublicSubnets.Count < 2 || network.PrivateSubnets.Count < 2)
+                throw new InvalidOperationException(
+                    Problem(
+                        "network needs at least two public and two private subnets, in different availability "
+                            + "zones: a load balancer and a database each span two."
+                    )
+                );
+        }
+        foreach (var service in env.Counts.Keys)
+            if (!Services.ContainsKey(service))
+                throw new InvalidOperationException(
+                    Problem($"counts names '{service}', which is not a service.")
+                );
+        var provided = env.Auth is { Kind: DeployAuth.Cognito } auth
+            ? new HashSet<string>([auth.AuthorityKey, auth.AudienceKey], StringComparer.Ordinal)
+            : [];
+        var missing = Settings
+            .Where(s => !env.Settings.ContainsKey(s) && !provided.Contains(s))
+            .ToList();
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                Problem(
+                    $"settings has no value for {string.Join(", ", missing)}, which the app lists as settings."
+                )
+            );
+        var unknown = env.Settings.Keys.Where(k => !Settings.Contains(k)).ToList();
+        if (unknown.Count > 0)
+            throw new InvalidOperationException(
+                Problem(
+                    $"settings gives {string.Join(", ", unknown)}, which the app does not list under \"settings\"."
+                )
+            );
+        if (env.Auth is { } a && a.Kind != DeployAuth.Cognito)
+            throw new InvalidOperationException(
+                Problem(
+                    $"auth kind '{a.Kind}' is not one trax creates. Use cognito, or leave auth out and give an "
+                        + "existing issuer's address in settings."
+                )
+            );
+        return env;
+    }
+
+    /// <summary>The CloudFormation stack an environment deploys to: <c>&lt;app&gt;-&lt;environment&gt;</c>.</summary>
+    public string StackName(string environment) => $"{App}-{environment}";
+
+    /// <summary>How many copies of <paramref name="service"/> run in <paramref name="environment"/>.</summary>
+    public int Count(DeployEnvironment environment, string service) =>
+        environment.Counts.TryGetValue(service, out var count) ? count : Services[service].Count;
+
     public string Write() => JsonSerializer.Serialize(this, Json) + "\n";
 
     /// <summary>
@@ -141,6 +236,76 @@ internal sealed partial class DeployFile
 
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
     private static partial Regex Variable();
+}
+
+/// <summary>One cloud environment: a stack of its own.</summary>
+internal sealed class DeployEnvironment
+{
+    public const string Production = "production";
+    public const string Try = "try";
+
+    /// <summary>
+    /// <c>production</c>: private subnets behind a NAT gateway, a domain with its certificate, a Multi-AZ database
+    /// kept on delete. <c>try</c>: public subnets locked by security groups, a CloudFront address, a small database
+    /// deleted with the stack.
+    /// </summary>
+    public string Profile { get; set; } = Production;
+
+    public string Region { get; set; } = "";
+
+    /// <summary>The host name the app serves on (<c>orders.example.com</c>). Production only.</summary>
+    public string? Domain { get; set; }
+
+    /// <summary>
+    /// The Route 53 hosted zone that holds <see cref="Domain"/>. With it the certificate is validated and the name
+    /// pointed at the load balancer automatically; without it trax prints the records to add.
+    /// </summary>
+    public string? HostedZoneId { get; set; }
+
+    /// <summary>An existing VPC to deploy into, in place of the one the stack creates.</summary>
+    public DeployNetwork? Network { get; set; }
+
+    /// <summary>
+    /// A Secrets Manager secret holding the hosts' whole Postgres connection string, in place of the database the
+    /// stack creates.
+    /// </summary>
+    public string? DatabaseSecretArn { get; set; }
+
+    /// <summary>The sign-in the stack creates: <c>cognito</c>, or none when the hosts trust an existing issuer.</summary>
+    public DeployAuth? Auth { get; set; }
+
+    /// <summary>Copies per service in this environment, over the file's <c>count</c>.</summary>
+    public SortedDictionary<string, int> Counts { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>A value for each name the file lists under <c>settings</c>.</summary>
+    public SortedDictionary<string, string> Settings { get; set; } = new(StringComparer.Ordinal);
+}
+
+/// <summary>An existing VPC, with the subnets the load balancer and the services use.</summary>
+internal sealed class DeployNetwork
+{
+    public string VpcId { get; set; } = "";
+
+    /// <summary>The VPC's address range, which the hosts trust forwarded headers from.</summary>
+    public string Cidr { get; set; } = "";
+
+    public List<string> PublicSubnets { get; set; } = [];
+
+    public List<string> PrivateSubnets { get; set; } = [];
+}
+
+/// <summary>The sign-in a stack creates.</summary>
+internal sealed class DeployAuth
+{
+    public const string Cognito = "cognito";
+
+    public string Kind { get; set; } = Cognito;
+
+    /// <summary>The setting the hosts read the issuer from.</summary>
+    public string AuthorityKey { get; set; } = "Auth__Authority";
+
+    /// <summary>The setting the hosts read the audience (the app client's id) from.</summary>
+    public string AudienceKey { get; set; } = "Auth__Audience";
 }
 
 /// <summary>One deployed project.</summary>

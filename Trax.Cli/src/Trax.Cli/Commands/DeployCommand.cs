@@ -7,23 +7,21 @@ namespace Trax.Cli.Commands;
 
 /// <summary>
 /// <c>trax deploy</c>: turns the projects named in <c>trax.deploy.json</c>, and what each host reports it needs
-/// (<c>--trax-export-deploy</c>), into a deployment. <c>trax deploy init</c> writes a first <c>trax.deploy.json</c>.
+/// (<c>--trax-export-deploy</c>), into a deployment: a compose stack, or an AWS environment
+/// (<see cref="DeployAwsCommands"/>). <c>trax deploy init</c> writes a first <c>trax.deploy.json</c>.
 /// </summary>
 internal static class DeployCommand
 {
     public static Command Create()
     {
-        var target = new Option<string>("--target")
+        var target = new Option<string?>("--target")
         {
             Description =
-                "Where to deploy. compose writes a compose stack for any docker or podman host.",
-            DefaultValueFactory = _ => "compose",
+                "Where to deploy: compose writes a compose stack for any docker or podman host; aws deploys the "
+                + "--env environment. Default: aws when --env is given, else compose.",
         };
-        var file = new Option<FileInfo?>("--file")
-        {
-            Description =
-                $"The deployment's {DeployFile.FileName} (default: the one in this directory).",
-        };
+        var env = DeployAwsCommands.EnvOption(required: false);
+        var file = DeployAwsCommands.FileOption();
         var output = new Option<DirectoryInfo?>("--out")
         {
             Description =
@@ -41,25 +39,49 @@ internal static class DeployCommand
         )
         {
             target,
+            env,
             file,
             output,
             build,
             CreateInit(),
         };
-        command.SetAction(parseResult =>
-        {
-            var path =
-                parseResult.GetValue(file)?.FullName
-                ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName);
-            return Run(
-                parseResult.GetValue(target) ?? "compose",
-                path,
-                parseResult.GetValue(output)?.FullName,
-                parseResult.GetValue(build),
-                new DotnetHostExporter(),
-                BuildImage
-            );
-        });
+        foreach (var subcommand in DeployAwsCommands.Create())
+            command.Subcommands.Add(subcommand);
+        command.SetAction(
+            (parseResult, ct) =>
+            {
+                var path =
+                    parseResult.GetValue(file)?.FullName
+                    ?? Path.Combine(Directory.GetCurrentDirectory(), DeployFile.FileName);
+                var environment = parseResult.GetValue(env);
+                var chosen =
+                    parseResult.GetValue(target) ?? (environment is null ? "compose" : "aws");
+                if (chosen != "aws")
+                    return Task.FromResult(
+                        Run(
+                            chosen,
+                            path,
+                            parseResult.GetValue(output)?.FullName,
+                            parseResult.GetValue(build),
+                            new DotnetHostExporter(),
+                            BuildImage
+                        )
+                    );
+                if (environment is null)
+                {
+                    Console.Error.WriteLine(
+                        "--target aws deploys one environment: name it with --env."
+                    );
+                    return Task.FromResult(1);
+                }
+                return DeployAwsCommands.DeployAsync(
+                    path,
+                    environment,
+                    new DotnetHostExporter(),
+                    ct
+                );
+            }
+        );
         return command;
     }
 
@@ -73,6 +95,19 @@ internal static class DeployCommand
         {
             Description = $"Replace an existing {DeployFile.FileName}.",
         };
+        var target = new Option<string>("--target")
+        {
+            Description = "aws also writes a production environment to fill in.",
+            DefaultValueFactory = _ => "compose",
+        };
+        var region = new Option<string?>("--region")
+        {
+            Description = "The production environment's region (with --target aws).",
+        };
+        var domain = new Option<string?>("--domain")
+        {
+            Description = "The production environment's domain (with --target aws).",
+        };
         var init = new Command(
             "init",
             $"Write a first {DeployFile.FileName} from the Trax host projects under this directory."
@@ -80,33 +115,61 @@ internal static class DeployCommand
         {
             app,
             force,
+            target,
+            region,
+            domain,
         };
         init.SetAction(parseResult =>
             Init(
                 Directory.GetCurrentDirectory(),
                 parseResult.GetValue(app),
-                parseResult.GetValue(force)
+                parseResult.GetValue(force),
+                parseResult.GetValue(target) ?? "compose",
+                parseResult.GetValue(region),
+                parseResult.GetValue(domain)
             )
         );
         return init;
     }
 
-    internal static int Init(string directory, string? app, bool force)
+    internal static int Init(
+        string directory,
+        string? app,
+        bool force,
+        string target = "compose",
+        string? region = null,
+        string? domain = null
+    )
     {
         try
         {
+            if (target is not ("compose" or "aws"))
+                throw new InvalidOperationException(
+                    $"--target '{target}' is not one trax deploys to. Use compose or aws."
+                );
             var path = Path.Combine(directory, DeployFile.FileName);
             if (File.Exists(path) && !force)
                 throw new InvalidOperationException(
                     $"{path} exists. Edit it, or pass --force to write a new one over it."
                 );
             var file = DeployInit.Create(directory, app);
+            if (target == "aws")
+                file.Environments["production"] = new DeployEnvironment
+                {
+                    Profile = DeployEnvironment.Production,
+                    Region = region ?? "us-east-1",
+                    Domain = domain ?? $"{file.App}.example.com",
+                    Auth = new DeployAuth(),
+                };
             File.WriteAllText(path, file.Write());
             Console.WriteLine($"Wrote {path}:");
             foreach (var (name, service) in file.Services)
                 Console.WriteLine($"  {name, -12}{service.Project}");
             Console.WriteLine(
-                "Name the settings and secrets the hosts read, then run 'trax deploy --target compose'."
+                target == "aws"
+                    ? "Check the production environment's region, domain and hostedZoneId, name the settings and "
+                        + "secrets the hosts read, then run 'trax deploy plan --env production'."
+                    : "Name the settings and secrets the hosts read, then run 'trax deploy --target compose'."
             );
             return 0;
         }
@@ -130,19 +193,10 @@ internal static class DeployCommand
         {
             if (target != "compose")
                 throw new InvalidOperationException(
-                    $"--target '{target}' is not one trax deploys to yet. Use compose."
+                    $"--target '{target}' is not one trax deploys to. Use compose, or aws with --env."
                 );
             var file = DeployFile.Read(filePath);
-            var placeholders = DotnetHostExporter.Placeholders(file);
-            var exports = new Dictionary<string, DeployManifest>(StringComparer.Ordinal);
-            foreach (var (name, service) in file.Services)
-            {
-                Console.WriteLine($"Asking {name} what it needs ({service.Project})...");
-                exports[name] = exporter.Export(
-                    DeployFile.ProjectPath(filePath, service),
-                    placeholders
-                );
-            }
+            var exports = Export(file, filePath, exporter);
 
             var dir = outDir ?? Path.GetDirectoryName(Path.GetFullPath(filePath))!;
             var files = ComposeTarget.Render(file, exports);
@@ -185,6 +239,26 @@ internal static class DeployCommand
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    /// <summary>Asks each service's host what it needs, by running it once with --trax-export-deploy.</summary>
+    internal static Dictionary<string, DeployManifest> Export(
+        DeployFile file,
+        string filePath,
+        IHostExporter exporter
+    )
+    {
+        var placeholders = DotnetHostExporter.Placeholders(file);
+        var exports = new Dictionary<string, DeployManifest>(StringComparer.Ordinal);
+        foreach (var (name, service) in file.Services)
+        {
+            Console.WriteLine($"Asking {name} what it needs ({service.Project})...");
+            exports[name] = exporter.Export(
+                DeployFile.ProjectPath(filePath, service),
+                placeholders
+            );
+        }
+        return exports;
     }
 
     private static void BuildImage(string projectPath, string repository)

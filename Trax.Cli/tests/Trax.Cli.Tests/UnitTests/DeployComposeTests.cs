@@ -293,10 +293,10 @@ public class DeployComposeTests
     }
 
     [Test]
-    public void A_target_trax_does_not_deploy_to_yet_is_refused() =>
+    public void A_target_trax_does_not_deploy_to_is_refused() =>
         DeployCommand
             .Run(
-                "aws",
+                "gcp",
                 Write(File_()),
                 null,
                 false,
