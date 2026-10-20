@@ -72,6 +72,8 @@ project would drift from its own packages after the first bump. Templates point 
 - `SkillsAreWellFormedTests` holds every skill to the release's rules (name, description, the internal marker, no
   stamped version, markdown only, links inside the skill), every docs link in a skill to a published page, and the
   marketplace on `main` to the one the release expects.
+- `SkillsCoverMigrationGuidesTests` holds `trax-upgrade` to every page under `migration-guides/`: a guide the skill
+  does not link fails, naming the guide.
 - `Trax.Docs/tools/Trax.Skills.Publish` is the stage the `Skills` workflow runs; it applies the same rules and refuses to
   write a tree that breaks one. Its tests are in `StagerTests.cs` and `SkillRulesTests.cs`.
 - `CompiledSnippetsTests.cs` and `EveryCSharpFenceIsMarkedTests.cs` in Trax.Docs.Snippets.Tests cover a skill's
