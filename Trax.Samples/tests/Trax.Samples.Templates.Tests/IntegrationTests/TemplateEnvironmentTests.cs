@@ -38,6 +38,54 @@ public class TemplateEnvironmentTests
         });
 
     [Test]
+    public Task The_hub_template_believes_forwarded_headers_only_from_its_proxy_networks() =>
+        BelievesForwardedHeadersOnlyFromItsProxyNetworks<Hub.Data.AppDbContext>();
+
+    [Test]
+    public Task The_scheduler_template_believes_forwarded_headers_only_from_its_proxy_networks() =>
+        BelievesForwardedHeadersOnlyFromItsProxyNetworks<Scheduler.Trains.HelloWorld.HelloWorldInput>();
+
+    [Test]
+    public Task The_api_template_believes_forwarded_headers_only_from_its_proxy_networks() =>
+        BelievesForwardedHeadersOnlyFromItsProxyNetworks<Api.Data.AppDbContext>();
+
+    private static async Task BelievesForwardedHeadersOnlyFromItsProxyNetworks<T>()
+        where T : class
+    {
+        await using var behindProxy = new WebApplicationFactory<T>().WithWebHostBuilder(b =>
+            b.UseEnvironment("Development").UseSetting("Trax:Proxy:KnownNetworks", "10.0.0.0/16")
+        );
+        await using var noProxy = Start<T>("Development");
+
+        (await ForwardedScheme(behindProxy, "10.0.4.5"))
+            .Should()
+            .Be("https", "a request from the load balancer's network carries the caller's scheme");
+        (await ForwardedScheme(behindProxy, "192.0.2.7"))
+            .Should()
+            .Be("http", "anyone outside the proxy networks could otherwise claim https");
+        (await ForwardedScheme(noProxy, "10.0.4.5"))
+            .Should()
+            .Be("http", "with no proxy networks set the host reads no forwarded header");
+    }
+
+    private static async Task<string> ForwardedScheme<T>(
+        WebApplicationFactory<T> factory,
+        string from
+    )
+        where T : class
+    {
+        var context = await factory.Server.SendAsync(c =>
+        {
+            c.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(from);
+            c.Request.Method = "GET";
+            c.Request.Path = "/trax/health";
+            c.Request.Headers["X-Forwarded-Proto"] = "https";
+            c.Request.Headers["X-Forwarded-For"] = "203.0.113.9";
+        });
+        return context.Request.Scheme;
+    }
+
+    [Test]
     public void The_hub_template_refuses_to_start_outside_Development_without_a_database() =>
         RefusesWithoutADatabase<Hub.Data.AppDbContext>();
 
