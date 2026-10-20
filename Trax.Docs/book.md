@@ -17,8 +17,33 @@ The [quick start](/docs/getting-started) is the short version: one train, record
 served in an afternoon. The book covers the same ground more slowly and then keeps going.
 
 Every C# block in the book compiles in CI against the release the site was published from, as in the
-quick start, and each chapter compiles as the whole project so far. Chapters without a link are not
-written yet.
+quick start, and each chapter compiles as the whole project so far.
+
+## The chapters at a glance
+
+| Part | Chapter | What Shopfront gains | Trax feature |
+|---|---|---|---|
+| Trains | [1. An order is a train](/docs/book/an-order-is-a-train) | placing an order | trains, junctions, Memory |
+| | [2. Testing PlaceOrder](/docs/book/testing-place-order) | a test project | junction, train and host tests, architecture guards |
+| | [3. Every order is recorded](/docs/book/every-order-is-recorded) | Postgres, a failing payment | the run record, failure classes |
+| | [4. The shop's own data](/docs/book/the-shops-own-data) | products, stock, orders | domain data contexts |
+| | [5. Does this order look like fraud](/docs/book/does-this-order-look-like-fraud) | a fraud check | decisions and deciders |
+| The API | [6. Customers and staff](/docs/book/customers-and-staff) | sign-in | authentication and authorization |
+| | [7. Serve it over GraphQL](/docs/book/serve-it-over-graphql) | the API | queries, mutations, query models |
+| | [8. The operations console](/docs/book/the-operations-console) | a staff view of every run | the console |
+| Running it for real | [9. Scheduled work](/docs/book/scheduled-work) | a nightly stock report | schedules, dependent jobs |
+| | [10. Failures, retries and dead letters](/docs/book/failures-retries-and-dead-letters) | a supplier sync | retries, dead letters, lifecycle hooks |
+| | [11. A separate worker](/docs/book/a-separate-worker) | fulfilment on its own process | queued work, workers, recovery |
+| Machines | [12. Checkout is a state machine](/docs/book/checkout-is-a-state-machine) | checkout | machines, guards, timers |
+| | [13. The machine places the order](/docs/book/the-machine-places-the-order) | checkout runs the order | invoking a train, child machines |
+| Composition | [14. Checks in parallel, and resuming](/docs/book/checks-in-parallel-and-resuming) | courier rates side by side | `Parallel`, checkpoints |
+| The storefront | [15. A generated client](/docs/book/a-generated-client) | a React storefront | generated clients |
+| | [16. Checkout in the browser](/docs/book/checkout-in-the-browser) | checkout in React | the TypeScript twin |
+| | [17. Require persisted operations](/docs/book/require-persisted-operations) | only known documents run | persisted operations |
+| Shipping it | [18. Deploy](/docs/book/deploy) | a hub and two workers in containers | deployment, health checks |
+
+[What Trax does](/docs/what-trax-does) has the same features grouped by capability, with the page
+that explains each.
 
 ## What we build
 
