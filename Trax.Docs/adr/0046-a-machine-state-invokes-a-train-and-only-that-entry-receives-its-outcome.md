@@ -207,7 +207,7 @@ checkpoint.
 
 Written first, red, before the code they cover. Each names the class and method it will have.
 
-In `Trax.Effect/tests/Trax.Effect.StateMachine.Tests`:
+In `Trax.StateMachine/dotnet/tests/Trax.Effect.StateMachine.Tests`:
 - `InvokesDeclarationTests.An_invoking_state_without_OnCancelled_is_refused_at_build`
 - `InvokesDeclarationTests.A_guarded_OnDone_routes_an_unsure_output_to_its_own_target`
 - `InvokesDeclarationTests.Outcomes_export_as_their_own_trigger_kind_per_invoke_edge_with_the_output_schema`
@@ -215,7 +215,7 @@ In `Trax.Effect/tests/Trax.Effect.StateMachine.Tests`:
 - `MachineInstanceIdTests.Keys_a_b_c_split_differently_give_different_ids`
 - `DifferentialCorpusReplayTests.Outcome_triggers_apply_the_same_reduction_in_the_twin`
 
-In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Postgres and Sqlite:
+In `Trax.StateMachine/dotnet/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Postgres and Sqlite:
 - `InvokesStartupRefusalTests`, one test per refusal, each naming the offending junction, train or member:
   `A_plain_Junction_is_refused`, `An_IChain_over_a_non_effect_interface_is_refused`,
   `A_train_that_is_not_a_ServiceTrain_is_refused`, `A_recorder_refusal_is_refused`,

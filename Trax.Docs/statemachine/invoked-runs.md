@@ -5,11 +5,11 @@ type: reference
 area: machines
 nav_order: 23
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Invokes.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/InvokeOutcomeDelivery.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/InvokeOutcomeReconciler.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/InvokedRunOutcomes.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/InvokesStartupValidator.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokeOutcomeDelivery.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokeOutcomeReconciler.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokedRunOutcomes.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokesStartupValidator.cs
   - Trax.Mediator/src/Trax.Mediator/Services/InvokedTrains/InvokedTrainLauncher.cs
 ---
 

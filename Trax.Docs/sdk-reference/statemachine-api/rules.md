@@ -9,8 +9,8 @@ nav_order: 3
 package: Trax.Effect.StateMachine
 namespace: Trax.Effect.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/Rules.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/MemberPath.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/Rules.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/MemberPath.cs
 ---
 
 # Rules

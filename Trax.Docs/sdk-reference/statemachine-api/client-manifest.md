@@ -9,7 +9,7 @@ nav_order: 16
 package: Trax.Effect.StateMachine
 namespace: Trax.Effect.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/ClientManifest.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/ClientManifest.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/TraxClientExport.cs
   - Trax.Effect/src/Trax.Effect/Configuration/ClientExport/ITraxStartupCheck.cs
   - Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Extensions/TraxClientManifestExtensions.cs

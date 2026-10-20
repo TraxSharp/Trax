@@ -9,15 +9,15 @@ nav_order: 4
 package: Trax.Effect.StateMachine
 namespace: Trax.Effect.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/Rule.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/Reduction.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/ContextSchema.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/DeclarativeModel.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/RuleEvaluator.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/ReductionEvaluator.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/MachineDefinition.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/StorableJson.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/Rule.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/Reduction.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/ContextSchema.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/DeclarativeModel.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/RuleEvaluator.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/ReductionEvaluator.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/MachineDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/StorableJson.cs
 ---
 
 # Declarative data model

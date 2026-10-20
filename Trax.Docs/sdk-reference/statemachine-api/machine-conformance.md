@@ -9,9 +9,9 @@ nav_order: 15
 package: Trax.Effect.StateMachine.Testing
 namespace: Trax.Effect.StateMachine.Testing
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Testing/MachineConformance.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Testing/DifferentialCorpus.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/CorpusReplay.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Testing/MachineConformance.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Testing/DifferentialCorpus.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/CorpusReplay.cs
 ---
 
 # MachineConformance

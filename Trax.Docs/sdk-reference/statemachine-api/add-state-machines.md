@@ -9,10 +9,10 @@ nav_order: 1
 package: Trax.Effect.StateMachine.Persistence
 namespace: Trax.Effect.StateMachine.Persistence
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/StateMachineOptions.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/MachineCensus.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/StateMachineInstruments.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/StateMachineOptions.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/MachineCensus.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/StateMachineInstruments.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/add-trax-state-machines
 ---

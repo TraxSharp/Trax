@@ -10,7 +10,7 @@ namespace Trax.Docs.Tests.Tests;
 /// page they name was renamed, and nothing on the docs side knew they existed. A page that moves
 /// claims its old path in <c>redirect_from</c>, which this accepts, as the site does.</para>
 ///
-/// <para>Scanned: every <c>*.cs</c> under a <c>Trax.*/src/</c> folder (the packages, the analyzer
+/// <para>Scanned: every <c>*.cs</c> under a <c>Trax.*/src/</c> or <c>Trax.*/dotnet/src/</c> folder (the packages, the analyzer
 /// included), and under <c>Trax.Samples/samples/</c> and <c>Trax.Samples/templates/</c>; and every
 /// <c>*.ts</c> and <c>*.tsx</c> of the operations console's app, whose help links and empty states
 /// send an operator to the docs (each term's glossary entry among them).</para>
@@ -135,6 +135,7 @@ public class CodeLinksToDocsResolveTests
     {
         var roots = Directory
             .EnumerateDirectories(RepoRoot.Monorepo, "Trax.*")
+            .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
             .Select(folder => Path.Combine(folder, "src"))
             .Append(Path.Combine(RepoRoot.Monorepo, "Trax.Samples", "samples"))
             .Append(Path.Combine(RepoRoot.Monorepo, "Trax.Samples", "templates"));

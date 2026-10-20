@@ -54,7 +54,11 @@ internal static class Projects
         var baselines = Baselines();
         var packages = new Dictionary<string, Package>(StringComparer.Ordinal);
 
-        foreach (var folder in Directory.EnumerateDirectories(RepoRoot.Monorepo, "Trax.*"))
+        foreach (
+            var folder in Directory
+                .EnumerateDirectories(RepoRoot.Monorepo, "Trax.*")
+                .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
+        )
         {
             var src = Path.Combine(folder, "src");
             if (!Directory.Exists(src))
@@ -96,7 +100,11 @@ internal static class Projects
     private static Dictionary<string, string> Baselines()
     {
         var baselines = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var folder in Directory.EnumerateDirectories(RepoRoot.Monorepo, "Trax.*"))
+        foreach (
+            var folder in Directory
+                .EnumerateDirectories(RepoRoot.Monorepo, "Trax.*")
+                .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
+        )
         {
             var tests = Path.Combine(folder, "tests");
             if (!Directory.Exists(tests))

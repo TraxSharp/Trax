@@ -7,8 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
-    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
-    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../../Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../../../../Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
   </ItemGroup>
 </Project>

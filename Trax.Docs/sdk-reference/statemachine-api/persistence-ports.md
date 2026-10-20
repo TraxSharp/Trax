@@ -9,16 +9,16 @@ nav_order: 8
 package: Trax.Effect.StateMachine.Persistence
 namespace: Trax.Effect.StateMachine.Persistence
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Ports.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotDraftService.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Actor.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/CallerAuthorization.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/EfSnapshotStore.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/EffectClaimStore.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/IdempotentEffect.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/RequestIdRing.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotLimits.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotMachineRegistry.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Ports.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SnapshotDraftService.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Actor.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/CallerAuthorization.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/EfSnapshotStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/EffectClaimStore.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/IdempotentEffect.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/RequestIdRing.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SnapshotLimits.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SnapshotMachineRegistry.cs
 ---
 
 # Persistence ports

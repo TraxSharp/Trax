@@ -5,9 +5,9 @@ type: how-to
 area: machines
 nav_order: 3
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Invokes.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/InvokedTrainLauncher.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/InvokesStartupValidator.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokedTrainLauncher.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokesStartupValidator.cs
 ---
 
 # Invoke a train from a state

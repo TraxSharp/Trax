@@ -5,7 +5,7 @@ type: how-to
 area: machines
 nav_order: 2
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules
 ---
 
 # Write guards and reducers as data

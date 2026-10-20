@@ -5,8 +5,8 @@ type: explanation
 area: machines
 nav_order: 1
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence
 ---
 
 # State machines

@@ -48,10 +48,10 @@
       <!-- content/<template>/..., so the first directory under content/ names the template. -->
       <TemplateName>$([System.String]::Copy('%(RecursiveDir)').Replace('\', '/').Split('/')[0])</TemplateName>
     </_TraxTemplateProject>
-    <!-- Every Trax package this repository builds: the csproj file names under each folder's src/. -->
+    <!-- Every Trax package this repository builds: the csproj file names under each folder's src/ (or dotnet/src/). -->
     <_TraxPackageProject
-      Include="../../Trax.*/src/**/*.csproj"
-      Exclude="../../Trax.*/src/**/bin/**;../../Trax.*/src/**/obj/**"
+      Include="../../Trax.*/src/**/*.csproj;../../Trax.*/dotnet/src/**/*.csproj"
+      Exclude="../../Trax.*/src/**/bin/**;../../Trax.*/src/**/obj/**;../../Trax.*/dotnet/src/**/bin/**;../../Trax.*/dotnet/src/**/obj/**"
     />
     <_TraxPackageId Include="@(_TraxPackageProject->'%(Filename)')" />
   </ItemGroup>

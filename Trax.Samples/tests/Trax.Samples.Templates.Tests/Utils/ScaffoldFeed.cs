@@ -205,6 +205,7 @@ internal static class ScaffoldFeed
         var monorepo = Path.GetDirectoryName(RepoRoot())!;
         return Directory
                 .EnumerateDirectories(monorepo, "Trax.*")
+                .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
                 .Select(folder => Path.Combine(folder, "src", id, id + ".csproj"))
                 .SingleOrDefault(File.Exists)
             ?? throw new InvalidOperationException(

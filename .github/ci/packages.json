@@ -14,8 +14,13 @@
       "adr": { "adr-root": "docs/adr", "known-areas": "migrations,providers,data-model,testing,platform,auth", "census-root": "tests/Trax.Effect.Tests.Meta" }
     },
     {
+      "folder": "Trax.StateMachine",
+      "upstream": ["Trax.Effect", "Trax.Api.StateMachine"],
+      "dotnet": { "solution": "dotnet/Trax.StateMachine.slnx", "state-machine": true, "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" }
+    },
+    {
       "folder": "Trax.Mediator",
-      "upstream": ["Trax.Effect"],
+      "upstream": ["Trax.StateMachine"],
       "dotnet": { "solution": "Trax.Mediator.slnx", "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "docs/adr", "known-areas": "auth,platform,testing", "census-root": "tests/Trax.Mediator.Tests.Meta" }
     },

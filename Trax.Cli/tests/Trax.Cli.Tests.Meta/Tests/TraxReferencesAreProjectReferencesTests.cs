@@ -46,11 +46,12 @@ public class TraxReferencesAreProjectReferencesTests
 
     /// <summary>
     /// The package id of every Trax project in the repository: the file name of each csproj under
-    /// a folder's <c>src/</c>.
+    /// a folder's <c>src/</c>, or its <c>dotnet/src/</c> in a folder that holds more than .NET.
     /// </summary>
     private static HashSet<string> TraxProjects() =>
         Directory
             .EnumerateDirectories(MonorepoRoot.Path, "Trax.*")
+            .SelectMany(f => new[] { f, Path.Combine(f, "dotnet") })
             .Select(folder => Path.Combine(folder, "src"))
             .Where(Directory.Exists)
             .SelectMany(src =>

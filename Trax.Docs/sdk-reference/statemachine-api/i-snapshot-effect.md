@@ -9,8 +9,8 @@ nav_order: 7
 package: Trax.Effect.StateMachine.Persistence
 namespace: Trax.Effect.StateMachine.Persistence
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Ports.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotEffectRunner.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Ports.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SnapshotEffectRunner.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/effects
 ---

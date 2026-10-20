@@ -9,8 +9,8 @@
   -->
   <ItemGroup>
     <_TraxSourceProject
-      Include="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/*.csproj"
-      Exclude="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/bin/**;$(MSBuildThisFileDirectory)../../../Trax.*/src/**/obj/**"
+      Include="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/*.csproj;$(MSBuildThisFileDirectory)../../../Trax.*/dotnet/src/**/*.csproj"
+      Exclude="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/bin/**;$(MSBuildThisFileDirectory)../../../Trax.*/src/**/obj/**;$(MSBuildThisFileDirectory)../../../Trax.*/dotnet/src/**/bin/**;$(MSBuildThisFileDirectory)../../../Trax.*/dotnet/src/**/obj/**"
       ProjectPath="%(FullPath)"
     />
     <!-- The same projects keyed by package id, which is the csproj file name. -->

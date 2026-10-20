@@ -5,8 +5,8 @@ type: reference
 area: machines
 nav_order: 21
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/SchemaReflection.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/ContextSchema.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/SchemaReflection.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/ContextSchema.cs
 ---
 
 # Context and input schemas

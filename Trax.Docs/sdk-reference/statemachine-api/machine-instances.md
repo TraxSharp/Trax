@@ -9,7 +9,7 @@ nav_order: 13
 package: Trax.Effect.StateMachine.Persistence
 namespace: Trax.Effect.StateMachine.Persistence
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/MachineInstances.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/MachineInstances.cs
 ---
 
 # IMachineInstances

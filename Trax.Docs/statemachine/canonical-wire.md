@@ -5,8 +5,8 @@ type: reference
 area: machines
 nav_order: 20
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/CanonicalJson.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/StorableJson.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/CanonicalJson.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/StorableJson.cs
 ---
 
 # Canonical wire

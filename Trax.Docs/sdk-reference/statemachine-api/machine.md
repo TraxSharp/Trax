@@ -9,11 +9,11 @@ nav_order: 2
 package: Trax.Effect.StateMachine.Persistence
 namespace: Trax.Effect.StateMachine.Persistence
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Machine.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Invokes.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Timers.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/MachineTrigger.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Machine.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Timers.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/MachineTrigger.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/fluent-authoring
 ---

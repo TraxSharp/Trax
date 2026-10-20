@@ -6,7 +6,7 @@ area: data
 nav_order: 12
 source:
   - Trax.Effect/src/Trax.Effect.Data.Postgres/Migrations/080_snapshot_draft_change_notify_switch.sql
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/ChangeFeedStartupValidator.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/ChangeFeedStartupValidator.cs
 ---
 
 # Turn off state-machine change notices

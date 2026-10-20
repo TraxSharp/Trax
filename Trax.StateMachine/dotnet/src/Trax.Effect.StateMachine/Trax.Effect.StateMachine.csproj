@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <!-- A state that invokes a train names it by its IServiceTrain interface, which carries the train's input and output types. -->
-    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -9,9 +9,9 @@ nav_order: 5
 package: Trax.Effect.StateMachine
 namespace: Trax.Effect.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/IrExporter.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/SchemaReflection.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/ValueFormats.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/IrExporter.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/SchemaReflection.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/ValueFormats.cs
 ---
 
 # IR format

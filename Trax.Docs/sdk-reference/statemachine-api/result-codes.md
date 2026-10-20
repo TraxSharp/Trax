@@ -9,8 +9,8 @@ nav_order: 9
 package: Trax.Effect.StateMachine
 namespace: Trax.Effect.StateMachine
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/RefusalCode.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine/Results.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/RefusalCode.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Results.cs
 ---
 
 # Result codes

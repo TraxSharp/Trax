@@ -51,7 +51,7 @@ per language runs them. Consequences:
 
 ### What is built (Increment A: C# authoring -> IR)
 
-In `Trax.Effect/src/Trax.Effect.StateMachine/Rules/`:
+In `Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/`:
 - `Rule.cs` + `RuleEvaluator.cs` (guard/validator vocabulary as data + a total evaluator).
 - `Reduction.cs` + `ReductionEvaluator.cs` (reducer vocabulary + non-mutating evaluator).
 - `MemberPath.cs`, `ContextSchema.cs`, `SchemaReflection.cs`, `SchemaValidator.cs` (typed layer: member
@@ -113,7 +113,7 @@ Ordered by priority as it was written then (E before D; see §5 and Decision D):
 - **Schema validation is stricter than the old twins:** `SchemaValidator` enforces `additionalProperties:
   false` (matching `machine.json`'s intent and the C# side). A v2 that adds a field needs its own validator
   (see how `migration.test.ts` overrides the v2 `Unlocked` validator).
-- **Run the suites:** C# `dotnet test Trax.Effect/tests/Trax.Effect.StateMachine.Tests/...`; TS
+- **Run the suites:** C# `dotnet test Trax.StateMachine/dotnet/tests/Trax.Effect.StateMachine.Tests/...`; TS
   `cd Trax.Api.StateMachine && npx vitest run` and `npx tsc --noEmit`.
 
 ## 1. The baseline this plan started from (grounded, 2026-08-11)

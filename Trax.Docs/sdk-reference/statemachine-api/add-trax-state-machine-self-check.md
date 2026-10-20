@@ -9,8 +9,8 @@ nav_order: 12
 package: Trax.Effect.StateMachine.Persistence
 namespace: Trax.Effect.StateMachine.Persistence
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/StateMachineSelfCheckHealthCheck.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotSelfCheck.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/StateMachineSelfCheckHealthCheck.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SnapshotSelfCheck.cs
 ---
 
 # AddTraxStateMachineSelfCheck

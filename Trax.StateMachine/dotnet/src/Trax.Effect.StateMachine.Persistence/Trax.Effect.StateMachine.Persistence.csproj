@@ -10,9 +10,9 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
     <!-- The generic mutation surface (ServiceTrain / Junction / [TraxMutation]) and AddStateMachines. -->
-    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
     <!-- IDataContext, whose SnapshotDrafts and EffectClaims the stores reach their tables through, and ISqlDialect. -->
-    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>

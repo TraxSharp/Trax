@@ -5,8 +5,8 @@ type: how-to
 area: machines
 nav_order: 1
 source:
-  - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
 ---
 
 # Author and serve a machine
