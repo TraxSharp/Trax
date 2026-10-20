@@ -18,7 +18,6 @@ using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Effect.Models.WorkQueue;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
@@ -27,6 +26,7 @@ using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.JobRunner;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.Fixtures;
 

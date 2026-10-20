@@ -7,9 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.SnapshotDraft;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Tests.Integration.Fakes.Timers;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.Fixtures;
 

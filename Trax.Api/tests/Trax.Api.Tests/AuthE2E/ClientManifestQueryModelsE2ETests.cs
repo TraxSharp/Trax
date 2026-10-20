@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.PersistedOperations.Services;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;
 
 namespace Trax.Api.Tests.AuthE2E;

@@ -405,13 +405,13 @@
           "Trax.Effect": "[1.99.99, )"
         }
       },
-      "trax.effect.statemachine": {
+      "trax.statemachine": {
         "type": "Project",
         "dependencies": {
           "Trax.Effect": "[1.99.99, )"
         }
       },
-      "trax.effect.statemachine.persistence": {
+      "trax.statemachine.persistence": {
         "type": "Project",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "[10.0.12, )",
@@ -420,14 +420,14 @@
           "Microsoft.Extensions.Diagnostics.HealthChecks": "[10.0.12, )",
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
-          "Trax.Effect.StateMachine": "[1.99.99, )"
+          "Trax.StateMachine": "[1.99.99, )"
         }
       },
-      "trax.effect.statemachine.testing": {
+      "trax.statemachine.testing": {
         "type": "Project",
         "dependencies": {
-          "Trax.Effect.StateMachine": "[1.99.99, )",
-          "Trax.Effect.StateMachine.Persistence": "[1.99.99, )"
+          "Trax.StateMachine": "[1.99.99, )",
+          "Trax.StateMachine.Persistence": "[1.99.99, )"
         }
       },
       "dbup-core": {

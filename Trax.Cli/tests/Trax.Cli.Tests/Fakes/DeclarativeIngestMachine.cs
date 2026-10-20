@@ -1,11 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using Ingest.Contracts;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
-// The train's contract is declared as in Trax.Effect.StateMachine.Tests, so both describe the same machine and
+// The train's contract is declared as in Trax.StateMachine.Tests, so both describe the same machine and
 // export the one committed ingest.ir.json.
 namespace Ingest.Contracts
 {

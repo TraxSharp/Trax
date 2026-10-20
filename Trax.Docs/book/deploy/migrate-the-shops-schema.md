@@ -49,8 +49,8 @@ dotnet tool install dotnet-ef --version 10.0.12
     <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine.Testing" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Persistence" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Scheduler" Version="1.61.0" />
@@ -111,7 +111,7 @@ keeps it out of everything that references the library: only the tools use it.
     <PackageReference Include="Trax.Core" />
     <PackageReference Include="Trax.Effect" />
     <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
+    <PackageReference Include="Trax.StateMachine.Persistence" />
     <PackageReference Include="Trax.Mediator" />
   </ItemGroup>
 

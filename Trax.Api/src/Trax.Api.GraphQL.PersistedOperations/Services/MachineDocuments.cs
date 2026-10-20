@@ -5,7 +5,7 @@ using HotChocolate;
 using HotChocolate.Types;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Attributes;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 

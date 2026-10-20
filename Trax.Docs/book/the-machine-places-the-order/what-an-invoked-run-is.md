@@ -92,7 +92,7 @@ A small helper finds it, or nothing.
 `Shopfront.Core/Machines/InvokedRuns.cs`:
 
 ```csharp compile=app file=Shopfront.Core/Machines/InvokedRuns.cs
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Shopfront.Machines;
 

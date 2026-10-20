@@ -1,7 +1,7 @@
 /**
  * `@traxsharp/state-machine` — the TypeScript half of the Trax portable snapshot state machine.
  *
- * A machine's behavior is authored once in C# (`Trax.Effect.StateMachine`) and exported as a neutral
+ * A machine's behavior is authored once in C# (`Trax.StateMachine`) and exported as a neutral
  * IR; this package interprets that IR so a browser and the server enforce the same guards, and a
  * shared differential corpus proves the two runtimes agree. Everything below is pure — no I/O. The
  * server-facing client lives behind `@traxsharp/state-machine/client`, the React binding behind
@@ -106,7 +106,7 @@ export type { MachineFactoryOptions } from './rules/generateTypes';
 
 // ── 6. Cross-runtime conformance ──────────────────────────────────────────────────────────────────
 // Enumerate a machine's reachable behavior into a golden corpus that the C# engine replays
-// (Trax.Effect.StateMachine.Testing). TypeScript is currently the oracle.
+// (Trax.StateMachine.Testing). TypeScript is currently the oracle.
 
 export { enumerate, serializeCorpus } from './differential';
 export type { DifferentialSpec, DifferentialCorpus, DifferentialCase } from './differential';

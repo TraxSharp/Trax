@@ -176,9 +176,7 @@ public class GenericOptInE2ETests
             .Which.ToString()
             .Should()
             .Contain(
-                nameof(
-                    Trax.Effect.StateMachine.Persistence.GenericStateMachineMutationOptions.Policy
-                )
+                nameof(Trax.StateMachine.Persistence.GenericStateMachineMutationOptions.Policy)
             );
     }
 

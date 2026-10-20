@@ -6,11 +6,11 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 7
-package: Trax.Effect.StateMachine.Persistence
-namespace: Trax.Effect.StateMachine.Persistence
+package: Trax.StateMachine.Persistence
+namespace: Trax.StateMachine.Persistence
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Ports.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SnapshotEffectRunner.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Ports.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotEffectRunner.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/effects
 ---
@@ -24,7 +24,7 @@ its receipt in the snapshot, and does not run it again, a crash and retry includ
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine.Persistence;
+namespace Trax.StateMachine.Persistence;
 
 public interface ISnapshotEffect
 {

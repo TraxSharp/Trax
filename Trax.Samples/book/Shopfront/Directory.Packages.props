@@ -20,8 +20,8 @@
     <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.61.0" />
     <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.61.0" />
-    <PackageVersion Include="Trax.Effect.StateMachine.Testing" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Persistence" Version="1.61.0" />
+    <PackageVersion Include="Trax.StateMachine.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator" Version="1.61.0" />
     <PackageVersion Include="Trax.Mediator.Testing" Version="1.61.0" />
     <PackageVersion Include="Trax.Scheduler" Version="1.61.0" />

@@ -5,13 +5,13 @@ type: explanation
 area: machines
 nav_order: 1
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence
 ---
 
 # State machines
 
-Trax.Effect.StateMachine represents a multi-step flow (a wizard, an application form, a checkout) as a
+Trax.StateMachine represents a multi-step flow (a wizard, an application form, a checkout) as a
 small, language-neutral snapshot, so a C# backend and a TypeScript client agree on where a user is in the
 flow and the data that goes with it. The whole runtime state of an instance is a serializable snapshot that
 can be stored in Postgres and rebuilt from any point, so a user can start on one device and finish on
@@ -59,7 +59,7 @@ the declared name, so the value that is stored and served is canonical.
 
 ## Two runtimes, one behavior
 
-The engine is implemented twice, once in C# (`Trax.Effect.StateMachine`) and once in TypeScript
+The engine is implemented twice, once in C# (`Trax.StateMachine`) and once in TypeScript
 (`@traxsharp/state-machine`). They are kept identical not by generating one engine from the other but by a shared set of
 language-neutral conformance fixtures that both engines drive and must agree on. Only the result codes are contract;
 human-readable detail text is free to differ. [Result codes](/docs/sdk-reference/statemachine-api/result-codes)
@@ -142,7 +142,7 @@ terminal step. The [TypeScript package](/docs/sdk-reference/statemachine-api/typ
 
 | Piece | Location |
 | --- | --- |
-| C# engine (pure, total, dependency-free) | Trax.Effect.StateMachine |
-| C# persistence, exactly-once effects, mutation trains | Trax.Effect.StateMachine.Persistence |
+| C# engine (pure, total, dependency-free) | Trax.StateMachine |
+| C# persistence, exactly-once effects, mutation trains | Trax.StateMachine.Persistence |
 | TypeScript engine, typed facade, React hook | the @traxsharp/state-machine package |
 | Shared machines (the exported IR, differential and migration goldens) and the frontend generators | the shared machines directory and the codegen tools |

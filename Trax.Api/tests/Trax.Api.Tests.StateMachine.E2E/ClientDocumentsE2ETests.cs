@@ -7,7 +7,7 @@ using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.StateMachine.E2E.Fakes;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
 

@@ -69,7 +69,7 @@ Not covered:
 - **These suites require a live Postgres and fail without one rather than skipping.** In
   `tests/Trax.Effect.Tests.Integration` it is `UsePostgres` running the migrator at
   registration time inside `[OneTimeSetUp]`; in
-  `tests/Trax.Effect.StateMachine.Persistence.Integration` it is `PostgresSetup`, an
+  `tests/Trax.StateMachine.Persistence.Integration` it is `PostgresSetup`, an
   assembly-wide `[SetUpFixture]` that opens a connection unconditionally, so even the Sqlite
   case fails when Postgres is absent. That contradicts
   `Trax.Docs/adr/0005-a-skipped-test-is-a-runtime-decision.md`, which binds this repo. The

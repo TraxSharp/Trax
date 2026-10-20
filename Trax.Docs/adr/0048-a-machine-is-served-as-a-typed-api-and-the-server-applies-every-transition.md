@@ -385,12 +385,12 @@ In `Trax.Api.Tests.StateMachine.E2E`:
 - `MachinesRootSchemaTests`: `Machines_root_lists_each_exposed_machine_with_start_events_and_get`, `An_unexposed_declarative_machine_gets_no_field`, `An_event_without_WithInput_has_no_input_argument_and_no_json_scalar`, `Outcome_timer_and_effect_receipt_inputs_never_appear_as_client_arguments`, `Start_takes_its_declared_StartInput_never_the_context_type`, `A_misspelt_event_field_is_a_validation_error_not_a_runtime_problem`
 - `OperatorMachineFeedE2ETests`: `The_operator_subscription_is_gated_and_shows_state_revision_and_runs`, `A_users_draft_change_appears_to_an_operator_without_its_context`, `Each_host_runs_one_listener_shared_by_the_dashboard_and_GraphQL`, `After_a_listener_reconnect_the_operator_feed_sends_a_reload`
 
-In `Trax.Effect.StateMachine.Persistence.Integration`, on Postgres and SQLite:
+In `Trax.StateMachine.Persistence.Integration`, on Postgres and SQLite:
 - `EffectPendingTests`: `An_event_out_of_the_effects_state_while_it_is_pending_is_refused_effect_in_progress`, `A_reset_and_the_generic_save_are_refused_while_an_effect_is_pending`, `Discard_and_the_draft_sweep_leave_a_row_with_a_pending_effect`, `A_due_timer_waits_for_a_pending_effect_and_fires_after_it_fails`, `The_receipt_the_move_and_the_end_of_the_mark_are_one_write`, `A_failed_effect_leaves_the_row_as_it_was_and_takes_events_again`, `A_mark_past_its_lease_is_finished_by_the_next_send_under_the_same_key`, `A_mark_past_its_lease_is_finished_by_the_reconciler_under_the_same_key`, `A_host_without_the_effect_leaves_an_abandoned_mark_and_meters_it`, `A_completed_ledger_claim_from_before_the_upgrade_is_recorded_by_the_next_send`, `A_send_after_the_effect_was_recorded_and_the_draft_reset_runs_under_a_new_key`
 - `ServerRecordTests`: `A_row_a_gated_event_moved_is_kept_and_refuses_discard`, `A_row_a_client_event_moved_into_the_same_state_is_a_draft`, `A_client_event_out_of_a_kept_row_makes_it_a_draft_again`, `A_timer_carries_the_record_over`, `Kept_rows_do_not_count_toward_the_draft_cap`, `The_upgrade_marks_rows_in_kept_states_as_kept`, `A_host_upsert_out_of_a_kept_row_leaves_it_judged_by_its_state`, `A_host_update_out_of_a_kept_row_leaves_it_judged_by_its_state`
 - `MachineInterleavingModelTests`: `Seeded_interleavings_keep_every_invariant` (starts, events, sends, timers, discards, sweeps and a claimant that stops, in random order from a logged seed, with the invariants of *Effects and server records* checked after every step)
 
-In `Trax.Effect.StateMachine.Tests`:
+In `Trax.StateMachine.Tests`:
 - `EventWriteRuleTests`: `An_open_event_copying_a_field_an_effect_writes_refuses_to_build`, `An_open_event_copying_a_field_an_invoked_runs_outcome_writes_refuses_to_build`
 
 In `Trax.Api.Tests.Stress`:
@@ -423,7 +423,7 @@ In `Trax.Dashboard.Tests.Integration`:
 In `Trax.Effect.Data.Testing.Tests`:
 - `TraxInvariantsTests`: `ARevisionBelowOne_IsReportedWithItsRow`, `AUserDraftWithAnEmptyOrBlankOwner_IsReportedWithItsRow`, `TwoRowsWithOneRowId_AreReported`, `ADueTimeInAStateWithNoTimer_IsReportedWithItsRow`, `ATimedStateWithNoDueTime_IsReportedWithItsRow`, `ADueTimeOfAMachineWithNoTimerLeft_IsReportedOnceTheHostsStop`, `AUserDraftOlderThanTheMaximumLifetime_IsReportedWithItsRow`
 
-In `Trax.Effect.StateMachine.Persistence.Integration`:
+In `Trax.StateMachine.Persistence.Integration`:
 - `ActorHierarchyTests`: `A_record_outside_Trax_cannot_derive_from_Actor`, `A_client_is_built_outside_Trax`, `Actor_offers_no_trusted_kind`
 - `AddStateMachinesBuilderTests`: `Without_the_opt_in_the_internal_trains_route_but_are_not_exposed`, `A_second_AddStateMachines_call_is_refused_rather_than_replacing_the_first`, `A_host_that_registers_no_machine_refuses_to_start`, `A_machine_the_host_registered_before_the_scan_finds_it_is_registered_once`, `The_same_machine_type_registered_twice_is_one_machine_to_the_registry`
 - `ClientDivergenceMeterTests`: `A_client_divergence_is_refused_and_metered`
@@ -461,10 +461,10 @@ In `Trax.Effect.StateMachine.Persistence.Integration`:
 - `TimerFailureClassificationTests`: `A_fire_failure_is_the_databases_by_its_SQLSTATE_class`, `A_timeout_is_the_databases`, `Any_other_failure_is_the_rows`
 - `TriggerInputValidationPathTests`: `Every_path_validates_trigger_input_and_refuses_unknown_fields`, `Input_size_is_capped_before_validation_on_every_path`, `An_invalid_input_records_no_request_id_so_a_corrected_retry_fires`, `The_effect_runner_receipt_still_commits_on_an_effect_bound_trigger_with_WithInput` (a guard, green today)
 
-In `Trax.Effect.StateMachine.Tests.Stress`:
+In `Trax.StateMachine.Tests.Stress`:
 - `RevisionStoreModelTests`: `Every_incarnation_commits_revisions_one_to_n_and_replays_to_its_final_row`
 
-In `Trax.Effect.StateMachine.Tests`:
+In `Trax.StateMachine.Tests`:
 - `CheckoutConformanceTests`: `Advance_matches_the_shared_fixture`, which replays the bad-input fixtures with the rest
 - `ConformanceTests`: `Advance_matches_the_shared_fixture`, which replays the bad-input fixtures with the rest
 - `DifferentialCorpusReplayTests`: `Timer_triggers_replay_through_AdvanceTimer`
@@ -542,7 +542,7 @@ themselves (an undeclared event, an unexposed raw-delegate machine, the opt-in w
 that breaks the rule from starting.
 
 Not covered: nothing can check that a host's own code forwards the right actor; a client is the only kind of actor
-(`Trax.Effect.StateMachine.Persistence.Integration.ActorHierarchyTests`, in Trax.Effect), trusted host code reaches only system-owned instances through the named host API, and the
+(`Trax.StateMachine.Persistence.Integration.ActorHierarchyTests`, in Trax.Effect), trusted host code reaches only system-owned instances through the named host API, and the
 census lists what that code can send, but a host that drives a system-owned instance on a client's behalf has chosen
 to trust it. The twin's prediction is checked against the server only where the differential corpus and
 `clientResult` reach.

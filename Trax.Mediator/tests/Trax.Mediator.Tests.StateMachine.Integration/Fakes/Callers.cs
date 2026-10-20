@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrustedExecution;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 

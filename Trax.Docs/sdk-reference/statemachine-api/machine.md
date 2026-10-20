@@ -6,14 +6,14 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 2
-package: Trax.Effect.StateMachine.Persistence
-namespace: Trax.Effect.StateMachine.Persistence
+package: Trax.StateMachine.Persistence
+namespace: Trax.StateMachine.Persistence
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Machine.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Invokes.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Timers.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/MachineTrigger.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Machine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Timers.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineTrigger.cs
 redirect_from:
   - /docs/sdk-reference/statemachine-api/fluent-authoring
 ---
@@ -22,13 +22,13 @@ redirect_from:
 
 A machine is a subclass of `Machine<TState, TTrigger>` that declares itself in `Configure`. `TState` and `TTrigger`
 are the host's own enums. The builder compiles to the same total engine (`SnapshotMachine<TState, TTrigger>`) the
-conformance fixtures drive. `Machine<TState, TTrigger>` ships in `Trax.Effect.StateMachine.Persistence`; the builder
-interfaces ship in `Trax.Effect.StateMachine`.
+conformance fixtures drive. `Machine<TState, TTrigger>` ships in `Trax.StateMachine.Persistence`; the builder
+interfaces ship in `Trax.StateMachine`.
 
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine.Persistence;
+namespace Trax.StateMachine.Persistence;
 
 public abstract class Machine<TState, TTrigger> : IMachine
     where TState : struct, Enum

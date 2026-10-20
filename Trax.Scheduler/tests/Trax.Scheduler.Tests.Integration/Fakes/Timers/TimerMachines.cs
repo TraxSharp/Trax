@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Scheduler.Tests.Integration.Fakes.Timers;
 

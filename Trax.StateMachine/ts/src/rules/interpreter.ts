@@ -1,4 +1,4 @@
-// The TypeScript mirror of the C# declarative rule engine (Trax.Effect.StateMachine.Rules). Guards,
+// The TypeScript mirror of the C# declarative rule engine (Trax.StateMachine.Rules). Guards,
 // reducers, and context validators arrive from the IR as DATA; these interpreters evaluate that data, so the
 // generated TS machine runs the same rules the C# source authored. Semantics match RuleEvaluator /
 // ReductionEvaluator / SchemaValidator exactly (proven by the shared tests and, ultimately, the differential).

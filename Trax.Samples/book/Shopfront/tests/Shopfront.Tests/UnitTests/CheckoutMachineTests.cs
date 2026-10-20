@@ -1,5 +1,5 @@
 using Shopfront.Machines.Checkout;
-using Trax.Effect.StateMachine.Testing;
+using Trax.StateMachine.Testing;
 
 namespace Shopfront.Tests.UnitTests;
 

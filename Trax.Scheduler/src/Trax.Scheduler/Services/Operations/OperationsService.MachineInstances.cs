@@ -7,9 +7,9 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.StateMachine.Persistence;
 using SnapshotDraft = Trax.Effect.Models.SnapshotDraft.SnapshotDraft;
 
 namespace Trax.Scheduler.Services.Operations;

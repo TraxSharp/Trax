@@ -5,8 +5,8 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 // What the browser tests' host runs. Two trains are scheduled at startup in two dependent manifest groups (the
 // groups page's dependency graph) and a system-owned machine has an instance (the state-machine pages); the rest

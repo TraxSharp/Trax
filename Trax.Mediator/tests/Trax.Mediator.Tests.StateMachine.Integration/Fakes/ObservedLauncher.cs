@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 

@@ -5,8 +5,8 @@ type: how-to
 area: machines
 nav_order: 1
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachinesBuilderExtensions.cs
 ---
 
 # Author and serve a machine
@@ -30,9 +30,9 @@ client can do: a rule on every event and on its `Start`, and an owner-only or st
 ```csharp compile=checkout
 using System.Text.Json.Nodes;
 using Trax.Effect.Attributes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
 public enum CheckoutState
 {
@@ -133,8 +133,8 @@ the effect's key, which is the same for every run of one send; pass it to the sy
 key. The effect gets the server's stored snapshot, never the client's, so price from what the server holds.
 
 ```csharp compile=checkout
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 public interface ICharge : ISnapshotEffect;
 
@@ -161,7 +161,7 @@ Drafts are scoped by a user key, which the host supplies through `ISnapshotPrinc
 
 ```csharp compile=checkout
 using Trax.Api.Auth;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPrincipal
 {
@@ -185,7 +185,7 @@ using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 
 builder.Services.AddTrax(trax =>
@@ -240,7 +240,7 @@ default, and the opt-in requires an authorization policy:
 ```csharp compile
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 
 builder.Services.AddTrax(trax =>

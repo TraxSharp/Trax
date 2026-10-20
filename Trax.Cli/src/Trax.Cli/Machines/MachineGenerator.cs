@@ -1,4 +1,4 @@
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
 

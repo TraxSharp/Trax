@@ -1,7 +1,7 @@
 {
   "name": "@traxsharp/state-machine",
   "version": "0.0.0",
-  "description": "Portable, resumable snapshot state-machine engine — the TypeScript twin of Trax.Effect.StateMachine. Represents a multi-step flow's state as language-neutral JSON so a client and a C# backend agree on it, with illegal (state, context) pairs unrepresentable and every operation total.",
+  "description": "Portable, resumable snapshot state-machine engine — the TypeScript twin of Trax.StateMachine. Represents a multi-step flow's state as language-neutral JSON so a client and a C# backend agree on it, with illegal (state, context) pairs unrepresentable and every operation total.",
   "license": "MIT",
   "homepage": "https://traxsharp.net",
   "repository": {

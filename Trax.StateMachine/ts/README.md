@@ -7,7 +7,7 @@
 > Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
 > run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
-The TypeScript twin of `Trax.Effect.StateMachine`. A machine is declared once in C#; the twin generated from it runs
+The TypeScript twin of `Trax.StateMachine`. A machine is declared once in C#; the twin generated from it runs
 the same rules in the browser, so a page can show what an event will do before the server, which applies every
 transition, answers. It also holds the client a page uses to drive a machine a Trax host serves, and its React hooks.
 

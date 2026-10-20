@@ -6,11 +6,11 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 3
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/Rules.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/MemberPath.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/Rules.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/MemberPath.cs
 ---
 
 # Rules
@@ -23,7 +23,7 @@ produces the `Rule`; the reduction factories produce a `Reduction`.
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine;
+namespace Trax.StateMachine;
 
 public static class Rules
 {

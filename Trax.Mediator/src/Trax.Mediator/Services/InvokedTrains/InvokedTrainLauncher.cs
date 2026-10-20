@@ -4,10 +4,10 @@ using Trax.Core.Monad;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Services.InvokedTrains;
 

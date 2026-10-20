@@ -6,18 +6,18 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 4
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/Rule.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/Reduction.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/ContextSchema.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/DeclarativeModel.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/RuleEvaluator.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/ReductionEvaluator.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/MachineDefinition.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/StorableJson.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/Rule.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/Reduction.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ContextSchema.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/DeclarativeModel.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/RuleEvaluator.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ReductionEvaluator.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/StorableJson.cs
 ---
 
 # Declarative data model

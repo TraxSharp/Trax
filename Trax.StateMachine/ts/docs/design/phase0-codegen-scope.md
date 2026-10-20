@@ -51,7 +51,7 @@ per language runs them. Consequences:
 
 ### What is built (Increment A: C# authoring -> IR)
 
-In `Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/`:
+In `Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/`:
 - `Rule.cs` + `RuleEvaluator.cs` (guard/validator vocabulary as data + a total evaluator).
 - `Reduction.cs` + `ReductionEvaluator.cs` (reducer vocabulary + non-mutating evaluator).
 - `MemberPath.cs`, `ContextSchema.cs`, `SchemaReflection.cs`, `SchemaValidator.cs` (typed layer: member
@@ -113,7 +113,7 @@ Ordered by priority as it was written then (E before D; see §5 and Decision D):
 - **Schema validation is stricter than the old twins:** `SchemaValidator` enforces `additionalProperties:
   false` (matching `machine.json`'s intent and the C# side). A v2 that adds a field needs its own validator
   (see how `migration.test.ts` overrides the v2 `Unlocked` validator).
-- **Run the suites:** C# `dotnet test Trax.StateMachine/dotnet/tests/Trax.Effect.StateMachine.Tests/...`; TS
+- **Run the suites:** C# `dotnet test Trax.StateMachine/dotnet/tests/Trax.StateMachine.Tests/...`; TS
   `cd Trax.Api.StateMachine && npx vitest run` and `npx tsc --noEmit`.
 
 ## 1. The baseline this plan started from (grounded, 2026-08-11)
@@ -313,7 +313,7 @@ export is C# (`IrExporter.Export`), but the twin generators (`generateContextTyp
 and the pre-D corpus enumerator (`enumerate`) are TypeScript, in the engine's `src/rules/`. So `generate` is a
 C# **orchestrator** that crosses the runtime boundary explicitly:
 
-- **IR, in-process C#.** The CLI references `Trax.Effect.StateMachine.Persistence`, loads the consumer's
+- **IR, in-process C#.** The CLI references `Trax.StateMachine.Persistence`, loads the consumer's
   already-compiled assembly, reflects the machine out of it (`MachineLoader`), calls `IMachine.ExportIr()`
   (which is `IrExporter.Export` on the built machine), and writes `<machine>.ir.json` to `--ir-out`. It
   compiles nothing, and no Node is involved.
@@ -401,7 +401,7 @@ against `describe()`, and retiring it (or regenerating it from the IR) is the on
   consuming repo mirrors the TypeScript engine `src` at a pinned upstream commit (recorded in `VENDORED.md`)
   and imports it through a path alias (`@traxsharp/state-machine`), and commits the generated twin, the IR, and the
   differential corpus into its own tree (twin next to the frontend, IR + corpus in a shared `machines/<name>/`
-  dir). The C# side consumes Trax by exact-pinned NuGet (`Trax.Effect.StateMachine`). Rationale: the engine and
+  dir). The C# side consumes Trax by exact-pinned NuGet (`Trax.StateMachine`). Rationale: the engine and
   machines co-evolve tightly, the twin must build against an arbitrary engine `src` (not a fixed package
   layout), and checking the corpus into the consumer's tree is what makes the differential run in *its* CI
   (closing the upstream skip-on-missing hole, RFC §7). Cost: a manual re-vendor step (bump the pin, re-copy
@@ -424,7 +424,7 @@ against `describe()`, and retiring it (or regenerating it from the IR) is the on
 
 Smallest verifiable slice that de-risks the whole effort. Concretely:
 
-- A `Trax.Effect.StateMachine` **context-schema** type set (per-state field list: name, JSON type,
+- A `Trax.StateMachine` **context-schema** type set (per-state field list: name, JSON type,
   nullable, optional enum) and a **rule** type set for the §3 vocabulary, both plain data.
 - Fluent surface: `.Holds(...)` / `.When(...)` overloads that accept a rule (or a `named("promoValid")`
   custom handler) and record it as data on the built model, alongside the existing delegate path (so nothing
@@ -444,7 +444,7 @@ Smallest verifiable slice that de-risks the whole effort. Concretely:
 4. No-regression: the existing turnstile engine/differential/serialization suites stay green (the declarative
    re-author must not change behavior).
 
-Increment A touches only `Trax.Effect.StateMachine` (+ its tests) and adds one IR golden fixture. It does not
+Increment A touches only `Trax.StateMachine` (+ its tests) and adds one IR golden fixture. It does not
 require the generator, the C# target, or the oracle flip, so it is a clean, self-contained first PR that
 answers the one question everything else depends on: can C# author and export the declarative layer as data.
 
@@ -462,7 +462,7 @@ escape hatch for the ~8%:
 
 The vocabulary is a set of static factory helpers, imported with `using static` so the author writes them
 bare. This section is the design sketch that preceded Increment A; the shipped helpers are in
-`Trax.Effect.StateMachine/Rules/Rules.cs` and read slightly differently (`Input((CoinInput i) => i.Coin)
+`Trax.StateMachine/Rules/Rules.cs` and read slightly differently (`Input((CoinInput i) => i.Coin)
 .IsOneOf(...)`, and the machine id is declared with `m.Id("turnstile")` rather than derived from the class
 name), but the shape below is what landed:
 

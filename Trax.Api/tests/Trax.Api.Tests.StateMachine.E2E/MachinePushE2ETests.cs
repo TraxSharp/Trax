@@ -4,7 +4,7 @@ using HotChocolate.Execution;
 using HotChocolate.Types;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.StateMachine.E2E.Fakes;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Api.StateMachine.E2E;
 

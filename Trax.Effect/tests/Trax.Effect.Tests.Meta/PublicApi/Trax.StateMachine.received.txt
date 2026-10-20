@@ -1,0 +1,643 @@
+namespace Trax.StateMachine
+{
+    public abstract class AdvanceResult : System.IEquatable<Trax.StateMachine.AdvanceResult>
+    {
+        public sealed class Rejected : Trax.StateMachine.AdvanceResult, System.IEquatable<Trax.StateMachine.AdvanceResult.Rejected>
+        {
+            public Rejected(Trax.StateMachine.RefusalCode Reason, string? Detail = null) { }
+            public string? Detail { get; init; }
+            public Trax.StateMachine.RefusalCode Reason { get; init; }
+        }
+        public sealed class Transitioned : Trax.StateMachine.AdvanceResult, System.IEquatable<Trax.StateMachine.AdvanceResult.Transitioned>
+        {
+            public Transitioned(Trax.StateMachine.Snapshot Snapshot) { }
+            public Trax.StateMachine.Snapshot Snapshot { get; init; }
+        }
+    }
+    public sealed class BuiltMachine<TState, TTrigger> : System.IEquatable<Trax.StateMachine.BuiltMachine<TState, TTrigger>>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public BuiltMachine(Trax.StateMachine.MachineDefinition<TState, TTrigger> Definition, System.Collections.Generic.IReadOnlyCollection<TState> CommittedStates, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.EffectBinding<TState, TTrigger>> Effects, Trax.StateMachine.DeclarativeModel<TState, TTrigger>? Declarative = null) { }
+        public System.Collections.Generic.IReadOnlyCollection<TState> CommittedStates { get; init; }
+        public Trax.StateMachine.DeclarativeModel<TState, TTrigger>? Declarative { get; init; }
+        public Trax.StateMachine.MachineDefinition<TState, TTrigger> Definition { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.EffectBinding<TState, TTrigger>> Effects { get; init; }
+        public Trax.StateMachine.SnapshotMachine<TState, TTrigger> Engine { get; }
+    }
+    public sealed class ClientManifest : System.IEquatable<Trax.StateMachine.ClientManifest>
+    {
+        public const int CurrentFormat = 3;
+        public ClientManifest() { }
+        public System.Collections.Generic.IReadOnlyList<string> FilterInputs { get; init; }
+        public int Format { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestMachine> Machines { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestDocument> Progress { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestQueryModel> QueryModels { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestTrain> Trains { get; init; }
+        public string Types { get; init; }
+        public static Trax.StateMachine.ClientManifest Read(string text) { }
+        public static string Write(Trax.StateMachine.ClientManifest manifest) { }
+    }
+    public sealed class ClientManifestArgument : System.IEquatable<Trax.StateMachine.ClientManifestArgument>
+    {
+        public ClientManifestArgument() { }
+        public string? Default { get; init; }
+        public required string Name { get; init; }
+        public required string Type { get; init; }
+    }
+    public sealed class ClientManifestDocument : System.IEquatable<Trax.StateMachine.ClientManifestDocument>
+    {
+        public ClientManifestDocument() { }
+        public required string Document { get; init; }
+        public required string Id { get; init; }
+        public required string Operation { get; init; }
+    }
+    public sealed class ClientManifestMachine : System.IEquatable<Trax.StateMachine.ClientManifestMachine>
+    {
+        public ClientManifestMachine() { }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestDocument> Documents { get; init; }
+        public required string Id { get; init; }
+        public required System.Text.Json.Nodes.JsonObject Ir { get; init; }
+        public required string IrHash { get; init; }
+        public Trax.StateMachine.ClientManifestRequirement? Requires { get; init; }
+        public string IrText() { }
+    }
+    public sealed class ClientManifestQueryModel : System.IEquatable<Trax.StateMachine.ClientManifestQueryModel>
+    {
+        public ClientManifestQueryModel() { }
+        public string? Answer { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestArgument> Arguments { get; init; }
+        public required string Field { get; init; }
+        public string? Namespace { get; init; }
+        public Trax.StateMachine.ClientManifestRequirement? Requires { get; init; }
+    }
+    public sealed class ClientManifestRequirement : System.IEquatable<Trax.StateMachine.ClientManifestRequirement>
+    {
+        public ClientManifestRequirement() { }
+        public bool Anonymous { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Policies { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string>> RoleSets { get; init; }
+    }
+    public sealed class ClientManifestTrain : System.IEquatable<Trax.StateMachine.ClientManifestTrain>
+    {
+        public ClientManifestTrain() { }
+        public string? Answer { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.ClientManifestArgument> Arguments { get; init; }
+        public required string Field { get; init; }
+        public string? Namespace { get; init; }
+        public bool Progress { get; init; }
+        public Trax.StateMachine.ClientManifestRequirement? Requires { get; init; }
+        public required string Root { get; init; }
+    }
+    public enum CompareOp
+    {
+        GreaterThan = 0,
+        GreaterOrEqual = 1,
+        LessThan = 2,
+        LessOrEqual = 3,
+        EqualTo = 4,
+    }
+    public sealed class ContextSchema : System.IEquatable<Trax.StateMachine.ContextSchema>
+    {
+        public static readonly Trax.StateMachine.ContextSchema Empty;
+        public ContextSchema(System.Collections.Generic.IReadOnlyList<Trax.StateMachine.FieldSchema> Fields) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.FieldSchema> Fields { get; init; }
+    }
+    public static class CorpusReplay
+    {
+        public static System.Collections.Generic.IReadOnlyList<string> Replay<TState, TTrigger>(Trax.StateMachine.SnapshotMachine<TState, TTrigger> machine, string goldenJson)
+            where TState :  struct, System.Enum
+            where TTrigger :  struct, System.Enum { }
+    }
+    public sealed class DeclarativeModel<TState, TTrigger> : System.IEquatable<Trax.StateMachine.DeclarativeModel<TState, TTrigger>>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public DeclarativeModel(System.Collections.Generic.IReadOnlyDictionary<TState, Trax.StateMachine.ContextSchema> ContextSchemas, System.Collections.Generic.IReadOnlyDictionary<TTrigger, Trax.StateMachine.ContextSchema> TriggerInputs, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.DeclarativeTransition<TState, TTrigger>> Transitions, System.Collections.Generic.IReadOnlyDictionary<TState, Trax.StateMachine.Rule> StateInvariants) { }
+        public System.Collections.Generic.IReadOnlyDictionary<TState, Trax.StateMachine.ContextSchema> ContextSchemas { get; init; }
+        public Trax.StateMachine.DifferentialModel<TState, TTrigger>? Differential { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<TState, Trax.StateMachine.Rule> StateInvariants { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.DeclarativeTransition<TState, TTrigger>> Transitions { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<TTrigger, Trax.StateMachine.ContextSchema> TriggerInputs { get; init; }
+    }
+    public sealed class DeclarativeTransition<TState, TTrigger> : System.IEquatable<Trax.StateMachine.DeclarativeTransition<TState, TTrigger>>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public DeclarativeTransition(TState From, TTrigger Trigger, TState To, Trax.StateMachine.Rule? Guard, Trax.StateMachine.Reduction? Reduce) { }
+        public TState From { get; init; }
+        public Trax.StateMachine.Rule? Guard { get; init; }
+        public Trax.StateMachine.Reduction? Reduce { get; init; }
+        public TState To { get; init; }
+        public TTrigger Trigger { get; init; }
+    }
+    public sealed class DifferentialModel<TState, TTrigger> : System.IEquatable<Trax.StateMachine.DifferentialModel<TState, TTrigger>>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public DifferentialModel(System.Collections.Generic.IReadOnlyDictionary<TTrigger, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Samples, System.Collections.Generic.IReadOnlyDictionary<TState, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Seeds, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode> Contexts) { }
+        public System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode> Contexts { get; init; }
+        public bool IsEmpty { get; }
+        public System.Collections.Generic.IReadOnlyDictionary<TTrigger, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Samples { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<TState, System.Collections.Generic.IReadOnlyList<System.Text.Json.Nodes.JsonNode>> Seeds { get; init; }
+    }
+    public sealed class EffectBinding<TState, TTrigger> : System.IEquatable<Trax.StateMachine.EffectBinding<TState, TTrigger>>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public EffectBinding(TState From, TTrigger Trigger, TState To, System.Type EffectType, string KeyPrefix) { }
+        public System.Type EffectType { get; init; }
+        public TState From { get; init; }
+        public string KeyPrefix { get; init; }
+        public TState To { get; init; }
+        public TTrigger Trigger { get; init; }
+    }
+    public sealed class FieldMatcher
+    {
+        public FieldMatcher(Trax.StateMachine.RuleSource source, string field) { }
+        public Trax.StateMachine.Rule Absent() { }
+        public Trax.StateMachine.Rule ArrayOf(Trax.StateMachine.JsonFieldType type) { }
+        public Trax.StateMachine.Rule AtLeast(double value) { }
+        public Trax.StateMachine.Rule AtMost(double value) { }
+        public Trax.StateMachine.Rule CountAtLeast(int value) { }
+        public Trax.StateMachine.Rule CountGreaterThan(int value) { }
+        public Trax.StateMachine.Rule EqualTo(double value) { }
+        public Trax.StateMachine.Rule GreaterThan(double value) { }
+        public Trax.StateMachine.Rule IsFalse() { }
+        public Trax.StateMachine.Rule IsOneOf(params string[] values) { }
+        public Trax.StateMachine.Rule IsTrue() { }
+        public Trax.StateMachine.Rule LengthAtLeast(int value) { }
+        public Trax.StateMachine.Rule LengthGreaterThan(int value) { }
+        public Trax.StateMachine.Rule LessThan(double value) { }
+        public Trax.StateMachine.Rule NonEmpty() { }
+        public Trax.StateMachine.Rule OfType(Trax.StateMachine.JsonFieldType type) { }
+        public Trax.StateMachine.Rule Present() { }
+    }
+    public sealed class FieldSchema : System.IEquatable<Trax.StateMachine.FieldSchema>
+    {
+        public FieldSchema(string Name, Trax.StateMachine.JsonFieldType Type, bool Nullable, System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Rule> Constraints) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Rule> Constraints { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string>? Enum { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string>? EnumExact { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.FieldSchema>? Fields { get; init; }
+        public string? Format { get; init; }
+        public Trax.StateMachine.FieldSchema? Keys { get; init; }
+        public double? Maximum { get; init; }
+        public double? Minimum { get; init; }
+        public string Name { get; init; }
+        public bool Nullable { get; init; }
+        public Trax.StateMachine.JsonFieldType Type { get; init; }
+        public Trax.StateMachine.FieldSchema? Values { get; init; }
+    }
+    public interface IDifferentialBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> EmptySample(TTrigger trigger);
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> OutcomeSample<TOutput>(TState invokingState, TOutput output);
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> Probe(System.Text.Json.Nodes.JsonObject context);
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> Probe<TContext>(TContext context);
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> Sample(TTrigger trigger, System.Text.Json.Nodes.JsonObject input);
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> Sample<TInput>(TTrigger trigger, TInput input);
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> Seed(TState state, System.Text.Json.Nodes.JsonObject context);
+        Trax.StateMachine.IDifferentialBuilder<TState, TTrigger> Seed<TContext>(TState state, TContext context);
+    }
+    public interface IInvokeBuilder<TState, TTrigger> : Trax.StateMachine.IStateBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        Trax.StateMachine.IInvokeBuilder<TState, TTrigger> OnCancelled(TState target, Trax.StateMachine.Reduction? reduce = null);
+        Trax.StateMachine.IInvokeBuilder<TState, TTrigger> OnDone(TState target, Trax.StateMachine.Rule? when = null, Trax.StateMachine.Reduction? reduce = null);
+        Trax.StateMachine.IInvokeBuilder<TState, TTrigger> OnFailed(TState target, Trax.StateMachine.Reduction? reduce = null);
+    }
+    public interface IMachineBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> CustomGuard(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> CustomReducer(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reducer);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> Discard(System.Action<Trax.StateMachine.IReadRuleBuilder> rule);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> Get(System.Action<Trax.StateMachine.IReadRuleBuilder> rule);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id);
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> In(TState state);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> MigrateFrom(int fromVersion, System.Func<string, System.Text.Json.Nodes.JsonObject, Trax.StateMachine.MigrationResult> migrate);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> Start<TStartInput>(System.Action<Trax.StateMachine.IStartBuilder<TStartInput>> configure);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> StartsAt(TState state, System.Func<System.Text.Json.Nodes.JsonObject> initialContext);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> SystemOwned();
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> Version(int version);
+        Trax.StateMachine.IMachineBuilder<TState, TTrigger> Watch(System.Action<Trax.StateMachine.IReadRuleBuilder> rule);
+    }
+    public interface IReadRuleBuilder
+    {
+        Trax.StateMachine.IReadRuleBuilder Anonymous();
+        Trax.StateMachine.IReadRuleBuilder AnyAuthenticated();
+        Trax.StateMachine.IReadRuleBuilder OwnerOnly();
+        Trax.StateMachine.IReadRuleBuilder Requires(params string[] roles);
+        Trax.StateMachine.IReadRuleBuilder RequiresPolicy(string policy);
+    }
+    public interface IStartBuilder<TStartInput>
+    {
+        Trax.StateMachine.IStartBuilder<TStartInput> Anonymous();
+        Trax.StateMachine.IStartBuilder<TStartInput> AnyAuthenticated();
+        Trax.StateMachine.IStartBuilder<TStartInput> Reduce(Trax.StateMachine.Reduction reduce);
+        Trax.StateMachine.IStartBuilder<TStartInput> Requires(params string[] roles);
+        Trax.StateMachine.IStartBuilder<TStartInput> RequiresPolicy(string policy);
+    }
+    public interface IStateBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        Trax.StateMachine.ITimerBuilder<TState, TTrigger> After(System.TimeSpan delay);
+        Trax.StateMachine.ITimerBuilder<TState, TTrigger> After<TContext>(System.Linq.Expressions.Expression<System.Func<TContext, System.TimeSpan?>> duration, System.TimeSpan min, System.TimeSpan max);
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> Committed();
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> Context();
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> Context<TContext>();
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> Ends();
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> Fails();
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> Holds(System.Func<System.Text.Json.Nodes.JsonObject, string?> validator);
+        Trax.StateMachine.IInvokeBuilder<TState, TTrigger> Invokes<TTrain, TInput, TOutput>(System.Func<System.Text.Json.Nodes.JsonObject, TInput> input)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>;
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> On(TTrigger trigger);
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> Requires(Trax.StateMachine.Rule constraint);
+        Trax.StateMachine.IInvokeBuilder<TState, TTrigger> Spawns<TChild, TContext, TOutput>(System.Linq.Expressions.Expression<System.Func<TContext, System.Guid?>> childId, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonObject>? context = null)
+            where TChild :  class;
+    }
+    public interface ITimerBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> GoTo(TState target);
+    }
+    public interface ITransitionBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> Anonymous();
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> AnyAuthenticated();
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> Because(string guardMessage);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> Reduce(System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reduce);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> Reduce(Trax.StateMachine.Reduction reduce);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> Requires(params string[] roles);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> RequiresPolicy(string policy);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> RunsOnce<TEffect>(string? keyPrefix = null);
+        Trax.StateMachine.IStateBuilder<TState, TTrigger> To(TState target);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> When(System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> When(Trax.StateMachine.Rule guard);
+        Trax.StateMachine.ITransitionBuilder<TState, TTrigger> WithInput<TInput>();
+    }
+    public static class IrExporter
+    {
+        public static string Export<TState, TTrigger>(Trax.StateMachine.BuiltMachine<TState, TTrigger> machine)
+            where TState :  struct, System.Enum
+            where TTrigger :  struct, System.Enum { }
+    }
+    public enum JsonFieldType
+    {
+        String = 0,
+        Number = 1,
+        Boolean = 2,
+        Array = 3,
+        Object = 4,
+        Integer = 5,
+    }
+    public sealed class MachineBuilder<TState, TTrigger> : Trax.StateMachine.IMachineBuilder<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public MachineBuilder() { }
+        public Trax.StateMachine.BuiltMachine<TState, TTrigger> Build() { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> CustomGuard(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> CustomReducer(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reducer) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> Discard(System.Action<Trax.StateMachine.IReadRuleBuilder> rule) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> Get(System.Action<Trax.StateMachine.IReadRuleBuilder> rule) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id) { }
+        public Trax.StateMachine.IStateBuilder<TState, TTrigger> In(TState state) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> MigrateFrom(int fromVersion, System.Func<string, System.Text.Json.Nodes.JsonObject, Trax.StateMachine.MigrationResult> migrate) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> Start<TStartInput>(System.Action<Trax.StateMachine.IStartBuilder<TStartInput>> configure) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> StartsAt(TState state, System.Func<System.Text.Json.Nodes.JsonObject> initialContext) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> SystemOwned() { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> Version(int version) { }
+        public Trax.StateMachine.IMachineBuilder<TState, TTrigger> Watch(System.Action<Trax.StateMachine.IReadRuleBuilder> rule) { }
+    }
+    public sealed class MachineDefinition<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public MachineDefinition() { }
+        public System.Collections.Generic.IReadOnlyDictionary<TState, System.Func<System.Text.Json.Nodes.JsonObject, string?>> ContextValidators { get; init; }
+        public required System.Func<System.Text.Json.Nodes.JsonObject> CreateInitialContext { get; init; }
+        public required string Id { get; init; }
+        public required TState InitialState { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<int, System.Func<string, System.Text.Json.Nodes.JsonObject, Trax.StateMachine.MigrationResult>> Migrations { get; init; }
+        public required System.Collections.Generic.IReadOnlyList<Trax.StateMachine.TransitionDefinition<TState, TTrigger>> Transitions { get; init; }
+        public required int Version { get; init; }
+        public Trax.StateMachine.Snapshot CreateInitialSnapshot() { }
+    }
+    public sealed class MachineState : System.IEquatable<Trax.StateMachine.MachineState>
+    {
+        public MachineState(string Name, System.Type? ContextType) { }
+        public System.Type? ContextType { get; init; }
+        public string Name { get; init; }
+    }
+    public static class MachineTimers
+    {
+        public static readonly System.TimeSpan MaxDuration;
+    }
+    public sealed class MachineTrigger : System.IEquatable<Trax.StateMachine.MachineTrigger>
+    {
+        public MachineTrigger(string Name, Trax.StateMachine.TriggerKind Kind, System.Type? InputType) { }
+        public System.Type? InputType { get; init; }
+        public Trax.StateMachine.TriggerKind Kind { get; init; }
+        public string Name { get; init; }
+    }
+    public sealed class MigrationResult : System.IEquatable<Trax.StateMachine.MigrationResult>
+    {
+        public MigrationResult(string State, System.Text.Json.Nodes.JsonObject Context) { }
+        public System.Text.Json.Nodes.JsonObject Context { get; init; }
+        public string State { get; init; }
+    }
+    public abstract class Reduction : System.IEquatable<Trax.StateMachine.Reduction>
+    {
+        public sealed class Clear : Trax.StateMachine.Reduction, System.IEquatable<Trax.StateMachine.Reduction.Clear>
+        {
+            public Clear() { }
+        }
+        public sealed class Custom : Trax.StateMachine.Reduction, System.IEquatable<Trax.StateMachine.Reduction.Custom>
+        {
+            public Custom(string Name) { }
+            public string Name { get; init; }
+        }
+        public sealed class Keep : Trax.StateMachine.Reduction, System.IEquatable<Trax.StateMachine.Reduction.Keep>
+        {
+            public Keep() { }
+        }
+        public sealed class Reset : Trax.StateMachine.Reduction, System.IEquatable<Trax.StateMachine.Reduction.Reset>
+        {
+            public Reset() { }
+        }
+        public sealed class Set : Trax.StateMachine.Reduction, System.IEquatable<Trax.StateMachine.Reduction.Set>
+        {
+            public Set(System.Collections.Generic.IReadOnlyList<Trax.StateMachine.SetStep> Steps) { }
+            public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.SetStep> Steps { get; init; }
+        }
+    }
+    public static class ReductionEvaluator
+    {
+        public static System.Text.Json.Nodes.JsonObject Apply(Trax.StateMachine.Reduction reduction, System.Text.Json.Nodes.JsonObject context, System.Text.Json.Nodes.JsonNode? input, System.Text.Json.Nodes.JsonObject initialContext, System.Collections.Generic.IReadOnlyDictionary<string, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject>>? customReducers = null) { }
+    }
+    [System.Text.Json.Serialization.JsonConverter(typeof(Trax.StateMachine.RefusalCodeJsonConverter))]
+    public enum RefusalCode
+    {
+        NoTransition = 0,
+        GuardFailed = 1,
+        InvalidContext = 2,
+        InternalError = 3,
+        InvalidInput = 4,
+        OutcomeBound = 5,
+        TimerBound = 6,
+        TooLarge = 7,
+        DiscardNotAllowed = 8,
+        EffectInProgress = 9,
+        Malformed = 10,
+        UnknownMachine = 11,
+        VersionMismatch = 12,
+        UnknownState = 13,
+        Forbidden = 14,
+        RequestIdReused = 15,
+        EffectBound = 16,
+        SaveNotAllowed = 17,
+        ClientOutdated = 18,
+        ServerOutdated = 19,
+        TooManyDrafts = 20,
+        InvalidRequestId = 21,
+        Unauthenticated = 22,
+        NoStart = 23,
+        SystemOwned = 24,
+        NotFound = 25,
+        TooManySubscriptions = 26,
+        SchemaMismatch = 27,
+        Conflict = 28,
+        NoEffect = 29,
+        DeliveryFailed = 30,
+        ClientDivergence = 31,
+        StateReserved = 32,
+        DraftInvoking = 33,
+        DraftUnreadable = 34,
+        DraftCommitted = 35,
+        DraftChanged = 36,
+        InvokeLimitReached = 37,
+        InvokeForbidden = 38,
+        InvokeChainUserOwned = 39,
+    }
+    public sealed class RefusalCodeJsonConverter : System.Text.Json.Serialization.JsonConverter<Trax.StateMachine.RefusalCode>
+    {
+        public RefusalCodeJsonConverter() { }
+        public override Trax.StateMachine.RefusalCode Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, Trax.StateMachine.RefusalCode value, System.Text.Json.JsonSerializerOptions options) { }
+    }
+    public static class RefusalCodes
+    {
+        public static System.Collections.Generic.IReadOnlyList<Trax.StateMachine.RefusalCode> All { get; }
+        public static string ToWire(this Trax.StateMachine.RefusalCode code) { }
+        public static bool TryParse(string? text, out Trax.StateMachine.RefusalCode code) { }
+    }
+    public abstract class RehydrationResult : System.IEquatable<Trax.StateMachine.RehydrationResult>
+    {
+        public sealed class Error : Trax.StateMachine.RehydrationResult, System.IEquatable<Trax.StateMachine.RehydrationResult.Error>
+        {
+            public Error(Trax.StateMachine.RefusalCode Code, string Message) { }
+            public Trax.StateMachine.RefusalCode Code { get; init; }
+            public string Message { get; init; }
+        }
+        public sealed class Ok : Trax.StateMachine.RehydrationResult, System.IEquatable<Trax.StateMachine.RehydrationResult.Ok>
+        {
+            public Ok(Trax.StateMachine.Snapshot Snapshot) { }
+            public Trax.StateMachine.Snapshot Snapshot { get; init; }
+        }
+    }
+    public abstract class Rule : System.IEquatable<Trax.StateMachine.Rule>
+    {
+        public sealed class Absent : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.Absent>
+        {
+            public Absent(Trax.StateMachine.RuleSource Source, string Field) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+        }
+        public sealed class All : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.All>
+        {
+            public All(System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Rule> Rules) { }
+            public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Rule> Rules { get; init; }
+        }
+        public sealed class Any : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.Any>
+        {
+            public Any(System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Rule> Rules) { }
+            public System.Collections.Generic.IReadOnlyList<Trax.StateMachine.Rule> Rules { get; init; }
+        }
+        public sealed class ArrayOf : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.ArrayOf>
+        {
+            public ArrayOf(Trax.StateMachine.RuleSource Source, string Field, Trax.StateMachine.JsonFieldType ElementType) { }
+            public Trax.StateMachine.JsonFieldType ElementType { get; init; }
+            public string Field { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+        }
+        public sealed class BoolEquals : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.BoolEquals>
+        {
+            public BoolEquals(Trax.StateMachine.RuleSource Source, string Field, bool Value) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+            public bool Value { get; init; }
+        }
+        public sealed class Compare : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.Compare>
+        {
+            public Compare(Trax.StateMachine.RuleSource Source, string Field, Trax.StateMachine.CompareOp Op, double Value) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.CompareOp Op { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+            public double Value { get; init; }
+        }
+        public sealed class Count : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.Count>
+        {
+            public Count(Trax.StateMachine.RuleSource Source, string Field, Trax.StateMachine.CompareOp Op, int Value) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.CompareOp Op { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+            public int Value { get; init; }
+        }
+        public sealed class Custom : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.Custom>
+        {
+            public Custom(string Name) { }
+            public string Name { get; init; }
+        }
+        public sealed class Length : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.Length>
+        {
+            public Length(Trax.StateMachine.RuleSource Source, string Field, Trax.StateMachine.CompareOp Op, int Value) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.CompareOp Op { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+            public int Value { get; init; }
+        }
+        public sealed class NonEmpty : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.NonEmpty>
+        {
+            public NonEmpty(Trax.StateMachine.RuleSource Source, string Field) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+        }
+        public sealed class OfType : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.OfType>
+        {
+            public OfType(Trax.StateMachine.RuleSource Source, string Field, Trax.StateMachine.JsonFieldType Type) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+            public Trax.StateMachine.JsonFieldType Type { get; init; }
+        }
+        public sealed class OneOf : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.OneOf>
+        {
+            public OneOf(Trax.StateMachine.RuleSource Source, string Field, System.Collections.Generic.IReadOnlyList<string> Values) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+            public System.Collections.Generic.IReadOnlyList<string> Values { get; init; }
+        }
+        public sealed class Present : Trax.StateMachine.Rule, System.IEquatable<Trax.StateMachine.Rule.Present>
+        {
+            public Present(Trax.StateMachine.RuleSource Source, string Field) { }
+            public string Field { get; init; }
+            public Trax.StateMachine.RuleSource Source { get; init; }
+        }
+    }
+    public static class RuleEvaluator
+    {
+        public static bool Evaluate(Trax.StateMachine.Rule rule, System.Text.Json.Nodes.JsonObject context, System.Text.Json.Nodes.JsonNode? input, System.Collections.Generic.IReadOnlyDictionary<string, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool>>? customGuards = null) { }
+    }
+    public enum RuleSource
+    {
+        Context = 0,
+        Input = 1,
+    }
+    public static class Rules
+    {
+        public static Trax.StateMachine.Rule All(params Trax.StateMachine.Rule[] rules) { }
+        public static Trax.StateMachine.Rule Any(params Trax.StateMachine.Rule[] rules) { }
+        public static Trax.StateMachine.Reduction Clear() { }
+        public static Trax.StateMachine.FieldMatcher Field<TContext, TField>(System.Linq.Expressions.Expression<System.Func<TContext, TField>> selector) { }
+        public static Trax.StateMachine.FieldMatcher Input<TInput, TField>(System.Linq.Expressions.Expression<System.Func<TInput, TField>> selector) { }
+        public static Trax.StateMachine.Reduction Keep() { }
+        public static Trax.StateMachine.Reduction Reset() { }
+        public static Trax.StateMachine.SetBuilder Set<TContext, TField>(System.Linq.Expressions.Expression<System.Func<TContext, TField>> field) { }
+        public static Trax.StateMachine.Reduction SetAll(params Trax.StateMachine.Reduction[] sets) { }
+    }
+    public sealed class SetBuilder
+    {
+        public SetBuilder(string field) { }
+        public Trax.StateMachine.Reduction FromInput<TInput, TField>(System.Linq.Expressions.Expression<System.Func<TInput, TField>> input) { }
+        public Trax.StateMachine.Reduction ToValue(System.Text.Json.Nodes.JsonNode? value) { }
+    }
+    public sealed class SetStep : System.IEquatable<Trax.StateMachine.SetStep>
+    {
+        public SetStep(string Field, Trax.StateMachine.ValueSource Source) { }
+        public string Field { get; init; }
+        public Trax.StateMachine.ValueSource Source { get; init; }
+    }
+    public sealed class Snapshot : System.IEquatable<Trax.StateMachine.Snapshot>
+    {
+        public Snapshot() { }
+        public required System.Text.Json.Nodes.JsonObject Context { get; init; }
+        public required string Machine { get; init; }
+        public required string State { get; init; }
+        public required int Version { get; init; }
+        public bool Equals(Trax.StateMachine.Snapshot? other) { }
+        public override int GetHashCode() { }
+    }
+    public sealed class SnapshotMachine<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public SnapshotMachine(Trax.StateMachine.MachineDefinition<TState, TTrigger> definition) { }
+        public Trax.StateMachine.MachineDefinition<TState, TTrigger> Definition { get; }
+        public Trax.StateMachine.AdvanceResult Advance(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
+        public System.Collections.Generic.IReadOnlyList<string> AvailableTriggers(Trax.StateMachine.Snapshot snapshot) { }
+        public bool CanFire(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
+        public System.Text.Json.Nodes.JsonObject Describe() { }
+        public Trax.StateMachine.RehydrationResult Rehydrate(string json) { }
+        public string Serialize(Trax.StateMachine.Snapshot snapshot) { }
+    }
+    public static class StorableJson
+    {
+        public static string? Problem(System.Text.Json.Nodes.JsonNode? node) { }
+    }
+    public sealed class TransitionDefinition<TState, TTrigger>
+        where TState :  struct, System.Enum
+        where TTrigger :  struct, System.Enum
+    {
+        public TransitionDefinition() { }
+        public required TState From { get; init; }
+        public System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool>? Guard { get; init; }
+        public string? GuardMessage { get; init; }
+        public System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject>? Reduce { get; init; }
+        public required TState To { get; init; }
+        public required TTrigger Trigger { get; init; }
+    }
+    public enum TriggerKind
+    {
+        Client = 0,
+        EffectBound = 1,
+        Outcome = 2,
+        Timer = 3,
+    }
+    public abstract class ValueSource : System.IEquatable<Trax.StateMachine.ValueSource>
+    {
+        public sealed class Constant : Trax.StateMachine.ValueSource, System.IEquatable<Trax.StateMachine.ValueSource.Constant>
+        {
+            public Constant(System.Text.Json.Nodes.JsonNode? Value) { }
+            public System.Text.Json.Nodes.JsonNode? Value { get; init; }
+        }
+        public sealed class FromInput : Trax.StateMachine.ValueSource, System.IEquatable<Trax.StateMachine.ValueSource.FromInput>
+        {
+            public FromInput(string Field) { }
+            public string Field { get; init; }
+        }
+    }
+}

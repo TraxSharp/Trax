@@ -14,7 +14,7 @@ namespace Trax.Effect.Data.Services.InvokedRunListener;
 /// SQLite and InMemory register none: on them the run's own host applies the outcome through its lifecycle hook,
 /// and the sweep covers the rest.</para>
 ///
-/// <para>Infrastructure for <c>Trax.Effect.StateMachine.Persistence</c>, which alone sees it; a host does not
+/// <para>Infrastructure for <c>Trax.StateMachine.Persistence</c>, which alone sees it; a host does not
 /// implement or call it.</para>
 /// </remarks>
 internal interface IInvokedRunListener

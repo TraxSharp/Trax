@@ -9,8 +9,8 @@ using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.TypeModules;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Startup;
 

@@ -44,7 +44,7 @@ an `OnCancelled(target)` that is required, so a cancel always has a declared edg
 **There is no `OnDecisionUnsure`.** A run ends in one `Either`, so "unsure" is not an outcome of its own. A train that
 can be unsure says so in its output, and a guarded `OnDone` routes it (`out is Unsure` to `NeedsReview`).
 
-**The machine package does not depend on the mediator.** Effect.StateMachine declares an `IInvokedTrainLauncher` port
+**The machine package does not depend on the mediator.** Trax.StateMachine declares an `IInvokedTrainLauncher` port
 and Mediator implements it. A host that declares `Invokes` without registering Mediator fails at startup. A new
 package above Scheduler was the other place it could live, and would have been one more package for a single port.
 
@@ -73,7 +73,7 @@ at most one live run per entry.
 
 **A sweep guarantees delivery; the lifecycle hook is the fast path.** Lifecycle hooks run in the process that ran the
 train and swallow exceptions, and a run failed by the reaper publishes nothing from a train at all, so a hook alone
-can lose an outcome. A reconciler, a hosted service in Effect.StateMachine.Persistence started on every host that
+can lose an outcome. A reconciler, a hosted service in Trax.StateMachine.Persistence started on every host that
 registers machines (it needs their definitions), sweeps snapshots whose token names a finished run and applies the
 outcome. Several hosts sweeping at once is harmless, because the conditional update applies once. A cancelled run maps
 to `OnCancelled`; a reaped one reaches `OnFailed` through the sweep, and the reaper publishes its own terminal event
@@ -207,7 +207,7 @@ checkpoint.
 
 Written first, red, before the code they cover. Each names the class and method it will have.
 
-In `Trax.StateMachine/dotnet/tests/Trax.Effect.StateMachine.Tests`:
+In `Trax.StateMachine/dotnet/tests/Trax.StateMachine.Tests`:
 - `InvokesDeclarationTests.An_invoking_state_without_OnCancelled_is_refused_at_build`
 - `InvokesDeclarationTests.A_guarded_OnDone_routes_an_unsure_output_to_its_own_target`
 - `InvokesDeclarationTests.Outcomes_export_as_their_own_trigger_kind_per_invoke_edge_with_the_output_schema`
@@ -215,7 +215,7 @@ In `Trax.StateMachine/dotnet/tests/Trax.Effect.StateMachine.Tests`:
 - `MachineInstanceIdTests.Keys_a_b_c_split_differently_give_different_ids`
 - `DifferentialCorpusReplayTests.Outcome_triggers_apply_the_same_reduction_in_the_twin`
 
-In `Trax.StateMachine/dotnet/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Postgres and Sqlite:
+In `Trax.StateMachine/dotnet/tests/Trax.StateMachine.Persistence.Integration`, on Postgres and Sqlite:
 - `InvokesStartupRefusalTests`, one test per refusal, each naming the offending junction, train or member:
   `A_plain_Junction_is_refused`, `An_IChain_over_a_non_effect_interface_is_refused`,
   `A_train_that_is_not_a_ServiceTrain_is_refused`, `A_recorder_refusal_is_refused`,

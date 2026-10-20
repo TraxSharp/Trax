@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 

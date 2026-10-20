@@ -6,10 +6,10 @@ global using Trax.Api.Auth;
 global using Trax.Effect.Data.Postgres.Extensions;
 global using Trax.Effect.Extensions;
 global using Trax.Effect.Provider.Json.Extensions;
-global using Trax.Effect.StateMachine;
-global using Trax.Effect.StateMachine.Persistence;
-global using static Trax.Effect.StateMachine.Rules;
 global using Trax.Mediator.Extensions;
+global using Trax.StateMachine;
+global using Trax.StateMachine.Persistence;
+global using static Trax.StateMachine.Rules;
 
 public enum CheckoutState
 {

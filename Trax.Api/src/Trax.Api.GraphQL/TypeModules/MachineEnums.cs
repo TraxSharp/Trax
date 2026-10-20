@@ -2,8 +2,8 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HotChocolate.Types;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.TypeModules;
 

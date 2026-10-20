@@ -91,7 +91,7 @@ title, the body below it. A security change or an open hotspot uses GitHub's `> 
 | 🟨 | Data (`data`) | `Trax.Effect.Data.*` (Postgres, Sqlite, InMemory), migrations, SQL, the run-record tables |
 | 🟫 | Plumbing (`plumbing`) | Effect providers, junction providers, broadcasters (RabbitMQ, SignalR), lifecycle hooks |
 | 🟩 | Trains (`trains`) | `Train` (Core), `ServiceTrain` (Effect), junctions, chains, Memory, decisions, `Parallel` |
-| 🟪 | Machines (`machines`) | `Trax.Effect.StateMachine*` and `@traxsharp/state-machine`, its TypeScript twin |
+| 🟪 | Machines (`machines`) | `Trax.StateMachine*` and `@traxsharp/state-machine`, its TypeScript twin |
 | 🟧 | Dispatch (`dispatch`) | Mediator (train bus, authorization), Scheduler (jobs, manifests, recovery), remote runners, Lambda |
 | 🟦 | Surface (`surface`) | Api (GraphQL, auth, persisted operations, generated clients, the React operations console) |
 | ⬛ | Tooling (`tooling`) | CLI, analyzers, architecture and ADR guards, CI, release, docs |

@@ -15,7 +15,7 @@ namespace Trax.Cli.Tests.UnitTests;
 /// with.
 ///
 /// <para>Those are not the Trax a new scaffold floats to. The tests reference no Trax.Core
-/// directly: it arrives transitively through the <c>Trax.Effect.StateMachine.Persistence</c> pin
+/// directly: it arrives transitively through the <c>Trax.StateMachine.Persistence</c> pin
 /// in <c>Directory.Packages.props</c>, which currently resolves Trax.Core 1.6.0, and 1.6.0 still
 /// has <c>RunInternal</c> and <c>Activate</c>. So in CI a template that goes back to the old shape
 /// still compiles here, and this only catches that regression once the pin moves to a Trax.Core

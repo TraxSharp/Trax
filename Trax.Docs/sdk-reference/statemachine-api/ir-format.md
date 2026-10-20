@@ -6,12 +6,12 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 5
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/IrExporter.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/SchemaReflection.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules/ValueFormats.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/IrExporter.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/SchemaReflection.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules/ValueFormats.cs
 ---
 
 # IR format
@@ -25,7 +25,7 @@ transition's guard and reducer as data. The per-language generators read it. The
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine;
+namespace Trax.StateMachine;
 
 public static class IrExporter
 {

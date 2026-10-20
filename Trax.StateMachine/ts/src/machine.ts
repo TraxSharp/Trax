@@ -13,7 +13,7 @@ import type {
 
 /**
  * Interprets a {@link MachineDefinition} over {@link Snapshot}s — the TypeScript half of the
- * cross-language contract. The C# {@link SnapshotMachine} (Trax.Effect.StateMachine) is the other
+ * cross-language contract. The C# {@link SnapshotMachine} (Trax.StateMachine) is the other
  * half, and the shared conformance fixtures prove they behave identically.
  *
  * A plain reducer: `advance` matches the edges out of the snapshot's state, picks the FIRST whose

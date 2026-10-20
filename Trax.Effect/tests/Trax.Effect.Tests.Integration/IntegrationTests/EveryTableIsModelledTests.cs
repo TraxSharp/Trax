@@ -195,7 +195,7 @@ public class EveryTableIsModelledTests : TestSetup
             .Should()
             .ContainKey(
                 table,
-                $"Trax.Effect.StateMachine.Persistence reaches {table} through IDataContext. See {Adr}."
+                $"Trax.StateMachine.Persistence reaches {table} through IDataContext. See {Adr}."
             );
         mapped[table]
             .Should()

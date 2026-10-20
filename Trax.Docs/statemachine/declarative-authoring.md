@@ -5,7 +5,7 @@ type: how-to
 area: machines
 nav_order: 2
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Rules
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Rules
 ---
 
 # Write guards and reducers as data
@@ -49,9 +49,9 @@ property types that refuse to configure.
 
 ```csharp compile=turnstile
 using System.Text.Json.Nodes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
 public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 {

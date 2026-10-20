@@ -1,6 +1,6 @@
 /**
  * The language-neutral, serializable state of a machine instance — the only thing that crosses the
- * wire or lands in a database row. The C# backend (Trax.Effect.StateMachine) reads and writes this
+ * wire or lands in a database row. The C# backend (Trax.StateMachine) reads and writes this
  * exact shape, and the shared conformance fixtures prove the two engines agree.
  */
 export interface Snapshot {

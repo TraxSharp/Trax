@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Samples.StateMachine.E2E.Utilities;
 

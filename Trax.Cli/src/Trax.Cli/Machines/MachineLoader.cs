@@ -1,12 +1,12 @@
 using System.Reflection;
 using System.Runtime.Loader;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Cli.Machines;
 
 /// <summary>
 /// Loads a compiled machine assembly and hands back the <see cref="IMachine"/> to export. The assembly goes into
-/// the default <see cref="AssemblyLoadContext"/>, so its reference to <c>Trax.Effect.StateMachine.Persistence</c>
+/// the default <see cref="AssemblyLoadContext"/>, so its reference to <c>Trax.StateMachine.Persistence</c>
 /// binds by simple name to the copy the CLI already has: type identity is preserved, and a machine built against
 /// an older engine still unifies with the CLI's own <see cref="IMachine"/>. A machine built against a newer one
 /// cannot: the default context already holds that simple name at a lower version. How that surfaces has not been
@@ -84,7 +84,7 @@ internal static class MachineLoader
             throw new InvalidOperationException(
                 $"No machines found in {Path.GetFileName(fullPath)}. A machine is a non-abstract "
                     + "IMachine (a Machine<TState, TTrigger> subclass) with a parameterless constructor. "
-                    + "If the assembly references a different Trax.Effect.StateMachine version than this CLI, "
+                    + "If the assembly references a different Trax.StateMachine version than this CLI, "
                     + "its machines will not be recognized; rebuild it against the matching version."
                     + DescribeLoaderExceptions(loaderExceptions)
             );

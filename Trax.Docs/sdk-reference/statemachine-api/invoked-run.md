@@ -6,10 +6,10 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 11
-package: Trax.Effect.StateMachine.Persistence
-namespace: Trax.Effect.StateMachine.Persistence
+package: Trax.StateMachine.Persistence
+namespace: Trax.StateMachine.Persistence
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokedRun.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedRun.cs
 ---
 
 # InvokedRun
@@ -19,7 +19,7 @@ The machine instance whose invoking state queued the run going on, and who owns 
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine.Persistence;
+namespace Trax.StateMachine.Persistence;
 
 public sealed record InvokedRun(
     string Machine,
@@ -50,7 +50,7 @@ public sealed record InvokedRun(
 ```csharp compile
 using Trax.Core.Exceptions;
 using Trax.Effect.Services.EffectJunction;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 public record PlayCard(Guid GameId, int Slot);
 

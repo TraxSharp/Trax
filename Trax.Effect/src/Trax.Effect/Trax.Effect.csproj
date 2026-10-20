@@ -20,7 +20,7 @@
     <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
     <InternalsVisibleTo Include="Trax.Effect.Tests.Broadcaster" />
     <InternalsVisibleTo Include="Trax.Effect.Tests.Data.InMemory.Integration" />
-    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+    <InternalsVisibleTo Include="Trax.StateMachine.Persistence.Integration" />
   </ItemGroup>
 
   <!--
@@ -40,13 +40,13 @@
        member (TraxRedaction). -->
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.JunctionProvider.Progress" />
-    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
+    <InternalsVisibleTo Include="Trax.StateMachine.Persistence" />
   </ItemGroup>
 
   <!-- The engine serializes an invoked run's output with the options a run stores it with (InvokedRunOutput), so the
        two cannot drift. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="Trax.Effect.StateMachine" />
+    <InternalsVisibleTo Include="Trax.StateMachine" />
   </ItemGroup>
 
   <!-- The parameter effect stores no output for a run whose train withholds it (Metadata.OutputWithheld). -->

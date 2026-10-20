@@ -1,6 +1,6 @@
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
 namespace Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 

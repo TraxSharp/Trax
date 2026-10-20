@@ -52,7 +52,7 @@ const layers = [
   {
     rung: "Walk a user through it",
     name: "State machines",
-    cmd: "dotnet add package Trax.Effect.StateMachine.Persistence",
+    cmd: "dotnet add package Trax.StateMachine.Persistence",
     desc: "A checkout or a form as named states the server stores after every move. Each move is a typed mutation the server applies or refuses, and a state can run a train.",
     replaces: "status columns and hand-written transition checks",
     href: "/docs/statemachine",

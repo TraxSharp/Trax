@@ -7,7 +7,7 @@ namespace Trax.Effect.Models.SnapshotTransition;
 /// Base model for <c>trax.snapshot_transition</c>: one write of a state-machine instance's snapshot, in its history.
 /// </summary>
 /// <remarks>
-/// <para>Trax.Effect.StateMachine.Persistence's store writes one row for every snapshot it writes, in the same
+/// <para>Trax.StateMachine.Persistence's store writes one row for every snapshot it writes, in the same
 /// transaction, with the revision that write gave the instance: its creation, every command, save, timer and outcome.
 /// A write that leaves the snapshot alone (marking a pending effect, setting a run's token, keeping a draft active)
 /// writes none, and neither does a writer that goes around the store, so revisions can skip.</para>

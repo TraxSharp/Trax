@@ -4,7 +4,7 @@ using HotChocolate.Execution;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Api.GraphQL.TypeModules;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Api.Tests;
 

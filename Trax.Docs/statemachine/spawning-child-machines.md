@@ -5,9 +5,9 @@ type: how-to
 area: machines
 nav_order: 4
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Invokes.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokeOutbox.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SpawnsStartupValidator.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokeOutbox.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SpawnsStartupValidator.cs
 ---
 
 # Spawn a child machine from a state

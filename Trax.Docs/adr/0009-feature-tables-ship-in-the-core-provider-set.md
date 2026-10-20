@@ -10,7 +10,7 @@ status: accepted
 A higher-level feature package does not carry its own migrations. Its table DDL goes into
 the core `Trax.Effect.Data.<Provider>` migration set, alongside every other Trax table.
 `035_persisted_operations.sql`, `040_state_machine_snapshots.sql` and `047_runner_nonce.sql` are
-all in the core Postgres provider, and `Trax.Effect.StateMachine.Persistence` has no `Migrations` folder at
+all in the core Postgres provider, and `Trax.StateMachine.Persistence` has no `Migrations` folder at
 all.
 
 ## Status

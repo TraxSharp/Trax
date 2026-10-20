@@ -75,8 +75,8 @@ public sealed record ParcelResult;
 
 ```csharp compile=app file=Shopfront.Core/Machines/Parcel/ParcelMachine.cs
 using System.Text.Json.Nodes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Shopfront.Machines.Parcel;
 

@@ -2,7 +2,7 @@ import type { ProblemCode } from '../results';
 /**
  * The client half of "one set of operations, any machine".
  *
- * `Trax.Effect.StateMachine.Persistence` serves six generic mutations, when the host opts in to them —
+ * `Trax.StateMachine.Persistence` serves six generic mutations, when the host opts in to them —
  * `startSnapshot`, `saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot`, `discardSnapshot` —
  * under `dispatch { stateMachine { … } }`, and every one carries a `machine` discriminator the server
  * resolves in its registry. There is no per-machine

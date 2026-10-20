@@ -10,8 +10,8 @@ using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.EffectRegistry;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Tests;
 

@@ -38,8 +38,8 @@
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
-    <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
-    <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine/Trax.StateMachine.csproj" />
+    <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
   </ItemGroup>
 

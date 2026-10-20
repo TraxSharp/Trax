@@ -5,9 +5,9 @@ type: how-to
 area: machines
 nav_order: 3
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Invokes.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokedTrainLauncher.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/InvokesStartupValidator.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Invokes.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokedTrainLauncher.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/InvokesStartupValidator.cs
 ---
 
 # Invoke a train from a state
@@ -42,9 +42,9 @@ context the state was entered with. Every invoking state says where each outcome
 
 ```csharp compile=ingest
 using System.Text.Json.Nodes;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
-using static Trax.Effect.StateMachine.Rules;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
+using static Trax.StateMachine.Rules;
 
 public enum Stage
 {
@@ -151,7 +151,7 @@ The host that registers the machine needs Postgres or SQLite (InMemory has no tr
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 
 builder.Services.AddTrax(trax =>
@@ -217,7 +217,7 @@ instance's invoke token, however many hosts deliver it. To change how often the 
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 
 builder.Services.AddTrax(trax =>

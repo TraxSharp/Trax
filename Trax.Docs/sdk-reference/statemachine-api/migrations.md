@@ -6,12 +6,12 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 6
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Fluent.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/SnapshotMachine.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/MachineDefinition.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Fluent.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/SnapshotMachine.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/MachineDefinition.cs
 ---
 
 # Migrations

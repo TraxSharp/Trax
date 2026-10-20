@@ -5,7 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shopfront.Auth;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Shopfront.Tests.IntegrationTests;
 

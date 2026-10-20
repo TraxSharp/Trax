@@ -15,7 +15,7 @@
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
-    <ProjectReference Include="../../../../Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />

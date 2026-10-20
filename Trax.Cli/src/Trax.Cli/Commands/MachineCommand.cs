@@ -102,7 +102,7 @@ internal static class MachineCommand
     /// </summary>
     internal static string NewNextSteps()
     {
-        var version = typeof(Trax.Effect.StateMachine.Persistence.IMachine)
+        var version = typeof(Trax.StateMachine.Persistence.IMachine)
             .Assembly.GetCustomAttributes(
                 typeof(System.Reflection.AssemblyInformationalVersionAttribute),
                 false
@@ -114,9 +114,9 @@ internal static class MachineCommand
         return string.Join(
             Environment.NewLine,
             "Next steps:",
-            "  1. The machine derives from Machine<TState, TTrigger> in Trax.Effect.StateMachine.Persistence. In the",
+            "  1. The machine derives from Machine<TState, TTrigger> in Trax.StateMachine.Persistence. In the",
             "     project that holds this file, reference the version this trax is built against:",
-            $"       dotnet add package Trax.Effect.StateMachine.Persistence{versionFlag}",
+            $"       dotnet add package Trax.StateMachine.Persistence{versionFlag}",
             "  2. Edit the states, triggers and context, then build the project.",
             "  3. Export the IR from the built assembly:",
             "       trax machine generate --assembly <path to the built .dll> --ir-out <dir>",

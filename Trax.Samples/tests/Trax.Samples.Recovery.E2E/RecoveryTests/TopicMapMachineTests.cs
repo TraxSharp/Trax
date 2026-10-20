@@ -3,11 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.Samples.Recovery.Machines;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 
@@ -283,7 +283,7 @@ public class TopicMapMachineTests : RecoveryTestFixture
                 .BeOfType<AdvanceOutcome.Rejected>()
                 .Which.Reason.Should()
                 .Be(
-                    Trax.Effect.StateMachine.RefusalCode.TimerBound,
+                    Trax.StateMachine.RefusalCode.TimerBound,
                     "only the server fires a timer, when it is due (Trax.Docs/adr/0048)"
                 );
 

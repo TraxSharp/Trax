@@ -208,4 +208,4 @@ An EF entity marked `[TraxQueryModel]` (in `Trax.Effect.Attributes`), which `Add
 
 *Roughly:* a long-lived record that moves between named states.
 
-A machine deriving `Machine<TState, TTrigger>` in `Trax.Effect.StateMachine.Persistence`: states, triggers and a context record, stored as a language-neutral snapshot that the C# engine and its TypeScript twin both read. See [State Machines](/docs/statemachine).
+A machine deriving `Machine<TState, TTrigger>` in `Trax.StateMachine.Persistence`: states, triggers and a context record, stored as a language-neutral snapshot that the C# engine and its TypeScript twin both read. See [State Machines](/docs/statemachine).

@@ -36,7 +36,6 @@ using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Recovery;
 using Trax.Samples.Recovery.Api;
@@ -49,6 +48,7 @@ using Trax.Samples.Recovery.Model;
 using Trax.Samples.Recovery.Orders;
 using Trax.Samples.Recovery.Records;
 using Trax.Scheduler.Extensions;
+using Trax.StateMachine.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 

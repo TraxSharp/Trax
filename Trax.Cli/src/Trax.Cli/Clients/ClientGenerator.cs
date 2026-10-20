@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 using GraphQLParser;
 using GraphQLParser.AST;
 using Trax.Cli.Machines;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
 

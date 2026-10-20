@@ -10,9 +10,9 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Configuration.ClientExport;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.PersistedOperations.Services;
 

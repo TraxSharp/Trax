@@ -17,7 +17,6 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
@@ -27,6 +26,7 @@ using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrustedExecution;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Mediator.Services.TrainExecution;
 

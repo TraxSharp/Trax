@@ -34,7 +34,7 @@ public static class PartitionMachines
     /// <summary>The instance for one partition, or null.</summary>
     public static async Task<SnapshotDraft?> OfAsync(string source, string month)
     {
-        var id = Effect.StateMachine.Persistence.MachineInstanceId.For(
+        var id = Trax.StateMachine.Persistence.MachineInstanceId.For(
             SourcePartitionMachine.MachineId,
             SourcePartitionMachine.KeyFor(source, month)
         );

@@ -344,7 +344,7 @@ trax machine check --assembly ./bin/MyApp.dll \
 
 Scaffolds one declarative C# file, `<Name>Machine.cs`: the state and trigger enums, a context record, a
 guarded transition, and the differential wiring, ready for `trax machine generate`. The machine derives from
-`Machine<TState, TTrigger>` in `Trax.Effect.StateMachine.Persistence`, so the project holding the file needs
+`Machine<TState, TTrigger>` in `Trax.StateMachine.Persistence`, so the project holding the file needs
 that package, at the version the CLI prints (the one it is built against). `generate` then reads the built
 assembly, not the source.
 

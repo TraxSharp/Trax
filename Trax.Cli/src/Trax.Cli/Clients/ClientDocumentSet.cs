@@ -3,7 +3,7 @@ using System.Text;
 using GraphQLParser;
 using GraphQLParser.AST;
 using GraphQLParser.Visitors;
-using Trax.Effect.StateMachine;
+using Trax.StateMachine;
 
 namespace Trax.Cli.Clients;
 

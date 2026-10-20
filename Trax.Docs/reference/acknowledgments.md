@@ -16,7 +16,7 @@ packages and the .NET shared framework: `Trax.Api`, `Trax.Api.Auth`, `Trax.Api.A
 `Trax.Api.GraphQL.Audit`, `Trax.Api.GraphQL.Client.Typed`, `Trax.Effect.Broadcaster.SignalR`,
 `Trax.Effect.Decisions.SystemOne`, `Trax.Effect.JunctionProvider.Logging`,
 `Trax.Effect.JunctionProvider.Progress`, `Trax.Effect.Provider.Parameter`,
-`Trax.Effect.StateMachine`, `Trax.Effect.StateMachine.Testing` and `Trax.Samples.Templates`.
+`Trax.StateMachine`, `Trax.StateMachine.Testing` and `Trax.Samples.Templates`.
 
 
 ## Trax.Core
@@ -98,7 +98,7 @@ packages and the .NET shared framework: `Trax.Api`, `Trax.Api.Auth`, `Trax.Api.A
 |---|---|---|
 | [RabbitMQ.Client](https://github.com/rabbitmq/rabbitmq-dotnet-client) | Apache 2.0 or MPL 2.0 | RabbitMQ client for cross-process lifecycle events |
 
-## Trax.Effect.StateMachine.Persistence
+## Trax.StateMachine.Persistence
 
 | Package | Licence | Used for |
 |---|---|---|

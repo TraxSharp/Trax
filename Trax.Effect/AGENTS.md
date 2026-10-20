@@ -94,7 +94,7 @@ carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A
 unclassified until you choose, and the build says so. Opting out is a normal answer; a reason
 that reads as a deferral is not.
 
-`tests/Trax.Effect.StateMachine.Persistence.Integration/MigrationSchemaTests.cs` is the
+`tests/Trax.StateMachine.Persistence.Integration/MigrationSchemaTests.cs` is the
 model-versus-DDL drift guard for the state-machine tables, and `EveryTableIsModelledTests` (Postgres)
 with `SqliteEveryTableIsModelledTests` is the one for the data context: every migrated table is
 mapped, and every mapped column exists (`0036`). The Postgres ones need a live Postgres. `docker compose up -d` provides one.
@@ -109,7 +109,7 @@ entity holding per-user data is filtered through the principal and exposed only 
 run all five without writing a test body. `TraxInvariants.cs` beside them checks a database once
 every host has stopped (no run in progress, no effect claim left without a receipt, no dispatched
 queue entry without its run); `CheckTraxInvariantsAttribute` runs it after every test in
-`Trax.Effect.Tests.Integration` and `Trax.Effect.StateMachine.Persistence.Integration`, and a test
+`Trax.Effect.Tests.Integration` and `Trax.StateMachine.Persistence.Integration`, and a test
 that leaves such a row on purpose says why with `[LeavesStuckRuns]`. `tests/Trax.Effect.Data.Testing.Tests/` is their
 own suite, and `DomainDataLayerGuardFixtureSelfTest` there subclasses the fixture the way a
 consumer would. Changing either file changes what every consumer enforces, so treat

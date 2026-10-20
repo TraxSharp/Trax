@@ -28,7 +28,11 @@ public class MachineGenerateFromPackedToolTests
             );
         if (
             !Directory.Exists(
-                Path.Combine(RepoFolder(Path.Combine("Trax.StateMachine", "ts")), "node_modules", "esbuild")
+                Path.Combine(
+                    RepoFolder(Path.Combine("Trax.StateMachine", "ts")),
+                    "node_modules",
+                    "esbuild"
+                )
             )
         )
             NodePrerequisite.Missing(
@@ -758,7 +762,7 @@ public class MachineGenerateFromPackedToolTests
     {
         File.WriteAllText(
             Path.Combine(work, "manifest.json"),
-            Trax.Effect.StateMachine.ClientManifest.Write(Fakes.ClientManifests.Sample())
+            Trax.StateMachine.ClientManifest.Write(Fakes.ClientManifests.Sample())
         );
         // The page's own document of the train, from which its function is generated.
         Directory.CreateDirectory(Path.Combine(work, "documents"));

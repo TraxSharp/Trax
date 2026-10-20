@@ -6,11 +6,11 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 9
-package: Trax.Effect.StateMachine
-namespace: Trax.Effect.StateMachine
+package: Trax.StateMachine
+namespace: Trax.StateMachine
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/RefusalCode.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine/Results.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/RefusalCode.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine/Results.cs
 ---
 
 # Result codes

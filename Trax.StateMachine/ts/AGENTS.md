@@ -1,6 +1,6 @@
 # Trax.Api.StateMachine
 
-`@traxsharp/state-machine` on npm: the TypeScript twin of `Trax.Effect.StateMachine`, the client a page drives a
+`@traxsharp/state-machine` on npm: the TypeScript twin of `Trax.StateMachine`, the client a page drives a
 served machine through, and the generators `trax machine generate` runs. It is its own npm project, not a .NET
 folder, and releases with every Trax release at the same version (`Trax.Docs/adr/0042`).
 

@@ -17,7 +17,7 @@ source:
 
 # TypeScript package
 
-`@traxsharp/state-machine` is the TypeScript twin of `Trax.Effect.StateMachine`, published from `Trax.StateMachine/ts`.
+`@traxsharp/state-machine` is the TypeScript twin of `Trax.StateMachine`, published from `Trax.StateMachine/ts`.
 Its exports are pinned by a committed baseline (`src/exports.test.ts`).
 
 ```bash

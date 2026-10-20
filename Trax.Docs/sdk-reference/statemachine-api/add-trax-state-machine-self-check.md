@@ -6,11 +6,11 @@ area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 12
-package: Trax.Effect.StateMachine.Persistence
-namespace: Trax.Effect.StateMachine.Persistence
+package: Trax.StateMachine.Persistence
+namespace: Trax.StateMachine.Persistence
 source:
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/StateMachineSelfCheckHealthCheck.cs
-  - Trax.StateMachine/dotnet/src/Trax.Effect.StateMachine.Persistence/SnapshotSelfCheck.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/StateMachineSelfCheckHealthCheck.cs
+  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/SnapshotSelfCheck.cs
 ---
 
 # AddTraxStateMachineSelfCheck
@@ -22,7 +22,7 @@ with every diff when a machine no longer reproduces it.
 ## Signature
 
 ```csharp fragment
-namespace Trax.Effect.StateMachine.Persistence;
+namespace Trax.StateMachine.Persistence;
 
 public static class StateMachineHealthCheckExtensions
 {

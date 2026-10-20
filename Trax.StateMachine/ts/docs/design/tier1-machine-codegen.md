@@ -323,7 +323,7 @@ commit and checks the generated artifacts into its own tree.** Concretely, in th
 - The generated **twin** (`<machine>.contexts.g.ts` + `<machine>.machine.g.ts`) lives next to the frontend
   that consumes it (`apps/web/src/app/<machine>/`). The **IR** and the differential **corpus** live in a
   shared per-machine directory (`libs/shared/statemachine/machines/<machine>/`). All of it is committed.
-- The C# side consumes Trax by NuGet package (`Trax.Effect.StateMachine`), pinned to an exact version.
+- The C# side consumes Trax by NuGet package (`Trax.StateMachine`), pinned to an exact version.
 
 Why vendoring rather than a published npm package: the engine and the machines co-evolve tightly, the
 frontend needs to build against an arbitrary engine `src` (not a fixed package layout), and checking the

@@ -1,9 +1,9 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Effect.StateMachine;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.StateMachine.E2E.Fixtures;
 using Trax.Samples.StateMachine.E2E.Utilities;
+using Trax.StateMachine;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.StateMachine.E2E.Tests;
 

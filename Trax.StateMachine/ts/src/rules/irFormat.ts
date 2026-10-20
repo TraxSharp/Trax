@@ -6,7 +6,7 @@
 // The package's version is no measure of this: every Trax release bumps it, most without touching the IR. The format
 // changes only when the contract does. Bump irFormatVersion when the IR gains something an engine reading the
 // previous format would misread or ignore (a new section, rule or reduction, a changed meaning), together with
-// IrExporter.FormatVersion in Trax.Effect.StateMachine, which IrFormatParityTests holds equal to it. Raise
+// IrExporter.FormatVersion in Trax.StateMachine, which IrFormatParityTests holds equal to it. Raise
 // oldestIrFormatRead only when this engine stops reading an older format.
 
 /** The IR format this engine reads and its generators write. */

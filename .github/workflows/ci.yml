@@ -809,7 +809,7 @@ jobs:
             --tools-dir "$RUNNER_TEMP/engine" --documents 'src/graphql/*.graphql' --check) \
             || { echo "::error::The StateMachine sample's generated client is out of date. Regenerate it with the commands at the top of $api/Program.cs and commit the result."; exit 1; }
 
-  # The TypeScript twin of Trax.Effect.StateMachine. Its machines/ corpus is also read by the
+  # The TypeScript twin of Trax.StateMachine. Its machines/ corpus is also read by the
   # Trax.Effect conformance tests and the Trax.Cli byte-parity tests, which is why those
   # folders list it upstream.
   state-machine:

@@ -27,8 +27,8 @@ using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.Tests.AuthE2E;
 

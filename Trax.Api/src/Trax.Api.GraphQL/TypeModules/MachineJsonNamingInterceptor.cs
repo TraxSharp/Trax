@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using HotChocolate.Configuration;
 using HotChocolate.Types.Descriptors.Configurations;
-using Trax.Effect.StateMachine.Persistence;
+using Trax.StateMachine.Persistence;
 
 namespace Trax.Api.GraphQL.TypeModules;
 
