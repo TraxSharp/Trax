@@ -16,7 +16,7 @@ it links to the page that has it rather than repeating it.
 
 | Kind | What it is for | In Trax |
 |---|---|---|
-| Tutorial | Learning by doing. One path from an empty folder to something that runs, with a visible result at each step. | [Getting Started](/docs/getting-started) builds a server with a train, a schedule, the dashboard and a GraphQL API. |
+| Tutorial | Learning by doing. One path from an empty folder to something that runs, with a visible result at each step. | [Getting Started](/docs/getting-started) builds a server with a train, a schedule, the operations console and a GraphQL API. |
 | How-to guide | Getting a specific job done when you already know what you want. Steps, no teaching. | Setting up the scheduler, resolving a dead letter, securing a GraphQL host, testing a train. |
 | Reference | Looking something up. Describes what exists and what it does, in a consistent shape, without advice. | Every public type and method under [SDK Reference](/docs/sdk-reference), the CLI, the packages, the glossary, the schema migrations. |
 | Explanation | Understanding. Why a part of Trax works the way it does, what it trades off, how its pieces fit. | How a train runs its chain, what an effect is, how the scheduler decides when a manifest runs. |

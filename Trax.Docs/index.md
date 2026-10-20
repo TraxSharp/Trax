@@ -16,25 +16,33 @@ a worker in another process or in AWS Lambda, and every run leaves a record of w
 it ended, and which junction failed with what. Trax is MIT licensed and targets .NET 10. The
 [Glossary](/docs/reference/glossary) defines the names the docs use.
 
+Everything in Trax is a way to use a train. The database records its runs, the mediator, the
+scheduler and workers decide when and where it runs, the GraphQL API and the operations console let
+a client or an operator call it and watch it, and a state machine walks a user through a longer
+process and runs trains along the way. [What Trax does](/docs/what-trax-does) maps every capability
+to the chapter that teaches it and the page that explains it.
+
 ## Start here
 
 New to Trax, read these in order. Everything else on this site is for when you need it.
 
-1. [Quick start](/docs/getting-started): one app from an empty folder, in-process to GraphQL.
-2. [Trains and junctions](/docs/core/trains-and-junctions): what a train is and how it runs.
-3. [Memory](/docs/core/memory): how a junction gets its input.
-4. [How a chain runs](/docs/core/building-chains): the steps a train can declare.
-5. [Handle errors in trains](/docs/cross-cutting/handle-errors-in-trains): what a failing junction
+1. [What Trax does](/docs/what-trax-does): every capability on one page, and how they fit.
+2. [Quick start](/docs/getting-started): one app from an empty folder, in-process to GraphQL.
+3. [Trains and junctions](/docs/core/trains-and-junctions): what a train is and how it runs.
+4. [Memory](/docs/core/memory): how a junction gets its input.
+5. [How a chain runs](/docs/core/building-chains): the steps a train can declare.
+6. [Handle errors in trains](/docs/cross-cutting/handle-errors-in-trains): what a failing junction
    does to the rest.
-6. [Test a train](/docs/cross-cutting/test-a-train): with in-memory effects, no database.
-7. [Trax.Effect](/docs/effect): what gets recorded for each run, and where.
-8. [Mediator](/docs/mediator): running a train by its input type.
-9. [Schedule a train](/docs/scheduler/setup): cron, intervals and one-off runs.
-10. [The GraphQL API](/docs/api): serving trains to a client.
-11. [Authorization rules](/docs/authorization): nothing is served until a rule allows it.
-12. [Operations console](/docs/dashboard): finding and requeuing runs.
-13. [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim.
-14. [Packages](/docs/reference/packages): which ones to install.
+7. [Test a train](/docs/cross-cutting/test-a-train): with in-memory effects, no database.
+8. [Recording runs](/docs/effect): what gets recorded for each run, and where.
+9. [Calling a train by its input](/docs/mediator): how every caller starts a train.
+10. [Schedule a train](/docs/scheduler/setup): cron, intervals and one-off runs.
+11. [The GraphQL API](/docs/api): serving trains to a client.
+12. [Authorization rules](/docs/security/authorization-rules): nothing is served until a rule allows it.
+13. [Operations console](/docs/dashboard): finding and requeuing runs.
+14. [Train or machine](/docs/statemachine/train-or-machine): when a process needs a state machine.
+15. [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim.
+16. [Packages](/docs/reference/packages): which ones to install.
 
 ## Where to go
 
@@ -45,7 +53,7 @@ New to Trax, read these in order. Everything else on this site is for when you n
 - [The Trax book](/docs/book): build one shop from an empty folder to a deployed hub, workers and a
   React storefront, one feature per chapter.
 - [Getting Started](/docs/getting-started): build a server with one train, record its runs in
-  Postgres, schedule it, open the dashboard and call it over GraphQL.
+  Postgres, schedule it, open the operations console and call it over GraphQL.
 
 ### Do
 
@@ -53,7 +61,7 @@ New to Trax, read these in order. Everything else on this site is for when you n
 - [Run a job once, later](/docs/scheduler/delayed-jobs): delayed and one-off runs.
 - [Handle dead letters](/docs/scheduler/dead-letters-and-cleanup): retry or acknowledge runs that
   ran out of retries.
-- [Secure a GraphQL host](/docs/api-security): authentication, authorization and hardening, end to
+- [Secure a GraphQL host](/docs/security/secure-a-graphql-host): authentication, authorization and hardening, end to
   end.
 - [Add a domain data context](/docs/effect/effect-providers/domain-data-contexts): your own EF Core
   tables next to Trax's.
@@ -64,13 +72,27 @@ New to Trax, read these in order. Everything else on this site is for when you n
 
 ### Understand
 
-- [Core](/docs/core): trains, junctions, and how a chain runs.
-- [Effect](/docs/effect): what an effect is and how runs get recorded.
-- [Mediator](/docs/mediator): running a train by its input type, and nested trains.
+- [What Trax does](/docs/what-trax-does): every capability, with where to learn and read about it.
+- [Trains](/docs/core): trains, junctions, and how a chain runs.
+- [Decisions](/docs/core/decisions): a branch in a chain as a typed question a rule or a model answers.
+- [Checkpoints and branches](/docs/core/checkpoints-and-branches): steps side by side, and resuming a
+  failed run.
+- [Recording runs](/docs/effect): what an effect is and how runs get recorded.
+- [Calling a train by its input](/docs/mediator): the train bus, queued work and nested trains.
 - [Scheduling](/docs/scheduler): manifests, the work queue, and how jobs are dispatched.
+- [How retries work](/docs/scheduler/how-retries-work): backoff, dead letters and requeues.
+- [Choosing where trains run](/docs/scheduler/remote-execution): in the host, on worker
+  processes, over SQS or in Lambda.
+- [The GraphQL API](/docs/api): trains as queries and mutations, and query models.
+- [Persisted operations](/docs/api/persisted-operations): a server that runs only the documents you
+  registered.
+- [Operations console](/docs/dashboard): what an operator sees and can do.
 - [State Machines](/docs/statemachine): snapshots and definitions, the guarantees, and the matching
   C# and TypeScript runtimes.
-- [Authorization](/docs/authorization): where Trax checks who may run what.
+- [Train or machine](/docs/statemachine/train-or-machine): which one a piece of work needs.
+- [Authorization](/docs/security/authorization-rules): where Trax checks who may run what.
+- [Architecture guards](/docs/reference/architecture-guards): tests that keep an application in
+  the shape Trax expects.
 - [Deployment topologies](/docs/reference/deployment-topologies): the ways to split an application
   across processes, and the sample that runs each.
 - [Trax compared with Quartz.NET and Hangfire](/docs/reference/comparison): what each is for.
