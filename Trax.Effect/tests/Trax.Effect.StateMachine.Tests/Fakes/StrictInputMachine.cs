@@ -260,6 +260,11 @@ public static class StrictInputMachine
         // or an offset of at most fourteen hours.
         new("date-time Z", "at", "2026-10-12T10:00:00Z"),
         new("date-time fraction", "at", "2026-10-12T10:00:00.123Z"),
+        new(
+            "date-time seven fraction digits and an offset",
+            "at",
+            "2026-10-12T10:00:00.1234567+02:00"
+        ),
         new("date-time offset", "atOffset", "2026-10-12T10:00:00-14:00"),
         new("date-time offset too far", "atOffset", "2026-10-12T10:00:00+14:30"),
         new(
@@ -317,6 +322,7 @@ public static class StrictInputMachine
         new("date leap day of a common year", "day", "2026-02-29"),
         new("date leap day of a century", "day", "1900-02-29"),
         new("date leap day of a 400th year", "day", "2000-02-29"),
+        new("date year zero", "day", "0000-01-01"),
         new("date month 13", "day", "2026-13-01"),
         new("date with a time", "day", "2026-10-12T00:00:00"),
         // A time is HH:mm:ss with at most seven fraction digits.
@@ -359,12 +365,16 @@ public static class StrictInputMachine
         new("uri one-letter scheme", "link", "c:foo"),
         new("uri unclosed IPv6 host", "link", "http://[::1"),
         new("uri IPv6 host and port", "link", "http://[::1]:8080/a"),
+        new("uri IPv6 host with two double colons", "link", "http://[1::2::3]/"),
+        new("uri IPv4-mapped IPv6 host", "link", "http://[::ffff:1.2.3.4]/"),
+        new("uri dotted host with an octet past 255", "link", "http://1.2.3.999/"),
         new("uri port past 65535", "link", "http://a:99999/"),
         new("uri port 65535", "link", "http://a:65535/a?b=c#d"),
         new("uri empty host", "link", "http:///a"),
         new("uri host with an empty label", "link", "http://a..b/"),
         new("uri with a user", "link", "http://u@a/", Stricter: "the grammar takes no user"),
         new("uri file", "link", "file:///tmp/a"),
+        new("uri file with a UNC path", "link", "file:////share/a"),
         new("uri file with a drive", "link", "file:///a:x"),
         new("uri mailto", "link", "mailto:a.b@example.com"),
         new(

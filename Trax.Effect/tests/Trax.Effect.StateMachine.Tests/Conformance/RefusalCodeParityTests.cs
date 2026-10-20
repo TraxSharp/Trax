@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Effect.StateMachine.Tests.Helpers;
@@ -10,9 +10,10 @@ namespace Trax.Effect.StateMachine.Tests.Conformance;
 /// <summary>
 /// A refusal code is one closed set, <see cref="RefusalCode"/>, that both engines, the GraphQL schema and the
 /// TypeScript package hold. A code that is a free string somewhere reaches no client type, so every public member
-/// that carries one is typed by the enum, and the TypeScript package's list equals it member for member.
+/// that carries one is typed by the enum, and the enum equals <c>conformance/refusal-codes.json</c> member for
+/// member, which the TypeScript package and every other engine check themselves against too.
 /// </summary>
-public partial class RefusalCodeParityTests
+public class RefusalCodeParityTests
 {
     [Test]
     public void Every_public_code_or_reason_is_a_RefusalCode()
@@ -72,36 +73,22 @@ public partial class RefusalCodeParityTests
     }
 
     [Test]
-    public void The_TypeScript_package_exports_the_same_codes()
+    public void The_shared_registry_lists_the_same_codes_in_the_same_order()
     {
-        var resultsTs = Path.Combine(
-            Directory.GetParent(FixturePaths.MachinesRoot)!.FullName,
-            "src",
-            "results.ts"
-        );
-        var block = RefusalCodeBlock().Match(File.ReadAllText(resultsTs));
-        block
-            .Success.Should()
-            .BeTrue("results.ts declares `export const RefusalCode = { ... } as const;`");
-
-        var ts = TsMember()
-            .Matches(block.Groups["body"].Value)
-            .Select(m => (Name: m.Groups["name"].Value, Wire: m.Groups["wire"].Value))
+        var registry = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(FixturePaths.ConformanceRoot, "refusal-codes.json"))
+        )!["codes"]!
+            .AsArray()
+            .Select(c =>
+                (Name: c!["name"]!.GetValue<string>(), Wire: c["code"]!.GetValue<string>())
+            )
             .ToList();
 
-        ts.Should()
+        registry
+            .Should()
             .Equal(
                 RefusalCodes.All.Select(c => (Name: c.ToString(), Wire: c.ToWire())),
-                "the TypeScript RefusalCode and the C# enum are one set, in one order"
+                "conformance/refusal-codes.json is the one set every engine and client checks itself against"
             );
     }
-
-    [GeneratedRegex(
-        @"export const RefusalCode = \{(?<body>.*?)\} as const;",
-        RegexOptions.Singleline
-    )]
-    private static partial Regex RefusalCodeBlock();
-
-    [GeneratedRegex(@"(?<name>[A-Z][A-Za-z]*): ['""](?<wire>[A-Z_]+)['""]")]
-    private static partial Regex TsMember();
 }

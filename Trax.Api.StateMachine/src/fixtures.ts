@@ -64,3 +64,6 @@ export function rehydrateInput(fixture: Record<string, unknown>): string {
   if (typeof fixture.raw === "string") return fixture.raw;
   return JSON.stringify(fixture.json);
 }
+/** A file of the engine-neutral conformance kit, `conformance/` beside `machines/`. */
+export const conformanceFile = (...parts: string[]): string =>
+  path.join(path.dirname(machinesRoot()), "conformance", ...parts);

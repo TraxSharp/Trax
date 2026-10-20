@@ -1,14 +1,15 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Effect.StateMachine.Tests.Fakes;
+using Trax.Effect.StateMachine.Tests.Helpers;
 
 namespace Trax.Effect.StateMachine.Tests.UnitTests;
 
 /// <summary>
 /// The canonical wire must match RFC 8785 (JCS) byte-for-byte, which for numbers and strings means matching
-/// ECMAScript <c>JSON.stringify</c> exactly, since that is what the TypeScript twin emits. The expected
-/// values here are the ECMAScript reference outputs (produced by <c>JSON.stringify</c>); a divergence is a
-/// cross-runtime parity break, the precise failure the differential exists to catch.
+/// ECMAScript <c>JSON.stringify</c> exactly, since that is what the TypeScript twin emits. The vectors are
+/// <c>conformance/canonical-wire.json</c>, which every engine reads; a divergence is a cross-runtime parity break,
+/// the precise failure the differential exists to catch.
 /// </summary>
 public class CanonicalizationConformanceTests
 {
@@ -26,116 +27,40 @@ public class CanonicalizationConformanceTests
     private static string Envelope(string context) =>
         "{\"machine\":\"m\",\"version\":1,\"state\":\"S\",\"context\":" + context + "}";
 
-    [TestCase(0.1, "0.1")]
-    [TestCase(1e21, "1e+21")]
-    [TestCase(1e20, "100000000000000000000")]
-    [TestCase(1e-7, "1e-7")]
-    [TestCase(1e-6, "0.000001")]
-    [TestCase(5e-324, "5e-324")]
-    [TestCase(1.7976931348623157e308, "1.7976931348623157e+308")]
-    [TestCase(1.2345678901234568e20, "123456789012345680000")]
-    [TestCase(100.0, "100")]
-    [TestCase(-1.5, "-1.5")]
-    [TestCase(2.5, "2.5")]
-    [TestCase(1.0, "1")]
-    [TestCase(-0.0, "0")]
-    public void Serialize_formats_numbers_per_ECMAScript(double value, string expected)
+    public static IEnumerable<TestCaseData> Vectors()
     {
-        Wire(new JsonObject { ["n"] = value }).Should().Be(Envelope("{\"n\":" + expected + "}"));
-    }
-
-    [TestCase("café", "café")]
-    [TestCase("a/b", "a/b")]
-    [TestCase("q\"x", "q\\\"x")]
-    [TestCase("b\\s", "b\\\\s")]
-    public void Serialize_escapes_strings_like_JSON_stringify(string value, string expectedInner)
-    {
-        Wire(new JsonObject { ["s"] = value })
-            .Should()
-            .Be(Envelope("{\"s\":\"" + expectedInner + "\"}"));
+        var file = Path.Combine(FixturePaths.ConformanceRoot, "canonical-wire.json");
+        foreach (var node in JsonNode.Parse(File.ReadAllText(file))!["cases"]!.AsArray())
+        {
+            var vector = (JsonObject)node!;
+            yield return new TestCaseData(vector).SetArgDisplayNames(
+                vector["name"]!.GetValue<string>()
+            );
+        }
     }
 
     [Test]
-    public void Serialize_uses_short_escapes_and_lowercase_hex_for_controls()
+    public void The_shared_vectors_are_there() => Vectors().Should().HaveCountGreaterThan(20);
+
+    [TestCaseSource(nameof(Vectors))]
+    public void Serialize_writes_the_shared_vector(JsonObject vector)
     {
-        // Input is U+0001, tab, newline, U+001F. Expected: short escapes where they exist, else lowercase
-        // hex. The backslash is built from its code point so the literal escape text is not in the source.
-        var input = new string([(char)0x01, (char)0x09, (char)0x0A, (char)0x1F]);
-        var bs = (char)0x5C;
-        var expectedInner = $"{bs}u0001{bs}t{bs}n{bs}u001f";
-        Wire(new JsonObject { ["s"] = input })
-            .Should()
-            .Be(Envelope("{\"s\":\"" + expectedInner + "\"}"));
+        Wire(ContextOf(vector)).Should().Be(Envelope(vector["wire"]!.GetValue<string>()));
     }
 
-    [Test]
-    public void Serialize_uses_the_backspace_formfeed_and_carriage_return_short_escapes()
+    // A lone surrogate has no UTF-8 encoding and System.Text.Json refuses to read one, so the file gives those
+    // strings as UTF-16 code units.
+    private static JsonObject ContextOf(JsonObject vector)
     {
-        // U+0008, U+000C, U+000D have JSON.stringify short escapes \b \f \r (the control escapes the test
-        // above does not exercise). Backslash built from its code point so the escape text is not in source.
-        var input = new string([(char)0x08, (char)0x0C, (char)0x0D]);
-        var bs = (char)0x5C;
-        var expectedInner = $"{bs}b{bs}f{bs}r";
-        Wire(new JsonObject { ["s"] = input })
-            .Should()
-            .Be(Envelope("{\"s\":\"" + expectedInner + "\"}"));
+        if (vector["context"] is { } context)
+            return (JsonObject)JsonNode.Parse(context.GetValue<string>())!;
+        if (vector["stringUnits"] is JsonArray stringUnits)
+            return new JsonObject { ["s"] = FromUnits(stringUnits) };
+        if (vector["keyUnits"] is JsonArray keyUnits)
+            return new JsonObject { [FromUnits(keyUnits)] = 1 };
+        throw new InvalidOperationException($"{vector["name"]}: no context");
     }
 
-    [Test]
-    public void Serialize_keeps_astral_characters_literal()
-    {
-        Wire(new JsonObject { ["s"] = "😀" }).Should().Be(Envelope("{\"s\":\"😀\"}"));
-    }
-
-    // A lone surrogate has no UTF-8 encoding, so JSON.stringify (ES2019) writes it as a lowercase \uxxxx
-    // escape, while a well-formed pair stays literal. The inputs are code units, because a C# string literal
-    // holding a lone surrogate is easy to mangle in an editor.
-    [TestCase(new[] { 0xD800 }, "\\ud800")]
-    [TestCase(new[] { 0xDFFF }, "\\udfff")]
-    [TestCase(new[] { 0x61, 0xD83D }, "a\\ud83d")]
-    [TestCase(new[] { 0xDE00, 0xD83D }, "\\ude00\\ud83d")]
-    [TestCase(new[] { 0xD83D, 0xD83D, 0xDE00 }, "\\ud83d😀")]
-    public void Serialize_escapes_lone_surrogates_like_JSON_stringify(
-        int[] codeUnits,
-        string expectedInner
-    )
-    {
-        var input = new string(codeUnits.Select(u => (char)u).ToArray());
-        Wire(new JsonObject { ["s"] = input })
-            .Should()
-            .Be(Envelope("{\"s\":\"" + expectedInner + "\"}"));
-    }
-
-    [Test]
-    public void Serialize_escapes_a_lone_surrogate_in_a_key()
-    {
-        Wire(new JsonObject { [new string((char)0xDBFF, 1)] = 1 })
-            .Should()
-            .Be(Envelope("{\"\\udbff\":1}"));
-    }
-
-    [Test]
-    public void Serialize_orders_integer_like_keys_by_UTF16_code_unit()
-    {
-        // RFC 8785 sorts every key by code unit. A JavaScript object would enumerate "2" before "10", so the
-        // TypeScript twin must not rely on insertion into a plain object to produce this order.
-        Wire(
-                new JsonObject
-                {
-                    ["b"] = 1,
-                    ["10"] = "x",
-                    ["2"] = "y",
-                }
-            )
-            .Should()
-            .Be(Envelope("{\"10\":\"x\",\"2\":\"y\",\"b\":1}"));
-    }
-
-    [Test]
-    public void Serialize_keeps_a_key_named___proto__()
-    {
-        Wire(new JsonObject { ["__proto__"] = 1, ["a"] = 2 })
-            .Should()
-            .Be(Envelope("{\"__proto__\":1,\"a\":2}"));
-    }
+    private static string FromUnits(JsonArray units) =>
+        new(units.Select(u => (char)u!.GetValue<int>()).ToArray());
 }

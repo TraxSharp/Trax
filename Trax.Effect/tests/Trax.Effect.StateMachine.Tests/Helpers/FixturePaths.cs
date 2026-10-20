@@ -26,6 +26,13 @@ public static class FixturePaths
     public static string IrFile(string machine) =>
         Path.Combine(MachinesRoot, machine, $"{machine}.ir.json");
 
+    /// <summary>
+    /// The engine-neutral conformance kit beside <c>machines/</c>: tables and cases any engine, in any language,
+    /// replays.
+    /// </summary>
+    public static string ConformanceRoot =>
+        Path.Combine(Directory.GetParent(MachinesRoot)!.FullName, "conformance");
+
     /// <summary>The shared migration golden for a machine: stored older-version snapshots and the exact
     /// canonical wire each must become after forward migration.</summary>
     public static string MigrationFile(string machine) =>

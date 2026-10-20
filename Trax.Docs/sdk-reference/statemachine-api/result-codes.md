@@ -25,7 +25,8 @@ snake case (`GUARD_FAILED`), the spelling GraphQL gives the enum: `RefusalCode.G
 `RefusalCode.GuardFailed` in TypeScript. `RefusalCodes.TryParse` also reads the kebab-case spelling the codes had
 before (`guard-failed`), so a request id an older node recorded still replays. `RefusalCodes.All` lists the members
 in order, and `RefusalCodeJsonConverter`, which the enum carries, writes and reads the wire spelling in
-`System.Text.Json`. `RefusalCodeParityTests` holds the C# and TypeScript sets equal.
+`System.Text.Json`. The set is also written as data, `Trax.Api.StateMachine/conformance/refusal-codes.json`, and
+every engine checks itself against that file, so the C# and TypeScript sets are equal member for member and in order.
 
 ## Members
 

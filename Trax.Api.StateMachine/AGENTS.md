@@ -16,6 +16,7 @@ This file is the entry point. It routes; it does not restate the rules.
 | `src/rules/generateTypes.ts` | `generateContextTypes` and `generateMachineFactory`, which turn an IR into a twin. |
 | `tools/` | The node entrypoints the `trax machine` commands shell out to (`generate-twin.mjs`, `generate-corpus.mjs`), and `bundle-cli.mjs`, which bundles them with the engine compiled in for Trax.Cli's package. |
 | `machines/` | The shared fixtures both engines drive: each machine's IR, its generated twin and its differential corpus. |
+| `conformance/` | Engine-neutral tables any engine replays: the canonical-wire vectors, the refusal-code registry, the strict-input cases (written from the CLR by the C# `StrictInputGoldenTests`). A vector goes here, not in one engine's tests. |
 | `docs/design/` | The design notes the codegen was built from. Historical: the published docs are the rule. |
 
 ## The rules, and where they are written
@@ -45,5 +46,5 @@ npm test          # vitest: conformance, totality, serialization, migration, cod
 npm run typecheck
 ```
 
-The Trax.Effect conformance tests and the Trax.Cli byte-parity tests read `machines/`, which is why CI lists this
-folder upstream of both.
+The Trax.Effect conformance tests read `machines/` and `conformance/`, and the Trax.Cli byte-parity tests read
+`machines/`, which is why CI lists this folder upstream of both.
