@@ -99,6 +99,17 @@ describe('build job', () => {
     assert.ok(indexOf(build, 'Install the API dashboard (locked, no install scripts)') < indexOf(build, 'Pack every package'));
   });
 
+  it('packs every folder solution and every suite marked pack, the C# state-machine engine among them', () => {
+    const run = step(build, 'Pack every package').run;
+    const program = run.match(/jq -r '([\s\S]*?)' \\/)[1];
+    const packages = join(dirname(workflowPath), '..', 'ci', 'packages.json');
+    const list = execFileSync('jq', ['-r', program, packages], { encoding: 'utf8' }).trim().split('\n');
+
+    assert.ok(list.includes('Trax.Effect/Trax.Effect.slnx'));
+    assert.ok(list.includes('Trax.StateMachine/dotnet/Trax.StateMachine.slnx'));
+    assert.equal(new Set(list).size, list.length);
+  });
+
   it('hands publish the packages and their digests', () => {
     assert.equal(build.outputs.digests, '${{ steps.digests.outputs.digests }}');
     assert.equal(build.outputs['npm-digests'], '${{ steps.npm-digests.outputs.digests }}');
