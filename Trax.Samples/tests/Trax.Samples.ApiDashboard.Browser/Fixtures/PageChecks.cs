@@ -119,6 +119,24 @@ public sealed class PageChecks
             $"the server pushes {field} with {string.Join(", ", containing)}"
         );
 
+    /// <summary>
+    /// Waits until the server is listening for the page's subscription, by calling <paramref name="probe"/> until the
+    /// page is pushed an event of <paramref name="field"/> holding every text given. The page sending its
+    /// <c>subscribe</c> frame (<see cref="SubscribedAsync"/>) does not show that: graphql-ws acknowledges no single
+    /// subscription, and an event published before the server has registered it reaches nobody.
+    /// </summary>
+    public async Task ListeningAsync(Func<Task> probe, string field, params string[] containing)
+    {
+        var pushed = PushedAsync(field, containing);
+        while (!pushed.IsCompleted)
+        {
+            await probe();
+            // allowed-delay: re-probe interval, bounded by PushedAsync's own timeout; WhenAny wakes on receipt.
+            await Task.WhenAny(pushed, Task.Delay(100));
+        }
+        await pushed;
+    }
+
     private static async Task<string> Bounded(Task<string> seen, string what)
     {
         try

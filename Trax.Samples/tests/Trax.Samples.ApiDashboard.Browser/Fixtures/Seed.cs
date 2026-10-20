@@ -11,6 +11,7 @@ using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.PersistedOperation;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
@@ -250,6 +251,41 @@ public sealed class Seed(ConsoleHost host) : IAsyncDisposable
         var run = await QueueAndWaitAsync<IReconcileAccountTrain>(key, TrainState.InProgress);
         return (run, () => Holds.Release(key));
     }
+
+    /// <summary>
+    /// Publishes a junction event for <paramref name="run"/> named <see cref="ProbeJunction"/>, through every
+    /// junction event handler the host registered, as a real step's would be. A page following the run receives it
+    /// once the server's subscription is live: see <see cref="PageChecks.ListeningAsync"/>.
+    /// </summary>
+    public async Task ProbeJunctionEventAsync<TTrain>(Metadata run)
+    {
+        var message = new TrainLifecycleEventMessage(
+            MetadataId: run.Id,
+            ExternalId: run.ExternalId,
+            TrainName: typeof(TTrain).FullName!,
+            TrainState: nameof(TrainState.InProgress),
+            Timestamp: DateTime.UtcNow,
+            FailureJunction: null,
+            FailureReason: null,
+            EventType: TrainLifecycleEventMessage.JunctionStartedEventType,
+            Executor: null,
+            Output: null
+        )
+        {
+            Junction = new JunctionEventPayload(
+                Position: 999,
+                Kind: JunctionRunKind.Junction,
+                Name: ProbeJunction,
+                State: JunctionRunState.InProgress,
+                StartedAt: DateTime.UtcNow
+            ),
+        };
+        foreach (var handler in host.Services.GetServices<IJunctionEventHandler>())
+            await handler.HandleAsync(message, CancellationToken.None);
+    }
+
+    /// <summary>The name of the step <see cref="ProbeJunctionEventAsync{TTrain}"/> publishes.</summary>
+    public const string ProbeJunction = "probe";
 
     /// <summary>
     /// A manifest that runs only when triggered, in <paramref name="group"/> when one is named: what Queue now,

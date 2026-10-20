@@ -109,6 +109,12 @@ public class RunActionsBrowserTests : ConsoleTest
         var page = new RunPage(Console, run.Id, nameof(IReconcileAccountTrain));
         await page.OpenAsync(Caller.Operator);
         await Checks.SubscribedAsync("OnJunctionEvent", $"\"metadataId\":{run.Id}");
+        await Checks.ListeningAsync(
+            () => Seed.ProbeJunctionEventAsync<IReconcileAccountTrain>(run),
+            "onJunctionEvent",
+            $"\"metadataId\":{run.Id}",
+            $"\"{Fixtures.Seed.ProbeJunction}\""
+        );
 
         release();
 
