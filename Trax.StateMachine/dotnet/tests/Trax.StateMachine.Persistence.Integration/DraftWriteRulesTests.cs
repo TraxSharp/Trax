@@ -99,14 +99,14 @@ public sealed class LedgerMachine : Machine<LedgerState, LedgerTrigger>
 /// refuses to create or move a draft into a committed state, to rewrite one there, or to overwrite a stored draft it
 /// cannot read.
 ///
-/// <para>Enforces <c>docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md</c>.</para>
 /// </summary>
-[Property("adr", "docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md")]
+[Property("adr", "docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md")]
 public class DraftWriteRulesTests
 {
     private const string Adr =
         "only the effect runner puts a draft into a committed state or an effect's target. See "
-        + "docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md";
+        + "docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md";
 
     private static ISnapshotDraftService Orders() =>
         new OrderMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims());

@@ -18,7 +18,7 @@ namespace Trax.Effect.Models.SnapshotTransition;
 ///
 /// EF Core mapping lives in <c>Trax.Effect.Data.Models.SnapshotTransition.PersistentSnapshotTransition</c>; the table
 /// ships in the core migration set (Postgres <c>087</c>, Sqlite <c>046</c>). See
-/// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+/// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
 /// </remarks>
 public class SnapshotTransition
 {

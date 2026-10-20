@@ -9,7 +9,7 @@
 > Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
 > run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
-Trax.Effect adds run records, dependency injection and storage providers to Trax trains, plus the portable state-machine engine. Its `ServiceTrain` runs the same chain as a [Trax.Core](https://github.com/TraxSharp/Trax/tree/main/Trax.Core) `Train`, resolves junctions from DI, and writes a metadata row for every run. Trax.Mediator, Trax.Scheduler and the layers above it all run trains through it.
+Trax.Effect adds run records, dependency injection and storage providers to Trax trains. Its `ServiceTrain` runs the same chain as a [Trax.Core](https://github.com/TraxSharp/Trax/tree/main/Trax.Core) `Train`, resolves junctions from DI, and writes a metadata row for every run. Trax.Mediator, Trax.Scheduler and the layers above it all run trains through it.
 
 ## Install
 
@@ -60,7 +60,8 @@ Trax is split into layers, one folder of this repository each. Take the ones you
 | Folder | What it adds |
 |---|---|
 | [Trax.Core](https://github.com/TraxSharp/Trax/tree/main/Trax.Core) | Trains, junctions and the chain, with no database and no DI container |
-| **[Trax.Effect](https://github.com/TraxSharp/Trax/tree/main/Trax.Effect)** | **A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine** |
+| **[Trax.Effect](https://github.com/TraxSharp/Trax/tree/main/Trax.Effect)** | **A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers** |
+| [Trax.StateMachine](https://github.com/TraxSharp/Trax/tree/main/Trax.StateMachine) | State machines a page drives and the server applies, in C# and TypeScript, held to one conformance kit |
 | [Trax.Mediator](https://github.com/TraxSharp/Trax/tree/main/Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
 | [Trax.Scheduler](https://github.com/TraxSharp/Trax/tree/main/Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
 | [Trax.Api](https://github.com/TraxSharp/Trax/tree/main/Trax.Api) | GraphQL generated from your trains, with authentication, audit and typed clients, and the operations console your host serves |

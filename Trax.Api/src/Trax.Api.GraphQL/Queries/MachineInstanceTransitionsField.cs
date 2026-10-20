@@ -11,7 +11,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// makes (central <c>docs/0022</c>). A field of the instance rather than of <c>operations</c>, so a lookup that does not
 /// select it never reads the table. Reached only through <c>operations</c>, so the operations gate covers it. Never an
 /// owner key, a context or a run's token. Registered with the operations queries. See
-/// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+/// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
 /// </summary>
 internal static class MachineInstanceTransitionsField
 {

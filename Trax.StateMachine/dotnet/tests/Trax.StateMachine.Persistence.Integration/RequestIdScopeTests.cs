@@ -11,12 +11,12 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// A request id replays only the request it recorded: the same id and trigger, while the draft still shows
 /// that request's outcome. Anything else fires, or is refused as <c>REQUEST_ID_REUSED</c>.
 ///
-/// <para>Enforces <c>docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0001-a-request-id-replays-only-the-request-it-recorded.md</c>.</para>
 /// </summary>
-[Property("adr", "docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md")]
+[Property("adr", "docs/adr/0001-a-request-id-replays-only-the-request-it-recorded.md")]
 public class RequestIdScopeTests
 {
-    private const string Adr = "docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md";
+    private const string Adr = "docs/adr/0001-a-request-id-replays-only-the-request-it-recorded.md";
 
     private static readonly ISnapshotPrincipal User = new FakePrincipal("u");
 

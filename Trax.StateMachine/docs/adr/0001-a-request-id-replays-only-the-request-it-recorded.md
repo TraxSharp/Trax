@@ -55,6 +55,7 @@ again. That is the single-slot design this refines, not something it changes.
 
 ## Changelog
 
+- **2026-10-20**: Moved from `effect/0013` when the state machines got a folder of their own; the decision did not change.
 - **2026-10-12**: A send whose request id the ring holds replays its recorded result wherever the draft is now,
   before the state checks and before the effect is claimed, as an advance does; the replay carries the row's due time
   only while the row is still at the recorded revision. The ring keeps up to sixteen requests and at most 128 KiB

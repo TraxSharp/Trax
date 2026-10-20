@@ -13,14 +13,14 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// the effect runs, or when the effect ends in a cancellation: the receipt is recorded only on the content the
 /// effect ran on, and an effect that may have happened never runs a second time.
 ///
-/// <para>Enforces <c>docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md</c>.</para>
 /// </summary>
-[Property("adr", "docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md")]
+[Property("adr", "docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md")]
 public class EffectCommitIntegrityTests
 {
     private const string Adr =
         "the effect's receipt is recorded only on the draft the effect ran on, and an effect that may have "
-        + "happened never runs again. See docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md";
+        + "happened never runs again. See docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md";
 
     private const string User = "u";
 

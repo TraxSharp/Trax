@@ -205,7 +205,7 @@ public class MachineEventStressTests
     /// The history's write path under concurrency: many instances moved at once, each by a run of events, and every
     /// event's history row is there, in revision order with no gap, kind and command matching, read back through the
     /// operations service the console's instance page reads. Enforces
-    /// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+    /// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
     /// </summary>
     [Test]
     public async Task Every_event_writes_one_history_row_in_order_when_instances_move_at_once()
@@ -252,7 +252,7 @@ public class MachineEventStressTests
                 .Equal(
                     Enumerable.Range(1, EventsPerInstance + 1).Select(r => (long)r),
                     "every event adds one row at its revision, none lost or doubled under load, per "
-                        + "Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md"
+                        + "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md"
                 );
             oldestFirst[0].Kind.Should().Be(Trax.Effect.Enums.SnapshotTransitionKind.Start);
             oldestFirst

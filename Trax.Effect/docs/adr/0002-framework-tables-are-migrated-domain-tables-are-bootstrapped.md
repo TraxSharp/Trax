@@ -46,10 +46,11 @@ throwaway databases. What is not fine is a Trax table whose only creation path i
 
 ## Exemplars
 
-- `MigrationSchemaTests` builds the state machine tables from the **shipped** migrations
-  (Postgres `040`, Sqlite `006`) and round-trips through the real stores, so a column added
-  to the model without a migration fails when the store queries a column that does not
-  exist.
+**Enforced elsewhere:** `MigrationSchemaTests` in Trax.StateMachine
+(`dotnet/tests/Trax.StateMachine.Persistence.Integration`) builds the state machine tables from the
+**shipped** migrations (Postgres `040`, Sqlite `006`) and round-trips through the real stores, so a
+column added to the model without a migration fails when the store queries a column that does not
+exist.
 
 Not covered:
 
@@ -69,7 +70,7 @@ Not covered:
 - **These suites require a live Postgres and fail without one rather than skipping.** In
   `tests/Trax.Effect.Tests.Integration` it is `UsePostgres` running the migrator at
   registration time inside `[OneTimeSetUp]`; in
-  `tests/Trax.StateMachine.Persistence.Integration` it is `PostgresSetup`, an
+  Trax.StateMachine's `dotnet/tests/Trax.StateMachine.Persistence.Integration` it is `PostgresSetup`, an
   assembly-wide `[SetUpFixture]` that opens a connection unconditionally, so even the Sqlite
   case fails when Postgres is absent. That contradicts
   `Trax.Docs/adr/0005-a-skipped-test-is-a-runtime-decision.md`, which binds this repo. The

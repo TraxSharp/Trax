@@ -27,7 +27,7 @@ namespace Trax.StateMachine.Persistence;
 /// store's own. A write that leaves the snapshot alone writes none. The history row is saved through the data context,
 /// so a change host code tracked on the same context and has not saved yet is saved with it, as it is by
 /// <see cref="Insert(string, Guid, Snapshot, CancellationToken)"/> and <see cref="Upsert"/>. See
-/// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.</para>
+/// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.</para>
 /// </summary>
 /// <param name="db">The data context the table is reached through.</param>
 /// <param name="dialect">

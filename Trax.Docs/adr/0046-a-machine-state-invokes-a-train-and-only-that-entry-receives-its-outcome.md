@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [core, effect, mediator, scheduler, api, dashboard, cli, samples]
+repos: [core, effect, statemachine, mediator, scheduler, api, dashboard, cli, samples]
 areas: [platform, data-model, graphql]
 status: accepted
 ---
@@ -280,7 +280,7 @@ In `Trax.Api/tests`, on GraphQL and the dashboard alike:
 
 ## Exemplars
 
-**Enforced elsewhere:** the tests listed under *Tests*, in Trax.Effect's state machine test projects, Trax.Scheduler's
+**Enforced elsewhere:** the tests listed under *Tests*, in Trax.StateMachine's test projects, Trax.Scheduler's
 and Trax.Api's tests, each written red before the code it covers; `InteractionMatrixTests` in `Trax.Core.Tests.Meta`,
 which requires the `Invokes` row of the interaction matrix's machine-features table to name a test for every existing
 feature.

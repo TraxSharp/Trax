@@ -289,7 +289,7 @@ public class MigrationSchemaTests
             .Be(
                 new CompletedEffect("rcpt-2", fingerprint),
                 "the claim keeps the fingerprint of the content its effect ran on. See "
-                    + "docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md."
+                    + "docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md."
             );
     }
 

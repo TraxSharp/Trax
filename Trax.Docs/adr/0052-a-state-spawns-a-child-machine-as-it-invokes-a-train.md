@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [effect, api]
+repos: [effect, statemachine, api]
 areas: [platform, data-model]
 status: accepted
 ---

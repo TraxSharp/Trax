@@ -5,7 +5,7 @@ namespace Trax.StateMachine.Persistence;
 /// <summary>
 /// What the store records in an instance's history for one snapshot write: what wrote it, the command that moved it,
 /// and who made it. The states, the revision and the time come from the write itself. See
-/// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+/// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
 /// </summary>
 /// <param name="Kind">What wrote it.</param>
 /// <param name="Trigger">The command, or null when none moved it.</param>

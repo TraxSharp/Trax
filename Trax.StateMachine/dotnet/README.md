@@ -55,10 +55,20 @@ The server runs `ICharge` once per send and fires `Pay` with its receipt. A clie
 
 ## Where this fits
 
-This folder sits between Trax.Effect, whose trains a machine invokes and whose tables it is stored in, and
-Trax.Mediator, which launches those trains. It holds the C# engine (`dotnet/`), the TypeScript engine (`ts/`) and the
-conformance kit both are checked against (`conformance/`). Docs are at
-[traxsharp.net/docs/statemachine](https://traxsharp.net/docs/statemachine).
+Trax is split into layers, one folder of this repository each. Take the ones you need; the trains you wrote do not change. **You are here: Trax.StateMachine.**
+
+| Folder | What it adds |
+|---|---|
+| [Trax.Core](https://github.com/TraxSharp/Trax/tree/main/Trax.Core) | Trains, junctions and the chain, with no database and no DI container |
+| [Trax.Effect](https://github.com/TraxSharp/Trax/tree/main/Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers |
+| **[Trax.StateMachine](https://github.com/TraxSharp/Trax/tree/main/Trax.StateMachine)** | **State machines a page drives and the server applies, in C# and TypeScript, held to one conformance kit** |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax/tree/main/Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax/tree/main/Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
+| [Trax.Api](https://github.com/TraxSharp/Trax/tree/main/Trax.Api) | GraphQL generated from your trains, with authentication, audit and typed clients, and the operations console your host serves |
+| [Trax.Cli](https://github.com/TraxSharp/Trax/tree/main/Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
+| [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
+
+Docs live in [Trax.Docs](https://github.com/TraxSharp/Trax/tree/main/Trax.Docs) and are published at [traxsharp.net/docs](https://traxsharp.net/docs).
 
 ## Contributing
 

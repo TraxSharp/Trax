@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [effect, mediator, scheduler, api, dashboard, cli, samples]
+repos: [effect, statemachine, mediator, scheduler, api, dashboard, cli, samples]
 areas: [platform, graphql, data-model]
 status: accepted
 ---
@@ -23,7 +23,7 @@ written first, marked `[Red]` (they run, and pass only while they fail, so CI st
 passing is noticed), and each stage removes the marker from the tests it turns green.
 
 Amends [0046](./0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md) (the startup
-comparison per entering event, the actor, timers and invoking states) and effect/0017 (autosave), each in its
+comparison per entering event, the actor, timers and invoking states) and statemachine/0002 (autosave), each in its
 Changelog.
 
 ## Why this is written down

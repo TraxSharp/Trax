@@ -14,20 +14,20 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// An effect is pending on its instance's row: sending an effect-bound event marks the row, every other write to it
 /// is refused as <c>EFFECT_IN_PROGRESS</c> or waits while the mark is there, and the effect's receipt, the move to its
 /// target and the end of the mark are one write. Past its lease the mark is taken over, by the next send or by the
-/// reconciler, and the effect run again under the same key. Pins docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md
+/// reconciler, and the effect run again under the same key. Pins docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md
 /// as well: nothing but the effect runner writes a draft between its effect and its record.
 /// </summary>
 [TestFixture(StoreProvider.Postgres)]
 [TestFixture(StoreProvider.Sqlite)]
 [Property("adr", Adr)]
-[Property("adr", "docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md")]
+[Property("adr", "docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md")]
 public class EffectPendingTests(StoreProvider provider)
 {
     private const string Adr =
         "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
 
     private const string OnlyTheRunner =
-        "docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md";
+        "docs/adr/0002-only-the-effect-runner-reaches-a-committed-state.md";
 
     private const string Machine = PendingPayMachine.Id;
 

@@ -77,4 +77,5 @@ without its history row; a reviewer has to catch that.
 
 ## Changelog
 
+- **2026-10-20**: Moved from `effect/0022` when the state machines got a folder of their own; the decision did not change.
 - **2026-10-19**: Recorded.

@@ -18,18 +18,18 @@ namespace Trax.StateMachine.Persistence.Integration;
 /// what wrote it, the command, who made it and the states it moved between, in the same transaction as the write. A
 /// write that leaves the snapshot alone, and a write that is refused or loses its race, adds none, and the history
 /// goes with the instance however it is removed. Each per-site test makes one write and reads the history that
-/// changed. Enforces <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+/// changed. Enforces <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
 /// </summary>
 [TestFixture(StoreProvider.Postgres)]
 [TestFixture(StoreProvider.Sqlite)]
 [Property(
     "adr",
-    "Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md"
+    "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md"
 )]
 public class TransitionHistoryTests(StoreProvider provider)
 {
     private const string Adr =
-        "Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md";
+        "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md";
 
     private const string User = "history-user";
 
@@ -704,16 +704,16 @@ public class TransitionHistoryTests(StoreProvider provider)
 /// <summary>
 /// The InMemory provider has no transaction and no foreign key, so the store writes the history and removes it with
 /// the instance itself. Enforces
-/// <c>Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
+/// <c>Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md</c>.
 /// </summary>
 [Property(
     "adr",
-    "Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md"
+    "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md"
 )]
 public class TransitionHistoryInMemoryTests
 {
     private const string Adr =
-        "Trax.Effect/docs/adr/0022-a-machine-instance-history-is-written-with-its-snapshot.md";
+        "Trax.StateMachine/docs/adr/0003-a-machine-instance-history-is-written-with-its-snapshot.md";
 
     private const string User = "history-user";
 

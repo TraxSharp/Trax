@@ -103,6 +103,7 @@ builder, is not checked for a second edge into its effect's target.
 
 ## Changelog
 
+- **2026-10-20**: Moved from `effect/0017` when the state machines got a folder of their own; the decision did not change.
 - **2026-10-13**: Amended with central 0048. The effect is pending on the draft's row, and every other write to the
   draft is refused until the receipt and the move are written together; past its lease the effect is run again under
   its key. The token check, the content fingerprint, `draft-changed` and a reset's release of settled claims are
