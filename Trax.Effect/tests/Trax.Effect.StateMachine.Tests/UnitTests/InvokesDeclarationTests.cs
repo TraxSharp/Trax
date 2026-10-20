@@ -597,13 +597,12 @@ public class InvokesDeclarationTests
     public void The_ingest_IR_matches_the_committed_golden_the_twin_reads()
     {
         var file = FixturePaths.IrFile("ingest");
-        file.Should().NotBeNull("the shared machines/ directory is part of the repository");
         var exported = IrExporter.Export(IngestMachine.Built);
 
         if (Environment.GetEnvironmentVariable("UPDATE_IR") == "1")
-            File.WriteAllText(file!, exported + "\n");
+            File.WriteAllText(file, exported + "\n");
 
-        File.ReadAllText(file!)
+        File.ReadAllText(file)
             .TrimEnd('\n')
             .Should()
             .Be(exported, "regenerate the golden deliberately with UPDATE_IR=1");

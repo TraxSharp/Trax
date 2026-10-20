@@ -74,11 +74,6 @@ public partial class RefusalCodeParityTests
     [Test]
     public void The_TypeScript_package_exports_the_same_codes()
     {
-        if (FixturePaths.MachinesRoot is null)
-            Assert.Ignore(
-                "Trax.Api.StateMachine not found (isolated build), so there is no TypeScript package to compare."
-            );
-
         var resultsTs = Path.Combine(
             Directory.GetParent(FixturePaths.MachinesRoot)!.FullName,
             "src",

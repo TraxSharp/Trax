@@ -17,12 +17,6 @@ public class DeclarativeTurnstileTests
     public void Declarative_turnstile_reproduces_the_shared_differential_corpus()
     {
         var file = FixturePaths.DifferentialFile("turnstile");
-        if (file is null || !File.Exists(file))
-        {
-            Assert.Ignore("Shared turnstile differential corpus not found (isolated build).");
-            return;
-        }
-
         var diffs = DifferentialCorpus.Replay(DeclarativeTurnstile.Machine, File.ReadAllText(file));
 
         diffs

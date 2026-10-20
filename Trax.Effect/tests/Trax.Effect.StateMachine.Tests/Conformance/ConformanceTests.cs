@@ -18,8 +18,6 @@ public class ConformanceTests
     public static IEnumerable<TestCaseData> AdvanceFixtures()
     {
         var dir = FixturePaths.AdvanceDir("turnstile");
-        if (dir is null || !Directory.Exists(dir))
-            yield break;
         foreach (
             var path in Directory
                 .EnumerateFiles(dir, "*.json")
@@ -33,8 +31,6 @@ public class ConformanceTests
     public static IEnumerable<TestCaseData> RehydrateFixtures()
     {
         var dir = FixturePaths.RehydrateDir("turnstile");
-        if (dir is null || !Directory.Exists(dir))
-            yield break;
         foreach (
             var path in Directory
                 .EnumerateFiles(dir, "*.json")
@@ -48,11 +44,6 @@ public class ConformanceTests
     [Test]
     public void Shared_fixtures_are_reachable()
     {
-        if (FixturePaths.MachinesRoot is null)
-            Assert.Ignore(
-                "Shared Trax.Api.StateMachine/machines fixtures not found (isolated build). In CI they are supplied by the Trax.StateMachine.Fixtures package."
-            );
-
         Directory.Exists(FixturePaths.AdvanceDir("turnstile")).Should().BeTrue();
     }
 

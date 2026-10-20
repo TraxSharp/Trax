@@ -17,9 +17,6 @@ public class MigrationGoldenTests
     public static IEnumerable<TestCaseData> MigrationCases()
     {
         var file = FixturePaths.MigrationFile("turnstile");
-        if (file is null || !File.Exists(file))
-            yield break;
-
         var golden = (JsonObject)JsonNode.Parse(File.ReadAllText(file))!;
         foreach (var node in (JsonArray)golden["cases"]!)
         {
@@ -35,11 +32,6 @@ public class MigrationGoldenTests
     [Test]
     public void Shared_migration_golden_is_reachable()
     {
-        if (FixturePaths.MachinesRoot is null)
-            Assert.Ignore(
-                "Shared Trax.Api.StateMachine/machines fixtures not found (isolated build). In CI they are supplied by the Trax.StateMachine.Fixtures package."
-            );
-
         File.Exists(FixturePaths.MigrationFile("turnstile")).Should().BeTrue();
     }
 

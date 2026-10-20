@@ -65,9 +65,8 @@ public class RulesVocabularyTests
     public void The_gauge_IR_matches_the_committed_golden_the_twin_reads()
     {
         var file = FixturePaths.IrFile("gauge");
-        file.Should().NotBeNull("the shared machines/ directory is part of the repository");
 
-        File.ReadAllText(file!)
+        File.ReadAllText(file)
             .TrimEnd('\n')
             .Should()
             .Be(

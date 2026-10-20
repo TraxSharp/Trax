@@ -35,15 +35,6 @@ public class DifferentialConformanceTests
         where TTrigger : struct, Enum
     {
         var file = FixturePaths.DifferentialFile(name);
-        if (file is null || !File.Exists(file))
-        {
-            Assert.Ignore(
-                $"Shared {name} differential corpus not found (isolated build). In CI it is supplied "
-                    + "by the Trax.StateMachine.Fixtures package."
-            );
-            return;
-        }
-
         var diffs = DifferentialCorpus.Replay(machine, File.ReadAllText(file));
         diffs
             .Should()

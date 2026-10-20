@@ -17,8 +17,6 @@ public class CheckoutConformanceTests
     public static IEnumerable<TestCaseData> AdvanceFixtures()
     {
         var dir = FixturePaths.AdvanceDir("checkout");
-        if (dir is null || !Directory.Exists(dir))
-            yield break;
         foreach (
             var path in Directory
                 .EnumerateFiles(dir, "*.json")
@@ -32,8 +30,6 @@ public class CheckoutConformanceTests
     public static IEnumerable<TestCaseData> RehydrateFixtures()
     {
         var dir = FixturePaths.RehydrateDir("checkout");
-        if (dir is null || !Directory.Exists(dir))
-            yield break;
         foreach (
             var path in Directory
                 .EnumerateFiles(dir, "*.json")
@@ -109,13 +105,10 @@ public class CheckoutConformanceTests
     [Test]
     public void Serialize_canonicalizes_the_multi_key_wire_handoff_samples()
     {
-        if (FixturePaths.MachinesRoot is null)
-            Assert.Ignore("Shared checkout fixtures not found (isolated build).");
-
         var handoff = (JsonObject)
             JsonNode.Parse(
                 File.ReadAllText(
-                    Path.Combine(FixturePaths.MachinesRoot!, "checkout", "wire-handoff.json")
+                    Path.Combine(FixturePaths.MachinesRoot, "checkout", "wire-handoff.json")
                 )
             )!;
 

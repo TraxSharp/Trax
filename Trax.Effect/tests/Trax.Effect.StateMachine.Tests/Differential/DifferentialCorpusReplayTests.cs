@@ -97,8 +97,7 @@ public class DifferentialCorpusReplayTests
         // context, byte for byte. This is the pure half only: the twin holds no token, so a stale completion is
         // indistinguishable from a live one here.
         var file = FixturePaths.DifferentialFile("ingest");
-        file.Should().NotBeNull("the shared machines/ directory is part of the repository");
-        var corpus = File.ReadAllText(file!);
+        var corpus = File.ReadAllText(file);
 
         var outcomeCases = JsonNode.Parse(corpus)!["cases"]!
             .AsArray()

@@ -241,11 +241,6 @@ public class TwinSequenceParityTests
         if (!NodeIsAvailable())
             Unavailable("node is not on PATH.");
         var machinesRoot = FixturePaths.MachinesRoot;
-        if (machinesRoot is null)
-        {
-            Unavailable("Trax.Api.StateMachine is not checked out beside this folder.");
-            return;
-        }
         var engineRoot = Directory.GetParent(machinesRoot)!.FullName;
 
         // An empty request first: it skips the test when the engine's dependencies are absent, which cannot be

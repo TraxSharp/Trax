@@ -431,13 +431,12 @@ public class TimerDeclarationTests
     public void The_reminder_IR_matches_the_committed_golden_the_twin_reads()
     {
         var file = Helpers.FixturePaths.IrFile("reminder");
-        file.Should().NotBeNull("the shared machines/ directory is part of the repository");
         var exported = IrExporter.Export(ReminderMachine.Built);
 
         if (Environment.GetEnvironmentVariable("UPDATE_IR") == "1")
-            File.WriteAllText(file!, exported + "\n");
+            File.WriteAllText(file, exported + "\n");
 
-        File.ReadAllText(file!)
+        File.ReadAllText(file)
             .TrimEnd('\n')
             .Should()
             .Be(

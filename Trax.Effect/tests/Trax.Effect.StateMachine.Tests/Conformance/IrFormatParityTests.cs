@@ -15,11 +15,6 @@ public partial class IrFormatParityTests
     [Test]
     public void The_TypeScript_engine_reads_the_IR_format_this_engine_exports()
     {
-        if (FixturePaths.MachinesRoot is null)
-            Assert.Ignore(
-                "Trax.Api.StateMachine not found (isolated build), so there is no TypeScript engine to compare."
-            );
-
         var irFormatTs = Path.Combine(
             Directory.GetParent(FixturePaths.MachinesRoot)!.FullName,
             "src",

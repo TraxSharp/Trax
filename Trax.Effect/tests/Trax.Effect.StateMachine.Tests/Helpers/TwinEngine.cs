@@ -96,12 +96,7 @@ public static class TwinEngine
     {
         if (!NodeIsAvailable())
             Unavailable("node is not on PATH.");
-        if (FixturePaths.MachinesRoot is not { } machinesRoot)
-        {
-            Unavailable("Trax.Api.StateMachine is not checked out beside this folder.");
-            throw new UnreachableException();
-        }
-        return Directory.GetParent(machinesRoot)!.FullName;
+        return Directory.GetParent(FixturePaths.MachinesRoot)!.FullName;
     }
 
     // Skips the test on a developer's machine; fails it under CI, where the engine is always installed.
