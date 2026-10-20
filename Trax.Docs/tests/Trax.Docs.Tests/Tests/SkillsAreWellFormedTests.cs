@@ -5,7 +5,7 @@ namespace Trax.Docs.Tests.Tests;
 /// <summary>
 /// The agent skills under <c>skills/</c> are ready for a release to publish: each passes
 /// <see cref="SkillRules"/>, every docs page a skill sends an agent to exists, and the marketplace
-/// at the repository root points Claude Code at the branch the release writes.
+/// at the repository root points Claude Code at the branch the Skills workflow writes.
 ///
 /// <para>A skill is read by an agent in someone else's repository, so a link is only useful as
 /// a full <c>https://traxsharp.net/docs/...</c> URL, and a link to a page that moved sends the
@@ -37,8 +37,8 @@ public class SkillsAreWellFormedTests
         problems
             .Should()
             .BeEmpty(
-                "a release stages these skills with the same rules and stops on the first broken "
-                    + "one, so a skill that breaks them blocks the release. See "
+                "the Skills workflow stages these skills with the same rules and stops on the first broken "
+                    + "one, so a skill that breaks them blocks publishing. See "
                     + Adr
                     + ". Problems:\n  "
                     + string.Join("\n  ", problems)
@@ -87,7 +87,7 @@ public class SkillsAreWellFormedTests
             .Be(
                 Stager.MarketplaceJson(),
                 "the marketplace on main names the plugin, and the plugin's source is the "
-                    + $"`{Stager.Branch}` branch the release writes. Regenerate it with "
+                    + $"`{Stager.Branch}` branch the Skills workflow writes. Regenerate it with "
                     + "`dotnet run --project Trax.Docs/tools/Trax.Skills.Publish -- marketplace`. See "
                     + Adr
             );

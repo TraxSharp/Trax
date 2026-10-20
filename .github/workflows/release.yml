@@ -18,9 +18,8 @@ name: Release
 # 2FA, while the publish job waits (see the "Stage on npm and wait for approval" step).
 #
 # Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
-# build (packs from the tag, read-only) -> publish (verifies, attests, publishes) -> skills
-# (commits the agent skills build staged to the `skills` branch). Publishing the site is not part
-# of a release: dispatch website.yml with the new tag afterwards.
+# build (packs from the tag, read-only) -> publish (verifies, attests, publishes). Publishing the
+# site is not part of a release: dispatch website.yml with the new tag afterwards.
 on:
   workflow_dispatch:
 
@@ -144,7 +143,6 @@ jobs:
     outputs:
       digests: ${{ steps.digests.outputs.digests }}
       npm-digests: ${{ steps.npm-digests.outputs.digests }}
-      skills-digests: ${{ steps.skills.outputs.digests }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
@@ -261,28 +259,6 @@ jobs:
         with:
           name: npm
           path: npm/*.tgz
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Stage the agent skills
-        # Trax.Docs/adr/0056: the skills under Trax.Docs/skills/ go to the `skills` branch with this
-        # release's version stamped in. Staging builds a .NET tool, so it runs here, where nothing
-        # can write; the skills job only commits what this step staged.
-        id: skills
-        env:
-          PKG_VERSION: ${{ needs.release.outputs.version }}
-        run: |
-          dotnet restore Trax.Docs/tools/Trax.Skills.Publish --locked-mode
-          dotnet run --project Trax.Docs/tools/Trax.Skills.Publish --configuration Release --no-restore -- \
-            stage --skills Trax.Docs/skills --version "$PKG_VERSION" --license LICENSE --out skills
-          echo "digests=$(cd skills && find . -type f -printf '%P\n' | LC_ALL=C sort | xargs -d '\n' sha256sum -- | base64 -w0)" >> "$GITHUB_OUTPUT"
-      - name: Upload skills artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
-        with:
-          name: skills
-          path: skills/
-          # .claude-plugin/ holds the plugin and marketplace manifests.
-          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
 
@@ -479,60 +455,3 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: dotnet nuget push "nupkg/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-  # ---------------------------------------------------------------------------
-  # Skills zone. Commits the agent skills build staged to the `skills` branch and tags the commit
-  # skills-v<version> (Trax.Docs/adr/0056). A skill is instructions agents follow in other people's
-  # repositories, so the branch takes updates from release jobs only: the `skills` ruleset
-  # restricts updates, deletion and force pushes, with GitHub Actions as its only bypass. This job
-  # runs no build, only git, gh and jq, after the packages it describes are on nuget.org, and its
-  # token can write contents and nothing else. The commit goes through the API, so GitHub signs it.
-  # The branch was created once, by hand, with a signed commit; createCommitOnBranch cannot start
-  # one.
-  # ---------------------------------------------------------------------------
-  skills:
-    needs: [release, build, publish]
-    if: needs.release.outputs.released == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: release
-    permissions:
-      contents: write       # the skills branch and its skills-v* tag
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
-        with:
-          egress-policy: block
-          disable-telemetry: true
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            release-assets.githubusercontent.com:443
-            objects.githubusercontent.com:443
-      - name: Checkout the tag
-        # For the publish script only; nothing in it is built or run.
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: refs/tags/v${{ needs.release.outputs.version }}
-          persist-credentials: false
-          sparse-checkout: .github/scripts
-      - name: Download skills artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
-        with:
-          name: skills
-          path: skills
-      - name: Verify the skills are the ones build staged
-        env:
-          DIGESTS: ${{ needs.build.outputs.skills-digests }}
-        run: |
-          echo "$DIGESTS" | base64 -d > "$RUNNER_TEMP/expected-skills.sha256"
-          if [ "$(cd skills && find . -type f -printf '%P\n' | LC_ALL=C sort)" != "$(awk '{print $2}' "$RUNNER_TEMP/expected-skills.sha256")" ]; then
-            echo "::error::The downloaded skills are not the set the build job staged."
-            exit 1
-          fi
-          (cd skills && sha256sum --check --strict "$RUNNER_TEMP/expected-skills.sha256")
-      - name: Commit and tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PKG_VERSION: ${{ needs.release.outputs.version }}
-        run: .github/scripts/publish-skills.sh skills "$GITHUB_REPOSITORY" skills "skills-v$PKG_VERSION" "Trax $PKG_VERSION"
