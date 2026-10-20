@@ -16,6 +16,26 @@ a worker in another process or in AWS Lambda, and every run leaves a record of w
 it ended, and which junction failed with what. Trax is MIT licensed and targets .NET 10. The
 [Glossary](/docs/reference/glossary) defines the names the docs use.
 
+## Start here
+
+New to Trax, read these in order. Everything else on this site is for when you need it.
+
+1. [Quick start](/docs/getting-started): one app from an empty folder, in-process to GraphQL.
+2. [Trains and junctions](/docs/core/trains-and-junctions): what a train is and how it runs.
+3. [Memory](/docs/core/memory): how a junction gets its input.
+4. [How a chain runs](/docs/core/building-chains): the steps a train can declare.
+5. [Handle errors in trains](/docs/cross-cutting/handle-errors-in-trains): what a failing junction
+   does to the rest.
+6. [Test a train](/docs/cross-cutting/test-a-train): with in-memory effects, no database.
+7. [Trax.Effect](/docs/effect): what gets recorded for each run, and where.
+8. [Mediator](/docs/mediator): running a train by its input type.
+9. [Schedule a train](/docs/scheduler/setup): cron, intervals and one-off runs.
+10. [The GraphQL API](/docs/api): serving trains to a client.
+11. [Authorization rules](/docs/authorization): nothing is served until a rule allows it.
+12. [Operations console](/docs/dashboard): finding and requeuing runs.
+13. [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim.
+14. [Packages](/docs/reference/packages): which ones to install.
+
 ## Where to go
 
 [How these docs are organised](/docs/about-these-docs) explains the four kinds of page below.
