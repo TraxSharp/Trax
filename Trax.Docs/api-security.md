@@ -14,7 +14,7 @@ nav_order: 1
 
 This guide builds a host that accepts API keys and JWTs, serves a gated mutation, a query any
 signed-in caller can run, an `operations` namespace only operators reach, and records every
-request in an audit trail. It is the [Auth sample](/docs/samples/auth)'s shape, trimmed; the
+request in an audit trail. It is the [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth)'s shape, trimmed; the
 sample's E2E suite proves each gate.
 
 The defaults are closed. Until a surface declares who may reach it, the host does not start, and a

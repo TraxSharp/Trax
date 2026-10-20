@@ -5,6 +5,8 @@ type: tutorial
 area: general
 parent: The Trax book
 nav_order: 21
+redirect_from:
+  - /docs/samples/energy-hub
 ---
 
 # 11. A separate worker

@@ -312,8 +312,7 @@ failed job is logged at `Error`, and a job that runs out of retries at `Warning`
 - [Administrative trains](/docs/scheduler/admin-trains): the services this host started.
 - [Startup errors](/docs/scheduler/startup-errors): what stops a scheduler host from starting.
 - [Scheduler namespaces](/docs/scheduler/namespaces): where each type used here lives.
-- The [Scheduling sample](/docs/samples/scheduling) is a whole scheduler host, with the dashboard
-  and the GraphQL operations surface.
+- [9. Scheduled work](/docs/book/scheduled-work): the book adds a scheduler to a running shop.
 
 ## SDK Reference
 

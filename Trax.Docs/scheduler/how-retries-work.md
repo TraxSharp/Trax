@@ -85,7 +85,7 @@ still due, and the ManifestManager queues the retry on its next cycle:
 
 So with `MaxRetries(2)`, `DefaultRetryDelay(2 s)` and the default multiplier, a due manifest that
 keeps failing runs three times within about ten seconds and is dead-lettered on the next cycle. The
-[Scheduling sample](/docs/samples/scheduling) runs exactly that. A requeue of the dead letter, by
+[Scheduling sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Scheduling) runs exactly that. A requeue of the dead letter, by
 contrast, queues a run at once, with no backoff; see [Resolve a dead letter](/docs/scheduler/dead-letters-and-cleanup).
 
 ## Retries replay decisions
@@ -233,7 +233,7 @@ refused. `requeueExecution` always reruns from the top.
 
 The InMemory provider has no work queue: its ManifestManager dispatches inline. It does not delay
 retries the way Postgres does and does not replay decisions, so retries are best tested against a
-real database, as the [Scheduling sample's E2E suite](/docs/samples/scheduling#tests) does.
+real database, as the [Scheduling sample's E2E suite](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/tests/Trax.Samples.Scheduling.E2E) does.
 
 ## SDK Reference
 

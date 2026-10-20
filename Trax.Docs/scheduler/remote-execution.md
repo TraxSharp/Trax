@@ -170,7 +170,7 @@ service on, and only runs work that passed the check where it was submitted, so 
 [Authorization: Opting Out for Scheduler-Only Hosts](/docs/authorization#opting-out-for-scheduler-only-hosts)).
 And synchronous work is still answered by the process that receives the request: a `[TraxQuery]`
 or a `RUN` mutation does not reach a worker, so mutations that should always run on one are
-declared `GraphQLOperation.Queue`. The [Energy Hub sample](/docs/samples/energy-hub) runs every
+declared `GraphQLOperation.Queue`. The [Energy Hub sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers) runs every
 queued job on a standalone worker, and its E2E suite proves the hub has no `LocalWorkerService`.
 
 ## Which Model Should I Use?

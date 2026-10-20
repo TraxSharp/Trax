@@ -228,8 +228,9 @@ Every refusal is a typed `problem` in the data, never a thrown error: `GUARD_FAI
 and limits are in the [machines root](/docs/sdk-reference/graphql-api/machines), and every code in
 [Result codes](/docs/sdk-reference/statemachine-api/result-codes).
 
-The [State Machine sample](/docs/samples/state-machine) is a complete, runnable version: two machines, a GraphQL
-host, exactly-once over the wire, a forward migration and a server-checked total.
+[12. Checkout is a state machine](/docs/book/checkout-is-a-state-machine) builds one step by step and serves it.
+The [State Machine sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/StateMachine) is another runnable version: two machines, a GraphQL host, exactly-once over the
+wire, a forward migration and a server-checked total.
 
 ## Serve the generic mutations instead
 

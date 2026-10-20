@@ -144,4 +144,4 @@ Without a database it fails; it never skips.
 - The `snapshot_draft` and `effect_claim` tables are created by the Trax Postgres provider's own
   migrations when the host starts; the sample writes no schema of its own.
 
-Docs: <https://traxsharp.net/docs/samples/state-machine>
+The book builds a machine step by step: [12. Checkout is a state machine](https://traxsharp.net/docs/book/checkout-is-a-state-machine).

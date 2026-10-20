@@ -24,6 +24,9 @@ One junction. It's a simple train because the logic is straightforward, the comp
 
 The `MetadataCleanupPollingService` is a separate `BackgroundService` from the manifest polling service. It runs on its own interval (`CleanupInterval`, default: 1 minute) and invokes the MetadataCleanupTrain each cycle. It also runs a cleanup immediately on startup.
 
+To sweep on demand, from a test for instance, resolve `IMetadataCleanupTrain` from the host's services and
+call `Run(new MetadataCleanupRequest())`.
+
 ## The Deletion Junction
 
 `DeleteExpiredMetadataJunction` deletes expired metadata in configurable batches (default: 1000 rows per batch) to limit row-level lock duration. Each batch loads metadata IDs first, deletes the owned child rows (work queue entries, logs), clears the back-references that would otherwise block the delete (dead letter retry links, child metadata parent links), then deletes the metadata by ID. The junction loops until no more expired rows remain.

@@ -46,7 +46,7 @@ serves GraphQL, one only polls for jobs, or one process does all three. Every pr
 the trains points at the same database.
 
 Not every sample is split this way. Auth and SignalRBroadcaster are single hosts with their trains
-inside them, which is the template layout above. The [Energy Hub](/docs/samples/energy-hub) sample
+inside them, which is the template layout above. The [Energy Hub](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers) sample
 is the split at its plainest: a library, a hub and a worker.
 
 ```

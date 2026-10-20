@@ -57,7 +57,7 @@ The hub subscribes to the exchange and rebroadcasts each matching event to the b
 
 ## 3. Check it
 
-Run a train on a worker and watch a connected client receive its `Completed` or `Failed` event. The [SignalR Broadcaster sample](/docs/samples/signalr-broadcaster) is a single-process version with a browser page; the [Energy Hub sample](/docs/samples/energy-hub) is the multi-process case, with GraphQL subscriptions in place of SignalR.
+Run a train on a worker and watch a connected client receive its `Completed` or `Failed` event. The [SignalR Broadcaster sample](/docs/samples/signalr-broadcaster) is a single-process version with a browser page; the [Energy Hub sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers) is the multi-process case, with GraphQL subscriptions in place of SignalR.
 
 ## SDK Reference
 

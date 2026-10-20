@@ -70,7 +70,7 @@ Without the key, `operations` answers `Not authorized.` with code `TRAX_AUTHORIZ
 
 ## Docs
 
-[Scheduling sample](https://traxsharp.net/docs/samples/scheduling) walks through the code. The
+[9. Scheduled work](https://traxsharp.net/docs/book/scheduled-work) builds a scheduler host step by step. The
 features: [Scheduling](https://traxsharp.net/docs/scheduler),
 [Dependent Trains](https://traxsharp.net/docs/scheduler/dependent-trains),
 [Dead Letters & Cleanup](https://traxsharp.net/docs/scheduler/dead-letters-and-cleanup).

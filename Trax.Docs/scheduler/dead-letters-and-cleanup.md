@@ -306,7 +306,7 @@ the one it runs with.
 `UseInMemory()` runs jobs inline and has no work queue, so it neither delays retries nor replays
 decisions as Postgres does. To test retries, dead letters and requeues as they run in production,
 start the real host against a test Postgres and wait on the `trax.metadata` and
-`trax.dead_letter` rows, as the [Scheduling sample's E2E suite](/docs/samples/scheduling#tests)
+`trax.dead_letter` rows, as the [Scheduling sample's E2E suite](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/tests/Trax.Samples.Scheduling.E2E)
 does.
 
 ## SDK Reference

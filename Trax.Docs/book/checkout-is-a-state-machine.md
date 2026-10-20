@@ -5,6 +5,8 @@ type: tutorial
 area: general
 parent: The Trax book
 nav_order: 22
+redirect_from:
+  - /docs/samples/state-machine
 ---
 
 # 12. Checkout is a state machine

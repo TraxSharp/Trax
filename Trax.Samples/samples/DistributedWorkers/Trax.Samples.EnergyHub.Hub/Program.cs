@@ -44,7 +44,7 @@
 //     -H "X-Api-Key: energyhub-operator-key-do-not-use-in-production" \
 //     -d '{"query":"{ operations { manifests(take: 5) { items { externalId scheduleType } } } }"}'
 //
-// Docs: https://traxsharp.net/docs/samples/energy-hub
+// Docs: https://traxsharp.net/docs/reference/deployment-topologies
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Auth.ApiKey;

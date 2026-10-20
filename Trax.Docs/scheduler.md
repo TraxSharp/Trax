@@ -126,11 +126,11 @@ A scheduler host runs a handful of hosted services. On startup one seeds the man
 
 ## Sample Project
 
-The [Scheduling sample](/docs/samples/scheduling) is a complete scheduler host on Postgres with
-the built-in local workers: interval, cron, one-off, dependent and dormant dependent manifests, a
-train that retries with backoff and is dead-lettered, the GraphQL operations surface to requeue it,
-metadata cleanup and the dashboard. Its page has the whole `Program.cs` and the startup errors each
-missing piece produces.
+[9. Scheduled work](/docs/book/scheduled-work) and [10. Failures, retries and dead
+letters](/docs/book/failures-retries-and-dead-letters) build a scheduler host step by step. The
+[Scheduling sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Scheduling) is a complete one on Postgres with the built-in local workers: interval,
+cron, one-off, dependent and dormant dependent manifests, a train that retries with backoff and is
+dead-lettered, the GraphQL operations surface to requeue it, metadata cleanup and the dashboard.
 
 ## Next Layer
 

@@ -24,7 +24,7 @@
 //   trax client --manifest samples/StateMachine/web/src/trax/manifest.json --out samples/StateMachine/web/src/trax \
 //     --documents 'samples/StateMachine/web/src/graphql/*.graphql'
 //
-// Docs: https://traxsharp.net/docs/samples/state-machine
+// Docs: https://traxsharp.net/docs/statemachine/authoring
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Api.Auth.ApiKey;

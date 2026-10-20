@@ -14,7 +14,7 @@
 // Run it (from Trax.Samples/, after `docker compose up -d` and the hub):
 //   dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 //
-// Docs: https://traxsharp.net/docs/samples/energy-hub
+// Docs: https://traxsharp.net/docs/reference/deployment-topologies
 //
 // The worker picks up jobs atomically using PostgreSQL's FOR UPDATE SKIP LOCKED,
 // so multiple worker instances can run safely without duplicate execution.

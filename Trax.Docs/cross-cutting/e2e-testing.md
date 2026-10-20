@@ -173,7 +173,7 @@ test with what it saw instead.
 | Fits | Behaviour a user or operator sees: retries and backoff, dead letters and requeue, dependents, authorization, subscriptions | Dispatch of one specific input in isolation |
 
 Keeping the scheduler running tests what ships, and is what the
-[Scheduling sample](/docs/samples/scheduling)'s suite does. Disable the ManifestManager only when
+[Scheduling sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Scheduling)'s suite does. Disable the ManifestManager only when
 its own timing gets in the way of what a test asserts; the EnergyHub sample's suite does.
 
 ### Keep the scheduler running

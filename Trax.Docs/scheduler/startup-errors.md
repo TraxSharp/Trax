@@ -55,5 +55,4 @@ The postures are described in [Runner authorization posture](/docs/scheduler/run
 
 - [Schedule a train](/docs/scheduler/setup)
 - [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler)
-- [Scheduling sample](/docs/samples/scheduling), whose page lists the error each missing piece of
-  its `Program.cs` produces
+- [9. Scheduled work](/docs/book/scheduled-work): the book's scheduler host, built step by step
