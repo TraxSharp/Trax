@@ -81,6 +81,13 @@ several squares, innermost first.
 A release note headed 🟧🟦🟥, for example, changes how work is dispatched and what the API serves, and it is worth
 reading for its security impact before you upgrade.
 
+## Sponsors
+
+<a href="https://constituentvoice.com/"><img src="https://github.com/constituentvoice.png" width="64" alt="Constituent Voice"></a>
+
+Trax is sponsored by [Constituent Voice](https://constituentvoice.com/). To support it too, see
+[GitHub Sponsors](https://github.com/sponsors/TraxSharp).
+
 ## Contributing
 
 Read [AGENTS.md](AGENTS.md) before changing anything, then the `AGENTS.md` in the folder you are working in. Report

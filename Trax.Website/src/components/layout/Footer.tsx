@@ -12,6 +12,17 @@ export default function Footer() {
             <p className="mt-1 max-w-xs text-sm text-text-muted">
               A headless web framework for .NET. MIT licensed.
             </p>
+            <p className="mt-3 max-w-xs text-sm text-text-muted">
+              Sponsored by{" "}
+              <a
+                href="https://constituentvoice.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-text-secondary hover:text-accent"
+              >
+                Constituent Voice
+              </a>
+            </p>
           </div>
 
           <div className="flex gap-12 text-sm">
@@ -45,6 +56,14 @@ export default function Footer() {
                 className="block text-text-muted hover:text-text-secondary"
               >
                 NuGet
+              </a>
+              <a
+                href="https://github.com/sponsors/TraxSharp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-text-muted hover:text-text-secondary"
+              >
+                Sponsor
               </a>
             </div>
           </div>
