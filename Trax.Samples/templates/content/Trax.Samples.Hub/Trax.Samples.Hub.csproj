@@ -9,6 +9,13 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
   </PropertyGroup>
 
+  <!-- `dotnet publish -t:PublishContainer` builds this project's image without a Dockerfile: the
+       ASP.NET runtime image, running as its non-root user, named after the project and serving on
+       8080, the port the runtime image listens on. -->
+  <ItemGroup>
+    <ContainerPort Include="8080" Type="tcp" />
+  </ItemGroup>
+
   <!-- Versions live in Directory.Packages.props, beside this file. -->
   <ItemGroup>
     <PackageReference Include="Trax.Core" />
