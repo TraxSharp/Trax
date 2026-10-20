@@ -1,5 +1,5 @@
 ---
-title: Mediator
+title: Calling a train by its input (Trax.Mediator)
 description: "Trax.Mediator and the train bus: dispatching a train by its input type instead of injecting it, nested trains, and the scope each run gets."
 type: explanation
 area: mediator
@@ -9,10 +9,12 @@ source:
   - Trax.Mediator/src/Trax.Mediator/Services/TrainRegistry/TrainRegistry.cs
 ---
 
-# Mediator
+# Calling a train by its input (Trax.Mediator)
 
+A controller, a GraphQL mutation, the scheduler and a worker all need to start the same trains,
+and none of them should have to reference each train's class.
 `Trax.Mediator` provides `ITrainBus`, which runs a train chosen by the type of the input it is
-given, so a caller does not need a reference to the train it runs. [AddMediator](/docs/sdk-reference/configuration/add-mediator)
+given. [AddMediator](/docs/sdk-reference/configuration/add-mediator)
 registers it, scans the assemblies it is given for trains, and registers each train under its
 interface. How the scan and the lookup work in detail is in [Train discovery](/docs/mediator/train-discovery).
 

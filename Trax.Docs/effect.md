@@ -1,5 +1,5 @@
 ---
-title: Trax.Effect
+title: Recording runs (Trax.Effect)
 description: "How Trax.Effect works: ServiceTrain, the record it writes for every run, junctions resolved from DI, and the effect pattern behind its providers."
 type: explanation
 area: effects
@@ -9,9 +9,10 @@ source:
   - Trax.Effect/src/Trax.Effect/Services/EffectRunner/EffectRunner.cs
 ---
 
-# Trax.Effect
+# Recording runs (Trax.Effect)
 
-`Trax.Effect` gives every train run a record: a row with its state, start and end time, the junction that failed and the exception it threw, stored in PostgreSQL, SQLite or memory. It also resolves junctions from dependency injection and runs pluggable effect providers around each run.
+When a run fails in production, the first questions are which run, with what input, at which step,
+and why. `Trax.Effect` answers them with no logging code of yours. It gives every train run a record: a row with its state, start and end time, the junction that failed and the exception it threw, stored in PostgreSQL, SQLite or memory. It also resolves junctions from dependency injection and runs pluggable effect providers around each run.
 
 It adds to [Core](/docs/core):
 

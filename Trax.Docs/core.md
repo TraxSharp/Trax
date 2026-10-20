@@ -1,5 +1,5 @@
 ---
-title: Trax.Core
+title: Trains (Trax.Core)
 description: "Trax.Core overview: trains, junctions, Memory and railway error propagation with no database or DI container, and when to use Core on its own."
 source:
   - Trax.Core/src/Trax.Core
@@ -8,9 +8,17 @@ area: trains
 nav_order: 1
 ---
 
-# Trax.Core
+# Trains (Trax.Core)
 
-`Trax.Core` is the foundation: trains, junctions, and railway error propagation. No database, no DI container, no infrastructure required.
+A piece of business work, such as placing an order, is rarely one call. It prices a cart, reserves
+stock, takes a payment and confirms, and when the payment fails the steps after it must not run.
+Written by hand, that is a method full of `if` checks between service calls. In Trax it is a
+**train**: a class that lists its steps (**junctions**) in order, hands each step's output to the
+next by its type, and stops at the first one that throws.
+
+Everything else in Trax runs, records, schedules or serves a train, so this is the place to start.
+[What Trax does](/docs/what-trax-does) shows how the rest attaches to it. This page covers
+`Trax.Core`, the package with the train itself: no database, no DI container, no infrastructure.
 
 ```bash
 dotnet add package Trax.Core
