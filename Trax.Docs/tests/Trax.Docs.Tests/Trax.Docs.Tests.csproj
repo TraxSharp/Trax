@@ -18,4 +18,8 @@
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../tools/Trax.Skills.Publish/Trax.Skills.Publish.csproj" />
+  </ItemGroup>
 </Project>

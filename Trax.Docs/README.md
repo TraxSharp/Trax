@@ -16,9 +16,11 @@ decision records for the rules that span more than one folder of the [Trax repos
 |---|---|
 | `*.md` and the section directories (`core/`, `effect/`, `mediator/`, `scheduler/`, `statemachine/`, `sdk-reference/`, `reference/`, `contributing/`, ...) | The pages published at traxsharp.net/docs. A file at `effect/metadata.md` is served at `/docs/effect/metadata`. |
 | `adr/` | Architecture decision records that bind more than one folder, indexed in [`adr/README.md`](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/README.md). Not published to the site. |
+| `skills/` | Agent skills for apps built on Trax, one folder per skill. Not published to the site; each release publishes them to [TraxSharp/skills](https://github.com/TraxSharp/skills) ([ADR 0056](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0056-agent-skills-are-written-in-the-docs-and-published-from-a-release.md)). |
 | `tools/Trax.Adr.Guard` | The checker for ADR frontmatter, index tables and guard census. CI builds it from this folder in the same checkout and runs it over each folder's ADR corpus through the local composite action `.github/actions/adr-guard` at the repository root, so a guard change and the corpus it checks land in one pull request ([ADR 0042](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md)). |
 | `tests/Trax.Docs.Tests` | Lint for the pages: internal links and redirects resolve, no em dashes, no Jekyll syntax, every page has a type and an area, SDK reference pages name a package, namespace and source that exist, and links from the code to the docs resolve. |
-| `tests/Trax.Docs.Snippets.Tests` | The code on the pages: every C# fence is marked, `compile` fences build against this checkout, `from=` fences match the file they quote. |
+| `tests/Trax.Docs.Snippets.Tests` | The code on the pages: every C# fence is marked, `compile` fences build against this checkout, `from=` fences match the file they quote. Covers the skills' fences too. |
+| `tools/Trax.Skills.Publish` | Checks the skills and stages the tree a release commits to TraxSharp/skills: the release's version stamped in, the plugin and marketplace manifests written. Tested by `tests/Trax.Skills.Publish.Tests`. |
 
 [Trax.Website](https://github.com/TraxSharp/Trax/tree/main/Trax.Website) renders these files. The site is published from a
 release: the release workflow moves the `website` branch to each release tag, so the published docs describe released code

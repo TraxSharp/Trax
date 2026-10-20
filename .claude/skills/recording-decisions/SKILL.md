@@ -1,6 +1,8 @@
 ---
 name: recording-decisions
 description: Record an architecture decision as an ADR in the Trax repository. Use when a change makes a decision that is hard to reverse, surprising without context, and the result of a real trade-off, or when editing, superseding or reviewing an existing ADR.
+metadata:
+  internal: true
 ---
 
 # Recording decisions

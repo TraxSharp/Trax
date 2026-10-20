@@ -40,6 +40,7 @@ internal static class RepoRoot
         System.IO.Path.GetFileName(relative) != "README.md"
         && !relative.StartsWith("adr/", StringComparison.Ordinal)
         && !relative.StartsWith(".claude/", StringComparison.Ordinal)
+        && !relative.StartsWith("skills/", StringComparison.Ordinal)
         && !relative.StartsWith("tools/", StringComparison.Ordinal)
         && !relative.StartsWith("tests/", StringComparison.Ordinal)
         && !relative.StartsWith(".github/", StringComparison.Ordinal);
