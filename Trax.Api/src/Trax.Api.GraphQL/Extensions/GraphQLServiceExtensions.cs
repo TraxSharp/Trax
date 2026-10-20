@@ -129,6 +129,14 @@ public static class GraphQLServiceExtensions
             ServiceDescriptor.Transient<IStartupFilter, WebSocketsStartupFilter>()
         );
 
+        // What the host serves, for a process started with --trax-export-deploy (TraxDeployExport).
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<
+                Trax.Effect.Configuration.Deploy.IDeployManifestSource,
+                Deploy.ApiDeployManifestSource
+            >()
+        );
+
         // Detect train queries/mutations registered before us so we can decide whether
         // RootQuery / RootMutation will have any fields by the time HotChocolate builds
         // the schema. A train registered AFTER AddTraxGraphQL is not seen here, and

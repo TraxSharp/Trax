@@ -54,6 +54,11 @@ public static class WorkerExtensions
 
         // Register the worker service that polls background_job
         services.AddHostedService<Services.LocalWorkerService.LocalWorkerService>();
+        Trax.Effect.Configuration.Deploy.DeployFact.Add(
+            services,
+            Trax.Effect.Configuration.Deploy.DeployFact.Role,
+            "worker"
+        );
 
         return services;
     }

@@ -127,7 +127,16 @@ public static class ServiceExtensions
         // not to; a process started with --trax-migrate always does (TraxMigrate).
         // A process started to export its client manifest opens no database, and refuses to serve if it is not
         // exporting after all (TraxClientExport).
-        var export = TraxClientExport.SkipsDatabase(configurationBuilder.ServiceCollection);
+        // The same holds for a process exporting what it needs from its deployment (TraxDeployExport).
+        var export =
+            TraxClientExport.SkipsDatabase(configurationBuilder.ServiceCollection)
+            | TraxDeployExport.SkipsDatabase(configurationBuilder.ServiceCollection);
+        DeployFact.Add(configurationBuilder.ServiceCollection, DeployFact.Database, "postgres");
+        DeployFact.Add(
+            configurationBuilder.ServiceCollection,
+            DeployFact.MigratesOnStart,
+            configurationBuilder.MigrationsDisabled ? "false" : "true"
+        );
         if (!export && TraxMigrate.ShouldMigrate(configurationBuilder))
             DatabaseMigrator.Migrate(connectionString).Wait();
 
