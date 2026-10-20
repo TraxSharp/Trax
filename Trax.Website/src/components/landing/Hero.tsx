@@ -21,6 +21,12 @@ export default function Hero() {
               >
                 Get started
               </Link>
+              <Link
+                href="/docs/what-trax-does"
+                className="text-sm font-medium text-accent transition-colors hover:text-accent-hover"
+              >
+                What Trax does &rarr;
+              </Link>
               <a
                 href="https://github.com/TraxSharp/Trax"
                 target="_blank"
@@ -30,8 +36,10 @@ export default function Hero() {
                 github.com/TraxSharp/Trax &rarr;
               </a>
             </div>
-            <p className="mt-8 font-mono text-xs text-text-muted">
-              $ dotnet add package Trax.Core
+            <p className="mt-8 font-mono text-xs leading-relaxed text-text-muted">
+              $ dotnet new install Trax.Samples.Templates
+              <br />
+              $ dotnet new trax-hub -n MyApp
             </p>
           </div>
           <AgentPrompt />

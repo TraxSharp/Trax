@@ -36,7 +36,7 @@ export default function QuickStart() {
           <pre className="mt-3 overflow-x-auto border-l-2 border-border bg-bg-secondary py-4 pl-5 pr-5 font-mono text-[13px] leading-relaxed text-text-secondary">
             {`Payments/
 ├── Payments.Hub/              `}
-            <span className="text-text-muted">API + Scheduler + Dashboard</span>
+            <span className="text-text-muted">API + Scheduler + console</span>
             {`
 │   └── Program.cs
 └── Payments.Trains/
@@ -69,10 +69,10 @@ export default function QuickStart() {
 
           <div className="mt-8">
             <Link
-              href="/docs/getting-started"
+              href="/docs/reference/cli"
               className="text-sm font-medium text-accent hover:text-accent-hover"
             >
-              Read the getting started guide &rarr;
+              Everything trax generate does &rarr;
             </Link>
           </div>
         </div>

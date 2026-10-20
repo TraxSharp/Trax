@@ -43,11 +43,19 @@ const layers = [
   },
   {
     rung: "Watch it",
-    name: "Dashboard",
+    name: "Operations console",
     cmd: "dotnet add package Trax.Api.Dashboard",
-    desc: "Served by your API host. Every run, schedule and dead letter in one place, with requeue and run-with-new-input from the browser.",
+    desc: "Served by your API host. Every run, schedule, dead letter and machine in one place, with requeue and run-with-new-input from the browser.",
     replaces: "a dashboard per tool",
     href: "/docs/dashboard",
+  },
+  {
+    rung: "Walk a user through it",
+    name: "State machines",
+    cmd: "dotnet add package Trax.Effect.StateMachine.Persistence",
+    desc: "A checkout or a form as named states the server stores after every move. Each move is a typed mutation the server applies or refuses, and a state can run a train.",
+    replaces: "status columns and hand-written transition checks",
+    href: "/docs/statemachine",
   },
 ];
 
@@ -59,7 +67,7 @@ export default function LayerDiagram() {
           Take the layers you need
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          Each package adds one thing on top of the one before it.
+          Each package adds one thing, and the trains you already wrote do not change.
         </p>
         <Link href="/docs/reference/packages" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
           Every package and what it adds &rarr;

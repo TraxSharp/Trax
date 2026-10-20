@@ -13,9 +13,9 @@ export default function Home() {
   return (
     <main>
       <Hero />
-      <SeeItRunning />
       <FourWays />
       <RunRecord />
+      <SeeItRunning />
       <Decisions />
       <LayerDiagram />
       <DeploymentArchitectures />
