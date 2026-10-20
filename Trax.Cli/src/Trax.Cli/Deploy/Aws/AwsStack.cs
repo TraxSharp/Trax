@@ -27,6 +27,12 @@ internal static class AwsStack
 
     public const int ContainerPort = 8080;
 
+    /// <summary>
+    /// The Postgres a new database starts on. RDS refuses a bare major version for a new instance, so this names a
+    /// minor; minor upgrades after that are RDS's (AutoMinorVersionUpgrade).
+    /// </summary>
+    public const string PostgresVersion = "17.11";
+
     public const string DatabaseUser = "trax";
 
     // AWS managed policies and CloudFront managed policies, by their fixed ids.
@@ -830,7 +836,7 @@ internal static class AwsStack
             new JsonObject
             {
                 ["Engine"] = "postgres",
-                ["EngineVersion"] = "17",
+                ["EngineVersion"] = PostgresVersion,
                 ["DBInstanceClass"] = production ? "db.t4g.small" : "db.t4g.micro",
                 ["AllocatedStorage"] = "20",
                 ["StorageType"] = "gp3",
