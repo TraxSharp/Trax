@@ -165,6 +165,9 @@ operation is refused and `/trax/dashboard` is a 404.
   [UseTraxApiDashboard](https://traxsharp.net/docs/sdk-reference/api-dashboard/use-trax-api-dashboard).
 - Outside `dotnet run` the URL comes from `ASPNETCORE_URLS` (or `ASPNETCORE_HTTP_PORTS`), not
   `launchSettings.json`.
+- To build a container image, no Dockerfile needed: `dotnet publish -t:PublishContainer`. It uses the
+  ASP.NET runtime image, runs as that image's non-root user, listens on 8080 and is named after the
+  project, lower-cased. Add `-p:ContainerRegistry=<registry>` to push it.
 
 ## Where to go next
 

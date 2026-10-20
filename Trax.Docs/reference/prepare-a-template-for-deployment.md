@@ -51,4 +51,21 @@ than a 401 or 403.
 3. Keep `[TraxAuthorize]` on the trains you add. Mark one `[TraxAllowAnonymous]` only when anyone
    who can reach the host may call it.
 
+## Build a container image
+
+Each template publishes as a container image with no Dockerfile:
+
+```bash
+dotnet publish -t:PublishContainer
+dotnet publish -t:PublishContainer -p:ContainerRegistry=123456789012.dkr.ecr.us-west-2.amazonaws.com
+```
+
+The image is the ASP.NET runtime image with the published app, named after the project in lower case, running as
+the runtime image's non-root user and listening on 8080, which the project declares with a `ContainerPort` item. The
+first form loads it into the local Docker or Podman; the second pushes it to the registry instead.
+
 [Secure a GraphQL host](/docs/security/secure-a-graphql-host) covers the rest of a production posture.
+
+## SDK Reference
+
+> [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth)
