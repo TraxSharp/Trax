@@ -22,6 +22,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
@@ -150,4 +151,6 @@ app.UseTraxGraphQL();
 if (app.Environment.IsDevelopment())
     app.UseTraxApiDashboard(dashboard => dashboard.AllowAnonymousShell());
 
-app.Run();
+// Serves, or, for a deployment step, migrates the database (--trax-migrate) or reports what the
+// host needs from its deployment (--trax-export-deploy) and exits.
+await app.RunTraxAsync(args);

@@ -167,6 +167,48 @@ public class ScaffoldedTemplateTests
             );
     }
 
+    [TestCase("trax-hub", "api,scheduler", "/trax/health")]
+    [TestCase("trax-scheduler", "api,scheduler", null)]
+    [TestCase("trax-api", "api", "/trax/health")]
+    public async Task Scaffold_ReportsWhatItNeedsFromItsDeployment(
+        string shortName,
+        string roles,
+        string? health
+    )
+    {
+        var dir = await Scaffold(shortName);
+        var path = Path.Combine(dir, "deploy.json");
+
+        // In Production, as trax deploy runs it, with a connection string that names no reachable server: the
+        // export opens no database.
+        var export = await Run(
+            dir,
+            new Dictionary<string, string>
+            {
+                ["ASPNETCORE_ENVIRONMENT"] = "Production",
+                ["ConnectionStrings__Trax"] =
+                    "Host=trax-deploy-export.invalid;Database=x;Username=x;Password=x",
+            },
+            allowFailure: true,
+            "run",
+            "--no-build",
+            "--no-launch-profile",
+            "--",
+            "--trax-export-deploy",
+            path
+        );
+
+        export.ExitCode.Should().Be(0, $"the {shortName} export runs:\n{export.Output}");
+        var manifest = Trax.Effect.Configuration.Deploy.DeployManifest.Read(
+            await File.ReadAllTextAsync(path)
+        );
+        manifest.Roles.Should().Equal(roles.Split(','));
+        manifest.Database!.Provider.Should().Be("postgres");
+        manifest.Endpoints.GraphQL.Should().Be("/trax/graphql");
+        manifest.Endpoints.Health.Should().Be(health);
+        manifest.Endpoints.Console.Should().BeNull("the console is served only in Development");
+    }
+
     [TestCase("trax-hub", "/trax/dashboard/", HttpStatusCode.NotFound)]
     [TestCase("trax-hub", "/trax/health", HttpStatusCode.OK)]
     [TestCase("trax-scheduler", "/trax/dashboard/", HttpStatusCode.NotFound)]
