@@ -18,6 +18,8 @@ can be stored in Postgres and rebuilt from any point, so a user can start on one
 another. Illegal (state, data) combinations are made unrepresentable, and neither the API nor the client can
 produce an unhandled exception.
 
+Whether a piece of work wants a machine or a train is on [Train or machine](/docs/statemachine/train-or-machine).
+
 To build one, follow [Author and serve a machine](/docs/statemachine/authoring). Guards and reducers written as data
 are covered in [Write guards and reducers as data](/docs/statemachine/declarative-authoring), and a state that runs
 a train in [Invoke a train from a state](/docs/statemachine/invoking-trains). A state can also start another machine and wait for
