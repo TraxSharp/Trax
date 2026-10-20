@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
 // Trax Hub: GraphQL API + Scheduler + operations console in one process
 //
-// Runs with no database: the in-memory provider keeps every run in this process
-// and loses it on restart. README.md says how to switch to Postgres, add a
+// In Development it runs with no database: the in-memory provider keeps every run in
+// this process and loses it on restart. Set ConnectionStrings__Trax to use Postgres,
+// which it needs anywhere else. README.md says how to switch to Postgres, add a
 // train and run the tests; https://traxsharp.net/docs/reference/templates
 // describes every file.
 //
@@ -29,6 +30,7 @@ using Trax.Api.Dashboard.Extensions;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
@@ -61,11 +63,27 @@ if (builder.Environment.IsDevelopment())
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
+// -- Where runs are recorded --------------------------------------------------
+// In Postgres when ConnectionStrings:Trax is set (ConnectionStrings__Trax in the environment), so
+// runs survive a restart and every process sees the same ones. Without it, in memory, which loses
+// them on restart: in Development, or anywhere Trax:AllowInMemory is true (the tests set it).
+// Anywhere else the host refuses to start rather than lose every run when it stops.
+var traxDatabase = builder.Configuration.GetConnectionString("Trax");
+if (
+    traxDatabase is null
+    && !builder.Environment.IsDevelopment()
+    && !builder.Configuration.GetValue<bool>("Trax:AllowInMemory")
+)
+    throw new InvalidOperationException(
+        "ConnectionStrings:Trax is not set. Outside Development this host does not keep its runs in "
+            + "memory, where a restart loses them, unless Trax:AllowInMemory is true. Set "
+            + "ConnectionStrings__Trax to a Postgres connection string: "
+            + "https://traxsharp.net/docs/reference/switch-a-template-to-postgres"
+    );
+
 // -- 2. Trax: the effect system, the mediator and the scheduler -----------------
 // AddTrax comes before AddTraxGraphQL, which throws without it.
-//   UseInMemory()          where runs are recorded. Swap for UsePostgres(connectionString)
-//                          (package Trax.Effect.Data.Postgres) to keep them across restarts
-//                          and share them between processes.
+//   UsePostgres/UseInMemory where runs are recorded, chosen above.
 //   SaveTrainParameters()  stores each run's input and output, which the console shows.
 //   AddJunctionProgress()  records the running junction and lets the console cancel a run
 //                          between junctions.
@@ -75,7 +93,11 @@ builder.Services.AddAuthorization();
 //   AddScheduler(...)      runs manifests. The console needs it: the operations namespace
 //                          reads the scheduler's services.
 builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UseInMemory().SaveTrainParameters().AddJunctionProgress())
+    trax.AddEffects(effects =>
+            (traxDatabase is null ? effects.UseInMemory() : effects.UsePostgres(traxDatabase))
+                .SaveTrainParameters()
+                .AddJunctionProgress()
+        )
         .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler =>
             scheduler.Schedule<IHelloWorldTrain>(

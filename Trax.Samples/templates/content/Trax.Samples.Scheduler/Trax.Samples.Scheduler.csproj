@@ -20,6 +20,7 @@
     <PackageReference Include="Trax.Core" />
     <PackageReference Include="Trax.Effect" />
     <PackageReference Include="Trax.Effect.Data.InMemory" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" />
     <PackageReference Include="Trax.Effect.Provider.Parameter" />
     <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
     <PackageReference Include="Trax.Mediator" />

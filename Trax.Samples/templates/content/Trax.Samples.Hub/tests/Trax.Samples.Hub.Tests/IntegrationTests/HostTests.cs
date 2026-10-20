@@ -18,9 +18,10 @@ public class HostTests
     private const string DispatchHelloWorld =
         "mutation { dispatch { helloWorld(input: { name: \"Test\" }) { metadataId } } }";
 
+    // Outside Development the host refuses the in-memory store unless told it is meant, as here.
     private static WebApplicationFactory<Program> Start(string environment) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
-            host.UseEnvironment(environment)
+            host.UseEnvironment(environment).UseSetting("Trax:AllowInMemory", "true")
         );
 
     [Test]
