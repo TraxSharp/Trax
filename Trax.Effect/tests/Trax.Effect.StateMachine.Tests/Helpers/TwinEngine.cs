@@ -77,7 +77,8 @@ public static class TwinEngine
             ),
         };
 
-        var answers = (JsonArray)JsonNode.Parse(Run(engineRoot, request.ToJsonString()))!;
+        var answers = (JsonArray)
+            JsonNode.Parse(Run(engineRoot, "tools/replay-sequences.mjs", request.ToJsonString()))!;
         return answers
             .Select(sequence =>
                 (IReadOnlyList<Answer>)
@@ -88,6 +89,26 @@ public static class TwinEngine
                             a["wire"]!.GetValue<string>()
                         ))
                         .ToList()
+            )
+            .ToList();
+    }
+
+    /// <summary>
+    /// Checks each of <paramref name="irs"/> against <c>conformance/ir.schema.json</c> with the engine's validator
+    /// (<c>tools/conformance/ir-schema.mjs</c>), and returns each one's errors, empty when it is valid.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<string>> ValidateIrs(IReadOnlyList<JsonObject> irs)
+    {
+        var engineRoot = EngineRoot();
+        var request = new JsonArray(irs.Select(ir => (JsonNode)ir.DeepClone()).ToArray());
+        var answers = (JsonArray)
+            JsonNode.Parse(
+                Run(engineRoot, "tools/conformance/ir-schema.mjs", request.ToJsonString())
+            )!;
+        return answers
+            .Select(errors =>
+                (IReadOnlyList<string>)
+                    ((JsonArray)errors!).Select(e => e!.GetValue<string>()).ToList()
             )
             .ToList();
     }
@@ -110,9 +131,9 @@ public static class TwinEngine
         Assert.Ignore($"The TypeScript twin cannot run: {why} Skipping the cross-engine check.");
     }
 
-    private static string Run(string engineRoot, string request)
+    private static string Run(string engineRoot, string script, string request)
     {
-        var start = new ProcessStartInfo("node", "tools/replay-sequences.mjs")
+        var start = new ProcessStartInfo("node", script)
         {
             WorkingDirectory = engineRoot,
             RedirectStandardInput = true,
@@ -130,14 +151,12 @@ public static class TwinEngine
         if (!process.WaitForExit(NodeTimeout))
         {
             process.Kill(entireProcessTree: true);
-            Assert.Fail($"replay-sequences.mjs did not answer within {NodeTimeout}.");
+            Assert.Fail($"{script} did not answer within {NodeTimeout}.");
         }
 
         if (process.ExitCode == MissingDependencies)
             Unavailable("its dependencies are not installed (npm ci in Trax.Api.StateMachine).");
-        process
-            .ExitCode.Should()
-            .Be(0, $"replay-sequences.mjs failed: {stderr.GetAwaiter().GetResult()}");
+        process.ExitCode.Should().Be(0, $"{script} failed: {stderr.GetAwaiter().GetResult()}");
         return stdout.GetAwaiter().GetResult();
     }
 

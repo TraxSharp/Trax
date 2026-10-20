@@ -1,0 +1,970 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trax:state-machine:ir-format:1",
+  "title": "Trax state machine IR, format 1",
+  "description": "The document IrExporter.Export writes and every engine reads. Normative: an engine reads every document this schema accepts, and an exporter writes nothing it refuses. Every object is closed, so a field the exporter adds without changing this schema fails the conformance tests. See traxsharp.net/docs/sdk-reference/statemachine-api/ir-format.",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "initialState",
+    "initialContext",
+    "states",
+    "triggers",
+    "committedStates",
+    "context",
+    "inputs",
+    "transitions"
+  ],
+  "properties": {
+    "irFormat": {
+      "description": "The IR format a generated twin was generated for. The exporter does not write it; a twin generated with specifier imports adds it.",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "initialState": {
+      "type": "string",
+      "minLength": 1
+    },
+    "initialContext": {
+      "type": "object"
+    },
+    "states": {
+      "$ref": "#/$defs/names"
+    },
+    "triggers": {
+      "$ref": "#/$defs/names"
+    },
+    "committedStates": {
+      "$ref": "#/$defs/names"
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/schema"
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/schema"
+      }
+    },
+    "invariants": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/rule"
+      }
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/transition"
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/outcome"
+      }
+    },
+    "timers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/timer"
+      }
+    },
+    "differential": {
+      "$ref": "#/$defs/differential"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "names": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "type": {
+      "enum": [
+        "string",
+        "number",
+        "integer",
+        "boolean",
+        "array",
+        "object"
+      ]
+    },
+    "format": {
+      "enum": [
+        "uuid",
+        "date-time",
+        "date-time-offset",
+        "date",
+        "time",
+        "duration",
+        "uri",
+        "char"
+      ]
+    },
+    "schema": {
+      "type": "object",
+      "required": [
+        "fields"
+      ],
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "nullable",
+        "constraints"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "enum": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enumExact": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "values": {
+          "$ref": "#/$defs/valueShape"
+        },
+        "keys": {
+          "$ref": "#/$defs/keyShape"
+        }
+      },
+      "additionalProperties": false
+    },
+    "valueShape": {
+      "description": "The schema each value of a dictionary, or each element of a list of non-records, is checked against.",
+      "type": "object",
+      "required": [
+        "type",
+        "nullable"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "enum": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enumExact": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "values": {
+          "$ref": "#/$defs/valueShape"
+        },
+        "keys": {
+          "$ref": "#/$defs/keyShape"
+        }
+      },
+      "additionalProperties": false
+    },
+    "keyShape": {
+      "description": "The schema each key of a dictionary not keyed by string is checked against.",
+      "type": "object",
+      "required": [
+        "type",
+        "nullable"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "nullable": {
+          "const": false
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "enum": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enumExact": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "values": {
+          "$ref": "#/$defs/valueShape"
+        },
+        "keys": {
+          "$ref": "#/$defs/keyShape"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field"
+          ],
+          "properties": {
+            "rule": {
+              "const": "present"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field"
+          ],
+          "properties": {
+            "rule": {
+              "const": "absent"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field"
+          ],
+          "properties": {
+            "rule": {
+              "const": "nonEmpty"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field",
+            "type"
+          ],
+          "properties": {
+            "rule": {
+              "const": "ofType"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "$ref": "#/$defs/type"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field",
+            "type"
+          ],
+          "properties": {
+            "rule": {
+              "const": "arrayOf"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "$ref": "#/$defs/type"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field",
+            "values"
+          ],
+          "properties": {
+            "rule": {
+              "const": "oneOf"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field",
+            "op",
+            "value"
+          ],
+          "properties": {
+            "rule": {
+              "const": "compare"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "enum": [
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "eq"
+              ]
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field",
+            "op",
+            "value"
+          ],
+          "properties": {
+            "rule": {
+              "const": "count"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "enum": [
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "eq"
+              ]
+            },
+            "value": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field",
+            "op",
+            "value"
+          ],
+          "properties": {
+            "rule": {
+              "const": "length"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "enum": [
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "eq"
+              ]
+            },
+            "value": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "source",
+            "field",
+            "value"
+          ],
+          "properties": {
+            "rule": {
+              "const": "boolEquals"
+            },
+            "source": {
+              "enum": [
+                "context",
+                "input"
+              ]
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "rules"
+          ],
+          "properties": {
+            "rule": {
+              "const": "all"
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/rule"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "rules"
+          ],
+          "properties": {
+            "rule": {
+              "const": "any"
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/rule"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "rule",
+            "name"
+          ],
+          "properties": {
+            "rule": {
+              "const": "custom"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "reduction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "reduce"
+          ],
+          "properties": {
+            "reduce": {
+              "enum": [
+                "keep",
+                "clear",
+                "reset"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "reduce",
+            "name"
+          ],
+          "properties": {
+            "reduce": {
+              "const": "custom"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "reduce",
+            "steps"
+          ],
+          "properties": {
+            "reduce": {
+              "const": "set"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "field",
+                  "value"
+                ],
+                "properties": {
+                  "field": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "value": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "input"
+                        ],
+                        "properties": {
+                          "input": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "const"
+                        ],
+                        "properties": {
+                          "const": true
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "transition": {
+      "type": "object",
+      "required": [
+        "from",
+        "trigger",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "guard": {
+          "$ref": "#/$defs/rule"
+        },
+        "guardMessage": {
+          "type": "string"
+        },
+        "reduce": {
+          "$ref": "#/$defs/reduction"
+        },
+        "effect": {
+          "type": "object",
+          "required": [
+            "keyPrefix"
+          ],
+          "properties": {
+            "keyPrefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "state",
+        "outcome",
+        "edges"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "enum": [
+            "done",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "edges": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "to"
+            ],
+            "properties": {
+              "to": {
+                "type": "string",
+                "minLength": 1
+              },
+              "guard": {
+                "$ref": "#/$defs/rule"
+              },
+              "reduce": {
+                "$ref": "#/$defs/reduction"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "output": {
+          "$ref": "#/$defs/schema"
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "done"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "output"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "output"
+          ]
+        }
+      }
+    },
+    "timer": {
+      "type": "object",
+      "required": [
+        "state",
+        "trigger",
+        "target",
+        "rules"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger": {
+          "type": "string",
+          "pattern": "\\.after$"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "after": {
+          "type": "string",
+          "pattern": "^P"
+        },
+        "field": {
+          "type": "object",
+          "required": [
+            "name",
+            "min",
+            "max"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "min": {
+              "type": "string",
+              "pattern": "^P"
+            },
+            "max": {
+              "type": "string",
+              "pattern": "^P"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "after"
+          ]
+        },
+        {
+          "required": [
+            "field"
+          ]
+        }
+      ]
+    },
+    "differential": {
+      "description": "Test-only fuzzing inputs; stripped from a generated runtime machine.",
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "samples": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array"
+          }
+        },
+        "seeds": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            ]
+          }
+        },
+        "contexts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

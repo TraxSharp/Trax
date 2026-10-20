@@ -125,6 +125,14 @@ schema hash. A twin generated with specifier imports records it as `irFormat` in
 `@traxsharp/state-machine` refuses, when the twin is imported, a format newer than it reads or older than it still
 reads, saying whether to upgrade the package or regenerate. An IR without `irFormat` is not checked.
 
+## The schema
+
+The format is also written as a JSON Schema (draft 2020-12),
+[`conformance/ir.schema.json`](https://github.com/TraxSharp/Trax/blob/main/Trax.Api.StateMachine/conformance/ir.schema.json),
+and the schema is normative: an engine reads every document it accepts, and the exporter writes nothing it refuses.
+Every object in it is closed, so a field it does not name is refused rather than ignored. Both runtimes' tests check
+every IR the exporter writes against it, so a field added to the IR without the schema fails them.
+
 ## Transitions
 
 Each transition carries its structure plus its guard and reducer as data:
