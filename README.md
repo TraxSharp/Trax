@@ -60,6 +60,26 @@ folder depends only on folders above it in this table; take the layers you need,
 Trax used to be split into one repository per layer (`TraxSharp/Trax.Core` and the rest). Those are archived; their
 history is here, under each folder.
 
+### The coloured squares
+
+Release notes, pull requests and the docs mark each change with the parts of Trax it touches. The parts are concepts,
+not folders: `Trax.Effect` alone holds data, plumbing, trains and state machines. A change that crosses several shows
+several squares, innermost first.
+
+| | Part | What it covers |
+|---|---|---|
+| 🟨 | Data | The run-record tables, migrations and the Postgres, SQLite and in-memory providers |
+| 🟫 | Plumbing | Effect and junction providers, broadcasters (RabbitMQ, SignalR), lifecycle hooks |
+| 🟩 | Trains | Trains, junctions, chains, decisions, `Parallel` |
+| 🟪 | Machines | State machines, in .NET and in `@traxsharp/state-machine` |
+| 🟧 | Dispatch | The train bus, authorization, the scheduler (manifests, retries, dead letters), remote workers and Lambda |
+| 🟦 | Surface | Trax.Api: GraphQL, auth, persisted operations, generated clients, the operations console |
+| ⬛ | Tooling | The `trax` CLI, analyzers, architecture guards, CI, releases, the docs |
+| 🟥 | Security | Not a part: a flag on any change to authentication, authorization or what is exposed |
+
+A release note headed 🟧🟦🟥, for example, changes how work is dispatched and what the API serves, and it is worth
+reading for its security impact before you upgrade.
+
 ## Contributing
 
 Read [AGENTS.md](AGENTS.md) before changing anything, then the `AGENTS.md` in the folder you are working in. Report
