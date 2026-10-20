@@ -117,6 +117,9 @@
         "dependencies": {
           "Microsoft.TestPlatform.ObjectModel": "18.10.1"
         }
+      },
+      "trax.skills.publish": {
+        "type": "Project"
       }
     }
   }
