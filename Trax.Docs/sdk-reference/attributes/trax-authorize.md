@@ -103,5 +103,5 @@ The caller must pass `MustBeInternal` and hold `Admin` or `Manager`.
 
 - [Authorization](/docs/authorization), the full model and the exposure posture every GraphQL surface declares
 - [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) and [TraxAuthorization](/docs/sdk-reference/attributes/trax-authorization)
-- [Auth sample](/docs/samples/auth), each form on a running host
+- [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth), each form on a running host
 

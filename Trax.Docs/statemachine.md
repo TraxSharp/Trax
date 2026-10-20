@@ -102,7 +102,7 @@ events.
 Autosave stores the context the client wrote, so any value an effect will act on has to be held to its true value
 by the state's rule, not just to its type. A checkout whose context carries a `total` holds
 `total == items x price` in every state; checking only that `total` is a number would let a browser save two items
-at one cent and have the charge take one cent. The [State Machine sample](/docs/samples/state-machine) shows the
+at one cent and have the charge take one cent. The [State Machine sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/StateMachine) shows the
 check and its test.
 
 Some transitions carry an irreversible side effect: charge a card, send a letter, provision a resource. Those run

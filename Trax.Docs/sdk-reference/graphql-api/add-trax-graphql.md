@@ -148,7 +148,7 @@ An anonymous caller or one without the role gets `TRAX_AUTHORIZATION` (`"Not aut
 any `operations { ... }` field, read or mutation, while `[TraxAllowAnonymous]` surfaces stay
 reachable. `queueTrain`, `runTrain` and `requeueExecution` also apply the queued train's own
 `[TraxAuthorize]`, so the operator role alone does not let a caller queue a train they may not
-run. The [Auth sample](/docs/samples/auth) covers each of these end to end.
+run. The [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth) covers each of these end to end.
 
 What refuses startup:
 

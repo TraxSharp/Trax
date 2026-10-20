@@ -480,7 +480,7 @@ the union of every attribute's roles; it does not say which attributes they came
   [ITrustedExecutionScope](/docs/sdk-reference/mediator-api/i-trusted-execution-scope),
   [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql),
   [Query models](/docs/sdk-reference/graphql-api/query-models)
-- The [Auth sample](/docs/samples/auth) uses each gate in one host, and its E2E suite proves them.
+- The [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth) uses each gate in one host, and its E2E suite proves them.
 
 ## SDK Reference
 

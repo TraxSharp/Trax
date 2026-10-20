@@ -56,4 +56,4 @@ TRAX_TEST_PG_PORT=5432 dotnet test tests/Trax.Samples.EnergyHub.E2E
 The suite starts the hub and a worker in one test process against `energyhub_e2e_tests`.
 `TRAX_TEST_RABBITMQ` overrides the broker URI (default `amqp://trax:trax123@localhost:5672`).
 
-Docs: <https://traxsharp.net/docs/samples/energy-hub>
+The book splits a host this way in [11. A separate worker](https://traxsharp.net/docs/book/a-separate-worker).

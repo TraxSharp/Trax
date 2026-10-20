@@ -27,7 +27,7 @@
 //
 //   A token for any of them: curl http://localhost:5220/dev/token/alice  (Development only)
 //
-// Try it: see README.md, or https://traxsharp.net/docs/samples/auth
+// Try it: see README.md.
 //
 // NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for
 // securing systems that use it.

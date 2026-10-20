@@ -5,7 +5,7 @@ Securing a Trax GraphQL server end to end, in one host: API keys and JWT bearer 
 `GateOperations` on the operations namespace, scheme-qualified principal ids, and an audit trail
 of who did what.
 
-Full walkthrough: [traxsharp.net/docs/samples/auth](https://traxsharp.net/docs/samples/auth).
+The book builds the same thing step by step: [6. Customers and staff](https://traxsharp.net/docs/book/customers-and-staff).
 
 ## What it proves
 

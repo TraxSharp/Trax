@@ -66,7 +66,7 @@ public static class DevJwt
 }
 ```
 
-The [Auth sample](/docs/samples/auth) serves such tokens from a `GET /dev/token/{user}` endpoint it
+The [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth) serves such tokens from a `GET /dev/token/{user}` endpoint it
 maps only in Development. In tests, [TestTokenIssuer](/docs/sdk-reference/api-auth/test-token-issuer)
 `.Symmetric` mints them.
 

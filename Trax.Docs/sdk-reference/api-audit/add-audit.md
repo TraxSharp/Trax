@@ -81,4 +81,4 @@ services.AddTraxGraphQL(graphql =>
 - [Audit pipeline](/docs/api-security#3-write-the-audit-sink): what an entry records, drops and shutdown.
 - [Tune the audit pipeline](/docs/security/tune-the-audit-pipeline)
 - [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options), [ITraxAuditSink](/docs/sdk-reference/api-audit/i-trax-audit-sink), [ITraxAuditRedactor](/docs/sdk-reference/api-audit/i-trax-audit-redactor)
-- The [Auth sample](/docs/samples/auth) stores entries in a table and serves them to auditors as a gated query model.
+- The [Auth sample](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Auth) stores entries in a table and serves them to auditors as a gated query model.

@@ -103,12 +103,8 @@ and dead letters. The `operations.health` query returns the same data over Graph
 Every sample serves the API; these show it in different topologies (see
 [Samples](/docs/samples) for all of them):
 
-- [Scheduling](/docs/samples/scheduling): API, scheduler, local workers and dashboard in one
-  process, with the operations surface gated to an operator role.
-- [Auth](/docs/samples/auth): the API secured end to end, with API keys and JWTs,
-  `[TraxAuthorize]`, `GateOperations` and the audit trail.
-- [Energy Hub](/docs/samples/energy-hub): API, scheduler and dashboard in one hub process that runs
-  no queued job itself; separate worker processes do.
+- [The Trax book](/docs/book): one shop that grows from one process into a hub and workers, with
+  JWT auth, scheduling and the operations console.
 - [Content Shield](/docs/samples/content-shield): `UseRemoteWorkers()` and `UseRemoteRun()` send
   queued work, runs and queries to an ephemeral runner over signed HTTP requests.
 

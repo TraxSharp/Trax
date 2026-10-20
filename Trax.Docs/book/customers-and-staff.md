@@ -5,6 +5,8 @@ type: tutorial
 area: general
 parent: The Trax book
 nav_order: 16
+redirect_from:
+  - /docs/samples/auth
 ---
 
 # 6. Customers and staff

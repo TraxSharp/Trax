@@ -20,7 +20,7 @@ that the registrations described work together. The second one has no sample.
 
 ## One host does everything
 
-Samples: [Scheduling](/docs/samples/scheduling), [Recovery](/docs/samples/recovery).
+Samples: [Scheduling](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/Scheduling), [Recovery](/docs/samples/recovery).
 
 One ASP.NET process schedules trains, runs them, serves GraphQL and, in Development, serves the
 operations console. It runs them on the scheduler's local workers, which `AddScheduler()` registers by
@@ -56,7 +56,7 @@ a fleet of workers.
 
 ## A hub and distributed workers
 
-Sample: [Energy Hub](/docs/samples/energy-hub).
+Sample: [Energy Hub](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples/samples/DistributedWorkers). The book splits Shopfront this way in [11. A separate worker](/docs/book/a-separate-worker).
 
 The hub schedules and serves the API but executes nothing it queues.
 `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())` registers the

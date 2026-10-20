@@ -5,6 +5,8 @@ type: tutorial
 area: general
 parent: The Trax book
 nav_order: 19
+redirect_from:
+  - /docs/samples/scheduling
 ---
 
 # 9. Scheduled work
