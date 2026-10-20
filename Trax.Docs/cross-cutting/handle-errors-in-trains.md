@@ -51,6 +51,47 @@ public class ChargeCardJunction(IPaymentGateway gateway) : Junction<PaymentReque
 Do not catch an exception only to return a default value: the next junction then runs on input
 that is not real.
 
+Once a junction throws, no later junction runs, and `Run` throws the same exception the junction
+did. This checkout, from Trax.Core's tests, has a card that is always declined, so the receipt is
+never sent:
+
+```csharp from=Trax.Core/tests/Trax.Core.Tests.Integration/Examples/Failures/Checkout.cs
+public class ChargeCard : Junction<Order, Payment>
+{
+    public override Task<Payment> Run(Order order) =>
+        throw new InvalidOperationException("Card declined");
+}
+
+public class SendReceipt(IOutbox outbox) : Junction<Payment, Receipt>
+{
+    public override Task<Receipt> Run(Payment payment)
+    {
+        outbox.Sent.Add($"receipt for {payment.Amount}");
+        return Task.FromResult(new Receipt(payment.Amount));
+    }
+}
+
+public class CheckoutTrain(IOutbox outbox) : Train<Order, Receipt>
+{
+    protected override Task<Either<Exception, Receipt>> Junctions() =>
+        AddServices(outbox).Chain<ChargeCard>().Chain<SendReceipt>().Resolve();
+}
+```
+
+```csharp from=Trax.Core/tests/Trax.Core.Tests.Integration/Examples/Failures/FailedJunctionTests.cs
+    [Test]
+    public async Task Run_ChargeCardThrows_SendsNoReceiptAndThrowsTheSameException()
+    {
+        var outbox = new Outbox();
+
+        var checkout = () => new CheckoutTrain(outbox).Run(new Order(20m));
+
+        var declined = await checkout.Should().ThrowAsync<InvalidOperationException>();
+        declined.Which.Message.Should().Be("Card declined");
+        outbox.Sent.Should().BeEmpty();
+    }
+```
+
 ## React to a failure in the train
 
 On a `ServiceTrain`, override `OnFailed`. It runs once, after the run's failure is recorded, with

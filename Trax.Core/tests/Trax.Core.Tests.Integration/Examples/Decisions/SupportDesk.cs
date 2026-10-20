@@ -5,6 +5,8 @@ using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Integration.Examples.Decisions;
 
+// Shown on https://traxsharp.net/docs/core/decisions
+//
 // A support desk triages each incoming message. A decider (in production, a model that returns
 // typed decisions) reads the parsed ticket and picks a track. Refunds move money, so they need more
 // confidence than the other tracks; anything the decider is unsure about goes to a person.

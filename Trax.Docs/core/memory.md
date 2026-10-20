@@ -43,6 +43,34 @@ Memory stores one value per type. If two junctions both return `string`, the sec
 .Chain<GetLastNameJunction>()    // Returns LastName
 ```
 
+This test, from Trax.Core's own suite, shows it happening: both junctions return `string`, and the train ends up with the last name only.
+
+```csharp from=Trax.Core/tests/Trax.Core.Tests.Integration/Examples/Memory/OneValuePerTypeTests.cs
+public class GetFirstName : Junction<Person, string>
+{
+    public override Task<string> Run(Person person) => Task.FromResult(person.FirstName);
+}
+
+public class GetLastName : Junction<Person, string>
+{
+    public override Task<string> Run(Person person) => Task.FromResult(person.LastName);
+}
+
+public class NameTrain : Train<Person, string>
+{
+    protected override Task<Either<Exception, string>> Junctions() =>
+        Chain<GetFirstName>().Chain<GetLastName>().Resolve();
+}
+// ...
+    [Test]
+    public async Task Run_TwoJunctionsReturnAString_ReturnsTheSecond()
+    {
+        var name = await new NameTrain().Run(new Person("Ada", "Lovelace"));
+
+        name.Should().Be("Lovelace");
+    }
+```
+
 A junction's output is stored under its declared output type only, not its runtime type or interfaces, so a later junction that takes an interface finds the value only when the producing junction declares that interface as its output.
 
 This is why Trax encourages specific types (records, value objects) over primitives. A junction signature like `Junction<User, EmailAddress>` tells you exactly what goes in and what comes out, while `Junction<User, string>` doesn't.

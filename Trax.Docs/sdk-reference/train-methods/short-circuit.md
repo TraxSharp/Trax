@@ -50,6 +50,37 @@ protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
 
 The steps after a `ShortCircuit` still run, whether or not it succeeded: the short-circuit value changes only what `Resolve()` returns. A later step that fails puts the train on the failure track, and `Resolve()` then returns that failure rather than the short-circuit value.
 
+This test, from Trax.Core's suite, puts a cache in front of a price lookup. On a hit the cached price is the result and the lookup still runs; on a miss the cache's exception is dropped:
+
+```csharp from=Trax.Core/tests/Trax.Core.Tests.Integration/Examples/Caching/CachedPriceTests.cs
+public class PriceTrain(IPriceCache cache, IAudit audit) : Train<Product, Price>
+{
+    protected override Task<Either<Exception, Price>> Junctions() =>
+        AddServices(cache, audit).ShortCircuit<CheckCache>().Chain<LookUpPrice>().Resolve();
+}
+// ...
+    [Test]
+    public async Task Run_CacheHit_ReturnsTheCachedPriceButStillRunsTheLookUp()
+    {
+        var cache = new PriceCache();
+        cache.Prices["tea"] = 4m;
+        var audit = new Audit();
+
+        var price = await new PriceTrain(cache, audit).Run(new Product("tea"));
+
+        price.Should().Be(new Price(4m));
+        audit.Lines.Should().Equal("looked up tea");
+    }
+
+    [Test]
+    public async Task Run_CacheMiss_IgnoresTheFailureAndReturnsTheLookUp()
+    {
+        var price = await new PriceTrain(new PriceCache(), new Audit()).Run(new Product("tea"));
+
+        price.Should().Be(new Price(10m));
+    }
+```
+
 | Condition | Result |
 |-----------|--------|
 | The junction's output cannot be `TReturn` | Refused by the startup chain check |

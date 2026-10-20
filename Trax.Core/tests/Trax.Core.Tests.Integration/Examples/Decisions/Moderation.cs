@@ -5,6 +5,8 @@ using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Integration.Examples.Decisions;
 
+// Shown on https://traxsharp.net/docs/core/decisions
+//
 // Moderating a post. Three questions about the same post are asked in one call: is it a threat,
 // what should happen to it, and how severe is it. A threat is taken down whatever the verdict; the
 // rest is routed by the verdict, and posts sent for review are routed again by severity.

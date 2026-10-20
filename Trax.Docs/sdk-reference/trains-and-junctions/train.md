@@ -88,6 +88,34 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
 - **Nothing escapes `RunEither`.** A junction's exception, including cancellation, comes back as `Left`, and so does an exception `Junctions()` itself throws.
 - **Overriding `Run`.** `Run` is virtual so code built on Trax.Core alone can wrap it. An override that does not call `base.Run` never reaches `Junctions()`, so `DeclaredChain()`, and any check built on it, does not describe what runs (Trax.Core ADR 0003). `ServiceTrain` seals it.
 
+A checkout whose card is always declined, from Trax.Core's tests. `RunEither` hands back the junction's own exception rather than throwing it:
+
+```csharp from=Trax.Core/tests/Trax.Core.Tests.Integration/Examples/Failures/Checkout.cs
+public class ChargeCard : Junction<Order, Payment>
+{
+    public override Task<Payment> Run(Order order) =>
+        throw new InvalidOperationException("Card declined");
+}
+// ...
+public class CheckoutTrain(IOutbox outbox) : Train<Order, Receipt>
+{
+    protected override Task<Either<Exception, Receipt>> Junctions() =>
+        AddServices(outbox).Chain<ChargeCard>().Chain<SendReceipt>().Resolve();
+}
+```
+
+```csharp from=Trax.Core/tests/Trax.Core.Tests.Integration/Examples/Failures/RunEitherTests.cs
+    [Test]
+    public async Task RunEither_ChargeCardThrows_ReturnsTheExceptionInsteadOfThrowing()
+    {
+        var result = await new CheckoutTrain(new Outbox()).RunEither(new Order(20m));
+
+        result.IsLeft.Should().BeTrue();
+        var message = result.Match(Right: receipt => "", Left: failure => failure.Message);
+        message.Should().Be("Card declined");
+    }
+```
+
 ## Example
 
 ```csharp compile=score

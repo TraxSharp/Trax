@@ -345,6 +345,19 @@ them. Trailing whitespace and the indentation a chunk's lines share are not comp
 lifted out of a nested block drops its outer indentation. Region marker lines are ignored on both
 sides. A failure names the page and line, the file, and the first chunk that did not match.
 
+A page that states a behaviour can show the test that proves it: an excerpt of a file under a
+library folder's `tests/`, usually a small example in `Examples/` written to be read (one train,
+one test, names a reader follows without the rest of the suite). The test file names each page that
+shows it, in a comment near its top, so whoever edits the test knows a page depends on it:
+
+```csharp fragment
+// Shown on https://traxsharp.net/docs/core/memory
+```
+
+`TestExcerptsNameTheirPagesTests` checks both directions: an excerpt of a library test needs the
+line in the file, and the line needs the page to excerpt the file. Samples and templates are not
+covered.
+
 ### Package versions
 
 Every Trax `PackageReference` with a `Version` on a page, and every Trax `PackageVersion` in a
