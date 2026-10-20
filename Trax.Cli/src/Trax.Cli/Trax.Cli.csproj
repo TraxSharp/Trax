@@ -23,6 +23,14 @@
     <PackageReference Include="GraphQL-Parser" />
     <PackageReference Include="Microsoft.OpenApi.Readers" />
     <PackageReference Include="Scriban" />
+    <!-- The AWS target of trax deploy: the stack, the images, the migrate task, secrets and logs. -->
+    <PackageReference Include="AWSSDK.CloudFormation" />
+    <PackageReference Include="AWSSDK.CloudWatchLogs" />
+    <PackageReference Include="AWSSDK.EC2" />
+    <PackageReference Include="AWSSDK.ECR" />
+    <PackageReference Include="AWSSDK.ECS" />
+    <PackageReference Include="AWSSDK.SecretsManager" />
+    <PackageReference Include="AWSSDK.SecurityToken" />
     <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Gherkin/Trax.StateMachine.Gherkin.csproj" />
   </ItemGroup>

@@ -151,10 +151,24 @@ internal static class ComposeTarget
     private static string Required(string name) => $"${{{name}:?set {name}}}";
 
     /// <summary>Refuses a deployment compose cannot give what the hosts said they need.</summary>
-    internal static void Check(DeployFile file, IReadOnlyDictionary<string, DeployManifest> exports)
+    internal static void Check(
+        DeployFile file,
+        IReadOnlyDictionary<string, DeployManifest> exports
+    ) => CheckHosts(file, exports, name => file.Services[name].Count);
+
+    /// <summary>
+    /// Refuses what no deployment can give the hosts: runs kept anywhere but Postgres, or more than one copy of a
+    /// service running the api or scheduler role. <paramref name="count"/> is how many copies each service runs.
+    /// </summary>
+    internal static void CheckHosts(
+        DeployFile file,
+        IReadOnlyDictionary<string, DeployManifest> exports,
+        Func<string, int> count
+    )
     {
-        foreach (var (name, service) in file.Services)
+        foreach (var name in file.Services.Keys)
         {
+            var copies = count(name);
             var export = exports[name];
             switch (export.Database?.Provider)
             {
@@ -173,10 +187,10 @@ internal static class ComposeTarget
                     );
             }
             var single = export.Roles.Intersect(["api", "scheduler"]).ToList();
-            if (service.Count > 1 && single.Count > 0)
+            if (copies > 1 && single.Count > 0)
                 throw new InvalidOperationException(
                     $"Service '{name}' runs the {string.Join(" and ", single)} role and has count "
-                        + $"{service.Count}. It runs as one until hosts hold leases on their runs: a second copy "
+                        + $"{copies}. It runs as one until hosts hold leases on their runs: a second copy "
                         + "restarting fails the runs live on the first. Scale its workers instead."
                 );
         }
