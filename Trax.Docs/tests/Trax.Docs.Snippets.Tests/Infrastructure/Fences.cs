@@ -199,6 +199,13 @@ public static class Fences
     public static IEnumerable<Fence> OnPublishedPages() =>
         InDocs().Where(f => RepoRoot.IsPublished(f.Page));
 
+    /// <summary>
+    /// Every fence a reader copies from: the published pages and the agent skills, which a release
+    /// publishes on their own (Trax.Docs/adr/0056) and which carry the same markers.
+    /// </summary>
+    public static IEnumerable<Fence> OnPagesAndSkills() =>
+        InDocs().Where(f => RepoRoot.IsPublished(f.Page) || RepoRoot.IsSkill(f.Page));
+
     private static List<string> GroupsOf(IEnumerable<string> words, int openLine)
     {
         var groups = new List<string>();

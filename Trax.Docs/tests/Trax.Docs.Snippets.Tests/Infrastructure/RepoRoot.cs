@@ -47,6 +47,10 @@ internal static class RepoRoot
         && !relative.StartsWith("tests/", StringComparison.Ordinal)
         && !relative.StartsWith(".github/", StringComparison.Ordinal);
 
+    /// <summary>Whether the file at <paramref name="relative"/> is part of an agent skill.</summary>
+    public static bool IsSkill(string relative) =>
+        relative.StartsWith("skills/", StringComparison.Ordinal);
+
     private static bool IsExcluded(string path)
     {
         var s = System.IO.Path.DirectorySeparatorChar;

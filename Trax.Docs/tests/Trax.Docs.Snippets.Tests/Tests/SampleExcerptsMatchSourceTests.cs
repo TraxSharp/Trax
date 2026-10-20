@@ -26,7 +26,7 @@ public class SampleExcerptsMatchSourceTests
     public void Every_FromFence_IsAnExcerptOfItsFile()
     {
         var offenders = Fences
-            .OnPublishedPages()
+            .OnPagesAndSkills()
             .Where(f => f.From is not null)
             .Select(Excerpts.Problem)
             .OfType<string>()

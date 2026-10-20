@@ -1,7 +1,7 @@
 namespace Trax.Docs.Snippets.Tests.Tests;
 
 /// <summary>
-/// Every C# fence on a published page says how it relates to the code: <c>compile</c> (it
+/// Every C# fence on a published page or in an agent skill says how it relates to the code: <c>compile</c> (it
 /// builds), <c>from=path[#region]</c> (it is an excerpt of that file) or <c>fragment</c> (it is
 /// partial on purpose). Exactly one of them, and never <c>compile</c> on a signature.
 ///
@@ -28,10 +28,10 @@ public class EveryCSharpFenceIsMarkedTests
         "tests/Trax.Docs.Snippets.Tests/KnownUnmarkedFencePages.txt";
 
     [Test]
-    public void Every_CSharpFence_OnAPublishedPage_IsMarked()
+    public void Every_CSharpFence_OnAPageOrSkill_IsMarked()
     {
         var unmarked = Fences
-            .OnPublishedPages()
+            .OnPagesAndSkills()
             .Where(f => f.IsCSharp && f.Markers.Count == 0)
             .ToList();
         var pages = unmarked.Select(f => f.Page).ToHashSet(StringComparer.Ordinal);
@@ -54,7 +54,7 @@ public class EveryCSharpFenceIsMarkedTests
         offenders
             .Should()
             .BeEmpty(
-                "every C# fence on a published page carries `compile` (it builds in CI), "
+                "every C# fence on a published page or in a skill carries `compile` (it builds in CI), "
                     + "`from=<path>[#region]` (it is an excerpt of that file, checked against it) or "
                     + "`fragment` (deliberately partial: a signature, a before and after, a line out "
                     + $"of context). See {Adr} and /docs/contributing/writing-docs. Do not add the "
@@ -89,7 +89,7 @@ public class EveryCSharpFenceIsMarkedTests
     public void Fence_CarriesAtMostOneMarker()
     {
         var offenders = Fences
-            .OnPublishedPages()
+            .OnPagesAndSkills()
             .Where(f => f.Markers.Count > 1)
             .Select(f => $"{f.Location}  ({string.Join(", ", f.Markers)})")
             .ToList();
@@ -109,7 +109,7 @@ public class EveryCSharpFenceIsMarkedTests
     public void SignatureFence_IsNotCompiled()
     {
         var offenders = Fences
-            .OnPublishedPages()
+            .OnPagesAndSkills()
             .Where(f => f.IsCompiled && f.IsUnderSignature)
             .Select(f => $"{f.Location}  (under ## {f.Section})")
             .ToList();
