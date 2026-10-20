@@ -108,6 +108,8 @@ public class DeployComposeTests
                     healthcheck:
                       test: ["CMD", "pg_isready", "-U", "orders"]
                       interval: 5s
+                    security_opt:
+                      - no-new-privileges:true
                     restart: unless-stopped
 
                   rabbitmq:
@@ -118,6 +120,8 @@ public class DeployComposeTests
                     healthcheck:
                       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
                       interval: 5s
+                    security_opt:
+                      - no-new-privileges:true
                     restart: unless-stopped
 
                   # The new version migrates the database once, before any service of it starts.
@@ -125,6 +129,10 @@ public class DeployComposeTests
                     image: orders-hub:${TRAX_IMAGE_TAG:-latest}
                     command: ["--trax-migrate"]
                     environment: *trax
+                    cap_drop:
+                      - ALL
+                    security_opt:
+                      - no-new-privileges:true
                     depends_on:
                       database:
                         condition: service_healthy
@@ -136,7 +144,11 @@ public class DeployComposeTests
                       <<: *trax
                       TRAX_MIGRATIONS: skip
                     ports:
-                      - "8080:8080"
+                      - "127.0.0.1:8080:8080"
+                    cap_drop:
+                      - ALL
+                    security_opt:
+                      - no-new-privileges:true
                     depends_on:
                       migrate:
                         condition: service_completed_successfully
@@ -149,6 +161,10 @@ public class DeployComposeTests
                     environment:
                       <<: *trax
                       TRAX_MIGRATIONS: skip
+                    cap_drop:
+                      - ALL
+                    security_opt:
+                      - no-new-privileges:true
                     deploy:
                       replicas: 2
                     depends_on:
