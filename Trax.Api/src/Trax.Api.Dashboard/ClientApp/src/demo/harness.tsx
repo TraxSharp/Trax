@@ -116,8 +116,8 @@ export async function everyPage(page: HTMLElement) {
  * Reads the recorder (Trax.Samples scripts/recordings/dashboard.mjs) does not record yet. The demo
  * does not offer what needs them (lib/answerable.ts). Once the recordings hold one, it is checked like
  * every other read; drop it from here when they do. Empty: the recorder records every read a page
- * sends. Two documents no page sends (MachineInstanceCounts, MachineInstances) and the search's
- * Lookup, which answers what a visitor types, are not recorded and need no entry here.
+ * sends. The search's Lookup, which answers what a visitor types, is not recorded and needs no
+ * entry here.
  */
 export const NOT_RECORDED_YET: string[] = [];
 

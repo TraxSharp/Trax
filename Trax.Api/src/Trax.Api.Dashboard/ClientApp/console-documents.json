@@ -142,20 +142,12 @@
       "text": "query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {\n  operations {\n    machineInstance(\n      machine: $machine\n      ownerKind: $ownerKind\n      id: $id\n      rowId: $rowId\n    ) {\n      machine\n      ownerKind\n      id\n      rowId\n      state\n      version\n      createdAt\n      updatedAt\n      hasLiveInvokedRun\n      queuedInvokedRunEntryId\n      isInvokedRunsCapped\n      inStateSince\n      dueAt\n      overdue\n      stuck\n      waitingOn {\n        executionId\n        trainState\n        workQueueEntryId\n        __typename\n      }\n      invokedRuns {\n        id\n        externalId\n        name\n        trainState\n        startTime\n        endTime\n        failureClass\n        cancellationRequested\n        isLive\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
-      "name": "MachineInstanceCounts",
-      "text": "query MachineInstanceCounts {\n  operations {\n    machineInstanceCounts {\n      machine\n      state\n      ownerKind\n      count\n      __typename\n    }\n    __typename\n  }\n}"
-    },
-    {
       "name": "MachineInstanceStuckCounts",
       "text": "query MachineInstanceStuckCounts($machine: String) {\n  operations {\n    machineInstanceCounts(machine: $machine) {\n      machine\n      state\n      ownerKind\n      count\n      stuck\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "MachineInstanceTransitions",
       "text": "query MachineInstanceTransitions($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long, $first: Int!, $after: Long) {\n  operations {\n    machineInstance(\n      machine: $machine\n      ownerKind: $ownerKind\n      id: $id\n      rowId: $rowId\n    ) {\n      rowId\n      transitions(first: $first, after: $after) {\n        nextCursor\n        items {\n          revision\n          kind\n          trigger\n          actor\n          fromState\n          toState\n          at\n          previousAt\n          startedRun {\n            executionId\n            trainState\n            workQueueEntryId\n            __typename\n          }\n          startedChild {\n            machine\n            ownerKind\n            id\n            rowId\n            __typename\n          }\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}"
-    },
-    {
-      "name": "MachineInstances",
-      "text": "query MachineInstances($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $skip: Int!, $take: Int!) {\n  operations {\n    machineInstances(\n      machine: $machine\n      state: $state\n      ownerKind: $ownerKind\n      skip: $skip\n      take: $take\n    ) {\n      items {\n        machine\n        ownerKind\n        id\n        rowId\n        state\n        version\n        createdAt\n        updatedAt\n        hasLiveInvokedRun\n        __typename\n      }\n      totalCount\n      isCountCapped\n      __typename\n    }\n    __typename\n  }\n}"
     },
     {
       "name": "MachineInstancesAttention",

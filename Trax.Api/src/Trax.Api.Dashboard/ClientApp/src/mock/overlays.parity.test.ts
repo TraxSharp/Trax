@@ -19,7 +19,7 @@ import {
   LOG_LEVELS,
   EXECUTION_DETAIL,
   MACHINE_INSTANCE,
-  MACHINE_INSTANCES,
+  MACHINE_INSTANCES_ATTENTION,
   MANIFESTS,
   MANIFEST_DETAIL,
   MANIFEST_GROUPS,
@@ -253,7 +253,7 @@ describe("state machines", () => {
 
   test("no read returns an instance's context", async () => {
     const c = client(machineScenario);
-    const list = await c.query(MACHINE_INSTANCES, { skip: 0, take: 20 }, NET).toPromise();
+    const list = await c.query(MACHINE_INSTANCES_ATTENTION, { skip: 0, take: 20 }, NET).toPromise();
     const detail = await instance(c, MACHINE_IDS.dispatched);
     expect(JSON.stringify([list.data, detail.data])).not.toMatch(/context/i);
   });

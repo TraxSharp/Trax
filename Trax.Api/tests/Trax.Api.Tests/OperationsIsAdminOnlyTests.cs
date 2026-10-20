@@ -25,8 +25,9 @@ namespace Trax.Api.Tests;
 /// surface it belongs to.
 /// </summary>
 /// <remarks>
-/// The dashboard is the React app Trax.Api.Dashboard ships, the one that speaks GraphQL; the Blazor dashboard calls the
-/// same services directly. Enforces <c>Trax.Api/docs/adr/0041-operations-holds-only-what-the-dashboard-does.md</c>.
+/// The dashboard is the operations console, the React app Trax.Api.Dashboard ships. The guard counts a document the
+/// console defines, not one a page sends, so a document no page imports keeps its fields here until it is deleted.
+/// Enforces <c>Trax.Api/docs/adr/0041-operations-holds-only-what-the-dashboard-does.md</c>.
 /// </remarks>
 [TestFixture]
 [Property("adr", "docs/adr/0041-operations-holds-only-what-the-dashboard-does.md")]

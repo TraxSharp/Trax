@@ -1277,45 +1277,6 @@ export const MACHINES = gql`
   }
 `;
 
-// How many instances each machine has in each state, by owner kind. Exact, where the list's total
-// stops at 10,000.
-export const MACHINE_INSTANCE_COUNTS = gql`
-  query MachineInstanceCounts {
-    operations {
-      machineInstanceCounts {
-        machine
-        state
-        ownerKind
-        count
-      }
-    }
-  }
-`;
-
-// Instances newest first by when each was last written. Offset-paged: the order is by a time that
-// moves, so the API has no cursor here.
-export const MACHINE_INSTANCES = gql`
-  query MachineInstances($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $skip: Int!, $take: Int!) {
-    operations {
-      machineInstances(machine: $machine, state: $state, ownerKind: $ownerKind, skip: $skip, take: $take) {
-        items {
-          machine
-          ownerKind
-          id
-          rowId
-          state
-          version
-          createdAt
-          updatedAt
-          hasLiveInvokedRun
-        }
-        totalCount
-        isCountCapped
-      }
-    }
-  }
-`;
-
 // What says an instance needs attention: its timer's due time and whether it is overdue, the run
 // it waits on and where that run is, and whether it is stuck (overdue, or waiting on a run that
 // failed or was cancelled). inStateSince is when the instance last changed until a transition log
