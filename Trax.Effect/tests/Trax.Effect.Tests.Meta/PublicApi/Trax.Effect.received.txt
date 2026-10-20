@@ -134,6 +134,17 @@ namespace Trax.Effect.Configuration.ClientExport
         public static string? PathIn(System.Collections.Generic.IReadOnlyList<string> args) { }
     }
 }
+namespace Trax.Effect.Configuration.Deploy
+{
+    public static class TraxMigrate
+    {
+        public const string Argument = "--trax-migrate";
+        public const string SkipValue = "skip";
+        public const string Variable = "TRAX_MIGRATIONS";
+        public static bool Requested { get; }
+        public static bool RequestedIn(System.Collections.Generic.IReadOnlyList<string> args) { }
+    }
+}
 namespace Trax.Effect.Configuration.TraxBuilder
 {
     public class TraxBuilder

@@ -40,8 +40,31 @@ Called after `UsePostgres`, it changes nothing: the migration has already run.
 
 ## 2. Migrate from the deployment
 
-Run `DatabaseMigrator.Migrate` once per deployment, before any host of the new version starts serving. A small
-console project referencing `Trax.Effect.Data.Postgres` is enough:
+The host can do it itself. Start the image you are about to deploy once with `--trax-migrate`, before any process of
+the new version serves, and start every serving process with `TRAX_MIGRATIONS=skip` in its environment instead of
+calling `SkipMigrations()` in code, so one image does both:
+
+```csharp compile
+using Microsoft.Extensions.Hosting;
+using Trax.Effect.Data.Extensions;
+
+var host = builder.Build();
+await host.RunTraxAsync(args: []); // in place of host.Run()
+```
+
+```bash
+dotnet Orders.dll --trax-migrate          # migrates, exits 0, serves nothing
+TRAX_MIGRATIONS=skip dotnet Orders.dll    # serves, does not migrate
+```
+
+`RunTraxAsync` also applies the migrations of the application's own contexts named with `MigrateOnDeploy`. See
+[TraxMigrate](/docs/sdk-reference/configuration/trax-migrate).
+
+### Or from a program of your own
+
+
+Without the host, run `DatabaseMigrator.Migrate` once per deployment, before any host of the new version starts
+serving. A small console project referencing `Trax.Effect.Data.Postgres` is enough:
 
 ```csharp compile
 using Trax.Effect.Data.Postgres.Utils;
@@ -68,4 +91,4 @@ runners that skip, so the schema moves forward when the long-running host deploy
 
 ## SDK Reference
 
-> [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) | [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres)
+> [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) | [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate) | [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator) | [UsePostgres](/docs/sdk-reference/configuration/use-postgres)
