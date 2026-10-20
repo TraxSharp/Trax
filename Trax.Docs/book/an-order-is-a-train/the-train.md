@@ -46,7 +46,9 @@ The train is only the order of its junctions. Nothing here passes a value from o
 next: the train carries a store called Memory, which holds the input when the train starts and
 each junction's output as it finishes, one value per type. Every junction takes its input from
 there. That is how `TakePaymentJunction` gets the `PlaceOrderInput` even though the junction just
-before it made a `StockReservation`.
+before it made a `StockReservation`. One value per type also means a junction that returns a type
+already in Memory replaces the value there, which is why each junction here returns a type of its
+own ([Memory](/docs/core/memory#storage-by-type)).
 
 Nothing reads the `StockReservation` yet. In chapter 3 the payment starts failing, and
 `TakePaymentJunction` takes the reservation too, to give the stock back before the order stops.

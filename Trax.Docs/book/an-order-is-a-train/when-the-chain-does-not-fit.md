@@ -43,8 +43,8 @@ small junctions that each do one thing. A junction that fails stops the order wh
 chain in the wrong order never starts.
 
 What we cannot do yet is look back. The runs are recorded, but in memory, and they are gone when the
-application stops. In chapter 2 we move them to Postgres, make the payment provider fail now and
-then, and read back what happened to each order.
+application stops. In chapter 2 we test the train, and in chapter 3 we move the runs to Postgres,
+make the payment provider fail now and then, and read back what happened to each order.
 
 ## SDK Reference
 
