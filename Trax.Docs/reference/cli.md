@@ -1,6 +1,6 @@
 ---
 title: Trax CLI
-description: "The trax CLI: generate scaffolds a hub and trains from GraphQL SDL or OpenAPI, machine scaffolds and exports state machines, lexicon formats lexicons."
+description: "The trax CLI: generate scaffolds a hub and trains from GraphQL SDL or OpenAPI, machine scaffolds and exports state machines, lexicon formats lexicons, deploy writes a deployment."
 type: reference
 area: tooling
 nav_order: 1
@@ -11,6 +11,8 @@ source:
   - Trax.Cli/src/Trax.Cli/Commands/MachineCommand.cs
   - Trax.Cli/src/Trax.Cli/Commands/LexiconCommand.cs
   - Trax.Cli/src/Trax.Cli/Machines
+  - Trax.Cli/src/Trax.Cli/Commands/DeployCommand.cs
+  - Trax.Cli/src/Trax.Cli/Deploy
 ---
 
 # Trax CLI
@@ -660,7 +662,64 @@ schema type named like a document's `<Operation>Variables` or `<Operation>Result
 record has (`Equals`, `ToString`), which its record would declare beside its own name. It writes no `console-documents.json`;
 the host registers the documents from the TypeScript client's. A union or interface selection is refused, since the
 C# client does not type one yet; the console selects none.
+## Deployments (`trax deploy`)
+
+`trax deploy` turns the projects named in `trax.deploy.json` into a deployment. What each host needs (its
+database, its roles, its endpoints) is not written in the file: trax runs each project once with
+`--trax-export-deploy`, in Production, and reads what the host reports
+([DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)). A host that would refuse to start in
+Production refuses the deploy the same way, before anything is written.
+
+```bash
+# Write a first trax.deploy.json from the Trax host projects under this directory.
+trax deploy init --app orders
+
+# Write compose.yaml and .env.example beside it, and build each service's image.
+trax deploy --target compose --build
+```
+
+### `trax.deploy.json`
+
+```json
+{
+  "version": 1,
+  "app": "orders",
+  "services": {
+    "hub": { "project": "Orders/Orders.csproj" },
+    "worker": { "project": "Orders.Worker/Orders.Worker.csproj", "count": 2 }
+  },
+  "connectionStrings": { "trax": "Trax", "rabbitMq": "RabbitMq" },
+  "settings": ["Auth__Authority", "Auth__Audience"],
+  "secrets": ["Stripe__ApiKey"]
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
+| `services` | Each deployed project, relative to the file, under its service name. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `init` names a lone project `hub` and several by the last part of their names. |
+| `connectionStrings` | The names under `ConnectionStrings:` the hosts read Postgres and RabbitMQ from. Default `Trax` and `RabbitMq`. |
+| `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
+
+`init` makes a service of every web or console project under the directory that references a `Trax.*` package,
+leaving out test projects, and refuses to replace an existing file without `--force`.
+
+### `--target compose`
+
+Writes `compose.yaml` and `.env.example` beside `trax.deploy.json` (or into `--out`), for docker or podman
+compose:
+
+- `database`, Postgres 17, with the app's name as database and user;
+- `rabbitmq`, only when a host connects to RabbitMQ;
+- `migrate`, the image of the service that serves the API, started once with `--trax-migrate` before any service;
+- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish; a service that serves HTTP is
+  published on 8080 (then 8081 and on), and `count` becomes `deploy.replicas`.
+
+Every password, setting and secret is `${NAME:?set NAME}`, so compose stops when one is missing; `.env.example`
+lists them. Images are `<app>-<service>:${TRAX_IMAGE_TAG:-latest}`; `--build` builds each with
+`dotnet publish -t:PublishContainer` under that name. A host that keeps its runs anywhere but Postgres is refused,
+and so is a `compose.yaml` trax did not write.
 
 ## SDK Reference
 
-> [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format)
+> [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IR format](/docs/sdk-reference/statemachine-api/ir-format) | [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest) | [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate)
