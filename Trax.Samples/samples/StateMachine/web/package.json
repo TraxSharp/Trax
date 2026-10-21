@@ -10,8 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "graphql-ws": "^6.0.0"
   },
   "devDependencies": {
@@ -19,7 +19,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "typescript": "~5.9.3",
-    "vite": "^8.3.3",
+    "vite": "^8.3.4",
     "vitest": "^4.1.12"
   }
 }
