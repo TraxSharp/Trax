@@ -55,23 +55,42 @@ export function codeLineLayout(text: string): { row: string; text: string; style
 }
 
 /**
- * Re-indents a sample's chains the way the site writes them, with the step names in one column: the line that
- * starts a chain (`Chain<...>` or a machine's `m.In(...)`) moves one space in, and the lines that continue it move
- * four spaces out, so each `.Step` hangs its dot to the left of the name above it. Whitespace only: the lines and
- * their numbers stay the file's.
+ * Re-indents a sample's chains the way the site writes them. A train's chain keeps its step names in one column:
+ * the `Chain<...>` line moves one space in and the lines that continue it move four spaces out, so each `.Step`
+ * hangs its dot to the left of the name above it. A machine's `m.In(...)` keeps its chain four spaces in, and nests
+ * each event's or timer's rules under it, from `.On(...)` or `.After(...)` to its `.To(...)` or `.GoTo(...)`, which
+ * the formatter writes flat. Whitespace only: the lines and their numbers stay the file's.
  */
 export function alignChains(lines: string[]): string[] {
   let start = -1;
+  let machine = false;
+  let inEdge = false;
   return lines.map((line) => {
     const indent = line.search(/\S/);
     const text = line.trim();
-    if (text.startsWith("Chain<") || text.startsWith("m.In(")) {
+    if (text.startsWith("Chain<")) {
       start = indent;
+      machine = false;
       return " " + line;
     }
+    if (text.startsWith("m.In(")) {
+      start = indent;
+      machine = true;
+      inEdge = false;
+      return line;
+    }
     if (start < 0 || indent < 0) return line;
-    if (indent >= start + 4) return line.slice(4);
-    start = -1;
-    return line;
+    if (indent < start + 4) {
+      start = -1;
+      return line;
+    }
+    if (!machine) return line.slice(4);
+    if (/^\.(On|After)\(/.test(text)) {
+      inEdge = true;
+      return line;
+    }
+    if (!inEdge) return line;
+    if (/^\.(To|GoTo)\(/.test(text)) inEdge = false;
+    return "    " + line;
   });
 }

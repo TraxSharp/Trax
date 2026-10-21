@@ -6,8 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
-A headless web framework for .NET. Build a more robust frontend: whatever goes wrong, the backend gets it right, and
-every run is recorded in your Postgres.
+The backend that checks the client's work. State machines and workflows the server enforces, with every run recorded in
+your database.
 [What Trax does](https://traxsharp.net/docs/what-trax-does) · [Docs](https://traxsharp.net/docs) ·
 [Getting started](https://traxsharp.net/docs/getting-started) ·
 [Samples](Trax.Samples) · [NuGet](https://www.nuget.org/profiles/Theauxm) ·

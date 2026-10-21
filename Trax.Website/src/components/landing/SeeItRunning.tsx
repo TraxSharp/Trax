@@ -2,11 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import BoardReplay from "./BoardReplay";
 import ChatServiceReplay from "./ChatServiceReplay";
 import OrderReplay from "./OrderReplay";
 import PersistedOperationsReplay from "./PersistedOperationsReplay";
 import RecoveryReplay from "./RecoveryReplay";
 import SampleSource, { type SampleSourceProps } from "./SampleSource";
+import boardData from "@/data/board-recordings.json";
+import type { BoardRecordings } from "@/lib/board-replay";
+
+const boardRecordings = boardData as unknown as BoardRecordings;
 
 // Each tab plays runs of the real sample, recorded by Trax.Samples' scripts/recordings and copied into src/data with
 // its --copy-to option. Re-record a sample when its code or its page changes.
@@ -17,6 +22,25 @@ interface Sample {
 }
 
 const samples: Sample[] = [
+  {
+    tab: "Agents",
+    href: "/docs/samples/board",
+    source: {
+      folder: "Board",
+      files: [
+        { path: "Trax.Samples.Board/Machines/AssignmentMachine.cs", label: "an agent's assignment: its events and the checks they run" },
+        { path: "Trax.Samples.Board/Machines/TicketMachine.cs", label: "the board: lanes only the server moves" },
+        { path: "Trax.Samples.Board/Trains/Checks/ReproduceTrain.cs", label: "a check: the server runs the agent's case itself" },
+        { path: "Trax.Samples.Board.Agents/src/scenarios.ts", label: "the scripted agents, on the generated client" },
+      ],
+      docs: "/docs/samples/board",
+      run: [
+        "docker compose up -d database",
+        "dotnet run --project samples/Board/Trax.Samples.Board.Api",
+        "cd samples/Board/Trax.Samples.Board.Agents && npm ci && npm run scenario",
+      ],
+    },
+  },
   {
     tab: "State Machines",
     href: "/docs/samples/recovery",
@@ -121,12 +145,10 @@ export default function SeeItRunning() {
   const sample = samples[active];
 
   return (
-    <section className="border-b border-border py-24">
-      <div className="mx-auto max-w-6xl px-6 sm:px-8">
+    <section className="border-b border-border pb-24 pt-8">
+      {/* Wider than the rest of the page, so a demo fits on one screen without scrolling between its steps. */}
+      <div className="mx-auto max-w-[1280px] px-4 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">See it running</h2>
-        <p className="mt-3 max-w-2xl text-text-secondary">
-          Small apps built with Trax. Each tab replays a real run of one in your browser.
-        </p>
 
         <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-3 border-b border-border">
           <div role="tablist" className="flex flex-wrap gap-1">
@@ -158,7 +180,9 @@ export default function SeeItRunning() {
 
         <div role="tabpanel" ref={panel} className="pt-8" style={minHeight ? { minHeight } : undefined}>
           <div>
-            {sample.tab === "State Machines" ? (
+            {sample.tab === "Agents" ? (
+              <BoardReplay recordings={boardRecordings} />
+            ) : sample.tab === "State Machines" ? (
               <OrderReplay />
             ) : sample.tab === "Workflows" ? (
               <RecoveryReplay />

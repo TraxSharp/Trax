@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import StepButtons from "./StepButtons";
 import { alignChains, codeLineLayout, useFitCode } from "./useFitCode";
 import { replayNow } from "@/lib/replay-pace";
+import { nextStop, previousStop, stepIndex, stopsOf } from "@/lib/replay-steps";
 import data from "@/data/order-recordings.json";
-import { ORDER, STAGES, durationOf, trackAt, viewAt, type OrderRecordings, type Scenario, type Slot, type Stage, type Tone, type Track } from "@/lib/order-replay";
+import { ORDER, STAGES, durationOf, eventsOf, trackAt, viewAt, type OrderRecordings, type Scenario, type Slot, type Stage, type Tone, type Track } from "@/lib/order-replay";
 
 // A food order taken by the Recovery sample's OrderMachine: what its laptop page and the phone received from the
 // host, with the time each thing arrived. Re-record when the machine, its train or the page change.
@@ -21,11 +23,14 @@ export default function OrderReplay() {
   const [key, setKey] = useState(scenarios[0]?.key ?? "order");
   const [playing, setPlaying] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  // Back or Next stops the clock: from then on the replay moves only when the reader steps.
+  const [paused, setPaused] = useState(false);
   const base = useRef(0);
 
   const scenario = scenarios.find((s) => s.key === (playing ?? key));
   const duration = durationOf(scenario);
-  const active = playing != null && elapsed < duration;
+  const active = playing != null && elapsed < duration && !paused;
+  const stops = useMemo(() => stopsOf(eventsOf(scenario).map((e) => e.t)), [scenario]);
   const view = useMemo(() => (playing ? viewAt(recordings, scenario, elapsed) : null), [playing, scenario, elapsed]);
   // The timeline is drawn in full before anything plays, for the scenario chosen.
   const track = useMemo(() => trackAt(recordings, scenario, playing ? elapsed : -1), [scenario, playing, elapsed]);
@@ -42,12 +47,25 @@ export default function OrderReplay() {
     setRuns((n) => n + 1);
     base.current = replayNow();
     setElapsed(0);
+    setPaused(false);
     setPlaying(k);
   }, []);
 
   const reset = () => {
     setPlaying(null);
     setElapsed(0);
+    setPaused(false);
+  };
+
+  const step = (forward: boolean) => {
+    autoplayed.current = true;
+    const now = playing ? elapsed : -1;
+    if (!playing) {
+      setRuns((n) => n + 1);
+      setPlaying(key);
+    }
+    setPaused(true);
+    setElapsed(forward ? nextStop(stops, now) : previousStop(stops, now));
   };
 
   // Play the first scenario once, the first time the demo is on screen, unless the reader prefers less motion.
@@ -106,6 +124,12 @@ export default function OrderReplay() {
           >
             {leaves ? "Leave it in the cart" : "Place order"}
           </button>
+          <StepButtons
+            onBack={() => step(false)}
+            onNext={() => step(true)}
+            at={playing ? stepIndex(stops, elapsed) : 0}
+            of={stops.length}
+          />
           <ActionButton onClick={reset} disabled={!playing}>
             Reset
           </ActionButton>

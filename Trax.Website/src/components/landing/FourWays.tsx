@@ -121,10 +121,10 @@ export default async function FourWays() {
     <section className="border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">
-          One train, four ways to run it
+          Trains do the work
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          The same logic often has to run from a request, on a schedule and on other machines. Write it once.
+          A train is a chain of steps the server runs: from a machine&apos;s state, a request, a schedule or a worker on another machine. It is written once for all of them.
         </p>
         <Link href="/docs/core/trains-and-junctions" className="mt-4 inline-block text-sm font-medium text-accent hover:text-accent-hover">
           How a train is built &rarr;

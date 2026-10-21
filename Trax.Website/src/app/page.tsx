@@ -1,4 +1,5 @@
 import Hero from "@/components/landing/Hero";
+import MachineOnServer from "@/components/landing/MachineOnServer";
 import FourWays from "@/components/landing/FourWays";
 import RunRecord from "@/components/landing/RunRecord";
 import Decisions from "@/components/landing/Decisions";
@@ -13,12 +14,13 @@ export default function Home() {
   return (
     <main>
       <Hero />
+      <SeeItRunning />
+      <MachineOnServer />
       <FourWays />
       <RunRecord />
-      <SeeItRunning />
-      <Decisions />
       <LayerDiagram />
       <DeploymentArchitectures />
+      <Decisions />
       <WhereTraxStops />
       <QuickStart />
       <PackageList />

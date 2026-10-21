@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Trax .NET: a headless web framework",
+    default: "Trax .NET: the backend that checks the client's work",
     template: "%s | Trax .NET",
   },
   description: SITE_DESCRIPTION,
