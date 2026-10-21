@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trax.Samples.Board\Trax.Samples.Board.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Dashboard/Trax.Api.Dashboard.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
+  </ItemGroup>
+  <!-- The documents the agents and the board page wrote, which the host registers when it starts (ClientDocuments in
+       Program.cs). They ship with the host, so the host is deployed with its clients' documents before the clients. -->
+  <ItemGroup>
+    <None
+      Include="..\Trax.Samples.Board.Agents\src\trax\trax.documents.json"
+      Link="agents.documents.json"
+      CopyToOutputDirectory="PreserveNewest"
+      Condition="Exists('..\Trax.Samples.Board.Agents\src\trax\trax.documents.json')"
+    />
+    <None
+      Include="..\Trax.Samples.Board.Client\src\trax\trax.documents.json"
+      Link="client.documents.json"
+      CopyToOutputDirectory="PreserveNewest"
+      Condition="Exists('..\Trax.Samples.Board.Client\src\trax\trax.documents.json')"
+    />
+  </ItemGroup>
+</Project>

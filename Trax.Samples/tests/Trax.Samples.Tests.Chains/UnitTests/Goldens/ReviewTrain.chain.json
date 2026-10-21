@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Checks.ReviewTrain",
+  "input": "ReviewCheck",
+  "output": "CheckResult",
+  "nodes": [
+    {
+      "id": "RecordReview#0",
+      "kind": "Chain",
+      "junction": "RecordReview",
+      "in": "ReviewCheck",
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

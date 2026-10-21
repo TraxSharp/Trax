@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Checks.VerifyFixTrain",
+  "input": "FixCheck",
+  "output": "CheckResult",
+  "nodes": [
+    {
+      "id": "RunFixCheck#0",
+      "kind": "Chain",
+      "junction": "RunFixCheck",
+      "in": "FixCheck",
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Work.ClaimWorkTrain",
+  "input": "ClaimWorkInput",
+  "output": "WorkPackage",
+  "nodes": [
+    {
+      "id": "ClaimTicket#0",
+      "kind": "Chain",
+      "junction": "ClaimTicket",
+      "in": "ClaimWorkInput",
+      "out": "WorkPackage",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "WorkPackage",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

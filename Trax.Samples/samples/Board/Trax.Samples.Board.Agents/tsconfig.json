@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "paths": {
+      "@traxsharp/state-machine": ["../../../../Trax.StateMachine/ts/src/index.ts"],
+      "@traxsharp/state-machine/client": ["../../../../Trax.StateMachine/ts/src/client/index.ts"],
+      "@traxsharp/state-machine/react": ["../../../../Trax.StateMachine/ts/src/react.ts"]
+    }
+  },
+  "include": ["src"]
+}

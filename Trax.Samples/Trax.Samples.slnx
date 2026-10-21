@@ -42,6 +42,10 @@
     <Project Path="samples/StateMachine/Trax.Samples.StateMachine/Trax.Samples.StateMachine.csproj" />
     <Project Path="samples/StateMachine/Trax.Samples.StateMachine.Api/Trax.Samples.StateMachine.Api.csproj" />
   </Folder>
+  <Folder Name="/samples/Board/">
+    <Project Path="samples/Board/Trax.Samples.Board/Trax.Samples.Board.csproj" />
+    <Project Path="samples/Board/Trax.Samples.Board.Api/Trax.Samples.Board.Api.csproj" />
+  </Folder>
   <Folder Name="/samples/Recovery/">
     <Project Path="samples/Recovery/Trax.Samples.Recovery/Trax.Samples.Recovery.csproj" />
     <Project Path="samples/Recovery/Trax.Samples.Recovery.Api/Trax.Samples.Recovery.Api.csproj" />
@@ -65,6 +69,7 @@
     <Project Path="tests/Trax.Samples.StateMachine.Tests/Trax.Samples.StateMachine.Tests.csproj" />
     <Project Path="tests/Trax.Samples.StateMachine.E2E/Trax.Samples.StateMachine.E2E.csproj" />
     <Project Path="tests/Trax.Samples.Auth.E2E/Trax.Samples.Auth.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Board.E2E/Trax.Samples.Board.E2E.csproj" />
     <Project Path="tests/Trax.Samples.Recovery.E2E/Trax.Samples.Recovery.E2E.csproj" />
     <Project Path="tests/Trax.Samples.Recovery.Browser/Trax.Samples.Recovery.Browser.csproj" />
     <Project Path="tests/Trax.Samples.ApiDashboard.Browser/Trax.Samples.ApiDashboard.Browser.csproj" />

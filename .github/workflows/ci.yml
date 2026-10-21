@@ -859,6 +859,97 @@ jobs:
             --tools-dir "$RUNNER_TEMP/engine" --documents 'src/graphql/*.graphql' --check) \
             || { echo "::error::The StateMachine sample's generated client is out of date. Regenerate it with the commands at the top of $api/Program.cs and commit the result."; exit 1; }
 
+  # The Board sample's agents (Trax.Samples/samples/Board/Trax.Samples.Board.Agents) and page
+  # (Trax.Samples.Board.Client), two npm projects, each on the client `trax client` generated from the
+  # host. The agents are typechecked and the page built, then the host's manifest is exported and
+  # `trax client --check` run over both committed clients, which fails when either differs from the host.
+  board-client:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Samples')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      AGENTS: Trax.Samples/samples/Board/Trax.Samples.Board.Agents
+      WEB: Trax.Samples/samples/Board/Trax.Samples.Board.Client
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            aka.ms:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
+            dot.net:443
+            api.nuget.org:443
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            crl.globalsign.com:80
+            crl.sectigo.com:80
+            s.symcb.com:80
+            ts-crl.ws.symantec.com:80
+            www.microsoft.com:80
+            registry.npmjs.org:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install Trax.StateMachine/ts (locked, no install scripts)
+        # The page builds the engine from its source, and the twin generator is bundled from it.
+        working-directory: Trax.StateMachine/ts
+        run: npm ci --ignore-scripts
+      - name: Install the API dashboard (locked, no install scripts)
+        # The Board host serves the console, and a build without the app refuses to start, so
+        # exporting its client manifest below needs the app embedded.
+        working-directory: Trax.Api/src/Trax.Api.Dashboard/ClientApp
+        run: npm ci --ignore-scripts
+      - name: Install the agents (locked, no install scripts)
+        working-directory: ${{ env.AGENTS }}
+        run: npm ci --ignore-scripts
+      - name: Typecheck the agents
+        working-directory: ${{ env.AGENTS }}
+        run: npm run typecheck
+      - name: Install the page (locked, no install scripts)
+        working-directory: ${{ env.WEB }}
+        run: npm ci --ignore-scripts
+      - name: Build the page
+        # tsc typechecks it, then vite builds it.
+        working-directory: ${{ env.WEB }}
+        run: npm run build
+      - name: Audit runtime dependencies
+        run: |
+          (cd "$AGENTS" && npm audit --omit=dev --audit-level=high)
+          (cd "$WEB" && npm audit --omit=dev --audit-level=high)
+      - name: The committed clients match the host
+        run: |
+          api=Trax.Samples/samples/Board/Trax.Samples.Board.Api
+          dotnet restore "$api" --locked-mode
+          dotnet restore Trax.Cli/src/Trax.Cli --locked-mode
+          node Trax.StateMachine/ts/tools/bundle-cli.mjs --out "$RUNNER_TEMP/engine"
+          dotnet run --project "$api" --no-restore -- --trax-export-client "$RUNNER_TEMP/manifest.json"
+          cli="$PWD/Trax.Cli/src/Trax.Cli"
+          for client in "$AGENTS" "$WEB"; do
+            (cd "$client" && dotnet run --project "$cli" --no-restore -- client \
+              --manifest "$RUNNER_TEMP/manifest.json" --out src/trax \
+              --tools-dir "$RUNNER_TEMP/engine" --documents 'src/graphql/*.graphql' --check) \
+              || { echo "::error::$client's generated client is out of date. Regenerate it with the commands in Trax.Docs/samples/board.md and commit the result."; exit 1; }
+          done
+
   # The TypeScript engine, @traxsharp/state-machine (packages.json suite state-machine-ts). It
   # runs for a change under Trax.StateMachine/ts or the conformance kit, not for one to the C#
   # engine; the state-machine-conformance suite is the check that spans both.
@@ -947,7 +1038,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, state-machine, release-tooling]
+    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, board-client, state-machine, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

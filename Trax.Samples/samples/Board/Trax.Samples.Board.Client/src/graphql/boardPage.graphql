@@ -1,0 +1,17 @@
+query BoardPage {
+  discover {
+    board {
+      board {
+        tickets {
+          id
+          title
+          state
+          lane
+          claimedBy
+          note
+          by
+        }
+      }
+    }
+  }
+}

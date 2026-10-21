@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Checks.CloseTrain",
+  "input": "CloseCheck",
+  "output": "CheckResult",
+  "nodes": [
+    {
+      "id": "RunClose#0",
+      "kind": "Chain",
+      "junction": "RunClose",
+      "in": "CloseCheck",
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

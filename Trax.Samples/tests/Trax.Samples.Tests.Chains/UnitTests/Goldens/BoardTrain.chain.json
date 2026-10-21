@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Work.BoardTrain",
+  "input": "BoardInput",
+  "output": "BoardView",
+  "nodes": [
+    {
+      "id": "ReadBoard#0",
+      "kind": "Chain",
+      "junction": "ReadBoard",
+      "in": "BoardInput",
+      "out": "BoardView",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "BoardView",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

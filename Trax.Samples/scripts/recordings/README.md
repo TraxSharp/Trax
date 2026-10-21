@@ -1,7 +1,7 @@
 # Sample recordings
 
 traxsharp.net's landing page lets a reader try samples in the browser without running anything: follow a food
-order, crash a refund, chat over WebSockets, and call a persisted-operations API. Each tab plays recordings of the real sample, and these scripts make them. Each one drives
+order, watch agents work a board, crash a refund, chat over WebSockets, and call a persisted-operations API. Each tab plays recordings of the real sample, and these scripts make them. Each one drives
 its sample's running host over the same requests the sample's own page or client sends, and writes down every
 request, response and pushed event, with the time it arrived. Nothing the website shows is made up; where a sample
 takes free input, the recorder records a few presets instead. A sixth script records the operations dashboard that
@@ -19,6 +19,7 @@ script:
 |---|---|---|---|
 | Recovery | `node recovery.mjs` | `RECOVERY_HOST`, default `localhost:5260`, with `Recovery__RequirePersistedOperations=false` | 15 runs: three refund orders, each clean, crashing while it pays (with each fork that crash can take) and crashing while it emails, each ending with a requeue |
 | Recovery's food order | `node order.mjs` | `RECOVERY_HOST`, default `localhost:5260`, with `Recovery__RequirePersistedOperations=false` `Recovery__CartWait=00:00:15` and `Recovery__MachineSweepInterval=00:00:01` | four orders, each from a fresh `start` with Place order pressed twice: delivered, the tablet timing out and tried again, the restaurant closed, and a cart the server's timer clears, with both screens' pushes and the invoked run's junction events |
+| Board | `node board.mjs` | `BOARD_HOST`, default `localhost:5290`, as shipped (persisted documents only), with `npm ci` run in `samples/Board/Trax.Samples.Board.Agents` | four tickets worked through the lanes by the sample's own scripted agents over their generated client: a skipped lane and a self-approval refused, a patch an earlier case refuses, a patch QA sends back, and a ticket closed after two cases that did not reproduce it |
 | StateMachine | `node state-machine.mjs` | `STATE_MACHINE_HOST`, default `localhost:5280` | every button the page offers from every state it can reach, for both machines |
 | ChatService | `node chat-service.mjs` | `CHAT_HOST`, default `localhost:5210` | Alice and Bob in one room, a small tree of lines to pick from, a listener who is refused, and Charlie added at every point of the conversation |
 | SignalRBroadcaster | `node signalr-broadcaster.mjs` | `SIGNALR_HOST`, default `localhost:5270` | the refused connection, sign-in, every kind of ping and the events the hub pushes, sign-out |

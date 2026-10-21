@@ -6,6 +6,7 @@
   "scripts": {
     "recovery": "node recovery.mjs",
     "order": "node order.mjs",
+    "board": "node board.mjs",
     "state-machine": "node state-machine.mjs",
     "chat-service": "node chat-service.mjs",
     "signalr-broadcaster": "node signalr-broadcaster.mjs",

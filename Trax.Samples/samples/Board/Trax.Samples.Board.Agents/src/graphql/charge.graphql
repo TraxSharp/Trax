@@ -1,0 +1,10 @@
+query Charge($input: ChargeInput!) {
+  discover {
+    board {
+      charge(input: $input) {
+        subtotal
+        shipping
+      }
+    }
+  }
+}
