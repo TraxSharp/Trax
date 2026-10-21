@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "documents": [
+    {
+      "name": "Board",
+      "source": "src/graphql/board.graphql",
+      "text": "query Board {\n  discover {\n    board {\n      board {\n        tickets {\n          id\n          title\n          state\n          lane\n          claimedBy\n          note\n          by\n        }\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "Charge",
+      "source": "src/graphql/charge.graphql",
+      "text": "query Charge($input: ChargeInput!) {\n  discover {\n    board {\n      charge(input: $input) {\n        subtotal\n        shipping\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "ClaimWork",
+      "source": "src/graphql/claimWork.graphql",
+      "text": "mutation ClaimWork($input: ClaimWorkInput!) {\n  dispatch {\n    claimWork(input: $input) {\n      output {\n        problem {\n          code\n          message\n        }\n        ticket {\n          id\n          title\n          report\n          state\n          lane\n        }\n        lane\n        instructions\n        tools\n        events\n        deadline\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "FileTicket",
+      "source": "src/graphql/fileTicket.graphql",
+      "text": "mutation FileTicket($input: FileTicketInput!) {\n  dispatch {\n    fileTicket(input: $input) {\n      output {\n        id\n        title\n        state\n        lane\n      }\n    }\n  }\n}\n"
+    }
+  ]
+}

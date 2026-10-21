@@ -1,0 +1,12 @@
+mutation FileTicket($input: FileTicketInput!) {
+  dispatch {
+    fileTicket(input: $input) {
+      output {
+        id
+        title
+        state
+        lane
+      }
+    }
+  }
+}

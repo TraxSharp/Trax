@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Checks.QaTrain",
+  "input": "QaCheck",
+  "output": "CheckResult",
+  "nodes": [
+    {
+      "id": "RunQaSweep#0",
+      "kind": "Chain",
+      "junction": "RunQaSweep",
+      "in": "QaCheck",
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

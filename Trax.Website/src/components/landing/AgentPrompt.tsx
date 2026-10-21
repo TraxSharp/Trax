@@ -53,7 +53,7 @@ export default function AgentPrompt() {
         </button>
       </div>
       <div className="relative mt-3">
-        <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap border-l-2 border-accent/30 bg-bg-secondary py-4 pb-10 pl-5 pr-5 font-mono text-xs leading-relaxed text-text-secondary">
+        <pre className="max-h-52 overflow-y-auto whitespace-pre-wrap border-l-2 border-accent/30 bg-bg-secondary py-4 pb-10 pl-5 pr-5 font-mono text-xs leading-relaxed text-text-secondary">
           {PROMPT}
         </pre>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-bg-secondary to-transparent" />

@@ -9,7 +9,7 @@ export function generateMetadata(): Metadata {
     title: "Documentation",
     description:
       doc?.description ??
-      "Trax .NET documentation: a headless web framework for .NET.",
+      "Trax .NET documentation: the backend that checks the client's work.",
     alternates: {
       canonical: "/docs",
       ...(doc ? { types: { "text/markdown": markdownPath("") } } : {}),

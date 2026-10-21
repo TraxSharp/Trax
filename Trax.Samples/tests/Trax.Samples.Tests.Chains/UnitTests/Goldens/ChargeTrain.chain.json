@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Work.ChargeTrain",
+  "input": "ChargeInput",
+  "output": "ChargeOutput",
+  "nodes": [
+    {
+      "id": "ReadCharge#0",
+      "kind": "Chain",
+      "junction": "ReadCharge",
+      "in": "ChargeInput",
+      "out": "ChargeOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ChargeOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

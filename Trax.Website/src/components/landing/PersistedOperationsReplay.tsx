@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import data from "@/data/persisted-operations-recordings.json";
-import { durationOf, viewAt, type Actor, type Card, type Outcome, type Recording } from "@/lib/persisted-operations-replay";
+import { durationOf, scheduleOf, viewAt, type Actor, type Card, type Outcome, type Recording } from "@/lib/persisted-operations-replay";
+import { nextStop, previousStop, stepIndex, stopsOf } from "@/lib/replay-steps";
+import StepButtons from "./StepButtons";
 
 // Recorded from the PersistedOperations sample's API by Trax.Samples' scripts/recordings/persisted-operations.mjs,
 // which writes this file with its --copy-to option. Re-record when the sample's host, train or manifest change.
@@ -22,11 +24,14 @@ export default function PersistedOperationsReplay() {
   const [key, setKey] = useState(stories[0]?.key ?? "calls");
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(-1);
+  // Back or Next stops the clock: from then on the replay moves only when the reader steps.
+  const [paused, setPaused] = useState(false);
   const base = useRef(0);
 
   const story = stories.find((s) => s.key === key);
   const duration = durationOf(story);
-  const active = playing && elapsed < duration;
+  const active = playing && elapsed < duration && !paused;
+  const stops = useMemo(() => (story ? stopsOf(scheduleOf(story).map((s) => s.answerAt)) : []), [story]);
   const view = useMemo(() => viewAt(story, elapsed), [story, elapsed]);
 
   useEffect(() => {
@@ -38,12 +43,21 @@ export default function PersistedOperationsReplay() {
   const play = useCallback(() => {
     base.current = performance.now();
     setElapsed(0);
+    setPaused(false);
     setPlaying(true);
   }, []);
 
   const reset = () => {
     setPlaying(false);
     setElapsed(-1);
+    setPaused(false);
+  };
+
+  const step = (forward: boolean) => {
+    autoplayed.current = true;
+    setPlaying(true);
+    setPaused(true);
+    setElapsed(forward ? nextStop(stops, elapsed) : previousStop(stops, elapsed));
   };
 
   // Play the first story once, the first time the demo is on screen, unless the reader prefers less motion.
@@ -94,6 +108,7 @@ export default function PersistedOperationsReplay() {
           >
             Play
           </button>
+          <StepButtons onBack={() => step(false)} onNext={() => step(true)} at={Math.max(0, stepIndex(stops, elapsed))} of={stops.length} />
           <button
             onClick={reset}
             disabled={elapsed < 0}

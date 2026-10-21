@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Work.FileTicketTrain",
+  "input": "FileTicketInput",
+  "output": "TicketView",
+  "nodes": [
+    {
+      "id": "FileTicket#0",
+      "kind": "Chain",
+      "junction": "FileTicket",
+      "in": "FileTicketInput",
+      "out": "TicketView",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "TicketView",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

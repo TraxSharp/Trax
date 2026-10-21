@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Checks.TriageTrain",
+  "input": "TriageCheck",
+  "output": "CheckResult",
+  "nodes": [
+    {
+      "id": "RunTriage#0",
+      "kind": "Chain",
+      "junction": "RunTriage",
+      "in": "TriageCheck",
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

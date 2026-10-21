@@ -1,0 +1,24 @@
+mutation ClaimWork($input: ClaimWorkInput!) {
+  dispatch {
+    claimWork(input: $input) {
+      output {
+        problem {
+          code
+          message
+        }
+        ticket {
+          id
+          title
+          report
+          state
+          lane
+        }
+        lane
+        instructions
+        tools
+        events
+        deadline
+      }
+    }
+  }
+}

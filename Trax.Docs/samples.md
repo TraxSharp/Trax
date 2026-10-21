@@ -24,6 +24,7 @@ sample and checked against it in CI.
 | Sample | What you see | Run (from `Trax.Samples/`) | Port |
 |---|---|---|---|
 | [Chat Service](/docs/samples/chat-service) | A chat app in React: each message is a train, and a lifecycle hook feeds an `onChatEvent` subscription only a room's participants may join | `dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api` | 5210 |
+| [Board](/docs/samples/board) | Scripted agents working bug tickets through a board's lanes as clients with keys of their own; the server reruns everything they send before a ticket moves | `dotnet run --project samples/Board/Trax.Samples.Board.Api` | 5290 |
 | [Recovery](/docs/samples/recovery) | A run that crashes and resumes on a live page: recorded decisions replayed instead of asking the model again, a checkpoint, parallel branches, state machines that run trains | `dotnet run --project samples/Recovery/Trax.Samples.Recovery.Api` | 5260 |
 | [Persisted Operations](/docs/samples/persisted-operations) | An API that runs only stored documents, on a page: gated management mutations, a hot-fix by id, the shape-diff guardrail | `dotnet run --project samples/PersistedOperations/Trax.Samples.PersistedOperations.Api` | 5240 |
 
@@ -47,7 +48,7 @@ Starting a new server rather than learning? The [project templates](/docs/refere
 `dotnet new install Trax.Samples.Templates && dotnet new trax-hub -n MyApp`.
 
 The ports never collide, so any set of samples can run side by side. The React clients (Chat Service, Recovery,
-State Machine) use Vite's dev server on 5173, the one origin their hosts allow; run one at a time. A second
+State Machine, Board) use Vite's dev server on 5173, the one origin their hosts allow; run one at a time. A second
 client refuses to start rather than move to another port.
 
 ## Running the samples

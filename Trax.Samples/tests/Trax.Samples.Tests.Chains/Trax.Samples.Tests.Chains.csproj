@@ -12,6 +12,7 @@
        SampleTrainGraphTests fails when a sample project with a train is missing from this list. -->
   <ItemGroup>
     <ProjectReference Include="../../samples/Auth/Trax.Samples.Auth/Trax.Samples.Auth.csproj" />
+    <ProjectReference Include="../../samples/Board/Trax.Samples.Board/Trax.Samples.Board.csproj" />
     <ProjectReference Include="../../samples/Bookworm/Trax.Samples.Bookworm/Trax.Samples.Bookworm.csproj" />
     <ProjectReference Include="../../samples/ChatService/Trax.Samples.ChatService/Trax.Samples.ChatService.csproj" />
     <ProjectReference Include="../../samples/DistributedWorkers/Trax.Samples.EnergyHub/Trax.Samples.EnergyHub.csproj" />

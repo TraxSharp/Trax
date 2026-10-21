@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Board.Trains.Checks.ReproduceTrain",
+  "input": "ReproCheck",
+  "output": "CheckResult",
+  "nodes": [
+    {
+      "id": "RunReproCase#0",
+      "kind": "Chain",
+      "junction": "RunReproCase",
+      "in": "ReproCheck",
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "CheckResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

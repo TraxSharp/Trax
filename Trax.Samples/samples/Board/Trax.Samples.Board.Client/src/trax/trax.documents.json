@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "documents": [
+    {
+      "name": "BoardPage",
+      "source": "src/graphql/boardPage.graphql",
+      "text": "query BoardPage {\n  discover {\n    board {\n      board {\n        tickets {\n          id\n          title\n          state\n          lane\n          claimedBy\n          note\n          by\n        }\n      }\n    }\n  }\n}\n"
+    }
+  ]
+}

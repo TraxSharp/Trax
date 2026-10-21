@@ -880,6 +880,17 @@
           "Trax.Scheduler": "[1.99.99, )"
         }
       },
+      "trax.samples.board": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth": "[1.99.99, )",
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Mediator": "[1.99.99, )",
+          "Trax.StateMachine": "[1.99.99, )",
+          "Trax.StateMachine.Persistence": "[1.99.99, )"
+        }
+      },
       "trax.samples.bookworm": {
         "type": "Project",
         "dependencies": {

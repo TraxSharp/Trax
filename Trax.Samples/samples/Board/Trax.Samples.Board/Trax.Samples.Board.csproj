@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../../../Trax.StateMachine/dotnet/src/Trax.StateMachine/Trax.StateMachine.csproj" />
+    <ProjectReference Include="../../../../Trax.StateMachine/dotnet/src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
+  </ItemGroup>
+</Project>
