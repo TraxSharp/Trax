@@ -32,9 +32,11 @@ pub struct ManifestDocument {
 
 /// How a [`GraphQLMachineServer`] reaches its host.
 pub struct GraphQLMachineServerOptions {
-    /// The host's GraphQL endpoint (`https://host/trax/graphql`).
+    /// The host's GraphQL endpoint (`https://host/trax/graphql`). It must be `https` unless its host is loopback or
+    /// `allow_insecure_transport` is set.
     pub endpoint: String,
-    /// The host's socket endpoint (`wss://host/trax/graphql`).
+    /// The host's socket endpoint (`wss://host/trax/graphql`). It must be `wss` unless its host is loopback or
+    /// `allow_insecure_transport` is set.
     pub socket: String,
     /// The machine's id (`checkout`).
     pub machine: String,
@@ -46,6 +48,30 @@ pub struct GraphQLMachineServerOptions {
     pub connection_params: Option<Value>,
     /// Delays before subscribing again after a stream that ended without saying why. The last repeats.
     pub resubscribe_delays: Option<Vec<Duration>>,
+    /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
+    /// authenticates the client would travel in cleartext.
+    pub allow_insecure_transport: bool,
+}
+
+impl GraphQLMachineServerOptions {
+    /// Options for one machine's documents at `endpoint` and `socket`, with every other choice left to its default.
+    pub fn new(
+        endpoint: impl Into<String>,
+        socket: impl Into<String>,
+        machine: impl Into<String>,
+        documents: Vec<ManifestDocument>,
+    ) -> Self {
+        GraphQLMachineServerOptions {
+            endpoint: endpoint.into(),
+            socket: socket.into(),
+            machine: machine.into(),
+            documents,
+            http: None,
+            connection_params: None,
+            resubscribe_delays: None,
+            allow_insecure_transport: false,
+        }
+    }
 }
 
 /// The default delays before subscribing again after a stream ended without a reason.
@@ -90,10 +116,13 @@ struct Inner {
 }
 
 impl GraphQLMachineServer {
-    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`.
+    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, and an endpoint
+    /// or socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set.
     pub fn new(options: GraphQLMachineServerOptions) -> Result<Self, ConfigError> {
         // The socket's TLS needs a process-wide crypto provider; another one already installed is kept.
         let _ = rustls::crypto::ring::default_provider().install_default();
+        require_secure(&options.endpoint, "https", options.allow_insecure_transport)?;
+        require_secure(&options.socket, "wss", options.allow_insecure_transport)?;
         if options.documents.is_empty() {
             return Err(ConfigError(format!(
                 "The machine '{}' has no persisted documents. Export the host's client manifest and pass its \
@@ -510,6 +539,34 @@ impl Inner {
     }
 }
 
+// An endpoint must be over TLS unless its host is this machine (localhost, 127.0.0.0/8, ::1) or the caller accepts
+// cleartext. The error names the scheme and host only, never the path or the query.
+fn require_secure(endpoint: &str, secure_scheme: &str, allow_insecure: bool) -> Result<(), ConfigError> {
+    let url =
+        reqwest::Url::parse(endpoint).map_err(|e| ConfigError(format!("The endpoint is not an absolute URL: {e}.")))?;
+    if allow_insecure || url.scheme() == secure_scheme {
+        return Ok(());
+    }
+    let host = url.host_str().unwrap_or("");
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host.parse::<std::net::Ipv4Addr>().is_ok_and(|ip| ip.is_loopback())
+        || host
+            .strip_prefix('[')
+            .and_then(|h| h.strip_suffix(']'))
+            .and_then(|h| h.parse::<std::net::Ipv6Addr>().ok())
+            .is_some_and(|ip| ip.is_loopback());
+    if loopback {
+        return Ok(());
+    }
+    let port = url.port().map(|p| format!(":{p}")).unwrap_or_default();
+    Err(ConfigError(format!(
+        "The endpoint {}://{host}{port} is not over TLS, so whatever authenticates the client would travel in \
+         cleartext. Use {secure_scheme}://, a loopback host, or set allow_insecure_transport when the network is \
+         trusted.",
+        url.scheme()
+    )))
+}
+
 /// The variables a document declares (`$id: UUID!` declares `id`).
 fn declared_variables(document: &str) -> HashSet<String> {
     let mut names = HashSet::new();
@@ -585,5 +642,68 @@ mod tests {
             declared,
             ["id", "input", "requestId"].iter().map(|s| s.to_string()).collect()
         );
+    }
+
+    fn options(endpoint: &str, socket: &str) -> GraphQLMachineServerOptions {
+        GraphQLMachineServerOptions::new(
+            endpoint,
+            socket,
+            "turnstile",
+            vec![ManifestDocument {
+                id: "changed-1".into(),
+                operation: "changed".into(),
+                document: "subscription Changed($id: UUID!) { x }".into(),
+            }],
+        )
+    }
+
+    #[test]
+    fn a_cleartext_endpoint_on_another_host_is_refused() {
+        for (endpoint, socket) in [
+            ("http://api.example.com/graphql", "wss://api.example.com/graphql"),
+            ("https://api.example.com/graphql", "ws://api.example.com/graphql"),
+            ("http://10.0.0.5/graphql", "wss://10.0.0.5/graphql"),
+            ("https://[2001:db8::1]/graphql", "ws://[2001:db8::1]/graphql"),
+        ] {
+            let Err(error) = GraphQLMachineServer::new(options(endpoint, socket)) else {
+                panic!("{endpoint} {socket} was accepted");
+            };
+            assert!(error.0.contains("not over TLS"), "{}", error.0);
+        }
+    }
+
+    #[test]
+    fn the_refusal_names_the_host_but_not_the_query() {
+        let Err(error) = GraphQLMachineServer::new(options(
+            "http://api.example.com:8080/graphql?access_token=SECRET",
+            "wss://api.example.com/graphql",
+        )) else {
+            panic!("accepted");
+        };
+        assert!(error.0.contains("http://api.example.com:8080"), "{}", error.0);
+        assert!(!error.0.contains("SECRET"), "{}", error.0);
+    }
+
+    #[test]
+    fn tls_or_a_loopback_host_is_accepted() {
+        for (endpoint, socket) in [
+            ("https://api.example.com/graphql", "wss://api.example.com/graphql"),
+            ("http://localhost:5000/graphql", "ws://localhost:5000/graphql"),
+            ("http://127.0.0.1:5000/graphql", "ws://127.0.0.1:5000/graphql"),
+            ("http://127.4.5.6/graphql", "ws://127.4.5.6/graphql"),
+            ("http://[::1]:5000/graphql", "ws://[::1]:5000/graphql"),
+        ] {
+            assert!(
+                GraphQLMachineServer::new(options(endpoint, socket)).is_ok(),
+                "{endpoint} {socket}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_caller_may_accept_cleartext_explicitly() {
+        let mut given = options("http://api.example.com/graphql", "ws://api.example.com/graphql");
+        given.allow_insecure_transport = true;
+        assert!(GraphQLMachineServer::new(given).is_ok());
     }
 }

@@ -214,6 +214,20 @@ describe('createMachineServer operations', () => {
       }),
     ).toThrow(/changed/);
   });
+
+  it('refuses a cleartext endpoint on another host unless the caller allows it', () => {
+    const build = (allowInsecureTransport?: boolean) => () =>
+      createMachineServer('http://api.example.com/graphql', {
+        fetch: http().fetch,
+        machine: turnstile,
+        documents: DOCUMENTS,
+        socket: new FakeSocket(),
+        allowInsecureTransport,
+      });
+
+    expect(build()).toThrow(/not over TLS/);
+    expect(build(true)).not.toThrow();
+  });
 });
 
 describe('createMachineServer change stream', () => {

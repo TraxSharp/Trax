@@ -158,6 +158,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
     createMachineExecutor(endpoint, {
       fetch: options.fetch,
       headers: options.headers,
+      allowInsecureTransport: options.allowInsecureTransport,
       machines: [{ machine, documents }],
     }),
   );

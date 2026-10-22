@@ -107,7 +107,7 @@ From `@traxsharp/state-machine/client`:
 
 | Export | What it is |
 | --- | --- |
-| `MachineExecutorOptions`, `HttpExecutorOptions` | `createMachineExecutor`'s options: the `machines`, and the `headers` each request carries (called per request, so a rotating token stays fresh) and the `fetch` it is sent with. |
+| `MachineExecutorOptions`, `HttpExecutorOptions` | `createMachineExecutor`'s options: the `machines`, and the `headers` each request carries (called per request, so a rotating token stays fresh) and the `fetch` it is sent with. An absolute `http:` endpoint throws unless its host is loopback (`localhost`, `127.0.0.0/8`, `::1`) or `allowInsecureTransport` is set; a relative one is the page's own origin. |
 | `TypedMachineOperations` | One machine the executor sends: the `machine` (a twin, or its `id` and `version`), its `documents` and its `effectEvent`, the trigger `sendSnapshot` fires. |
 | `SnapshotExecutor`, `SnapshotOperation` | What an executor is: a function from one of the six operations (`startSnapshot`, `saveSnapshot`, `advanceSnapshot`, `loadSnapshot`, `sendSnapshot`, `discardSnapshot`) and its input to the `SnapshotOutput`. It may throw; the sessions above it turn a throw into `TRANSPORT_ERROR`. |
 | `SnapshotOutput`, `SnapshotProblem` | Each operation's output: the `snapshot` as JSON or a `problem` (`code`, `message`), and beside them `id` and `created` from a start, `discarded` from a discard, the `revision` and the timer's `dueAt`. |

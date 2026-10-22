@@ -21,7 +21,7 @@
  */
 import { RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
-import type { HttpExecutorOptions, SnapshotExecutor, SnapshotOutput } from './transport';
+import { requireSecureEndpoint, type HttpExecutorOptions, type SnapshotExecutor, type SnapshotOutput } from './transport';
 
 /**
  * One machine document from the host's exported client manifest (`--trax-export-client`): the persisted document of
@@ -159,13 +159,15 @@ type Answered = { answer: TypedAnswer | null | undefined } | { refused: Snapshot
  * An executor over plain `fetch` for the typed `machines` root. Pass it to {@link createSnapshotClient}; the
  * sessions above it are unchanged. A GraphQL error (an unauthenticated caller, a document the schema refuses) throws,
  * which the session reports as a transport error; a refusal is a problem, as data, and so is `CLIENT_OUTDATED` or
- * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine.
+ * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine. An absolute
+ * `http:` endpoint on a host that is not loopback throws unless `allowInsecureTransport` is set.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineExecutor(
   endpoint: string,
   options: MachineExecutorOptions,
 ): SnapshotExecutor {
+  requireSecureEndpoint(endpoint, options.allowInsecureTransport);
   const doFetch = options.fetch ?? globalThis.fetch;
   const machines = new Map(options.machines.map((m) => [m.machine.id, { ...m, byOperation: documentsOf(m) }]));
 

@@ -51,6 +51,35 @@ describe('names', () => {
 });
 
 describe('createMachineExecutor', () => {
+  it('refuses a cleartext endpoint on a host that is not loopback, naming the host but not the query', () => {
+    const { fetch } = recording();
+    const build = (endpoint: string, allowInsecureTransport?: boolean) => () =>
+      createMachineExecutor(endpoint, { fetch, allowInsecureTransport, machines: [{ machine: checkout, documents }] });
+
+    expect(build('http://api.example.com/graphql?access_token=SECRET')).toThrow(/http:\/\/api\.example\.com is not over TLS/);
+    expect(build('http://api.example.com/graphql?access_token=SECRET')).not.toThrow(/SECRET/);
+    expect(build('http://10.0.0.5/graphql')).toThrow(/not over TLS/);
+    expect(build('ws://api.example.com/graphql')).toThrow(/not over TLS/);
+  });
+
+  it('accepts TLS, a loopback host, a relative endpoint, or cleartext the caller allowed', () => {
+    const { fetch } = recording();
+    const build = (endpoint: string, allowInsecureTransport?: boolean) => () =>
+      createMachineExecutor(endpoint, { fetch, allowInsecureTransport, machines: [{ machine: checkout, documents }] });
+
+    for (const endpoint of [
+      'https://api.example.com/graphql',
+      'http://localhost:5000/graphql',
+      'http://127.0.0.1:5000/graphql',
+      'http://127.8.9.10/graphql',
+      'http://[::1]:5000/graphql',
+      '/graphql',
+      '//api.example.com/graphql',
+    ])
+      expect(build(endpoint)).not.toThrow();
+    expect(build('http://api.example.com/graphql', true)).not.toThrow();
+  });
+
   it('refuses a machine with no documents, naming the manifest', () => {
     const { fetch } = recording();
 

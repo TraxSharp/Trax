@@ -110,9 +110,9 @@ server answers it.
 | --- | --- |
 | `IMachineServer` | The seam the controller drives: `StartAsync`, `EventAsync`, `GetAsync` and `Subscribe`. A refusal is an answer; a failed request throws, and the controller reports it as `TRANSPORT_ERROR`. |
 | `GraphQLMachineServer` | The `IMachineServer` over a host's typed `machines` root. It POSTs `{ id, variables }` for each operation, keeping only the variables its document declares, and subscribes to `<machine>Changed` by id. `CLIENT_OUTDATED` and `SERVER_OUTDATED` are answers; any other GraphQL error or a status that is not success throws. A stream that ends without saying why is subscribed again after `ResubscribeDelays` (`DefaultResubscribeDelays`: 1, 2, then 5 seconds). `DiscardAsync` deletes one of the caller's instances, and answers null when it is gone. |
-| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`; and `ResubscribeDelays`. |
+| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`; `ResubscribeDelays`; and `AllowInsecureTransport`. |
 | `GraphQLSubscriptionSocket` | A graphql-transport-ws socket that subscribes by persisted id. It connects on the first subscription and closes after the last. It does not reconnect by itself: a closed socket fails every open subscription with its `Error`, and the server subscribes again. |
-| `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers or a proxy on each `ClientWebSocket`; and `ConnectTimeout`. |
+| `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers or a proxy on each `ClientWebSocket`; `ConnectTimeout` (10 seconds); and `AllowInsecureTransport`. |
 | `ISubscriptionSocket`, `ISubscriptionSink` | The socket seam: `Subscribe(documentId, variables, sink)`, and the sink's `Next`, `Error` and `Complete`. |
 | `SubscriptionErrorException` | The error a sink gets when the server ends a subscription with GraphQL errors, which it carries as `Errors`. |
 | `ServerAnswer`, `ServerSnapshot`, `ServerProblem` | An answer: the instance `Id` on a start, the `Snapshot` the server stored or the `Problem` it refused with (`Of` and `Refused` build one). A `ServerSnapshot` is the `State`, its `Context` with no null member, the `Revision` (null when the store records none, which the controller takes and cannot order), the incarnation `RowId`, and `DueAt`, which counts only when `DueAtKnown`. |
@@ -133,6 +133,9 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
   while the state stays; entering a timed state without one reads the instance once for it.
 - **Stopping.** A gone instance and `CLIENT_OUTDATED` stop the controller for good, and every queued send settles
   `Stopped`. A snapshot the predictor cannot read stops it as `CLIENT_OUTDATED` too.
+- **Transport.** An endpoint must be `https` (`wss` for the socket) unless its host is loopback (`localhost`,
+  `127.0.0.0/8`, `::1`). Any other `http` or `ws` endpoint throws when the server or socket is built, since whatever
+  authenticates the client would travel in cleartext; `AllowInsecureTransport` accepts it on a network you trust.
 - **Threads.** The controller works on one exclusive scheduler, so it handles one thing at a time whichever thread calls
   it. `Changed` is raised there: read `View` and marshal to the UI thread in the handler, and do not block on the
   controller from it.

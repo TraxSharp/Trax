@@ -28,8 +28,17 @@ public interface ISubscriptionSocket
 /// <summary>How a <see cref="GraphQLSubscriptionSocket"/> connects.</summary>
 public sealed record GraphQLSubscriptionSocketOptions
 {
-    /// <summary>The host's socket endpoint (<c>wss://host/trax/graphql</c>).</summary>
+    /// <summary>
+    /// The host's socket endpoint (<c>wss://host/trax/graphql</c>). It must be <c>wss</c> unless its host is loopback
+    /// or <see cref="AllowInsecureTransport"/> is set.
+    /// </summary>
     public required Uri Endpoint { get; init; }
+
+    /// <summary>
+    /// Accepts a <c>ws</c> endpoint on a host that is not loopback. Off by default: the <c>connection_init</c> payload,
+    /// and any header set in <see cref="ConfigureSocket"/>, would travel in cleartext.
+    /// </summary>
+    public bool AllowInsecureTransport { get; init; }
 
     /// <summary>
     /// The payload of <c>connection_init</c>, read on every connection so a rotating token stays fresh; how a host
@@ -63,9 +72,19 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private bool _disposed;
 
     /// <summary>Builds the socket. It connects on the first subscription.</summary>
+    /// <exception cref="ArgumentException">
+    /// The endpoint is not <c>wss</c> on a host that is not loopback, and
+    /// <see cref="GraphQLSubscriptionSocketOptions.AllowInsecureTransport"/> is not set.
+    /// </exception>
     public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TransportSecurity.RequireSecure(
+            options.Endpoint,
+            options.AllowInsecureTransport,
+            "wss",
+            nameof(options)
+        );
         _options = options;
     }
 

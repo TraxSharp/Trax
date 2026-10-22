@@ -16,8 +16,17 @@ public sealed record GraphQLMachineServerOptions
     /// </summary>
     public required HttpClient Http { get; init; }
 
-    /// <summary>The host's GraphQL endpoint (<c>https://host/trax/graphql</c>).</summary>
+    /// <summary>
+    /// The host's GraphQL endpoint (<c>https://host/trax/graphql</c>), or one relative to <see cref="Http"/>'s base
+    /// address. It must be <c>https</c> unless its host is loopback or <see cref="AllowInsecureTransport"/> is set.
+    /// </summary>
     public required Uri Endpoint { get; init; }
+
+    /// <summary>
+    /// Accepts an <c>http</c> endpoint on a host that is not loopback. Off by default: whatever authenticates the
+    /// requests would travel in cleartext.
+    /// </summary>
+    public bool AllowInsecureTransport { get; init; }
 
     /// <summary>
     /// The machine as the host's client manifest lists it, with its persisted documents, the push (<c>changed</c>)
@@ -71,10 +80,21 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private sealed record Document(string Id, IReadOnlySet<string> Variables);
 
     /// <summary>Builds the server for one machine.</summary>
-    /// <exception cref="ArgumentException">The machine lists no documents, or no <c>changed</c> document.</exception>
+    /// <exception cref="ArgumentException">
+    /// The machine lists no documents, or no <c>changed</c> document, or the endpoint is not <c>https</c> on a host that
+    /// is not loopback and <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set.
+    /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TransportSecurity.RequireSecure(
+            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
+                ? options.Endpoint
+                : new Uri(options.Http!.BaseAddress, options.Endpoint),
+            options.AllowInsecureTransport,
+            Uri.UriSchemeHttps,
+            nameof(options)
+        );
         _options = options;
         _shape = MachineShape.Of(options.Machine);
         _field = MachineField(_shape.Id);

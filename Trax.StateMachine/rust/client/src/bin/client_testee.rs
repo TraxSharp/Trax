@@ -113,16 +113,14 @@ fn open(request: &Value) -> Result<ServerMachineController, String> {
             document: d.get("document").and_then(|v| v.as_str()).unwrap_or("").to_owned(),
         })
         .collect();
-    let server = GraphQLMachineServer::new(GraphQLMachineServerOptions {
-        endpoint: text("endpoint").ok_or("no endpoint")?,
-        socket: text("socket").ok_or("no socket")?,
-        machine: text("machine").ok_or("no machine")?,
+    let mut server_options = GraphQLMachineServerOptions::new(
+        text("endpoint").ok_or("no endpoint")?,
+        text("socket").ok_or("no socket")?,
+        text("machine").ok_or("no machine")?,
         documents,
-        http: None,
-        connection_params: None,
-        resubscribe_delays: Some(delays("resubscribeDelays")),
-    })
-    .map_err(|e| e.to_string())?;
+    );
+    server_options.resubscribe_delays = Some(delays("resubscribeDelays"));
+    let server = GraphQLMachineServer::new(server_options).map_err(|e| e.to_string())?;
     // Request ids count r1, r2, ... from each open, so the host can tell which request is which.
     let count = Arc::new(AtomicU64::new(0));
     let mut options = ServerMachineOptions::new(request.get("ir").cloned().ok_or("no ir")?, server);
