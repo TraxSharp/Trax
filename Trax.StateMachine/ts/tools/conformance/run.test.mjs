@@ -67,4 +67,14 @@ describe("the conformance kit", () => {
     expect(run.stderr).toContain(`${cases.length} of ${cases.length} cases passed.`);
     expect(run.status).toBe(0);
   }, 120_000);
+
+  it("refuses a selection of no case rather than pass it", () => {
+    const run = spawnSync(
+      process.execPath,
+      [runner, "--only", "no-case-is-named-this", "--testee", process.execPath, here("testee-ts.mjs")],
+      { encoding: "utf8", timeout: 120_000 },
+    );
+    expect(run.stderr).toContain("No case of the kit");
+    expect(run.status).toBe(2);
+  }, 120_000);
 });

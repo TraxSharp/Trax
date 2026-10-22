@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { readLines } from "../../../conformance/run.mjs";
 import { bundleModule } from "../lib/engine-loader.mjs";
 
 // The TypeScript engine as a conformance testee (conformance/PROTOCOL.md): it builds each machine from the IR it is
@@ -93,7 +93,7 @@ async function main() {
     process.exit(/Could not load esbuild/.test(err.message) ? MISSING_DEPENDENCIES : 1);
   }
   const handle = createTestee(engine);
-  for await (const line of createInterface({ input: process.stdin })) {
+  for await (const line of readLines(process.stdin)) {
     const request = JSON.parse(line);
     process.stdout.write(`${JSON.stringify(handle(request))}\n`);
     if (request.op === "end") break;

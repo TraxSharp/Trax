@@ -21,11 +21,14 @@ the roles on the pipes are reversed: the runner writes requests on its own stdou
 test in another language (the C# `ConformanceRunnerTests`) can start the runner and answer from inside its own
 process. Either way the runner writes its report on stderr and exits 0 when every case passed, 1 when any failed.
 
-`--only <prefix>` runs the cases whose name starts with the prefix.
+`--only <prefix>` runs the cases whose name starts with the prefix, and every `load`. A prefix no case has is an error
+(exit 2), not an empty pass.
 
 ## The protocol
 
-One JSON object per line, UTF-8, in both directions. The runner sends a request and waits for its answer before
+One JSON object per line, UTF-8, in both directions. A line ends at `\n` and nowhere else: JSON.stringify writes
+U+2028 and U+2029 literally inside a string, so a reader that also breaks lines there (node's readline does) cuts a
+request in two. The runner sends a request and waits for its answer before
 sending the next, so a testee may answer synchronously. Every request has an `id` and an `op`; the answer carries the
 same `id`. A testee answers an `op` it does not implement with `{ "id", "unsupported": true }`, which fails that case.
 

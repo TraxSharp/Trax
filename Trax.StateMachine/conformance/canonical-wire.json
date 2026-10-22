@@ -17,6 +17,8 @@
     {"name":"number 1234567890123456.75, a tie written with the even digit","context":"{\"n\":1234567890123456.75}","wire":"{\"n\":1234567890123456.8}"},
     {"name":"number 2251799813685247.25, a tie written with the even digit","context":"{\"n\":2251799813685247.25}","wire":"{\"n\":2251799813685247.2}"},
     {"name":"number 2251799813685247.75, a tie written with the even digit","context":"{\"n\":2251799813685247.75}","wire":"{\"n\":2251799813685247.8}"},
+    {"name":"string with U+2028 and U+2029, escaped in the input","context":"{\"s\":\"a\\u2028b\\u2029c\"}","wire":"{\"s\":\"a\u2028b\u2029c\"}"},
+    {"name":"string with U+2028 and U+2029, literal in the input","context":"{\"s\":\"a\u2028b\u2029c\"}","wire":"{\"s\":\"a\u2028b\u2029c\"}"},
     {"name":"number 100","context":"{\"n\":100}","wire":"{\"n\":100}"},
     {"name":"number 100.0","context":"{\"n\":100.0}","wire":"{\"n\":100}"},
     {"name":"number -1.5","context":"{\"n\":-1.5}","wire":"{\"n\":-1.5}"},
