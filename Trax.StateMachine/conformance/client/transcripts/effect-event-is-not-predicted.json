@@ -1,0 +1,26 @@
+{
+  "about": "An event bound to the machine's effect is sent with no prediction, and the view shows what the host confirmed until it answers: what follows depends on the effect.",
+  "machine": "checkout",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "next": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "back": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "pay": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "restart": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 4, "state": "Review", "context": { "currency": "USD", "items": ["book"], "receipt": null, "total": 12.5 } } },
+    { "view": { "status": "ready", "state": "Review" } },
+    { "client": "send", "trigger": "Pay", "as": "pay" },
+    { "view": { "pending": true, "state": "Review", "context": { "currency": "USD", "items": ["book"], "total": 12.5 } } },
+    { "request": "pay", "variables": { "id": "i-1", "requestId": "r1" }, "answer": { "id": "i-1", "revision": 5, "state": "Paid", "context": { "currency": "USD", "items": ["book"], "receipt": "rcpt-1", "total": 12.5 } } },
+    { "await": "pay", "expect": { "outcome": "confirmed", "state": "Paid", "revision": 5 } },
+    { "view": { "pending": false, "state": "Paid", "context": { "currency": "USD", "items": ["book"], "receipt": "rcpt-1", "total": 12.5 } } }
+  ]
+}

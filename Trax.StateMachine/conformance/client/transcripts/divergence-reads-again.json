@@ -1,0 +1,24 @@
+{
+  "about": "CLIENT_DIVERGENCE refuses the event and makes the client read the instance again, since what the twin holds cannot be trusted.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "quarter" }, "as": "coin" },
+    { "request": "coin", "answer": { "problem": { "code": "CLIENT_DIVERGENCE", "message": "The engines disagree." } } },
+    { "await": "coin", "expect": { "outcome": "refused", "code": "CLIENT_DIVERGENCE" } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 2, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "view": { "state": "Unlocked", "revision": 2, "problem": "CLIENT_DIVERGENCE" } }
+  ]
+}

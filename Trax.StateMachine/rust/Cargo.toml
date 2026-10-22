@@ -1,0 +1,26 @@
+[package]
+name = "trax-state-machine"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.88"
+description = "The Trax state-machine engine: machines built from the IR the C# engine exports, over canonical snapshots."
+license = "MIT"
+repository = "https://github.com/TraxSharp/Trax"
+publish = false
+
+[workspace]
+members = ["client"]
+resolver = "3"
+
+[lib]
+name = "trax_state_machine"
+
+[[bin]]
+name = "trax-state-machine-testee"
+path = "src/bin/testee.rs"
+
+[dependencies]
+
+# The engine catches a panicking custom handler and refuses with INTERNAL_ERROR, which needs unwinding.
+[profile.release]
+panic = "unwind"

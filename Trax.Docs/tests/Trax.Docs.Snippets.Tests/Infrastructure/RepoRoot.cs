@@ -42,9 +42,14 @@ internal static class RepoRoot
         System.IO.Path.GetFileName(relative) != "README.md"
         && !relative.StartsWith("adr/", StringComparison.Ordinal)
         && !relative.StartsWith(".claude/", StringComparison.Ordinal)
+        && !relative.StartsWith("skills/", StringComparison.Ordinal)
         && !relative.StartsWith("tools/", StringComparison.Ordinal)
         && !relative.StartsWith("tests/", StringComparison.Ordinal)
         && !relative.StartsWith(".github/", StringComparison.Ordinal);
+
+    /// <summary>Whether the file at <paramref name="relative"/> is part of an agent skill.</summary>
+    public static bool IsSkill(string relative) =>
+        relative.StartsWith("skills/", StringComparison.Ordinal);
 
     private static bool IsExcluded(string path)
     {

@@ -328,9 +328,13 @@ see [the codegen pipeline](/docs/statemachine/codegen-pipeline#generation-and-dr
 # Scaffold a new machine as one declarative C# file.
 trax machine new checkout --output ./Machines --namespace MyApp.Machines --with-effect
 
-# Export the IR, twin, and corpus (each to its own output root).
+# Export the IR, twin, and corpus (each to its own output root). --lang csharp writes a C# view instead.
 trax machine generate --assembly ./bin/MyApp.dll \
   --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout
+
+# A frontend with the host's client manifest and not its assembly: a C# view of one of its machines.
+trax machine generate --manifest ./trax-client-manifest.json --machine checkout \
+  --twin-out ./App/Machines --lang csharp --namespace MyApp.Machines
 
 # Print its states and transitions (or --format mermaid|dot for a diagram source).
 trax machine show --assembly ./bin/MyApp.dll
@@ -358,7 +362,8 @@ assembly, not the source.
 
 ### `trax machine generate`
 
-Exports the IR from a compiled machine, then generates the twin and/or corpus. Each artifact has its own
+Exports the IR from a compiled machine, or reads it from a host's client manifest, then generates the twin and/or
+corpus. Each artifact has its own
 output root, because a consumer typically splits them across trees (the IR and corpus in a shared machines
 directory, the twin next to the frontend). Pass at least one `--*-out`. The run is atomic and idempotent: every
 artifact is staged first, a node step that exits 0 without writing what it should is refused, and the staged
@@ -366,6 +371,11 @@ files are then swapped into place together, so a failure at any point, including
 be written, leaves every committed artifact as it was and removes any output directory the run created. If
 putting a previous artifact back fails too, the error does not claim nothing changed: it names each artifact
 and the `<file>.<token>.bak` path its previous content was left at, to move back by hand.
+
+A frontend usually has the client manifest the host exported with `--trax-export-client`, not the server's
+assembly: `--manifest` reads the machine's IR from it instead. The IR is refused unless it hashes to the manifest's
+`irHash`, the version its persisted documents name, so a view generated from it and the documents it sends agree.
+The generated view embeds that hash, and its `Create` refuses a manifest whose machine has another.
 
 The assembly is searched for machines among the types that load. A type that cannot (a controller built on
 ASP.NET Core, which the CLI does not carry, or a class deriving from a dependency missing from the build
@@ -379,10 +389,13 @@ before writing anything.
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--assembly` | Yes | Compiled assembly (`.dll`) containing the machine. |
-| `--machine` | No | Full type name of the machine. Required only when the assembly has more than one. |
+| `--assembly` | One of the two | Compiled assembly (`.dll`) containing the machine. |
+| `--manifest` | One of the two | The client manifest the host exported with `--trax-export-client`, to read the IR from in place of `--assembly`. |
+| `--machine` | No | Full type name of the machine, or its id with `--manifest` (`checkout`). Required only when there is more than one. |
 | `--ir-out` | No | Directory to write `<id>.ir.json`. |
-| `--twin-out` | No | Directory to write `<id>.contexts.g.ts` and `<id>.machine.g.ts`. |
+| `--twin-out` | No | Directory to write the typed view: `<id>.contexts.g.ts` and `<id>.machine.g.ts`, or with `--lang csharp` one `<Machine>.g.cs` (`Checkout.g.cs`). |
+| `--lang` | No | The language of the typed view: `typescript` (the default) or `csharp`. Both are written from one model of the IR. The C# view declares the states and triggers as enums, a record per context and input, the IR with its hash (`<Machine>Machine`), and `<Machine>Client`, a typed client over [`Trax.StateMachine.Client`](/docs/sdk-reference/statemachine-api/dotnet-client) that predicts from that IR. `--import-style` and `--specifier` are refused with it. |
+| `--namespace` | No | The C# view's namespace with `--lang csharp` (default `Trax.Machines`); refused with any other language. |
 | `--corpus-out` | No | Directory to write `differential.json`. |
 | `--engine-src` | No | Generate the twin and corpus from this engine checkout's `src` directory, with the `tools/` beside it, instead of the engine bundled into the tool. For working on the engine itself; it needs `npm ci` in that checkout. |
 | `--import-style` | No | Twin engine imports: `specifier` (one collapsed import from `--specifier`, for a frontend that installs `@traxsharp/state-machine` from npm; the default) or `relative` (paths into the engine's `src`, for a machine inside the engine checkout; the default with `--engine-src`, and refused without it, since those paths resolve only inside the checkout). |

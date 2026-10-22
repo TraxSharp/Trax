@@ -1,0 +1,23 @@
+{
+  "about": "An event the twin refuses is still sent, with no prediction; the host's refusal is a value, and the view goes back to what the host confirmed.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "penny" }, "as": "coin" },
+    { "request": "coin", "variables": { "id": "i-1", "input": { "coin": "penny" }, "requestId": "r1" }, "answer": { "problem": { "code": "GUARD_FAILED", "message": "Only a quarter or a dollar is accepted." } } },
+    { "await": "coin", "expect": { "outcome": "refused", "code": "GUARD_FAILED" } },
+    { "view": { "status": "ready", "state": "Locked", "revision": 1, "pending": false, "problem": "GUARD_FAILED", "error": null } }
+  ]
+}

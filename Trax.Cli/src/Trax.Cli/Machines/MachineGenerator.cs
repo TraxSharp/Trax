@@ -1,5 +1,3 @@
-using Trax.StateMachine.Persistence;
-
 namespace Trax.Cli.Machines;
 
 /// <summary>What to generate, and where. Each artifact has its own output root because a real consumer splits
@@ -7,14 +5,16 @@ namespace Trax.Cli.Machines;
 /// <see cref="ImportStyle"/> left null is <c>relative</c> with <see cref="EngineSrc"/> and <c>specifier</c>
 /// without it.</summary>
 internal sealed record MachineGenerateOptions(
-    IMachine Machine,
+    MachineIr Machine,
     string? IrOut = null,
     string? TwinOut = null,
     string? CorpusOut = null,
     string? EngineSrc = null,
     string? ImportStyle = null,
     string? Specifier = null,
-    string? ToolsDir = null
+    string? ToolsDir = null,
+    string? Lang = null,
+    string? Namespace = null
 );
 
 /// <summary>An artifact written by <c>generate</c>: its kind and final path.</summary>
@@ -40,7 +40,8 @@ internal sealed record CheckResult(IReadOnlyList<ArtifactCheck> Checks)
 }
 
 /// <summary>
-/// Orchestrates <c>trax machine generate</c> / <c>check</c>. The IR is exported in-process (C#); the twin and
+/// Orchestrates <c>trax machine generate</c> / <c>check</c>. The IR is exported in-process (C#), or read from a
+/// host's client manifest; the twin and
 /// corpus are produced by shelling out to node: by default to the generators bundled into this package with the
 /// engine compiled in (<see cref="BundledToolsDir"/>), or, with <c>--engine-src</c>, to the <c>tools/</c> of that
 /// engine's checkout, against its <c>src</c>. Everything is
@@ -264,27 +265,42 @@ internal sealed partial class MachineGenerator
             Directory.CreateDirectory(twinStage);
             var args = new List<string> { "--ir", stagedIr };
             args.AddRange(EngineSrcArgs(o));
-            args.AddRange(["--out-dir", twinStage, "--import-style", importStyle]);
-            if (o.Specifier is not null)
-            {
-                args.Add("--specifier");
-                args.Add(o.Specifier);
-            }
+            args.AddRange(["--out-dir", twinStage]);
             var twinScript = ToolScript(o, "generate-twin.mjs", "the twin");
-            RunNode(twinScript, args, "the twin");
-            PlannedArtifact[] twin =
-            [
-                new(
-                    "contexts",
-                    Path.Combine(twinStage, $"{id}.contexts.g.ts"),
-                    Path.Combine(o.TwinOut, $"{id}.contexts.g.ts")
-                ),
-                new(
-                    "machine",
-                    Path.Combine(twinStage, $"{id}.machine.g.ts"),
-                    Path.Combine(o.TwinOut, $"{id}.machine.g.ts")
-                ),
-            ];
+            PlannedArtifact[] twin;
+            if (o.Lang == "csharp")
+            {
+                // The C# view is one file named after the machine's types, and imports no engine module.
+                args.AddRange(["--lang", "csharp"]);
+                if (o.Namespace is not null)
+                    args.AddRange(["--namespace", o.Namespace]);
+                RunNode(twinScript, args, "the C# view");
+                var file = $"{MachineScaffolder.Pascal(id)}.g.cs";
+                twin = [new("view", Path.Combine(twinStage, file), Path.Combine(o.TwinOut, file))];
+            }
+            else
+            {
+                args.AddRange(["--import-style", importStyle]);
+                if (o.Specifier is not null)
+                {
+                    args.Add("--specifier");
+                    args.Add(o.Specifier);
+                }
+                RunNode(twinScript, args, "the twin");
+                twin =
+                [
+                    new(
+                        "contexts",
+                        Path.Combine(twinStage, $"{id}.contexts.g.ts"),
+                        Path.Combine(o.TwinOut, $"{id}.contexts.g.ts")
+                    ),
+                    new(
+                        "machine",
+                        Path.Combine(twinStage, $"{id}.machine.g.ts"),
+                        Path.Combine(o.TwinOut, $"{id}.machine.g.ts")
+                    ),
+                ];
+            }
             RequireProduced(twin, twinScript, o);
             planned.AddRange(twin);
         }
@@ -363,6 +379,19 @@ internal sealed partial class MachineGenerator
     /// </summary>
     internal static string RefuseConflictingOptions(MachineGenerateOptions o)
     {
+        if (o.Lang is not null and not "typescript" and not "csharp")
+            throw new InvalidOperationException(
+                $"--lang must be 'typescript' or 'csharp', got '{o.Lang}'."
+            );
+        if (o.Lang == "csharp" && (o.ImportStyle is not null || o.Specifier is not null))
+            throw new InvalidOperationException(
+                "--import-style and --specifier are how a TypeScript twin imports its engine; a C# view imports "
+                    + "Trax.StateMachine.Client. Drop them, or pass --lang typescript."
+            );
+        if (o.Namespace is not null && o.Lang != "csharp")
+            throw new InvalidOperationException(
+                "--namespace names the C# view's namespace and needs --lang csharp."
+            );
         if (o.ImportStyle is not null and not "relative" and not "specifier")
             throw new InvalidOperationException(
                 $"--import-style must be 'relative' or 'specifier', got '{o.ImportStyle}'."

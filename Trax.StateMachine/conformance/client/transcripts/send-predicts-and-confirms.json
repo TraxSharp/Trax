@@ -1,0 +1,24 @@
+{
+  "about": "An event goes by its own document with its input, a fresh requestId and the twin's prediction as canonical wire. The view shows the prediction while the event is pending, and the host's answer once it comes.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 3, "state": "Locked", "context": { "paidWith": null } } },
+    { "view": { "status": "ready", "state": "Locked", "revision": 3 } },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "quarter" }, "as": "coin" },
+    { "view": { "pending": true, "state": "Unlocked", "context": { "paidWith": "quarter" }, "confirmed": { "state": "Locked", "context": {} } } },
+    { "request": "coin", "variables": { "id": "i-1", "input": { "coin": "quarter" }, "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}" }, "answer": { "id": "i-1", "revision": 4, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "await": "coin", "expect": { "outcome": "confirmed", "state": "Unlocked", "revision": 4 } },
+    { "view": { "pending": false, "state": "Unlocked", "revision": 4, "problem": null } }
+  ]
+}

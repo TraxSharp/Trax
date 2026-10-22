@@ -1,0 +1,133 @@
+# The client conformance kit and its testee protocol
+
+The engine kit (`../PROTOCOL.md`) checks that an engine answers a trigger as the others do. This kit checks the other
+half of a frontend: the client that drives a served machine over a host's typed `machines` root and its change
+stream. Each transcript in `transcripts/` scripts a host, request by request and push by push, and says where a client
+must end up: what it sent, what each send settled as, and what its view shows. Every operation is total, so a
+refusal, a transport failure or a host that stops answering ends in a value, never a throw.
+
+A client in any language joins by implementing a **testee**: a program that drives that language's client, through
+its public API, as the runner tells it. The client talks to `host.mjs`, a real GraphQL host on a local port (HTTP
+POST and a graphql-transport-ws socket), so its own HTTP stack, socket and JSON are what is tested.
+
+## Running it
+
+From `Trax.StateMachine/`:
+
+```bash
+node conformance/client/run.mjs --testee node ts/tools/conformance/client-testee-ts.mjs   # spawn a testee command
+node conformance/client/run.mjs --stdio                                                   # be spawned by one
+```
+
+`--stdio` reverses the pipes as the engine runner's does: the runner writes requests on its stdout and reads answers on
+its stdin, so a test in another language (the C# `ClientConformanceTests`) starts the runner and answers in process. The Rust
+client's testee is a binary, `rust/client/src/bin/client_testee.rs`, which the runner spawns.
+The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed. `--only <prefix>`
+runs the transcripts whose name starts with the prefix. The runner and the host use node's own modules only.
+
+## The protocol
+
+One JSON object per line, UTF-8, both ways. Every request has an `id` and an `op`, and its answer carries the same
+`id`. Unlike the engine kit, **answers come when they settle, not in order**: a `send` is answered once the host
+answers it, and the runner goes on sending requests meanwhile. A testee hands each request to its client in the order
+it arrives, so two sends reach the client in the order the runner sent them. A testee answers an `op` it does not implement with
+`{ "id", "unsupported": true }`, and anything that went wrong outside the client (a throw it caught) with
+`{ "id", "error": "..." }`. Either fails the transcript.
+
+**`open`** builds a client for one instance and holds it until the next `open`, `dispose` or `end`. It sends nothing.
+
+```json
+{ "id": 1, "op": "open", "machine": "turnstile", "ir": { ... }, "irHash": "40b0…", "documents": [ ... ],
+  "endpoint": "http://127.0.0.1:41234/graphql", "socket": "ws://127.0.0.1:41234/graphql",
+  "instance": "i-1", "startInput": null, "effectEvent": null, "retryDelays": [10, 10], "resubscribeDelays": [10] }
+{ "id": 1, "opened": true }
+```
+
+- `ir` is the machine's IR as committed in `../machines/<m>/`, which is the text the C# machine exports, and
+  `irHash` the lowercase hex SHA-256 of that text: the hash a host's documents carry and a generated twin holds. A
+  client that predicts with an engine of its own (C#) checks its machine against it.
+- `documents` are the machine's persisted documents as a host's client manifest lists them (`id`, `machine`,
+  `operation`, `irHash`, `document`). A client sends each operation by its `id`, with its values as variables, never
+  a document's text.
+- `instance` is the id of an instance to open, or null to start one on `start`.
+- `retryDelays` and `resubscribeDelays` are in milliseconds: the delays between retries of `SERVER_OUTDATED` and of a
+  failed read, and the delays before subscribing again after a stream that ended without saying why.
+- **Request ids.** The client mints them `r1`, `r2`, … in the order it needs them, counting from each `open`. The
+  host compares them, so they must be the ids the client actually sends.
+
+**`start`** opens the client: with an `instance`, subscribes to its change stream and reads it; without one, starts an
+instance under a fresh request id and subscribes to the id the host answers with. It is answered `{ "settled": true }`
+once the start or the first read has settled, whatever its result.
+
+**`send`** sends one event, after every earlier one has settled. `trigger` is the trigger's name; `input` is its
+input, or absent. **`retry`** resends what last failed under the same request id. Both are answered with what the send
+came to:
+
+```json
+{ "id": 4, "outcome": "confirmed", "state": "Unlocked", "revision": 4 }
+{ "id": 4, "outcome": "refused", "code": "GUARD_FAILED" }
+{ "id": 4, "outcome": "failed", "code": "TRANSPORT_ERROR" }
+{ "id": 4, "outcome": "stopped", "code": "CLIENT_OUTDATED" }
+```
+
+**`view`** answers with what the client shows now:
+
+```json
+{ "id": 5, "status": "ready", "instance": "i-1", "state": "Unlocked", "context": { "paidWith": "quarter" },
+  "confirmed": { "state": "Locked", "context": {} }, "rowId": null, "revision": 3, "dueAt": null,
+  "pending": true, "problem": null, "error": null, "deleted": null }
+```
+
+`status` is `loading`, `ready` or `stopped`. `state` and `context` are what to show (the prediction while one is
+pending), `confirmed` what the host last confirmed. `problem` is the code of the last refusal or transport failure,
+`error` the code that stopped the client (`GONE`, `CLIENT_OUTDATED`), and `deleted` whether a `GONE` came from a
+deletion (true) or a host that holds no such instance for the caller (false). A context holds no member whose value
+is null: a typed answer cannot tell a member stored as null from one the state does not hold.
+
+**`dispose`** closes the client: its stream, and every request it would still send. It is answered `{ "disposed":
+true }`. **`end`** is the last request; the testee answers `{ "id" }` and exits.
+
+## What the host does
+
+The host answers nothing by itself. A request for an id that is not one of the transcript's documents is answered
+with a GraphQL error and fails the transcript; so does a subscription that sends a document's text beside its id.
+It acknowledges a socket's `connection_init` unless the transcript refuses that connection, in which case it closes
+the socket with 4403 before acknowledging it.
+
+An answer is wrapped the way a host serves it, `{ "data": { "machines": { "<machine>": { "<operation>": … } } } }`,
+and a push as `{ "data": { "<machine>Changed": … } }`, with the fields a host selects that the step does not give
+filled in: `dueAt: null`, `dueAtKnown: true`, `problem: null` on an answer (and `id`, `revision`, `state`, `context`
+null beside a `problem`), and `rowId: null`, `gone: false`, `reload: false` on a push.
+
+## Transcripts
+
+```json
+{
+  "about": "What the transcript shows.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": { "get": "$id: UUID!", "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String", ... },
+  "refuseConnections": 0,
+  "retryDelays": [10, 10],
+  "resubscribeDelays": [10],
+  "steps": [ ... ]
+}
+```
+
+`documents` names each operation the host serves and the variables its document declares; the runner writes the
+documents from it. The steps run in order:
+
+| Step | What the runner does |
+| --- | --- |
+| `{ "client": "<op>", ...args }` | Sends the request. With `"expect"`, waits for its answer and compares; with `"as": "<name>"`, goes on and a later `await` compares; with neither, goes on, and the answer must still come before the transcript ends. |
+| `{ "await": "<name>", "expect": { ... } }` | Waits for the answer sent under that name and compares. |
+| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503`, or `"drop": true` (the connection is closed with no answer). |
+| `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
+| `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription. |
+| `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket. |
+| `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. |
+| `{ "quiet": 50 }` | Waits that many milliseconds; nothing may arrive meanwhile. |
+
+A comparison holds when every member the step gives equals the answer's, canonically; members it does not give are
+not compared. After the last step the runner waits briefly, and anything that arrived that no step took fails the
+transcript: a client sends nothing the transcript does not expect.

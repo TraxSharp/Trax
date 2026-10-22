@@ -455,6 +455,11 @@ jobs:
         if: matrix.suite.conformance
         working-directory: Trax.StateMachine
         run: node conformance/run.mjs --testee node ts/tools/conformance/testee-ts.mjs
+      - name: Run the client conformance kit through the TypeScript client
+        # The C# client answers the same transcripts in its CrossEngine tests above (ClientConformanceTests).
+        if: matrix.suite.conformance
+        working-directory: Trax.StateMachine
+        run: node conformance/client/run.mjs --testee node ts/tools/conformance/client-testee-ts.mjs
       - name: Install the web folder (locked, no install scripts)
         if: matrix.suite.web
         working-directory: ${{ matrix.suite.folder }}/${{ matrix.suite.web }}
@@ -999,6 +1004,61 @@ jobs:
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
 
+  # The Rust engine and its client, Trax.StateMachine/rust (packages.json suite state-machine-rust).
+  # It runs for a change under Trax.StateMachine/rust or the conformance kits. The runner image has
+  # rustup; the engine crate has no dependencies, and the client's come from crates.io at the
+  # versions Cargo.lock pins (--locked).
+  state-machine-rust:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.suite-names), 'state-machine-rust')
+    name: state-machine-rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: Trax.StateMachine/rust
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            static.rust-lang.org:443
+            index.crates.io:443
+            static.crates.io:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install the pinned toolchain
+        # The version rust-toolchain.toml pins, which every cargo command below then selects.
+        run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt,clippy
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Lint
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked --workspace
+      - name: Build the testees
+        run: cargo build --locked --release --workspace
+      - name: Conformance kit
+        working-directory: Trax.StateMachine
+        run: node conformance/run.mjs --testee rust/target/release/trax-state-machine-testee
+      - name: Client conformance kit
+        working-directory: Trax.StateMachine
+        run: node conformance/client/run.mjs --testee rust/target/release/trax-state-machine-client-testee
+
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
   # that adds pull requests' release notes. Its tests take seconds and read no folder, so they
   # run on every pull request rather than through the change detection.
@@ -1038,7 +1098,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, board-client, state-machine, release-tooling]
+    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, board-client, state-machine, state-machine-rust, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

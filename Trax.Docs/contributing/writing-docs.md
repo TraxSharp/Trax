@@ -18,8 +18,8 @@ to the code.
 ## Front matter
 
 Every published page opens with a YAML front matter block. Published means everything under
-`Trax.Docs` except `README.md` files and the `adr/`, `tests/`, `tools/`, `.claude/` and `.github/`
-folders, which is what `Trax.Website/scripts/sync-docs.sh` copies.
+`Trax.Docs` except `README.md` files and the `adr/`, `skills/`, `tests/`, `tools/`, `.claude/` and
+`.github/` folders, which is what `Trax.Website/scripts/sync-docs.sh` copies.
 
 ```yaml
 ---
@@ -383,6 +383,26 @@ means updating its line.
 | `tests/Trax.Docs.Tests/KnownUndocumentedPublicApi.txt` | every public type and member is named on a page (`PublicApiIsDocumentedTests`) |
 
 Never add a line to one of them: fix the page instead.
+
+## Agent skills
+
+`skills/<name>/SKILL.md` holds a skill for coding agents working in an app built on Trax. It is not
+a page: after each release, an approved run of the `Skills` workflow publishes it to the
+[`skills` branch](https://github.com/TraxSharp/Trax/tree/skills), stamped with the release's version, and agents
+install it from there (`Trax.Docs/adr/0056`). A skill says
+what to decide first, which pages to read and which mistakes are known, and links to the page for
+the detail rather than repeating it.
+
+- **Frontmatter** is `name` (the folder's name), `description` (when to use it: an agent matches
+  its task against this) and `metadata` holding `internal: true`. The marker keeps
+  `npx skills add TraxSharp/Trax` from offering unreleased skills; the release removes it.
+- **Links to the docs are full URLs**, `https://traxsharp.net/docs/...`, since the agent reading
+  one is in another repository. Other files the skill needs sit in its folder and are linked
+  relatively. Markdown only: a skill never ships a script.
+- **C# fences carry the same markers as a page**, and `compile` fences are compiled the same way.
+
+`SkillsAreWellFormedTests` checks all of it, and `Trax.Skills.Publish` refuses to stage a tree that
+breaks it.
 
 ## Voice
 

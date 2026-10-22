@@ -1,5 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Cli.Commands;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
 using Trax.StateMachine;
@@ -56,7 +59,7 @@ public class MachineGeneratorTests
         string? specifier = null
     ) =>
         new(
-            Turnstile,
+            MachineIr.Of(Turnstile),
             irOut,
             twinOut,
             corpusOut,
@@ -78,7 +81,7 @@ public class MachineGeneratorTests
         var twinOut = Dir("twin");
         var options = Options(irOut: irOut, twinOut: twinOut) with
         {
-            Machine = new MachineWithId(id),
+            Machine = MachineIr.Of(new MachineWithId(id)),
         };
 
         var act = () => new MachineGenerator(node).Generate(options);
@@ -157,6 +160,124 @@ public class MachineGeneratorTests
     }
 
     [Test]
+    public void Generate_with_lang_csharp_places_one_view_named_after_the_machine()
+    {
+        var node = new FakeNodeRunner { ViewContent = "// view\n" };
+        var twinOut = Dir("twin");
+
+        var result = new MachineGenerator(node).Generate(
+            Options(twinOut: twinOut) with
+            {
+                ImportStyle = null,
+                Lang = "csharp",
+                Namespace = "Shop.Machines",
+            }
+        );
+
+        File.ReadAllText(Path.Combine(twinOut, "Turnstile.g.cs")).Should().Be("// view\n");
+        Directory.EnumerateFiles(twinOut).Should().ContainSingle();
+        result.Written.Select(w => w.Kind).Should().BeEquivalentTo(["view"]);
+        var twinCall = node.Calls.Single(c => c.Script.Contains("twin"));
+        twinCall.Args.Should().ContainInOrder("--lang", "csharp", "--namespace", "Shop.Machines");
+        twinCall.Args.Should().NotContain("--import-style");
+    }
+
+    [Test]
+    public void Generate_from_a_manifest_writes_the_view_and_the_ir_the_manifest_hashes()
+    {
+        var manifest = ClientManifests.Sample();
+        var path = Path.Combine(_root, "trax-client-manifest.json");
+        File.WriteAllText(path, ClientManifest.Write(manifest));
+        var node = new FakeNodeRunner();
+        var irOut = Dir("ir");
+        var twinOut = Dir("twin");
+
+        new MachineGenerator(node).Generate(
+            new MachineGenerateOptions(
+                MachineCommand.Source(null, path, "checkout"),
+                IrOut: irOut,
+                TwinOut: twinOut,
+                ToolsDir: _tools,
+                EngineSrc: Dir("src"),
+                Lang: "csharp"
+            )
+        );
+
+        File.Exists(Path.Combine(twinOut, "Checkout.g.cs")).Should().BeTrue();
+        var ir = File.ReadAllText(Path.Combine(irOut, "checkout.ir.json")).TrimEnd('\n');
+        Convert
+            .ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ir)))
+            .Should()
+            .Be(manifest.Machines.Single(m => m.Id == "checkout").IrHash);
+    }
+
+    [TestCase(true, true, null, "*pass one of them*")]
+    [TestCase(false, false, null, "*Pass --assembly*or --manifest*")]
+    [TestCase(false, true, null, "*2 machines; pick one with --machine: checkout, reminder*")]
+    [TestCase(false, true, "turnstile", "*has no machine 'turnstile'. It has: checkout, reminder*")]
+    public void A_manifest_source_is_refused_when_it_names_no_one_machine(
+        bool assembly,
+        bool manifest,
+        string? machine,
+        string message
+    )
+    {
+        var path = Path.Combine(_root, "trax-client-manifest.json");
+        File.WriteAllText(path, ClientManifest.Write(ClientManifests.Sample()));
+
+        var act = () =>
+            MachineCommand.Source(
+                assembly ? typeof(DeclarativeTurnstileMachine).Assembly.Location : null,
+                manifest ? path : null,
+                machine
+            );
+
+        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+    }
+
+    [Test]
+    public void A_manifest_machine_whose_ir_does_not_hash_to_its_ir_hash_is_refused()
+    {
+        var sample = ClientManifests.Sample(new DeclarativeCheckoutMachine());
+        var tampered = sample with
+        {
+            Machines = [sample.Machines[0] with { IrHash = new string('0', 64) }],
+        };
+        var path = Path.Combine(_root, "trax-client-manifest.json");
+        File.WriteAllText(path, ClientManifest.Write(tampered));
+
+        var act = () => MachineCommand.Source(null, path, null);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*hashes to*documents were registered*");
+    }
+
+    [TestCase("rust", null, null, "*--lang must be*")]
+    [TestCase("csharp", "specifier", null, "*a C# view imports*")]
+    [TestCase(null, null, "Shop.Machines", "*--namespace*needs --lang csharp*")]
+    public void Generate_refuses_options_that_do_not_fit_the_language(
+        string? lang,
+        string? importStyle,
+        string? @namespace,
+        string message
+    )
+    {
+        var node = new FakeNodeRunner();
+        var options = Options(twinOut: Dir("twin")) with
+        {
+            ImportStyle = importStyle,
+            Lang = lang,
+            Namespace = @namespace,
+        };
+
+        var act = () => new MachineGenerator(node).Generate(options);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        node.Calls.Should().BeEmpty();
+    }
+
+    [Test]
     public void Generate_forwards_a_custom_specifier()
     {
         var node = new FakeNodeRunner();
@@ -198,7 +319,7 @@ public class MachineGeneratorTests
     {
         var node = new FakeNodeRunner();
         var options = new MachineGenerateOptions(
-            Turnstile,
+            MachineIr.Of(Turnstile),
             TwinOut: Dir("twin"),
             CorpusOut: Dir("corpus"),
             EngineSrc: null
@@ -220,7 +341,11 @@ public class MachineGeneratorTests
     [Test]
     public void Generate_twin_without_engine_src_or_a_bundled_engine_says_to_pass_engine_src()
     {
-        var options = new MachineGenerateOptions(Turnstile, TwinOut: Dir("twin"), EngineSrc: null);
+        var options = new MachineGenerateOptions(
+            MachineIr.Of(Turnstile),
+            TwinOut: Dir("twin"),
+            EngineSrc: null
+        );
 
         var generate = () =>
             new MachineGenerator(
@@ -356,7 +481,7 @@ public class MachineGeneratorTests
 
         new MachineGenerator(node, new PlacementFiles(), bundled).Generate(
             new MachineGenerateOptions(
-                Turnstile,
+                MachineIr.Of(Turnstile),
                 TwinOut: Dir("twin"),
                 EngineSrc: engineSrc ? Path.Combine(_root, "engine", "src") : null,
                 ToolsDir: toolsDir ? custom : null

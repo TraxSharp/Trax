@@ -1,0 +1,25 @@
+{
+  "about": "CLIENT_OUTDATED stops the client for good: the event settles stopped, the stream closes, and a later send is answered stopped without reaching the host.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "client": "send", "trigger": "Push", "as": "push" },
+    { "request": "push", "errors": [{ "message": "Reload.", "extensions": { "code": "CLIENT_OUTDATED" } }] },
+    { "await": "push", "expect": { "outcome": "stopped", "code": "CLIENT_OUTDATED" } },
+    { "view": { "status": "stopped", "error": "CLIENT_OUTDATED", "pending": false } },
+    { "client": "send", "trigger": "Push", "expect": { "outcome": "stopped", "code": "CLIENT_OUTDATED" } },
+    { "quiet": 50 }
+  ]
+}

@@ -21,4 +21,15 @@ public class ConformanceRunnerTests
         exitCode.Should().Be(0, report);
         report.Should().MatchRegex(@"(\d+) of \1 cases passed\.");
     }
+
+    [Test]
+    public void The_CSharp_engine_built_from_each_IR_passes_every_case_of_the_kit()
+    {
+        var testee = new ConformanceTestee(fromIr: true);
+
+        var (exitCode, report) = TwinEngine.RunConformance(testee.Answer);
+
+        exitCode.Should().Be(0, report);
+        report.Should().MatchRegex(@"(\d+) of \1 cases passed\.");
+    }
 }

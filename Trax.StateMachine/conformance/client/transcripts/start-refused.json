@@ -1,0 +1,19 @@
+{
+  "about": "A start the host refuses settles with the refusal shown, and the client opens nothing.",
+  "machine": "turnstile",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start", "as": "start" },
+    { "request": "start", "variables": { "requestId": "r1" }, "answer": { "problem": { "code": "FORBIDDEN", "message": "Not yours." } } },
+    { "await": "start", "expect": { "settled": true } },
+    { "view": { "status": "loading", "instance": null, "problem": "FORBIDDEN", "error": null } },
+    { "quiet": 50 }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "about": "The due time is the host's: an answer that does not know it keeps the one held while the state stays, an answer entering a timed state without one reads the instance once for it, and null clears it.",
+  "machine": "reminder",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "open": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "approve": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "extend": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Idle", "context": {} } },
+    { "view": { "status": "ready", "state": "Idle", "dueAt": null } },
+    { "client": "send", "trigger": "Open", "as": "open" },
+    { "request": "open", "variables": { "id": "i-1", "requestId": "r1", "clientResult": "{\"machine\":\"reminder\",\"version\":1,\"state\":\"Review\",\"context\":{}}" }, "answer": { "id": "i-1", "revision": 2, "state": "Review", "context": {}, "dueAtKnown": false } },
+    { "await": "open", "expect": { "outcome": "confirmed", "state": "Review" } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 2, "state": "Review", "context": {}, "dueAt": "2026-10-22T10:10:00Z" } },
+    { "view": { "state": "Review", "revision": 2, "dueAt": "2026-10-22T10:10:00Z" } },
+    { "client": "send", "trigger": "Extend", "as": "extend" },
+    { "request": "extend", "answer": { "id": "i-1", "revision": 3, "state": "Review", "context": {}, "dueAtKnown": false } },
+    { "await": "extend", "expect": { "outcome": "confirmed", "revision": 3 } },
+    { "view": { "revision": 3, "dueAt": "2026-10-22T10:10:00Z" } },
+    { "push": { "revision": 4, "state": "Review", "context": {}, "dueAt": "2026-10-22T10:20:00Z" } },
+    { "view": { "revision": 4, "dueAt": "2026-10-22T10:20:00Z" } },
+    { "push": { "revision": 5, "state": "Expired", "context": {}, "dueAt": null } },
+    { "view": { "state": "Expired", "revision": 5, "dueAt": null } }
+  ]
+}

@@ -3,8 +3,10 @@
     <Project Path="tests/Trax.Adr.Guard.Tests/Trax.Adr.Guard.Tests.csproj" />
     <Project Path="tests/Trax.Docs.Snippets.Tests/Trax.Docs.Snippets.Tests.csproj" />
     <Project Path="tests/Trax.Docs.Tests/Trax.Docs.Tests.csproj" />
+    <Project Path="tests/Trax.Skills.Publish.Tests/Trax.Skills.Publish.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Trax.Adr.Guard/Trax.Adr.Guard.csproj" />
+    <Project Path="tools/Trax.Skills.Publish/Trax.Skills.Publish.csproj" />
   </Folder>
 </Solution>
