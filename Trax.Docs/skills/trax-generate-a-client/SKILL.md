@@ -75,8 +75,9 @@ in [Fetch only what a component needs](https://traxsharp.net/docs/api/fetch-only
 dotnet tool run trax client --manifest src/trax/manifest.json --out src/trax --documents 'src/graphql/*.graphql'
 ```
 
-- Install the tool as a local tool so CI runs the pinned version (`dotnet new tool-manifest`,
-  `dotnet tool install Trax.Cli`). It needs `node` 22 or later. The app installs
+- Install the tool as a local tool so CI runs the pinned version: `dotnet new tool-manifest` once at the repository
+  root, then `dotnet tool install Trax.Cli --version <the Trax version>`, and commit the `dotnet-tools.json` it
+  writes. A fresh checkout runs `dotnet tool restore` first. It needs `node` 22 or later. The app installs
   `@traxsharp/state-machine` and `graphql-ws`, at the version of its `Trax.*` packages.
 - Commit everything under `--out`, the manifest included. Never edit a `.g.ts` file.
 - In CI, export the manifest again and run the same command with `--check`; it fails naming each stale file.

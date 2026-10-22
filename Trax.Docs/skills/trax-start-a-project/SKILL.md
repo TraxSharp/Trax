@@ -61,7 +61,7 @@ A [state machine that invokes trains](https://traxsharp.net/docs/statemachine/in
 `trax generate` is for an app that implements an existing schema. It always needs one:
 
 ```bash
-dotnet tool install Trax.Cli --version <the Trax version>
+dotnet tool install --global Trax.Cli --version <the Trax version>
 trax generate --schema ./schema.graphql --output ./MyProject --name MyProject
 ```
 
