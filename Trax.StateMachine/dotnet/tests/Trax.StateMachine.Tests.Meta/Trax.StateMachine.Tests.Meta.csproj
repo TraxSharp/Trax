@@ -27,6 +27,7 @@
     <ProjectReference Include="../../src/Trax.StateMachine.Persistence/Trax.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../src/Trax.StateMachine.Testing/Trax.StateMachine.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.StateMachine.Client/Trax.StateMachine.Client.csproj" />
+    <ProjectReference Include="../../src/Trax.Client/Trax.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

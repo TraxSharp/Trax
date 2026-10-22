@@ -8,7 +8,7 @@ nav_order: 3
 
 # Packages
 
-Trax ships as 44 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
+Trax ships as 45 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
 
 Every package releases at the same version, so install them all at one version. The site is published from the latest release, and the nuget.org link shows that release and its dependencies.
 
@@ -94,7 +94,8 @@ dotnet add package Trax.Api.Dashboard
 |---|---|---|---|
 | [Trax.StateMachine](https://www.nuget.org/packages/Trax.StateMachine) | The snapshot state-machine engine: state as language-neutral JSON that a C# backend and a TypeScript client agree on, authored through `IMachineBuilder`. No dependencies. See [State Machines](/docs/statemachine). | `Trax.StateMachine` | Usually `Trax.StateMachine.Persistence`. |
 | [Trax.StateMachine.Persistence](https://www.nuget.org/packages/Trax.StateMachine.Persistence) | `Machine<TState, TTrigger>`, the user-scoped snapshot store, the draft service, the exactly-once effect primitive, `AddStateMachines` and `AddTraxStateMachineSelfCheck`. See [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines). | `Trax.StateMachine.Persistence` | `Trax.Effect` and a data provider; `AddStateMachines` refuses to register without one. |
-| [Trax.StateMachine.Client](https://www.nuget.org/packages/Trax.StateMachine.Client) | Drives a machine a host serves from .NET (Blazor, MAUI, Avalonia, WPF, another service): persisted ids from the client manifest, the change stream over a socket, each event predicted with the C# engine. See [.NET client](/docs/sdk-reference/statemachine-api/dotnet-client). | `Trax.StateMachine.Client` | `Trax.StateMachine`, and the host's client manifest. |
+| [Trax.StateMachine.Client](https://www.nuget.org/packages/Trax.StateMachine.Client) | Drives a machine a host serves from .NET (Blazor, MAUI, Avalonia, WPF, another service): persisted ids from the client manifest, the change stream over a socket, each event predicted with the C# engine. See [.NET client](/docs/sdk-reference/statemachine-api/dotnet-client). | `Trax.StateMachine.Client` | `Trax.StateMachine` and `Trax.Client`, which it brings with it, and the host's client manifest. |
+| [Trax.Client](https://www.nuget.org/packages/Trax.Client) | Sends a Trax host's GraphQL documents from .NET: queries and mutations over HTTP POST, subscriptions over one graphql-transport-ws socket, each by persisted id or as text. Every refusal or failure is a value. The typed documents `trax client --operations --lang csharp` generates are written against it. No dependencies. See [.NET client](/docs/sdk-reference/client-api/dotnet-client). | `Trax.Client` | The documents `trax client` generates, or a `TraxDocument` of your own. |
 | [Trax.StateMachine.Testing](https://www.nuget.org/packages/Trax.StateMachine.Testing) | Replays the differential corpus produced by the TypeScript engine through the C# engine and returns the cases it fails to reproduce, proving the two engines agree. See [Codegen Pipeline](/docs/statemachine/codegen-pipeline). | `Trax.StateMachine.Testing` | A test project, and the corpus `trax machine generate` writes. |
 
 ## Trax.Mediator

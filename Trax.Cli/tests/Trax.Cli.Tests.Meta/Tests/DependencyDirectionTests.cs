@@ -79,6 +79,15 @@ public class DependencyDirectionTests
         "Trax.Samples",
     };
 
+    // Packages whose id carries no family prefix, and the family whose folder ships them.
+    private static readonly IReadOnlyDictionary<string, string> Unprefixed = new Dictionary<
+        string,
+        string
+    >(StringComparer.Ordinal)
+    {
+        ["Trax.Client"] = "Trax.StateMachine",
+    };
+
     [Test]
     public void No_project_references_a_downstream_or_parallel_Trax_package()
     {
@@ -115,6 +124,7 @@ public class DependencyDirectionTests
     [TestCase("Trax.StateMachine", "Trax.Mediator.Testing")]
     [TestCase("Trax.Effect", "Trax.StateMachine")]
     [TestCase("Trax.Effect", "Trax.StateMachine.Persistence")]
+    [TestCase("Trax.Effect", "Trax.Client")]
     public void A_reference_against_the_chain_is_refused(string folder, string referenced)
     {
         Offenders(folder, [("x.csproj", ProjectReferencing(referenced))])
@@ -183,10 +193,12 @@ public class DependencyDirectionTests
     }
 
     private static string? FamilyOf(string package) =>
-        Families.FirstOrDefault(f =>
-            package.Equals(f, StringComparison.Ordinal)
-            || package.StartsWith(f + ".", StringComparison.Ordinal)
-        );
+        Unprefixed.TryGetValue(package, out var family)
+            ? family
+            : Families.FirstOrDefault(f =>
+                package.Equals(f, StringComparison.Ordinal)
+                || package.StartsWith(f + ".", StringComparison.Ordinal)
+            );
 
     private static string? DetectRepo()
     {

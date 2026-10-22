@@ -1,0 +1,214 @@
+---
+title: .NET client
+description: "Reference for Trax.Client: TraxClient, TraxDocument, TraxHttpTransport and GraphQLSubscriptionSocket, which send a host's persisted GraphQL documents from .NET."
+type: reference
+area: api
+parent: Client API
+grand_parent: SDK Reference
+nav_order: 1
+package: Trax.Client
+namespace: Trax.Client
+source:
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxClient.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxDocument.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxHttpTransport.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxAnswer.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/Optional.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/TraxJson.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/GraphQLSubscriptionSocket.cs
+---
+
+# .NET client
+
+`Trax.Client` sends a Trax host's GraphQL documents from .NET: a query or mutation as an HTTP POST, a subscription over
+one graphql-transport-ws socket. A document goes by the persisted id the host registered it under, or as text to a host
+that runs it unregistered. Every answer is a value: data, the host's errors, or a transport failure. A refusal never
+throws.
+
+```bash
+dotnet add package Trax.Client
+```
+
+It references the base class library and nothing else, so a terminal tool, a MAUI app or a Blazor WebAssembly app can
+take it. The typed documents it sends are generated: `trax client --operations --lang csharp` writes a
+`TraxDocument<TVariables, TResult>` per document with its variables and result records, in the namespace `--namespace`
+names. [`Trax.StateMachine.Client`](/docs/sdk-reference/statemachine-api/dotnet-client) posts and subscribes through
+this package too.
+
+## Signatures
+
+```csharp fragment
+public sealed class TraxClient
+{
+    public TraxClient(ITraxTransport transport, TraxClientOptions? options = null);
+    public static readonly IReadOnlyList<TimeSpan> DefaultResubscribeDelays;
+    public ITraxTransport Transport { get; }
+
+    public Task<TraxAnswer<TResult>> SendAsync<TVariables, TResult>(
+        TraxDocument<TVariables, TResult> document, TVariables variables, CancellationToken cancellationToken = default);
+    public IDisposable Subscribe<TVariables, TResult>(
+        TraxDocument<TVariables, TResult> document, TVariables variables, Action<TraxStreamEvent<TResult>> onEvent);
+}
+
+public abstract record TraxDocument(string Name, TraxOperationKind Kind, string? Id, string Text);
+public sealed record TraxDocument<TVariables, TResult>(string Name, TraxOperationKind Kind, string? Id, string Text)
+    : TraxDocument(Name, Kind, Id, Text);
+
+public interface ITraxTransport
+{
+    Task<TraxAnswer> ExecuteAsync(TraxRequest request, CancellationToken cancellationToken = default);
+    IDisposable Subscribe(TraxRequest request, ISubscriptionSink sink);
+}
+
+public sealed class TraxHttpTransport : ITraxTransport
+{
+    public TraxHttpTransport(TraxHttpTransportOptions options);
+    public JsonObject Payload(TraxRequest request);
+    public static Task<TraxAnswer> PostAsync(
+        HttpClient http, Uri endpoint, JsonObject body,
+        long maxResponseSize = TraxHttpTransportOptions.DefaultMaxResponseSize,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDisposable
+{
+    public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options);
+    public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink);
+}
+
+public readonly record struct Optional<T>
+{
+    public Optional(T value);
+    public bool HasValue { get; }
+    public T Value { get; }
+}
+```
+
+## Members
+
+### Sending
+
+| Member | What it is |
+| --- | --- |
+| `TraxClient` | Sends documents through an `ITraxTransport`, writing variables and reading data with `TraxJson.Options` unless `TraxClientOptions.Json` says otherwise. It never talks to the network itself. |
+| `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, or for a subscription document, which `Subscribe` follows. Data that does not fit `TResult` is a `Failure`, not a throw. |
+| `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`. Throws for a document that is not a subscription. |
+| `Transport` | The transport the client sends through. |
+| `DefaultResubscribeDelays` | 1, 2, then 5 seconds: the delays before subscribing again after the socket dropped a stream. |
+| `TraxClientOptions` | `Json`, the serializer options (`TraxJson.Options` when null); `ResubscribeDelays`, whose last delay repeats for as long as the stream is followed (`DefaultResubscribeDelays` when null or empty); `Time`, the `TimeProvider` the delays run on (the system's when null). |
+
+### Documents
+
+| Member | What it is |
+| --- | --- |
+| `TraxDocument` | One document: its operation's `Name`, sent as `operationName`; its `Kind`; the persisted `Id`, or null for a document a host runs as text and never registers; and its `Text`, exactly as the id was computed from it. |
+| `TraxDocument<TVariables, TResult>` | A document whose variables are a `TVariables` and whose data is read into a `TResult`. Generated code declares one per document. |
+| `TraxOperationKind` | `Query`, `Mutation` or `Subscription`. |
+| `TraxNoVariables` | The variables of a document that declares none, sent as `{}`. `TraxNoVariables.Instance` is its one value. |
+| `TraxRequest` | A `Document` and its `Variables` as a `JsonObject`: what a transport is handed. |
+| `Optional<T>` | A variable or input field that may be left out, which GraphQL tells apart from null. `default` is left out, and the host uses the argument's default or leaves the value as it is; any value converts to one that is sent, null included, which clears it. `HasValue` says whether it is sent and `Value` holds it. |
+| `TraxJson.Options` | The web defaults (camelCase, case-insensitive reads), with every `Optional<T>` property that holds no value left out of the JSON. With other options a left-out `Optional<T>` is written as null. |
+
+### Answers
+
+| Member | What it is |
+| --- | --- |
+| `TraxAnswer<T>` | A document's answer: `Data` read into the result, the `Errors` the host answered with, or the `Failure` that kept an answer from arriving. `Succeeded` is true when data arrived with no error. `Code` is `TRANSPORT_ERROR` for a failure, else the first error's code. `Message` is the failure's message or every error's, one per line. |
+| `TraxAnswer` | An answer as it arrived, what an `ITraxTransport` returns: `Data` as JSON, `Errors` and `Failure`. `TraxAnswer.Of(json)` reads an answer's JSON and is null when it holds neither `data` nor `errors`; `TraxAnswer.Failed(message, status)` is one that never arrived. |
+| `TraxGraphQLError` | One error: its `Message`, its `Code` (`extensions.code`, such as `CLIENT_OUTDATED` or `AUTH_NOT_AUTHORIZED`), its `Path` and its `Extensions` as sent. |
+| `TraxTransportFailure` | A request that got no GraphQL answer: its `Message`, and the HTTP `Status` when a response arrived. `TraxTransportFailure.Code` is `TRANSPORT_ERROR`, the code the state-machine clients report a transport failure under. |
+| `TraxStreamEvent<T>` | What a followed stream delivers: `Next` with one frame's `Data`; `Interrupted` with the `Reason` the socket dropped it; `Resumed` once it is subscribed again; `Ended` with the `Errors` or the `Failure` it ended on, both empty when the host completed it. |
+
+### Transports
+
+| Member | What it is |
+| --- | --- |
+| `ITraxTransport` | How a request reaches a host: `ExecuteAsync` for a query or mutation, which answers a refusal or an unreachable host as a `TraxAnswer` and throws only on cancellation, and `Subscribe` for a stream. An app can give `TraxClient` its own: a recording, a fake, a wrapper that counts what is in flight. |
+| `TraxHttpTransport` | The transport over HTTP POST and a socket. `ExecuteAsync` posts the request; `Subscribe` sends it over the `Socket`, or fails the sink at once when there is none. `Payload(request)` is the body or subscribe payload it sends: `id` or `query`, with `operationName` and `variables`. |
+| `TraxHttpTransport.PostAsync(http, endpoint, body, maxResponseSize)` | POSTs one GraphQL body and reads the answer. A body with `errors` is an answer whatever its status, since a host answers a coded refusal with the status it chose, and a success with `data` is one too; a status that is not success with no errors (whatever data came with it), a host that could not be reached, or a body larger than `maxResponseSize` (refused as it arrives, never read whole), is a `Failure`. |
+| `TraxHttpTransportOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, a default header or a delegating handler); the GraphQL `Endpoint`; the `Socket` subscriptions go over; `ById`, which says whether a document goes by its id (by default every document with an id does; a host that registered only some of them, or none, names which); `MaxResponseSize`, the largest body read from an answer (`DefaultMaxResponseSize`, 16 MiB); and `AllowInsecureTransport`. Without it the transport refuses, when it is built, an `http` endpoint whose host is not this machine, since whatever authenticates the requests would cross the network in the clear. |
+
+### The socket
+
+| Member | What it is |
+| --- | --- |
+| `GraphQLSubscriptionSocket` | A graphql-transport-ws socket. It connects when the first subscription opens and closes when the last one ends. Each subscribe message carries the payload it is given. It does not reconnect by itself: a closed socket fails every open subscription with a `SocketClosedException`, and whoever subscribed decides when to subscribe again (`TraxClient` does, after its resubscribe delays). |
+| `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers, a proxy or client certificates on each `ClientWebSocket`; `ConnectTimeout` (10 seconds), how long a connection may take to be acknowledged; `MaxMessageSize` (16 MiB), the largest message read, past which the connection fails rather than reading on; and `AllowInsecureTransport`, without which a `ws` endpoint whose host is not this machine is refused. |
+| `ISubscriptionSocket` | The socket seam: `Subscribe(payload, sink)`, where `payload` is the subscribe message's payload (`id` or `query`, with `operationName` and `variables`). The returned handle ends the subscription. |
+| `ISubscriptionSink` | What a subscription delivers to: `Next` with each GraphQL result, `Error` when the server refused it or the socket closed, `Complete` when the server ended it, and `Started` once the subscribe message went out over an acknowledged connection (nothing by default). |
+| `SocketClosedException` | The `Error` a sink gets when the socket closed, before it was acknowledged or while subscribed. `CloseStatus` is the close code the server sent, if any. `Refused` is true for a 4400 to 4499 close, the host refusing the connection itself (4401 unauthorized, 4403 forbidden): subscribing again gets the same answer. |
+| `SubscriptionErrorException` | The `Error` a sink gets when the server ends a subscription with GraphQL errors, which it carries as `Errors`. |
+
+## Behavior
+
+- **Totality.** `SendAsync` and `ExecuteAsync` answer every refusal and every transport failure as a value. A timeout
+  the caller did not ask for is a `Failure`; a cancellation the caller asked for throws.
+- **By id or by text.** A document with an id goes by its id unless `ById` says otherwise, and its text is then not
+  sent at all. A host that requires persisted operations accepts only those. Either way the request carries
+  `operationName`.
+- **Streams.** A `Subscribe` stream ends for good (`Ended`) when the host completes it, answers a frame with errors,
+  refuses the subscription, or closes the socket with a 44xx code. Any other close is `Interrupted`, said once, and the
+  stream is subscribed again after the next of `ResubscribeDelays`; `Resumed` follows once the new subscription is
+  started, and frames sent meanwhile are lost, so read again what the stream may have missed. Disposing the handle ends
+  the stream and cancels a pending resubscribe.
+- **Optional fields.** A generated variables or input record types a field the host may leave as it is as an
+  `Optional<T>`, so `MaxActiveJobs = null` sends `"maxActiveJobs": null` and leaving it unset sends nothing.
+
+## Example
+
+```csharp compile
+using System.Text.Json.Nodes;
+using Trax.Client;
+
+using var http = new HttpClient();
+http.DefaultRequestHeaders.Add("X-Api-Key", configuration["Trax:ApiKey"]);
+
+await using var socket = new GraphQLSubscriptionSocket(
+    new GraphQLSubscriptionSocketOptions
+    {
+        Endpoint = new Uri("wss://shop.example/trax/graphql"),
+        ConnectionParams = _ =>
+            ValueTask.FromResult<JsonObject?>(new JsonObject { ["apiKey"] = configuration["Trax:ApiKey"] }),
+    }
+);
+var client = new TraxClient(
+    new TraxHttpTransport(
+        new TraxHttpTransportOptions
+        {
+            Http = http,
+            Endpoint = new Uri("https://shop.example/trax/graphql"),
+            Socket = socket,
+        }
+    )
+);
+
+// DisableManifest and OnTrainStateChanged are generated documents.
+var answer = await client.SendAsync(Documents.DisableManifest, new DisableManifestVariables("nightly-sync"));
+if (!answer.Succeeded)
+    Console.WriteLine($"{answer.Code}: {answer.Message}"); // a refusal or a transport failure, never a throw
+
+using var feed = client.Subscribe(
+    Documents.OnTrainStateChanged,
+    TraxNoVariables.Instance,
+    streamEvent =>
+    {
+        switch (streamEvent)
+        {
+            case TraxStreamEvent<OnTrainStateChangedResult>.Next next:
+                Console.WriteLine($"{next.Data.OnTrainStateChanged.TrainName}: {next.Data.OnTrainStateChanged.TrainState}");
+                break;
+            case TraxStreamEvent<OnTrainStateChangedResult>.Resumed:
+                Console.WriteLine("Reconnected: read the runs again.");
+                break;
+        }
+    }
+);
+```
+
+## See also
+
+- [Client API](/docs/sdk-reference/client-api), the package's index.
+- [Persisted Operations](/docs/api/persisted-operations), how a host registers the documents it accepts by id.
+- [.NET machine client](/docs/sdk-reference/statemachine-api/dotnet-client), which drives a served machine through this
+  package.
+- [trax client](/docs/reference/cli#frontend-clients-trax-client), which generates the typed documents.

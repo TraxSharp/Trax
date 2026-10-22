@@ -39,6 +39,9 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(
             typeof(Trax.StateMachine.Client.ServerMachineController).Assembly
         ).SetName("Trax.StateMachine.Client");
+        yield return new TestCaseData(typeof(Trax.Client.TraxClient).Assembly).SetName(
+            "Trax.Client"
+        );
     }
 
     /// <summary>

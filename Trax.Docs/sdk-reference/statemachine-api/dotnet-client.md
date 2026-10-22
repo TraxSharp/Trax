@@ -12,7 +12,7 @@ source:
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/ServerMachineController.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/IMachineServer.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/GraphQLMachineServer.cs
-  - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/GraphQLSubscriptionSocket.cs
+  - Trax.StateMachine/dotnet/src/Trax.Client/GraphQLSubscriptionSocket.cs
   - Trax.StateMachine/dotnet/src/Trax.StateMachine.Client/MachinePredictor.cs
 ---
 
@@ -27,8 +27,8 @@ package's `ServerMachineController` and `createMachineServer`, and it passes the
 dotnet add package Trax.StateMachine.Client
 ```
 
-It references `Trax.StateMachine` and nothing from `Trax.Api`, so it fits a MAUI or Blazor WebAssembly app. It sends
-each operation by the persisted id the host's [client manifest](/docs/sdk-reference/statemachine-api/client-manifest)
+It references `Trax.StateMachine` and [`Trax.Client`](/docs/sdk-reference/client-api/dotnet-client), and nothing from
+`Trax.Api`, so it fits a MAUI or Blazor WebAssembly app. It sends each operation by the persisted id the host's [client manifest](/docs/sdk-reference/statemachine-api/client-manifest)
 lists, never a document of its own, so a host that requires persisted operations accepts it.
 
 ## Signatures
@@ -55,11 +55,6 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     public GraphQLMachineServer(GraphQLMachineServerOptions options);
     public static readonly IReadOnlyList<TimeSpan> DefaultResubscribeDelays;
     public Task<ServerProblem?> DiscardAsync(string id, string requestId, CancellationToken cancellationToken = default);
-}
-
-public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDisposable
-{
-    public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options);
 }
 
 public static class MachinePredictor
@@ -111,14 +106,18 @@ server answers it.
 | Member | What it is |
 | --- | --- |
 | `IMachineServer` | The seam the controller drives: `StartAsync`, `EventAsync`, `GetAsync` and `Subscribe`. A refusal is an answer; a failed request throws, and the controller reports it as `TRANSPORT_ERROR`. |
-| `GraphQLMachineServer` | The `IMachineServer` over a host's typed `machines` root. It POSTs `{ id, variables }` for each operation, keeping only the variables its document declares, and subscribes to `<machine>Changed` by id. `CLIENT_OUTDATED` and `SERVER_OUTDATED` are answers; any other GraphQL error or a status that is not success throws. A stream that ends without saying why is subscribed again after `ResubscribeDelays` (`DefaultResubscribeDelays`: 1, 2, then 5 seconds). `DiscardAsync` deletes one of the caller's instances, and answers null when it is gone. |
-| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`; `ResubscribeDelays`; `MaxResponseSize`, the largest body read from an answer (16 MiB); and `AllowInsecureTransport`. |
-| `GraphQLSubscriptionSocket` | A graphql-transport-ws socket that subscribes by persisted id. It connects on the first subscription and closes after the last. It does not reconnect by itself: a closed socket fails every open subscription with its `Error`, and the server subscribes again. |
-| `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers or a proxy on each `ClientWebSocket`; `ConnectTimeout` (10 seconds); `MaxMessageSize`, the largest message read (16 MiB); and `AllowInsecureTransport`. |
-| `ISubscriptionSocket`, `ISubscriptionSink` | The socket seam: `Subscribe(documentId, variables, sink)`, and the sink's `Next`, `Error` and `Complete`. |
-| `SubscriptionErrorException` | The error a sink gets when the server ends a subscription with GraphQL errors, which it carries as `Errors`. |
+| `GraphQLMachineServer` | The `IMachineServer` over a host's typed `machines` root. It POSTs `{ id, variables }` for each operation through `TraxHttpTransport.PostAsync`, keeping only the variables its document declares, and subscribes to `<machine>Changed` by id. `CLIENT_OUTDATED` and `SERVER_OUTDATED` are answers; any other GraphQL error, or a response with no GraphQL answer in it, throws. A stream that ends without saying why is subscribed again after `ResubscribeDelays` (`DefaultResubscribeDelays`: 1, 2, then 5 seconds). `DiscardAsync` deletes one of the caller's instances, and answers null when it is gone. |
+| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`, an `ISubscriptionSocket` from `Trax.Client`; `ResubscribeDelays`; `MaxResponseSize`, the largest body read from an answer (16 MiB); and `AllowInsecureTransport`, without which an `http` endpoint that is not loopback is refused. |
 | `ServerAnswer`, `ServerSnapshot`, `ServerProblem` | An answer: the instance `Id` on a start, the `Snapshot` the server stored or the `Problem` it refused with (`Of` and `Refused` build one). A `ServerSnapshot` is the `State`, its `Context` with no null member, the `Revision` (null when the store records none, which the controller takes and cannot order), the incarnation `RowId`, and `DueAt`, which counts only when `DueAtKnown`. |
 | `StreamMessage` | What a change stream delivers: `Changed` with the `Snapshot`, `Gone` (with `NotFound` when the server answered `NOT_FOUND`), `Reload`, or `ClientOutdated`. |
+
+The socket is `Trax.Client`'s, in the namespace `Trax.Client`: `GraphQLSubscriptionSocket`, its options, the
+`ISubscriptionSocket` and `ISubscriptionSink` seam (`Subscribe(payload, sink)`, and the sink's `Next`, `Error`,
+`Complete` and `Started`), `SocketClosedException` and `SubscriptionErrorException`. The
+[`Trax.Client` reference](/docs/sdk-reference/client-api/dotnet-client#the-socket) describes them. The server subscribes
+with a payload of the `changed` document's persisted `id` and the instance id as its `variables`. Every `Error` the
+socket raises, a `SocketClosedException` whose `Refused` is true included, and every `Complete`, is a stream that ended
+without saying why, which it subscribes to again after `ResubscribeDelays`.
 
 ## Behavior
 

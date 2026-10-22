@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Send a Trax host's persisted GraphQL documents from .NET: a document by the id the host registered it under, or as text when the host runs it unregistered, over HTTP POST, and its streams over one graphql-transport-ws socket that subscribes again when it reconnects. The typed clients trax client generates are written against it. Every request answers a refusal or a transport failure as a value.</Description>
+    <AssemblyName>Trax.Client</AssemblyName>
+    <PackageTags>trax;dotnet;graphql;persisted-operations;client</PackageTags>
+    <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
+         ships it (Directory.Build.props). -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <!-- No references: the base class library only, so a MAUI or Blazor WebAssembly app, or a terminal tool, can take it
+       without the engine. -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.StateMachine.Tests" />
+    <!-- The machine client checks its endpoint as the transport does (TransportSecurity). -->
+    <InternalsVisibleTo Include="Trax.StateMachine.Client" />
+  </ItemGroup>
+</Project>

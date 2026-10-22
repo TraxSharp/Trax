@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Trax.StateMachine.Client;
+namespace Trax.Client;
 
 /// <summary>What a subscription delivers: one GraphQL result per event, then an error or the end.</summary>
 public interface ISubscriptionSink
@@ -16,13 +16,19 @@ public interface ISubscriptionSink
 
     /// <summary>The server ended the subscription.</summary>
     void Complete();
+
+    /// <summary>The subscribe message went out over an acknowledged connection. Nothing by default.</summary>
+    void Started() { }
 }
 
-/// <summary>A socket that subscribes to a persisted document by its id. The returned handle ends the subscription.</summary>
+/// <summary>A socket that subscribes to a document. The returned handle ends the subscription.</summary>
 public interface ISubscriptionSocket
 {
-    /// <summary>Subscribes to the persisted document <paramref name="documentId"/> with <paramref name="variables"/>.</summary>
-    IDisposable Subscribe(string documentId, JsonObject variables, ISubscriptionSink sink);
+    /// <summary>
+    /// Subscribes with <paramref name="payload"/> as the subscribe message's payload: <c>id</c> or <c>query</c>, and
+    /// <c>operationName</c> and <c>variables</c>.
+    /// </summary>
+    IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink);
 }
 
 /// <summary>How a <see cref="GraphQLSubscriptionSocket"/> connects.</summary>
@@ -60,12 +66,12 @@ public sealed record GraphQLSubscriptionSocketOptions
 }
 
 /// <summary>
-/// A graphql-transport-ws socket that subscribes by persisted id: each subscribe message carries the document's id and
-/// its variables, never a document. It connects when the first subscription opens and closes when the last one ends.
-/// It does not reconnect by itself: a closed socket fails every open subscription, and whoever subscribed decides when
-/// to subscribe again (<see cref="GraphQLMachineServer"/> does, after its resubscribe delays).
+/// A graphql-transport-ws socket. Each subscribe message carries the payload it is given, a persisted document's id or
+/// a document's text. It connects when the first subscription opens and closes when the last one ends. It does not
+/// reconnect by itself: a closed socket fails every open subscription with a <see cref="SocketClosedException"/>, and
+/// whoever subscribed decides when to subscribe again (<see cref="TraxClient"/> does, after its resubscribe delays).
 /// </summary>
-/// <seealso href="https://traxsharp.net/docs/sdk-reference/statemachine-api/dotnet-client">SDK reference</seealso>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/client-api/dotnet-client">SDK reference</seealso>
 public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDisposable
 {
     private const string Protocol = "graphql-transport-ws";
@@ -108,9 +114,9 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     }
 
     /// <inheritdoc/>
-    public IDisposable Subscribe(string documentId, JsonObject variables, ISubscriptionSink sink)
+    public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink)
     {
-        ArgumentNullException.ThrowIfNull(documentId);
+        ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(sink);
         Connection connection;
         string id;
@@ -125,15 +131,15 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             id = (++_next).ToString(System.Globalization.CultureInfo.InvariantCulture);
             connection.Sinks[id] = sink;
         }
-        _ = SubscribeAsync(connection, id, documentId, (JsonObject)variables.DeepClone());
+        _ = SubscribeAsync(connection, id, (JsonObject)payload.DeepClone(), sink);
         return new Handle(() => Unsubscribe(connection, id));
     }
 
     private async Task SubscribeAsync(
         Connection connection,
         string id,
-        string documentId,
-        JsonObject variables
+        JsonObject payload,
+        ISubscriptionSink sink
     )
     {
         try
@@ -145,14 +151,15 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                     {
                         ["id"] = id,
                         ["type"] = "subscribe",
-                        ["payload"] = new JsonObject
-                        {
-                            ["id"] = documentId,
-                            ["variables"] = variables,
-                        },
+                        ["payload"] = payload,
                     }
                 )
                 .ConfigureAwait(false);
+            bool open;
+            lock (_gate)
+                open = connection.Sinks.ContainsKey(id);
+            if (open)
+                sink.Started();
         }
         catch (Exception ex)
         {
@@ -249,9 +256,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 await SendAsync(connection, init).ConfigureAwait(false);
                 var first = await ReceiveAsync(connection, timeout.Token).ConfigureAwait(false);
                 if (first?["type"]?.GetValue<string>() != "connection_ack")
-                    throw new WebSocketException(
-                        CloseMessage(connection.Socket, "before it was acknowledged")
-                    );
+                    throw Closed(connection.Socket, "before it was acknowledged");
             }
             acknowledged.TrySetResult();
 
@@ -260,9 +265,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 var message = await ReceiveAsync(connection, connection.Stop.Token)
                     .ConfigureAwait(false);
                 if (message is null)
-                    throw new WebSocketException(
-                        CloseMessage(connection.Socket, "while subscribed")
-                    );
+                    throw Closed(connection.Socket, "while subscribed");
                 await OnMessageAsync(connection, message).ConfigureAwait(false);
             }
         }
@@ -277,10 +280,13 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
     }
 
-    private static string CloseMessage(ClientWebSocket socket, string when) =>
+    private static SocketClosedException Closed(ClientWebSocket socket, string when) =>
         socket.CloseStatus is { } status
-            ? $"The socket was closed {when}: {(int)status} {socket.CloseStatusDescription}".TrimEnd()
-            : $"The socket was closed {when}.";
+            ? new SocketClosedException(
+                $"The socket was closed {when}: {(int)status} {socket.CloseStatusDescription}".TrimEnd(),
+                (int)status
+            )
+            : new SocketClosedException($"The socket was closed {when}.", null);
 
     private async Task OnMessageAsync(Connection connection, JsonObject message)
     {
@@ -420,4 +426,22 @@ public sealed class SubscriptionErrorException : Exception
 
     /// <summary>The errors as the server sent them.</summary>
     public JsonArray Errors { get; }
+}
+
+/// <summary>
+/// The socket closed, before it was acknowledged or while subscribed. <see cref="CloseStatus"/> is the code the server
+/// closed it with, when it sent one: a 44xx code is the host refusing the connection (4401 unauthorized, 4403 forbidden),
+/// and subscribing again will not change its answer.
+/// </summary>
+public sealed class SocketClosedException : IOException
+{
+    /// <summary>Builds the exception.</summary>
+    public SocketClosedException(string message, int? closeStatus)
+        : base(message) => CloseStatus = closeStatus;
+
+    /// <summary>The close code the server sent, or null when the socket closed without one.</summary>
+    public int? CloseStatus { get; }
+
+    /// <summary>Whether the server refused the connection itself (a 4400 to 4499 close), so a retry gets the same answer.</summary>
+    public bool Refused => CloseStatus is >= 4400 and <= 4499;
 }

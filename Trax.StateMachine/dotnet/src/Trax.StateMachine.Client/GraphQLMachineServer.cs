@@ -1,9 +1,7 @@
 using System.Globalization;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Trax.Client;
 
 namespace Trax.StateMachine.Client;
 
@@ -233,78 +231,32 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 variables[name] = value.DeepClone();
         var body = new JsonObject { ["id"] = document.Id, ["variables"] = variables };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
-        {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        using var response = await _options
-            .Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+        var answered = await TraxHttpTransport
+            .PostAsync(
+                _options.Http,
+                _options.Endpoint,
+                body,
+                _options.MaxResponseSize,
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        var text = await ReadBoundedAsync(response.Content, cancellationToken)
-            .ConfigureAwait(false);
-
-        JsonObject? answered;
-        try
-        {
-            answered = JsonNode.Parse(text) as JsonObject;
-        }
-        catch (JsonException) when (!response.IsSuccessStatusCode)
-        {
-            answered = null;
-        }
-        // A GraphQL error with a code is the host's to answer with whatever status it chose; anything else not 2xx failed.
-        if (answered?["errors"] is JsonArray { Count: > 0 } errors)
-        {
-            var error = errors[0] as JsonObject;
-            var code =
-                error?["extensions"]?["code"] is JsonValue c && c.TryGetValue<string>(out var s)
-                    ? s
-                    : null;
-            var message =
-                error?["message"] is JsonValue m && m.TryGetValue<string>(out var t)
-                    ? t
-                    : "The server refused the request.";
-            if (code == ClientOutdated || code == ServerOutdated)
-                return (null, ServerAnswer.Refused(code, message));
-            throw new HttpRequestException(message);
-        }
-        if (!response.IsSuccessStatusCode)
+        if (answered.Failure is { } failure)
             throw new HttpRequestException(
-                $"The server answered {(int)response.StatusCode} {response.ReasonPhrase}.",
+                failure.Message,
                 null,
-                response.StatusCode
+                failure.Status is { } status ? (System.Net.HttpStatusCode)status : null
             );
-        if (answered is null)
-            throw new HttpRequestException("The server's answer is not JSON.");
-
-        return (answered["data"]?["machines"]?[_field]?[operation] as JsonObject, null);
-    }
-
-    // The body as text, refused once it passes MaxResponseSize, whether or not the host said its length up front.
-    private async Task<string> ReadBoundedAsync(
-        HttpContent content,
-        CancellationToken cancellationToken
-    )
-    {
-        var max = _options.MaxResponseSize;
-        if (content.Headers.ContentLength > max)
-            throw TooLarge(max);
-        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var body = new MemoryStream();
-        var buffer = new byte[8192];
-        int read;
-        while ((read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        // A GraphQL error with a code is the host's to answer with whatever status it chose.
+        if (answered.Errors.Count > 0)
         {
-            if (body.Length + read > max)
-                throw TooLarge(max);
-            body.Write(buffer, 0, read);
+            var error = answered.Errors[0];
+            if (error.Code == ClientOutdated || error.Code == ServerOutdated)
+                return (null, ServerAnswer.Refused(error.Code, error.Message));
+            throw new HttpRequestException(error.Message);
         }
-        return Encoding.UTF8.GetString(body.GetBuffer(), 0, (int)body.Length);
-    }
 
-    private static HttpRequestException TooLarge(long max) =>
-        new($"The server answered with a body larger than {max} bytes.");
+        return (answered.Data?["machines"]?[_field]?[operation] as JsonObject, null);
+    }
 
     private ServerAnswer AnswerOf(JsonObject? answer)
     {
@@ -372,8 +324,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
                 _ended = false;
             }
             var current = server._options.Socket.Subscribe(
-                server._changed.Id,
-                new JsonObject { ["id"] = id },
+                new JsonObject
+                {
+                    ["id"] = server._changed.Id,
+                    ["variables"] = new JsonObject { ["id"] = id },
+                },
                 this
             );
             bool close;

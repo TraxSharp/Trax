@@ -26,6 +26,12 @@
         "resolved": "2.0.5",
         "contentHash": "8LrlvI1KpjjJ4VGSqZ16yoOCKlQnYS+Y8rYNifNrscmVh5anJcF9E4e0NiDP30BHBMUbkoJ5KdcxoRWM7Pz9Aw=="
       },
+      "Microsoft.Extensions.TimeProvider.Testing": {
+        "type": "Direct",
+        "requested": "[10.10.0, )",
+        "resolved": "10.10.0",
+        "contentHash": "8duZdxuO3Oo8tlyQXVq1drXee6GJC9DjUU97Pq3YaIqf92jrAHsWxbbRKwvjQI48Mer3IANwUKF0elqvHeY4Rw=="
+      },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
         "requested": "[18.10.1, )",
@@ -204,6 +210,9 @@
           "Microsoft.TestPlatform.ObjectModel": "18.10.1"
         }
       },
+      "trax.client": {
+        "type": "Project"
+      },
       "trax.core": {
         "type": "Project",
         "dependencies": {
@@ -237,6 +246,7 @@
       "trax.statemachine.client": {
         "type": "Project",
         "dependencies": {
+          "Trax.Client": "[1.99.99, )",
           "Trax.StateMachine": "[1.99.99, )"
         }
       },

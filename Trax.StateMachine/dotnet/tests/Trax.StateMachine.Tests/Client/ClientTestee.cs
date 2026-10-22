@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Trax.Client;
 using Trax.StateMachine.Client;
 
 namespace Trax.StateMachine.Tests.Client;
