@@ -8,6 +8,10 @@ license = "MIT"
 repository = "https://github.com/TraxSharp/Trax"
 publish = false
 
+[workspace]
+members = ["client"]
+resolver = "3"
+
 [lib]
 name = "trax_state_machine"
 

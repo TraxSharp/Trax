@@ -20,7 +20,8 @@ node conformance/client/run.mjs --stdio                                         
 ```
 
 `--stdio` reverses the pipes as the engine runner's does: the runner writes requests on its stdout and reads answers on
-its stdin, so a test in another language (the C# `ClientConformanceTests`) starts the runner and answers in process.
+its stdin, so a test in another language (the C# `ClientConformanceTests`) starts the runner and answers in process. The Rust
+client's testee is a binary, `rust/client/src/bin/client_testee.rs`, which the runner spawns.
 The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed. `--only <prefix>`
 runs the transcripts whose name starts with the prefix. The runner and the host use node's own modules only.
 
