@@ -404,6 +404,27 @@ the detail rather than repeating it.
 `SkillsAreWellFormedTests` checks all of it, and `Trax.Skills.Publish` refuses to stage a tree that
 breaks it.
 
+### Setting up the skills branch
+
+The `Skills` workflow relies on repository settings it cannot check, made once by an admin. Until
+they exist it either fails or protects nothing:
+
+1. **Create the `skills` branch** with one signed commit, a placeholder `README.md` committed in
+   the web UI for instance. The workflow builds on its head and refuses to run without it.
+2. **Create the `skills-deploy` environment** with required reviewers (the maintainers who approve
+   a publish) and a deployment branch policy that allows `main` only.
+3. **Make a deploy key.** Generate an ed25519 key pair, add the public half to the repository as a
+   deploy key with write access, and store the private half as the `SKILLS_DEPLOY_KEY` secret of
+   the `skills-deploy` environment, not as a repository secret.
+4. **Add a branch ruleset** targeting `refs/heads/skills` with the rules *Restrict updates*,
+   *Restrict deletions* and *Block force pushes*, and deploy keys as its only bypass. This is what
+   stops the workflow token, which can write `skills-next`, from writing `skills`.
+5. **Add a tag ruleset** targeting `refs/tags/skills-v*` with *Restrict creations*, *Restrict
+   updates* and *Restrict deletions*, and deploy keys as its only bypass.
+
+With these in place an approved run of the workflow is the only way to change what consumers
+install. Without step 4 or 5, anything holding `contents: write` can.
+
 ## Voice
 
 Write like a senior engineer talking to other engineers.
