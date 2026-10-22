@@ -3,7 +3,7 @@
 // and every answer, refusal and check result is the host's.
 
 import { fileTicket, configureTrax } from "./trax/index.g";
-import { HOST, Log, Worker, type WorkerSpec } from "./agent";
+import { GRAPHQL_URL, Log, SOCKET_URL, Worker, type WorkerSpec } from "./agent";
 
 // The demo keys the host registers in Development (Trax.Samples.Board/Auth/BoardKeys.cs).
 export const WORKERS: WorkerSpec[] = [
@@ -145,8 +145,8 @@ export async function record(
 
   const reporter = WORKERS.find((w) => w.role === "reviewer")!;
   configureTrax({
-    url: `http://${HOST}/trax/graphql`,
-    socketUrl: `ws://${HOST}/trax/graphql`,
+    url: GRAPHQL_URL,
+    socketUrl: SOCKET_URL,
     headers: () => ({ "X-Api-Key": reporter.key }),
     user: reporter.id,
   });

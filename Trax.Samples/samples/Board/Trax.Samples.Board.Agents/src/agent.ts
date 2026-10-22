@@ -7,6 +7,11 @@ import { ServerMachineController, type SendOutcome } from "@traxsharp/state-mach
 import { assignment, assignmentServer, claimWork, board, configureTrax, type ClaimWorkResult } from "./trax/index.g";
 
 export const HOST = process.env.BOARD_HOST ?? "localhost:5290";
+// This machine is reached over plain http, any other host over TLS: the client refuses to send a worker's key to another
+// host in cleartext.
+const LOCAL = /^(localhost|127(\.\d{1,3}){3}|\[::1\])(:\d+)?$/.test(HOST);
+export const GRAPHQL_URL = `${LOCAL ? "http" : "https"}://${HOST}/trax/graphql`;
+export const SOCKET_URL = `${LOCAL ? "ws" : "wss"}://${HOST}/trax/graphql`;
 
 export type Lane = "triage" | "reproduce" | "fix" | "qa" | "review";
 
@@ -103,8 +108,8 @@ export class Worker {
   // The generated client holds one connection for the whole process: each worker signs in before it acts.
   private signIn(): void {
     configureTrax({
-      url: `http://${HOST}/trax/graphql`,
-      socketUrl: `ws://${HOST}/trax/graphql`,
+      url: GRAPHQL_URL,
+      socketUrl: SOCKET_URL,
       headers: () => ({ "X-Api-Key": this.spec.key }),
       connectionParams: () => ({ apiKey: this.spec.key }),
       user: this.spec.id,
