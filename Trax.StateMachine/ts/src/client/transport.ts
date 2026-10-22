@@ -168,8 +168,11 @@ export interface HttpExecutorOptions {
   allowInsecureTransport?: boolean;
 }
 
-// An absolute endpoint must be https unless its host is this machine (localhost, 127.0.0.0/8, ::1) or the caller
-// accepts cleartext. A relative one goes to the page's own origin, whatever its scheme.
+/**
+ * Throws unless `endpoint` may carry credentials: an absolute one must be https unless its host is this machine
+ * (localhost, 127.0.0.0/8, ::1) or `allowInsecure` is set. A relative one goes to the page's own origin, whatever its
+ * scheme. Every machine executor and server runs it; the generated client runs it before each train request too.
+ */
 export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
   if (allowInsecure) return;
   let url: URL;

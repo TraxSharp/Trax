@@ -109,8 +109,8 @@ export async function signIn(user: string): Promise<void> {
 ```
 
 `socketUrl` is an absolute `ws://` or `wss://` URL. An absolute `http:` `url` to a host that is not loopback is
-refused by every machine's server, since the headers would travel in cleartext: use `https:` or a relative url, or set
-`allowInsecureTransport: true` on a network you trust. Each document is then a function named after its operation,
+refused by every train function and machine server, since the headers would travel in cleartext: use `https:` or a
+relative url, or set `allowInsecureTransport: true` on a network you trust. Each document is then a function named after its operation,
 exported from `src/trax/index.g`, taking the operation's variables and answering exactly the fields it selected
 (`placeOrder(input)` for `mutation PlaceOrder($input: PlaceOrderInput!)`). Its doc comment says what a caller needs.
 

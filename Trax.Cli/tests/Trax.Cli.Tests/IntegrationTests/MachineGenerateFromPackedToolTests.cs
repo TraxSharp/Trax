@@ -320,7 +320,7 @@ public class MachineGenerateFromPackedToolTests
           },
         }));
 
-        import { configureTrax, followRunProgress, reminderServer, TraxOperationError, useRememberedReminder, useReminder, useRunProgress } from "./trax/index.g";
+        import { configureTrax, followRunProgress, reminderServer, startRun, TraxOperationError, useRememberedReminder, useReminder, useRunProgress } from "./trax/index.g";
 
         // Every request, with its headers, answered only when the test says so.
         const requests: { id: string; variables: Record<string, unknown>; headers: Record<string, string>; answer(data: unknown): void }[] = [];
@@ -428,6 +428,25 @@ public class MachineGenerateFromPackedToolTests
           expect(read.headers["X-Api-Key"]).toBe("U");
           await act(async () => read.answer(got("i-6")));
           await expect(reading).resolves.toMatchObject({ kind: "ok", snapshot: { state: "Idle" } });
+        });
+
+        it("A_train_function_refuses_a_cleartext_url_to_another_host_unless_the_connection_allows_it", async () => {
+          configureTrax({ url: "http://api:8080/graphql", socketUrl: "ws://api:8080/graphql", headers: () => ({ "X-Api-Key": "V" }) });
+          await expect(startRun({ scenario: "ok" })).rejects.toThrow(/not over TLS/);
+          expect(requests.filter((r) => r.headers["X-Api-Key"] === "V")).toHaveLength(0);
+
+          configureTrax({
+            url: "http://api:8080/graphql",
+            socketUrl: "ws://api:8080/graphql",
+            headers: () => ({ "X-Api-Key": "W" }),
+            allowInsecureTransport: true,
+          });
+          const running = startRun({ scenario: "ok" });
+          await settle();
+          const sent = requests.filter((r) => r.headers["X-Api-Key"] === "W");
+          expect(sent).toHaveLength(1);
+          await act(async () => sent[0].answer({}));
+          await expect(running).resolves.toBeUndefined();
         });
 
         it("The_remembered_key_follows_the_user_given_to_configureTrax", async () => {

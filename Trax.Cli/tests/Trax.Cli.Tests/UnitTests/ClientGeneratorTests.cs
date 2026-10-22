@@ -308,7 +308,13 @@ public partial class ClientGeneratorTests
     {
         var files = Render();
 
-        Text(files, "client.g.ts").Should().Contain("allowInsecureTransport?: boolean;");
+        Text(files, "client.g.ts")
+            .Should()
+            .Contain("allowInsecureTransport?: boolean;")
+            .And.Contain(
+                "requireSecureEndpoint(url, allowInsecureTransport);",
+                "a train function refuses a cleartext url to another host as a machine's server does"
+            );
         Text(files, "checkout/checkout.client.g.ts")
             .Should()
             .Contain(
