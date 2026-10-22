@@ -227,9 +227,9 @@ impl Inner {
             .body(Value::Object(body).to_json())
             .send()
             .await
-            .map_err(|e| TransportError(e.to_string()))?;
+            .map_err(transport_error)?;
         let status = response.status();
-        let text = response.text().await.map_err(|e| TransportError(e.to_string()))?;
+        let text = response.text().await.map_err(transport_error)?;
         let answered = Value::parse(&text).ok();
 
         // A GraphQL error with a code is the host's to answer with whatever status it chose.
@@ -278,6 +278,11 @@ impl Inner {
             Posted::Answer(Some(answer)) => answer_of(&answer),
         }
     }
+}
+
+// A request that failed, said without its URL: a query can carry a token.
+fn transport_error(error: reqwest::Error) -> TransportError {
+    TransportError(error.without_url().to_string())
 }
 
 fn answer_of(answer: &Value) -> Result<ServerAnswer, TransportError> {
@@ -705,5 +710,26 @@ mod tests {
         let mut given = options("http://api.example.com/graphql", "ws://api.example.com/graphql");
         given.allow_insecure_transport = true;
         assert!(GraphQLMachineServer::new(given).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_failed_request_never_says_its_url() {
+        let mut given = options(
+            "http://127.0.0.1:9/graphql?access_token=SECRET123",
+            "ws://127.0.0.1:9/graphql",
+        );
+        given.documents.push(ManifestDocument {
+            id: "get-1".into(),
+            operation: "get".into(),
+            document: "query Get($id: UUID!) { x }".into(),
+        });
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let Err(error) = server.get("i-1".into()).await else {
+            panic!("nothing listens on port 9");
+        };
+
+        assert!(!error.0.contains("SECRET123"), "{}", error.0);
+        assert!(!error.0.contains("127.0.0.1"), "{}", error.0);
     }
 }
