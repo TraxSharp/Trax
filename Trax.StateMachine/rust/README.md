@@ -30,6 +30,11 @@ match machine.advance(&draft, "Pay", Some(&Value::parse(r#"{"receipt":null}"#)?)
 }
 ```
 
+`trax-state-machine-client` (`client/`) is the client over it: `ServerMachineController` drives one instance a host
+serves, predicting each event with the machine built from the manifest's IR, over `GraphQLMachineServer` (persisted
+ids over HTTP, the change stream over graphql-transport-ws, on tokio). It is held to the client conformance kit, as
+the TypeScript and C# clients are.
+
 `advance` takes the triggers a client sends, `apply_outcome` an invoked train's outcome and `apply_timer` a state's
 timer. A custom rule is bound by name with `with_guard` or `with_reducer`; one with no handler fails, so the engine
 leaves that step to the server.
@@ -46,9 +51,9 @@ Read [../AGENTS.md](../AGENTS.md) first. Nothing runs on the host here; the test
 
 ```bash
 podman run --rm -v "$PWD/..":/src:Z -w /src/rust docker.io/library/rust:1.88.0-bookworm \
-  sh -c 'rustup component add rustfmt clippy && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test && cargo build --release'
+  sh -c 'rustup component add rustfmt clippy && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace && cargo build --release --workspace'
 podman run --rm -v "$PWD/..":/src:Z -w /src docker.io/library/node:24-bookworm \
-  node conformance/run.mjs --testee /src/rust/target/release/trax-state-machine-testee
+  sh -c 'node conformance/run.mjs --testee /src/rust/target/release/trax-state-machine-testee && node conformance/client/run.mjs --testee /src/rust/target/release/trax-state-machine-client-testee'
 ```
 
 Run them from this directory. The testee speaks `../conformance/PROTOCOL.md` through the crate's public API only.
