@@ -1,0 +1,14 @@
+{
+  "name": "A snapshot the server sent is still checked for its shape",
+  "fromServer": true,
+  "json": {
+    "machine": "vault",
+    "version": 1,
+    "state": "Sealed",
+    "context": {}
+  },
+  "expect": {
+    "result": "error",
+    "code": "INVALID_CONTEXT"
+  }
+}

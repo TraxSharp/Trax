@@ -39,6 +39,13 @@ builds it; one that only has machines compiled in checks that the IR is the one 
 { "id": 1, "error": "the turnstile this engine has exports a different IR" }
 ```
 
+A testee that builds machines from an IR binds one handler to every machine it loads: a custom guard named `throws`,
+which throws (panics, in Rust), so a case can pin `INTERNAL_ERROR`. It binds no other handler, so every other custom
+rule is one the engine cannot evaluate: a guard that does not hold, a reduction that keeps the context, a state
+requirement that fails except on a snapshot the server sent. The `vault` machine pins that. A testee whose machines are
+compiled has every handler bound, so for `vault` it checks the IR against its compiled machine and then serves it from
+the IR, with only `throws` bound, as an IR testee does.
+
 Some loads must be refused: the IRs in `unreadable-ir/cases.json` each name one construct no engine knows (a rule, a
 reduction, a field type, a comparison or a rule source), and a testee that builds machines from an IR answers each with
 `error`. Any `error` passes, since the message is the engine's own; `loaded` fails. A testee that only has compiled
@@ -49,7 +56,8 @@ rules are types in its language and cannot name an unknown construct, so these c
 client's trigger through advance, an invoked train's outcome (`Fetching.done`) through the outcome path, a state's
 timer (`Review.after`) through the timer path. `snapshot` is an object (`machine`, `version`, `state`, `context`);
 `input` is absent or `null` when the trigger takes none. The answer is the canonical wire after the step, or the
-refusal code.
+refusal code. A case may send a trigger through an entry point that does not own it, to pin the refusal
+(`OUTCOME_BOUND`, `TIMER_BOUND`, `NO_TRANSITION`).
 
 ```json
 { "id": 2, "op": "advance", "machine": "turnstile", "snapshot": { ... }, "trigger": "Coin", "input": { "coin": "quarter" } }
@@ -57,8 +65,9 @@ refusal code.
 { "id": 2, "outcome": "rejected", "reason": "GUARD_FAILED" }
 ```
 
-**`rehydrate`** reads stored text as a snapshot of `machine`. The answer is the snapshot's canonical wire, or the
-refusal code.
+**`rehydrate`** reads stored text as a snapshot of `machine`. With `"fromServer": true` it reads a snapshot the server
+sent, which counts a custom state requirement with no handler as passed; a testee whose engine has every handler bound
+reads it as any other. The answer is the snapshot's canonical wire, or the refusal code.
 
 ```json
 { "id": 3, "op": "rehydrate", "machine": "turnstile", "text": "{\"machine\":\"turnstile\",...}" }
@@ -91,8 +100,8 @@ string no JSON parser carries (a lone surrogate), as UTF-16 code units: `stringU
 | --- | --- |
 | `machines/<m>/<m>.ir.json` | `load` |
 | `machines/<m>/differential.json` | one `advance`, `outcome` or `timer` per case, by the trigger's kind in the IR |
-| `machines/<m>/fixtures/advance/*.json` | `advance` |
-| `machines/<m>/fixtures/rehydrate/*.json` | `rehydrate` |
+| `machines/<m>/fixtures/advance/*.json` | `advance`, `outcome` or `timer` by the trigger's kind, or the fixture's `op`, which sends a trigger through another entry point |
+| `machines/<m>/fixtures/rehydrate/*.json` | `rehydrate`, with the fixture's `fromServer` |
 | `machines/<m>/wire-handoff.json` | `serialize` |
 | `conformance/strict-input/` | `load`, then one `advance` per case |
 | `conformance/unreadable-ir/cases.json` | one `load` per case, which must be refused |

@@ -1,0 +1,18 @@
+{
+  "name": "A custom guard whose handler throws is an internal error",
+  "given": {
+    "machine": "vault",
+    "version": 1,
+    "state": "Draft",
+    "context": {
+      "title": "memo"
+    }
+  },
+  "when": {
+    "trigger": "Detonate"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "INTERNAL_ERROR"
+  }
+}

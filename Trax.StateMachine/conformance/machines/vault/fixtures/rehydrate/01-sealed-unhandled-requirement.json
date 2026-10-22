@@ -1,0 +1,15 @@
+{
+  "name": "A stored snapshot in a state whose custom requirement has no handler is invalid context",
+  "json": {
+    "machine": "vault",
+    "version": 1,
+    "state": "Sealed",
+    "context": {
+      "title": "memo"
+    }
+  },
+  "expect": {
+    "result": "error",
+    "code": "INVALID_CONTEXT"
+  }
+}

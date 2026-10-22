@@ -23,6 +23,13 @@ const vectorIr = {
   transitions: [],
 };
 
+// The one handler every testee binds (conformance/PROTOCOL.md): a custom guard named `throws`, which throws.
+const kitGuards = {
+  throws: () => {
+    throw new Error("throws");
+  },
+};
+
 /** A handler from one request to its answer, over `engine`, the package's exports. */
 export function createTestee(engine) {
   const { SnapshotMachine, machineFromIr } = engine;
@@ -36,14 +43,14 @@ export function createTestee(engine) {
 
   const handlers = {
     load: (r) => {
-      machines.set(r.machine, new SnapshotMachine(machineFromIr(r.ir)));
+      machines.set(r.machine, new SnapshotMachine(machineFromIr(r.ir, kitGuards)));
       return { loaded: true };
     },
     advance: (r, core) => step(core, core.advance(r.snapshot, r.trigger, r.input ?? undefined)),
     outcome: (r, core) => step(core, core.applyOutcome(r.snapshot, r.trigger, r.input ?? undefined)),
     timer: (r, core) => step(core, core.applyTimer(r.snapshot, r.trigger)),
     rehydrate: (r, core) => {
-      const result = core.rehydrate(r.text);
+      const result = core.rehydrate(r.text, r.fromServer === true ? { fromServer: true } : undefined);
       return result.result === "ok"
         ? { result: "ok", wire: core.serialize(result.snapshot) }
         : { result: "error", code: result.code };

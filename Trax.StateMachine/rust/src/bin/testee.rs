@@ -8,6 +8,8 @@ use std::io::{self, BufRead, Write};
 use trax_state_machine::{canonical_wire, JsString, Machine, Map, Refusal, Snapshot, Value};
 
 fn main() {
+    // The kit's `throws` handler panics on purpose; the engine catches it, so the panic message is noise.
+    std::panic::set_hook(Box::new(|_| {}));
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
     let mut machines: HashMap<String, Machine> = HashMap::new();
@@ -63,6 +65,8 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
             };
             match Machine::from_ir(ir) {
                 Ok(machine) => {
+                    // The one handler every testee binds (PROTOCOL.md): a custom guard named `throws`, which panics.
+                    let machine = machine.with_guard("throws", |_, _| panic!("throws"));
                     machines.insert(name.to_owned(), machine);
                     answer(vec![("loaded", Value::Bool(true))])
                 }
@@ -90,7 +94,13 @@ fn handle(request: &Value, machines: &mut HashMap<String, Machine>) -> Value {
                 let Some(text) = request.get("text").and_then(Value::as_str) else {
                     return error("a rehydrate carries text".into());
                 };
-                return match machine.rehydrate(text) {
+                let from_server = request.get("fromServer").and_then(Value::as_bool) == Some(true);
+                let read = if from_server {
+                    machine.rehydrate_from_server(text)
+                } else {
+                    machine.rehydrate(text)
+                };
+                return match read {
                     Ok(snapshot) => answer(vec![
                         ("result", Value::from("ok")),
                         ("wire", Value::from(machine.serialize(&snapshot))),

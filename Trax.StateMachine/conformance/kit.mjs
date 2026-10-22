@@ -28,7 +28,7 @@ export function wireOf(snapshot) {
   );
 }
 
-// The entry point a trigger goes through, by its kind in the IR.
+// The entry point a trigger goes through, by its kind in the IR. A fixture names `op` to send it through another.
 function opFor(ir, trigger) {
   if (ir.outcomes && Object.hasOwn(ir.outcomes, trigger)) return "outcome";
   if ((ir.timers ?? []).some((t) => t.trigger === trigger)) return "timer";
@@ -71,12 +71,17 @@ function machineCases(machine) {
     });
 
   for (const [file, f] of jsonFiles(join(dir, "fixtures", "advance")))
-    cases.push(step(`${machine}/advance/${file}`, machine, opFor(ir, f.when.trigger), f.given, f.when, f.expect));
+    cases.push(step(`${machine}/advance/${file}`, machine, f.op ?? opFor(ir, f.when.trigger), f.given, f.when, f.expect));
 
   for (const [file, f] of jsonFiles(join(dir, "fixtures", "rehydrate")))
     cases.push({
       name: `${machine}/rehydrate/${file}`,
-      request: { op: "rehydrate", machine, text: f.raw ?? JSON.stringify(f.json) },
+      request: {
+        op: "rehydrate",
+        machine,
+        text: f.raw ?? JSON.stringify(f.json),
+        ...(f.fromServer === true ? { fromServer: true } : {}),
+      },
       expect:
         f.expect.result === "ok"
           ? { result: "ok", wire: wireOf(f.expect.snapshot) }

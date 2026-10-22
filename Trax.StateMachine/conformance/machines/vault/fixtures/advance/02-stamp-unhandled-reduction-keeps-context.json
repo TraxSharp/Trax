@@ -1,0 +1,25 @@
+{
+  "name": "A custom reduction with no handler keeps the context",
+  "given": {
+    "machine": "vault",
+    "version": 1,
+    "state": "Draft",
+    "context": {
+      "title": "memo"
+    }
+  },
+  "when": {
+    "trigger": "Stamp"
+  },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": {
+      "machine": "vault",
+      "version": 1,
+      "state": "Stamped",
+      "context": {
+        "title": "memo"
+      }
+    }
+  }
+}

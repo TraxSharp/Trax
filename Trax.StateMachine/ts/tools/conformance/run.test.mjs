@@ -28,6 +28,8 @@ describe("the conformance kit", () => {
       "ingest",
       "reminder",
       "turnstile",
+      "vault",
+      "wait",
       "strict",
     ]);
     for (const op of ["advance", "outcome", "timer"])
