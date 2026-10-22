@@ -17,8 +17,8 @@ pub use controller::{
     ServerMachineController, ServerMachineOptions, DEFAULT_RETRY_DELAYS,
 };
 pub use graphql::{
-    event_field, machine_field, ConfigError, GraphQLMachineServer, GraphQLMachineServerOptions, ManifestDocument,
-    DEFAULT_RESUBSCRIBE_DELAYS,
+    event_field, machine_field, ConfigError, ConnectionParams, GraphQLMachineServer, GraphQLMachineServerOptions,
+    ManifestDocument, Provided, RequestHeaders, DEFAULT_RESUBSCRIBE_DELAYS,
 };
 pub use server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, StreamSink,

@@ -3,10 +3,13 @@
 //! `<machine>Changed` subscription, subscribed by its id over graphql-transport-ws.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
+use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
@@ -30,6 +33,17 @@ pub struct ManifestDocument {
     pub document: String,
 }
 
+/// What a provider answers with: a future, run once each time the value is needed.
+pub type Provided<T> = Pin<Box<dyn Future<Output = Result<T, TransportError>> + Send>>;
+
+/// The `connection_init` payload, asked for on every connection so a rotating token stays fresh; `None` sends none.
+/// An error fails that connection, which is tried again after the resubscribe delays.
+pub type ConnectionParams = Arc<dyn Fn() -> Provided<Option<Value>> + Send + Sync>;
+
+/// Headers asked for on every request and every socket's upgrade, so a rotating token stays fresh. An error fails
+/// that request as a [`TransportError`].
+pub type RequestHeaders = Arc<dyn Fn() -> Provided<HeaderMap> + Send + Sync>;
+
 /// How a [`GraphQLMachineServer`] reaches its host.
 pub struct GraphQLMachineServerOptions {
     /// The host's GraphQL endpoint (`https://host/trax/graphql`). It must be `https` unless its host is loopback or
@@ -42,10 +56,12 @@ pub struct GraphQLMachineServerOptions {
     pub machine: String,
     /// The machine's persisted documents, from the host's manifest, the push (`changed`) included.
     pub documents: Vec<ManifestDocument>,
-    /// The client requests go through. Set default headers on it for authentication. A plain one when `None`.
+    /// The client requests go through. A plain one when `None`.
     pub http: Option<reqwest::Client>,
-    /// The `connection_init` payload, how a host authenticates a socket. None sends none.
-    pub connection_params: Option<Value>,
+    /// Headers for each request and each socket's upgrade, asked for every time: how a host authenticates a request.
+    pub headers: Option<RequestHeaders>,
+    /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
+    pub connection_params: Option<ConnectionParams>,
     /// Delays before subscribing again after a stream that ended without saying why. The last repeats.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
@@ -67,6 +83,7 @@ impl GraphQLMachineServerOptions {
             machine: machine.into(),
             documents,
             http: None,
+            headers: None,
             connection_params: None,
             resubscribe_delays: None,
             allow_insecure_transport: false,
@@ -111,7 +128,8 @@ struct Inner {
     push_field: String,
     documents: HashMap<String, Document>,
     changed: String,
-    connection_params: Option<Value>,
+    headers: Option<RequestHeaders>,
+    connection_params: Option<ConnectionParams>,
     resubscribe_delays: Vec<Duration>,
 }
 
@@ -164,6 +182,7 @@ impl GraphQLMachineServer {
                 machine: options.machine,
                 documents,
                 changed,
+                headers: options.headers,
                 connection_params: options.connection_params,
                 resubscribe_delays: delays,
             }),
@@ -219,11 +238,15 @@ impl Inner {
         body.insert("id".into(), Value::from(document.id.as_str()));
         body.insert("variables".into(), Value::Object(variables));
 
-        let response = self
+        let mut request = self
             .http
             .post(&self.endpoint)
             .header("content-type", "application/json")
-            .header("accept", "application/json")
+            .header("accept", "application/json");
+        if let Some(headers) = &self.headers {
+            request = request.headers(headers().await?);
+        }
+        let response = request
             .body(Value::Object(body).to_json())
             .send()
             .await
@@ -421,6 +444,12 @@ impl Inner {
         let Ok(mut request) = self.socket.as_str().into_client_request() else {
             return Ended::Again;
         };
+        if let Some(headers) = &self.headers {
+            let Ok(headers) = headers().await else {
+                return Ended::Again;
+            };
+            request.headers_mut().extend(headers);
+        }
         request.headers_mut().insert(
             "Sec-WebSocket-Protocol",
             HeaderValue::from_static("graphql-transport-ws"),
@@ -429,10 +458,20 @@ impl Inner {
             return Ended::Again;
         };
 
+        // Asked for on every connection, so a token that expired since the last one is not sent again.
         let mut init = Map::new();
         init.insert("type".into(), Value::from("connection_init"));
         if let Some(params) = &self.connection_params {
-            init.insert("payload".into(), params.clone());
+            match params().await {
+                Ok(Some(payload)) => {
+                    init.insert("payload".into(), payload);
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    let _ = socket.close(None).await;
+                    return Ended::Again;
+                }
+            }
         }
         if socket.send(Message::text(Value::Object(init).to_json())).await.is_err() {
             return Ended::Again;
@@ -731,5 +770,106 @@ mod tests {
 
         assert!(!error.0.contains("SECRET123"), "{}", error.0);
         assert!(!error.0.contains("127.0.0.1"), "{}", error.0);
+    }
+
+    // A host on a loopback port that records each connection's authorization header and connection_init payload,
+    // refuses the first connection with 4403 the way a host refuses an expired token, and acknowledges the rest.
+    async fn recording_host() -> (
+        u16,
+        tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>,
+    ) {
+        use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
+        use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+        use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (seen, heard) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            for n in 0.. {
+                let (tcp, _) = listener.accept().await.unwrap();
+                let seen = seen.clone();
+                tokio::spawn(async move {
+                    let mut authorization = None;
+                    let mut socket =
+                        tokio_tungstenite::accept_hdr_async(tcp, |request: &Request, mut response: Response| {
+                            authorization = request
+                                .headers()
+                                .get("authorization")
+                                .map(|v| v.to_str().unwrap().to_owned());
+                            response.headers_mut().insert(
+                                "Sec-WebSocket-Protocol",
+                                HeaderValue::from_static("graphql-transport-ws"),
+                            );
+                            Ok(response)
+                        })
+                        .await
+                        .unwrap();
+                    let Some(Ok(Message::Text(init))) = socket.next().await else {
+                        return;
+                    };
+                    let token = Value::parse(init.as_str())
+                        .unwrap()
+                        .get("payload")
+                        .and_then(|p| p.get("token"))
+                        .and_then(|t| t.as_str())
+                        .map(str::to_owned);
+                    let _ = seen.send((authorization, token));
+                    if n == 0 {
+                        let _ = socket
+                            .close(Some(CloseFrame {
+                                code: CloseCode::Library(4403),
+                                reason: "Forbidden".into(),
+                            }))
+                            .await;
+                        return;
+                    }
+                    let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                    while let Some(Ok(_)) = socket.next().await {}
+                });
+            }
+        });
+        (port, heard)
+    }
+
+    #[tokio::test]
+    async fn every_connection_asks_for_its_headers_and_params_again() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let (port, mut heard) = recording_host().await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        let headers_asked = Arc::new(AtomicU32::new(0));
+        let params_asked = Arc::new(AtomicU32::new(0));
+        let asked = headers_asked.clone();
+        given.headers = Some(Arc::new(move || {
+            let n = asked.fetch_add(1, Ordering::SeqCst) + 1;
+            Box::pin(async move {
+                let mut headers = HeaderMap::new();
+                headers.insert("authorization", HeaderValue::from_str(&format!("Bearer {n}")).unwrap());
+                Ok(headers)
+            })
+        }));
+        let asked = params_asked.clone();
+        given.connection_params = Some(Arc::new(move || {
+            let n = asked.fetch_add(1, Ordering::SeqCst) + 1;
+            Box::pin(async move {
+                let mut payload = Map::new();
+                payload.insert("token".into(), Value::from(format!("t{n}")));
+                Ok(Some(Value::Object(payload)))
+            })
+        }));
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        let first = tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let second = tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+
+        assert_eq!(first, (Some("Bearer 1".into()), Some("t1".into())));
+        assert_eq!(second, (Some("Bearer 2".into()), Some("t2".into())));
     }
 }
