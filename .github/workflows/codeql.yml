@@ -1,8 +1,11 @@
 name: CodeQL
 
-# Static analysis of the C# and TypeScript sources and of the workflows. build-mode: none
-# reads the sources without compiling them, so this runs no restore, no MSBuild targets, no
-# npm install and no package code.
+# Static analysis of the C#, TypeScript and Rust sources and of the workflows. build-mode: none
+# reads the sources without compiling them, so for C#, TypeScript and the workflows this runs no
+# restore, no MSBuild targets, no npm install and no package code. Rust is the exception: its
+# extractor uses rust-analyzer, which fetches the crates Cargo.lock pins and runs their build
+# scripts and proc macros, the same code the state-machine-rust CI job builds. That is why the
+# analyze job may reach the Rust toolchain and crates.io.
 #
 # A pull request scans only the languages whose files it changes: a scan of untouched code
 # cannot find anything the pull request introduced. A push to main and the weekly run scan
@@ -49,13 +52,14 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$EVENT_NAME" != pull_request ]; then
-            echo 'languages=["csharp","javascript-typescript","actions"]' >> "$GITHUB_OUTPUT"
+            echo 'languages=["csharp","javascript-typescript","rust","actions"]' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           changed=$(git diff --name-only HEAD^1 HEAD)
           languages=()
           grep -qE '\.(cs|csproj|props|targets|razor|cshtml)$' <<<"$changed" && languages+=(csharp)
           grep -qE '\.(ts|tsx|js|jsx|mjs|cjs|html)$' <<<"$changed" && languages+=(javascript-typescript)
+          grep -qE '(\.rs|(^|/)Cargo\.(toml|lock)|(^|/)rust-toolchain\.toml)$' <<<"$changed" && languages+=(rust)
           grep -qE '^\.github/' <<<"$changed" && languages+=(actions)
           echo "Scanning: ${languages[*]:-nothing}"
           echo "languages=$(printf '%s\n' "${languages[@]}" | jq -R . | jq -sc 'map(select(length > 0))')" >> "$GITHUB_OUTPUT"
@@ -99,6 +103,9 @@ jobs:
             s.symcb.com:80
             ts-crl.ws.symantec.com:80
             www.microsoft.com:80
+            static.rust-lang.org:443
+            index.crates.io:443
+            static.crates.io:443
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
