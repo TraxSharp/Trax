@@ -150,6 +150,19 @@ internal sealed class SelectionTypes(
         GraphQLSelectionSet? selection,
         string typeName,
         List<(string Key, GraphQLField Field, List<ASTNode> Below)> fields
+    ) => Collect(sdl, fragments, selection, typeName, fields);
+
+    /// <summary>
+    /// The fields <paramref name="selection"/> names on the object type <paramref name="typeName"/>, in the order it
+    /// names them, those under one key merged into one with their sub-selections joined. The TypeScript and C#
+    /// renderers both read a selection through this, so they agree on which fields a type has.
+    /// </summary>
+    internal static void Collect(
+        SdlTypes sdl,
+        IReadOnlyDictionary<string, GraphQLFragmentDefinition>? fragments,
+        GraphQLSelectionSet? selection,
+        string typeName,
+        List<(string Key, GraphQLField Field, List<ASTNode> Below)> fields
     )
     {
         foreach (var item in selection?.Selections ?? [])
@@ -168,7 +181,7 @@ internal sealed class SelectionTypes(
                 case GraphQLInlineFragment fragment
                     when fragment.TypeCondition is null
                         || sdl.Applies(fragment.TypeCondition.Type.Name.StringValue, typeName):
-                    Collect(fragment.SelectionSet, typeName, fields);
+                    Collect(sdl, fragments, fragment.SelectionSet, typeName, fields);
                     break;
                 // A named fragment's fields are written out where it is spread: the type is the same shape as the
                 // fragment's own, so a value typed by either fits the other.
@@ -176,7 +189,7 @@ internal sealed class SelectionTypes(
                     when fragments?.GetValueOrDefault(spread.FragmentName.Name.StringValue)
                         is { } definition
                         && sdl.Applies(definition.TypeCondition.Type.Name.StringValue, typeName):
-                    Collect(definition.SelectionSet, typeName, fields);
+                    Collect(sdl, fragments, definition.SelectionSet, typeName, fields);
                     break;
             }
     }

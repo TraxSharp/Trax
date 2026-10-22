@@ -485,6 +485,7 @@ dotnet tool restore && dotnet tool run trax client --target react --manifest web
 | `--target` | The framework. `react`, the default, is the only one today. |
 | `--manifest` | The manifest the host wrote with `--trax-export-client`. Required, unless `--operations` is given. |
 | `--operations` | The operations schema, as SDL, in place of `--manifest`. Generates the client for documents that reach the operations surface, as the operations console's do. See [The operations console's client](#the-operations-consoles-client). |
+| `--lang`, `--namespace` | With `--operations` only: the client's language, `typescript` (the default) or `csharp`, and the C# client's namespace (default `Trax.Operations`). See [The operations console's client](#the-operations-consoles-client). |
 | `--out` | The directory the client is written to, inside the frontend's source. Required. A file `trax client` wrote under it that the manifest no longer generates is deleted, and a folder that leaves empty. A client module is its own when its first line is its header. A twin is when it is `<machine>/<machine>.machine.g.ts` or `.contexts.g.ts` with the twin generator's header for that machine, and the previous run served the machine: the `manifest.json` it left in `--out` names it, or `<machine>/<machine>.client.g.ts` is still there. With neither, a twin is kept, so one `trax machine generate` wrote is never deleted. Any other file is left alone, a linked folder is not entered, and a file that is not a regular one (a FIFO, a device) is not read. A link at a path it writes, or at a folder on the way there, is refused, and nothing is written. |
 | `--check` | Writes nothing; exits 1 when the client in `--out` is not what the manifest generates, naming each file. A checkout that writes CRLF is not a difference. |
 | `--specifier` | The module the client imports the runtime from (default `@traxsharp/state-machine`). |
@@ -552,6 +553,22 @@ under `--out`:
 | `documents/<operation>.g.ts` | `<operation>Document`, the operation's name, kind, id (`trax_console_<name>_<hash of its text>`, or `null` for persisted-operation management, which a host runs as text) and text; `<Operation>Variables` and `<Operation>Result`, typed from the schema; and `<operation>(variables)`, or for a subscription `<operation>(variables, sink)`, which returns the function that stops it. |
 | `console-documents.json` | Every document with an id, `{ "format": 1, "documents": [{ "name", "text" }] }` in name order: the file `Trax.Api.Dashboard` embeds and a host registers. |
 | `index.g.ts` | Everything above re-exported. |
+
+A .NET operator frontend, such as `trax-console`, gets the same client in C# from the same documents and the same
+checks, over [Trax.Client](/docs/sdk-reference/client-api/dotnet-client):
+
+```bash
+trax client --operations operations.graphql --documents 'src/graphql/*.graphql' --lang csharp --namespace My.Console.Operations --out Operations
+```
+
+| File | What it holds |
+| --- | --- |
+| `Types.g.cs` | The enums and inputs the schema declares. An enum value is named in PascalCase and sent as written (`LAST24_HOURS` is `Last24Hours`). |
+| `Documents/<Operation>.g.cs` | `<Operation>Variables`, a record whose required variables are `required` properties and whose others are `Optional<T>`, left out of the request unless set (set to `null`, they send null); `<Operation>Result` and a record per object it selects, named by the path to it (`ExecutionsResultOperationsExecutionsItems`); `TraxOperations.<Operation>`, the document with its name, kind, id and the text the id is computed from, byte for byte; and `client.<Operation>Async(variables)` on `TraxClient`, or for a subscription `client.<Operation>(variables, onEvent)`, which returns the handle that stops it. A document with no variables takes none. |
+
+Every type is `internal`: the client belongs to the app it is written into. It writes no `console-documents.json`;
+the host registers the documents from the TypeScript client's. A union or interface selection is refused, since the
+C# client does not type one yet; the console selects none.
 
 ## SDK Reference
 

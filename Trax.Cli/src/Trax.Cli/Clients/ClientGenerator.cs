@@ -350,6 +350,7 @@ internal sealed partial class ClientGenerator
         };
         return Directory
             .EnumerateFiles(outDir, "*.g.ts", enumeration)
+            .Concat(Directory.EnumerateFiles(outDir, "*.g.cs", enumeration))
             .Select(p => (Full: p, Path: Path.GetRelativePath(outDir, p).Replace('\\', '/')))
             .Where(f => !expected.Contains(f.Path) && Generated(f.Path, f.Full, served))
             .Select(f => f.Path)

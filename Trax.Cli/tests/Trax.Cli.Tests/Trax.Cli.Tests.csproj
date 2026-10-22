@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Cli/Trax.Cli.csproj" />
+    <!-- The runtime the C# operations client is compiled against. -->
+    <ProjectReference Include="../../../Trax.StateMachine/dotnet/src/Trax.Client/Trax.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>
