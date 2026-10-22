@@ -6,7 +6,9 @@
 The state-machine engine in Rust. A machine is declared once in C# and exported as an IR; this crate builds the
 machine from that IR and answers what the server would do with a trigger, byte for byte on the wire and code for
 code on a refusal. It is pure (no I/O, no clock, no async) and has no dependencies, so the bindings for other
-languages can be built on it. Every operation is total: a refusal is a value, never a panic.
+languages can be built on it. Every operation is total: a refusal is a value, never a panic. A custom handler
+that panics is caught and refused with `INTERNAL_ERROR`, which needs the build that links the crate to unwind on
+panic (`panic = "unwind"`, Rust's default). Under `panic = "abort"` such a panic ends the process.
 
 ## Install
 
