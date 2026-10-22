@@ -69,6 +69,7 @@
     "@types/react-dom": "^19.3.0",
     "ajv": "^8.18.0",
     "esbuild": "^0.28.2",
+    "graphql-ws": "^6.4.1",
     "jsdom": "^25.0.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

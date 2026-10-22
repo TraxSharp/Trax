@@ -455,6 +455,11 @@ jobs:
         if: matrix.suite.conformance
         working-directory: Trax.StateMachine
         run: node conformance/run.mjs --testee node ts/tools/conformance/testee-ts.mjs
+      - name: Run the client conformance kit through the TypeScript client
+        # The C# client answers the same transcripts in its CrossEngine tests above (ClientConformanceTests).
+        if: matrix.suite.conformance
+        working-directory: Trax.StateMachine
+        run: node conformance/client/run.mjs --testee node ts/tools/conformance/client-testee-ts.mjs
       - name: Install the web folder (locked, no install scripts)
         if: matrix.suite.web
         working-directory: ${{ matrix.suite.folder }}/${{ matrix.suite.web }}

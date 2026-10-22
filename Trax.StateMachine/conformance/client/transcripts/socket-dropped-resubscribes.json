@@ -1,0 +1,23 @@
+{
+  "about": "A socket the host drops is opened again and the stream subscribed again; nothing is lost because the new stream's first event is the instance as it is then.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "status": "ready" } },
+    { "dropSocket": true },
+    { "subscribe": { "id": "i-1" } },
+    { "push": { "revision": 2, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "state": "Unlocked", "revision": 2 } }
+  ]
+}

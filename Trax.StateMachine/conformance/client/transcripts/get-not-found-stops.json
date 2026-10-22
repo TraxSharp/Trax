@@ -1,0 +1,19 @@
+{
+  "about": "A get answered with no instance stops the client as GONE, not deleted: the host does not tell a missing instance from another caller's.",
+  "machine": "turnstile",
+  "instance": "i-9",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-9" } },
+    { "request": "get", "variables": { "id": "i-9" }, "answer": null },
+    { "view": { "status": "stopped", "error": "GONE", "deleted": false } }
+  ]
+}

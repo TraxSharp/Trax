@@ -1,0 +1,24 @@
+{
+  "about": "SERVER_OUTDATED (another node of a rolling deploy answered) is retried under the same requestId after each retry delay, and a later answer settles the event.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready" } },
+    { "client": "send", "trigger": "Push", "as": "push" },
+    { "request": "push", "variables": { "id": "i-1", "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}" }, "errors": [{ "message": "Another version answered.", "extensions": { "code": "SERVER_OUTDATED" } }] },
+    { "request": "push", "variables": { "id": "i-1", "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}" }, "errors": [{ "message": "Another version answered.", "extensions": { "code": "SERVER_OUTDATED" } }] },
+    { "request": "push", "variables": { "id": "i-1", "requestId": "r1", "clientResult": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}" }, "answer": { "id": "i-1", "revision": 2, "state": "Locked", "context": {} } },
+    { "await": "push", "expect": { "outcome": "confirmed", "revision": 2 } }
+  ]
+}

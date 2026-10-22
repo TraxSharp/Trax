@@ -1,0 +1,23 @@
+{
+  "about": "A push of another incarnation (the row was deleted and created again) restarts the revisions: the client reads the instance again rather than ordering the push against what it holds.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "push": { "rowId": "7", "revision": 4, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "rowId": "7", "revision": 4, "state": "Unlocked" } },
+    { "push": { "rowId": "8", "revision": 1, "state": "Locked", "context": {} } },
+    { "request": "get", "variables": { "id": "i-1" }, "answer": { "id": "i-1", "revision": 1, "state": "Locked", "context": {} } },
+    { "view": { "rowId": "8", "revision": 1, "state": "Locked" } }
+  ]
+}
