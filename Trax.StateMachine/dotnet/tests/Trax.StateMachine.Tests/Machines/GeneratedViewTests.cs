@@ -43,7 +43,15 @@ public class GeneratedViewTests
         using var turnstile = TurnstileClient.Create(Manifest("turnstile"), server, id: "i-1");
         await server.Answer(
             turnstile.Controller,
-            ServerAnswer.Of(new ServerSnapshot { Revision = 1, State = "Locked", Context = [], DueAtKnown = true })
+            ServerAnswer.Of(
+                new ServerSnapshot
+                {
+                    Revision = 1,
+                    State = "Locked",
+                    Context = [],
+                    DueAtKnown = true,
+                }
+            )
         );
         turnstile.State.Should().Be(TurnstileState.Locked);
         turnstile.AvailableTriggers().Should().Equal(TurnstileTrigger.Coin);
@@ -55,7 +63,9 @@ public class GeneratedViewTests
 
         sent.Input!.ToJsonString().Should().Be("{\"coin\":\"quarter\"}");
         sent.ClientResult.Should()
-            .Be("{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}");
+            .Be(
+                "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"
+            );
         sent.Answer.SetResult(
             ServerAnswer.Of(
                 new ServerSnapshot
@@ -81,6 +91,9 @@ public class GeneratedViewTests
 
         var create = () => TurnstileClient.Create(other, new HandServer());
 
-        create.Should().Throw<ArgumentException>().WithMessage("*not the version this view was generated for*");
+        create
+            .Should()
+            .Throw<ArgumentException>()
+            .WithMessage("*not the version this view was generated for*");
     }
 }

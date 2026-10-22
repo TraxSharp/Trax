@@ -15,8 +15,14 @@ public class GeneratedViewDriftTests
     private const string Namespace = "Trax.StateMachine.Tests.Machines";
 
     public static IEnumerable<TestCaseData> Machines() =>
-        new[] { ("checkout", "Checkout"), ("gauge", "Gauge"), ("ingest", "Ingest"), ("reminder", "Reminder"), ("turnstile", "Turnstile") }
-            .Select(m => new TestCaseData(m.Item1, m.Item2).SetName($"The_{m.Item1}_view_is_current"));
+        new[]
+        {
+            ("checkout", "Checkout"),
+            ("gauge", "Gauge"),
+            ("ingest", "Ingest"),
+            ("reminder", "Reminder"),
+            ("turnstile", "Turnstile"),
+        }.Select(m => new TestCaseData(m.Item1, m.Item2).SetName($"The_{m.Item1}_view_is_current"));
 
     [TestCaseSource(nameof(Machines))]
     public void The_committed_view_is_what_the_generator_writes(string machine, string file)
@@ -58,10 +64,20 @@ public class GeneratedViewDriftTests
             }
             process.ExitCode.Should().Be(0, stderr.GetAwaiter().GetResult());
 
-            var committed = Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "..", "Machines", $"{file}.g.cs");
+            var committed = Path.Combine(
+                TestContext.CurrentContext.TestDirectory,
+                "..",
+                "..",
+                "..",
+                "Machines",
+                $"{file}.g.cs"
+            );
             File.ReadAllText(Path.Combine(outDir, $"{file}.g.cs"))
                 .Should()
-                .Be(File.ReadAllText(committed), $"{file}.g.cs is stale: run generate-twin.mjs --lang csharp for {machine}");
+                .Be(
+                    File.ReadAllText(committed),
+                    $"{file}.g.cs is stale: run generate-twin.mjs --lang csharp for {machine}"
+                );
         }
         finally
         {

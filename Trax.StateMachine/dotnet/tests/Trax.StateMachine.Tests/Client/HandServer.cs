@@ -46,10 +46,8 @@ internal sealed class HandServer : IMachineServer
         return sent.Answer.Task;
     }
 
-    public Task<ServerAnswer> GetAsync(
-        string id,
-        CancellationToken cancellationToken = default
-    ) => _read.Task;
+    public Task<ServerAnswer> GetAsync(string id, CancellationToken cancellationToken = default) =>
+        _read.Task;
 
     public IDisposable Subscribe(string id, Action<StreamMessage> onMessage) => new Nothing();
 

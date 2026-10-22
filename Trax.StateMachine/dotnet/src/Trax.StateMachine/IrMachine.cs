@@ -84,7 +84,10 @@ public sealed class IrMachine
         try
         {
             // A twin records the IR format it was generated for; an IR of a newer format than this engine reads is refused.
-            if (ir["irFormat"] is JsonValue format && format.GetValue<int>() > IrExporter.FormatVersion)
+            if (
+                ir["irFormat"] is JsonValue format
+                && format.GetValue<int>() > IrExporter.FormatVersion
+            )
                 throw new ArgumentException(
                     $"The IR is in format {format.GetValue<int>()}, and this engine reads format {IrExporter.FormatVersion}. Update Trax.StateMachine.",
                     nameof(ir)
