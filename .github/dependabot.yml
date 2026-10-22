@@ -105,6 +105,25 @@ updates:
       # ignore rules do not apply to security updates.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+  # The Rust engine's workspace: the engine has no dependencies, its client's are pinned in the
+  # one Cargo.lock. Resolver 3 keeps an update within the workspace's rust-version.
+  - package-ecosystem: "cargo"
+    directory: "/Trax.StateMachine/rust"
+    schedule: { interval: "weekly" }
+    cooldown: { default-days: 7 }
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      cargo-security:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      # A major (reqwest, rustls, tokio-tungstenite, ...) changes the client's code with it, so
+      # it is taken by hand. Security fixes still arrive: ignore rules do not apply to them.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   # The images the devcontainer and the compose files run, pinned by digest, so without
   # these nothing ever moves them.
   - package-ecosystem: "docker"
