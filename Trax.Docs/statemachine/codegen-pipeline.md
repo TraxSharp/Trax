@@ -140,6 +140,13 @@ its hash, and a typed client over [`Trax.StateMachine.Client`](/docs/sdk-referen
 that predicts with the machine built from that IR ([`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine)).
 The conformance kit holds that engine to the same answers as the C# and TypeScript ones.
 
+A frontend in another language usually has the host's client manifest and not its assembly, so `generate` reads the
+IR from the manifest with `--manifest` in place of `--assembly`:
+
+```bash
+trax machine generate --manifest ./trax-client-manifest.json --machine checkout --twin-out ./App/Machines --lang csharp
+```
+
 ## SDK Reference
 
 > [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IDifferentialBuilder](/docs/sdk-reference/statemachine-api/machine#idifferentialbuilder) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [Migrations](/docs/sdk-reference/statemachine-api/migrations) | [trax machine](/docs/reference/cli#state-machines-trax-machine)

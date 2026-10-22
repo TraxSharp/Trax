@@ -77,7 +77,7 @@ public class MachineGeneratorNodeTests
     private GenerateResult GenerateInto(string sub) =>
         new MachineGenerator(new NodeRunner()).Generate(
             new MachineGenerateOptions(
-                Turnstile,
+                MachineIr.Of(Turnstile),
                 Path.Combine(_out, sub, "ir"),
                 Path.Combine(_out, sub, "twin"),
                 Path.Combine(_out, sub, "corpus"),
@@ -136,7 +136,7 @@ public class MachineGeneratorNodeTests
 
         new MachineGenerator(new NodeRunner()).Generate(
             new MachineGenerateOptions(
-                machine,
+                MachineIr.Of(machine),
                 irOut,
                 twinOut,
                 corpusOut,
@@ -169,7 +169,7 @@ public class MachineGeneratorNodeTests
     public void Check_is_clean_against_freshly_generated_artifacts()
     {
         var options = new MachineGenerateOptions(
-            Turnstile,
+            MachineIr.Of(Turnstile),
             IrOut: Path.Combine(_out, "ir"),
             TwinOut: Path.Combine(_out, "twin"),
             CorpusOut: Path.Combine(_out, "corpus"),

@@ -52,7 +52,7 @@ public class MachineGenerateOptionsTests
     public void Tools_dir_without_engine_src_is_refused_up_front()
     {
         ShouldRefuse(
-            new(new DeclarativeTurnstileMachine(), TwinOut: Twin, ToolsDir: _tools),
+            new(MachineIr.Of(new DeclarativeTurnstileMachine()), TwinOut: Twin, ToolsDir: _tools),
             "--tools-dir needs --engine-src*"
         );
     }
@@ -61,7 +61,11 @@ public class MachineGenerateOptionsTests
     public void Relative_imports_without_engine_src_are_refused()
     {
         ShouldRefuse(
-            new(new DeclarativeTurnstileMachine(), TwinOut: Twin, ImportStyle: "relative"),
+            new(
+                MachineIr.Of(new DeclarativeTurnstileMachine()),
+                TwinOut: Twin,
+                ImportStyle: "relative"
+            ),
             "--import-style relative*needs --engine-src*"
         );
     }
@@ -73,7 +77,7 @@ public class MachineGenerateOptionsTests
         // With --engine-src, relative is also the default.
         ShouldRefuse(
             new(
-                new DeclarativeTurnstileMachine(),
+                MachineIr.Of(new DeclarativeTurnstileMachine()),
                 TwinOut: Twin,
                 EngineSrc: _engineSrc,
                 ImportStyle: importStyle,
@@ -103,7 +107,7 @@ public class MachineGenerateOptionsTests
         MachineGenerator.IsModuleSpecifier(specifier).Should().BeFalse();
         ShouldRefuse(
             new(
-                new DeclarativeTurnstileMachine(),
+                MachineIr.Of(new DeclarativeTurnstileMachine()),
                 TwinOut: Twin,
                 ImportStyle: "specifier",
                 Specifier: specifier
@@ -135,7 +139,11 @@ public class MachineGenerateOptionsTests
         var node = new FakeNodeRunner();
 
         new MachineGenerator(node, new PlacementFiles(), _tools).Generate(
-            new(new DeclarativeTurnstileMachine(), TwinOut: Twin, Specifier: "@acme/engine/twin")
+            new(
+                MachineIr.Of(new DeclarativeTurnstileMachine()),
+                TwinOut: Twin,
+                Specifier: "@acme/engine/twin"
+            )
         );
 
         node.Calls.Single()
@@ -151,7 +159,7 @@ public class MachineGenerateOptionsTests
                 new FakeNodeRunner { WritesOutputs = false },
                 new PlacementFiles(),
                 _tools
-            ).Generate(new(new DeclarativeTurnstileMachine(), TwinOut: Twin));
+            ).Generate(new(MachineIr.Of(new DeclarativeTurnstileMachine()), TwinOut: Twin));
 
         generate
             .Should()
@@ -166,7 +174,11 @@ public class MachineGenerateOptionsTests
     {
         var generate = () =>
             new MachineGenerator(new FakeNodeRunner { WritesOutputs = false }).Generate(
-                new(new DeclarativeTurnstileMachine(), TwinOut: Twin, EngineSrc: _engineSrc)
+                new(
+                    MachineIr.Of(new DeclarativeTurnstileMachine()),
+                    TwinOut: Twin,
+                    EngineSrc: _engineSrc
+                )
             );
 
         generate
@@ -181,7 +193,7 @@ public class MachineGenerateOptionsTests
         var generate = () =>
             new MachineGenerator(new FakeNodeRunner { WritesOutputs = false }).Generate(
                 new(
-                    new DeclarativeTurnstileMachine(),
+                    MachineIr.Of(new DeclarativeTurnstileMachine()),
                     TwinOut: Twin,
                     EngineSrc: _engineSrc,
                     ToolsDir: _tools

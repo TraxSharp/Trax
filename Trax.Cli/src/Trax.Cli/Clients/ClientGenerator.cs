@@ -544,7 +544,7 @@ internal sealed partial class ClientGenerator
     /// IR would differ from the one hashed), and one whose SHA-256 is not the
     /// <see cref="ClientManifestMachine.IrHash"/> its documents carry.
     /// </summary>
-    private static void CheckIr(ClientManifestMachine machine)
+    internal static void CheckIr(ClientManifestMachine machine)
     {
         var ir = machine.Ir;
         var id = ir["id"] is JsonValue value && value.TryGetValue<string>(out var s) ? s : null;

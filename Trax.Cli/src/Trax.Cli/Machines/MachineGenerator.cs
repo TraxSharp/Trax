@@ -1,5 +1,3 @@
-using Trax.StateMachine.Persistence;
-
 namespace Trax.Cli.Machines;
 
 /// <summary>What to generate, and where. Each artifact has its own output root because a real consumer splits
@@ -7,7 +5,7 @@ namespace Trax.Cli.Machines;
 /// <see cref="ImportStyle"/> left null is <c>relative</c> with <see cref="EngineSrc"/> and <c>specifier</c>
 /// without it.</summary>
 internal sealed record MachineGenerateOptions(
-    IMachine Machine,
+    MachineIr Machine,
     string? IrOut = null,
     string? TwinOut = null,
     string? CorpusOut = null,
@@ -42,7 +40,8 @@ internal sealed record CheckResult(IReadOnlyList<ArtifactCheck> Checks)
 }
 
 /// <summary>
-/// Orchestrates <c>trax machine generate</c> / <c>check</c>. The IR is exported in-process (C#); the twin and
+/// Orchestrates <c>trax machine generate</c> / <c>check</c>. The IR is exported in-process (C#), or read from a
+/// host's client manifest; the twin and
 /// corpus are produced by shelling out to node: by default to the generators bundled into this package with the
 /// engine compiled in (<see cref="BundledToolsDir"/>), or, with <c>--engine-src</c>, to the <c>tools/</c> of that
 /// engine's checkout, against its <c>src</c>. Everything is

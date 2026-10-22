@@ -33,7 +33,7 @@ public class MachineGeneratorPlacementTests
 
     private MachineGenerateOptions Options(string irOut, string twinOut) =>
         new(
-            new DeclarativeTurnstileMachine(),
+            MachineIr.Of(new DeclarativeTurnstileMachine()),
             irOut,
             twinOut,
             EngineSrc: Path.Combine(_root, "engine", "src"),

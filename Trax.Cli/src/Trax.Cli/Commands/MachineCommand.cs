@@ -130,10 +130,11 @@ internal static class MachineCommand
         var o = MachineOptions.Create();
         var command = new Command(
             "generate",
-            "Export the IR from a compiled machine and generate its typed view (TypeScript or C#) and/or differential corpus."
+            "Export the IR from a compiled machine, or read it from a host's client manifest, and generate its typed view (TypeScript or C#) and/or differential corpus."
         )
         {
             o.Assembly,
+            o.Manifest,
             o.Machine,
             o.IrOut,
             o.TwinOut,
@@ -148,7 +149,7 @@ internal static class MachineCommand
         };
         command.SetAction(parseResult =>
             RunGenerate(
-                parseResult.GetRequiredValue(o.Assembly).FullName,
+                parseResult.GetValue(o.Assembly)?.FullName,
                 parseResult.GetValue(o.Machine),
                 parseResult.GetValue(o.IrOut)?.FullName,
                 parseResult.GetValue(o.TwinOut)?.FullName,
@@ -159,7 +160,8 @@ internal static class MachineCommand
                 parseResult.GetValue(o.ToolsDir)?.FullName,
                 new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
                 parseResult.GetValue(o.Lang),
-                parseResult.GetValue(o.Namespace)
+                parseResult.GetValue(o.Namespace),
+                parseResult.GetValue(o.Manifest)?.FullName
             )
         );
         return command;
@@ -174,6 +176,7 @@ internal static class MachineCommand
         )
         {
             o.Assembly,
+            o.Manifest,
             o.Machine,
             o.IrOut,
             o.TwinOut,
@@ -188,7 +191,7 @@ internal static class MachineCommand
         };
         command.SetAction(parseResult =>
             RunCheck(
-                parseResult.GetRequiredValue(o.Assembly).FullName,
+                parseResult.GetValue(o.Assembly)?.FullName,
                 parseResult.GetValue(o.Machine),
                 parseResult.GetValue(o.IrOut)?.FullName,
                 parseResult.GetValue(o.TwinOut)?.FullName,
@@ -199,7 +202,8 @@ internal static class MachineCommand
                 parseResult.GetValue(o.ToolsDir)?.FullName,
                 new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
                 parseResult.GetValue(o.Lang),
-                parseResult.GetValue(o.Namespace)
+                parseResult.GetValue(o.Namespace),
+                parseResult.GetValue(o.Manifest)?.FullName
             )
         );
         return command;
@@ -207,7 +211,7 @@ internal static class MachineCommand
 
     private static Command CreateShow()
     {
-        var o = MachineOptions.Create();
+        var o = MachineOptions.Create(assemblyRequired: true);
         var formatOption = new Option<string?>("--format")
         {
             Description =
@@ -310,7 +314,7 @@ internal static class MachineCommand
     // Returns the process exit code (0 success, 1 failure). The action returns it so InvokeAsync propagates it;
     // setting Environment.ExitCode would not work here because Program returns InvokeAsync's result, which wins.
     internal static int RunGenerate(
-        string assemblyPath,
+        string? assemblyPath,
         string? machineName,
         string? irOut,
         string? twinOut,
@@ -321,12 +325,13 @@ internal static class MachineCommand
         string? toolsDir,
         INodeRunner node,
         string? lang = null,
-        string? @namespace = null
+        string? @namespace = null,
+        string? manifestPath = null
     )
     {
         try
         {
-            var machine = MachineLoader.Load(assemblyPath, machineName);
+            var machine = Source(assemblyPath, manifestPath, machineName);
             var result = new MachineGenerator(node).Generate(
                 new MachineGenerateOptions(
                     machine,
@@ -357,7 +362,7 @@ internal static class MachineCommand
     }
 
     internal static int RunCheck(
-        string assemblyPath,
+        string? assemblyPath,
         string? machineName,
         string? irOut,
         string? twinOut,
@@ -368,12 +373,13 @@ internal static class MachineCommand
         string? toolsDir,
         INodeRunner node,
         string? lang = null,
-        string? @namespace = null
+        string? @namespace = null,
+        string? manifestPath = null
     )
     {
         try
         {
-            var machine = MachineLoader.Load(assemblyPath, machineName);
+            var machine = Source(assemblyPath, manifestPath, machineName);
             var result = new MachineGenerator(node).Check(
                 new MachineGenerateOptions(
                     machine,
@@ -419,10 +425,32 @@ internal static class MachineCommand
         }
     }
 
+    /// <summary>
+    /// The machine whose IR <c>generate</c> and <c>check</c> read: compiled into <paramref name="assemblyPath"/>, or
+    /// in the client manifest at <paramref name="manifestPath"/>. Exactly one of the two.
+    /// </summary>
+    internal static MachineIr Source(
+        string? assemblyPath,
+        string? manifestPath,
+        string? machineName
+    ) =>
+        (assemblyPath, manifestPath) switch
+        {
+            (not null, null) => MachineIr.Of(MachineLoader.Load(assemblyPath, machineName)),
+            (null, not null) => MachineIr.FromManifest(manifestPath, machineName),
+            (null, null) => throw new InvalidOperationException(
+                "Pass --assembly with the compiled machine, or --manifest with a host's client manifest."
+            ),
+            _ => throw new InvalidOperationException(
+                "--assembly and --manifest are two places to read the IR from; pass one of them."
+            ),
+        };
+
     /// <summary>The options shared by <c>generate</c> and <c>check</c>. A fresh set per command, since a
     /// System.CommandLine option belongs to one command.</summary>
     private sealed record MachineOptions(
         Option<FileInfo> Assembly,
+        Option<FileInfo?> Manifest,
         Option<string?> Machine,
         Option<DirectoryInfo?> IrOut,
         Option<DirectoryInfo?> TwinOut,
@@ -436,17 +464,24 @@ internal static class MachineCommand
         Option<string?> Namespace
     )
     {
-        public static MachineOptions Create() =>
+        public static MachineOptions Create(bool assemblyRequired = false) =>
             new(
                 new Option<FileInfo>("--assembly")
                 {
-                    Description = "Compiled assembly (.dll) containing the machine.",
-                    Required = true,
+                    Description = assemblyRequired
+                        ? "Compiled assembly (.dll) containing the machine."
+                        : "Compiled assembly (.dll) containing the machine. Or pass --manifest.",
+                    Required = assemblyRequired,
+                },
+                new Option<FileInfo?>("--manifest")
+                {
+                    Description =
+                        "The client manifest the host exported with --trax-export-client, to read the IR from in place of --assembly: for a frontend that has the manifest and not the server.",
                 },
                 new Option<string?>("--machine")
                 {
                     Description =
-                        "Full type name of the machine (required only if the assembly has more than one).",
+                        "Full type name of the machine, or its id with --manifest (required only if there is more than one).",
                 },
                 new Option<DirectoryInfo?>("--ir-out")
                 {
