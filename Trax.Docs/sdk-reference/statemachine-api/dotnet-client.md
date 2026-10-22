@@ -64,6 +64,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
 public static class MachinePredictor
 {
+    public static IMachinePredictor FromIr(ClientManifestMachine machine);
     public static IMachinePredictor For<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
         where TState : struct, Enum
         where TTrigger : struct, Enum;
@@ -95,11 +96,12 @@ public static class MachinePredictor
 
 | Member | What it is |
 | --- | --- |
+| `MachinePredictor.FromIr(machine)` | The predictor built from the machine's IR as the manifest lists it, with an [`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine): no reference to the host's assembly, the way every language's client builds its machine. A snapshot the server sends is read trusting the custom state requirements it has no handler for; an event into such a state is not predicted. |
 | `MachinePredictor.For(machine)` | The predictor over a compiled machine's engine (`BuiltMachine`, what `MachineBuilder.Build` answers). Its `IrHash` is the SHA-256 of the machine's exported IR; the controller refuses one whose hash is not the manifest's, since the server would answer every request `CLIENT_OUTDATED`. |
 | `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire` and `AvailableTriggers`, each the engine's own. |
 
-A client predicts only with the C# machine the host serves, compiled into it: the C# engine does not build a machine
-from an IR. A frontend that does not share the machine's assembly leaves `Predictor` null and shows each event once the
+`FromIr` is the usual choice: the app needs only the manifest. `For` suits an app that already compiles the host's
+machine, and custom rules then predict with their C# handlers. Without a predictor the app shows each event once the
 server answers it.
 
 ### Talking to a host
@@ -159,7 +161,7 @@ using var controller = new ServerMachineController(
     {
         Machine = turnstile,
         Server = server,
-        Predictor = MachinePredictor.For(Turnstile.Build()),
+        Predictor = MachinePredictor.FromIr(turnstile),
     }
 );
 await controller.StartAsync();

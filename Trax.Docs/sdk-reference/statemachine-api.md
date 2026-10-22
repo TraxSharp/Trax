@@ -22,6 +22,7 @@ Reference for authoring and hosting portable snapshot state machines. The concep
 - [IR format](/docs/sdk-reference/statemachine-api/ir-format): the exported `machine.ir.json`.
 - [Migrations](/docs/sdk-reference/statemachine-api/migrations): `MigrateFrom` and forward-migrating stored drafts.
 - [Result codes](/docs/sdk-reference/statemachine-api/result-codes): the typed outcomes of advance, rehydrate and the draft operations.
+- [IrMachine](/docs/sdk-reference/statemachine-api/ir-machine): the engine built from a machine's IR, for a client that holds only the manifest.
 
 ## Trax.StateMachine.Persistence
 

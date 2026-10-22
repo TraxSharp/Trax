@@ -294,6 +294,25 @@ namespace Trax.StateMachine
             where TState :  struct, System.Enum
             where TTrigger :  struct, System.Enum { }
     }
+    public sealed class IrMachine
+    {
+        public IrMachine(System.Text.Json.Nodes.JsonObject ir, System.Collections.Generic.IReadOnlyDictionary<string, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool>>? customGuards = null, System.Collections.Generic.IReadOnlyDictionary<string, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject>>? customReducers = null) { }
+        public System.Collections.Generic.IReadOnlySet<string> CommittedStates { get; }
+        public System.Collections.Generic.IReadOnlySet<string> EffectTriggers { get; }
+        public string Id { get; }
+        public string InitialState { get; }
+        public System.Collections.Generic.IReadOnlySet<string> TimedStates { get; }
+        public int Version { get; }
+        public Trax.StateMachine.AdvanceResult Advance(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
+        public Trax.StateMachine.AdvanceResult ApplyOutcome(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
+        public Trax.StateMachine.AdvanceResult ApplyTimer(Trax.StateMachine.Snapshot snapshot, string trigger) { }
+        public System.Collections.Generic.IReadOnlyList<string> AvailableTriggers(Trax.StateMachine.Snapshot snapshot) { }
+        public bool CanFire(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
+        public Trax.StateMachine.Snapshot CreateInitialSnapshot() { }
+        public Trax.StateMachine.RehydrationResult Rehydrate(string json) { }
+        public Trax.StateMachine.RehydrationResult Rehydrate(string json, bool fromServer) { }
+        public string Serialize(Trax.StateMachine.Snapshot snapshot) { }
+    }
     public enum JsonFieldType
     {
         String = 0,

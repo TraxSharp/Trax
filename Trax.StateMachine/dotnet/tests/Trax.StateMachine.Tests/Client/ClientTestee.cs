@@ -1,26 +1,17 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Trax.StateMachine.Client;
-using Trax.StateMachine.Tests.Fakes;
 
 namespace Trax.StateMachine.Tests.Client;
 
 /// <summary>
 /// The C# client as a client-conformance testee (<c>Trax.StateMachine/conformance/client/PROTOCOL.md</c>): a
 /// <see cref="ServerMachineController"/> over a <see cref="GraphQLMachineServer"/> and a
-/// <see cref="GraphQLSubscriptionSocket"/>, predicting with the test machine whose IR the transcript gives, and driven
-/// through the package's public API only.
+/// <see cref="GraphQLSubscriptionSocket"/>, predicting with the machine built from the IR the transcript gives, as an app
+/// that holds only the host's manifest does, and driven through the package's public API only.
 /// </summary>
 public sealed class ClientTestee : IAsyncDisposable
 {
-    private static readonly IReadOnlyDictionary<string, IMachinePredictor> Predictors =
-        new Dictionary<string, IMachinePredictor>
-        {
-            ["checkout"] = MachinePredictor.For(DeclarativeCheckout.Built),
-            ["reminder"] = MachinePredictor.For(ReminderMachine.Built),
-            ["turnstile"] = MachinePredictor.For(DeclarativeTurnstile.Built),
-        };
-
     private readonly HttpClient _http = new();
     private ServerMachineController? _controller;
     private GraphQLSubscriptionSocket? _socket;
@@ -83,8 +74,6 @@ public sealed class ClientTestee : IAsyncDisposable
     private JsonObject Open(JsonObject request)
     {
         var name = request["machine"]!.GetValue<string>();
-        if (!Predictors.TryGetValue(name, out var predictor))
-            return new JsonObject { ["error"] = $"this client has no machine {name}" };
         var machine = new ClientManifestMachine
         {
             Id = name,
@@ -122,7 +111,7 @@ public sealed class ClientTestee : IAsyncDisposable
             {
                 Machine = machine,
                 Server = server,
-                Predictor = predictor,
+                Predictor = MachinePredictor.FromIr(machine),
                 Id = request["instance"]?.GetValue<string>(),
                 StartInput = request["startInput"]?.DeepClone(),
                 NewRequestId = () => $"r{Interlocked.Increment(ref count)}",

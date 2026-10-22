@@ -4,12 +4,13 @@ using Trax.StateMachine.Tests.Fakes;
 namespace Trax.StateMachine.Tests.Helpers;
 
 /// <summary>
-/// The C# engine as a conformance testee (<c>Trax.StateMachine/conformance/PROTOCOL.md</c>). It cannot build a
-/// machine from an IR, so it serves the test machines whose IRs the kit holds, by name, and a <c>load</c> checks that
-/// the IR it is given is the one its machine exports, apart from the test-only <c>differential</c> block: a committed IR
-/// that drifted from its C# source fails there.
+/// The C# engine as a conformance testee (<c>Trax.StateMachine/conformance/PROTOCOL.md</c>), in one of two ways. By
+/// default it serves the compiled test machines whose IRs the kit holds, by name, and a <c>load</c> checks that the IR it
+/// is given is the one its machine exports, apart from the test-only <c>differential</c> block: a committed IR that
+/// drifted from its C# source fails there. With <c>fromIr</c> it builds each machine from the IR it is loaded with, as
+/// a client that holds only the host's manifest does (<see cref="IrMachine"/>).
 /// </summary>
-public sealed class ConformanceTestee
+public sealed class ConformanceTestee(bool fromIr = false)
 {
     private static readonly IReadOnlyDictionary<string, Served> Known = new Dictionary<
         string,
@@ -63,6 +64,11 @@ public sealed class ConformanceTestee
     private JsonObject Load(JsonObject request)
     {
         var name = request["machine"]!.GetValue<string>();
+        if (fromIr)
+        {
+            _loaded[name] = Served.Of(new IrMachine((JsonObject)request["ir"]!.DeepClone()));
+            return new JsonObject { ["loaded"] = true };
+        }
         if (!Known.TryGetValue(name, out var machine))
             return new JsonObject { ["error"] = $"this engine has no machine {name}" };
         if (!JsonNode.DeepEquals(Behaviour(request["ir"]), Behaviour(JsonNode.Parse(machine.Ir))))
@@ -147,6 +153,20 @@ public sealed class ConformanceTestee
                 engine.Serialize
             );
         }
+
+        public static Served Of(IrMachine machine) =>
+            new(
+                "",
+                (op, snapshot, trigger, input) =>
+                    op switch
+                    {
+                        "outcome" => machine.ApplyOutcome(snapshot, trigger, input?.DeepClone()),
+                        "timer" => machine.ApplyTimer(snapshot, trigger),
+                        _ => machine.Advance(snapshot, trigger, input?.DeepClone()),
+                    },
+                machine.Rehydrate,
+                machine.Serialize
+            );
 
         public JsonObject Step(string op, Snapshot snapshot, string trigger, JsonNode? input) =>
             Apply(op, snapshot, trigger, input) switch

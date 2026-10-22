@@ -78,6 +78,7 @@ namespace Trax.StateMachine.Client
         public static Trax.StateMachine.Client.IMachinePredictor For<TState, TTrigger>(Trax.StateMachine.BuiltMachine<TState, TTrigger> machine)
             where TState :  struct, System.Enum
             where TTrigger :  struct, System.Enum { }
+        public static Trax.StateMachine.Client.IMachinePredictor FromIr(Trax.StateMachine.ClientManifestMachine machine) { }
     }
     public sealed class MachineProblem : System.IEquatable<Trax.StateMachine.Client.MachineProblem>
     {

@@ -60,6 +60,27 @@ public class ClientPredictionTests
     }
 
     [Test]
+    public async Task A_predictor_built_from_the_IR_predicts_the_bytes_the_compiled_machine_does()
+    {
+        var fromIr = new HandServer();
+        var compiled = new HandServer();
+        using var irController = Open(fromIr, MachinePredictor.FromIr(Turnstile));
+        using var compiledController = Open(
+            compiled,
+            MachinePredictor.For(DeclarativeTurnstile.Built)
+        );
+        await fromIr.Answer(irController, ServerAnswer.Of(At(1, "Locked")));
+        await compiled.Answer(compiledController, ServerAnswer.Of(At(1, "Locked")));
+
+        _ = irController.SendAsync("Coin", new JsonObject { ["coin"] = "dollar" });
+        _ = compiledController.SendAsync("Coin", new JsonObject { ["coin"] = "dollar" });
+        var fromIrSent = await fromIr.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+        var compiledSent = await compiled.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        fromIrSent.ClientResult.Should().NotBeNull().And.Be(compiledSent.ClientResult);
+    }
+
+    [Test]
     public async Task Without_a_predictor_an_event_is_sent_with_no_prediction_and_nothing_is_shown_until_it_answers()
     {
         var server = new HandServer();

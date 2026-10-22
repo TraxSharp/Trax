@@ -5,8 +5,8 @@ using System.Text.Json.Nodes;
 namespace Trax.StateMachine.Client;
 
 /// <summary>
-/// The engine a <see cref="ServerMachineController"/> predicts with: the C# machine the host serves, compiled into the
-/// client. The server applies every transition; a prediction only decides what the client shows until it answers, and is
+/// The engine a <see cref="ServerMachineController"/> predicts with: the machine built from the host's IR
+/// (<see cref="MachinePredictor.FromIr"/>), or the C# machine compiled into the client. The server applies every transition; a prediction only decides what the client shows until it answers, and is
 /// sent beside the event so the server refuses a step the two engines do not agree on.
 /// </summary>
 public interface IMachinePredictor
@@ -30,7 +30,7 @@ public interface IMachinePredictor
     IReadOnlyList<string> AvailableTriggers(Snapshot snapshot);
 }
 
-/// <summary>Builds the <see cref="IMachinePredictor"/> for a compiled machine.</summary>
+/// <summary>Builds an <see cref="IMachinePredictor"/>, from the host's IR or from a compiled machine.</summary>
 public static class MachinePredictor
 {
     /// <summary>A predictor over <paramref name="machine"/>'s engine, whose IR hash is that of its exported IR.</summary>
@@ -42,6 +42,44 @@ public static class MachinePredictor
         return new EnginePredictor<TState, TTrigger>(machine);
     }
 
+    /// <summary>
+    /// A predictor built from the machine's IR as the host's client manifest lists it, the way every language's client
+    /// builds its machine: no reference to the host's assembly. A snapshot the server sends is read trusting the custom
+    /// state requirements it has no handler for, since the server checked them; an event into such a state is not
+    /// predicted.
+    /// </summary>
+    /// <exception cref="ArgumentException">The manifest's IR is not one the engine can read.</exception>
+    public static IMachinePredictor FromIr(ClientManifestMachine machine)
+    {
+        ArgumentNullException.ThrowIfNull(machine);
+        return new IrPredictor(
+            new IrMachine((JsonObject)machine.Ir.DeepClone()),
+            Hash(machine.IrText())
+        );
+    }
+
+    private static string Hash(string ir) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ir)));
+
+    private sealed class IrPredictor(IrMachine machine, string irHash) : IMachinePredictor
+    {
+        public string IrHash { get; } = irHash;
+
+        public AdvanceResult Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
+            machine.Advance(snapshot, trigger, input);
+
+        public RehydrationResult Rehydrate(string json) =>
+            machine.Rehydrate(json, fromServer: true);
+
+        public string Serialize(Snapshot snapshot) => machine.Serialize(snapshot);
+
+        public bool CanFire(Snapshot snapshot, string trigger, JsonNode? input) =>
+            machine.CanFire(snapshot, trigger, input);
+
+        public IReadOnlyList<string> AvailableTriggers(Snapshot snapshot) =>
+            machine.AvailableTriggers(snapshot);
+    }
+
     private sealed class EnginePredictor<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
         : IMachinePredictor
         where TState : struct, Enum
@@ -49,10 +87,7 @@ public static class MachinePredictor
     {
         private readonly SnapshotMachine<TState, TTrigger> _engine = machine.Engine;
 
-        public string IrHash { get; } =
-            Convert.ToHexStringLower(
-                SHA256.HashData(Encoding.UTF8.GetBytes(IrExporter.Export(machine)))
-            );
+        public string IrHash { get; } = Hash(IrExporter.Export(machine));
 
         public AdvanceResult Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
             _engine.Advance(snapshot, trigger, input);
