@@ -100,7 +100,9 @@ public static class MachinePredictor
 | `MachinePredictor.For(machine)` | The predictor over a compiled machine's engine (`BuiltMachine`, what `MachineBuilder.Build` answers). Its `IrHash` is the SHA-256 of the machine's exported IR; the controller refuses one whose hash is not the manifest's, since the server would answer every request `CLIENT_OUTDATED`. |
 | `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire` and `AvailableTriggers`, each the engine's own. |
 
-`FromIr` is the usual choice: the app needs only the manifest. `For` suits an app that already compiles the host's
+`FromIr` is the usual choice: the app needs only the manifest. It has no handler for a custom rule, so an event whose
+prediction depends on a custom guard, custom state requirement or custom reduction goes with no `clientResult`, and the
+view shows the server's answer when it comes rather than a guess. `For` suits an app that already compiles the host's
 machine, and custom rules then predict with their C# handlers. Without a predictor the app shows each event once the
 server answers it.
 

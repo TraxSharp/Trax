@@ -55,7 +55,7 @@ public sealed class IrMachine
 | --- | --- |
 | `IrMachine(ir, customGuards, customReducers)` | Builds the machine an IR describes. The handlers bind the custom rules and reductions the IR names. An IR this engine cannot read throws `ArgumentException`; the `differential` block is ignored. |
 | `Id`, `Version`, `InitialState` | The IR's id, definition version and initial state. |
-| `CommittedStates`, `EffectTriggers`, `TimedStates` | The states only the server's effect or train reaches, the triggers whose edge runs the effect, and the states with a timer. |
+| `CommittedStates`, `EffectTriggers`, `TimedStates` | The states marked `.Committed()`, which a soft autosave may not move a draft out of; the triggers whose edge runs the effect; and the states with a timer. |
 | `CreateInitialSnapshot()` | The snapshot a new instance begins with: the IR's `initialContext`, or one derived from the initial state's schema. |
 | `Advance(snapshot, trigger, input)` | A client's trigger, with the refusals `SnapshotMachine.Advance` gives, in its order. |
 | `ApplyOutcome(snapshot, trigger, input)`, `ApplyTimer(snapshot, trigger)` | An invoked train's outcome (`Fetching.done`) and a state's timer (`Review.after`). The server applies both; a client uses them to replay one. |
@@ -67,8 +67,10 @@ public sealed class IrMachine
 
 - Every operation is total: a refusal is an `AdvanceResult.Rejected` or a `RehydrationResult.Error`, never an
   exception.
-- A custom guard with no handler does not hold, and a custom reduction with none keeps the context, so the machine does
-  not predict past them. The server, which has the handlers, decides.
+- A custom guard with no handler does not hold, and a custom reduction with none keeps the context. Neither is the
+  server's answer, which has the handlers. The .NET client does not use such a result: an event whose prediction
+  depended on an unhandled custom guard, custom state requirement or custom reduction is sent unpredicted, and the view
+  shows the server's answer.
 - An IR carries no migrations, so `Rehydrate` refuses a snapshot of another version with `VERSION_MISMATCH`.
 
 ## Example
