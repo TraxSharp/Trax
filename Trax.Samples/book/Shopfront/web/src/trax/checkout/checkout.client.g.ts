@@ -117,6 +117,7 @@ export function checkoutServer(): ReturnType<typeof createMachineServer> {
         if (generation !== traxGeneration()) throw changed();
         return connection.headers?.() ?? {};
       },
+      allowInsecureTransport: connection.allowInsecureTransport,
       machine: checkout,
       documents: checkoutDocuments,
       // A stream refused below ends for good: the controller stops with it instead of subscribing again.

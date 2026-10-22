@@ -332,8 +332,8 @@ public class MachineGenerateFromPackedToolTests
 
         const signIn = (key: string, user = key) =>
           configureTrax({
-            url: "http://host/graphql",
-            socketUrl: "ws://host/graphql",
+            url: "https://host/graphql",
+            socketUrl: "wss://host/graphql",
             headers: () => ({ "X-Api-Key": key }),
             connectionParams: () => ({ apiKey: key }),
             user,
@@ -409,6 +409,25 @@ public class MachineGenerateFromPackedToolTests
           stop();
           expect(sockets.flatMap((s) => s.subscriptions).filter((s) => s.payload.variables.id === "i-4")).toHaveLength(0);
           expect(reminderServer()).not.toBe(server);
+        });
+
+        it("A_cleartext_url_to_another_host_is_refused_unless_the_connection_allows_it", async () => {
+          configureTrax({ url: "http://api:8080/graphql", socketUrl: "ws://api:8080/graphql", headers: () => ({ "X-Api-Key": "T" }) });
+          expect(() => reminderServer()).toThrow(/not over TLS/);
+          expect(requests).toHaveLength(0);
+
+          configureTrax({
+            url: "http://api:8080/graphql",
+            socketUrl: "ws://api:8080/graphql",
+            headers: () => ({ "X-Api-Key": "U" }),
+            allowInsecureTransport: true,
+          });
+          const reading = reminderServer().get("i-6");
+          await settle();
+          const read = reads("i-6").at(-1)!;
+          expect(read.headers["X-Api-Key"]).toBe("U");
+          await act(async () => read.answer(got("i-6")));
+          await expect(reading).resolves.toMatchObject({ kind: "ok", snapshot: { state: "Idle" } });
         });
 
         it("The_remembered_key_follows_the_user_given_to_configureTrax", async () => {
