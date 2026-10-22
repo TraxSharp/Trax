@@ -1,0 +1,213 @@
+namespace Trax.StateMachine.Client
+{
+    public static class ClientProblemCodes
+    {
+        public const string Disposed = "DISPOSED";
+        public const string Gone = "GONE";
+        public const string NothingToRetry = "NOTHING_TO_RETRY";
+        public const string TransportError = "TRANSPORT_ERROR";
+    }
+    public sealed class GraphQLMachineServer : Trax.StateMachine.Client.IMachineServer
+    {
+        public static readonly System.Collections.Generic.IReadOnlyList<System.TimeSpan> DefaultResubscribeDelays;
+        public GraphQLMachineServer(Trax.StateMachine.Client.GraphQLMachineServerOptions options) { }
+        public System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerProblem?> DiscardAsync(string id, string requestId, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> EventAsync(string id, string trigger, System.Text.Json.Nodes.JsonNode? input, string requestId, string? clientResult, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> GetAsync(string id, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> StartAsync(System.Text.Json.Nodes.JsonNode? input, string requestId, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.IDisposable Subscribe(string id, System.Action<Trax.StateMachine.Client.StreamMessage> onMessage) { }
+    }
+    public sealed class GraphQLMachineServerOptions : System.IEquatable<Trax.StateMachine.Client.GraphQLMachineServerOptions>
+    {
+        public GraphQLMachineServerOptions() { }
+        public required System.Uri Endpoint { get; init; }
+        public required System.Net.Http.HttpClient Http { get; init; }
+        public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
+        public required Trax.StateMachine.Client.ISubscriptionSocket Socket { get; init; }
+    }
+    public sealed class GraphQLSubscriptionSocket : System.IAsyncDisposable, Trax.StateMachine.Client.ISubscriptionSocket
+    {
+        public GraphQLSubscriptionSocket(Trax.StateMachine.Client.GraphQLSubscriptionSocketOptions options) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        public System.IDisposable Subscribe(string documentId, System.Text.Json.Nodes.JsonObject variables, Trax.StateMachine.Client.ISubscriptionSink sink) { }
+    }
+    public sealed class GraphQLSubscriptionSocketOptions : System.IEquatable<Trax.StateMachine.Client.GraphQLSubscriptionSocketOptions>
+    {
+        public GraphQLSubscriptionSocketOptions() { }
+        public System.Action<System.Net.WebSockets.ClientWebSocketOptions>? ConfigureSocket { get; init; }
+        public System.TimeSpan ConnectTimeout { get; init; }
+        public System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Text.Json.Nodes.JsonObject?>>? ConnectionParams { get; init; }
+        public required System.Uri Endpoint { get; init; }
+    }
+    public interface IMachinePredictor
+    {
+        string IrHash { get; }
+        Trax.StateMachine.AdvanceResult Advance(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input);
+        System.Collections.Generic.IReadOnlyList<string> AvailableTriggers(Trax.StateMachine.Snapshot snapshot);
+        bool CanFire(Trax.StateMachine.Snapshot snapshot, string trigger, System.Text.Json.Nodes.JsonNode? input);
+        Trax.StateMachine.RehydrationResult Rehydrate(string json);
+        string Serialize(Trax.StateMachine.Snapshot snapshot);
+    }
+    public interface IMachineServer
+    {
+        System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> EventAsync(string id, string trigger, System.Text.Json.Nodes.JsonNode? input, string requestId, string? clientResult, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> GetAsync(string id, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> StartAsync(System.Text.Json.Nodes.JsonNode? input, string requestId, System.Threading.CancellationToken cancellationToken = default);
+        System.IDisposable Subscribe(string id, System.Action<Trax.StateMachine.Client.StreamMessage> onMessage);
+    }
+    public interface ISubscriptionSink
+    {
+        void Complete();
+        void Error(System.Exception error);
+        void Next(System.Text.Json.Nodes.JsonObject value);
+    }
+    public interface ISubscriptionSocket
+    {
+        System.IDisposable Subscribe(string documentId, System.Text.Json.Nodes.JsonObject variables, Trax.StateMachine.Client.ISubscriptionSink sink);
+    }
+    public sealed class MachineError : System.IEquatable<Trax.StateMachine.Client.MachineError>
+    {
+        public MachineError(string Code, string Message, bool? Deleted = default) { }
+        public string Code { get; init; }
+        public bool? Deleted { get; init; }
+        public string Message { get; init; }
+    }
+    public static class MachinePredictor
+    {
+        public static Trax.StateMachine.Client.IMachinePredictor For<TState, TTrigger>(Trax.StateMachine.BuiltMachine<TState, TTrigger> machine)
+            where TState :  struct, System.Enum
+            where TTrigger :  struct, System.Enum { }
+    }
+    public sealed class MachineProblem : System.IEquatable<Trax.StateMachine.Client.MachineProblem>
+    {
+        public MachineProblem(Trax.StateMachine.Client.MachineProblemKind Kind, string Code, string Message) { }
+        public string Code { get; init; }
+        public Trax.StateMachine.Client.MachineProblemKind Kind { get; init; }
+        public string Message { get; init; }
+    }
+    public enum MachineProblemKind
+    {
+        Rejected = 0,
+        Transport = 1,
+    }
+    public enum MachineStatus
+    {
+        Loading = 0,
+        Ready = 1,
+        Stopped = 2,
+    }
+    public sealed class MachineView : System.IEquatable<Trax.StateMachine.Client.MachineView>
+    {
+        public MachineView() { }
+        public Trax.StateMachine.Snapshot? Confirmed { get; init; }
+        public System.DateTimeOffset? DueAt { get; init; }
+        public Trax.StateMachine.Client.MachineError? Error { get; init; }
+        public string? Id { get; init; }
+        public bool Pending { get; init; }
+        public Trax.StateMachine.Client.MachineProblem? Problem { get; init; }
+        public long? Revision { get; init; }
+        public string? RowId { get; init; }
+        public Trax.StateMachine.Snapshot? Snapshot { get; init; }
+        public Trax.StateMachine.Client.MachineStatus Status { get; init; }
+    }
+    public abstract class SendOutcome : System.IEquatable<Trax.StateMachine.Client.SendOutcome>
+    {
+        public sealed class Confirmed : Trax.StateMachine.Client.SendOutcome, System.IEquatable<Trax.StateMachine.Client.SendOutcome.Confirmed>
+        {
+            public Confirmed(Trax.StateMachine.Client.ServerSnapshot Snapshot) { }
+            public Trax.StateMachine.Client.ServerSnapshot Snapshot { get; init; }
+        }
+        public sealed class Failed : Trax.StateMachine.Client.SendOutcome, System.IEquatable<Trax.StateMachine.Client.SendOutcome.Failed>
+        {
+            public Failed(Trax.StateMachine.Client.MachineProblem Problem) { }
+            public Trax.StateMachine.Client.MachineProblem Problem { get; init; }
+        }
+        public sealed class Refused : Trax.StateMachine.Client.SendOutcome, System.IEquatable<Trax.StateMachine.Client.SendOutcome.Refused>
+        {
+            public Refused(Trax.StateMachine.Client.MachineProblem Problem) { }
+            public Trax.StateMachine.Client.MachineProblem Problem { get; init; }
+        }
+        public sealed class Stopped : Trax.StateMachine.Client.SendOutcome, System.IEquatable<Trax.StateMachine.Client.SendOutcome.Stopped>
+        {
+            public Stopped(Trax.StateMachine.Client.MachineError Error) { }
+            public Trax.StateMachine.Client.MachineError Error { get; init; }
+        }
+    }
+    public sealed class ServerAnswer : System.IEquatable<Trax.StateMachine.Client.ServerAnswer>
+    {
+        public ServerAnswer() { }
+        public string? Id { get; init; }
+        public Trax.StateMachine.Client.ServerProblem? Problem { get; init; }
+        public Trax.StateMachine.Client.ServerSnapshot? Snapshot { get; init; }
+        public static Trax.StateMachine.Client.ServerAnswer Of(Trax.StateMachine.Client.ServerSnapshot snapshot, string? id = null) { }
+        public static Trax.StateMachine.Client.ServerAnswer Refused(string code, string message) { }
+    }
+    public sealed class ServerMachineController : System.IDisposable
+    {
+        public static readonly System.Collections.Generic.IReadOnlyList<System.TimeSpan> DefaultRetryDelays;
+        public ServerMachineController(Trax.StateMachine.Client.ServerMachineOptions options) { }
+        public Trax.StateMachine.Client.MachineView View { get; }
+        public event System.EventHandler? Changed;
+        public System.Collections.Generic.IReadOnlyList<string> AvailableTriggers() { }
+        public bool CanSend(string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
+        public void Dispose() { }
+        public System.Threading.Tasks.Task<Trax.StateMachine.Client.SendOutcome> RetryAsync() { }
+        public System.Threading.Tasks.Task<Trax.StateMachine.Client.SendOutcome> SendAsync(string trigger, System.Text.Json.Nodes.JsonNode? input = null) { }
+        public System.Threading.Tasks.Task StartAsync() { }
+    }
+    public sealed class ServerMachineOptions : System.IEquatable<Trax.StateMachine.Client.ServerMachineOptions>
+    {
+        public ServerMachineOptions() { }
+        public string? Id { get; init; }
+        public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
+        public System.Func<string>? NewRequestId { get; init; }
+        public Trax.StateMachine.Client.IMachinePredictor? Predictor { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? RetryDelays { get; init; }
+        public required Trax.StateMachine.Client.IMachineServer Server { get; init; }
+        public System.Text.Json.Nodes.JsonNode? StartInput { get; init; }
+        public string? StartRequestId { get; init; }
+    }
+    public sealed class ServerProblem : System.IEquatable<Trax.StateMachine.Client.ServerProblem>
+    {
+        public ServerProblem(string Code, string Message) { }
+        public string Code { get; init; }
+        public string Message { get; init; }
+    }
+    public sealed class ServerSnapshot : System.IEquatable<Trax.StateMachine.Client.ServerSnapshot>
+    {
+        public ServerSnapshot() { }
+        public required System.Text.Json.Nodes.JsonObject Context { get; init; }
+        public System.DateTimeOffset? DueAt { get; init; }
+        public bool DueAtKnown { get; init; }
+        public required long Revision { get; init; }
+        public string? RowId { get; init; }
+        public required string State { get; init; }
+    }
+    public abstract class StreamMessage : System.IEquatable<Trax.StateMachine.Client.StreamMessage>
+    {
+        public sealed class Changed : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Changed>
+        {
+            public Changed(Trax.StateMachine.Client.ServerSnapshot Snapshot) { }
+            public Trax.StateMachine.Client.ServerSnapshot Snapshot { get; init; }
+        }
+        public sealed class ClientOutdated : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.ClientOutdated>
+        {
+            public ClientOutdated() { }
+        }
+        public sealed class Gone : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Gone>
+        {
+            public Gone(bool NotFound) { }
+            public bool NotFound { get; init; }
+        }
+        public sealed class Reload : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Reload>
+        {
+            public Reload() { }
+        }
+    }
+    public sealed class SubscriptionErrorException : System.Exception
+    {
+        public SubscriptionErrorException(System.Text.Json.Nodes.JsonArray? errors) { }
+        public System.Text.Json.Nodes.JsonArray Errors { get; }
+    }
+}

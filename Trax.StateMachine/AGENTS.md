@@ -15,9 +15,10 @@ The folder is laid out by language, with what spans the languages at its root.
 
 | Path | What it holds |
 | --- | --- |
-| `dotnet/` | The C# engine. A .NET folder like any other: `Trax.StateMachine.slnx`, `Directory.Build.props`, `.config/dotnet-tools.json`, the NuGet `README.md`, `src/` and `tests/` (with `Trax.StateMachine.Tests.Meta`). |
+| `dotnet/` | The C# engine, and `Trax.StateMachine.Client`, which drives a served machine from .NET. A .NET folder like any other: `Trax.StateMachine.slnx`, `Directory.Build.props`, `.config/dotnet-tools.json`, the NuGet `README.md`, `src/` and `tests/` (with `Trax.StateMachine.Tests.Meta`). |
 | `ts/` | `@traxsharp/state-machine`: the engine (`src/`), the client a page drives a served machine through (`src/client/`, `src/server/`, `src/react.ts`), and the node entrypoints `trax machine` shells out to (`tools/`), which `tools/bundle-cli.mjs` bundles into Trax.Cli's package. |
 | `conformance/` | Engine-neutral data any engine replays: the shared machines (`machines/<m>/`, each machine's IR, fixtures, differential corpus and migration golden), the IR's JSON Schema (`ir.schema.json`, normative), the canonical-wire vectors, the refusal-code registry, the strict-input cases, and the runner (`run.mjs`, `kit.mjs`) that sends all of it to one engine over the protocol in `PROTOCOL.md`. A vector goes here, not in one engine's tests. |
+| `conformance/client/` | The client kit: transcripts of a host, request by request and push by push (`transcripts/`), the fake host that plays them (`host.mjs`) and the runner (`run.mjs`) that drives one client's testee through them over the protocol in its `PROTOCOL.md`. The TypeScript client (`ts/tools/conformance/client-testee-ts.mjs`) and the C# one (`ClientConformanceTests`) pass it. |
 | `docs/adr/` | This folder's decisions, for every language. |
 
 Another language's engine gets a directory of its own beside `dotnet/` and `ts/`, and joins the kit by
@@ -100,6 +101,7 @@ The conformance kit through the TypeScript engine, from this folder (the C# engi
 
 ```bash
 node conformance/run.mjs --testee node ts/tools/conformance/testee-ts.mjs
+node conformance/client/run.mjs --testee node ts/tools/conformance/client-testee-ts.mjs
 ```
 
 ## CI

@@ -90,6 +90,33 @@ public static class DeclarativeCheckout
             .Reduce(Reset())
             .To(CheckoutState.Cart);
 
+        // The differential inputs the committed IR carries, so this machine exports that IR byte for byte, as the host
+        // that serves it does: Pay with and without a receipt, and seeds for the states only Pay and its effect reach.
+        m.Differential(d =>
+            d.Sample(CheckoutTrigger.Pay, new JsonObject { ["receipt"] = "rcpt_1" })
+                .EmptySample(CheckoutTrigger.Pay)
+                .Seed(
+                    CheckoutState.Paid,
+                    new JsonObject
+                    {
+                        ["currency"] = "USD",
+                        ["items"] = new JsonArray("book"),
+                        ["receipt"] = "rcpt_seed",
+                        ["total"] = 5,
+                    }
+                )
+                .Seed(
+                    CheckoutState.Review,
+                    new JsonObject
+                    {
+                        ["currency"] = "USD",
+                        ["items"] = new JsonArray("book"),
+                        ["receipt"] = null,
+                        ["total"] = 5,
+                    }
+                )
+        );
+
         return m.Build();
     }
 }

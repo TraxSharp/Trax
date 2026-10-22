@@ -9,7 +9,7 @@ of its own:
 
 | Directory | What it is | Package |
 | --- | --- | --- |
-| [dotnet](dotnet) | The C# engine, its persistence and its test helpers | `Trax.StateMachine`, `Trax.StateMachine.Persistence`, `Trax.StateMachine.Testing` on NuGet |
+| [dotnet](dotnet) | The C# engine, its persistence, its test helpers and its client | `Trax.StateMachine`, `Trax.StateMachine.Persistence`, `Trax.StateMachine.Testing`, `Trax.StateMachine.Client` on NuGet |
 | [ts](ts) | The TypeScript engine, and the client a page drives a served machine through | `@traxsharp/state-machine` on npm |
 | [conformance](conformance) | The cases every engine must answer the same way, and the runner that sends them | not published |
 

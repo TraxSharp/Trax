@@ -273,6 +273,12 @@
           "Trax.Effect": "[1.99.99, )"
         }
       },
+      "trax.statemachine.client": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.StateMachine": "[1.99.99, )"
+        }
+      },
       "trax.statemachine.persistence": {
         "type": "Project",
         "dependencies": {

@@ -38,6 +38,10 @@ Reference for authoring and hosting portable snapshot state machines. The concep
 
 - [MachineConformance](/docs/sdk-reference/statemachine-api/machine-conformance): checking a machine against its committed IR and corpus in a test.
 
+## Trax.StateMachine.Client
+
+- [.NET client](/docs/sdk-reference/statemachine-api/dotnet-client): driving a served machine from Blazor, MAUI or another .NET service.
+
 ## @traxsharp/state-machine (npm)
 
 - [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package): the engine twin, the stores and hooks, and the server clients.
