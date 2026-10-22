@@ -11,6 +11,7 @@
 //! languages, without locks.
 
 use std::collections::hash_map::RandomState;
+use std::collections::HashSet;
 use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -23,6 +24,7 @@ use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, Subscription,
     TransportError,
 };
+use crate::unhandled::unpredictable_edges;
 
 /// The codes the client reports of its own, beside the server's refusal codes.
 pub mod codes {
@@ -157,12 +159,14 @@ pub struct ServerMachineController {
     commands: mpsc::UnboundedSender<Msg>,
     view: watch::Receiver<Arc<MachineView>>,
     machine: Arc<Machine>,
+    unpredictable: Arc<HashSet<(String, String)>>,
 }
 
 impl ServerMachineController {
     /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start).
     pub fn new<S: MachineServer>(options: ServerMachineOptions<S>) -> Result<Self, IrError> {
         let machine = Arc::new(Machine::from_ir(&options.ir)?);
+        let unpredictable = Arc::new(unpredictable_edges(&options.ir));
         let (commands, inbox) = mpsc::unbounded_channel();
         let initial = Arc::new(MachineView {
             status: MachineStatus::Loading,
@@ -179,6 +183,7 @@ impl ServerMachineController {
         let (publish, view) = watch::channel(initial);
         let actor = Actor {
             machine: machine.clone(),
+            unpredictable: unpredictable.clone(),
             server: Arc::new(options.server),
             commands: commands.clone(),
             publish,
@@ -217,6 +222,7 @@ impl ServerMachineController {
             commands,
             view,
             machine,
+            unpredictable,
         })
     }
 
@@ -265,12 +271,15 @@ impl ServerMachineController {
     }
 
     /// Whether `trigger` fires from what is shown. False before the first snapshot and once stopped. An event bound to
-    /// the effect is judged by its edge alone, since its guard reads an input only the server's effect has.
+    /// the effect is judged by its edge alone, since its guard reads an input only the server's effect has, and so is
+    /// one whose edge rests on a custom rule the client holds no handler for: the server decides.
     pub fn can_send(&self, trigger: &str, input: Option<&Value>) -> bool {
         let view = self.view();
         match (&view.snapshot, view.status) {
             (Some(shown), status) if status != MachineStatus::Stopped => {
-                if self.machine.effect_triggers().iter().any(|t| t == trigger) {
+                if self.machine.effect_triggers().iter().any(|t| t == trigger)
+                    || self.unpredictable.contains(&(shown.state.clone(), trigger.to_owned()))
+                {
                     self.machine.available_triggers(shown).iter().any(|t| t == trigger)
                 } else {
                     self.machine.can_fire(shown, trigger, input)
@@ -402,6 +411,8 @@ enum Source {
 
 struct Actor<S> {
     machine: Arc<Machine>,
+    // The (state, trigger) pairs whose edge rests on a custom rule the machine holds no handler for.
+    unpredictable: Arc<HashSet<(String, String)>>,
     server: Arc<S>,
     commands: mpsc::UnboundedSender<Msg>,
     publish: watch::Sender<Arc<MachineView>>,
@@ -972,6 +983,12 @@ impl<S: MachineServer> Actor<S> {
         self.machine.effect_triggers().iter().any(|t| t == trigger)
     }
 
+    // Whether the event's outcome from `state` is one the client can tell: not bound to the effect, and with no edge
+    // that rests on a custom rule it holds no handler for (unhandled.rs).
+    fn predicts(&self, state: &str, trigger: &str) -> bool {
+        !self.is_effect(trigger) && !self.unpredictable.contains(&(state.to_owned(), trigger.to_owned()))
+    }
+
     fn pump(&mut self) {
         if self.sending || self.disposed || self.error.is_some() {
             return;
@@ -986,8 +1003,9 @@ impl<S: MachineServer> Actor<S> {
         let request = match &next.request {
             Some(request) => request.clone(),
             None => {
-                // An event bound to the effect is sent without a prediction: what it leads to depends on the effect.
-                let predicted = if self.is_effect(&next.trigger) {
+                // An event bound to the effect is sent without a prediction: what it leads to depends on the effect. So is
+                // one that rests on a custom rule the client cannot evaluate, rather than a guess the server would refuse.
+                let predicted = if !self.predicts(&confirmed.state, &next.trigger) {
                     None
                 } else {
                     self.machine
@@ -1146,7 +1164,7 @@ impl<S: MachineServer> Actor<S> {
     }
 
     // The confirmed snapshot with every pending event the machine allows applied in order, up to the first one bound
-    // to the effect: what the page will show if the server agrees.
+    // to the effect or resting on a custom rule it cannot evaluate: what the page will show if the server agrees.
     fn predicted(&self) -> Option<Snapshot> {
         let confirmed = self.confirmed.clone()?;
         if self.status == MachineStatus::Stopped {
@@ -1154,7 +1172,7 @@ impl<S: MachineServer> Actor<S> {
         }
         let mut shown = confirmed;
         for queued in &self.queue {
-            if self.is_effect(&queued.trigger) {
+            if !self.predicts(&shown.state, &queued.trigger) {
                 break;
             }
             if let Ok(next) = self.machine.advance(&shown, &queued.trigger, queued.input.as_ref()) {

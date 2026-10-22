@@ -96,7 +96,7 @@ public static class MachinePredictor
 
 | Member | What it is |
 | --- | --- |
-| `MachinePredictor.FromIr(machine)` | The predictor built from the machine's IR as the manifest lists it, with an [`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine): no reference to the host's assembly, the way every language's client builds its machine. A snapshot the server sends is read trusting the custom state requirements it has no handler for; an event into such a state is not predicted. |
+| `MachinePredictor.FromIr(machine)` | The predictor built from the machine's IR as the manifest lists it, with an [`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine): no reference to the host's assembly, the way every language's client builds its machine. A snapshot the server sends is read trusting the custom state requirements it has no handler for. It holds no handler for any custom rule, so an event with an edge whose guard or reduction is custom, or that enters a state with a custom requirement, is sent with no prediction, and `CanSend` says only whether the state has an edge for it. |
 | `MachinePredictor.For(machine)` | The predictor over a compiled machine's engine (`BuiltMachine`, what `MachineBuilder.Build` answers). Its `IrHash` is the SHA-256 of the machine's exported IR; the controller refuses one whose hash is not the manifest's, since the server would answer every request `CLIENT_OUTDATED`. |
 | `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire` and `AvailableTriggers`, each the engine's own. |
 
@@ -127,7 +127,8 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
   A push of another incarnation (the instance was deleted and created again) makes the controller read the instance
   again rather than compare revisions across incarnations.
 - **Effects.** An event bound to the machine's effect is sent with no prediction, and nothing queued after it is
-  predicted until it answers.
+  predicted until it answers. So is an event with an edge that rests on a custom rule the predictor has no handler
+  for.
 - **Timers** are the server's: `DueAt` is shown and never fired. An answer that does not know it keeps the one held
   while the state stays; entering a timed state without one reads the instance once for it.
 - **Stopping.** A gone instance and `CLIENT_OUTDATED` stop the controller for good, and every queued send settles

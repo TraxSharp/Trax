@@ -227,6 +227,20 @@ export function machineFromIr(
       ...(t.field !== undefined ? { field: { ...t.field } } : {}),
     };
 
+  // The edges whose outcome rests on a custom rule bound to no handler here: the twin cannot tell what they lead to.
+  const unpredictable: Record<string, string[]> = {};
+  for (const t of ir.transitions) {
+    const requirement = ir.invariants?.[t.to];
+    if (
+      (t.guard !== undefined && namesUnhandled(t.guard, customGuards)) ||
+      (t.reduce?.reduce === "custom" && !Object.prototype.hasOwnProperty.call(customReducers, t.reduce.name)) ||
+      (requirement !== undefined && namesUnhandled(requirement, customGuards))
+    ) {
+      const triggers = (unpredictable[t.from] ??= []);
+      if (!triggers.includes(t.trigger)) triggers.push(t.trigger);
+    }
+  }
+
   return {
     id: ir.id,
     version: ir.version,
@@ -237,6 +251,7 @@ export function machineFromIr(
     committedStates: ir.committedStates,
     outcomeTriggers,
     effectTriggers: [...effectBound].sort(),
+    unpredictable,
     timers,
     inputValidators,
     contextValidators,
@@ -335,6 +350,13 @@ function trustUnhandled(rule: Rule, bound: CustomGuards): CustomGuards {
   };
   visit(rule);
   return guards;
+}
+
+// Whether `rule` is, or holds, a custom rule with no handler in `bound`.
+function namesUnhandled(rule: Rule, bound: CustomGuards): boolean {
+  if (rule.rule === "custom") return !Object.prototype.hasOwnProperty.call(bound, rule.name);
+  if (rule.rule === "all" || rule.rule === "any") return rule.rules.some((r) => namesUnhandled(r, bound));
+  return false;
 }
 
 // What an effect-bound trigger that declares no record takes: the receipt the effect runner hands it, or nothing.

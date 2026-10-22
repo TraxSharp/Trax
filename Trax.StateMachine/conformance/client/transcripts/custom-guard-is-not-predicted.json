@@ -1,0 +1,29 @@
+{
+  "about": "An event with an edge whose custom guard the client holds no handler for is sent with no prediction, and the view shows what the host confirmed until it answers: the client cannot tell which edge the host takes.",
+  "machine": "review",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "approve": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "close": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "edit": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "hold": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "reject": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "reopen": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "touch": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    {"client": "start"},
+    {"subscribe": {"id": "i-1"}},
+    {"request": "get", "answer": {"id": "i-1", "revision": 1, "state": "Draft", "context": {"edits": 0}}},
+    {"view": {"status": "ready", "state": "Draft"}},
+    {"client": "send", "trigger": "Approve", "as": "approve"},
+    {"view": {"pending": true, "state": "Draft", "context": {"edits": 0}}},
+    {"request": "approve", "variables": {"id": "i-1", "requestId": "r1"}, "answer": {"id": "i-1", "revision": 2, "state": "Approved", "context": {}}},
+    {"await": "approve", "expect": {"outcome": "confirmed", "state": "Approved", "revision": 2}},
+    {"view": {"state": "Approved", "revision": 2, "pending": false}}
+  ]
+}

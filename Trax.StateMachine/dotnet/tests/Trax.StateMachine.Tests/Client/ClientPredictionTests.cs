@@ -177,6 +177,132 @@ public class ClientPredictionTests
         build.Should().Throw<ArgumentException>().WithMessage("*another version*");
     }
 
+    // A review whose reviewer check, edit count and closing rule only the server can evaluate: custom rules the IR names
+    // and a predictor built from it holds no handler for.
+    private static readonly ClientManifestMachine Review = WithHash(
+        new ClientManifestMachine
+        {
+            Id = "review",
+            IrHash = "",
+            Ir = (JsonObject)
+                JsonNode.Parse(
+                    """
+                    {"committedStates":[],"context":{"Approved":{"fields":[]},"Closed":{"fields":[]},
+                     "Draft":{"fields":[{"constraints":[],"name":"edits","nullable":false,"type":"integer"}]},
+                     "Escalated":{"fields":[]},"Held":{"fields":[]},"Rejected":{"fields":[]}},
+                     "id":"review","initialContext":{"edits":0},"initialState":"Draft","inputs":{},
+                     "invariants":{"Closed":{"name":"review:closable","rule":"custom"}},
+                     "states":["Approved","Closed","Draft","Escalated","Held","Rejected"],
+                     "transitions":[
+                      {"from":"Draft","reduce":{"name":"review:count-edit","reduce":"custom"},"to":"Draft","trigger":"Edit"},
+                      {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Approved","trigger":"Approve"},
+                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Escalated","trigger":"Approve"},
+                      {"from":"Draft","guard":{"name":"review:is-reviewer","rule":"custom"},"reduce":{"reduce":"clear"},"to":"Rejected","trigger":"Reject"},
+                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Closed","trigger":"Close"},
+                      {"from":"Draft","reduce":{"reduce":"clear"},"to":"Held","trigger":"Hold"}],
+                     "triggers":["Approve","Close","Edit","Hold","Reject"],"version":1}
+                    """
+                )!,
+        }
+    );
+
+    private static ClientManifestMachine WithHash(ClientManifestMachine machine) =>
+        machine with
+        {
+            IrHash = MachinePredictor.FromIr(machine).IrHash,
+        };
+
+    private static readonly JsonObject Drafted = new() { ["edits"] = 0 };
+
+    [Test]
+    public async Task IrMachine_UnhandledCustomReduction_IsNotPredicted()
+    {
+        var server = new HandServer();
+        using var controller = OpenReview(server);
+        await server.Answer(
+            controller,
+            ServerAnswer.Of(At(1, "Draft", Drafted.DeepClone().AsObject()))
+        );
+
+        var send = controller.SendAsync("Edit");
+        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        sent.ClientResult.Should().BeNull();
+        sent.Answer.SetResult(ServerAnswer.Of(At(2, "Draft", new JsonObject { ["edits"] = 1 })));
+        (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Snapshot!.Context["edits"]!.GetValue<int>().Should().Be(1);
+    }
+
+    [Test]
+    public async Task IrMachine_UnhandledCustomGuardBesideAnotherEdge_IsNotPredicted()
+    {
+        var server = new HandServer();
+        using var controller = OpenReview(server);
+        await server.Answer(
+            controller,
+            ServerAnswer.Of(At(1, "Draft", Drafted.DeepClone().AsObject()))
+        );
+
+        controller.CanSend("Approve").Should().BeTrue();
+        _ = controller.SendAsync("Approve");
+        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        sent.ClientResult.Should().BeNull();
+        await Until(controller, v => v.Pending);
+        controller.View.Snapshot!.State.Should().Be("Draft");
+    }
+
+    [Test]
+    public async Task IrMachine_RefusalFromUnhandledCustomGuard_IsSent_AndNothingAfterItIsPredicted()
+    {
+        var server = new HandServer();
+        using var controller = OpenReview(server);
+        await server.Answer(
+            controller,
+            ServerAnswer.Of(At(1, "Draft", Drafted.DeepClone().AsObject()))
+        );
+
+        controller.CanSend("Reject").Should().BeTrue();
+        _ = controller.SendAsync("Reject");
+        _ = controller.SendAsync("Hold");
+        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        sent.Trigger.Should().Be("Reject");
+        sent.ClientResult.Should().BeNull();
+        await Until(controller, v => v.Pending);
+        controller.View.Snapshot!.State.Should().Be("Draft");
+    }
+
+    [Test]
+    public async Task IrMachine_TransitionIntoAStateWithAnUnhandledCustomRequirement_IsNotPredicted()
+    {
+        var server = new HandServer();
+        using var controller = OpenReview(server);
+        await server.Answer(
+            controller,
+            ServerAnswer.Of(At(1, "Draft", Drafted.DeepClone().AsObject()))
+        );
+
+        _ = controller.SendAsync("Close");
+        _ = controller.SendAsync("Hold");
+        var sent = await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait);
+
+        sent.ClientResult.Should().BeNull();
+        await Until(controller, v => v.Pending);
+        controller.View.Snapshot!.State.Should().Be("Draft");
+    }
+
+    private static ServerMachineController OpenReview(HandServer server) =>
+        new(
+            new ServerMachineOptions
+            {
+                Machine = Review,
+                Server = server,
+                Predictor = MachinePredictor.FromIr(Review),
+                Id = "i-1",
+            }
+        );
+
     private static ServerMachineController Open(HandServer server, IMachinePredictor? predictor) =>
         new(
             new ServerMachineOptions

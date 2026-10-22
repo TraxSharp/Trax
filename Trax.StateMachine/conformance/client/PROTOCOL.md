@@ -49,7 +49,8 @@ one.)
 { "id": 1, "opened": true }
 ```
 
-- `ir` is the machine's IR as committed in `../machines/<m>/`, which is the text the C# machine exports, and
+- `ir` is the machine's IR as committed in `../machines/<m>/`, or in `machines/<m>.ir.json` here for a machine only
+  this kit drives (one whose custom rules no client holds a handler for), which is the text the C# machine exports, and
   `irHash` the lowercase hex SHA-256 of that text: the hash a host's documents carry and a generated twin holds. A
   client that predicts with an engine of its own (C#) checks its machine against it.
 - `documents` are the machine's persisted documents as a host's client manifest lists them (`id`, `machine`,
@@ -66,7 +67,11 @@ instance under a fresh request id and subscribes to the id the host answers with
 once the start or the first read has settled, whatever its result.
 
 **`send`** sends one event, after every earlier one has settled. `trigger` is the trigger's name; `input` is its
-input, or absent. **`retry`** resends what last failed under the same request id. Both are answered with what the send
+input, or absent. The client sends its prediction as `clientResult`, except for an event bound to the machine's
+effect or one with an edge out of the state it fires from that rests on a custom rule it holds no handler for (a custom
+guard, a custom reduction, or a custom requirement of the state it enters): it sends those with none, predicts nothing
+after them until they answer, and sends one even when its own engine would refuse it. **`retry`** resends what last
+failed under the same request id. Both are answered with what the send
 came to:
 
 ```json
@@ -135,6 +140,7 @@ documents from it. The steps run in order:
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket. |
 | `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. |
 | `{ "quiet": 50 }` | Waits that many milliseconds; nothing may arrive meanwhile. |
+| `{ "wait": 50 }` | Waits that many milliseconds, so the client has taken every request sent before it; what arrives meanwhile waits for a later step. |
 
 A comparison holds when every member the step gives equals the answer's, canonically; members it does not give are
 not compared. After the last step the runner waits briefly, and anything that arrived that no step took fails the

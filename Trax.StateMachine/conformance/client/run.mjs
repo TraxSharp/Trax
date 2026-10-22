@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonical } from "../kit.mjs";
@@ -12,6 +12,8 @@ const USAGE =
 
 const clientDir = fileURLToPath(new URL(".", import.meta.url));
 const machinesDir = join(clientDir, "..", "machines");
+// Machines only the client kit drives, beside the engine kit's: one IR file each, as the C# machine would export it.
+const clientMachinesDir = join(clientDir, "machines");
 const transcriptsDir = join(clientDir, "transcripts");
 
 // How long a step waits for the client before the transcript fails. Every delay a transcript configures is far
@@ -30,10 +32,13 @@ export const machineField = (id) =>
 
 /**
  * A machine of the kit as a client gets it: its IR as committed, which is the text the C# machine exports, and that
- * text's SHA-256, the hash a host stamps its documents with and a generated twin carries.
+ * text's SHA-256, the hash a host stamps its documents with and a generated twin carries. The client kit's own machines
+ * come first, then the engine kit's.
  */
 export function machineOf(id) {
-  const text = readFileSync(join(machinesDir, id, `${id}.ir.json`), "utf8").replace(/\n+$/, "");
+  const own = join(clientMachinesDir, `${id}.ir.json`);
+  const path = existsSync(own) ? own : join(machinesDir, id, `${id}.ir.json`);
+  const text = readFileSync(path, "utf8").replace(/\n+$/, "");
   const irHash = createHash("sha256").update(text, "utf8").digest("hex");
   return { ir: JSON.parse(text), irHash };
 }
@@ -189,6 +194,8 @@ export async function runTranscript(transcript, host, askTestee) {
         if (Date.now() > deadline) fail(`expected the view to hold ${canonical(step.view)}, it holds ${canonical(got)}`);
         await delay(5);
       }
+    } else if (step.wait !== undefined) {
+      await delay(step.wait);
     } else if (step.quiet !== undefined) {
       await delay(step.quiet);
       const extra = host.leftovers();

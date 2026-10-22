@@ -861,6 +861,19 @@ describe('ServerMachineController', () => {
       expect(controller.get().error?.code).toBe('CLIENT_OUTDATED');
     });
 
+    it('sends an event through a custom reduction with no prediction, and predicts nothing after it', async () => {
+      const { server, controller } = await open({ kind: 'ok', snapshot: serverSnapshot({ state: 'Cart', context: cart }) });
+
+      void controller.send('AddItem', { item: 'pear' });
+      void controller.send('Pay');
+      await flushMicrotasks();
+
+      expect(server.events).toHaveLength(1);
+      expect(server.events[0].request.clientResult).toBeUndefined();
+      expect(controller.get().snapshot).toEqual(priced.snapshotAt('Cart', cart));
+      expect(controller.can('AddItem', { item: 'pear' })).toBe(true);
+    });
+
     it('does not predict a transition into a state whose custom rule it cannot check', async () => {
       const { server, controller } = await open({ kind: 'ok', snapshot: serverSnapshot({ state: 'Cart', context: cart }) });
 

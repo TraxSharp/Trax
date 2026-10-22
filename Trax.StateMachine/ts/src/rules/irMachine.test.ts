@@ -182,3 +182,34 @@ describe("machine built from an IR with an effect edge", () => {
     ).toBe(false);
   });
 });
+
+describe("the edges a machine built from the IR cannot predict", () => {
+  const ir = {
+    id: "review",
+    version: 1,
+    initialState: "Draft",
+    initialContext: {},
+    states: ["Approved", "Closed", "Draft", "Escalated"],
+    triggers: ["Approve", "Close", "Edit", "Touch"],
+    committedStates: [],
+    context: {},
+    inputs: {},
+    invariants: { Closed: { rule: "all", rules: [{ rule: "custom", name: "closable" }] } },
+    transitions: [
+      { from: "Draft", trigger: "Edit", to: "Draft", reduce: { reduce: "custom", name: "count-edit" } },
+      { from: "Draft", trigger: "Approve", to: "Approved", guard: { rule: "any", rules: [{ rule: "custom", name: "is-reviewer" }] } },
+      { from: "Draft", trigger: "Approve", to: "Escalated" },
+      { from: "Draft", trigger: "Close", to: "Closed" },
+      { from: "Draft", trigger: "Touch", to: "Draft", reduce: { reduce: "keep" } },
+    ],
+  } as IrDocument;
+
+  it("names each trigger whose edge rests on a custom rule with no handler", () => {
+    expect(machineFromIr(ir).unpredictable).toEqual({ Draft: ["Edit", "Approve", "Close"] });
+  });
+
+  it("leaves out the ones whose handlers are bound", () => {
+    const bound = machineFromIr(ir, { "is-reviewer": () => true, closable: () => true }, { "count-edit": (c) => c });
+    expect(bound.unpredictable).toEqual({});
+  });
+});

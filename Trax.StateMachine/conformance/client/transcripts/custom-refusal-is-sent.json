@@ -1,0 +1,33 @@
+{
+  "about": "A refusal the client predicts only because it holds no handler for a custom guard is not trusted: the event is sent, and nothing queued after it is predicted until the host answers.",
+  "machine": "review",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "approve": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "close": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "edit": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "hold": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "reject": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "reopen": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "touch": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    {"client": "start"},
+    {"subscribe": {"id": "i-1"}},
+    {"request": "get", "answer": {"id": "i-1", "revision": 1, "state": "Draft", "context": {"edits": 0}}},
+    {"view": {"status": "ready", "state": "Draft"}},
+    {"client": "send", "trigger": "Reject", "as": "reject"},
+    {"client": "send", "trigger": "Hold", "as": "hold"},
+    {"wait": 50},
+    {"view": {"pending": true, "state": "Draft", "context": {"edits": 0}}},
+    {"request": "reject", "variables": {"id": "i-1", "requestId": "r1"}, "answer": {"id": "i-1", "revision": 2, "state": "Rejected", "context": {}}},
+    {"await": "reject", "expect": {"outcome": "confirmed", "state": "Rejected", "revision": 2}},
+    {"request": "hold", "variables": {"id": "i-1", "requestId": "r2"}, "answer": {"problem": {"code": "NO_TRANSITION", "message": "Hold does not fire from Rejected."}}},
+    {"await": "hold", "expect": {"outcome": "refused", "code": "NO_TRANSITION"}},
+    {"view": {"state": "Rejected", "revision": 2, "pending": false, "problem": "NO_TRANSITION"}}
+  ]
+}

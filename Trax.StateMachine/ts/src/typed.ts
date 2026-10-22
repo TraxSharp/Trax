@@ -101,6 +101,17 @@ export class TypedMachine<Spec extends MachineSpec> {
     return this.core.definition.effectTriggers?.includes(trigger) ?? false;
   }
 
+  /**
+   * Whether this machine can tell what `trigger` leads to from `state`: false when an edge it could take rests on a
+   * custom rule it holds no handler for (a guard, a reduction, or the destination's requirement), so a client sends
+   * the event with no prediction and lets the server decide.
+   */
+  predicts(state: StateOf<Spec>, trigger: TriggerOf<Spec>): boolean {
+    const unpredictable = this.core.definition.unpredictable ?? {};
+    if (!Object.prototype.hasOwnProperty.call(unpredictable, state)) return true;
+    return !unpredictable[state].includes(trigger);
+  }
+
   advance<T extends TriggerOf<Spec>>(
     snapshot: TypedSnapshot<Spec>,
     trigger: T,

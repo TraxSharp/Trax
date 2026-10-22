@@ -200,7 +200,8 @@ const transportFailure = (error: unknown): Problem => ({
  *   While one is pending, the view shows the twin's prediction (sent as `clientResult`); the server's answer replaces
  *   it, and a refusal or a transport failure rolls it back to the last snapshot the server confirmed. An event the
  *   twin refuses is still sent, without a prediction: the server decides. An effect-bound event (one whose edge runs
- *   an effect) is sent with no input and no prediction, and nothing queued after it is predicted until it answers.
+ *   an effect) is sent with no input and no prediction, and nothing queued after it is predicted until it answers. So
+ *   is an event with an edge that rests on a custom rule the twin holds no handler for (`TypedMachine.predicts`).
  * - **Ordering.** Every snapshot, pushed or answered, carries its revision. Anything at or below the revision held is
  *   dropped, so a skipped revision is harmless. An answer without one (a store that records none) is taken and cannot
  *   be ordered: the next snapshot, with a revision or without, is taken after it. The controller reads the instance again only after a reconnect, an
@@ -335,6 +336,8 @@ export class ServerMachineController<Spec extends MachineSpec> {
     // An effect-bound trigger's guard reads an input only the server's effect runner has, so its rules on that input
     // count as passing and its rules on the context still decide.
     if (this.machine.isEffectBound(trigger)) return this.couldFireWithoutInput(shown, trigger);
+    // An edge that rests on a custom rule the twin holds no handler for is the server's to judge.
+    if (!this.machine.predicts(shown.state, trigger)) return this.machine.available(shown).includes(trigger);
     return this.machine.can(shown, trigger, ...input);
   }
 
@@ -643,8 +646,9 @@ export class ServerMachineController<Spec extends MachineSpec> {
     this.sending = true;
 
     if (next.request === null) {
-      // An effect-bound event is sent without a prediction: what it leads to depends on the effect's result.
-      const predicted = this.machine.isEffectBound(next.trigger as TriggerOf<Spec>)
+      // An effect-bound event is sent without a prediction: what it leads to depends on the effect's result. So is one
+      // that rests on a custom rule the twin cannot evaluate, rather than a guess the server would refuse.
+      const predicted = !this.predicts(this.confirmed, next.trigger as TriggerOf<Spec>)
         ? null
         : this.machine.advance(
             this.confirmed,
@@ -784,16 +788,23 @@ export class ServerMachineController<Spec extends MachineSpec> {
     };
   }
 
+  // Whether the twin can tell what `trigger` leads to from `from`: not effect-bound, and with no edge that rests on a
+  // custom rule it holds no handler for.
+  private predicts(from: TypedSnapshot<Spec>, trigger: TriggerOf<Spec>): boolean {
+    return !this.machine.isEffectBound(trigger) && this.machine.predicts(from.state, trigger);
+  }
+
   // The confirmed snapshot with every pending event the twin allows applied in order, up to the first effect-bound
-  // one: what the page will show if the server agrees. An event the twin refuses leaves it as it is; the server still
+  // one or one that rests on a custom rule it cannot evaluate: what the page will show if the server agrees. An event the twin refuses leaves it as it is; the server still
   // decides.
   private predicted(): TypedSnapshot<Spec> | null {
     const confirmed = this.confirmed;
     if (!confirmed || this.status === 'stopped') return confirmed;
     let shown: TypedSnapshot<Spec> = confirmed;
     for (const queued of this.queue) {
-      // Nothing is predicted through an effect-bound event, nor past it: what follows depends on the effect.
-      if (this.machine.isEffectBound(queued.trigger as TriggerOf<Spec>)) break;
+      // Nothing is predicted through an effect-bound event, nor past it: what follows depends on the effect. Nor through
+      // one that rests on a custom rule the twin cannot evaluate.
+      if (!this.predicts(shown, queued.trigger as TriggerOf<Spec>)) break;
       const next = this.machine.advance(
         shown,
         queued.trigger as TriggerOf<Spec>,
