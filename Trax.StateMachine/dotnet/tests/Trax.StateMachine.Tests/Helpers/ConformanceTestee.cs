@@ -66,7 +66,14 @@ public sealed class ConformanceTestee(bool fromIr = false)
         var name = request["machine"]!.GetValue<string>();
         if (fromIr)
         {
-            _loaded[name] = Served.Of(new IrMachine((JsonObject)request["ir"]!.DeepClone()));
+            try
+            {
+                _loaded[name] = Served.Of(new IrMachine((JsonObject)request["ir"]!.DeepClone()));
+            }
+            catch (ArgumentException ex)
+            {
+                return new JsonObject { ["error"] = ex.Message };
+            }
             return new JsonObject { ["loaded"] = true };
         }
         if (!Known.TryGetValue(name, out var machine))

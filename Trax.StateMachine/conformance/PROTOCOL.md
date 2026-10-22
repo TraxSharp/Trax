@@ -39,6 +39,12 @@ builds it; one that only has machines compiled in checks that the IR is the one 
 { "id": 1, "error": "the turnstile this engine has exports a different IR" }
 ```
 
+Some loads must be refused: the IRs in `unreadable-ir/cases.json` each name one construct no engine knows (a rule, a
+reduction, a field type, a comparison or a rule source), and a testee that builds machines from an IR answers each with
+`error`. Any `error` passes, since the message is the engine's own; `loaded` fails. A testee that only has compiled
+machines answers `error` because it has no machine of that name, which passes but proves nothing: a compiled machine's
+rules are types in its language and cannot name an unknown construct, so these cases hold the engines that read IRs.
+
 **`advance`**, **`outcome`** and **`timer`** apply a trigger to a snapshot through the entry point that owns it: a
 client's trigger through advance, an invoked train's outcome (`Fetching.done`) through the outcome path, a state's
 timer (`Review.after`) through the timer path. `snapshot` is an object (`machine`, `version`, `state`, `context`);
@@ -89,6 +95,7 @@ string no JSON parser carries (a lone surrogate), as UTF-16 code units: `stringU
 | `machines/<m>/fixtures/rehydrate/*.json` | `rehydrate` |
 | `machines/<m>/wire-handoff.json` | `serialize` |
 | `conformance/strict-input/` | `load`, then one `advance` per case |
+| `conformance/unreadable-ir/cases.json` | one `load` per case, which must be refused |
 | `conformance/canonical-wire.json` | `canonical` |
 
 `machines/turnstile/migration.json` is not sent: it migrates from a v1 to a v2 machine that has no IR, so each engine

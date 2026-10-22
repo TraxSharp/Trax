@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { canonical, kitCases } from "./kit.mjs";
+import { answers, canonical, kitCases } from "./kit.mjs";
 
 const USAGE =
   "Usage: node conformance/run.mjs [--only <prefix>] (--testee <command> [args...] | --stdio)\n" +
@@ -9,7 +9,7 @@ const USAGE =
 
 /**
  * Sends each case's request through `exchange` (request → Promise<answer>) and compares the answer, without its id,
- * with what the case expects. A machine whose load failed fails its remaining cases without sending them. Returns
+ * with what the case expects (`answers` in kit.mjs). A machine whose load failed fails its remaining cases without sending them. Returns
  * the failures, each `{ name, request, expect, got }`; an empty list means the testee passed.
  */
 export async function runCases(cases, exchange) {
@@ -24,7 +24,7 @@ export async function runCases(cases, exchange) {
     id += 1;
     const { id: answered, ...got } = await exchange({ id, ...c.request });
     if (answered !== id) throw new Error(`the testee answered request ${id} with id ${answered}`);
-    if (canonical(got) !== canonical(c.expect)) {
+    if (!answers(got, c.expect)) {
       failures.push({ ...c, got });
       if (c.request.op === "load") unloaded.add(c.request.machine);
     }

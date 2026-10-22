@@ -114,6 +114,23 @@ function strictInputCases() {
   ];
 }
 
+// Each IR names one construct no engine knows; loading it must be refused. The runner passes any `error` answer: the
+// message is the engine's own.
+function unreadableIrCases() {
+  const doc = readJson(join(conformanceDir, "unreadable-ir", "cases.json"));
+  return doc.cases.map((c) => ({
+    name: `unreadable-ir/${c.name}`,
+    request: { op: "load", machine: `unreadable-${c.name}`, ir: c.ir },
+    expect: { refused: true },
+  }));
+}
+
+/** Whether the testee's answer is the one the case expects: any `error` for a refusal, else the same JSON. */
+export function answers(got, expect) {
+  if (expect.refused === true) return typeof got.error === "string" && Object.keys(got).length === 1;
+  return canonical(got) === canonical(expect);
+}
+
 function canonicalWireCases() {
   const doc = readJson(join(conformanceDir, "canonical-wire.json"));
   return doc.cases.map(({ name, wire, ...context }) => ({
@@ -123,11 +140,19 @@ function canonicalWireCases() {
   }));
 }
 
-/** Every case of the kit, in a fixed order: each machine's, then the strict inputs, then the wire vectors. */
+/**
+ * Every case of the kit, in a fixed order: each machine's, then the strict inputs, then the IRs that must be refused,
+ * then the wire vectors.
+ */
 export function kitCases() {
   const machines = readdirSync(machinesDir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && existsSync(join(machinesDir, d.name, `${d.name}.ir.json`)))
     .map((d) => d.name)
     .sort();
-  return [...machines.flatMap(machineCases), ...strictInputCases(), ...canonicalWireCases()];
+  return [
+    ...machines.flatMap(machineCases),
+    ...strictInputCases(),
+    ...unreadableIrCases(),
+    ...canonicalWireCases(),
+  ];
 }

@@ -18,8 +18,10 @@ import {
   type ContextSchema,
   type CustomGuards,
   type CustomReducers,
+  type FieldSchema,
   type Reduction,
   type Rule,
+  type ValueSchema,
 } from "./interpreter";
 
 export interface IrTransition {
@@ -113,6 +115,7 @@ export function machineFromIr(
   customReducers: CustomReducers = {},
 ): MachineDefinition<string, string> {
   requireReadableIrFormat(ir.irFormat);
+  checkIr(ir);
 
   // The machine's actual initial context (what StartsAt built) if the IR carries it, else derived from the
   // initial state's schema. The IR value is authoritative: it reproduces a constrained default (an enum) that
@@ -241,6 +244,85 @@ export function machineFromIr(
 }
 
 const emptyInput: ContextSchema = { fields: [] };
+
+const FIELD_TYPES = new Set(["string", "number", "integer", "boolean", "array", "object"]);
+const COMPARE_OPS = new Set(["gt", "gte", "lt", "lte", "eq"]);
+const RULE_SOURCES = new Set(["context", "input"]);
+const LEAF_RULES = new Set([
+  "present",
+  "absent",
+  "nonEmpty",
+  "ofType",
+  "oneOf",
+  "compare",
+  "count",
+  "length",
+  "boolEquals",
+  "arrayOf",
+]);
+const REDUCTIONS = new Set(["keep", "clear", "reset", "set", "custom"]);
+
+// Refuses an IR that names a rule, a reduction, a field type, a comparison or a rule source this engine does not
+// know, as the C# IrMachine and the Rust engine do when they read it. Interpreting it instead would run a guard that
+// never holds or a reduction that does nothing, and answer differently from the server without saying so.
+function checkIr(ir: IrDocument): void {
+  const fail = (message: string): never => {
+    throw new Error(`This state-machine IR cannot be read: ${message}`);
+  };
+  const fieldType = (type: unknown, where: string): void => {
+    if (typeof type !== "string" || !FIELD_TYPES.has(type))
+      fail(`${where} names an unknown type '${String(type)}'.`);
+  };
+  const rule = (r: Rule, where: string): void => {
+    const raw = r as unknown as Record<string, unknown>;
+    if (r.rule === "all" || r.rule === "any") {
+      for (const inner of r.rules ?? []) rule(inner, where);
+      return;
+    }
+    if (r.rule === "custom") return;
+    if (typeof raw.source !== "string" || !RULE_SOURCES.has(raw.source))
+      fail(`${where} reads an unknown source '${String(raw.source)}'.`);
+    if (!LEAF_RULES.has(raw.rule as string))
+      fail(`${where} is an unknown rule '${String(raw.rule)}'.`);
+    if (r.rule === "ofType" || r.rule === "arrayOf") fieldType(r.type, where);
+    if (r.rule === "compare" || r.rule === "count" || r.rule === "length")
+      if (typeof r.op !== "string" || !COMPARE_OPS.has(r.op))
+        fail(`${where} names an unknown operator '${String(r.op)}'.`);
+  };
+  const reduction = (r: Reduction, where: string): void => {
+    if (!REDUCTIONS.has(r.reduce))
+      fail(`${where} is an unknown reduction '${String(r.reduce)}'.`);
+  };
+  const value = (v: ValueSchema, where: string): void => {
+    fieldType(v.type, where);
+    for (const f of v.fields ?? []) field(f, `${where}.${f.name}`);
+    if (v.values) value(v.values, where);
+    if (v.keys) value(v.keys, where);
+  };
+  const field = (f: FieldSchema, where: string): void => {
+    value(f, where);
+    for (const c of f.constraints ?? []) rule(c, where);
+  };
+  const schema = (s: ContextSchema | undefined, where: string): void => {
+    for (const f of s?.fields ?? []) field(f, `${where}.${f.name}`);
+  };
+
+  for (const [state, s] of Object.entries(ir.context ?? {})) schema(s, `the context of ${state}`);
+  for (const [trigger, s] of Object.entries(ir.inputs ?? {})) schema(s, `the input of ${trigger}`);
+  for (const [state, r] of Object.entries(ir.invariants ?? {})) rule(r, `the requirement of ${state}`);
+  for (const t of ir.transitions ?? []) {
+    const where = `the transition ${t.from} --${t.trigger}--> ${t.to}`;
+    if (t.guard) rule(t.guard, where);
+    if (t.reduce) reduction(t.reduce, where);
+  }
+  for (const [name, o] of Object.entries(ir.outcomes ?? {})) {
+    if (o.outcome === "done") schema(o.output, `the output of ${name}`);
+    for (const e of o.edges ?? []) {
+      if (e.guard) rule(e.guard, `an edge of ${name}`);
+      if (e.reduce) reduction(e.reduce, `an edge of ${name}`);
+    }
+  }
+}
 
 // The handlers `rule` is evaluated with on a snapshot the server sent: the bound ones, and a passing one for every
 // custom rule it names that has none.
