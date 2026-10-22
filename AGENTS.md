@@ -40,9 +40,9 @@ published from releases, not from `main` (`Trax.Docs/adr/0043`).
 ```
 Trax.Core/              Core utilities, the chain, the guard engines (Trax.Core.Testing)
 Trax.Effect/            Effect system, data providers, the tables the state machines are stored in
-Trax.StateMachine/      The state machines, by language: dotnet/ (Trax.StateMachine*), ts/
-                        (@traxsharp/state-machine), rust/ (the core the bindings build on) and
-                        the conformance/ kit all of them are held to
+Trax.StateMachine/      The state machines, by language, each an engine and a client: dotnet/
+                        (Trax.StateMachine*), ts/ (@traxsharp/state-machine), rust/ (the core
+                        the bindings build on), and the conformance/ kits all of them are held to
 Trax.Mediator/          Mediator pattern, train bus, train authorization
 Trax.Scheduler/         Job scheduling, manifests, remote runners
 Trax.Api/               GraphQL API layer, and the React operations console it ships (Trax.Docs/adr/0055)
@@ -97,7 +97,7 @@ title, the body below it. A security change or an open hotspot uses GitHub's `> 
 | 🟨 | Data (`data`) | `Trax.Effect.Data.*` (Postgres, Sqlite, InMemory), migrations, SQL, the run-record tables |
 | 🟫 | Plumbing (`plumbing`) | Effect providers, junction providers, broadcasters (RabbitMQ, SignalR), lifecycle hooks |
 | 🟩 | Trains (`trains`) | `Train` (Core), `ServiceTrain` (Effect), junctions, chains, Memory, decisions, `Parallel` |
-| 🟪 | Machines (`machines`) | `Trax.StateMachine/`: the C# engine (`Trax.StateMachine*`), `@traxsharp/state-machine`, its TypeScript twin, and the conformance kit |
+| 🟪 | Machines (`machines`) | `Trax.StateMachine/`: the engines in C# (`Trax.StateMachine*`, `IrMachine` among them), TypeScript (`@traxsharp/state-machine`) and Rust, their clients (`Trax.StateMachine.Client`, the TypeScript client, `trax-state-machine-client`), and the conformance kits that hold the three engines and the three clients to the same answers |
 | 🟧 | Dispatch (`dispatch`) | Mediator (train bus, authorization), Scheduler (jobs, manifests, recovery), remote runners, Lambda |
 | 🟦 | Surface (`surface`) | Api (GraphQL, auth, persisted operations, generated clients, the React operations console) |
 | ⬛ | Tooling (`tooling`) | CLI, analyzers, architecture and ADR guards, CI, release, docs |
@@ -180,8 +180,11 @@ folders it runs for and its paths, and the folder's row leaves its tests out wit
 (the console's browser tests, `console-browser`, are one). Trax.StateMachine has no folder job:
 its C# solution, its TypeScript engine, its Rust engine and the checks that span them are four
 suites (`state-machine-dotnet`, `state-machine-ts`, `state-machine-rust`,
-`state-machine-conformance`), each with its own paths, so a change to one language does not
-rebuild the others and none of them reruns Trax.Effect. **`CI result` is the one required check.**
+`state-machine-conformance`), each with its own paths. The three language suites run only for
+their own language and `conformance/`, but `state-machine-conformance` runs for anything in the
+folder, and the change detector selects the folder and everything downstream of it for any change
+there, so even a `rust/`-only change runs the C# conformance tests and the Mediator, Scheduler, Api,
+Cli, Samples and Docs jobs. None of them reruns Trax.Effect. **`CI result` is the one required check.**
 
 ## Releases
 
