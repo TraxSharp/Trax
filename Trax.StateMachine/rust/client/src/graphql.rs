@@ -69,6 +69,9 @@ pub struct GraphQLMachineServerOptions {
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
     /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
     pub connect_timeout: Duration,
+    /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
+    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default.
+    pub request_timeout: Duration,
     /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
     /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
     /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default.
@@ -96,6 +99,7 @@ impl GraphQLMachineServerOptions {
             connection_params: None,
             resubscribe_delays: None,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            request_timeout: DEFAULT_REQUEST_TIMEOUT,
             max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
             allow_insecure_transport: false,
         }
@@ -109,6 +113,9 @@ pub const DEFAULT_MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 
 /// How long a socket may take to connect and be acknowledged before the attempt counts as failed, by default.
 pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long one request may take before it fails, by default.
+pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The default delays before subscribing again after a stream ended without a reason.
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
@@ -151,6 +158,7 @@ struct Inner {
     connection_params: Option<ConnectionParams>,
     resubscribe_delays: Vec<Duration>,
     connect_timeout: Duration,
+    request_timeout: Duration,
     max_message_size: usize,
 }
 
@@ -207,6 +215,7 @@ impl GraphQLMachineServer {
                 connection_params: options.connection_params,
                 resubscribe_delays: delays,
                 connect_timeout: options.connect_timeout,
+                request_timeout: options.request_timeout,
                 max_message_size: options.max_message_size,
             }),
         })
@@ -269,32 +278,42 @@ impl Inner {
         if let Some(headers) = &self.headers {
             request = request.headers(headers().await?);
         }
-        let mut response = request
-            .body(Value::Object(body).to_json())
-            .send()
-            .await
-            .map_err(transport_error)?;
-        let status = response.status();
-        // Read up to the limit, whether or not the host said the length up front.
-        let too_large = || {
-            TransportError(format!(
-                "The server answered with a body larger than {} bytes.",
-                self.max_message_size
-            ))
-        };
-        if response
-            .content_length()
-            .is_some_and(|n| n > self.max_message_size as u64)
-        {
-            return Err(too_large());
-        }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(transport_error)? {
-            if bytes.len() + chunk.len() > self.max_message_size {
+        let request = request.body(Value::Object(body).to_json());
+        // The whole exchange, sending and reading the answer, within the request timeout: a host that never answers
+        // fails the request rather than holding it forever.
+        let exchange = async {
+            let mut response = request.send().await.map_err(transport_error)?;
+            let status = response.status();
+            // Read up to the limit, whether or not the host said the length up front.
+            let too_large = || {
+                TransportError(format!(
+                    "The server answered with a body larger than {} bytes.",
+                    self.max_message_size
+                ))
+            };
+            if response
+                .content_length()
+                .is_some_and(|n| n > self.max_message_size as u64)
+            {
                 return Err(too_large());
             }
-            bytes.extend_from_slice(&chunk);
-        }
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(transport_error)? {
+                if bytes.len() + chunk.len() > self.max_message_size {
+                    return Err(too_large());
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok::<_, TransportError>((status, bytes))
+        };
+        let (status, bytes) = tokio::time::timeout(self.request_timeout, exchange)
+            .await
+            .map_err(|_| {
+                TransportError(format!(
+                    "The server did not answer within {} ms.",
+                    self.request_timeout.as_millis()
+                ))
+            })??;
         let text = String::from_utf8_lossy(&bytes);
         let answered = Value::parse(&text).ok();
 
@@ -1072,6 +1091,56 @@ mod tests {
         let again = tokio::time::timeout(wait, heard.recv()).await;
 
         assert!(again.is_ok(), "the stream outlived a message over the limit");
+    }
+
+    // A host on a loopback port that reads each request and never finishes answering it: with `send_head`, it sends
+    // the status line and headers of a long body and then nothing more.
+    async fn stalled_host(send_head: bool) -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let (mut tcp, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut buffer = [0u8; 4096];
+                    let _ = tcp.read(&mut buffer).await;
+                    if send_head {
+                        let _ = tcp.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 1000\r\n\r\n{").await;
+                    }
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    drop(tcp);
+                });
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn a_request_the_host_never_answers_fails_after_the_request_timeout() {
+        for send_head in [false, true] {
+            let port = stalled_host(send_head).await;
+            let mut given = with_get(options(
+                &format!("http://127.0.0.1:{port}/graphql"),
+                &format!("ws://127.0.0.1:{port}/graphql"),
+            ));
+            given.request_timeout = Duration::from_millis(200);
+            let server = GraphQLMachineServer::new(given).unwrap();
+
+            let answered = tokio::time::timeout(Duration::from_secs(10), server.get("i-1".into())).await;
+
+            let Ok(Err(error)) = answered else {
+                panic!("the request was not given up (head sent: {send_head})");
+            };
+            assert!(error.0.contains("did not answer within 200 ms"), "{}", error.0);
+        }
+    }
+
+    #[test]
+    fn the_request_timeout_is_thirty_seconds_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.request_timeout, Duration::from_secs(30));
     }
 
     #[test]
