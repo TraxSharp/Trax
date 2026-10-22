@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { createClient } from "graphql-ws";
 import { bundleModule } from "../lib/engine-loader.mjs";
@@ -128,14 +127,21 @@ async function main() {
     process.exit(/Could not load esbuild/.test(err.message) ? MISSING_DEPENDENCIES : 1);
   }
   const handle = createClientTestee(engine);
-  const lines = createInterface({ input: process.stdin });
-  for await (const line of lines) {
-    const request = JSON.parse(line);
-    // Each request is answered when it settles, not in order: a send waits on the host while the runner goes on.
-    void handle(request).then((answer) => {
-      process.stdout.write(`${JSON.stringify(answer)}\n`);
-      if (request.op === "end") process.exit(0);
-    });
+  // Lines end at "\n" only: readline would also end one at U+2028 or U+2029, which JSON writes raw inside a string.
+  let rest = "";
+  process.stdin.setEncoding("utf8");
+  for await (const chunk of process.stdin) {
+    const lines = (rest + chunk).split("\n");
+    rest = lines.pop();
+    for (const line of lines) {
+      if (line.trim() === "") continue;
+      const request = JSON.parse(line);
+      // Each request is answered when it settles, not in order: a send waits on the host while the runner goes on.
+      void handle(request).then((answer) => {
+        process.stdout.write(`${JSON.stringify(answer)}\n`);
+        if (request.op === "end") process.exit(0);
+      });
+    }
   }
 }
 

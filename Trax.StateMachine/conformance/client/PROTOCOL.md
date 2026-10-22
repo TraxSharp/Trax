@@ -22,17 +22,23 @@ node conformance/client/run.mjs --stdio                                         
 `--stdio` reverses the pipes as the engine runner's does: the runner writes requests on its stdout and reads answers on
 its stdin, so a test in another language (the C# `ClientConformanceTests`) starts the runner and answers in process. The Rust
 client's testee is a binary, `rust/client/src/bin/client_testee.rs`, which the runner spawns.
-The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed. `--only <prefix>`
-runs the transcripts whose name starts with the prefix. The runner and the host use node's own modules only.
+The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed or the testee's
+answer to `end` was an `error`, and 2 on a usage error, a `--only <prefix>` that selects no transcript, or anything
+else it could not run. `--only <prefix>` runs the transcripts whose name starts with the prefix. The TypeScript
+client's testee exits 3 when esbuild, which it bundles the client with, is not installed. The runner and the host use
+node's own modules only.
 
 ## The protocol
 
-One JSON object per line, UTF-8, both ways. Every request has an `id` and an `op`, and its answer carries the same
+One JSON object per line, UTF-8, both ways. A line ends at `\n` only: JSON writes U+2028 and U+2029 raw inside a
+string, so a reader that also ends a line there splits an answer. Every request has an `id` and an `op`, and its answer carries the same
 `id`. Unlike the engine kit, **answers come when they settle, not in order**: a `send` is answered once the host
 answers it, and the runner goes on sending requests meanwhile. A testee hands each request to its client in the order
 it arrives, so two sends reach the client in the order the runner sent them. A testee answers an `op` it does not implement with
 `{ "id", "unsupported": true }`, and anything that went wrong outside the client (a throw it caught) with
-`{ "id", "error": "..." }`. Either fails the transcript.
+`{ "id", "error": "..." }`. Either fails the transcript, whichever request it answers: one a step compares, one no
+step looks at, and `dispose`. (A `view`'s `error` is the code that stopped the client, beside its `status`; it is not
+one.)
 
 **`open`** builds a client for one instance and holds it until the next `open`, `dispose` or `end`. It sends nothing.
 
