@@ -327,7 +327,7 @@ public class MachineGenerateFromPackedToolTests
         globalThis.fetch = ((_url: string, init: { body: string; headers: Record<string, string> }) =>
           new Promise((resolve) => {
             const { id, variables } = JSON.parse(init.body);
-            requests.push({ id, variables, headers: init.headers, answer: (data) => resolve({ json: async () => ({ data }) } as Response) });
+            requests.push({ id, variables, headers: init.headers, answer: (data) => resolve({ ok: true, status: 200, json: async () => ({ data }) } as Response) });
           })) as unknown as typeof fetch;
 
         const signIn = (key: string, user = key) =>
