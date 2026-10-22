@@ -1,6 +1,6 @@
 ---
 name: trax
-description: Use before writing or changing code in a .NET app that references Trax packages (Trax.Core, Trax.Effect, Trax.Mediator, Trax.Scheduler, Trax.Api, Trax.StateMachine) or the @traxsharp/state-machine npm package. Says what Trax is, which packages and template to use, the rules that hold everywhere, how to check these skills match the installed release, and which Trax skill to load for the task.
+description: Use before writing or changing code in a .NET app that references Trax packages (Trax.Core, Trax.Effect, Trax.Mediator, Trax.Scheduler, Trax.Api, Trax.StateMachine, Trax.StateMachine.Client) or the @traxsharp/state-machine npm package. Says what Trax is, which packages and template to use, the rules that hold everywhere, how to check these skills match the installed release, and which Trax skill to load for the task.
 metadata:
   internal: true
 ---
@@ -66,7 +66,7 @@ Pick the highest layer you need, then one data provider. Each package brings the
 | Schedules, a work queue, retries, dead letters | add `Trax.Scheduler` |
 | A GraphQL API over the trains | add `Trax.Api.GraphQL` and an auth package (`Trax.Api.Auth.ApiKey`, `.Jwt`, `.Oidc`) |
 | The operations console | add `Trax.Api.Dashboard` |
-| State machines | `Trax.StateMachine.Persistence` (server), `@traxsharp/state-machine` (TypeScript client) |
+| State machines | `Trax.StateMachine.Persistence` (server), `@traxsharp/state-machine` (TypeScript client), `Trax.StateMachine.Client` (.NET client) |
 
 ## Before writing code
 
