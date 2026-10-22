@@ -11,6 +11,7 @@ of its own:
 | --- | --- | --- |
 | [dotnet](dotnet) | The C# engine, its persistence, its test helpers and its client | `Trax.StateMachine`, `Trax.StateMachine.Persistence`, `Trax.StateMachine.Testing`, `Trax.StateMachine.Client` on NuGet |
 | [ts](ts) | The TypeScript engine, and the client a page drives a served machine through | `@traxsharp/state-machine` on npm |
+| [rust](rust) | The engine in Rust, which the other languages' bindings are built on | not published yet |
 | [conformance](conformance) | The cases every engine must answer the same way, and the runner that sends them | not published |
 
 Docs are at [traxsharp.net/docs/statemachine](https://traxsharp.net/docs/statemachine).

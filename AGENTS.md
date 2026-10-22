@@ -41,7 +41,8 @@ published from releases, not from `main` (`Trax.Docs/adr/0043`).
 Trax.Core/              Core utilities, the chain, the guard engines (Trax.Core.Testing)
 Trax.Effect/            Effect system, data providers, the tables the state machines are stored in
 Trax.StateMachine/      The state machines, by language: dotnet/ (Trax.StateMachine*), ts/
-                        (@traxsharp/state-machine) and the conformance/ kit both are held to
+                        (@traxsharp/state-machine), rust/ (the core the bindings build on) and
+                        the conformance/ kit all of them are held to
 Trax.Mediator/          Mediator pattern, train bus, train authorization
 Trax.Scheduler/         Job scheduling, manifests, remote runners
 Trax.Api/               GraphQL API layer, and the React operations console it ships (Trax.Docs/adr/0055)
@@ -177,10 +178,10 @@ and databases its entry in `.github/ci/packages.json` names. A slow test project
 out of its folder's job into one of its own, beside it: a `suites` entry there names it, the
 folders it runs for and its paths, and the folder's row leaves its tests out with a `--filter`
 (the console's browser tests, `console-browser`, are one). Trax.StateMachine has no folder job:
-its C# solution, its TypeScript engine and the checks that span both are three suites
-(`state-machine-dotnet`, `state-machine-ts`, `state-machine-conformance`), each with its own
-paths, so a change to one language does not rebuild the other and none of them reruns
-Trax.Effect. **`CI result` is the one required check.**
+its C# solution, its TypeScript engine, its Rust engine and the checks that span them are four
+suites (`state-machine-dotnet`, `state-machine-ts`, `state-machine-rust`,
+`state-machine-conformance`), each with its own paths, so a change to one language does not
+rebuild the others and none of them reruns Trax.Effect. **`CI result` is the one required check.**
 
 ## Releases
 
