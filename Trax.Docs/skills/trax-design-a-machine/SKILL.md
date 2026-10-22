@@ -31,8 +31,12 @@ the builder refuses, found after the states were drawn. Read the rules below bef
    ([Author and serve a machine](https://traxsharp.net/docs/statemachine/authoring)).
 3. **Does a state run work.** A state that invokes a train needs Postgres or SQLite (not InMemory),
    `AddJunctionProgress()`, `AddMediator(...)`, and a scheduler on this host or one sharing the database. Without a
-   scheduler the run stays queued and no outcome arrives; the host does not check. The `trax-hub` template has all
-   of it; `trax-api` has none.
+   scheduler the run stays queued and no outcome arrives; the host does not check. Neither template is ready as
+   generated. Start from `trax-hub`, which has the mediator, the scheduler and `AddJunctionProgress()`; add
+   `Trax.StateMachine.Persistence` and `AddStateMachines(...)` before `AddMediator(...)`, and swap `UseInMemory()`
+   for `UsePostgres(...)` or `UseSqlite(...)` (`Trax.Effect.Data.Postgres` or `.Sqlite`). The host refuses to start
+   a machine that invokes trains on InMemory. `trax-api` has the mediator but no scheduler and no junction progress,
+   so it needs those too ([Invoke a train from a state](https://traxsharp.net/docs/statemachine/invoking-trains)).
 4. **One irreversible effect, or trains.** `RunsOnce<TEffect>()` binds the machine's one exactly-once effect (a
    charge) to one edge. Work with several stages is invoked trains.
 
@@ -233,9 +237,16 @@ to `OnFailed`. [Invoke a train from a state](https://traxsharp.net/docs/statemac
 ## Where the files go
 
 `Machines/<Name>/` beside the trains: the machine, its state and trigger enums and its context at the top, every
-input and context part in `Models/`. `trax machine generate --assembly <dll> --ir-out machines/<id> --corpus-out
-machines/<id>` writes the IR and the differential corpus under `machines/<id>/` at the solution root; commit them,
-embed the corpus, and run `trax machine check` with the same arguments in CI. The frontend's twin comes from
+input and context part in `Models/`. Each machine's IR and differential corpus go under `machines/<id>/` at the
+solution root, written one machine per run:
+
+```bash
+trax machine generate --assembly <dll> --machine <Namespace.RunMachine> --ir-out machines/run --corpus-out machines/run
+```
+
+`--machine` takes the machine's full type name. It may be left out only while the assembly holds one machine; with
+two or more the command names them and exits 1. Commit what it writes, embed the corpus, and run `trax machine
+check` with the same arguments in CI, once per machine. The frontend's twin comes from
 `trax client` (`trax-generate-a-client`).
 [Organize machines in a project](https://traxsharp.net/docs/statemachine/organize-machines) has the tree.
 
