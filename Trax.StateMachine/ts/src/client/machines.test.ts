@@ -12,7 +12,7 @@ const recording = (...bodies: unknown[]) => {
   const sent: Record<string, unknown>[] = [];
   const fetch = (async (_url: string, init: { body: string }) => {
     sent.push(JSON.parse(init.body) as Record<string, unknown>);
-    return { json: async () => bodies.shift() };
+    return { ok: true, status: 200, statusText: 'OK', json: async () => bodies.shift() };
   }) as unknown as typeof globalThis.fetch;
   return { sent, fetch };
 };
@@ -173,6 +173,33 @@ describe('createMachineExecutor with persisted documents', () => {
 
     expect(await session.load()).toEqual({ ok: false, code: 'CLIENT_OUTDATED', message: 'Reload.' });
     expect(await session.load()).toEqual({ ok: false, code: 'SERVER_OUTDATED', message: 'Retry.' });
+  });
+
+  it('throws on a status that is not 2xx, whatever answer its body carries', async () => {
+    const body = answer('get', { id: 'draft-1', revision: 2, state: 'Cart', context: { items: [] }, problem: null });
+    const fetch = (async () => ({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => body,
+    })) as unknown as typeof globalThis.fetch;
+    const session = createDraftSession({ executor: persisted(fetch), machine: checkout, id: 'draft-1' });
+
+    const loaded = await session.load();
+
+    expect(loaded.ok).toBe(false);
+  });
+
+  it('answers client-outdated on any status, as the host may choose one', async () => {
+    const fetch = (async () => ({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      json: async () => ({ errors: [{ message: 'Reload.', extensions: { code: 'CLIENT_OUTDATED' } }] }),
+    })) as unknown as typeof globalThis.fetch;
+    const session = createDraftSession({ executor: persisted(fetch), machine: checkout, id: 'draft-1' });
+
+    expect(await session.load()).toEqual({ ok: false, code: 'CLIENT_OUTDATED', message: 'Reload.' });
   });
 
   it('answers an operation it has no document for as client-outdated, without asking the server', async () => {

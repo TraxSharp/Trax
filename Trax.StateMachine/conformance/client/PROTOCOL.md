@@ -127,7 +127,7 @@ documents from it. The steps run in order:
 | --- | --- |
 | `{ "client": "<op>", ...args }` | Sends the request. With `"expect"`, waits for its answer and compares; with `"as": "<name>"`, goes on and a later `await` compares; with neither, goes on, and the answer must still come before the transcript ends. |
 | `{ "await": "<name>", "expect": { ... } }` | Waits for the answer sent under that name and compares. |
-| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503`, or `"drop": true` (the connection is closed with no answer). |
+| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), or `"drop": true` (the connection is closed with no answer). |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
 | `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket. |

@@ -175,16 +175,28 @@ export function createMachineExecutor(
       headers: { 'Content-Type': 'application/json', ...options.headers?.() },
       body: JSON.stringify(body),
     });
-    const answered = (await response.json()) as {
+    type Body = {
       data?: { machines?: Record<string, Record<string, unknown>> } | null;
       errors?: { message: string; extensions?: { code?: string } }[];
     };
-    const error = answered.errors?.[0];
+    let answered: Body | null;
+    try {
+      answered = (await response.json()) as Body;
+    } catch (error) {
+      if (response.ok) throw error;
+      answered = null;
+    }
+    // A GraphQL error with a code is the host's to answer with whatever status it chose; anything else not 2xx failed,
+    // whatever its body holds.
+    const error = answered?.errors?.[0];
     if (error) {
       const code = error.extensions?.code;
       if (isOutdated(code)) return { refused: problem(code, error.message) };
       throw new Error(error.message);
     }
+    if (!response.ok)
+      throw new Error(`The server answered ${[response.status, response.statusText].filter(Boolean).join(' ')}.`);
+    if (answered === null || typeof answered !== 'object') throw new Error("The server's answer is not JSON.");
     return { answer: Object.values(answered.data?.machines ?? {})[0]?.[name] as TypedAnswer | null | undefined };
   };
 
