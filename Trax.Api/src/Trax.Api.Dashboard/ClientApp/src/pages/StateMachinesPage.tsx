@@ -1,19 +1,10 @@
 import { Link } from "react-router-dom";
-import { useQuery } from "urql";
-import { MACHINES, MACHINE_INSTANCE_STUCK_COUNTS } from "../graphql/queries";
 import { machinePath } from "../lib/machineInstances";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
-import type { MachineDefinition, MachineInstanceStuckCount } from "../types";
 import { TermHelp } from "../components/TermHelp";
-
-interface MachinesData {
-  operations: { machines: MachineDefinition[] };
-}
-
-interface CountsData {
-  operations: { machineInstanceCounts: MachineInstanceStuckCount[] };
-}
+import { useTraxQuery } from "../lib/consoleClient";
+import { machineInstanceStuckCountsDocument, machinesDocument } from "../trax/index.g";
 
 const DOCS = "https://traxsharp.net/docs/statemachine";
 
@@ -21,10 +12,10 @@ const DOCS = "https://traxsharp.net/docs/statemachine";
 // how many instances it has and how many of them are stuck (operations.machineInstanceCounts). A
 // machine's page holds its diagram and its instances.
 export function StateMachinesPage() {
-  const [machines] = useQuery<MachinesData>({ query: MACHINES });
-  const [counts, reexecuteCounts] = useQuery<CountsData>({ query: MACHINE_INSTANCE_STUCK_COUNTS, variables: {} });
+  const [machines] = useTraxQuery(machinesDocument);
+  const [counts, reexecuteCounts] = useTraxQuery(machineInstanceStuckCountsDocument, { variables: {} });
   // The definitions do not change while a host runs; the counts move with every instance.
-  const refetch = () => reexecuteCounts({ requestPolicy: "network-only" });
+  const refetch = () => reexecuteCounts();
   usePoll(refetch);
   useRefetchOnChange(["EXECUTION", "WORK_QUEUE"], refetch);
 

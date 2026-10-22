@@ -1,0 +1,18 @@
+# The bulk operations this node knows, newest first; each read on the node that started it.
+query BulkOperations {
+  operations {
+    bulkOperations {
+      id
+      kind
+      status
+      actor
+      askAfresh
+      startedAt
+      finishedAt
+      total
+      done
+      failed
+      message
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# Manifest group controls: trigger/cancel every manifest in the group, and patch its settings.
+mutation TriggerGroup($groupId: Long!) {
+  operations {
+    triggerGroup(groupId: $groupId) {
+      success
+      count
+      message
+    }
+  }
+}

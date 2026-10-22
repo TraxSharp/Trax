@@ -1,0 +1,11 @@
+# Re-queue a run with its saved input. askAfresh: the new run asks the model afresh instead of
+# replaying this run's decisions. id is the new work queue entry.
+mutation RequeueExecution($id: Long!, $askAfresh: Boolean! = false) {
+  operations {
+    requeueExecution(id: $id, askAfresh: $askAfresh) {
+      success
+      message
+      id
+    }
+  }
+}

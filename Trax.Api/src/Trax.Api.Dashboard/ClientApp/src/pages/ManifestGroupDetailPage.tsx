@@ -1,56 +1,35 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import {
-  EXECUTIONS,
-  MANIFEST_GROUP_DETAIL,
-  MANIFEST_GROUP_STATS,
-  MANIFESTS,
-} from "../graphql/queries";
-import {
-  CANCEL_GROUP,
-  TRIGGER_GROUP,
-  UPDATE_MANIFEST_GROUP,
-} from "../graphql/mutations";
 import { StateBadge } from "../components/StateBadge";
 import { Graph } from "../components/Graph";
 import { GROUP_GRAPH_LEGEND, groupGraph } from "../lib/groupGraph";
 import { RunSparkline } from "../components/schedules";
 import { useGroupGraphStatus } from "../lib/schedules";
 import { usePoll } from "../lib/poll";
-import type {
-  ExecutionSummary,
-  ManifestGroupDependencyGraph,
-  ManifestGroupStats,
-  ManifestGroupSummary,
-  ManifestSummary,
-  PagedResult,
-} from "../types";
+import type { ManifestGroupDependencyGraph, ManifestGroupSummary } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { toast } from "../lib/toast";
-
-interface DetailData {
-  operations: {
-    manifestGroups: {
-      group: ManifestGroupSummary | null;
-      graph: ManifestGroupDependencyGraph | null;
-    };
-  };
-}
+import { useTraxMutation, useTraxQuery, type OperationResult } from "../lib/consoleClient";
+import {
+  cancelGroupDocument,
+  executionsDocument,
+  manifestGroupDetailDocument,
+  manifestGroupStatsDocument,
+  manifestsDocument,
+  triggerGroupDocument,
+  updateManifestGroupDocument,
+} from "../trax/index.g";
 
 export function ManifestGroupDetailPage() {
   const id = Number(useParams().id);
-  const [result, reexecute] = useQuery<DetailData>({
-    query: MANIFEST_GROUP_DETAIL,
-    variables: { id },
-  });
-  const [, update] = useMutation(UPDATE_MANIFEST_GROUP);
-  const [, triggerGroup] = useMutation(TRIGGER_GROUP);
-  const [, cancelGroup] = useMutation(CANCEL_GROUP);
+  const [result, reexecute] = useTraxQuery(manifestGroupDetailDocument, { variables: { id } });
+  const [, update] = useTraxMutation(updateManifestGroupDocument);
+  const [, triggerGroup] = useTraxMutation(triggerGroupDocument);
+  const [, cancelGroup] = useTraxMutation(cancelGroupDocument);
 
   const group = result.data?.operations?.manifestGroups?.group;
   const graph = result.data?.operations?.manifestGroups?.graph;
-  const refetch = () => reexecute({ requestPolicy: "network-only" });
+  const refetch = () => reexecute();
 
   if (result.error) return <ErrorBox message={result.error.message} />;
   if (!group) return <p className="text-muted">Loading…</p>;
@@ -64,7 +43,9 @@ export function ManifestGroupDetailPage() {
     refetch();
   }
   async function act(
-    fn: typeof triggerGroup,
+    fn: (variables: { groupId: number }) => Promise<
+      OperationResult<{ operations: Record<string, { success: boolean; message: string | null }> | null }>
+    >,
     field: "triggerGroup" | "cancelGroup",
     request: { title: string; message: string; danger?: boolean },
   ) {
@@ -127,9 +108,7 @@ export function ManifestGroupDetailPage() {
 
 // ── Group summary cards ─────────────────────────────────────────────────────
 function GroupStatCards({ groupId }: { groupId: number }) {
-  const [{ data }] = useQuery<{
-    operations: { manifestGroups: { stats: ManifestGroupStats[] } };
-  }>({ query: MANIFEST_GROUP_STATS, variables: { groupIds: [groupId] } });
+  const [{ data }] = useTraxQuery(manifestGroupStatsDocument, { variables: { groupIds: [groupId] } });
   const s = data?.operations?.manifestGroups?.stats?.[0];
   if (!s) return null;
   return (
@@ -156,10 +135,7 @@ function GroupStatCard({ label, value, tone }: { label: string; value: number; t
 
 // ── Manifests in the group ──────────────────────────────────────────────────
 function GroupManifests({ groupId }: { groupId: number }) {
-  const [{ data }] = useQuery<{ operations: { manifests: PagedResult<ManifestSummary> } }>({
-    query: MANIFESTS,
-    variables: { take: 25, manifestGroupId: groupId },
-  });
+  const [{ data }] = useTraxQuery(manifestsDocument, { variables: { take: 25, manifestGroupId: groupId } });
   const items = data?.operations?.manifests?.items ?? [];
   return (
     <div className="mt-6 bg-surface rounded-lg border border-line p-5">
@@ -195,10 +171,7 @@ function GroupManifests({ groupId }: { groupId: number }) {
 
 // ── Recent runs across the group ──────────────────────────────────────
 function GroupExecutions({ groupId }: { groupId: number }) {
-  const [{ data }] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
-    query: EXECUTIONS,
-    variables: { take: 10, manifestGroupId: groupId },
-  });
+  const [{ data }] = useTraxQuery(executionsDocument, { variables: { take: 10, manifestGroupId: groupId } });
   const items = data?.operations?.executions?.items ?? [];
   return (
     <div className="mt-6 bg-surface rounded-lg border border-line p-5">

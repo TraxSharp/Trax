@@ -1,0 +1,29 @@
+# What says an instance needs attention: its timer's due time and whether it is overdue, the run
+# it waits on and where that run is, and whether it is stuck (overdue, or waiting on a run that
+# failed or was cancelled). inStateSince is when the instance last changed until a transition log
+# exists: label it "last changed". stuck: true lists only the stuck ones.
+query MachineInstancesAttention($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $stuck: Boolean, $skip: Int!, $take: Int!) {
+  operations {
+    machineInstances(machine: $machine, state: $state, ownerKind: $ownerKind, stuck: $stuck, skip: $skip, take: $take) {
+      items {
+        machine
+        ownerKind
+        id
+        rowId
+        state
+        updatedAt
+        inStateSince
+        dueAt
+        overdue
+        stuck
+        waitingOn {
+          executionId
+          trainState
+          workQueueEntryId
+        }
+      }
+      totalCount
+      isCountCapped
+    }
+  }
+}

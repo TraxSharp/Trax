@@ -1,6 +1,6 @@
-import { useQuery } from "urql";
-import { TRAINS_ASKING_DECISIONS } from "../graphql/queries";
 import { useAnswers } from "./answerable";
+import { useTraxQuery } from "./consoleClient";
+import { trainsAskingDecisionsDocument } from "../trax/index.g";
 
 // Ask afresh and replay-on-retry mean something only for a train that asks a decider (api/0043):
 // for every other train they are noise. The console offers them where operations.trains says the
@@ -10,10 +10,7 @@ import { useAnswers } from "./answerable";
 /** Whether each train the host registers asks a decider, by full name; null until the host has said. */
 export function useTrainsAskingDecisions(): ReadonlyMap<string, boolean> | null {
   const answerable = useAnswers("TrainsAskingDecisions");
-  const [{ data }] = useQuery<{ operations: { trains: { fullName: string; asksDecisions: boolean }[] } | null }>({
-    query: TRAINS_ASKING_DECISIONS,
-    pause: !answerable,
-  });
+  const [{ data }] = useTraxQuery(trainsAskingDecisionsDocument, { pause: !answerable });
   const trains = data?.operations?.trains;
   return trains ? new Map(trains.map((t) => [t.fullName, t.asksDecisions])) : null;
 }

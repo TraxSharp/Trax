@@ -1,0 +1,20 @@
+# Host processes from their heartbeat rows, online when beaten in the last 45 seconds. Backs the
+# Hosts page.
+query Hosts {
+  operations {
+    hosts {
+      instanceId
+      name
+      environment
+      traxVersion
+      startedAt
+      lastHeartbeat
+      online
+      runsDispatcher
+      runsManifestManager
+      workerSlots
+      workerSlotsInUse
+      currentlyRunning
+    }
+  }
+}

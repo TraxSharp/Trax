@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useMutation } from "urql";
-import { UPDATE_MANIFEST } from "../graphql/mutations";
 import { Modal } from "./Modal";
 import { Spinner } from "./Spinner";
 import { toast } from "../lib/toast";
 import { enumLabel } from "../lib/format";
 import type { ManifestSummary, ScheduleType } from "../types";
+import { useTraxMutation } from "../lib/consoleClient";
+import { updateManifestDocument } from "../trax/index.g";
 
 const SCHEDULE_TYPES: ScheduleType[] = [
   "NONE",
@@ -36,7 +36,7 @@ export function ManifestEditForm({
   const [timeout, setTimeout] = useState(
     manifest.timeoutSeconds != null ? String(manifest.timeoutSeconds) : "",
   );
-  const [{ fetching }, update] = useMutation(UPDATE_MANIFEST);
+  const [{ fetching }, update] = useTraxMutation(updateManifestDocument);
 
   async function onSubmit() {
     const timeoutTrimmed = timeout.trim();
@@ -56,12 +56,12 @@ export function ManifestEditForm({
       toast(r.error.message, "error");
       return;
     }
-    if (r.data?.operations.updateManifest.success) {
+    if (r.data?.operations?.updateManifest.success) {
       toast("Manifest updated.", "success");
       onSaved();
       onClose();
     } else {
-      toast(r.data?.operations.updateManifest.message ?? "Update failed.", "error");
+      toast(r.data?.operations?.updateManifest.message ?? "Update failed.", "error");
     }
   }
 

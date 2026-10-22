@@ -1,8 +1,5 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import { WORK_QUEUE_DETAIL } from "../graphql/queries";
-import { CANCEL_WORK_QUEUE_ENTRY } from "../graphql/mutations";
 import {
   BackLink,
   DetailLink,
@@ -15,24 +12,18 @@ import {
 import { enumLabel, formatTime, shortName } from "../lib/format";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
-import type { WorkQueueDetail } from "../types";
 import { confirmAction } from "../lib/confirm";
-
-interface WqData {
-  operations: { workQueue: { detail: WorkQueueDetail | null } };
-}
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import { cancelWorkQueueEntryDocument, workQueueDetailDocument } from "../trax/index.g";
 
 // One work queue entry, read through workQueue.detail: its fields, its input (sensitive values
 // masked by the API), and, for a subject-keyed entry, the entry it waits on. Mirrors the Blazor
 // WorkQueueDetailPage.
 export function WorkQueueDetailPage() {
   const id = Number(useParams().id);
-  const [result, reexecute] = useQuery<WqData>({
-    query: WORK_QUEUE_DETAIL,
-    variables: { id },
-  });
-  useRefetchOnChange("WORK_QUEUE", () => reexecute({ requestPolicy: "network-only" }));
-  const [, cancelEntry] = useMutation(CANCEL_WORK_QUEUE_ENTRY);
+  const [result, reexecute] = useTraxQuery(workQueueDetailDocument, { variables: { id } });
+  useRefetchOnChange("WORK_QUEUE", () => reexecute());
+  const [, cancelEntry] = useTraxMutation(cancelWorkQueueEntryDocument);
   const [busy, setBusy] = useState(false);
   const w = result.data?.operations?.workQueue?.detail;
 
@@ -55,7 +46,7 @@ export function WorkQueueDetailPage() {
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) toast(`Entry #${id} cancelled.`, "success");
     else toast(res?.message ?? "Could not cancel.", "error");
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   }
 
   const waitingOn =

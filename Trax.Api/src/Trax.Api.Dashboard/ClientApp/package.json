@@ -7,7 +7,8 @@
     "dev": "vite",
     "dev:mock": "vite --mode mock",
     "build": "tsc -b && vite build && node scripts/check-bundle.mjs dist app",
-    "documents": "tsx scripts/export-documents.ts",
+    "client": "dotnet run --project ../../../../Trax.Cli/src/Trax.Cli -- client --operations operations.graphql --documents \"src/graphql/*.graphql\" --out src/trax",
+    "client:check": "dotnet run --project ../../../../Trax.Cli/src/Trax.Cli -- client --operations operations.graphql --documents \"src/graphql/*.graphql\" --out src/trax --check",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
@@ -25,7 +26,6 @@
     "@dagrejs/dagre": "^3.1.1",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
-    "@urql/core": "^6.0.1",
     "@xyflow/react": "^12.12.0",
     "graphql": "^16.13.2",
     "graphql-ws": "^6.3.0",
@@ -33,8 +33,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.1",
-    "recharts": "^3.10.1",
-    "urql": "^5.0.4"
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -48,7 +47,6 @@
     "@types/node": "^24.19.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@urql/exchange-execute": "^3.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",

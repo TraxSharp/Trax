@@ -363,7 +363,7 @@ public class OperationsIsAdminOnlyTests
             yield return mutation;
     }
 
-    // The gql`...` documents in the dashboard's graphql folder: its operations, and the fragments they spread.
+    // The documents in the dashboard's graphql folder, one operation per file, which its generated client sends.
     private static IEnumerable<string> DashboardDocuments()
     {
         var folder = System.IO.Path.Combine(
@@ -375,18 +375,12 @@ public class OperationsIsAdminOnlyTests
             "graphql"
         );
         var documents = Directory
-            .EnumerateFiles(folder, "*.ts")
-            .Where(f => !f.EndsWith(".test.ts", StringComparison.Ordinal))
-            .SelectMany(f =>
-                GqlTemplate.Matches(File.ReadAllText(f)).Select(m => m.Groups[1].Value)
-            )
-            .Where(t => Regex.IsMatch(t, @"^\s*(query|mutation|subscription|fragment)\b"))
+            .EnumerateFiles(folder, "*.graphql")
+            .Select(File.ReadAllText)
             .ToList();
         documents.Should().NotBeEmpty($"the dashboard's documents are read from {folder}");
         return documents;
     }
-
-    private static readonly Regex GqlTemplate = new(@"gql`([^`]*)`", RegexOptions.Compiled);
 
     // The whole operations surface: both halves of the namespace, the machine instance feed it carries, and the
     // persisted-operation package, so a field it grafted onto operations would be caught.

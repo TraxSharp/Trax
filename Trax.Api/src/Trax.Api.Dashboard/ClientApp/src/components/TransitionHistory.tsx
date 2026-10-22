@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "urql";
-import { MACHINE_INSTANCE_TRANSITIONS } from "../graphql/queries";
 import { enumLabel, formatMs, formatTime } from "../lib/format";
 import { useNow } from "../lib/useNow";
 import type {
   MachineInstanceTransition,
-  MachineInstanceTransitions,
   SnapshotOwnerKind,
   SnapshotTransitionActor,
   SnapshotTransitionKind,
 } from "../types";
+import { useTraxQuery } from "../lib/consoleClient";
+import { machineInstanceTransitionsDocument } from "../trax/index.g";
 
 const PAGE_SIZE = 25;
 
@@ -23,10 +22,6 @@ export interface TransitionHistoryKey {
   id: string;
   /** Required for a user's draft: several users can hold a draft under one id. */
   rowId?: number | null;
-}
-
-interface TransitionsData {
-  operations: { machineInstance: { rowId: number; transitions: MachineInstanceTransitions } | null };
 }
 
 const KIND_LABEL: Record<SnapshotTransitionKind, string> = {
@@ -114,8 +109,7 @@ function HistoryPage({
   last: boolean;
   onOlder: (cursor: number) => void;
 }) {
-  const [result] = useQuery<TransitionsData>({
-    query: MACHINE_INSTANCE_TRANSITIONS,
+  const [result] = useTraxQuery(machineInstanceTransitionsDocument, {
     variables: {
       machine: instance.machine,
       ownerKind: instance.ownerKind,
@@ -127,7 +121,7 @@ function HistoryPage({
   });
   if (result.error) return <p className="text-sm text-danger-fg">{result.error.message}</p>;
   if (!result.data) return <p className="text-sm text-muted">Loading history…</p>;
-  const page = result.data.operations.machineInstance?.transitions;
+  const page = result.data.operations?.machineInstance?.transitions;
   const rows = page?.items ?? [];
   if (first && rows.length === 0) return <Empty />;
   return (

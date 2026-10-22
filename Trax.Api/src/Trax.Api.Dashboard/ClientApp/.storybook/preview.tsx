@@ -3,7 +3,7 @@ import "../src/lib/theme"; // applies persisted/system theme
 import { useEffect, useMemo, type ReactNode } from "react";
 import type { Decorator, Preview } from "@storybook/react-vite";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../src/lib/consoleClient";
 import {
   createMockClient,
   createRealClient,
@@ -94,7 +94,7 @@ function StoryProviders({
   );
 
   return (
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
         <div className="min-h-screen bg-inset text-fg p-8">
           {body}
@@ -102,7 +102,7 @@ function StoryProviders({
         <ToastHost />
         <ConfirmHost />
       </MemoryRouter>
-    </Provider>
+    </ConsoleClientProvider>
   );
 }
 

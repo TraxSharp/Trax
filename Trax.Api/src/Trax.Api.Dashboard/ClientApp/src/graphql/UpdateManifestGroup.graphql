@@ -1,0 +1,10 @@
+mutation UpdateManifestGroup($id: Long!, $input: UpdateManifestGroupInput!) {
+  operations {
+    manifestGroups {
+      updateManifestGroup(id: $id, input: $input) {
+        success
+        message
+      }
+    }
+  }
+}

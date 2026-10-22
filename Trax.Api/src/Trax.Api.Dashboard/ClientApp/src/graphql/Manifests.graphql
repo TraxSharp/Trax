@@ -1,0 +1,40 @@
+# Manifests, newest first. hideAdminTrains leaves out the manifests of the scheduler's own trains.
+query Manifests(
+  $take: Int!
+  $afterId: Long
+  $isEnabled: Boolean
+  $scheduleType: ScheduleType
+  $nameContains: String
+  $manifestGroupId: Long
+  $hideAdminTrains: Boolean! = false
+) {
+  operations {
+    manifests(
+      take: $take
+      afterId: $afterId
+      isEnabled: $isEnabled
+      scheduleType: $scheduleType
+      nameContains: $nameContains
+      manifestGroupId: $manifestGroupId
+      hideAdminTrains: $hideAdminTrains
+    ) {
+      items {
+        id
+        externalId
+        name
+        isEnabled
+        scheduleType
+        cronExpression
+        intervalSeconds
+        maxRetries
+        lastSuccessfulRun
+        manifestGroupId
+        priority
+        replayDecisionsOnRetry
+      }
+      totalCount
+      isEstimatedCount
+      nextCursor
+    }
+  }
+}

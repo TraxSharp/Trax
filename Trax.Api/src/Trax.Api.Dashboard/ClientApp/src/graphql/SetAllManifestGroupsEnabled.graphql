@@ -1,0 +1,11 @@
+mutation SetAllManifestGroupsEnabled($enabled: Boolean!) {
+  operations {
+    manifestGroups {
+      setAllManifestGroupsEnabled(enabled: $enabled) {
+        success
+        count
+        message
+      }
+    }
+  }
+}

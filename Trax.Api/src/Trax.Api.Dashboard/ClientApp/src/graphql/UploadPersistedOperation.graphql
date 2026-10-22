@@ -1,0 +1,25 @@
+mutation UploadPersistedOperation($input: UploadPersistedOperationInput!) {
+  persistedOperations {
+    uploadPersistedOperation(input: $input) {
+      success
+      errors {
+        code
+        message
+        locations {
+          line
+          column
+        }
+        path
+        oldFingerprint
+        newFingerprint
+      }
+      operation {
+        id
+        tenantKey
+        version
+        isActive
+        shapeFingerprint
+      }
+    }
+  }
+}

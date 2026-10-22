@@ -1,34 +1,19 @@
 import { useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import { PERSISTED_OPERATION_DETAIL } from "../graphql/queries";
-import {
-  DEACTIVATE_PERSISTED_OPERATION,
-  RESTORE_PERSISTED_OPERATION,
-} from "../graphql/mutations";
 import { BackLink, DetailPanel, Fields, Loading } from "../components/detail";
-import {
-  DeactivationReasonDialog,
-  PersistedOperationEditor,
-} from "../components/PersistedOperationEditor";
+import { DeactivationReasonDialog, PersistedOperationEditor } from "../components/PersistedOperationEditor";
 import { formatTime } from "../lib/format";
 import { tenantLabel, usePersistedOperationsAvailable } from "../lib/persistedOperations";
 import { toast } from "../lib/toast";
 import { NotEnabled } from "./PersistedOperationsPage";
-import type {
-  PersistedOperation,
-  PersistedOperationHistoryEntry,
-  PersistedOperationPayload,
-} from "../types";
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import {
+  deactivatePersistedOperationDocument,
+  persistedOperationDetailDocument,
+  restorePersistedOperationDocument,
+} from "../trax/index.g";
 
 const HISTORY_TAKE = 100;
-
-interface DetailData {
-  persistedOperations: {
-    persistedOperation: PersistedOperation | null;
-    persistedOperationHistory: PersistedOperationHistoryEntry[];
-  };
-}
 
 // One persisted operation (the tenant comes from ?tenant=; none is the default tenant): its
 // fields, its document and its audit history, with Edit, Deactivate (a reason is required) and
@@ -54,12 +39,9 @@ export function PersistedOperationDetailPage() {
 }
 
 function Detail({ id, tenantKey }: { id: string; tenantKey: string | null }) {
-  const [result, reexecute] = useQuery<DetailData>({
-    query: PERSISTED_OPERATION_DETAIL,
-    variables: { id, tenantKey, historyTake: HISTORY_TAKE },
-  });
-  const [, deactivate] = useMutation(DEACTIVATE_PERSISTED_OPERATION);
-  const [, restore] = useMutation(RESTORE_PERSISTED_OPERATION);
+  const [result, reexecute] = useTraxQuery(persistedOperationDetailDocument, { variables: { id, tenantKey, historyTake: HISTORY_TAKE } });
+  const [, deactivate] = useTraxMutation(deactivatePersistedOperationDocument);
+  const [, restore] = useTraxMutation(restorePersistedOperationDocument);
   const [editing, setEditing] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -67,7 +49,7 @@ function Detail({ id, tenantKey }: { id: string; tenantKey: string | null }) {
   const ns = result.data?.persistedOperations;
   const op = ns?.persistedOperation;
   const history = ns?.persistedOperationHistory ?? [];
-  const refetch = () => reexecute({ requestPolicy: "network-only" });
+  const refetch = () => reexecute();
 
   if (result.error && !op)
     return <p className="text-danger-fg">{result.error.message}</p>;
@@ -79,7 +61,11 @@ function Detail({ id, tenantKey }: { id: string; tenantKey: string | null }) {
       </p>
     );
 
-  function report(summary: string, payload: PersistedOperationPayload | undefined, error?: string) {
+  function report(
+    summary: string,
+    payload: { success: boolean; errors: { message: string }[] } | undefined,
+    error?: string,
+  ) {
     if (error) toast(error, "error");
     else if (payload?.success) toast(`${summary}: ${id} (${tenantLabel(tenantKey)})`, "success");
     else toast(`Not changed. ${(payload?.errors ?? []).map((e) => e.message).join(" ")}`, "error");

@@ -1,0 +1,11 @@
+# Enable / disable several manifests in one call. Only manifests whose flag differs are written,
+# and count says how many that was.
+mutation SetManifestsEnabled($ids: [Long!]!, $enabled: Boolean!) {
+  operations {
+    setManifestsEnabled(ids: $ids, enabled: $enabled) {
+      success
+      count
+      message
+    }
+  }
+}

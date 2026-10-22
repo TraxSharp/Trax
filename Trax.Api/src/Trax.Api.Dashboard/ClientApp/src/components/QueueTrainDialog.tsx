@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation } from "urql";
-import { QUEUE_TRAIN } from "../graphql/mutations";
 import { Modal } from "./Modal";
 import { Spinner } from "./Spinner";
 import { TrainInputForm } from "./TrainInputForm";
 import { useTrainInputForm } from "../lib/useTrainInputForm";
-import type { OperationResponse } from "../types";
+import { useTraxMutation } from "../lib/consoleClient";
+import { queueTrainDocument } from "../trax/index.g";
 
 // Modal form to queue a train in the background (operations.workQueue.queueTrain),
 // mirroring the Blazor QueueTrainDialog: on success it closes and opens the new work queue entry.
@@ -20,7 +19,7 @@ export function QueueTrainDialog({
   // Preselect a train (the Trains page opens the dialog for one).
   initialTrain?: string;
 }) {
-  const [, queueTrain] = useMutation(QUEUE_TRAIN);
+  const [, queueTrain] = useTraxMutation(queueTrainDocument);
   const navigate = useNavigate();
   const form = useTrainInputForm(initialTrain);
   const [priority, setPriority] = useState("0");
@@ -45,7 +44,7 @@ export function QueueTrainDialog({
     }
     // A refusal (unknown train, bad input, a refusal the train makes) is success: false with a
     // message, not an error: keep the dialog open and say why.
-    const result: OperationResponse | undefined = r.data?.operations?.workQueue?.queueTrain;
+    const result = r.data?.operations?.workQueue?.queueTrain;
     if (!result?.success) {
       setError(result?.message ?? "The train was not queued.");
       return;

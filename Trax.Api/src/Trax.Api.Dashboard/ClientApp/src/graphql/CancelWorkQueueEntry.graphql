@@ -1,0 +1,11 @@
+# Cancel a queued work queue entry (only entries in QUEUED can be cancelled).
+mutation CancelWorkQueueEntry($id: Long!) {
+  operations {
+    workQueue {
+      cancelWorkQueueEntry(id: $id) {
+        success
+        message
+      }
+    }
+  }
+}

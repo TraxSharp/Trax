@@ -1,0 +1,17 @@
+mutation TriggerManifests($ids: [Long!]!, $askAfresh: Boolean! = false) {
+  operations {
+    triggerManifests(ids: $ids, askAfresh: $askAfresh) {
+      success
+      matched
+      queued
+      alreadyQueued
+      tooLateToAskAfresh
+      skipped
+      message
+      notes {
+        id
+        message
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# Trigger a manifest after a delay, and cancel every running execution of a manifest.
+mutation TriggerManifestDelayed($externalId: String!, $delay: Duration!) {
+  operations {
+    triggerManifestDelayed(externalId: $externalId, delay: $delay) {
+      success
+      message
+    }
+  }
+}

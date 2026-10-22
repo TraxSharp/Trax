@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "urql";
-import { BULK_OPERATION, BULK_OPERATIONS } from "../graphql/queries";
 import { TermHelp } from "../components/TermHelp";
 import { enumLabel, formatTime } from "../lib/format";
 import {
@@ -11,10 +9,11 @@ import {
   bulkTitle,
   describeFilter,
   filterListPath,
-  type BulkOperationDetail,
   type BulkOperationStatus,
   type BulkOperationSummary,
 } from "../lib/bulkOperations";
+import { useTraxQuery } from "../lib/consoleClient";
+import { bulkOperationDocument, bulkOperationsDocument } from "../trax/index.g";
 
 // The bulk operations this host ran (api/0045): the one running, and those that finished in the
 // last day. A running operation is read again until it stops; the server keeps no history beyond
@@ -67,15 +66,11 @@ function Progress({ op, label }: { op: BulkOperationSummary; label: string }) {
   );
 }
 
-interface ListData {
-  operations: { bulkOperations: BulkOperationSummary[] };
-}
-
 export function BulkOperationsPage() {
-  const [result, reexecute] = useQuery<ListData>({ query: BULK_OPERATIONS });
+  const [result, reexecute] = useTraxQuery(bulkOperationsDocument);
   const operations = result.data?.operations?.bulkOperations ?? [];
   const running = operations.some((o) => o.status === "RUNNING");
-  useFollow(running, result.data, () => reexecute({ requestPolicy: "network-only" }));
+  useFollow(running, result.data, () => reexecute());
 
   return (
     <div>
@@ -85,7 +80,7 @@ export function BulkOperationsPage() {
           <TermHelp term="bulkOperation" />
         </div>
         <button
-          onClick={() => reexecute({ requestPolicy: "network-only" })}
+          onClick={() => reexecute()}
           className="text-sm px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 hover:bg-hover"
         >
           Refresh
@@ -156,21 +151,14 @@ export function BulkOperationsPage() {
   );
 }
 
-interface DetailData {
-  operations: { bulkOperation: BulkOperationDetail | null };
-}
-
 export function BulkOperationPage() {
   const { id = "" } = useParams();
   // Keyset over the failures: a stack of afterId cursors, the first page null.
   const [cursors, setCursors] = useState<(number | null)[]>([null]);
   const failuresAfter = cursors[cursors.length - 1];
-  const [result, reexecute] = useQuery<DetailData>({
-    query: BULK_OPERATION,
-    variables: { id, failuresAfter, failuresTake: FAILURES_PAGE },
-  });
+  const [result, reexecute] = useTraxQuery(bulkOperationDocument, { variables: { id, failuresAfter, failuresTake: FAILURES_PAGE } });
   const op = result.data?.operations?.bulkOperation;
-  useFollow(op?.status === "RUNNING", result.data, () => reexecute({ requestPolicy: "network-only" }));
+  useFollow(op?.status === "RUNNING", result.data, () => reexecute());
 
   const back = (
     <Link to="/system/operations" className="text-sm text-accent-fg hover:underline">

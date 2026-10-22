@@ -1,0 +1,10 @@
+mutation AcknowledgeDeadLetters($ids: [Long!]!, $note: String!) {
+  operations {
+    deadLetters {
+      acknowledgeDeadLetters(ids: $ids, note: $note) {
+        count
+        message
+      }
+    }
+  }
+}

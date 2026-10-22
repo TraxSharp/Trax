@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, test } from "vitest";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient } from "../mock/client";
 
@@ -13,12 +13,12 @@ function Where() {
 
 function renderAt(path: string) {
   render(
-    <Provider value={createMockClient()}>
+    <ConsoleClientProvider client={createMockClient()}>
       <MemoryRouter initialEntries={[path]}>
         <AppRoutes />
         <Where />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 }
 

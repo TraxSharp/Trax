@@ -1,15 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import { MANIFEST_SCHEDULES, MANIFESTS } from "../graphql/queries";
-import {
-  DISABLE_MANIFEST,
-  ENABLE_MANIFEST,
-  SET_MANIFESTS_ENABLED,
-  SET_MANIFESTS_REPLAY_DECISIONS_ON_RETRY,
-  TRIGGER_MANIFEST,
-  TRIGGER_MANIFESTS,
-} from "../graphql/mutations";
 import { toast } from "../lib/toast";
 import { reportBatchTrigger, type BatchTriggerReport } from "../lib/batchTrigger";
 import { setHideAdminTrains, useHideAdminTrains } from "../lib/adminTrains";
@@ -20,7 +10,7 @@ import { useKeyset } from "../lib/useKeyset";
 import { useSelection } from "../lib/useSelection";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
-import type { ManifestSchedule, ManifestSummary, PagedResult, ScheduleType } from "../types";
+import type { ManifestSummary, ScheduleType } from "../types";
 import { useAnswers } from "../lib/answerable";
 import { useNow } from "../lib/useNow";
 import { NextRun, SchedulesTabs } from "../components/schedules";
@@ -29,6 +19,17 @@ import { useUrlState } from "../lib/urlState";
 import { ApplyToAllMatching } from "../components/ApplyToAllMatching";
 import { TermHelp } from "../components/TermHelp";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
+import { useTraxMutation, useTraxQuery, type OperationResult } from "../lib/consoleClient";
+import {
+  disableManifestDocument,
+  enableManifestDocument,
+  manifestSchedulesDocument,
+  manifestsDocument,
+  setManifestsEnabledDocument,
+  setManifestsReplayDecisionsOnRetryDocument,
+  triggerManifestDocument,
+  triggerManifestsDocument,
+} from "../trax/index.g";
 
 const PAGE_SIZE = 25;
 const SCHEDULES: (ScheduleType | "")[] = [
@@ -41,14 +42,6 @@ const SCHEDULES: (ScheduleType | "")[] = [
   "DORMANT_DEPENDENT",
   "ONCE",
 ];
-
-interface ManifestsData {
-  operations: { manifests: PagedResult<ManifestSummary> };
-}
-
-interface SchedulesData {
-  operations: { manifests: { items: ManifestSchedule[] } };
-}
 
 export function ManifestsPage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
@@ -66,13 +59,12 @@ export function ManifestsPage() {
     nameContains: name || null,
     hideAdminTrains: hideAdmin,
   };
-  const [result, reexecute] = useQuery<ManifestsData>({ query: MANIFESTS, variables });
+  const [result, reexecute] = useTraxQuery(manifestsDocument, { variables });
   // The schedule in words and the next runs, read for the same page with the same filters and
   // zipped to its rows by id. Left out where the client cannot answer it (the demo, until the
   // recordings hold it); the row then shows the schedule from its type.
   const schedulesAnswered = useAnswers("ManifestSchedules");
-  const [schedulesResult, reexecuteSchedules] = useQuery<SchedulesData>({
-    query: MANIFEST_SCHEDULES,
+  const [schedulesResult, reexecuteSchedules] = useTraxQuery(manifestSchedulesDocument, {
     variables: { ...variables, count: 3 },
     pause: !schedulesAnswered,
   });
@@ -80,19 +72,19 @@ export function ManifestsPage() {
     (schedulesResult.data?.operations?.manifests?.items ?? []).map((s) => [s.id, s]),
   );
   const now = useNow(30_000);
-  const [, trigger] = useMutation(TRIGGER_MANIFEST);
-  const [, enable] = useMutation(ENABLE_MANIFEST);
-  const [, disable] = useMutation(DISABLE_MANIFEST);
-  const [, setEnabledMany] = useMutation(SET_MANIFESTS_ENABLED);
-  const [, setReplayMany] = useMutation(SET_MANIFESTS_REPLAY_DECISIONS_ON_RETRY);
-  const [, triggerMany] = useMutation(TRIGGER_MANIFESTS);
+  const [, trigger] = useTraxMutation(triggerManifestDocument);
+  const [, enable] = useTraxMutation(enableManifestDocument);
+  const [, disable] = useTraxMutation(disableManifestDocument);
+  const [, setEnabledMany] = useTraxMutation(setManifestsEnabledDocument);
+  const [, setReplayMany] = useTraxMutation(setManifestsReplayDecisionsOnRetryDocument);
+  const [, triggerMany] = useTraxMutation(triggerManifestsDocument);
   const [busy, setBusy] = useState(false);
   const [batchReport, setBatchReport] = useState<BatchTriggerReport | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
   const { selected, toggle, setMany, clear } = useSelection();
   const refetchAll = () => {
-    reexecute({ requestPolicy: "network-only" });
-    if (schedulesAnswered) reexecuteSchedules({ requestPolicy: "network-only" });
+    reexecute();
+    if (schedulesAnswered) reexecuteSchedules();
   };
   useRefetchOnChange("MANIFEST", refetchAll);
   usePoll(refetchAll);
@@ -108,14 +100,16 @@ export function ManifestsPage() {
   // One manifest's Queue, Disable or Enable from its row. The server answers success: false for a
   // manifest it no longer has; that is said, as an accepted change is.
   async function run(
-    action: typeof trigger,
+    action: (variables: { externalId: string }) => Promise<
+      OperationResult<{ operations: Record<string, { success: boolean; message: string | null }> | null }>
+    >,
     field: "triggerManifest" | "enableManifest" | "disableManifest",
     externalId: string,
     confirm?: { title: string; message: string },
   ) {
     if (confirm && !(await confirmAction(confirm))) return;
     const r = await action({ externalId });
-    const res: OperationResponse | undefined = r.data?.operations?.[field];
+    const res = r.data?.operations?.[field];
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) toast(res.message || "Done.", "success");
     else toast(res?.message ?? "Nothing changed.", "error");
@@ -126,7 +120,7 @@ export function ManifestsPage() {
   // the Blazor page's batch buttons do. The response says how many manifests changed.
   async function bulkSet(
     label: string,
-    call: () => Promise<{ error?: { message: string }; data?: { operations: Record<string, OperationResponse> } }>,
+    call: () => Promise<OperationResult<{ operations: Record<string, OperationResponse> | null }>>,
     field: string,
   ) {
     setBusy(true);

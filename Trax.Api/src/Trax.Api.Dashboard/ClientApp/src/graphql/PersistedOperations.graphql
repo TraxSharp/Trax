@@ -1,0 +1,18 @@
+# Persisted operations, most recently updated first. Offset-paged (the API has no keyset cursor
+# here); the filter's tenantKey is null for every tenant and "" for the default tenant.
+query PersistedOperations($filter: PersistedOperationFilterInput, $skip: Int!, $take: Int!) {
+  persistedOperations {
+    persistedOperations(filter: $filter, skip: $skip, take: $take) {
+      items {
+        id
+        tenantKey
+        operationName
+        version
+        isActive
+        description
+        updatedAt
+      }
+      totalCount
+    }
+  }
+}

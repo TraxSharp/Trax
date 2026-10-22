@@ -1,0 +1,26 @@
+# Registered trains. In-memory discovery, so it stays fast regardless of table size.
+query Trains($hideAdmin: Boolean!) {
+  operations {
+    trains(hideAdminTrains: $hideAdmin) {
+      fullName
+      serviceTypeName
+      implementationTypeName
+      inputTypeName
+      outputTypeName
+      lifetime
+      isQuery
+      isMutation
+      graphQLName
+      isBroadcastEnabled
+      requiredRoles
+      requiredPolicies
+      inputSchema {
+        name
+        typeName
+        isNullable
+        enumValues
+      }
+      hasQueueSubjectKey
+    }
+  }
+}

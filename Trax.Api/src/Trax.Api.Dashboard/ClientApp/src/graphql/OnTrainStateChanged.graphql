@@ -1,0 +1,15 @@
+# Real-time execution feed. onTrainStateChanged fires on every lifecycle transition
+# (started, completed, failed, cancelled), so one subscription drives the whole feed.
+# Delivered over the graphql-ws WebSocket; the API key rides in the connection_init
+# payload (see lib/graphql.ts).
+subscription OnTrainStateChanged {
+  onTrainStateChanged {
+    metadataId
+    externalId
+    trainName
+    trainState
+    timestamp
+    failureJunction
+    failureReason
+  }
+}

@@ -11,9 +11,25 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { print, type DocumentNode } from "graphql";
-import * as Q from "../src/graphql/queries";
 import { EMPTY_VARIABLES_HASH, hashVariables } from "../src/mock/variables-hash";
+import {
+  deadLetterDetailDocument,
+  deadLettersDocument,
+  executionChildrenDocument,
+  executionDetailDocument,
+  executionsDocument,
+  logsDocument,
+  manifestDetailDocument,
+  manifestGroupDetailDocument,
+  manifestGroupsDocument,
+  manifestsDocument,
+  overviewDocument,
+  schedulerConfigDocument,
+  trainsDocument,
+  workQueueDetailDocument,
+  workQueueDocument,
+  type TraxDocument,
+} from "../src/trax/index.g";
 
 const URL = process.env.TRAX_API_URL ?? "http://localhost:5310/trax/graphql";
 const KEY = process.env.TRAX_API_KEY ?? "admin-key-do-not-use-in-production";
@@ -27,18 +43,15 @@ type Data = Record<string, unknown>;
 type Store = Record<string, Record<string, Data>>;
 const store: Store = {};
 
-function operationName(doc: DocumentNode): string {
-  for (const def of doc.definitions) {
-    if (def.kind === "OperationDefinition" && def.name) return def.name.value;
-  }
-  throw new Error("document has no named operation");
+function operationName(doc: TraxDocument<unknown, unknown>): string {
+  return doc.name;
 }
 
-async function run(doc: DocumentNode, variables: Data): Promise<Data> {
+async function run(doc: TraxDocument<unknown, unknown>, variables: Data): Promise<Data> {
   const res = await fetch(URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Api-Key": KEY },
-    body: JSON.stringify({ query: print(doc), variables }),
+    body: JSON.stringify({ query: doc.text, variables }),
   });
   const json = (await res.json()) as { data?: Data; errors?: unknown };
   if (json.errors) throw new Error(`${operationName(doc)}: ${JSON.stringify(json.errors)}`);
@@ -78,7 +91,7 @@ function store_(op: string, hash: string, data: Data) {
 }
 
 // Walk a keyset-paginated list up to MAX_PAGES, keyed by the variables the dashboard sends.
-async function capturePaged(doc: DocumentNode, base: Data, pagedPath: string): Promise<Data> {
+async function capturePaged(doc: TraxDocument<unknown, unknown>, base: Data, pagedPath: string): Promise<Data> {
   const op = operationName(doc);
   let afterId: number | undefined;
   let firstPage: Data = {};
@@ -96,7 +109,7 @@ async function capturePaged(doc: DocumentNode, base: Data, pagedPath: string): P
   return firstPage;
 }
 
-async function captureOne(doc: DocumentNode, vars: Data): Promise<Data> {
+async function captureOne(doc: TraxDocument<unknown, unknown>, vars: Data): Promise<Data> {
   const data = await run(doc, vars);
   store_(operationName(doc), hashVariables(vars), data);
   return data;
@@ -106,24 +119,24 @@ async function main() {
   console.log(`Capturing fixtures from ${URL} (max ${MAX_PAGES} page(s) per list)`);
 
   // Non-paged reads.
-  await captureOne(Q.OVERVIEW, { range: "LAST24_HOURS", hideAdmin: true });
-  await captureOne(Q.TRAINS, { hideAdmin: true });
-  await captureOne(Q.SCHEDULER_CONFIG, {});
+  await captureOne(overviewDocument, { range: "LAST24_HOURS", hideAdmin: true });
+  await captureOne(trainsDocument, { hideAdmin: true });
+  await captureOne(schedulerConfigDocument, {});
   console.log("  Overview, Trains, SchedulerConfig");
 
   // Paged lists + a detail fixture for the first few ids on each first page.
   const lists: {
-    doc: DocumentNode;
+    doc: TraxDocument<unknown, unknown>;
     pagedPath: string;
     itemsPath: string;
-    detail?: DocumentNode;
+    detail?: TraxDocument<unknown, unknown>;
   }[] = [
-    { doc: Q.WORK_QUEUE, pagedPath: "operations.workQueue.workQueues", itemsPath: "operations.workQueue.workQueues.items", detail: Q.WORK_QUEUE_DETAIL },
-    { doc: Q.DEAD_LETTERS, pagedPath: "operations.deadLetters.deadLetters", itemsPath: "operations.deadLetters.deadLetters.items", detail: Q.DEAD_LETTER_DETAIL },
-    { doc: Q.LOGS, pagedPath: "operations.logs.logs", itemsPath: "operations.logs.logs.items" },
-    { doc: Q.MANIFESTS, pagedPath: "operations.manifests", itemsPath: "operations.manifests.items", detail: Q.MANIFEST_DETAIL },
-    { doc: Q.EXECUTIONS, pagedPath: "operations.executions", itemsPath: "operations.executions.items", detail: Q.EXECUTION_DETAIL },
-    { doc: Q.MANIFEST_GROUPS, pagedPath: "operations.manifestGroups.groups", itemsPath: "operations.manifestGroups.groups.items", detail: Q.MANIFEST_GROUP_DETAIL },
+    { doc: workQueueDocument, pagedPath: "operations.workQueue.workQueues", itemsPath: "operations.workQueue.workQueues.items", detail: workQueueDetailDocument },
+    { doc: deadLettersDocument, pagedPath: "operations.deadLetters.deadLetters", itemsPath: "operations.deadLetters.deadLetters.items", detail: deadLetterDetailDocument },
+    { doc: logsDocument, pagedPath: "operations.logs.logs", itemsPath: "operations.logs.logs.items" },
+    { doc: manifestsDocument, pagedPath: "operations.manifests", itemsPath: "operations.manifests.items", detail: manifestDetailDocument },
+    { doc: executionsDocument, pagedPath: "operations.executions", itemsPath: "operations.executions.items", detail: executionDetailDocument },
+    { doc: manifestGroupsDocument, pagedPath: "operations.manifestGroups.groups", itemsPath: "operations.manifestGroups.groups.items", detail: manifestGroupDetailDocument },
   ];
 
   for (const { doc, pagedPath, itemsPath, detail } of lists) {
@@ -134,8 +147,8 @@ async function main() {
   }
 
   // Parent/child flow: metadata id 1 is seeded with children in the stress DB.
-  await captureOne(Q.EXECUTION_DETAIL, { id: 1 });
-  await capturePaged(Q.EXECUTION_CHILDREN, { parentId: 1, take: PAGE_SIZE }, "operations.executionChildren");
+  await captureOne(executionDetailDocument, { id: 1 });
+  await capturePaged(executionChildrenDocument, { parentId: 1, take: PAGE_SIZE }, "operations.executionChildren");
 
   mkdirSync(OUT_DIR, { recursive: true });
   const body =

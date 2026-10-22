@@ -1,0 +1,20 @@
+# The whole cross-group dependency graph (every group + cross-group edges), for the global
+# dependency visual on the manifest-groups page.
+query GroupDependencyGraph {
+  operations {
+    manifestGroups {
+      dependencyGraph {
+        nodes {
+          id
+          name
+          isHighlighted
+          isEnabled
+        }
+        edges {
+          fromId
+          toId
+        }
+      }
+    }
+  }
+}

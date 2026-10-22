@@ -1,0 +1,13 @@
+# Set the level configured log categories filter at in the API process, until it restarts.
+mutation SetLogLevels($levels: [LogLevelSettingInput!]!) {
+  operations {
+    config {
+      setLogLevels(levels: $levels) {
+        success
+        count
+        notApplied
+        message
+      }
+    }
+  }
+}

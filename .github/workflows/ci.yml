@@ -624,10 +624,12 @@ jobs:
   # The operations dashboard (Trax.Api/src/Trax.Api.Dashboard/ClientApp) is its own npm project
   # with its own lockfile. Trax.Api.Dashboard ships its production build, and the site's build
   # above builds its demo; this job runs its lint, its tests (every story, and the demo's strict
-  # check that every page is answered by a recording) and both its production builds.
+  # check that every page is answered by a recording) and both its production builds, and checks
+  # its committed client is what `trax client --operations` generates from its documents. The
+  # generator is Trax.Cli's, so a change there runs it too.
   api-dashboard:
     needs: changes
-    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Api')
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Api') || contains(fromJSON(needs.changes.outputs.folders), 'Trax.Cli')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -648,14 +650,37 @@ jobs:
             objects.githubusercontent.com:443
             registry.npmjs.org:443
             storybook.js.org:443
+            aka.ms:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
+            dot.net:443
+            api.nuget.org:443
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            crl.globalsign.com:80
+            crl.sectigo.com:80
+            s.symcb.com:80
+            ts-crl.ws.symantec.com:80
+            www.microsoft.com:80
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: '24'
+      - name: The committed client matches the documents
+        # The console sends only what trax client generated from src/graphql and operations.graphql;
+        # a document changed without regenerating would send text the host never registered.
+        run: |
+          dotnet restore ../../../../Trax.Cli/src/Trax.Cli --locked-mode
+          npm run client:check \
+            || { echo "::error::The console's generated client is out of date. Run 'npm run client' in Trax.Api/src/Trax.Api.Dashboard/ClientApp and commit the result."; exit 1; }
       - name: Install (locked, no install scripts)
         # esbuild and rolldown ship their binaries as platform optional packages, so nothing
         # here needs an install script.

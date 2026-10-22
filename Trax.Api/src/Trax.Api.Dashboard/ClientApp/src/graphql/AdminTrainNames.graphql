@@ -1,0 +1,8 @@
+# Canonical FullNames of the internal/administrative scheduler trains. The executions grid filters
+# these server-side via hideAdminTrains; the client uses this list to filter the live subscription
+# feed (which streams every train on an admin host) by the same rule.
+query AdminTrainNames {
+  operations {
+    adminTrainNames
+  }
+}

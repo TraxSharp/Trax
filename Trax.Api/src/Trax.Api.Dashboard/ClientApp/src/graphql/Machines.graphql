@@ -1,0 +1,40 @@
+# Every machine the host registers, with or without instances, and its graph as `trax machine show`
+# draws it: states, transitions (what takes each: a command, a timer or an outcome) and timers.
+query Machines {
+  operations {
+    machines {
+      name
+      version
+      systemOwned
+      schemaHash
+      initialState
+      graphUnavailableReason
+      states {
+        name
+        isInitial
+        isFinal
+        isCommitted
+        invokesTrain
+        spawnsMachine
+      }
+      transitions {
+        from
+        command
+        to
+        kind
+        guard
+        effect
+        after
+      }
+      timers {
+        state
+        command
+        target
+        after
+        field
+        min
+        max
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# Cancel several executions in one call (bulk selection). count is how many were flagged.
+mutation CancelExecutions($ids: [Long!]!) {
+  operations {
+    cancelExecutions(ids: $ids) {
+      success
+      count
+      message
+    }
+  }
+}

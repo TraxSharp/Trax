@@ -1,0 +1,11 @@
+# Whether a retry of a failed run replays the decisions that run recorded (true) or asks the
+# model afresh (false), for several manifests in one call.
+mutation SetManifestsReplayDecisionsOnRetry($ids: [Long!]!, $replay: Boolean!) {
+  operations {
+    setManifestsReplayDecisionsOnRetry(ids: $ids, replay: $replay) {
+      success
+      count
+      message
+    }
+  }
+}

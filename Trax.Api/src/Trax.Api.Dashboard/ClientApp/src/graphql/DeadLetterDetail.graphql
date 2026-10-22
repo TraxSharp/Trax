@@ -1,0 +1,18 @@
+query DeadLetterDetail($id: Long!) {
+  operations {
+    deadLetters {
+      deadLetter(id: $id) {
+        id
+        manifestId
+        manifestName
+        status
+        deadLetteredAt
+        reason
+        retryCountAtDeadLetter
+        resolvedAt
+        resolutionNote
+        retryMetadataId
+      }
+    }
+  }
+}

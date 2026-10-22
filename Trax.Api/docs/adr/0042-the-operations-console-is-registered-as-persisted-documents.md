@@ -13,8 +13,9 @@ frontend's (central `docs/0053`), and tells the page their ids, which the page s
 
 ## Decision
 
-- The console's documents are a file the app's build writes from its source (`ClientApp/console-documents.json`,
-  checked by its tests) and the package embeds. `UseTraxApiDashboard` hands them to the GraphQL host.
+- The console's documents are a file written from its source and embedded by the package: since 2026-10-22,
+  `ClientApp/src/trax/console-documents.json`, which `trax client --operations` writes with the console's client
+  (central `docs/0057`), checked in CI. `UseTraxApiDashboard` hands them to the GraphQL host.
 - Each is stored under `trax_console_<name>_<hash>`, content-addressed as a client document is, so any version runs on
   any node while the store holds it active, and a collected one answers `CLIENT_OUTDATED`.
 - A console document reaches only `operations` (a query or a mutation) or one of the operator's streams (a
@@ -55,3 +56,5 @@ tests call documents directly.
 ## Changelog
 
 - **2026-10-18**: Recorded.
+- **2026-10-22**: The file is written by `trax client --operations` with the console's generated client, under
+  `ClientApp/src/trax/` (central `docs/0057`); what a host registers and how is unchanged.

@@ -1,0 +1,9 @@
+mutation CancelGroup($groupId: Long!) {
+  operations {
+    cancelGroup(groupId: $groupId) {
+      success
+      count
+      message
+    }
+  }
+}

@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
-import type { Operation } from "@urql/core";
+import { ConsoleClientProvider } from "../lib/consoleClient";
+import type { TraxRequest } from "../trax/index.g";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { executionScenario, workQueueScenario } from "../mock/scenarios";
@@ -15,21 +15,21 @@ afterEach(cleanup);
 
 function renderAt(route: string, overrides: MockSchemaOverrides) {
   const client = createMockClient({ store: createMockStore(), fixtures: false, overrides });
-  const sent: Operation[] = [];
-  const execute = client.executeRequestOperation.bind(client);
-  vi.spyOn(client, "executeRequestOperation").mockImplementation((op) => {
-    sent.push(op);
-    return execute(op);
+  const sent: TraxRequest[] = [];
+  const execute = client.transport.execute.bind(client.transport);
+  vi.spyOn(client.transport, "execute").mockImplementation((request) => {
+    sent.push(request);
+    return execute(request);
   });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   const named = (name: string) =>
-    sent.filter((op) => op.query.definitions.some((d) => d.kind === "OperationDefinition" && d.name?.value === name));
+    sent.filter((op) => op.document.name === name);
   return { named };
 }
 

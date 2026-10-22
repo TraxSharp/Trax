@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "urql";
-import { MACHINES, MACHINE_INSTANCES_ATTENTION, MACHINE_INSTANCE_STUCK_COUNTS } from "../graphql/queries";
 import { BackLink, Loading } from "../components/detail";
 import { MachineDiagram } from "../components/MachineDiagram";
 import { WaitingOn } from "../components/WaitingOn";
@@ -12,31 +10,18 @@ import { MACHINE_INSTANCES_PATH, machineInstancePath, ownerLabel } from "../lib/
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { useUrlStateOrNull } from "../lib/urlState";
-import type {
-  MachineDefinition,
-  MachineInstanceAttentionRow,
-  MachineInstanceStuckCount,
-  SnapshotOwnerKind,
-} from "../types";
+import type { SnapshotOwnerKind } from "../types";
+import { useTraxQuery } from "../lib/consoleClient";
+import {
+  machineInstanceStuckCountsDocument,
+  machineInstancesAttentionDocument,
+  machinesDocument,
+} from "../trax/index.g";
 
 const PAGE_SIZE = 20;
 
 // The API's count stops here (OperationsService.MachineInstanceCountCap); the counts stay exact.
 const COUNT_CAP = 10_000;
-
-interface MachinesData {
-  operations: { machines: MachineDefinition[] };
-}
-
-interface CountsData {
-  operations: { machineInstanceCounts: MachineInstanceStuckCount[] };
-}
-
-interface ListData {
-  operations: {
-    machineInstances: { items: MachineInstanceAttentionRow[]; totalCount: number; isCountCapped: boolean };
-  };
-}
 
 const select = "text-sm border border-line-strong rounded-md px-2 py-1 bg-field";
 
@@ -55,18 +40,12 @@ export function MachinePage() {
   const stuck = stuckParam === "true" ? true : null;
   const [skip, setSkip] = useState(0);
 
-  const [machines] = useQuery<MachinesData>({ query: MACHINES });
-  const [counts, reexecuteCounts] = useQuery<CountsData>({
-    query: MACHINE_INSTANCE_STUCK_COUNTS,
-    variables: { machine: name },
-  });
-  const [result, reexecute] = useQuery<ListData>({
-    query: MACHINE_INSTANCES_ATTENTION,
-    variables: { machine: name, state, ownerKind, stuck, skip, take: PAGE_SIZE },
-  });
+  const [machines] = useTraxQuery(machinesDocument);
+  const [counts, reexecuteCounts] = useTraxQuery(machineInstanceStuckCountsDocument, { variables: { machine: name } });
+  const [result, reexecute] = useTraxQuery(machineInstancesAttentionDocument, { variables: { machine: name, state, ownerKind, stuck, skip, take: PAGE_SIZE } });
   const refetch = () => {
-    reexecuteCounts({ requestPolicy: "network-only" });
-    reexecute({ requestPolicy: "network-only" });
+    reexecuteCounts();
+    reexecute();
   };
   usePoll(refetch);
   // Instances move as the runs they invoke start, finish and are cancelled, and as their queued runs

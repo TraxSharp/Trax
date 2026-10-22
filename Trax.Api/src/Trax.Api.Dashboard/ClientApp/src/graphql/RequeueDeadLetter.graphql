@@ -1,0 +1,14 @@
+# Dead letter resolution. requeue creates a fresh work queue entry and marks the dead
+# letter Retried; acknowledge closes it with an operator note without retrying. askAfresh makes
+# the new run ask the model afresh instead of replaying the failed run's decisions.
+mutation RequeueDeadLetter($id: Long!, $askAfresh: Boolean! = false) {
+  operations {
+    deadLetters {
+      requeueDeadLetter(id: $id, askAfresh: $askAfresh) {
+        success
+        workQueueId
+        message
+      }
+    }
+  }
+}

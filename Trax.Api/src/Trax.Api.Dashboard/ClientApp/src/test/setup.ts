@@ -42,7 +42,7 @@ configure({ asyncUtilTimeout: 5000 });
 configureStorybook({ asyncUtilTimeout: 5000 });
 
 // Register the global .storybook/preview annotations so composeStories applies the mock
-// decorator (urql Provider + router) to portable stories rendered in vitest.
+// decorator (console client provider + router) to portable stories rendered in vitest.
 setProjectAnnotations([preview]);
 
 // React Flow (components/Graph.tsx) watches its container's size and reads the viewport's zoom from

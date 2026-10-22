@@ -1,0 +1,9 @@
+# Patch a manifest's mutable settings.
+mutation UpdateManifest($id: Long!, $input: UpdateManifestInput!) {
+  operations {
+    updateManifest(id: $id, input: $input) {
+      success
+      message
+    }
+  }
+}

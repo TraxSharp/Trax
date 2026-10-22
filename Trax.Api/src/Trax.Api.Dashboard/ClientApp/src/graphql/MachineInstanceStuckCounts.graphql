@@ -1,0 +1,12 @@
+# The counts by state with how many in each are stuck, for the diagram's per-state badges.
+query MachineInstanceStuckCounts($machine: String) {
+  operations {
+    machineInstanceCounts(machine: $machine) {
+      machine
+      state
+      ownerKind
+      count
+      stuck
+    }
+  }
+}

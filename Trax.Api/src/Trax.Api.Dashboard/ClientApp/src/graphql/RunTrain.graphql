@@ -1,0 +1,13 @@
+# Run a train now, in the API process, through the host's job submitter (no work queue entry).
+# id is the new run (metadata row).
+mutation RunTrain($input: RunTrainInput!) {
+  operations {
+    workQueue {
+      runTrain(input: $input) {
+        success
+        message
+        id
+      }
+    }
+  }
+}

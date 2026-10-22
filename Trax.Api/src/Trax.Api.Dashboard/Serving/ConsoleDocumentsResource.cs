@@ -4,9 +4,10 @@ using Trax.Api.GraphQL.Configuration;
 namespace Trax.Api.Dashboard.Serving;
 
 /// <summary>
-/// The documents the app sends, embedded from <c>ClientApp/console-documents.json</c>, which the app's
-/// <c>npm run documents</c> writes from its source. <c>UseTraxApiDashboard</c> hands them to the GraphQL host,
-/// which registers them as persisted documents when it runs persisted operations.
+/// The documents the app sends, embedded from <c>ClientApp/src/trax/console-documents.json</c>, which
+/// <c>trax client --operations</c> writes with the app's generated client from <c>ClientApp/src/graphql</c>.
+/// <c>UseTraxApiDashboard</c> hands them to the GraphQL host, which registers them as persisted documents
+/// when it runs persisted operations.
 /// </summary>
 internal static class ConsoleDocumentsResource
 {
@@ -32,7 +33,7 @@ internal static class ConsoleDocumentsResource
             ?? throw new InvalidOperationException($"'{Name}' is empty.");
         if (file.Format != Format || file.Documents is null)
             throw new InvalidOperationException(
-                $"'{Name}' is not format {Format}. Write it again with `npm run documents` in ClientApp."
+                $"'{Name}' is not format {Format}. Write it again with `npm run client` in ClientApp."
             );
         return [.. file.Documents.Select(d => new ConsoleDocumentText(d.Name, d.Text))];
     }

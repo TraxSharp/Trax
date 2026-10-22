@@ -1,0 +1,9 @@
+mutation CancelGroups($ids: [Long!]!) {
+  operations {
+    cancelGroups(ids: $ids) {
+      success
+      count
+      message
+    }
+  }
+}

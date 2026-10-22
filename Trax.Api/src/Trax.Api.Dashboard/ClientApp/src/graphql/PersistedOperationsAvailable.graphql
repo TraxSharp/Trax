@@ -1,0 +1,10 @@
+# ── Persisted operations ───────────────────────────────────────────────────
+# The persistedOperations namespace exists only when the host calls UsePersistedOperations(...)
+# and declares GateManagement(...). Selecting only __typename on it reads nothing, so this is a
+# cheap probe: it resolves when the namespace is there and the caller meets its gate, and fails
+# otherwise.
+query PersistedOperationsAvailable {
+  persistedOperations {
+    __typename
+  }
+}

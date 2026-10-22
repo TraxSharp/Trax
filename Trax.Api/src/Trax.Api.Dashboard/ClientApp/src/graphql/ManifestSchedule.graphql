@@ -1,0 +1,10 @@
+# One manifest's upcoming runs and its schedule in words, for its detail page.
+query ManifestSchedule($id: Long!, $count: Int! = 5) {
+  operations {
+    manifestDetail(id: $id) {
+      id
+      scheduleText
+      nextRuns(count: $count)
+    }
+  }
+}

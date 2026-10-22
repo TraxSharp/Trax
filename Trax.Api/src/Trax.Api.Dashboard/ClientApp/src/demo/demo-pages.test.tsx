@@ -1,8 +1,6 @@
 import { cleanup, fireEvent, within } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "vitest";
 import { setHideAdminTrains } from "../lib/adminTrains";
-import { DISABLE_MANIFEST, TRIGGER_MANIFEST } from "../graphql/mutations";
-import { MANIFESTS } from "../graphql/queries";
 import { createMockStore } from "../mock/store/mock-store";
 import { defaultOverlays } from "../mock/store/overlays";
 import { createDemoClient } from "./client";
@@ -21,6 +19,7 @@ import {
   type Ledger,
 } from "./harness";
 import { setAutoConfirm } from "../lib/confirm";
+import { disableManifestDocument, manifestsDocument, triggerManifestDocument } from "../trax/index.g";
 
 // The demo's strict check: a visitor who opens every page, picks every option of every filter and
 // sort, pages every list to its end and opens every row is answered from a recording every time,
@@ -192,19 +191,19 @@ describe("writes", () => {
       recordings: recordings(),
       store: createMockStore({ persist: false, exposeOnWindow: false }),
     });
-    const refused = await client.mutation(TRIGGER_MANIFEST, { externalId: "no-such-manifest", askAfresh: false }).toPromise();
-    expect(refused.data.operations.triggerManifest).toEqual({
+    const refused = await client.mutation(triggerManifestDocument, { externalId: "no-such-manifest", askAfresh: false });
+    expect(refused.data!.operations!.triggerManifest).toEqual({
       success: false,
       message: "Manifest 'no-such-manifest' not found.",
     });
 
     const read = async () =>
-      (await client.query(MANIFESTS, { take: 25, hideAdminTrains: true }, { requestPolicy: "network-only" }).toPromise())
-        .data.operations.manifests.items.find((m: { externalId: string }) => m.externalId === "send-daily-digest");
-    expect((await read()).isEnabled).toBe(true);
-    const disabled = await client.mutation(DISABLE_MANIFEST, { externalId: "send-daily-digest" }).toPromise();
-    expect(disabled.data.operations.disableManifest.message).toBe("Manifest disabled");
-    expect((await read()).isEnabled).toBe(false);
+      (await client.query(manifestsDocument, { take: 25, hideAdminTrains: true }))
+        .data!.operations!.manifests.items.find((m: { externalId: string }) => m.externalId === "send-daily-digest");
+    expect((await read())!.isEnabled).toBe(true);
+    const disabled = await client.mutation(disableManifestDocument, { externalId: "send-daily-digest" });
+    expect(disabled.data!.operations!.disableManifest.message).toBe("Manifest disabled");
+    expect((await read())!.isEnabled).toBe(false);
   });
 
   test("cancelling a queued entry on the page reads back cancelled", async () => {

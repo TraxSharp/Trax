@@ -1,16 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "urql";
-import { TRAINS } from "../graphql/queries";
 import { buildInputJson } from "./trainInput";
-import type { TrainInfo } from "../types";
-
-interface TrainsData {
-  operations: { trains: TrainInfo[] };
-}
+import { useTraxQuery } from "./consoleClient";
+import { trainsDocument } from "../trax/index.g";
 
 /** State for the TrainInputForm the Queue and Run dialogs render, with the registered trains. */
 export function useTrainInputForm(initialTrain?: string) {
-  const [{ data }] = useQuery<TrainsData>({ query: TRAINS, variables: { hideAdmin: true } });
+  const [{ data }] = useTraxQuery(trainsDocument, { variables: { hideAdmin: true } });
   const trains = data?.operations?.trains ?? [];
   const [trainName, setTrainName] = useState(initialTrain ?? "");
   const [inputJson, setInputJson] = useState("");

@@ -1,0 +1,8 @@
+mutation EnableManifest($externalId: String!) {
+  operations {
+    enableManifest(externalId: $externalId) {
+      success
+      message
+    }
+  }
+}

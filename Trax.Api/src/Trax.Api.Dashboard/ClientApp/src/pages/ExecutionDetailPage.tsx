@@ -1,8 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import { EXECUTION_DETAIL, RUN_GRAPH, RUN_LINKS } from "../graphql/queries";
-import { CANCEL_EXECUTION, REQUEUE_EXECUTION, RESUME_EXECUTION } from "../graphql/mutations";
 import { StateBadge } from "../components/StateBadge";
 import { ExecutionChildren } from "../components/ExecutionChildren";
 import { JunctionTimeline } from "../components/JunctionTimeline";
@@ -27,9 +24,18 @@ import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { useUrlState, useUrlStateOrNull } from "../lib/urlState";
 import { machineInstancePath } from "../lib/machineInstances";
 import { failedNode } from "../lib/runGraphFlow";
-import type { ExecutionDetail, RunGraph, RunLinks } from "../types";
+import type { ExecutionDetail, RunLinks } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import {
+  cancelExecutionDocument,
+  executionDetailDocument,
+  requeueExecutionDocument,
+  resumeExecutionDocument,
+  runGraphDocument,
+  runLinksDocument,
+} from "../trax/index.g";
 
 const ACTIVE_STATES = new Set(["PENDING", "IN_PROGRESS"]);
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
@@ -43,18 +49,6 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
-interface ExecData {
-  operations: { executionDetail: ExecutionDetail | null };
-}
-
-interface RunGraphData {
-  operations: { runGraph: RunGraph | null };
-}
-
-interface RunLinksData {
-  operations: { executionDetail: RunLinks | null };
-}
-
 /**
  * One run (api/0043): a header with its state, train, duration, what started it and the actions
  * on it; its chain drawn on the shared graph, coloured by this run, with a panel for the selected
@@ -63,25 +57,17 @@ interface RunLinksData {
  */
 export function ExecutionDetailPage() {
   const id = Number(useParams().id);
-  const [result, reexecute] = useQuery<ExecData>({
-    query: EXECUTION_DETAIL,
-    variables: { id },
-  });
+  const [result, reexecute] = useTraxQuery(executionDetailDocument, { variables: { id } });
   // The run drawn on its train's declared graph, with the checkpoints it can resume from. Not asked
   // of a client that cannot answer it (the demo, until its recordings hold run graphs).
   const answersGraph = useAnswers("RunGraph");
-  const [graphResult, reexecuteGraph] = useQuery<RunGraphData>({
-    query: RUN_GRAPH,
+  const [graphResult, reexecuteGraph] = useTraxQuery(runGraphDocument, {
     variables: { metadataId: id },
     pause: !answersGraph,
   });
   // What started the run and what it came from; the header names what it can without it.
   const answersLinks = useAnswers("RunLinks");
-  const [linksResult] = useQuery<RunLinksData>({
-    query: RUN_LINKS,
-    variables: { id },
-    pause: !answersLinks,
-  });
+  const [linksResult] = useTraxQuery(runLinksDocument, { variables: { id }, pause: !answersLinks });
   // An EXECUTION change names no run, so it refetches the run on any run's change. The graph is the
   // heavier read and changes only while this run is going, so it is read again only then, and once
   // more when the run's state moves (as it ends), so a finished run shows the graph it ended with.
@@ -89,19 +75,19 @@ export function ExecutionDetailPage() {
   const trainState = result.data?.operations?.executionDetail?.trainState;
   const active = trainState != null && ACTIVE_STATES.has(trainState);
   useRefetchOnChange("EXECUTION", () => {
-    reexecute({ requestPolicy: "network-only" });
-    if (answersGraph && active) reexecuteGraph({ requestPolicy: "network-only" });
+    reexecute();
+    if (answersGraph && active) reexecuteGraph();
   });
   const seenState = useRef(trainState);
   useEffect(() => {
     const before = seenState.current;
     seenState.current = trainState;
     if (answersGraph && before != null && trainState != null && before !== trainState)
-      reexecuteGraph({ requestPolicy: "network-only" });
+      reexecuteGraph();
   }, [trainState, answersGraph, reexecuteGraph]);
-  const [, cancelExecution] = useMutation(CANCEL_EXECUTION);
-  const [, requeueExecution] = useMutation(REQUEUE_EXECUTION);
-  const [, resumeExecution] = useMutation(RESUME_EXECUTION);
+  const [, cancelExecution] = useTraxMutation(cancelExecutionDocument);
+  const [, requeueExecution] = useTraxMutation(requeueExecutionDocument);
+  const [, resumeExecution] = useTraxMutation(resumeExecutionDocument);
   const [busy, setBusy] = useState(false);
   // While a resume is in flight: the node a "Resume from here" names, or "" for the Resume button.
   const [resuming, setResuming] = useState<string | null>(null);
@@ -113,7 +99,7 @@ export function ExecutionDetailPage() {
   const [step, setStep] = useUrlStateOrNull("step");
   const [cleared, setCleared] = useState(false);
 
-  const e = result.data?.operations.executionDetail;
+  const e = result.data?.operations?.executionDetail;
   const links = linksResult.data?.operations?.executionDetail ?? null;
   const askingDecisions = useTrainsAskingDecisions();
   const graph = graphResult.data?.operations?.runGraph ?? null;
@@ -157,7 +143,7 @@ export function ExecutionDetailPage() {
     else if (res && !res.success) toast(res.message ?? "Could not request cancellation.", "error");
     else if (res?.count === 0) toast("Run is no longer cancellable.", "info");
     else toast("Cancellation requested.", "success");
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   }
 
   // Requeue queues a fresh run with this run's saved input and opens its work queue entry, as the

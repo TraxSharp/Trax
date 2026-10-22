@@ -1,0 +1,15 @@
+# Write the changed settings of a configurable effect in the API process, all or none. A value
+# is text read as the setting's type; null clears a nullable setting.
+mutation ConfigureEffect($fullName: String!, $values: [EffectSettingValueInput!]!) {
+  operations {
+    configureEffect(fullName: $fullName, values: $values) {
+      success
+      count
+      message
+      errors {
+        field
+        message
+      }
+    }
+  }
+}

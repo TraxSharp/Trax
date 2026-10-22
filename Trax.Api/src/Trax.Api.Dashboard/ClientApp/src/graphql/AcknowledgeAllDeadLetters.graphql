@@ -1,0 +1,10 @@
+mutation AcknowledgeAllDeadLetters($note: String!) {
+  operations {
+    deadLetters {
+      acknowledgeAllDeadLetters(note: $note) {
+        count
+        message
+      }
+    }
+  }
+}

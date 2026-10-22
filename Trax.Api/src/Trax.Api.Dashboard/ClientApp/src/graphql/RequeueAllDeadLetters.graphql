@@ -1,0 +1,19 @@
+# Requeue / acknowledge EVERY unresolved dead letter in one call (not just a selection).
+# Requeue-all starts a background job on the node that received it and returns the job at once;
+# REQUEUE_ALL_JOB reads it back until its status is no longer RUNNING.
+mutation RequeueAllDeadLetters($askAfresh: Boolean! = false) {
+  operations {
+    deadLetters {
+      requeueAllDeadLetters(askAfresh: $askAfresh) {
+        id
+        status
+        started
+        awaitingAtStart
+        startedAt
+        finishedAt
+        count
+        message
+      }
+    }
+  }
+}

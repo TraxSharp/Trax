@@ -1,13 +1,8 @@
 import { Link } from "react-router-dom";
-import { useQuery } from "urql";
-import { EXECUTION_CHILDREN } from "../graphql/queries";
 import { StateBadge } from "./StateBadge";
 import { DetailPanel } from "./detail";
-import type { ExecutionSummary, PagedResult } from "../types";
-
-interface ChildrenData {
-  operations: { executionChildren: PagedResult<ExecutionSummary> };
-}
+import { useTraxQuery } from "../lib/consoleClient";
+import { executionChildrenDocument } from "../trax/index.g";
 
 // Child runs of a parent. Only mounted when the parent reports childCount > 0, so the
 // query never runs for the common (leaf) case.
@@ -18,12 +13,9 @@ export function ExecutionChildren({
   parentId: number;
   childCount: number;
 }) {
-  const [result] = useQuery<ChildrenData>({
-    query: EXECUTION_CHILDREN,
-    variables: { parentId, take: 25 },
-  });
+  const [result] = useTraxQuery(executionChildrenDocument, { variables: { parentId, take: 25 } });
 
-  const page = result.data?.operations.executionChildren;
+  const page = result.data?.operations?.executionChildren;
   const items = page?.items ?? [];
 
   return (

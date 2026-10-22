@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { describe, expect, test } from "vitest";
 import { createMockClient, createMockStore } from "../mock";
 import { lookupScenario, MACHINE_IDS } from "../mock/scenarios";
@@ -14,14 +14,14 @@ function Where() {
 function renderSearch() {
   const client = createMockClient({ store: createMockStore(), fixtures: false, overrides: lookupScenario });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/"]}>
         <Search />
         <Routes>
           <Route path="*" element={<Where />} />
         </Routes>
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 }
 

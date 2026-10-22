@@ -1,0 +1,50 @@
+# What needs attention, the Overview's lead: the scheduler switches, dead letters awaiting intervention by train
+# and reason, trains failing more this hour than this week, stuck instances by machine and state, the due queue and
+# hosts that stopped beating. Each entry's link is the console path and query that lists it. Lists hold at most 50.
+query Attention {
+  operations {
+    attention {
+      asOf
+      scheduler {
+        manifestManagerEnabled
+        jobDispatcherEnabled
+        paused
+        link
+      }
+      deadLetters {
+        trainName
+        reason
+        count
+        oldestDeadLetteredAt
+        link
+      }
+      failingTrains {
+        trainName
+        failedLastHour
+        finishedLastHour
+        lastHourFailureRate
+        baselineFailureRate
+        link
+      }
+      stuckInstances {
+        machine
+        state
+        count
+        link
+      }
+      queue {
+        queued
+        oldestQueuedAt
+        oldestAgeSeconds
+        link
+      }
+      offlineHosts {
+        instanceId
+        hostName
+        lastHeartbeatAt
+        runsDispatcher
+        link
+      }
+    }
+  }
+}

@@ -1,16 +1,12 @@
 import { Fragment, useState } from "react";
-import { useQuery } from "urql";
-import { DECISIONS } from "../graphql/queries";
 import { DetailPanel } from "./detail";
 import { useKeyset } from "../lib/useKeyset";
 import { formatTime, prettyJson, shortName } from "../lib/format";
-import type { DecisionPage, DecisionRecord } from "../types";
+import type { DecisionRecord } from "../types";
+import { useTraxQuery } from "../lib/consoleClient";
+import { decisionsDocument } from "../trax/index.g";
 
 const PAGE_SIZE = 25;
-
-interface DecisionsData {
-  operations: { decisions: DecisionPage };
-}
 
 /**
  * The decisions a run recorded (operations.decisions), in the order it made them: each question it
@@ -27,10 +23,7 @@ interface DecisionsData {
 export function DecisionsPanel({ metadataId }: { metadataId: number }) {
   const { afterId, isFirstPage, next, prev } = useKeyset();
   const [open, setOpen] = useState<number | null>(null);
-  const [result] = useQuery<DecisionsData>({
-    query: DECISIONS,
-    variables: { metadataId, afterId, take: PAGE_SIZE + 1 },
-  });
+  const [result] = useTraxQuery(decisionsDocument, { variables: { metadataId, afterId, take: PAGE_SIZE + 1 } });
   const fetched = result.data?.operations?.decisions?.items ?? [];
   const rows = fetched.slice(0, PAGE_SIZE);
   const hasMore = fetched.length > PAGE_SIZE;

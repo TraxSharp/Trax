@@ -1,0 +1,31 @@
+# One run's steps as they start and end (junction, decision, route). Each event carries the whole
+# step, so the timeline upserts it by position. Lossy under load: a sequence jump means events
+# were missed, and the timeline reads operations.junctionRuns again.
+subscription OnJunctionEvent($metadataId: Long!) {
+  onJunctionEvent(metadataId: $metadataId) {
+    metadataId
+    eventType
+    timestamp
+    sequence
+    junction {
+      position
+      kind
+      name
+      state
+      startedAt
+      endedAt
+      durationMs
+      failureClass
+      failureException
+      questionKey
+      answer
+      confidence
+      replayed
+      decider
+      answerWithheld
+      attempt
+      nameWithheld
+      trackPosition
+    }
+  }
+}

@@ -1,22 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useClient, useMutation, useQuery } from "urql";
-import { DEAD_LETTER_GROUPS, DEAD_LETTERS, REQUEUE_ALL_JOB } from "../graphql/queries";
-import {
-  ACKNOWLEDGE_ALL_DEAD_LETTERS,
-  ACKNOWLEDGE_DEAD_LETTER,
-  ACKNOWLEDGE_DEAD_LETTERS,
-  REQUEUE_ALL_DEAD_LETTERS,
-  REQUEUE_DEAD_LETTER,
-  REQUEUE_DEAD_LETTERS,
-} from "../graphql/mutations";
 import { NotePrompt } from "../components/NotePrompt";
 import { useKeyset } from "../lib/useKeyset";
 import { useSelection } from "../lib/useSelection";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
-import type { DeadLetterStatus, DeadLetterSummary, PagedResult } from "../types";
+import type { DeadLetterStatus, DeadLetterSummary } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
@@ -34,6 +24,19 @@ import {
   type Column,
   type ListGroup,
 } from "../components/ListView";
+import { useConsoleClient, useTraxMutation, useTraxQuery, type OperationResult } from "../lib/consoleClient";
+import {
+  acknowledgeAllDeadLettersDocument,
+  acknowledgeDeadLetterDocument,
+  acknowledgeDeadLettersDocument,
+  deadLetterGroupsDocument,
+  deadLettersDocument,
+  requeueAllDeadLettersDocument,
+  requeueAllJobDocument,
+  requeueDeadLetterDocument,
+  requeueDeadLettersDocument,
+  type RequeueAllJobResult,
+} from "../trax/index.g";
 
 const PAGE_SIZE = 25;
 // How many of the newest dead letters the grouped view reads: the largest page the API serves.
@@ -64,10 +67,6 @@ interface RequeueAllJob {
 
 const JOB_POLL_MS = 1000;
 
-interface DeadLettersData {
-  operations: { deadLetters: { deadLetters: PagedResult<DeadLetterSummary> } };
-}
-
 export function DeadLettersPage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
   const [status, setStatus] = useUrlState<DeadLetterStatus | "">("status");
@@ -90,34 +89,32 @@ export function DeadLettersPage() {
   const [toggled, setToggled] = useState<Set<string>>(new Set());
 
   const filters = { status: status || null, manifestId: manifestId ? Number(manifestId) : null };
-  const [listResult, reexecuteList] = useQuery<DeadLettersData>({
-    query: DEAD_LETTERS,
+  const [listResult, reexecuteList] = useTraxQuery(deadLettersDocument, {
     variables: { take: PAGE_SIZE, afterId, ...filters },
     pause: view !== "list",
   });
-  const [groupResult, reexecuteGroups] = useQuery<DeadLettersData>({
-    query: DEAD_LETTER_GROUPS,
+  const [groupResult, reexecuteGroups] = useTraxQuery(deadLetterGroupsDocument, {
     variables: { take: GROUP_WINDOW, ...filters },
     pause: view !== "groups",
   });
   const result = view === "list" ? listResult : groupResult;
   const reexecute = view === "list" ? reexecuteList : reexecuteGroups;
-  const [, requeue] = useMutation(REQUEUE_DEAD_LETTER);
-  const [, acknowledge] = useMutation(ACKNOWLEDGE_DEAD_LETTER);
-  const [, requeueMany] = useMutation(REQUEUE_DEAD_LETTERS);
-  const [, acknowledgeMany] = useMutation(ACKNOWLEDGE_DEAD_LETTERS);
-  const [, requeueAll] = useMutation(REQUEUE_ALL_DEAD_LETTERS);
-  const client = useClient();
-  const [, acknowledgeAll] = useMutation(ACKNOWLEDGE_ALL_DEAD_LETTERS);
-  useRefetchOnChange("DEAD_LETTER", () => reexecute({ requestPolicy: "network-only" }));
-  usePoll(() => reexecute({ requestPolicy: "network-only" }));
+  const [, requeue] = useTraxMutation(requeueDeadLetterDocument);
+  const [, acknowledge] = useTraxMutation(acknowledgeDeadLetterDocument);
+  const [, requeueMany] = useTraxMutation(requeueDeadLettersDocument);
+  const [, acknowledgeMany] = useTraxMutation(acknowledgeDeadLettersDocument);
+  const [, requeueAll] = useTraxMutation(requeueAllDeadLettersDocument);
+  const client = useConsoleClient();
+  const [, acknowledgeAll] = useTraxMutation(acknowledgeAllDeadLettersDocument);
+  useRefetchOnChange("DEAD_LETTER", () => reexecute());
+  usePoll(() => reexecute());
 
   // Chain optionally: a GraphQL error can return { operations: null }.
   const page = result.data?.operations?.deadLetters?.deadLetters;
   const items = useMemo(() => page?.items ?? [], [page]);
   const refetch = () => {
     clear();
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   };
   const onFilter = () => {
     clear();
@@ -175,7 +172,7 @@ export function DeadLettersPage() {
     setBusy(false);
     if (r.error) toast(r.error.message, "error");
     else {
-      const c = r.data?.operations.deadLetters.requeueDeadLetters.count ?? 0;
+      const c = r.data?.operations?.deadLetters.requeueDeadLetters.count ?? 0;
       toast(
         c > 0 ? `${c} dead letter(s) requeued.` : "Nothing to requeue.",
         c > 0 ? "success" : "info",
@@ -210,9 +207,7 @@ export function DeadLettersPage() {
     // stop following it and let the list show where the backlog stands.
     while (job && job.status === "RUNNING") {
       await new Promise((resolve) => setTimeout(resolve, JOB_POLL_MS));
-      const next = await client
-        .query(REQUEUE_ALL_JOB, { id: job.id }, { requestPolicy: "network-only" })
-        .toPromise();
+      const next: OperationResult<RequeueAllJobResult> = await client.query(requeueAllJobDocument, { id: job.id });
       if (next.error) break;
       job = next.data?.operations?.deadLetters.requeueAllJob;
     }
@@ -243,7 +238,7 @@ export function DeadLettersPage() {
       setAckTarget(null);
       if (r.error) toast(r.error.message, "error");
       else {
-        const c = r.data?.operations.deadLetters.acknowledgeAllDeadLetters.count ?? 0;
+        const c = r.data?.operations?.deadLetters.acknowledgeAllDeadLetters.count ?? 0;
         toast(
           c > 0
             ? `${c} dead letter(s) acknowledged.`
@@ -257,7 +252,7 @@ export function DeadLettersPage() {
       setAckTarget(null);
       if (r.error) toast(r.error.message, "error");
       else {
-        const c = r.data?.operations.deadLetters.acknowledgeDeadLetters.count ?? 0;
+        const c = r.data?.operations?.deadLetters.acknowledgeDeadLetters.count ?? 0;
         toast(
           c > 0 ? `${c} dead letter(s) acknowledged.` : "Nothing acknowledged.",
           c > 0 ? "success" : "info",

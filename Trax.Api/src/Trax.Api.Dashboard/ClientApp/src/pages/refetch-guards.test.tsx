@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { executionDetailScenario, machineScenario, MACHINE_IDS } from "../mock/scenarios";
@@ -11,7 +11,7 @@ import type { MockSchemaOverrides } from "../mock/build-mock-schema";
 import type { ChangeDomain } from "../lib/useRefetchOnChange";
 
 // A change signal refetches what a page shows, but never a read the page would not send: a route
-// the API cannot look up, or a part the client cannot answer. urql's reexecute ignores `pause`, so
+// the API cannot look up, or a part the client cannot answer. A refetch ignores `pause`, so
 // each page guards its own refetch; these count what reaches the resolvers.
 
 afterEach(cleanup);
@@ -53,20 +53,17 @@ function renderAt(route: string, overrides: MockSchemaOverrides, limit?: (client
   // Every query the page sends, by operation name, whether or not a resolver runs for it (a request
   // the API refuses for its variables never reaches one).
   const sent: string[] = [];
-  const execute = client.executeRequestOperation.bind(client);
-  vi.spyOn(client, "executeRequestOperation").mockImplementation((op) => {
-    if (op.kind === "query") {
-      const def = op.query.definitions.find((d) => d.kind === "OperationDefinition");
-      if (def?.kind === "OperationDefinition" && def.name) sent.push(def.name.value);
-    }
-    return execute(op);
+  const execute = client.transport.execute.bind(client.transport);
+  vi.spyOn(client.transport, "execute").mockImplementation((request) => {
+    if (request.document.kind === "query") sent.push(request.document.name);
+    return execute(request);
   });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   return { store, sent: (name: string) => sent.filter((n) => n === name).length };
 }

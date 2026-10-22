@@ -1,0 +1,36 @@
+# ── Single-item detail queries ────────────────────────────────────────────
+query ExecutionDetail($id: Long!) {
+  operations {
+    executionDetail(id: $id) {
+      id
+      externalId
+      name
+      trainState
+      startTime
+      endTime
+      failureJunction
+      failureReason
+      failureException
+      stackTrace
+      input
+      output
+      manifestId
+      cancellationRequested
+      currentlyRunningJunction
+      junctionStartedAt
+      hostName
+      hostEnvironment
+      hostInstanceId
+      childCount
+      failureClass
+      parentId
+      scheduledTime
+      executor
+      hostLabels
+      replayDecisionsOf
+      replayAbandoned
+      resumeFrom
+      resumeAt
+    }
+  }
+}

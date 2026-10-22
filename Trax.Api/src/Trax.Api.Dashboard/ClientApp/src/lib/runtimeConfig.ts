@@ -10,7 +10,7 @@
 // page can never be pointed at another host's API with the credential an operator entered.
 //
 // A host that runs persisted operations also names the id it registered each console document
-// under (src/graphql/documents.ts), and the console then sends those ids instead of text. Only an
+// under (src/trax/console-documents.json), and the console then sends those ids instead of text. Only an
 // id under the console's prefix is kept.
 
 export interface RuntimeConfig {

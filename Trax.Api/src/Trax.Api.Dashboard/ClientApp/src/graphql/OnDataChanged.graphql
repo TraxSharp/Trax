@@ -1,0 +1,9 @@
+# Coalesced data-change signal. Fires once per burst of writes to a domain (work queue, dead
+# letters, manifests, manifest groups, scheduler config) and carries only which domain changed,
+# so a list page can refetch its bounded view instead of polling. See lib/useRefetchOnChange.
+subscription OnDataChanged {
+  onDataChanged {
+    domain
+    timestamp
+  }
+}

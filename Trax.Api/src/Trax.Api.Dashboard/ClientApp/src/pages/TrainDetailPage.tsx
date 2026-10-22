@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useClient, useQuery } from "urql";
-import {
-  EXECUTIONS,
-  MACHINES,
-  MANIFESTS,
-  MANIFEST_SCHEDULE,
-  METRIC_SERIES,
-  RUN_GRAPH,
-  TRAIN_CHAINS,
-  TRAIN_STATS,
-} from "../graphql/queries";
 import { Graph } from "../components/Graph";
 import { ExecutionsOverTimeChart } from "../components/OverviewCharts";
 import { QueueTrainDialog } from "../components/QueueTrainDialog";
@@ -19,18 +8,28 @@ import { StateBadge } from "../components/StateBadge";
 import { TermHelp } from "../components/TermHelp";
 import { useAnswers } from "../lib/answerable";
 import { enumLabel, formatMs, formatTime, shortName } from "../lib/format";
-import { chainGraph, failuresByStep, GRID_RUNS, STEP_STATE_LABEL, stepRows, type StepRow } from "../lib/trainChain";
+import {
+  chainGraph,
+  failuresByStep,
+  GRID_RUNS,
+  STEP_STATE_LABEL,
+  stepRows,
+  type StepRow,
+} from "../lib/trainChain";
 import { useUrlState } from "../lib/urlState";
-import type {
-  ExecutionSummary,
-  ManifestSummary,
-  PagedResult,
-  RunGraph,
-  RunNodeState,
-  TrainChain,
-  TrainExecutionStats,
-  TrainState,
-} from "../types";
+import type { ExecutionSummary, ManifestSummary, RunGraph, RunNodeState, TrainState } from "../types";
+import { useConsoleClient, useTraxQuery } from "../lib/consoleClient";
+import {
+  type MetricSeriesRange,
+  executionsDocument,
+  machinesDocument,
+  manifestScheduleDocument,
+  manifestsDocument,
+  metricSeriesDocument,
+  runGraphDocument,
+  trainChainsDocument,
+  trainStatsDocument,
+} from "../trax/index.g";
 
 // A train's page: what it does (its declared chain, where its runs fail), how it is doing (a grid of
 // its recent runs by step, its runs over time), what starts it (its manifests, the machine states
@@ -44,7 +43,7 @@ const DOCS_TRAINS = "https://traxsharp.net/docs/core/trains-and-junctions";
 const DOCS_SCHEDULER = "https://traxsharp.net/docs/scheduler";
 
 type Range = "24h" | "7d";
-const RANGES: Record<Range, { label: string; series: string; ms: number }> = {
+const RANGES: Record<Range, { label: string; series: MetricSeriesRange; ms: number }> = {
   "24h": { label: "last 24 hours", series: "LAST24_HOURS", ms: 24 * 3600_000 },
   "7d": { label: "last 7 days", series: "LAST7_DAYS", ms: 7 * 24 * 3600_000 },
 };
@@ -56,12 +55,6 @@ interface SeriesBucket {
   cancelled: number;
   p50DurationMs: number | null;
   p95DurationMs: number | null;
-}
-
-interface MachineDefinition {
-  name: string;
-  systemOwned: boolean;
-  states: { name: string; invokesTrain: string | null }[];
 }
 
 export function TrainDetailPage() {
@@ -80,22 +73,15 @@ export function TrainDetailPage() {
   const answersSchedule = useAnswers("ManifestSchedule");
   const answersMachines = useAnswers("Machines");
 
-  const [statsResult] = useQuery<{ operations: { trainStats: TrainExecutionStats } }>({
-    query: TRAIN_STATS,
-    variables: { trainName },
-  });
+  const [statsResult] = useTraxQuery(trainStatsDocument, { variables: { trainName } });
   const stats = statsResult.data?.operations?.trainStats;
 
-  const [execResult] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
-    query: EXECUTIONS,
-    variables: { take: RECENT_TAKE, trainName, order: "NEWEST" },
-  });
+  const [execResult] = useTraxQuery(executionsDocument, { variables: { take: RECENT_TAKE, trainName, order: "NEWEST" } });
   const recent = execResult.data?.operations?.executions?.items;
 
   // Every train's chain comes in one read; the page picks its own. Admin trains are included, so
   // a scheduler train's page draws its chain too.
-  const [chainResult] = useQuery<{ operations: { trains: TrainChain[] } }>({
-    query: TRAIN_CHAINS,
+  const [chainResult] = useTraxQuery(trainChainsDocument, {
     variables: { hideAdmin: false },
     pause: !answersChain,
   });
@@ -106,8 +92,7 @@ export function TrainDetailPage() {
   // The range runs back from when the page loaded (to the minute), so a re-render asks nothing again.
   const [loadedAt] = useState(() => Math.floor(Date.now() / 60_000) * 60_000);
   const startedAfter = new Date(loadedAt - range.ms).toISOString();
-  const [failedResult] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
-    query: EXECUTIONS,
+  const [failedResult] = useTraxQuery(executionsDocument, {
     variables: { take: FAILED_TAKE, trainName, trainState: "FAILED", startedAfter, order: "NEWEST" },
     pause: !answersRange,
   });
@@ -119,27 +104,20 @@ export function TrainDetailPage() {
     [steps, failures, failuresTitle],
   );
 
-  const [seriesResult] = useQuery<{
-    operations: { metrics: { series: { bucketSeconds: number; buckets: SeriesBucket[] } } };
-  }>({
-    query: METRIC_SERIES,
+  const [seriesResult] = useTraxQuery(metricSeriesDocument, {
     variables: { scope: "TRAIN", range: range.series, name: trainName },
     pause: !answersRange,
   });
   const series = seriesResult.data?.operations?.metrics?.series;
 
-  const [manifestsResult] = useQuery<{ operations: { manifests: PagedResult<ManifestSummary> } }>({
-    query: MANIFESTS,
+  const [manifestsResult] = useTraxQuery(manifestsDocument, {
     variables: { take: 25, nameContains: trainName, hideAdminTrains: false },
     pause: !answersSchedule,
   });
   // nameContains matches part of a name; the train's manifests are the ones that name it exactly.
   const manifests = manifestsResult.data?.operations?.manifests?.items.filter((m) => m.name === trainName);
 
-  const [machinesResult] = useQuery<{ operations: { machines: MachineDefinition[] } }>({
-    query: MACHINES,
-    pause: !answersMachines,
-  });
+  const [machinesResult] = useTraxQuery(machinesDocument, { pause: !answersMachines });
   const invokers = (machinesResult.data?.operations?.machines ?? []).flatMap((m) =>
     m.states.filter((s) => s.invokesTrain === trainName).map((s) => ({ machine: m.name, state: s.name })),
   );
@@ -394,7 +372,7 @@ export function TrainDetailPage() {
 // Each run's graph, read once per run (the client's cache answers a run read before); null until
 // its read answers, and left out when it fails.
 function useRunGraphs(ids: number[], pause: boolean): ReadonlyMap<number, RunGraph> {
-  const client = useClient();
+  const client = useConsoleClient();
   const [graphs, setGraphs] = useState<ReadonlyMap<number, RunGraph>>(new Map());
   const key = ids.join(",");
   useEffect(() => {
@@ -404,9 +382,8 @@ function useRunGraphs(ids: number[], pause: boolean): ReadonlyMap<number, RunGra
     Promise.all(
       wanted.map((metadataId) =>
         client
-          .query<{ operations: { runGraph: RunGraph | null } }>(RUN_GRAPH, { metadataId })
-          .toPromise()
-          .then((r) => [metadataId, r.data?.operations?.runGraph ?? null] as const),
+          .query(runGraphDocument, { metadataId })
+          .then((r) => [metadataId, (r.data?.operations?.runGraph ?? null) as RunGraph | null] as const),
       ),
     ).then((answers) => {
       if (!live) return;
@@ -534,9 +511,7 @@ function RunGrid({
 }
 
 function ManifestRow({ manifest }: { manifest: ManifestSummary }) {
-  const [{ data }] = useQuery<{
-    operations: { manifestDetail: { id: number; scheduleText: string; nextRuns: string[] } | null };
-  }>({ query: MANIFEST_SCHEDULE, variables: { id: manifest.id, count: 1 } });
+  const [{ data }] = useTraxQuery(manifestScheduleDocument, { variables: { id: manifest.id, count: 1 } });
   const schedule = data?.operations?.manifestDetail;
   const next = schedule?.nextRuns[0];
   return (

@@ -1,3 +1,4 @@
+import type { LogLevel, LogLevelSettingInput } from "../trax/index.g";
 import type { LogLevelSetting } from "../types";
 
 // The server settings' log-level editor: one level per configured category, saved through
@@ -7,15 +8,15 @@ import type { LogLevelSetting } from "../types";
 export const LOG_LEVEL_NAMES = ["Trace", "Debug", "Information", "Warning", "Error", "Critical", "None"] as const;
 
 /** "Information" -> "INFORMATION", the LogLevel enum setLogLevels takes. */
-export function toLogLevelEnum(level: string): string {
-  return level.toUpperCase();
+export function toLogLevelEnum(level: string): LogLevel {
+  return level.toUpperCase() as LogLevel;
 }
 
 /** The categories whose edited level differs from the level in force, ready for setLogLevels. */
 export function changedLogLevels(
   levels: LogLevelSetting[],
   edits: Record<string, string>,
-): { category: string; level: string }[] {
+): LogLevelSettingInput[] {
   return levels
     .filter((l) => edits[l.category] != null && edits[l.category] !== l.level)
     .map((l) => ({ category: l.category, level: toLogLevelEnum(edits[l.category]) }));

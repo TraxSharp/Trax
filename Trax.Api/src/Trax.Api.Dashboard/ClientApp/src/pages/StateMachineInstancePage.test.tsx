@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { MACHINE_IDS, machineQueryResolvers } from "../mock/scenarios";
@@ -31,11 +31,11 @@ function host() {
     },
   });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[`/machines/source-partition/system/${MACHINE_IDS.idle}`]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   const push = async (change: Partial<{ id: string; state: string; updatedAt: string; deleted: boolean; reload: boolean }>) => {
     await act(async () => {

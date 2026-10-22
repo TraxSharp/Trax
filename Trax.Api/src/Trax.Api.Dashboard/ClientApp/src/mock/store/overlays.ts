@@ -1,5 +1,4 @@
-import type { DocumentNode } from "graphql";
-import { MACHINE_INSTANCE } from "../../graphql/queries";
+import { machineInstanceDocument, type TraxDocument } from "../../trax/index.g";
 import type { MockStore } from "./mock-store";
 
 // An overlay teaches the mock how a slice of data is written by mutations and read back by
@@ -23,7 +22,7 @@ export type MutationOverlay = (
  * would be (base data, then the overlays), so the answer never depends on what a page read first.
  */
 export interface MutationContext {
-  query(document: DocumentNode, variables: Record<string, unknown>): Promise<unknown>;
+  query<V, R>(document: TraxDocument<V, R>, variables: Readonly<Record<string, unknown>>): Promise<unknown>;
 }
 
 export type QueryOverlay = (
@@ -1234,7 +1233,7 @@ const cancelMachineInstance: MutationOverlay = async (variables, store, context)
   const answer = (outcome: string, success: boolean, message: string) =>
     wrap("operations.cancelMachineInstance", { success, outcome, message, state: null });
   if (variables.ownerKind !== "SYSTEM") return answer("USER_OWNED", false, USER_OWNED_CANCEL_REFUSAL);
-  const read = await context.query(MACHINE_INSTANCE, { machine, ownerKind: "SYSTEM", id, rowId: null });
+  const read = await context.query(machineInstanceDocument, { machine, ownerKind: "SYSTEM", id, rowId: null });
   const instance = asRecord(asRecord(asRecord(read)?.operations)?.machineInstance);
   if (!instance) return answer("NOT_FOUND", false, `No system-owned instance of '${machine}' has id ${id}.`);
   if (!instance.hasLiveInvokedRun)

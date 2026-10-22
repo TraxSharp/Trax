@@ -1,0 +1,26 @@
+# The newest dead letters (the page asks for the largest page the API serves) for the Dead letters
+# view to group by train and reason. A separate document from DeadLetters so the demo, whose
+# recordings hold only 25-row pages, can leave the grouping out (demo/harness.tsx).
+query DeadLetterGroups($take: Int!, $status: DeadLetterStatus, $manifestId: Long) {
+  operations {
+    deadLetters {
+      deadLetters(take: $take, status: $status, manifestId: $manifestId) {
+        items {
+          id
+          manifestId
+          manifestName
+          manifestExternalId
+          status
+          deadLetteredAt
+          reason
+          retryCountAtDeadLetter
+          resolvedAt
+          resolutionNote
+        }
+        totalCount
+        isEstimatedCount
+        nextCursor
+      }
+    }
+  }
+}

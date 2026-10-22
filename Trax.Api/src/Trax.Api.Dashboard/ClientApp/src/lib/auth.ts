@@ -39,7 +39,7 @@ interface Held {
 // This page's credential. Nothing else holds it.
 let held: Held | null = null;
 
-// Small pub/sub so the urql client and React can react to credential changes without a full reload.
+// Small pub/sub so the console client and React can react to credential changes without a full reload.
 const listeners = new Set<() => void>();
 function notify(): void {
   listeners.forEach((fn) => fn());

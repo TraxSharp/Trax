@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "urql";
-import { PERSISTED_OPERATIONS } from "../graphql/queries";
 import { PersistedOperationEditor } from "../components/PersistedOperationEditor";
 import { formatTime } from "../lib/format";
 import {
@@ -10,18 +8,13 @@ import {
   usePersistedOperationsAvailable,
 } from "../lib/persistedOperations";
 import { toast } from "../lib/toast";
-import type { PersistedOperation } from "../types";
+import { useTraxQuery } from "../lib/consoleClient";
+import { persistedOperationsDocument } from "../trax/index.g";
 
 const PAGE_SIZE = 25;
 
 type TenantScope = "all" | "default" | "named";
 type StatusScope = "all" | "active" | "inactive";
-
-interface ListData {
-  persistedOperations: {
-    persistedOperations: { items: PersistedOperation[]; totalCount: number };
-  };
-}
 
 // Server-managed GraphQL operations resolved by stable id (persistedOperations), as the
 // Blazor PersistedOperationsPage lists them: filter by tenant, status and id prefix, open one, or
@@ -80,10 +73,7 @@ function PersistedOperationsList() {
           : null,
     idStartsWith: idPrefix.trim() ? idPrefix.trim() : null,
   };
-  const [result, reexecute] = useQuery<ListData>({
-    query: PERSISTED_OPERATIONS,
-    variables: { filter, skip, take: PAGE_SIZE },
-  });
+  const [result, reexecute] = useTraxQuery(persistedOperationsDocument, { variables: { filter, skip, take: PAGE_SIZE } });
   const page = result.data?.persistedOperations?.persistedOperations;
   const rows = page?.items ?? [];
   const total = page?.totalCount ?? 0;
@@ -251,7 +241,7 @@ function PersistedOperationsList() {
           onClose={() => setUploading(false)}
           onSaved={() => {
             toast("Operation uploaded.", "success");
-            reexecute({ requestPolicy: "network-only" });
+            reexecute();
           }}
         />
       )}

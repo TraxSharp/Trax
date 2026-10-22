@@ -1,0 +1,27 @@
+# Live scheduler runtime settings (the editable subset).
+query SchedulerConfig {
+  operations {
+    config {
+      scheduler {
+        manifestManagerEnabled
+        jobDispatcherEnabled
+        manifestManagerPollingInterval
+        jobDispatcherPollingInterval
+        maxActiveJobs
+        defaultMaxRetries
+        defaultRetryDelay
+        retryBackoffMultiplier
+        maxRetryDelay
+        defaultJobTimeout
+        stalePendingTimeout
+        recoverStuckJobsOnStartup
+        deadLetterRetentionPeriod
+        autoPurgeDeadLetters
+        localWorkerCount
+        metadataCleanupInterval
+        metadataCleanupRetention
+        failureCountWindow
+      }
+    }
+  }
+}

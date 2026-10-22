@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
-import { useQuery } from "urql";
-import { HOSTS, SCHEDULER_CONFIG, SERVER_PROCESS } from "../graphql/queries";
 import { useAnswers } from "../lib/answerable";
 import { usePoll } from "../lib/poll";
 import type { HostInfo } from "../types";
+import { useTraxQuery } from "../lib/consoleClient";
+import { hostsDocument, schedulerConfigDocument, serverProcessDocument } from "../trax/index.g";
 
 // Each host rewrites its heartbeat row every 15 seconds; the server calls it offline after three
 // missed beats (45 seconds).
@@ -47,31 +47,16 @@ function formatUptime(seconds: number): string {
   return `${m}m`;
 }
 
-interface HostsData {
-  operations: { hosts: HostInfo[] };
-}
-
-interface ProcessData {
-  operations: {
-    metrics: {
-      server: { uptimeSeconds: number; workingSetBytes: number; gcHeapBytes: number };
-      serverCpuPercent: number | null;
-    };
-  };
-}
-
 export function ClusterPage() {
-  const [result, reexecute] = useQuery<HostsData>({ query: HOSTS });
-  usePoll(() => reexecute({ requestPolicy: "network-only" }));
+  const [result, reexecute] = useTraxQuery(hostsDocument);
+  usePoll(() => reexecute());
 
   const hosts = result.data?.operations?.hosts ?? [];
   const totalRunning = hosts.reduce((n, h) => n + h.currentlyRunning, 0);
   const onlineCount = hosts.filter((h) => h.online).length;
   // A host reports the dispatcher only while it is switched on, so a paused dispatcher shows as no
   // host running it; say which it is.
-  const [{ data: config }] = useQuery<{ operations: { config: { scheduler: { jobDispatcherEnabled: boolean } } } }>({
-    query: SCHEDULER_CONFIG,
-  });
+  const [{ data: config }] = useTraxQuery(schedulerConfigDocument);
   const paused = config?.operations?.config?.scheduler?.jobDispatcherEnabled === false;
   const noDispatcher = !paused && result.data != null && !hosts.some((h) => h.online && h.runsDispatcher);
 
@@ -80,7 +65,7 @@ export function ClusterPage() {
       <div className="flex items-center justify-between mb-2 gap-4">
         <h1 className="text-2xl font-bold text-fg">Hosts</h1>
         <button
-          onClick={() => reexecute({ requestPolicy: "network-only" })}
+          onClick={() => reexecute()}
           className="text-sm px-3 py-1.5 rounded-lg border border-line-strong text-fg-2 hover:bg-hover"
         >
           Refresh
@@ -207,9 +192,9 @@ export function ClusterPage() {
 // demo's recordings do not hold this read yet, so it is not offered there (lib/answerable.ts).
 function ThisProcess() {
   const answered = useAnswers("ServerProcess");
-  const [{ data, error }, reexecute] = useQuery<ProcessData>({ query: SERVER_PROCESS, pause: !answered });
+  const [{ data, error }, reexecute] = useTraxQuery(serverProcessDocument, { pause: !answered });
   usePoll(() => {
-    if (answered) reexecute({ requestPolicy: "network-only" });
+    if (answered) reexecute();
   });
   if (!answered) return null;
   const m = data?.operations?.metrics;

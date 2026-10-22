@@ -1,0 +1,24 @@
+# Dead letters, newest first. Optional status and manifest filters.
+query DeadLetters($take: Int!, $afterId: Long, $status: DeadLetterStatus, $manifestId: Long) {
+  operations {
+    deadLetters {
+      deadLetters(take: $take, afterId: $afterId, status: $status, manifestId: $manifestId) {
+        items {
+          id
+          manifestId
+          manifestName
+          manifestExternalId
+          status
+          deadLetteredAt
+          reason
+          retryCountAtDeadLetter
+          resolvedAt
+          resolutionNote
+        }
+        totalCount
+        isEstimatedCount
+        nextCursor
+      }
+    }
+  }
+}

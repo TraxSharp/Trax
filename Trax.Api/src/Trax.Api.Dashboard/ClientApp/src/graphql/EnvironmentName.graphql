@@ -1,0 +1,8 @@
+# The host's environment name (ASPNETCORE_ENVIRONMENT), for the header badge.
+query EnvironmentName {
+  operations {
+    config {
+      environmentName
+    }
+  }
+}

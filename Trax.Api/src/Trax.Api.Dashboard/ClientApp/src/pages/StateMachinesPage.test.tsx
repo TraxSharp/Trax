@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import type { ChangeDomain } from "../lib/useRefetchOnChange";
@@ -92,12 +92,12 @@ function host(initial: Row[], route = "/machines/parcel") {
     return null;
   }
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
         <AppRoutes />
         <Where />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   return {
     set: (next: Row[]) => {
