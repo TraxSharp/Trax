@@ -50,7 +50,7 @@ selected_suites=$(jq -c --argjson selected "$selected" --argjson files "$changed
    | select($event != "pull_request"
        or any(.upstream[]; . as $u | $selected | index($u))
        or any(.paths[]; . as $p | $files | any(startswith($p))))]' "$config")
-# A suite with a "dotnet" key runs in the suite job; one without (an npm folder) has a job of
+# A suite with a "dotnet" key runs in the suite job; one without (an npm or Cargo folder) has a job of
 # its own, which reads suite-names.
 suites=$(jq -c '[.[] | select(.dotnet) | {name, folder, project} + .dotnet]' <<<"$selected_suites")
 suite_names=$(jq -c '[.[].name]' <<<"$selected_suites")
