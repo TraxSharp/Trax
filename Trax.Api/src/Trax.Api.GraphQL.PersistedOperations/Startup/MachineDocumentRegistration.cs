@@ -50,6 +50,7 @@ internal sealed class MachineDocumentRegistration(
     private bool _consoleIncluded;
     private IReadOnlyList<GeneratedDocument> _documents = [];
     private Task? _collecting;
+    private int _disposed;
 
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
@@ -198,6 +199,9 @@ internal sealed class MachineDocumentRegistration(
 
     public async Task StoppingAsync(CancellationToken cancellationToken)
     {
+        // A host stopped again after its services were disposed has nothing left here to stop.
+        if (Volatile.Read(ref _disposed) == 1)
+            return;
         await _stopping.CancelAsync().ConfigureAwait(false);
         if (_collecting is { } collecting)
             await collecting.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -209,6 +213,8 @@ internal sealed class MachineDocumentRegistration(
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
         _stopping.Cancel();
         _stopping.Dispose();
     }
