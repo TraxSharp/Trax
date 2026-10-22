@@ -99,6 +99,8 @@ export type {
   CustomReducers,
 } from './rules/interpreter';
 export { generateContextTypes, generateMachineFactory } from './rules/generateTypes';
+// The same machine's typed view for a .NET client (Trax.StateMachine.Client), from the same model of the IR.
+export { generateCSharpView, type CSharpViewOptions } from './codegen/csharp';
 
 // The client format: what code `trax client` generates checks the installed package serves, when it loads.
 export { clientFormat, oldestClientFormatServed, requireClientFormat } from './clientFormat';

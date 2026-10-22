@@ -328,7 +328,7 @@ see [the codegen pipeline](/docs/statemachine/codegen-pipeline#generation-and-dr
 # Scaffold a new machine as one declarative C# file.
 trax machine new checkout --output ./Machines --namespace MyApp.Machines --with-effect
 
-# Export the IR, twin, and corpus (each to its own output root).
+# Export the IR, twin, and corpus (each to its own output root). --lang csharp writes a C# view instead.
 trax machine generate --assembly ./bin/MyApp.dll \
   --ir-out ./machines/checkout --twin-out ./web/src/app/checkout --corpus-out ./machines/checkout
 
@@ -382,7 +382,9 @@ before writing anything.
 | `--assembly` | Yes | Compiled assembly (`.dll`) containing the machine. |
 | `--machine` | No | Full type name of the machine. Required only when the assembly has more than one. |
 | `--ir-out` | No | Directory to write `<id>.ir.json`. |
-| `--twin-out` | No | Directory to write `<id>.contexts.g.ts` and `<id>.machine.g.ts`. |
+| `--twin-out` | No | Directory to write the typed view: `<id>.contexts.g.ts` and `<id>.machine.g.ts`, or with `--lang csharp` one `<Machine>.g.cs` (`Checkout.g.cs`). |
+| `--lang` | No | The language of the typed view: `typescript` (the default) or `csharp`. Both are written from one model of the IR. The C# view declares the states and triggers as enums, a record per context and input, the IR with its hash (`<Machine>Machine`), and `<Machine>Client`, a typed client over [`Trax.StateMachine.Client`](/docs/sdk-reference/statemachine-api/dotnet-client) that predicts from that IR. `--import-style` and `--specifier` are refused with it. |
+| `--namespace` | No | The C# view's namespace with `--lang csharp` (default `Trax.Machines`); refused with any other language. |
 | `--corpus-out` | No | Directory to write `differential.json`. |
 | `--engine-src` | No | Generate the twin and corpus from this engine checkout's `src` directory, with the `tools/` beside it, instead of the engine bundled into the tool. For working on the engine itself; it needs `npm ci` in that checkout. |
 | `--import-style` | No | Twin engine imports: `specifier` (one collapsed import from `--specifier`, for a frontend that installs `@traxsharp/state-machine` from npm; the default) or `relative` (paths into the engine's `src`, for a machine inside the engine checkout; the default with `--engine-src`, and refused without it, since those paths resolve only inside the checkout). |

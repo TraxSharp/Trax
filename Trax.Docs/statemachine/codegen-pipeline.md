@@ -130,6 +130,16 @@ to generate as before, is in [Regenerate twins after the trax machine generate d
 drift. Generate and check are the same code path, so a passing check means the committed artifacts match the source.
 [`trax machine new`](/docs/reference/cli#trax-machine-new-name) scaffolds a machine.
 
+### Other languages
+
+Every typed view is written from one model of the IR: which states and triggers there are, and which field becomes
+which type (an `arrayOf` constraint types a list's elements, a `oneOf` constraint limits a string to its values). Each
+language has an emitter over that model, so a rule about the IR is decided once. `--lang csharp` writes the C# view,
+`<Machine>.g.cs`, for a .NET frontend: enums for the states and triggers, a record per context and input, the IR with
+its hash, and a typed client over [`Trax.StateMachine.Client`](/docs/sdk-reference/statemachine-api/dotnet-client)
+that predicts with the machine built from that IR ([`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine)).
+The conformance kit holds that engine to the same answers as the C# and TypeScript ones.
+
 ## SDK Reference
 
 > [ExportIr](/docs/sdk-reference/statemachine-api/machine#exporting-the-ir) | [IDifferentialBuilder](/docs/sdk-reference/statemachine-api/machine#idifferentialbuilder) | [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | [Migrations](/docs/sdk-reference/statemachine-api/migrations) | [trax machine](/docs/reference/cli#state-machines-trax-machine)

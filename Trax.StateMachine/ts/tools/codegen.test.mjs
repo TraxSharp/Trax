@@ -81,6 +81,27 @@ describe("generate-twin entrypoint", () => {
     expect(read(machinePath)).toBe(read(join(ingestTwin, "ingest.machine.g.ts")));
   });
 
+  it("reproduces the committed C# view of every kit machine, which the .NET tests compile and drive", async () => {
+    const views = join(repoRoot, "..", "dotnet", "tests", "Trax.StateMachine.Tests", "Machines");
+    for (const [machine, file] of [["checkout", "Checkout"], ["gauge", "Gauge"], ["ingest", "Ingest"], ["reminder", "Reminder"], ["turnstile", "Turnstile"]]) {
+      const { viewPath } = await generateTwin({
+        irPath: join(machinesRoot, machine, `${machine}.ir.json`),
+        engineSrc,
+        outDir: out,
+        lang: "csharp",
+        namespace: "Trax.StateMachine.Tests.Machines",
+      });
+      expect(viewPath.endsWith(`${file}.g.cs`)).toBe(true);
+      expect(read(viewPath), machine).toBe(read(join(views, `${file}.g.cs`)));
+    }
+  });
+
+  it("refuses an unknown language", async () => {
+    await expect(generateTwin({ irPath: turnstileIr, engineSrc, outDir: out, lang: "cobol" })).rejects.toThrow(
+      "--lang must be 'typescript' or 'csharp'",
+    );
+  });
+
   it("derives the filenames from the IR id", async () => {
     const { contextsPath, machinePath } = await generateTwin({
       irPath: turnstileIr,

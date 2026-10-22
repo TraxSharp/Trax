@@ -4,6 +4,7 @@ exports[`the published exports > match the committed baseline 1`] = `
 {
   "@traxsharp/state-machine": [
     "AdvanceResult",
+    "CSharpViewOptions",
     "ClientProblemCode",
     "CompareOp",
     "ContextOf",
@@ -64,6 +65,7 @@ exports[`the published exports > match the committed baseline 1`] = `
     "createFormView",
     "enumerate",
     "evaluateRule",
+    "generateCSharpView",
     "generateContextTypes",
     "generateMachineFactory",
     "machineFromIr",

@@ -19,6 +19,7 @@ internal sealed class FakeNodeRunner : INodeRunner
     public string ContextsContent { get; set; } = "// generated contexts\n";
     public string MachineContent { get; set; } = "// generated machine\n";
     public string CorpusContent { get; set; } = "{ \"cases\": [] }\n";
+    public string ViewContent { get; set; } = "// generated view\n";
 
     /// <summary>When false, every call exits 0 without writing anything, as a mismatched engine might.</summary>
     public bool WritesOutputs { get; set; } = true;
@@ -41,6 +42,14 @@ internal sealed class FakeNodeRunner : INodeRunner
         {
             var outDir = flags["--out-dir"];
             var id = ReadIrId(flags["--ir"]);
+            if (flags.GetValueOrDefault("--lang") == "csharp")
+            {
+                File.WriteAllText(
+                    Path.Combine(outDir, $"{MachineScaffolder.Pascal(id)}.g.cs"),
+                    ViewContent
+                );
+                return new NodeResult(0, "", "");
+            }
             File.WriteAllText(Path.Combine(outDir, $"{id}.contexts.g.ts"), ContextsContent);
             File.WriteAllText(Path.Combine(outDir, $"{id}.machine.g.ts"), MachineContent);
         }

@@ -157,6 +157,53 @@ public class MachineGeneratorTests
     }
 
     [Test]
+    public void Generate_with_lang_csharp_places_one_view_named_after_the_machine()
+    {
+        var node = new FakeNodeRunner { ViewContent = "// view\n" };
+        var twinOut = Dir("twin");
+
+        var result = new MachineGenerator(node).Generate(
+            Options(twinOut: twinOut) with
+            {
+                ImportStyle = null,
+                Lang = "csharp",
+                Namespace = "Shop.Machines",
+            }
+        );
+
+        File.ReadAllText(Path.Combine(twinOut, "Turnstile.g.cs")).Should().Be("// view\n");
+        Directory.EnumerateFiles(twinOut).Should().ContainSingle();
+        result.Written.Select(w => w.Kind).Should().BeEquivalentTo(["view"]);
+        var twinCall = node.Calls.Single(c => c.Script.Contains("twin"));
+        twinCall.Args.Should().ContainInOrder("--lang", "csharp", "--namespace", "Shop.Machines");
+        twinCall.Args.Should().NotContain("--import-style");
+    }
+
+    [TestCase("rust", null, null, "*--lang must be*")]
+    [TestCase("csharp", "specifier", null, "*a C# view imports*")]
+    [TestCase(null, null, "Shop.Machines", "*--namespace*needs --lang csharp*")]
+    public void Generate_refuses_options_that_do_not_fit_the_language(
+        string? lang,
+        string? importStyle,
+        string? @namespace,
+        string message
+    )
+    {
+        var node = new FakeNodeRunner();
+        var options = Options(twinOut: Dir("twin")) with
+        {
+            ImportStyle = importStyle,
+            Lang = lang,
+            Namespace = @namespace,
+        };
+
+        var act = () => new MachineGenerator(node).Generate(options);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        node.Calls.Should().BeEmpty();
+    }
+
+    [Test]
     public void Generate_forwards_a_custom_specifier()
     {
         var node = new FakeNodeRunner();

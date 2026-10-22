@@ -130,7 +130,7 @@ internal static class MachineCommand
         var o = MachineOptions.Create();
         var command = new Command(
             "generate",
-            "Export the IR from a compiled machine and generate its TS twin and/or differential corpus."
+            "Export the IR from a compiled machine and generate its typed view (TypeScript or C#) and/or differential corpus."
         )
         {
             o.Assembly,
@@ -143,6 +143,8 @@ internal static class MachineCommand
             o.Specifier,
             o.ToolsDir,
             o.Node,
+            o.Lang,
+            o.Namespace,
         };
         command.SetAction(parseResult =>
             RunGenerate(
@@ -155,7 +157,9 @@ internal static class MachineCommand
                 parseResult.GetValue(o.ImportStyle),
                 parseResult.GetValue(o.Specifier),
                 parseResult.GetValue(o.ToolsDir)?.FullName,
-                new NodeRunner(parseResult.GetValue(o.Node) ?? "node")
+                new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
+                parseResult.GetValue(o.Lang),
+                parseResult.GetValue(o.Namespace)
             )
         );
         return command;
@@ -179,6 +183,8 @@ internal static class MachineCommand
             o.Specifier,
             o.ToolsDir,
             o.Node,
+            o.Lang,
+            o.Namespace,
         };
         command.SetAction(parseResult =>
             RunCheck(
@@ -191,7 +197,9 @@ internal static class MachineCommand
                 parseResult.GetValue(o.ImportStyle),
                 parseResult.GetValue(o.Specifier),
                 parseResult.GetValue(o.ToolsDir)?.FullName,
-                new NodeRunner(parseResult.GetValue(o.Node) ?? "node")
+                new NodeRunner(parseResult.GetValue(o.Node) ?? "node"),
+                parseResult.GetValue(o.Lang),
+                parseResult.GetValue(o.Namespace)
             )
         );
         return command;
@@ -311,7 +319,9 @@ internal static class MachineCommand
         string? importStyle,
         string? specifier,
         string? toolsDir,
-        INodeRunner node
+        INodeRunner node,
+        string? lang = null,
+        string? @namespace = null
     )
     {
         try
@@ -326,7 +336,9 @@ internal static class MachineCommand
                     engineSrc,
                     importStyle,
                     specifier,
-                    toolsDir
+                    toolsDir,
+                    lang,
+                    @namespace
                 )
             );
 
@@ -354,7 +366,9 @@ internal static class MachineCommand
         string? importStyle,
         string? specifier,
         string? toolsDir,
-        INodeRunner node
+        INodeRunner node,
+        string? lang = null,
+        string? @namespace = null
     )
     {
         try
@@ -369,7 +383,9 @@ internal static class MachineCommand
                     engineSrc,
                     importStyle,
                     specifier,
-                    toolsDir
+                    toolsDir,
+                    lang,
+                    @namespace
                 )
             );
 
@@ -415,7 +431,9 @@ internal static class MachineCommand
         Option<string?> ImportStyle,
         Option<string?> Specifier,
         Option<DirectoryInfo?> ToolsDir,
-        Option<string?> Node
+        Option<string?> Node,
+        Option<string?> Lang,
+        Option<string?> Namespace
     )
     {
         public static MachineOptions Create() =>
@@ -466,6 +484,16 @@ internal static class MachineCommand
                 {
                     Description =
                         "The node executable: an absolute path, or a name looked up on PATH (default: node). Never resolved from the current directory; a relative path is refused, and on Windows so is a .cmd or .bat shim.",
+                },
+                new Option<string?>("--lang")
+                {
+                    Description =
+                        "The typed view --twin-out writes: 'typescript' (default; <id>.contexts.g.ts and <id>.machine.g.ts) or 'csharp' (<Machine>.g.cs, for Trax.StateMachine.Client).",
+                },
+                new Option<string?>("--namespace")
+                {
+                    Description =
+                        "The C# view's namespace with --lang csharp (default Trax.Machines).",
                 }
             );
     }
