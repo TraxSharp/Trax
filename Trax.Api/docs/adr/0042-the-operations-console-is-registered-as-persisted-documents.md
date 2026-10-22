@@ -55,6 +55,5 @@ tests call documents directly.
 
 ## Changelog
 
+- **2026-10-22**: The file is written by `trax client --operations` with the console's generated client, under `ClientApp/src/trax/` (central `docs/0057`); what a host registers and how is unchanged.
 - **2026-10-18**: Recorded.
-- **2026-10-22**: The file is written by `trax client --operations` with the console's generated client, under
-  `ClientApp/src/trax/` (central `docs/0057`); what a host registers and how is unchanged.
