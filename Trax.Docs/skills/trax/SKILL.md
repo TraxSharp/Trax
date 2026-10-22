@@ -27,7 +27,11 @@ package is at one version.
 - **The app is older:** the skills may describe APIs it does not have. Tell the user, and suggest installing the
   skills from the app's release:
   `npx skills add https://github.com/TraxSharp/Trax/tree/skills-v<version>` (add `-a claude-code` for Claude Code,
-  whose plugin always follows the latest release).
+  whose plugin always follows the latest release). A `skills-v<version>` tag exists only for a release that
+  published skills, from the first one that did; an app on an earlier release has none. For such an app, keep
+  the skills from the `skills` branch and check each API they describe against the app's version: the
+  [migration guides](https://traxsharp.net/docs/migration-guides) say what changed in each release, and
+  `trax-upgrade` moves the app forward if the user wants that.
 - **The app is newer:** update the skills (`npx skills update`, or `/plugin update trax@traxsharp` in Claude Code).
 - **The user wants to move the app to a newer Trax:** load `trax-upgrade`.
 
