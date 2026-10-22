@@ -181,7 +181,7 @@ namespace Trax.StateMachine.Client
         public required System.Text.Json.Nodes.JsonObject Context { get; init; }
         public System.DateTimeOffset? DueAt { get; init; }
         public bool DueAtKnown { get; init; }
-        public required long Revision { get; init; }
+        public required long? Revision { get; init; }
         public string? RowId { get; init; }
         public required string State { get; init; }
     }

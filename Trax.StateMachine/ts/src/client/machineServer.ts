@@ -107,9 +107,10 @@ const problemOf = (problem: { code: ProblemCode; message: string }): ServerProbl
 const snapshotOf = (output: SnapshotOutput): ServerSnapshot => {
   const parsed = JSON.parse(output.snapshot!) as { state: string; context: Record<string, unknown> };
   // A due time the answer does not carry, or says it cannot know, stays absent, so the controller tells it from null
-  // (no timer, or the server cleared it).
+  // (no timer, or the server cleared it). A revision the store does not record stays null: it is not revision 0, which
+  // would order every later answer below it.
   return {
-    revision: output.revision ?? 0,
+    revision: output.revision ?? null,
     state: parsed.state,
     context: parsed.context,
     ...(output.dueAt === undefined ? {} : { dueAt: output.dueAt }),

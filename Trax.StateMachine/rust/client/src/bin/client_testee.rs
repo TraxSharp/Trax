@@ -210,7 +210,10 @@ fn outcome_of(outcome: &SendOutcome) -> Map {
         SendOutcome::Confirmed(s) => object([
             ("outcome", Value::from("confirmed")),
             ("state", Value::from(s.state.as_str())),
-            ("revision", Value::Number(s.revision as f64)),
+            (
+                "revision",
+                s.revision.map(|r| Value::Number(r as f64)).unwrap_or(Value::Null),
+            ),
         ]),
         SendOutcome::Refused(p) => object([
             ("outcome", Value::from("refused")),

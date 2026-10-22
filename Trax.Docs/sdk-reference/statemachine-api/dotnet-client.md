@@ -115,7 +115,7 @@ server answers it.
 | `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers or a proxy on each `ClientWebSocket`; and `ConnectTimeout`. |
 | `ISubscriptionSocket`, `ISubscriptionSink` | The socket seam: `Subscribe(documentId, variables, sink)`, and the sink's `Next`, `Error` and `Complete`. |
 | `SubscriptionErrorException` | The error a sink gets when the server ends a subscription with GraphQL errors, which it carries as `Errors`. |
-| `ServerAnswer`, `ServerSnapshot`, `ServerProblem` | An answer: the instance `Id` on a start, the `Snapshot` the server stored or the `Problem` it refused with (`Of` and `Refused` build one). A `ServerSnapshot` is the `State`, its `Context` with no null member, the `Revision`, the incarnation `RowId`, and `DueAt`, which counts only when `DueAtKnown`. |
+| `ServerAnswer`, `ServerSnapshot`, `ServerProblem` | An answer: the instance `Id` on a start, the `Snapshot` the server stored or the `Problem` it refused with (`Of` and `Refused` build one). A `ServerSnapshot` is the `State`, its `Context` with no null member, the `Revision` (null when the store records none, which the controller takes and cannot order), the incarnation `RowId`, and `DueAt`, which counts only when `DueAtKnown`. |
 | `StreamMessage` | What a change stream delivers: `Changed` with the `Snapshot`, `Gone` (with `NotFound` when the server answered `NOT_FOUND`), `Reload`, or `ClientOutdated`. |
 
 ## Behavior

@@ -119,7 +119,7 @@ From `@traxsharp/state-machine/client`:
 | `MachineServerOptions` | `createMachineServer`'s options, `HttpExecutorOptions` with the `machine`, `documents`, `socket`, `resubscribeDelays` and `terminalStreamErrors`. |
 | `PersistedSubscriptionSocket`, `SubscriptionSink` | The part of a graphql-ws client the push needs: `subscribe(payload, sink)`, returning the function that closes it; and the sink it delivers to, `next`, `error`, `complete`. |
 | `TypedMachineServer` | The `MachineServer` `createMachineServer` answers: `start`, `event`, `get`, `subscribe` and `endedBy`, and `discard(id, requestId)`. |
-| `ServerSnapshot` | One snapshot as the server sends it: `state`, `context`, the `revision` every write bumps, the row's incarnation `rowId`, and `dueAt`. |
+| `ServerSnapshot` | One snapshot as the server sends it: `state`, `context`, the `revision` every write bumps (null when the store records none, which the controller takes and cannot order), the row's incarnation `rowId`, and `dueAt`. |
 | `StartResponse`, `EventResponse`, `GetResponse`, `DiscardResponse`, `ServerProblem` | A `MachineServer`'s answers: `started` with the `id` and snapshot, `ok` with the snapshot, `discarded`, or a `ServerProblem` (`kind: 'problem'`, `code`, `message`). |
 | `StreamMessage` | What an instance's push delivers: a `snapshot`, `gone` (with `notFound` when the server answered `NOT_FOUND`), `reconnected`, `client-outdated`, or `ended` with a code and message. |
 | `ServerMachineOptions<Spec>` | What a `ServerMachineController` is built with: the `machine`, the `server`, the instance `id` or the `startInput` and `startRequestId` to start one, `newRequestId` and `retryDelays`. |

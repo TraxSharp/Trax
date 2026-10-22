@@ -2,7 +2,8 @@
 //!
 //! Every event goes to the server under its own request id, the server's answer (or a pushed snapshot) replaces the
 //! prediction, and snapshots are ordered by revision within one incarnation: anything at or below the revision held is
-//! dropped, the controller's own answers included. The same rules as the TypeScript `ServerMachineController` and the
+//! dropped, the controller's own answers included. An answer with no revision cannot be ordered: it is taken, and so is
+//! whatever comes after it. The same rules as the TypeScript `ServerMachineController` and the
 //! C# one, held to the same transcripts by the client conformance kit.
 //!
 //! All of the controller's state is owned by one task, which handles one message at a time: a call from the
@@ -833,7 +834,7 @@ impl<S: MachineServer> Actor<S> {
                 self.reload_again = true;
             }
             let newer = match &self.buffered {
-                Some(b) => b.row_id != incoming.row_id || incoming.revision > b.revision,
+                Some(b) => b.row_id != incoming.row_id || !older_or_same(incoming.revision, b.revision),
                 None => true,
             };
             if newer {
@@ -842,10 +843,10 @@ impl<S: MachineServer> Actor<S> {
             return false;
         }
         if let Some(held) = self.revision {
-            if !other_incarnation && incoming.revision <= held {
+            if !other_incarnation && older_or_same(incoming.revision, Some(held)) {
                 // A read of the revision held, asked for because an answer did not know the due time of its timed
                 // state, brings the due time and nothing else.
-                if source == Source::Load && incoming.revision == held && self.due_at.is_none() {
+                if source == Source::Load && incoming.revision == Some(held) && self.due_at.is_none() {
                     if let DueAt::At(due) = &incoming.due_at {
                         if self.confirmed.as_ref().map(|c| c.state.as_str()) == Some(incoming.state.as_str()) {
                             self.due_at = Some(due.clone());
@@ -908,7 +909,7 @@ impl<S: MachineServer> Actor<S> {
         if incoming.row_id.is_some() {
             self.row_id = incoming.row_id;
         }
-        self.revision = Some(incoming.revision);
+        self.revision = incoming.revision;
         if self.status == MachineStatus::Loading {
             self.status = MachineStatus::Ready;
         }
@@ -1162,6 +1163,12 @@ impl<S: MachineServer> Actor<S> {
         }
         Some(shown)
     }
+}
+
+// Whether a snapshot at `incoming` is at or below one at `held`. A missing revision on either side cannot be ordered, so
+// it is never older.
+fn older_or_same(incoming: Option<i64>, held: Option<i64>) -> bool {
+    matches!((incoming, held), (Some(i), Some(h)) if i <= h)
 }
 
 /// The context with every null member left out, at every depth: a typed answer cannot tell a member stored as null

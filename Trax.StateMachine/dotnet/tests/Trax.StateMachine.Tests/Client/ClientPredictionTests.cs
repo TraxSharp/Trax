@@ -22,7 +22,7 @@ public class ClientPredictionTests
         Ir = (JsonObject)JsonNode.Parse(IrExporter.Export(DeclarativeTurnstile.Built))!,
     };
 
-    private static ServerSnapshot At(long revision, string state, JsonObject? context = null) =>
+    private static ServerSnapshot At(long? revision, string state, JsonObject? context = null) =>
         new()
         {
             Revision = revision,
@@ -99,6 +99,34 @@ public class ClientPredictionTests
         sent.Answer.SetResult(ServerAnswer.Of(At(2, "Unlocked")));
         (await send.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
         controller.View.Snapshot!.State.Should().Be("Unlocked");
+    }
+
+    [Test]
+    public async Task An_answer_without_a_revision_is_taken_and_the_next_one_is_taken_after_it()
+    {
+        var server = new HandServer();
+        using var controller = Open(server, MachinePredictor.FromIr(Turnstile));
+        await server.Answer(
+            controller,
+            ServerAnswer.Of(At(5, "Unlocked", new JsonObject { ["paidWith"] = "dollar" }))
+        );
+
+        var push = controller.SendAsync("Push");
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Of(At(null, "Locked"))
+        );
+        (await push.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+        controller.View.Revision.Should().BeNull();
+        controller.View.Confirmed!.State.Should().Be("Locked");
+
+        var coin = controller.SendAsync("Coin", new JsonObject { ["coin"] = "quarter" });
+        (await server.Events.Reader.ReadAsync().AsTask().WaitAsync(Wait)).Answer.SetResult(
+            ServerAnswer.Of(At(2, "Unlocked", new JsonObject { ["paidWith"] = "quarter" }))
+        );
+        (await coin.WaitAsync(Wait)).Should().BeOfType<SendOutcome.Confirmed>();
+
+        controller.View.Revision.Should().Be(2);
+        controller.View.Confirmed!.State.Should().Be("Unlocked");
     }
 
     [Test]

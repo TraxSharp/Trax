@@ -470,6 +470,26 @@ describe('ServerMachineController', () => {
     expect(controller.get().snapshot).toEqual(controller.get().confirmed);
   });
 
+  it('takes an answer without a revision, and whatever comes after it', async () => {
+    const { server, controller } = await ready();
+    const stream = server.stream('i-1');
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ revision: 5 }) });
+    await flushMicrotasks();
+
+    void controller.send('Coin', { coin: 'quarter' });
+    await flushMicrotasks();
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: null, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+    expect(controller.get().revision).toBeNull();
+    expect(controller.get().confirmed).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'quarter' }));
+
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ revision: 2 }) });
+    await flushMicrotasks();
+
+    expect(controller.get().revision).toBe(2);
+    expect(controller.get().confirmed).toEqual(turnstile.snapshotAt('Locked', {}));
+  });
+
   it('a skipped revision just renders the newer snapshot', async () => {
     const { server, controller } = await ready();
     const stream = server.stream('i-1');

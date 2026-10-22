@@ -256,7 +256,7 @@ fn answer_of(answer: &Value) -> Result<ServerAnswer, TransportError> {
         return Ok(ServerAnswer::Refused(problem));
     }
     let snapshot = snapshot_of(answer)
-        .ok_or_else(|| TransportError("The server answered a snapshot without a state or a revision.".to_owned()))?;
+        .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?;
     Ok(ServerAnswer::Stored {
         id: answer.get("id").and_then(|i| i.as_str()).map(str::to_owned),
         snapshot,
@@ -265,7 +265,12 @@ fn answer_of(answer: &Value) -> Result<ServerAnswer, TransportError> {
 
 fn snapshot_of(value: &Value) -> Option<ServerSnapshot> {
     let state = value.get("state")?.as_str()?.to_owned();
-    let revision = value.get("revision")?.as_f64()? as i64;
+    // A revision the store does not record stays `None`: it is not revision 0, which would order every later answer
+    // below it.
+    let revision = match value.get("revision") {
+        None | Some(Value::Null) => None,
+        Some(revision) => Some(revision.as_f64()? as i64),
+    };
     let context = value
         .get("context")
         .and_then(|c| c.as_object())
@@ -498,7 +503,7 @@ impl Inner {
             sink(StreamMessage::Reload);
             return None;
         }
-        let snapshot = snapshot_of(change)?;
+        let snapshot = snapshot_of(change).filter(|s| s.revision.is_some())?;
         *attempt = 0;
         sink(StreamMessage::Changed(snapshot));
         None
@@ -561,6 +566,15 @@ mod tests {
         assert_eq!(event_field("ID"), "id");
         assert_eq!(event_field("URLPath"), "urlPath");
         assert_eq!(event_field("coin"), "coin");
+    }
+
+    #[test]
+    fn an_answer_without_a_revision_has_none() {
+        let answer = Value::parse(r#"{"id":"i-1","revision":null,"state":"Locked","context":{}}"#).unwrap();
+        let ServerAnswer::Stored { snapshot, .. } = answer_of(&answer).unwrap() else {
+            panic!("expected a snapshot");
+        };
+        assert_eq!(snapshot.revision, None);
     }
 
     #[test]

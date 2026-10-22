@@ -5,7 +5,8 @@ import type { InputArgs, MachineSpec, TriggerOf, TypedMachine, TypedSnapshot } f
 // The server-authoritative controller: the server owns the instance, the twin only predicts. Every event goes
 // to the server under its own requestId, the server's answer (or a pushed snapshot) replaces the prediction,
 // and snapshots are ordered by `revision` within one incarnation (`rowId`): anything at or below the revision
-// held is dropped, the controller's own answers included. See
+// held is dropped, the controller's own answers included. An answer with no revision cannot be ordered: it is taken,
+// and so is whatever comes after it. See
 // Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md.
 
 /** One full server snapshot, with the values that travel beside it rather than inside the canonical wire. */
@@ -16,8 +17,11 @@ export interface ServerSnapshot {
    * the incarnation it holds.
    */
   rowId?: string | null;
-  /** Bumped by the database on every write of the row. */
-  revision: number;
+  /**
+   * Bumped by the database on every write of the row. Null when the store records none: the snapshot cannot be ordered,
+   * so it is never dropped as stale, and whatever comes after it is taken.
+   */
+  revision: number | null;
   state: string;
   context: Record<string, unknown>;
   /**
@@ -176,6 +180,11 @@ interface QueuedEvent {
 
 const defaultRequestId = (): string => globalThis.crypto.randomUUID();
 
+// Whether a snapshot at `incoming` is at or below one at `held`. A missing revision on either side cannot be ordered, so
+// it is never older.
+const olderOrSame = (incoming: number | null, held: number | null): boolean =>
+  incoming !== null && held !== null && incoming <= held;
+
 const refusal = (code: ProblemCode, message: string): Problem => ({ kind: 'rejected', code, message });
 
 const transportFailure = (error: unknown): Problem => ({
@@ -193,7 +202,8 @@ const transportFailure = (error: unknown): Problem => ({
  *   twin refuses is still sent, without a prediction: the server decides. An effect-bound event (one whose edge runs
  *   an effect) is sent with no input and no prediction, and nothing queued after it is predicted until it answers.
  * - **Ordering.** Every snapshot, pushed or answered, carries its revision. Anything at or below the revision held is
- *   dropped, so a skipped revision is harmless. The controller reads the instance again only after a reconnect, an
+ *   dropped, so a skipped revision is harmless. An answer without one (a store that records none) is taken and cannot
+ *   be ordered: the next snapshot, with a revision or without, is taken after it. The controller reads the instance again only after a reconnect, an
  *   incarnation change or a `CLIENT_DIVERGENCE`, once each.
  * - **Retries.** `SERVER_OUTDATED` is retried under the same requestId after each of `retryDelays`, never reloaded:
  *   an event, a read and the `start` that creates the instance alike.
@@ -553,11 +563,11 @@ export class ServerMachineController<Spec extends MachineSpec> {
       // The row was deleted and created again: its revisions restart, so they say nothing against the ones held.
       if (!this.reloading) this.reload(rowId);
       else if (this.reloadRowId === null) this.reloadAgain = true;
-      if (this.buffered === null || this.buffered.rowId !== rowId || incoming.revision > this.buffered.revision)
+      if (this.buffered === null || this.buffered.rowId !== rowId || !olderOrSame(incoming.revision, this.buffered.revision))
         this.buffered = { ...incoming, rowId };
       return false;
     }
-    if (!otherIncarnation && this.revision !== null && incoming.revision <= this.revision) {
+    if (!otherIncarnation && olderOrSame(incoming.revision, this.revision)) {
       // A read of the revision held, asked for because an answer did not know the due time of its timed state,
       // brings the due time and nothing else.
       if (

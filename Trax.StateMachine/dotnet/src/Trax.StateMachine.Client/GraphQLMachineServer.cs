@@ -266,7 +266,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         return ServerAnswer.Of(
             new ServerSnapshot
             {
-                Revision = answer["revision"]?.GetValue<long>() ?? 0,
+                // A revision the store does not record stays null: it is not revision 0, which would order every
+                // later answer below it.
+                Revision = answer["revision"] is JsonValue revision
+                    ? revision.GetValue<long>()
+                    : null,
                 State =
                     Text(answer["state"])
                     ?? throw new HttpRequestException(
