@@ -14,6 +14,7 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use trax_state_machine::{Map, Value};
 
 use crate::controller::{codes, without_nulls};
@@ -64,6 +65,9 @@ pub struct GraphQLMachineServerOptions {
     pub connection_params: Option<ConnectionParams>,
     /// Delays before subscribing again after a stream that ended without saying why. The last repeats.
     pub resubscribe_delays: Option<Vec<Duration>>,
+    /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
+    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
+    pub connect_timeout: Duration,
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
     /// authenticates the client would travel in cleartext.
     pub allow_insecure_transport: bool,
@@ -86,10 +90,16 @@ impl GraphQLMachineServerOptions {
             headers: None,
             connection_params: None,
             resubscribe_delays: None,
+            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
             allow_insecure_transport: false,
         }
     }
 }
+
+type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// How long a socket may take to connect and be acknowledged before the attempt counts as failed, by default.
+pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The default delays before subscribing again after a stream ended without a reason.
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
@@ -131,6 +141,7 @@ struct Inner {
     headers: Option<RequestHeaders>,
     connection_params: Option<ConnectionParams>,
     resubscribe_delays: Vec<Duration>,
+    connect_timeout: Duration,
 }
 
 impl GraphQLMachineServer {
@@ -185,6 +196,7 @@ impl GraphQLMachineServer {
                 headers: options.headers,
                 connection_params: options.connection_params,
                 resubscribe_delays: delays,
+                connect_timeout: options.connect_timeout,
             }),
         })
     }
@@ -440,13 +452,14 @@ impl Inner {
         }
     }
 
-    async fn subscribe_once(&self, id: &str, sink: &StreamSink, attempt: &mut usize) -> Ended {
+    // Opens a socket and has it acknowledged; `None` when it could not be, the host's refusal included.
+    async fn connect(&self) -> Option<Socket> {
         let Ok(mut request) = self.socket.as_str().into_client_request() else {
-            return Ended::Again;
+            return None;
         };
         if let Some(headers) = &self.headers {
             let Ok(headers) = headers().await else {
-                return Ended::Again;
+                return None;
             };
             request.headers_mut().extend(headers);
         }
@@ -455,7 +468,7 @@ impl Inner {
             HeaderValue::from_static("graphql-transport-ws"),
         );
         let Ok((mut socket, _)) = tokio_tungstenite::connect_async(request).await else {
-            return Ended::Again;
+            return None;
         };
 
         // Asked for on every connection, so a token that expired since the last one is not sent again.
@@ -469,12 +482,12 @@ impl Inner {
                 Ok(None) => {}
                 Err(_) => {
                     let _ = socket.close(None).await;
-                    return Ended::Again;
+                    return None;
                 }
             }
         }
         if socket.send(Message::text(Value::Object(init).to_json())).await.is_err() {
-            return Ended::Again;
+            return None;
         }
         // Acknowledged, or closed before: a host that turns the caller away closes here.
         loop {
@@ -492,9 +505,17 @@ impl Inner {
                     _ => {}
                 },
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => {}
-                _ => return Ended::Again,
+                _ => return None,
             }
         }
+        Some(socket)
+    }
+
+    async fn subscribe_once(&self, id: &str, sink: &StreamSink, attempt: &mut usize) -> Ended {
+        // A host that accepts the connection but never acknowledges it counts as one that refused it.
+        let Ok(Some(mut socket)) = tokio::time::timeout(self.connect_timeout, self.connect()).await else {
+            return Ended::Again;
+        };
 
         let mut variables = Map::new();
         variables.insert("id".into(), Value::from(id));
@@ -772,12 +793,21 @@ mod tests {
         assert!(!error.0.contains("127.0.0.1"), "{}", error.0);
     }
 
-    // A host on a loopback port that records each connection's authorization header and connection_init payload,
-    // refuses the first connection with 4403 the way a host refuses an expired token, and acknowledges the rest.
-    async fn recording_host() -> (
-        u16,
-        tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>,
-    ) {
+    // How the host answers one connection's connection_init.
+    #[derive(Clone, Copy)]
+    enum Reply {
+        // Closes it with 4403, as a host refuses an expired token.
+        Refuse,
+        Acknowledge,
+        // Says nothing and holds the connection open.
+        Silent,
+    }
+
+    type Heard = tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>;
+
+    // A host on a loopback port that records each connection's authorization header and connection_init payload and
+    // answers connection n (from 0) as `reply(n)` says.
+    async fn recording_host(reply: fn(usize) -> Reply) -> (u16, Heard) {
         use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
         use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
         use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -815,16 +845,21 @@ mod tests {
                         .and_then(|t| t.as_str())
                         .map(str::to_owned);
                     let _ = seen.send((authorization, token));
-                    if n == 0 {
-                        let _ = socket
-                            .close(Some(CloseFrame {
-                                code: CloseCode::Library(4403),
-                                reason: "Forbidden".into(),
-                            }))
-                            .await;
-                        return;
+                    match reply(n) {
+                        Reply::Acknowledge => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                        }
+                        Reply::Silent => {}
+                        Reply::Refuse => {
+                            let _ = socket
+                                .close(Some(CloseFrame {
+                                    code: CloseCode::Library(4403),
+                                    reason: "Forbidden".into(),
+                                }))
+                                .await;
+                            return;
+                        }
                     }
-                    let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                     while let Some(Ok(_)) = socket.next().await {}
                 });
             }
@@ -836,7 +871,7 @@ mod tests {
     async fn every_connection_asks_for_its_headers_and_params_again() {
         use std::sync::atomic::{AtomicU32, Ordering};
 
-        let (port, mut heard) = recording_host().await;
+        let (port, mut heard) = recording_host(|n| if n == 0 { Reply::Refuse } else { Reply::Acknowledge }).await;
         let mut given = options(
             &format!("http://127.0.0.1:{port}/graphql"),
             &format!("ws://127.0.0.1:{port}/graphql"),
@@ -871,5 +906,30 @@ mod tests {
 
         assert_eq!(first, (Some("Bearer 1".into()), Some("t1".into())));
         assert_eq!(second, (Some("Bearer 2".into()), Some("t2".into())));
+    }
+
+    #[tokio::test]
+    async fn a_connection_never_acknowledged_is_given_up_after_the_connect_timeout() {
+        let (port, mut heard) = recording_host(|_| Reply::Silent).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.connect_timeout = Duration::from_millis(100);
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert!(again.is_ok(), "the first connection was never given up");
+    }
+
+    #[test]
+    fn the_connect_timeout_is_ten_seconds_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.connect_timeout, Duration::from_secs(10));
     }
 }
