@@ -1,0 +1,8 @@
+{
+  "name": "A NUL in a context key is malformed, before the context is checked against its state",
+  "raw": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{\"paid\\u0000With\":\"quarter\"}}",
+  "expect": {
+    "result": "error",
+    "code": "MALFORMED"
+  }
+}

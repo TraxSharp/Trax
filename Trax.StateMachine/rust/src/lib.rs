@@ -26,6 +26,7 @@ mod ir;
 mod machine;
 mod refusal;
 mod rules;
+mod stored;
 mod value;
 
 pub use formats::duration_ticks;

@@ -1,0 +1,8 @@
+{
+  "name": "A lone surrogate in a context string is malformed",
+  "raw": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"a\\ud800b\"}}",
+  "expect": {
+    "result": "error",
+    "code": "MALFORMED"
+  }
+}

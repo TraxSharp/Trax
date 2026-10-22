@@ -194,13 +194,20 @@ fn rehydrate_is_total_on_broken_text() {
 }
 
 #[test]
-fn a_lone_surrogate_names_no_machine_and_no_state() {
+fn a_lone_surrogate_is_malformed_as_the_csharp_reader_answers() {
     let machine = Machine::from_ir(&conformance("machines/turnstile/turnstile.ir.json")).unwrap();
-    let foreign = r#"{"machine":"\ud800","version":1,"state":"Locked","context":{}}"#;
-    assert_eq!(
-        machine.rehydrate(foreign).unwrap_err().code,
-        RefusalCode::UnknownMachine
-    );
-    let lost = r#"{"machine":"turnstile","version":1,"state":"\ud800","context":{}}"#;
-    assert_eq!(machine.rehydrate(lost).unwrap_err().code, RefusalCode::UnknownState);
+    for stored in [
+        r#"{"machine":"\ud800","version":1,"state":"Locked","context":{}}"#,
+        r#"{"machine":"turnstile","version":1,"state":"\ud800","context":{}}"#,
+        r#"{"machine":"turnstile","version":1,"state":"Locked","context":{"\ud800":1}}"#,
+    ] {
+        assert_eq!(
+            machine.rehydrate(stored).unwrap_err().code,
+            RefusalCode::Malformed,
+            "{stored}"
+        );
+    }
+    // A member the reader never reads is not looked at, as there.
+    let ignored = r#"{"machine":"turnstile","version":1,"state":"Locked","context":{},"note":"\ud800"}"#;
+    assert!(machine.rehydrate(ignored).is_ok());
 }

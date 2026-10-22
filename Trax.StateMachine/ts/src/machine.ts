@@ -10,6 +10,7 @@ import type {
   Snapshot,
   TransitionDefinition,
 } from "./types";
+import { storedTextProblems, unstorable } from "./storedText";
 
 /**
  * Interprets a {@link MachineDefinition} over {@link Snapshot}s — the TypeScript half of the
@@ -301,6 +302,16 @@ export class SnapshotMachine<S extends string, T extends string> {
       return error(RefusalCode.Malformed, "Input is not valid JSON.");
     }
 
+    // What the C# reader refuses although JSON.parse reads it (./storedText.ts): too deep, a key twice, a lone
+    // surrogate in what it reads first.
+    const unreadable = storedTextProblems(json);
+    if (
+      unreadable.root ||
+      unreadable.members.has("machine") ||
+      unreadable.members.has("state")
+    )
+      return error(RefusalCode.Malformed, "The snapshot could not be read.");
+
     if (typeof node !== "object" || node === null || Array.isArray(node))
       return error(
         RefusalCode.Malformed,
@@ -360,6 +371,16 @@ export class SnapshotMachine<S extends string, T extends string> {
         RefusalCode.UnknownState,
         `Unknown state '${effState}'.`,
       );
+
+    // A context the C# reader cannot read, or holding a value no store can hold, is malformed, as there. Read
+    // before the copy, which turns a number outside the range of a double into null.
+    if (unreadable.members.has("context"))
+      return error(RefusalCode.Malformed, "The snapshot could not be read.");
+    const unstorableValue = unstorable(
+      version === this.def.version ? context : effContext,
+    );
+    if (unstorableValue != null)
+      return error(RefusalCode.Malformed, unstorableValue);
 
     const contextError = this.validateContext(
       effState,
