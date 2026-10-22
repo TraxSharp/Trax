@@ -62,7 +62,7 @@ Every `uses:` reference is pinned to a full commit SHA, and every service-contai
 
 The root `.github/CODEOWNERS` file names the maintainer for every path, and lists the files that decide what CI runs, what gets restored and how a release is cut (`.github/`, the `Directory.*.props` files, `global.json`, the release tooling) explicitly. The organisation ruleset requires a code owner's approval on `main`.
 
-On every pull request, CodeQL analyses the C# sources and the workflows (with `build-mode: none`, so the analysis runs no restore, MSBuild targets or package code), and zizmor audits the workflows for template injection, persisted credentials, unpinned actions and dangerous triggers.
+On every pull request, CodeQL analyses the C#, TypeScript and Rust sources and the workflows it changes. C#, TypeScript and the workflows are read with `build-mode: none`, so their analysis runs no restore, MSBuild targets or package code; the Rust analysis builds the crates `Cargo.lock` pins, build scripts included. So the analysis job holds no write permission: a separate job, which builds nothing, uploads its results to code scanning. zizmor audits the workflows for template injection, persisted credentials, unpinned actions and dangerous triggers.
 
 ## Keyless publishing
 
