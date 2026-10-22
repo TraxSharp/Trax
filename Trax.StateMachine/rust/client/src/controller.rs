@@ -112,6 +112,10 @@ pub enum SendOutcome {
 pub struct ServerMachineOptions<S> {
     /// The machine's IR, as the host's client manifest lists it. The client predicts with the machine built from it.
     pub ir: Value,
+    /// The IR's hash as the manifest lists it beside the IR (`irHash`): the lowercase hex SHA-256 of the IR's canonical
+    /// JSON. The controller refuses an IR that does not hash to it, since the host would answer every request
+    /// `CLIENT_OUTDATED`.
+    pub ir_hash: String,
     /// The server's operations and change stream for that machine.
     pub server: S,
     /// An existing instance to open; without one, `start` creates one.
@@ -127,10 +131,12 @@ pub struct ServerMachineOptions<S> {
 }
 
 impl<S> ServerMachineOptions<S> {
-    /// Options for the machine `ir` served by `server`, with every other choice left to its default.
-    pub fn new(ir: Value, server: S) -> Self {
+    /// Options for the machine `ir`, whose manifest hash is `ir_hash`, served by `server`, with every other choice left
+    /// to its default.
+    pub fn new(ir: Value, ir_hash: impl Into<String>, server: S) -> Self {
         ServerMachineOptions {
             ir,
+            ir_hash: ir_hash.into(),
             server,
             id: None,
             start_input: None,
@@ -163,9 +169,22 @@ pub struct ServerMachineController {
 }
 
 impl ServerMachineController {
-    /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start).
+    /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start). Refuses an IR the
+    /// machine cannot be built from, and one that does not hash to `ir_hash`.
     pub fn new<S: MachineServer>(options: ServerMachineOptions<S>) -> Result<Self, IrError> {
         let machine = Arc::new(Machine::from_ir(&options.ir)?);
+        let hash = ir_hash(&options.ir);
+        if !hash.eq_ignore_ascii_case(options.ir_hash.trim()) {
+            return Err(IrError {
+                message: format!(
+                    "The IR of '{}' hashes to {hash}, not to the manifest's irHash {}: they are of different versions \
+                     of the machine. Pass the IR and the irHash of one manifest entry, exported again from a host that \
+                     runs this version.",
+                    machine.id(),
+                    options.ir_hash
+                ),
+            });
+        }
         let unpredictable = Arc::new(unpredictable_edges(&options.ir));
         let (commands, inbox) = mpsc::unbounded_channel();
         let initial = Arc::new(MachineView {
@@ -335,6 +354,15 @@ fn transport_failure(error: &TransportError) -> MachineProblem {
             error.0.clone()
         },
     }
+}
+
+/// The hash a host's manifest gives an IR: the lowercase hex SHA-256 of its canonical JSON.
+pub fn ir_hash(ir: &Value) -> String {
+    ring::digest::digest(&ring::digest::SHA256, ir.to_json().as_bytes())
+        .as_ref()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);

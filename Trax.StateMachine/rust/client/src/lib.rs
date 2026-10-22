@@ -13,7 +13,7 @@ mod server;
 mod unhandled;
 
 pub use controller::{
-    codes, without_nulls, MachineError, MachineProblem, MachineStatus, MachineView, ProblemKind, SendOutcome,
+    codes, ir_hash, without_nulls, MachineError, MachineProblem, MachineStatus, MachineView, ProblemKind, SendOutcome,
     ServerMachineController, ServerMachineOptions, DEFAULT_RETRY_DELAYS,
 };
 pub use graphql::{

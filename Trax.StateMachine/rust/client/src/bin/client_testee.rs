@@ -123,7 +123,11 @@ fn open(request: &Value) -> Result<ServerMachineController, String> {
     let server = GraphQLMachineServer::new(server_options).map_err(|e| e.to_string())?;
     // Request ids count r1, r2, ... from each open, so the host can tell which request is which.
     let count = Arc::new(AtomicU64::new(0));
-    let mut options = ServerMachineOptions::new(request.get("ir").cloned().ok_or("no ir")?, server);
+    let mut options = ServerMachineOptions::new(
+        request.get("ir").cloned().ok_or("no ir")?,
+        text("irHash").ok_or("no irHash")?,
+        server,
+    );
     options.id = text("instance");
     options.start_input = request.get("startInput").filter(|i| !i.is_null()).cloned();
     options.new_request_id = Some(Box::new(move || {
