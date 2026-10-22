@@ -54,6 +54,19 @@ internal sealed class MachineIr
             throw new InvalidOperationException($"{manifestPath}: {ex.Message}", ex);
         }
 
+        // A machine listed twice leaves --machine with two IRs to pick from, so the manifest is refused whole.
+        var repeated = manifest
+            .Machines.GroupBy(m => m.Id, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => $"'{g.Key}'")
+            .ToList();
+        if (repeated.Count > 0)
+            throw new InvalidOperationException(
+                $"{manifestPath}: The client manifest is malformed at $.machines: {string.Join(", ", repeated)} "
+                    + (repeated.Count == 1 ? "is" : "are")
+                    + " listed more than once. Export it again from the host."
+            );
+
         var ids = string.Join(", ", manifest.Machines.Select(m => m.Id));
         if (id is not null)
             return Of(
