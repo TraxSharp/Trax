@@ -42,6 +42,12 @@ public sealed record GraphQLMachineServerOptions
     /// closed). The last repeats for as long as the stream is wanted.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
+
+    /// <summary>
+    /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
+    /// which the controller reports as a transport failure, rather than being read into memory.
+    /// </summary>
+    public long MaxResponseSize { get; init; } = 16 * 1024 * 1024;
 }
 
 /// <summary>
@@ -233,10 +239,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         using var response = await _options
-            .Http.SendAsync(request, cancellationToken)
+            .Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
-        var text = await response
-            .Content.ReadAsStringAsync(cancellationToken)
+        var text = await ReadBoundedAsync(response.Content, cancellationToken)
             .ConfigureAwait(false);
 
         JsonObject? answered;
@@ -275,6 +280,31 @@ public sealed partial class GraphQLMachineServer : IMachineServer
 
         return (answered["data"]?["machines"]?[_field]?[operation] as JsonObject, null);
     }
+
+    // The body as text, refused once it passes MaxResponseSize, whether or not the host said its length up front.
+    private async Task<string> ReadBoundedAsync(
+        HttpContent content,
+        CancellationToken cancellationToken
+    )
+    {
+        var max = _options.MaxResponseSize;
+        if (content.Headers.ContentLength > max)
+            throw TooLarge(max);
+        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var body = new MemoryStream();
+        var buffer = new byte[8192];
+        int read;
+        while ((read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            if (body.Length + read > max)
+                throw TooLarge(max);
+            body.Write(buffer, 0, read);
+        }
+        return Encoding.UTF8.GetString(body.GetBuffer(), 0, (int)body.Length);
+    }
+
+    private static HttpRequestException TooLarge(long max) =>
+        new($"The server answered with a body larger than {max} bytes.");
 
     private ServerAnswer AnswerOf(JsonObject? answer)
     {

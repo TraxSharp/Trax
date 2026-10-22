@@ -51,6 +51,12 @@ public sealed record GraphQLSubscriptionSocketOptions
 
     /// <summary>How long a connection may take to be acknowledged before it counts as failed.</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The largest message the server may send, in bytes; 16 MiB by default. A larger one fails the connection, and
+    /// every subscription over it, rather than being read into memory.
+    /// </summary>
+    public int MaxMessageSize { get; init; } = 16 * 1024 * 1024;
 }
 
 /// <summary>
@@ -337,10 +343,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
     }
 
-    private static async Task<JsonObject?> ReceiveAsync(
-        ClientWebSocket socket,
-        CancellationToken token
-    )
+    private async Task<JsonObject?> ReceiveAsync(ClientWebSocket socket, CancellationToken token)
     {
         var buffer = new byte[8192];
         using var text = new MemoryStream();
@@ -349,6 +352,14 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             var result = await socket.ReceiveAsync(buffer, token).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 return null;
+            if (text.Length + result.Count > _options.MaxMessageSize)
+            {
+                // Whatever is left of it is never read.
+                socket.Abort();
+                throw new WebSocketException(
+                    $"The server sent a message larger than {_options.MaxMessageSize} bytes."
+                );
+            }
             text.Write(buffer, 0, result.Count);
             if (result.EndOfMessage)
                 break;

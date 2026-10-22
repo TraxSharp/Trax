@@ -24,6 +24,7 @@ namespace Trax.StateMachine.Client
         public required System.Uri Endpoint { get; init; }
         public required System.Net.Http.HttpClient Http { get; init; }
         public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
+        public long MaxResponseSize { get; init; }
         public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
         public required Trax.StateMachine.Client.ISubscriptionSocket Socket { get; init; }
     }
@@ -41,6 +42,7 @@ namespace Trax.StateMachine.Client
         public System.TimeSpan ConnectTimeout { get; init; }
         public System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Text.Json.Nodes.JsonObject?>>? ConnectionParams { get; init; }
         public required System.Uri Endpoint { get; init; }
+        public int MaxMessageSize { get; init; }
     }
     public interface IMachinePredictor
     {

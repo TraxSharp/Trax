@@ -1,3 +1,8 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.StateMachine.Client;
@@ -142,5 +147,186 @@ public class TransportTests
 
         cleartext.Should().Throw<ArgumentException>();
         tls.Should().NotThrow();
+    }
+
+    // Answers every request with a body of `size` bytes, with or without its length up front.
+    private sealed class LargeAnswer(int size, bool sayLength) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            var body = Encoding.UTF8.GetBytes(
+                "{\"data\":{\"pad\":\"" + new string('x', size) + "\"}}"
+            );
+            HttpContent content = sayLength
+                ? new ByteArrayContent(body)
+                : new StreamContent(new UnseekableStream(body));
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = content }
+            );
+        }
+    }
+
+    // A stream that cannot say its length, so the content goes out without one.
+    private sealed class UnseekableStream(byte[] bytes) : MemoryStream(bytes)
+    {
+        public override bool CanSeek => false;
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task A_response_larger_than_the_limit_fails_the_request(bool sayLength)
+    {
+        var server = new GraphQLMachineServer(
+            new GraphQLMachineServerOptions
+            {
+                Http = new HttpClient(new LargeAnswer(64 * 1024, sayLength)),
+                Endpoint = new Uri("https://api.example.com/graphql"),
+                Machine = Turnstile,
+                Socket = new NoSocket(),
+                MaxResponseSize = 1024,
+            }
+        );
+
+        var get = () => server.GetAsync("i-1");
+
+        (await get.Should().ThrowAsync<HttpRequestException>()).WithMessage("*larger than 1024*");
+    }
+
+    [Test]
+    public async Task A_response_within_the_limit_is_read()
+    {
+        var server = new GraphQLMachineServer(
+            new GraphQLMachineServerOptions
+            {
+                Http = new HttpClient(new LargeAnswer(512, sayLength: false)),
+                Endpoint = new Uri("https://api.example.com/graphql"),
+                Machine = Turnstile,
+                Socket = new NoSocket(),
+                MaxResponseSize = 1024,
+            }
+        );
+
+        var answer = await server.GetAsync("i-1");
+
+        answer.Problem!.Code.Should().Be("NOT_FOUND");
+    }
+
+    [Test]
+    public void The_limits_are_sixteen_mebibytes_by_default()
+    {
+        new GraphQLSubscriptionSocketOptions { Endpoint = new Uri("wss://h/graphql") }
+            .MaxMessageSize.Should()
+            .Be(16 * 1024 * 1024);
+        new GraphQLMachineServerOptions
+        {
+            Http = new HttpClient(),
+            Endpoint = new Uri("https://h/graphql"),
+            Machine = Turnstile,
+            Socket = new NoSocket(),
+        }
+            .MaxResponseSize.Should()
+            .Be(16 * 1024 * 1024);
+    }
+
+    private sealed class Sink : ISubscriptionSink
+    {
+        public TaskCompletionSource<Exception> Failed { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Next(JsonObject value) { }
+
+        public void Error(Exception error) => Failed.TrySetResult(error);
+
+        public void Complete() { }
+    }
+
+    [Test]
+    public async Task A_socket_message_larger_than_the_limit_fails_the_connection()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var host = Task.Run(async () =>
+        {
+            using var tcp = await listener.AcceptTcpClientAsync();
+            var stream = tcp.GetStream();
+            await HandshakeAsync(stream);
+            using var socket = WebSocket.CreateFromStream(
+                stream,
+                new WebSocketCreationOptions
+                {
+                    IsServer = true,
+                    SubProtocol = "graphql-transport-ws",
+                }
+            );
+            var buffer = new byte[4096];
+            await socket.ReceiveAsync(buffer, CancellationToken.None);
+            await socket.SendAsync(
+                Encoding.UTF8.GetBytes("{\"type\":\"connection_ack\"}"),
+                WebSocketMessageType.Text,
+                true,
+                CancellationToken.None
+            );
+            var large = Encoding.UTF8.GetBytes(
+                "{\"type\":\"ping\",\"payload\":\"" + new string('x', 64 * 1024) + "\"}"
+            );
+            try
+            {
+                await socket.SendAsync(
+                    large,
+                    WebSocketMessageType.Text,
+                    true,
+                    CancellationToken.None
+                );
+                await socket.ReceiveAsync(buffer, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                // The client gave up on the connection.
+            }
+        });
+        await using var client = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = new Uri($"ws://127.0.0.1:{port}/graphql"),
+                MaxMessageSize = 1024,
+            }
+        );
+        var sink = new Sink();
+
+        using var subscription = client.Subscribe("changed-1", new JsonObject(), sink);
+        var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        error.Message.Should().Contain("larger than 1024");
+        await host.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    // The server half of the opening handshake (RFC 6455), so a test needs no web host.
+    private static async Task HandshakeAsync(NetworkStream stream)
+    {
+        var request = new StringBuilder();
+        var one = new byte[1];
+        while (!request.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
+        {
+            if (await stream.ReadAsync(one) == 0)
+                throw new IOException("The client closed before its handshake ended.");
+            request.Append((char)one[0]);
+        }
+        var key = request
+            .ToString()
+            .Split("\r\n")
+            .First(l => l.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
+            .Split(':', 2)[1]
+            .Trim();
+        var accept = Convert.ToBase64String(
+            SHA1.HashData(Encoding.ASCII.GetBytes(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+        );
+        var response =
+            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            + $"Sec-WebSocket-Accept: {accept}\r\nSec-WebSocket-Protocol: graphql-transport-ws\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(response));
     }
 }

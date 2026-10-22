@@ -13,6 +13,7 @@ use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use trax_state_machine::{Map, Value};
@@ -68,6 +69,10 @@ pub struct GraphQLMachineServerOptions {
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
     /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
     pub connect_timeout: Duration,
+    /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
+    /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
+    /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default.
+    pub max_message_size: usize,
     /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
     /// authenticates the client would travel in cleartext.
     pub allow_insecure_transport: bool,
@@ -91,12 +96,16 @@ impl GraphQLMachineServerOptions {
             connection_params: None,
             resubscribe_delays: None,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
             allow_insecure_transport: false,
         }
     }
 }
 
 type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// The largest response body or socket message a host may send, in bytes, by default: 16 MiB.
+pub const DEFAULT_MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 
 /// How long a socket may take to connect and be acknowledged before the attempt counts as failed, by default.
 pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -142,6 +151,7 @@ struct Inner {
     connection_params: Option<ConnectionParams>,
     resubscribe_delays: Vec<Duration>,
     connect_timeout: Duration,
+    max_message_size: usize,
 }
 
 impl GraphQLMachineServer {
@@ -197,6 +207,7 @@ impl GraphQLMachineServer {
                 connection_params: options.connection_params,
                 resubscribe_delays: delays,
                 connect_timeout: options.connect_timeout,
+                max_message_size: options.max_message_size,
             }),
         })
     }
@@ -258,13 +269,33 @@ impl Inner {
         if let Some(headers) = &self.headers {
             request = request.headers(headers().await?);
         }
-        let response = request
+        let mut response = request
             .body(Value::Object(body).to_json())
             .send()
             .await
             .map_err(transport_error)?;
         let status = response.status();
-        let text = response.text().await.map_err(transport_error)?;
+        // Read up to the limit, whether or not the host said the length up front.
+        let too_large = || {
+            TransportError(format!(
+                "The server answered with a body larger than {} bytes.",
+                self.max_message_size
+            ))
+        };
+        if response
+            .content_length()
+            .is_some_and(|n| n > self.max_message_size as u64)
+        {
+            return Err(too_large());
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(transport_error)? {
+            if bytes.len() + chunk.len() > self.max_message_size {
+                return Err(too_large());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let text = String::from_utf8_lossy(&bytes);
         let answered = Value::parse(&text).ok();
 
         // A GraphQL error with a code is the host's to answer with whatever status it chose.
@@ -467,7 +498,11 @@ impl Inner {
             "Sec-WebSocket-Protocol",
             HeaderValue::from_static("graphql-transport-ws"),
         );
-        let Ok((mut socket, _)) = tokio_tungstenite::connect_async(request).await else {
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(self.max_message_size))
+            .max_frame_size(Some(self.max_message_size));
+        let Ok((mut socket, _)) = tokio_tungstenite::connect_async_with_config(request, Some(config), false).await
+        else {
             return None;
         };
 
@@ -801,6 +836,8 @@ mod tests {
         Acknowledge,
         // Says nothing and holds the connection open.
         Silent,
+        // Acknowledges it, then sends a 64 KiB message.
+        Flood,
     }
 
     type Heard = tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>;
@@ -850,6 +887,11 @@ mod tests {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                         }
                         Reply::Silent => {}
+                        Reply::Flood => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            let large = format!(r#"{{"type":"ping","payload":"{}"}}"#, "x".repeat(64 * 1024));
+                            let _ = socket.send(Message::text(large)).await;
+                        }
                         Reply::Refuse => {
                             let _ = socket
                                 .close(Some(CloseFrame {
@@ -931,5 +973,110 @@ mod tests {
     fn the_connect_timeout_is_ten_seconds_by_default() {
         let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
         assert_eq!(given.connect_timeout, Duration::from_secs(10));
+    }
+
+    // A host on a loopback port that answers every request with a body of `size` bytes, with or without its length.
+    async fn large_answer_host(size: usize, say_length: bool) -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let (mut tcp, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut request = Vec::new();
+                    let mut buffer = [0u8; 4096];
+                    while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                        let Ok(n) = tcp.read(&mut buffer).await else { return };
+                        if n == 0 {
+                            return;
+                        }
+                        request.extend_from_slice(&buffer[..n]);
+                    }
+                    let body = format!(r#"{{"data":{{"pad":"{}"}}}}"#, "x".repeat(size));
+                    let head = if say_length {
+                        format!(
+                            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                            body.len()
+                        )
+                    } else {
+                        "HTTP/1.1 200 OK\r\nconnection: close\r\n\r\n".to_owned()
+                    };
+                    let _ = tcp.write_all(head.as_bytes()).await;
+                    let _ = tcp.write_all(body.as_bytes()).await;
+                    let _ = tcp.shutdown().await;
+                });
+            }
+        });
+        port
+    }
+
+    fn with_get(mut given: GraphQLMachineServerOptions) -> GraphQLMachineServerOptions {
+        given.documents.push(ManifestDocument {
+            id: "get-1".into(),
+            operation: "get".into(),
+            document: "query Get($id: UUID!) { x }".into(),
+        });
+        given
+    }
+
+    #[tokio::test]
+    async fn a_response_larger_than_the_limit_fails_the_request() {
+        for say_length in [true, false] {
+            let port = large_answer_host(64 * 1024, say_length).await;
+            let mut given = with_get(options(
+                &format!("http://127.0.0.1:{port}/graphql"),
+                &format!("ws://127.0.0.1:{port}/graphql"),
+            ));
+            given.max_message_size = 1024;
+            let server = GraphQLMachineServer::new(given).unwrap();
+
+            let Err(error) = server.get("i-1".into()).await else {
+                panic!("a body over the limit was read");
+            };
+
+            assert!(error.0.contains("larger than 1024"), "{}", error.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_response_within_the_limit_is_read() {
+        let port = large_answer_host(512, false).await;
+        let mut given = with_get(options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        ));
+        given.max_message_size = 1024;
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let answer = server.get("i-1".into()).await.unwrap();
+
+        assert!(matches!(answer, ServerAnswer::Refused(p) if p.code == codes::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn a_socket_message_larger_than_the_limit_ends_the_stream() {
+        let (port, mut heard) = recording_host(|n| if n == 0 { Reply::Flood } else { Reply::Silent }).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.max_message_size = 1024;
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert!(again.is_ok(), "the stream outlived a message over the limit");
+    }
+
+    #[test]
+    fn the_limit_is_sixteen_mebibytes_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.max_message_size, 16 * 1024 * 1024);
     }
 }
