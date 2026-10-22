@@ -126,6 +126,7 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
 (`Trax.StateMachine/conformance/client/`) holds both to the same transcripts.
 
 - **Ordering.** Every snapshot, pushed or answered, carries its revision; one at or below the revision held is dropped.
+  An answer with no revision is applied and not ordered.
   A push of another incarnation (the instance was deleted and created again) makes the controller read the instance
   again rather than compare revisions across incarnations.
 - **Effects.** An event bound to the machine's effect is sent with no prediction, and nothing queued after it is
