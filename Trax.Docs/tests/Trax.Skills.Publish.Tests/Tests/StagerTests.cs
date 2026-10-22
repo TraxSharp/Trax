@@ -69,6 +69,23 @@ public class StagerTests
         Directory.Exists(skills.Out).Should().BeFalse();
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Stage_RefusesALinkInASkill_AndStagesNothingItPointsAt(bool folder)
+    {
+        using var skills = new TempSkills().Skill("trax");
+        var (file, dir) = skills.Outside();
+        skills.Link(folder ? "trax/more" : "trax/extra.md", folder ? dir : file, folder);
+
+        Stager
+            .Stage(skills.Skills, "1.70.0", skills.License, skills.Out)
+            .Should()
+            .ContainSingle()
+            .Which.Message.Should()
+            .Contain("is a symbolic link");
+        Directory.Exists(skills.Out).Should().BeFalse();
+    }
+
     [TestCase("v1.70.0")]
     [TestCase("1.70")]
     [TestCase("main")]

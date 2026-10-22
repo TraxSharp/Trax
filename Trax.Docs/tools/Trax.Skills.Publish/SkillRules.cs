@@ -59,12 +59,29 @@ public static class SkillRules
         var problems = new List<SkillProblem>();
         void Add(string message) => problems.Add(new SkillProblem(skill, message));
 
-        foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
-            if (!file.EndsWith(".md", StringComparison.Ordinal))
+        if (IsLink(new DirectoryInfo(folder)))
+        {
+            Add(
+                "the skill's folder is a symbolic link. A published skill ships its own files, "
+                    + "never what a link points at"
+            );
+            return problems;
+        }
+
+        foreach (var entry in Entries(folder))
+        {
+            var relative = Path.GetRelativePath(folder, entry.FullName);
+            if (IsLink(entry))
                 Add(
-                    $"'{Path.GetRelativePath(folder, file)}' is not markdown. A published skill ships "
+                    $"'{relative}' is a symbolic link. A published skill ships its own files, "
+                        + "never what a link points at"
+                );
+            else if (entry is FileInfo && !entry.Name.EndsWith(".md", StringComparison.Ordinal))
+                Add(
+                    $"'{relative}' is not markdown. A published skill ships "
                         + "instructions only, never a script an agent could be told to run"
                 );
+        }
 
         var path = Path.Combine(folder, "SKILL.md");
         if (!File.Exists(path))
@@ -130,6 +147,39 @@ public static class SkillRules
 
         return problems;
     }
+
+    /// <summary>
+    /// Every file and folder under <paramref name="folder"/>, links included. A linked folder is listed but never
+    /// entered, so nothing outside the skill is reached through it.
+    /// </summary>
+    public static IEnumerable<FileSystemInfo> Entries(string folder)
+    {
+        var options = new EnumerationOptions
+        {
+            AttributesToSkip = 0,
+            RecurseSubdirectories = false,
+            IgnoreInaccessible = false,
+        };
+        foreach (
+            var entry in new DirectoryInfo(folder)
+                .EnumerateFileSystemInfos("*", options)
+                .OrderBy(e => e.Name, StringComparer.Ordinal)
+        )
+        {
+            yield return entry;
+            if (entry is DirectoryInfo dir && !IsLink(dir))
+                foreach (var inner in Entries(dir.FullName))
+                    yield return inner;
+        }
+    }
+
+    /// <summary>Every file under <paramref name="folder"/> that is not a link and is not reached through one.</summary>
+    public static IEnumerable<string> Files(string folder) =>
+        Entries(folder).Where(e => e is FileInfo && !IsLink(e)).Select(e => e.FullName);
+
+    /// <summary>A symbolic link or other reparse point, to a file or a folder.</summary>
+    public static bool IsLink(FileSystemInfo entry) =>
+        entry.LinkTarget is not null || entry.Attributes.HasFlag(FileAttributes.ReparsePoint);
 
     /// <summary>Every link target that is neither absolute nor a bare anchor, without its anchor.</summary>
     public static IEnumerable<string> RelativeLinks(string markdown) =>

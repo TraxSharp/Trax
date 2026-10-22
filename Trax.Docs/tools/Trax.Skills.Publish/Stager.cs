@@ -54,9 +54,8 @@ public static class Stager
         foreach (var folder in folders)
         {
             var target = Path.Combine(outDir, "skills", Path.GetFileName(folder));
-            foreach (
-                var file in Directory.EnumerateFiles(folder, "*.md", SearchOption.AllDirectories)
-            )
+            // Check refused any link, so this never follows one; Files skips them all the same.
+            foreach (var file in SkillRules.Files(folder))
             {
                 var dest = Path.Combine(target, Path.GetRelativePath(folder, file));
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
