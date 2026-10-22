@@ -94,6 +94,9 @@
          EF Core Sqlite pulls transitively (CVE-2025-6965). -->
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
+    <!-- trax-console. Its minors still break its API (v2 "still accepts planned API breaks"), so Dependabot proposes them
+         on their own (.github/dependabot.yml, terminal-gui). -->
+    <PackageVersion Include="Terminal.Gui" Version="2.5.0" />
     <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.12" />
     <!-- Referenced directly by Trax.Core.Tests.Analyzers, the one project that pulls it in
          (Analyzer.Testing -> NuGet.Packaging, at 9.0.6), for the same reason as the SQLite floor

@@ -1,0 +1,70 @@
+using Terminal.Gui.App;
+using Trax.Client;
+
+namespace Trax.Api.Console.Terminal.Screens;
+
+/// <summary>The questions a screen asks the operator, apart from the screen, so a test can answer them.</summary>
+internal interface IPrompts
+{
+    /// <summary>A question with <paramref name="buttons"/>; the index of the one chosen, or null when dismissed.</summary>
+    int? Ask(string title, string message, params string[] buttons);
+
+    /// <summary>Something the operator should read before going on.</summary>
+    void Tell(string title, string message);
+
+    /// <summary>Labelled text fields; the values entered, in order, or null when cancelled.</summary>
+    IReadOnlyList<string>? Form(
+        string title,
+        IReadOnlyList<(string Label, string Value)> fields,
+        string accept = "OK",
+        string? clear = null
+    );
+
+    /// <summary>Lines of text to read, until closed.</summary>
+    void Show(string title, IEnumerable<string> lines);
+}
+
+/// <summary>The console's dialogs.</summary>
+internal sealed class DialogPrompts(IApplication app) : IPrompts
+{
+    public int? Ask(string title, string message, params string[] buttons) =>
+        Ui.Ask(app, title, message, buttons);
+
+    public void Tell(string title, string message) => Ui.Tell(app, title, message);
+
+    public IReadOnlyList<string>? Form(
+        string title,
+        IReadOnlyList<(string Label, string Value)> fields,
+        string accept = "OK",
+        string? clear = null
+    ) => Ui.Form(app, title, fields, accept, clear);
+
+    public void Show(string title, IEnumerable<string> lines) => Ui.Show(app, title, lines);
+}
+
+/// <summary>What every screen reaches through: the terminal, the client, and what the window does for them.</summary>
+internal sealed class ConsoleContext(
+    IApplication app,
+    TraxClient client,
+    Uri endpoint,
+    IPrompts? prompts = null
+)
+{
+    public IApplication App { get; } = app;
+
+    public TraxClient Client { get; } = client;
+
+    /// <summary>The host's GraphQL endpoint, for the title.</summary>
+    public Uri Endpoint { get; } = endpoint;
+
+    public IPrompts Prompts { get; } = prompts ?? new DialogPrompts(app);
+
+    /// <summary>Puts one line in the status line at the bottom of the window.</summary>
+    public Action<string> Status { get; set; } = _ => { };
+
+    /// <summary>Opens a run's trace.</summary>
+    public Action<long> OpenTrace { get; set; } = _ => { };
+
+    /// <summary>Opens the source of a type a row names (a train, a junction) in the operator's editor.</summary>
+    public Action<string> OpenCode { get; set; } = _ => { };
+}
