@@ -1,0 +1,27 @@
+# One persisted operation (null when missing) and its audit history, most recent first.
+query PersistedOperationDetail($id: String!, $tenantKey: String, $historyTake: Int!) {
+  persistedOperations {
+    persistedOperation(id: $id, tenantKey: $tenantKey) {
+      id
+      tenantKey
+      operationName
+      version
+      document
+      shapeFingerprint
+      isActive
+      deprecationReason
+      description
+      createdAt
+      updatedAt
+    }
+    persistedOperationHistory(id: $id, tenantKey: $tenantKey, take: $historyTake) {
+      historyId
+      id
+      tenantKey
+      shapeFingerprint
+      changeType
+      changedAt
+      changedReason
+    }
+  }
+}

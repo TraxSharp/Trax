@@ -1,0 +1,30 @@
+# operations.manifestDetail: the manifest with its schedule details and its properties (the
+# input every run gets), [TraxSensitive] values masked by the API. Null when no manifest has the id.
+query ManifestDetail($id: Long!) {
+  operations {
+    manifestDetail(id: $id) {
+      id
+      externalId
+      name
+      isEnabled
+      scheduleType
+      cronExpression
+      intervalSeconds
+      maxRetries
+      timeoutSeconds
+      lastSuccessfulRun
+      manifestGroupId
+      manifestGroupName
+      dependsOnManifestId
+      priority
+      propertyTypeName
+      properties
+      misfirePolicy
+      misfireThresholdSeconds
+      scheduledAt
+      nextScheduledRun
+      varianceSeconds
+      replayDecisionsOnRetry
+    }
+  }
+}

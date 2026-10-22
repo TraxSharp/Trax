@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-// Global "is anything in flight" flag, driven by the urql activity exchange (it counts queries and
+// Global "is anything in flight" flag, driven by the console client (lib/consoleClient counts queries and
 // mutations). A single top-of-page progress bar reads it so every network operation shows feedback,
 // including long ones like acknowledging thousands of dead letters.
 let active = 0;

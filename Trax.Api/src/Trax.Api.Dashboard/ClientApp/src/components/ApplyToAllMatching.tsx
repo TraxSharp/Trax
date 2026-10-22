@@ -1,17 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation } from "urql";
-import { START_BULK_OPERATION } from "../graphql/mutations";
 import { useAnswers } from "../lib/answerable";
 import { confirmAction } from "../lib/confirm";
 import { toast } from "../lib/toast";
-import {
-  BULK_KINDS,
-  type BulkOperationFilter,
-  type BulkOperationKind,
-  type StartBulkOperationResponse,
-} from "../lib/bulkOperations";
+import { BULK_KINDS, type BulkOperationFilter, type BulkOperationKind } from "../lib/bulkOperations";
 import { NotePrompt } from "./NotePrompt";
+import { useTraxMutation } from "../lib/consoleClient";
+import { startBulkOperationDocument } from "../trax/index.g";
 
 export interface BulkAction {
   kind: BulkOperationKind;
@@ -40,7 +35,7 @@ export function ApplyToAllMatching({
   unavailable?: string;
 }) {
   const navigate = useNavigate();
-  const [, start] = useMutation(START_BULK_OPERATION);
+  const [, start] = useTraxMutation(startBulkOperationDocument);
   const [busy, setBusy] = useState(false);
   const [askNote, setAskNote] = useState<{ title: string; resolve: (note: string | null) => void } | null>(null);
   // The demo offers it only once its recordings hold the operations it opens (lib/answerable.ts).
@@ -80,7 +75,7 @@ export function ApplyToAllMatching({
         note: acknowledgement,
       });
       setBusy(false);
-      const res: StartBulkOperationResponse | undefined = r.data?.operations?.startBulkOperation;
+      const res = r.data?.operations?.startBulkOperation;
       if (r.error || !res) {
         toast(r.error?.message ?? "The bulk operation did not start.", "error");
         return;

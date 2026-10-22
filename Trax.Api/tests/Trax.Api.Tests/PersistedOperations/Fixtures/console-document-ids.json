@@ -1,0 +1,20 @@
+{
+  "_comment": "The ids a host and trax client --operations give a console document's text. Both test suites read this file (ConsoleDocumentsTests and OperationsClientGeneratorTests), so the id the console's generated client sends is the one the host registers.",
+  "cases": [
+    {
+      "name": "Overview",
+      "text": "query Overview($range: MetricsRange!) {\n  operations {\n    health {\n      status\n    }\n  }\n}\n",
+      "id": "trax_console_Overview_b13d1524b7e2d79f169fc39ccb96f4f357b3c3304617f149c77445161635359711c86a828138641e"
+    },
+    {
+      "name": "Requeue_It",
+      "text": "mutation Requeue_It($id: Long!) {\n  operations {\n    deadLetters {\n      requeueDeadLetter(id: $id) {\n        success\n      }\n    }\n  }\n}\n",
+      "id": "trax_console_Requeue-It_5a31dd0eef90f0be23abc59e22620e2bd8e34d86e1f36026191561e912a4185ef1121fa0a3503b09"
+    },
+    {
+      "name": "OnDataChanged",
+      "text": "subscription OnDataChanged {\n  onDataChanged {\n    domain\n    note(text: \"café ✓\")\n  }\n}\n",
+      "id": "trax_console_OnDataChanged_fd2d5cf016673b10f6b09f1e1b3979e8e8b18d082cdad73f47385845ef965fb72319067419156b03"
+    }
+  ]
+}

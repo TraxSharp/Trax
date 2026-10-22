@@ -1,0 +1,8 @@
+# The version of Trax serving the API, for the footer.
+query ServerVersion {
+  operations {
+    config {
+      version
+    }
+  }
+}

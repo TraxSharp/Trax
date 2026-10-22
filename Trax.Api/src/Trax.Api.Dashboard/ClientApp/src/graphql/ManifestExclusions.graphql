@@ -1,0 +1,14 @@
+# Schedule exclusion windows for a manifest (typed per kind), for the manifest detail page.
+query ManifestExclusions($manifestId: Long!) {
+  operations {
+    manifestExclusions(manifestId: $manifestId) {
+      type
+      daysOfWeek
+      dates
+      startDate
+      endDate
+      startTime
+      endTime
+    }
+  }
+}

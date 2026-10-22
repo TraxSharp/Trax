@@ -1,16 +1,16 @@
 import { useId, useState } from "react";
-import { useMutation, useQuery } from "urql";
-import { LOG_LEVELS, SCHEDULER_CONFIG } from "../graphql/queries";
-import { SET_LOG_LEVELS, UPDATE_SCHEDULER } from "../graphql/mutations";
 import { toast } from "../lib/toast";
 import { confirmAction } from "../lib/confirm";
 import { changedLogLevels, LOG_LEVEL_NAMES, notAppliedMessage } from "../lib/logLevels";
 import { buildDuration, parseDuration, UNIT_LABEL, type DurationUnit } from "../lib/duration";
-import type { LogLevelSetting, SchedulerConfigSnapshot, SetLogLevelsResponse } from "../types";
-
-interface ConfigData {
-  operations: { config: { scheduler: SchedulerConfigSnapshot } };
-}
+import type { SchedulerConfigSnapshot, SetLogLevelsResponse } from "../types";
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import {
+  logLevelsDocument,
+  schedulerConfigDocument,
+  setLogLevelsDocument,
+  updateSchedulerDocument,
+} from "../trax/index.g";
 
 type Patch = Record<string, unknown>;
 type Save = (patch: Patch) => Promise<string | null>;
@@ -22,8 +22,8 @@ const DOCS = "https://traxsharp.net/docs/scheduler";
 // never rewrites a switch another operator just flipped. The two switches are Pause and Resume
 // actions, confirmed, and the header's paused badge reads the same query this page refetches.
 export function SettingsPage() {
-  const [result, reexecute] = useQuery<ConfigData>({ query: SCHEDULER_CONFIG });
-  const [, update] = useMutation(UPDATE_SCHEDULER);
+  const [result, reexecute] = useTraxQuery(schedulerConfigDocument);
+  const [, update] = useTraxMutation(updateSchedulerDocument);
   const cfg = result.data?.operations?.config?.scheduler;
 
   /** Sends one patch; null when it was saved, else what the server said. */
@@ -33,7 +33,7 @@ export function SettingsPage() {
     const res = r.data?.operations?.config?.updateScheduler;
     if (!res?.success) return res?.message || "Not saved.";
     toast(res.message || "Saved.", "success");
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
     return null;
   };
 
@@ -394,10 +394,8 @@ function SettingsSection({
 // not reach the scheduler or worker processes. A host without AddScheduler cannot change them, and
 // says so when asked.
 function LogLevelsPanel() {
-  const [{ data, error }, reexecute] = useQuery<{ operations: { config: { logLevels: LogLevelSetting[] } } }>({
-    query: LOG_LEVELS,
-  });
-  const [, setLogLevels] = useMutation(SET_LOG_LEVELS);
+  const [{ data, error }, reexecute] = useTraxQuery(logLevelsDocument);
+  const [, setLogLevels] = useTraxMutation(setLogLevelsDocument);
   const levels = data?.operations?.config?.logLevels;
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -420,7 +418,7 @@ function LogLevelsPanel() {
       return;
     }
     setEdits({});
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
     if (res.notApplied.length > 0) {
       setProblem(`Log levels not applied. ${notAppliedMessage(res.notApplied)}`);
       return;

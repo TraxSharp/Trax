@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "urql";
-import { TRAINS } from "../graphql/queries";
 import { QueueTrainDialog } from "../components/QueueTrainDialog";
 import { RunTrainDialog } from "../components/RunTrainDialog";
 import type { TrainInfo } from "../types";
@@ -9,12 +7,10 @@ import { TermHelp } from "../components/TermHelp";
 import { setHideAdminTrains, useHideAdminTrains } from "../lib/adminTrains";
 import { shortName } from "../lib/format";
 import { useUrlState } from "../lib/urlState";
+import { useTraxQuery } from "../lib/consoleClient";
+import { trainsDocument } from "../trax/index.g";
 
 const DOCS_TRAINS = "https://traxsharp.net/docs/core/trains-and-junctions";
-
-interface TrainsData {
-  operations: { trains: TrainInfo[] };
-}
 
 type SortKey = "name" | "kind" | "lifetime" | "roles";
 const SORT_VALUE: Record<SortKey, (t: TrainInfo) => string> = {
@@ -33,13 +29,10 @@ export function TrainsPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   // The train a Queue or Run dialog is open for.
   const [dialog, setDialog] = useState<{ mode: "queue" | "run"; train: string } | null>(null);
-  const [result] = useQuery<TrainsData>({
-    query: TRAINS,
-    variables: { hideAdmin },
-  });
+  const [result] = useTraxQuery(trainsDocument, { variables: { hideAdmin } });
 
   // The train registry is a small in-memory list, so filter and sort client-side.
-  const data = result.data?.operations.trains;
+  const data = result.data?.operations?.trains;
   const trains = useMemo(() => {
     const all = data ?? [];
     const filtered = filter

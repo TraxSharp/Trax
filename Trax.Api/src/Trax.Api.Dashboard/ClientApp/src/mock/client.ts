@@ -1,16 +1,10 @@
-import {
-  Client,
-  cacheExchange,
-  fetchExchange,
-  subscriptionExchange,
-} from "@urql/core";
-import { createClient as createWsClient } from "graphql-ws";
-import { executeExchange } from "@urql/exchange-execute";
-import { activityExchange } from "../lib/activity-exchange";
+import { httpTransport, type TraxTransport } from "../trax/index.g";
+import { ConsoleClient } from "../lib/consoleClient";
 import { buildMockSchema, type MockSchemaOverrides } from "./build-mock-schema";
 import { createMockStore, type MockStore } from "./store/mock-store";
-import { statefulExchange } from "./store/stateful-exchange";
-import { fixtureExchange } from "./fixture-exchange";
+import { statefulTransport } from "./store/stateful-transport";
+import { fixtureTransport } from "./fixture-transport";
+import { schemaTransport } from "./schema-transport";
 import { defaultOverlays, type StatefulOverlay } from "./store/overlays";
 
 export interface MockClientOptions {
@@ -28,25 +22,23 @@ export interface MockClientOptions {
   fixtures?: boolean;
 }
 
+/** The mock's transport alone: what createMockClient puts under its client. */
+export function createMockTransport(opts: MockClientOptions = {}): TraxTransport {
+  const store = opts.store ?? createMockStore();
+  const useFixtures = opts.fixtures ?? true;
+  const base = schemaTransport(buildMockSchema(opts.overrides));
+  const stateful = statefulTransport(store, opts.overlays ?? defaultOverlays, () => top);
+  const top: TraxTransport = stateful(useFixtures ? fixtureTransport(base) : base);
+  return top;
+}
+
 /**
- * A urql Client backed entirely by the in-process mock: overlay mutations write a session
+ * A console client backed entirely by the in-process mock: overlay mutations write a session
  * delta, overlay queries merge it back (read-after-write), mocked subscriptions replay store
  * events, and everything else auto-mocks from the SDL. No backend required.
  */
-export function createMockClient(opts: MockClientOptions = {}): Client {
-  const store = opts.store ?? createMockStore();
-  const useFixtures = opts.fixtures ?? true;
-  return new Client({
-    url: "/mock", // never hit; executeExchange terminates every operation
-    requestPolicy: "cache-and-network",
-    exchanges: [
-      activityExchange,
-      cacheExchange,
-      statefulExchange(store, opts.overlays ?? defaultOverlays),
-      ...(useFixtures ? [fixtureExchange()] : []),
-      executeExchange({ schema: buildMockSchema(opts.overrides) }),
-    ],
-  });
+export function createMockClient(opts: MockClientOptions = {}): ConsoleClient {
+  return new ConsoleClient(createMockTransport(opts));
 }
 
 // Defaults for the Storybook e2e toggle: hit the devhost directly (Storybook has no Vite
@@ -61,36 +53,16 @@ export interface RealClientOptions {
   apiKey?: string;
 }
 
-/** A real urql Client pointed at a running Trax API. Used by the "real" Storybook path. */
-export function createRealClient(opts: RealClientOptions = {}): Client {
-  const url = opts.url ?? DEV_HTTP;
-  const wsUrl = opts.wsUrl ?? DEV_WS;
+/** A real client pointed at a running Trax API, sending documents as text. Used by the "real" Storybook path. */
+export function createRealClient(opts: RealClientOptions = {}): ConsoleClient {
   const apiKey = opts.apiKey ?? DEV_KEY;
-
-  const wsClient = createWsClient({
-    url: wsUrl,
-    connectionParams: () => ({ apiKey }),
-  });
-
-  return new Client({
-    url,
-    requestPolicy: "cache-and-network",
-    exchanges: [
-      activityExchange,
-      cacheExchange,
-      fetchExchange,
-      subscriptionExchange({
-        forwardSubscription(request) {
-          const input = { ...request, query: request.query ?? "" };
-          return {
-            subscribe(sink) {
-              const unsubscribe = wsClient.subscribe(input, sink);
-              return { unsubscribe };
-            },
-          };
-        },
-      }),
-    ],
-    fetchOptions: () => ({ headers: { "X-Api-Key": apiKey } }),
-  });
+  return new ConsoleClient(
+    httpTransport({
+      url: opts.url ?? DEV_HTTP,
+      socketUrl: opts.wsUrl ?? DEV_WS,
+      headers: () => ({ "X-Api-Key": apiKey }),
+      connectionParams: () => ({ apiKey }),
+      byId: () => false,
+    }),
+  );
 }

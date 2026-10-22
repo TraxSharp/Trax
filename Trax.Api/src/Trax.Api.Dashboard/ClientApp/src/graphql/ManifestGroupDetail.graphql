@@ -1,0 +1,26 @@
+# A single group plus its 1-hop cross-group dependency neighborhood (for the DAG).
+query ManifestGroupDetail($id: Long!) {
+  operations {
+    manifestGroups {
+      group(id: $id) {
+        id
+        name
+        maxActiveJobs
+        priority
+        isEnabled
+      }
+      graph(groupId: $id) {
+        nodes {
+          id
+          name
+          isHighlighted
+          isEnabled
+        }
+        edges {
+          fromId
+          toId
+        }
+      }
+    }
+  }
+}

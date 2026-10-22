@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useMutation } from "urql";
-import { CONFIGURE_EFFECT } from "../graphql/mutations";
 import { Modal } from "./Modal";
 import { Spinner } from "./Spinner";
 import {
@@ -14,6 +12,8 @@ import {
 import { shortName } from "../lib/format";
 import { toast } from "../lib/toast";
 import type { ConfigureEffectResponse, EffectInfo, EffectSettingInfo } from "../types";
+import { useTraxMutation } from "../lib/consoleClient";
+import { configureEffectDocument } from "../trax/index.g";
 
 const INPUT =
   "w-full text-sm border border-line-strong rounded-md px-2 py-1 bg-field";
@@ -44,7 +44,7 @@ export function ConfigureEffectDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [, configure] = useMutation(CONFIGURE_EFFECT);
+  const [, configure] = useTraxMutation(configureEffectDocument);
 
   const set = (name: string, value: string) => setValues((v) => ({ ...v, [name]: value }));
 

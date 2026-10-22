@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useClient } from "urql";
-import { JUNCTION_RUNS } from "../graphql/queries";
-import { ON_JUNCTION_EVENT } from "../graphql/subscriptions";
 import {
   MAX_JUNCTION_STEPS,
   attemptOf,
@@ -13,7 +10,9 @@ import {
   stepFailure,
 } from "../lib/junctionSteps";
 import { useRefetchOnReconnect } from "../lib/useRefetchOnReconnect";
-import type { JunctionEvent, JunctionStep, TrainState } from "../types";
+import type { JunctionStep, TrainState } from "../types";
+import { useConsoleClient } from "../lib/consoleClient";
+import { junctionRunsDocument, onJunctionEventDocument } from "../trax/index.g";
 
 const TERMINAL: TrainState[] = ["COMPLETED", "FAILED", "CANCELLED"];
 
@@ -23,10 +22,6 @@ const BAR_STYLE: Record<JunctionStep["state"], string> = {
   FAILED: "bg-danger",
   CANCELLED: "bg-warn",
 };
-
-interface JunctionRunsData {
-  operations: { junctionRuns: JunctionStep[] };
-}
 
 /**
  * Per-step timeline of one run, read from operations.junctionRuns (written when the host enables
@@ -56,7 +51,7 @@ export function JunctionTimeline({
   canSelect?: (position: number) => boolean;
   onSelect?: (position: number) => void;
 }) {
-  const client = useClient();
+  const client = useConsoleClient();
   const [steps, setSteps] = useState<JunctionStep[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -83,13 +78,7 @@ export function JunctionTimeline({
       const kept = after == null ? 0 : held.filter((s) => s.position <= after).length;
       const take = MAX_JUNCTION_STEPS - kept;
       if (take <= 0) return;
-      const r = await client
-        .query<JunctionRunsData>(
-          JUNCTION_RUNS,
-          { metadataId, afterPosition: after, take },
-          { requestPolicy: "network-only" },
-        )
-        .toPromise();
+      const r = await client.query(junctionRunsDocument, { metadataId, afterPosition: after, take });
       if (r.error) {
         setError(r.error.message);
         return;
@@ -103,13 +92,11 @@ export function JunctionTimeline({
       setLoaded(true);
       // A full page: ask for one more past it, so a run with more steps says so.
       if (next.length >= MAX_JUNCTION_STEPS) {
-        const probe = await client
-          .query<JunctionRunsData>(
-            JUNCTION_RUNS,
-            { metadataId, afterPosition: next[MAX_JUNCTION_STEPS - 1].position, take: 1 },
-            { requestPolicy: "network-only" },
-          )
-          .toPromise();
+        const probe = await client.query(junctionRunsDocument, {
+          metadataId,
+          afterPosition: next[MAX_JUNCTION_STEPS - 1].position,
+          take: 1,
+        });
         setHasMore((probe.data?.operations?.junctionRuns ?? []).length > 0);
       } else if (full) setHasMore(false);
     },
@@ -129,10 +116,11 @@ export function JunctionTimeline({
   // skips means events were lost, so read again.
   useEffect(() => {
     let lastSequence: number | null = null;
-    const sub = client
-      .subscription<{ onJunctionEvent: JunctionEvent }>(ON_JUNCTION_EVENT, { metadataId })
-      .subscribe((result) => {
-        const event = result.data?.onJunctionEvent;
+    return client.subscribe(
+      onJunctionEventDocument,
+      { metadataId },
+      (data) => {
+        const event = data.onJunctionEvent;
         if (!event || event.metadataId !== metadataId) return;
         const gap = lastSequence != null && event.sequence > lastSequence + 1;
         lastSequence = event.sequence;
@@ -151,8 +139,9 @@ export function JunctionTimeline({
           setLoaded(true);
         } else setHasMore(true);
         if (gap) void read(false);
-      });
-    return () => sub.unsubscribe();
+      },
+      () => {},
+    );
   }, [client, metadataId, read]);
 
   const now = useTicker(!endTime);

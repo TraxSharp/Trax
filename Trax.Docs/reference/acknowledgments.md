@@ -210,8 +210,7 @@ from these npm packages, which ship inside it, bundled:
 |---|---|---|
 | [react](https://github.com/facebook/react), [react-dom](https://github.com/facebook/react) | MIT | The UI |
 | [react-router-dom](https://github.com/remix-run/react-router) | MIT | The console's routes |
-| [urql](https://github.com/urql-graphql/urql), [@urql/core](https://github.com/urql-graphql/urql) | MIT | GraphQL requests and the cache |
-| [graphql](https://github.com/graphql/graphql-js) | MIT | Document parsing |
+| [graphql](https://github.com/graphql/graphql-js) | MIT | `graphql-ws`'s peer dependency |
 | [graphql-ws](https://github.com/enisdenjo/graphql-ws) | MIT | Subscriptions over WebSockets |
 | [@xyflow/react](https://github.com/xyflow/xyflow), [@dagrejs/dagre](https://github.com/dagrejs/dagre) | MIT | Drawing and laying out graphs |
 | [recharts](https://github.com/recharts/recharts) | MIT | Charts |

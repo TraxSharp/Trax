@@ -1,0 +1,11 @@
+# Batch requeue/acknowledge dead letters (bulk selection).
+mutation RequeueDeadLetters($ids: [Long!]!, $askAfresh: Boolean! = false) {
+  operations {
+    deadLetters {
+      requeueDeadLetters(ids: $ids, askAfresh: $askAfresh) {
+        count
+        message
+      }
+    }
+  }
+}

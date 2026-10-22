@@ -67,7 +67,7 @@ the browser sees a same-origin API and CORS is not involved in development.
 
 `npm run build:demo` (`vite build --mode demo`) builds the dashboard as traxsharp.net serves it:
 no API, no credential, and every answer taken from recordings of real Trax hosts. It is the same
-app; `src/demo` replaces the urql client, and a banner on every page says the data is recorded
+app; `src/demo` replaces the client's transport, and a banner on every page says the data is recorded
 and changes are simulated. The build lands in `dist-demo/`, based at `/dashboard/demo/`
 (`DASHBOARD_DEMO_BASE` moves it), and Trax.Website's `scripts/build-dashboard-demo.sh` copies it into
 `public/dashboard/demo`, which `/dashboard` frames.
@@ -122,21 +122,26 @@ cannot answer, other than a scenario's own row id and a filter the play types.
 
 ## How it talks to the API
 
-- **Client**: [urql](https://formidable.com/open-source/urql/) at the GraphQL path the host names
-  (`/trax/graphql` by default, and through the Vite proxy in development), with a `graphql-ws`
-  link for subscriptions (`src/lib/graphql.ts`).
+- **Client**: the client `trax client --operations` generates into `src/trax/` from the
+  documents in `src/graphql/` (one operation per `.graphql` file) and the operations schema in
+  `operations.graphql`: a typed function and descriptor per document, and a transport over HTTP
+  POST and one `graphql-ws` socket. The console points the transport at the GraphQL path the host
+  names (`/trax/graphql` by default, and through the Vite proxy in development) in
+  `src/lib/graphql.ts`. Pages read through `src/lib/consoleClient.ts`: a cache shared by every
+  page (cache-and-network), `useTraxQuery`, `useTraxMutation`, `useTraxSubscription`, one stream
+  per document and variables, and the in-flight count the header's progress bar reads. Nothing
+  in `src/trax/` is edited by hand: change a document, then run `npm run client` (it needs the
+  .NET SDK); CI runs `npm run client:check`.
 - **Auth**: the API key (or Bearer token) is held in memory only, for the life of the page
   (`src/lib/auth.ts`), and sent as the `X-Api-Key` header on every request. It is never written
   to `localStorage`, `sessionStorage`, IndexedDB or a cookie, so a reload or a new tab asks for it
   again. Browsers cannot set headers on a WebSocket upgrade, so subscriptions send the key in the
   `graphql-ws` `connection_init` payload, which the API's `TraxApiKeySocketInterceptor` reads.
   At startup the app deletes any credential an earlier version stored in `localStorage`.
-- **Persisted operations**: `console-documents.json` holds every document the app sends but the
-  persisted-operation pages, as urql puts them on the wire (`src/graphql/documents.ts`). The
-  package embeds it, a host that runs persisted operations registers each under a
-  `trax_console_` id and names the ids in the runtime config, and the app then sends those
-  documents by id (`src/lib/persistedDocuments.ts`). Run `npm run documents` after changing any
-  document under `src/graphql`; `npm run test` fails while the file is out of date.
+- **Persisted operations**: `src/trax/console-documents.json` holds every document the app sends
+  but the persisted-operation pages, which a host runs as text. The package embeds it, a host that
+  runs persisted operations registers each under its `trax_console_` id and names the ids in the
+  runtime config, and the transport then sends those documents by id and the rest as text.
 
 ## GraphQL mock (offline dev)
 
@@ -153,12 +158,12 @@ Or flip a single tab of a normal `npm run dev` to mock by appending `?mock` to t
 
 ### How it works
 
-Three layers compose as urql exchanges (`src/mock/`), fixtures-first with an auto-mock
-fallback:
+Three layers compose as transports under the generated client (`src/mock/`), fixtures-first with
+an auto-mock fallback:
 
-1. **Auto-mock schema** (`build-mock-schema.ts`) over `@urql/exchange-execute`. Every field
+1. **Auto-mock schema** (`build-mock-schema.ts`, run by `schema-transport.ts`). Every field
    resolves to plausible fake data from the exported SDL, so nothing errors.
-2. **Fixtures** (`fixtures/index.ts`, replayed by `fixture-exchange.ts`) — a committed snapshot
+2. **Fixtures** (`fixtures/index.ts`, replayed by `fixture-transport.ts`) — a committed snapshot
    of real (anonymized) responses, keyed by a hash of the variables, so pages render realistic
    data. Detail requests fall through to auto-mock rather than serve the wrong record. The
    fixtures hold no run graphs or state machines, so `dev:mock` answers those from the scenarios
@@ -178,6 +183,8 @@ carry no embedded schema, no mock store, no recordings and no demo banner.
 | `npm run dev:mock` | dev server against the mock |
 | `npm run build:demo` | the demo build, on the recordings (see [The demo](#the-demo)) |
 | `npm run mock:schema` | re-export the SDL from a running host (introspection); `TRAX_API_URL` and `TRAX_API_KEY` point it at a sample host, see the script's header |
+| `npm run client` | regenerate `src/trax/` after changing a document in `src/graphql/` or `operations.graphql` (needs the .NET SDK) |
+| `npm run client:check` | fail when `src/trax/` is not what the documents generate (CI runs it) |
 | `npm run mock:capture` | re-capture fixtures from a running devhost |
 | `npm run test` | vitest: overlay read-after-write + every story renders |
 | `npm run storybook` | stories against the mock; a story's `parameters.real` runs it against the devhost |
@@ -244,10 +251,12 @@ findings shape this UI:
 
 ```
 src/
-  lib/graphql.ts        urql client (HTTP + graphql-ws) with X-Api-Key auth
+  lib/graphql.ts        the console's client: the generated transport at the host's path, with auth
+  lib/consoleClient.ts  the cache and hooks pages read through
   lib/runtimeConfig.ts  the base path and GraphQL path the host writes into index.html
   lib/auth.ts           API key storage
-  graphql/              operations.* queries, mutations, subscriptions
+  graphql/              the documents the console sends, one operation per .graphql file
+  trax/                 the client trax client --operations generates from them (do not edit)
   types.ts              TS mirrors of the Trax.Api DTOs / enums
   components/           Layout, ConnectionGate, StateBadge, charts, dialogs, toasts
   pages/                one component per route (+ *.stories.tsx)
@@ -256,9 +265,10 @@ src/
   mock/                 offline GraphQL mock (see "GraphQL mock" above)
     client.ts             createMockClient / createRealClient
     build-mock-schema.ts  auto-mock schema over the exported SDL
-    fixture-exchange.ts   replays captured fixtures
+    schema-transport.ts   runs a document against the auto-mock schema
+    fixture-transport.ts  replays captured fixtures
     fixtures/index.ts     captured snapshot (generated)
-    store/                mock-store, stateful-exchange, overlays
+    store/                mock-store, stateful-transport, overlays
     simulator.ts          synthetic subscription events
 scripts/                export-schema, capture-fixtures, smokes, check-bundle
 ```

@@ -1,0 +1,13 @@
+# What a dependency graph's nodes are toned by: whether each group has a run in progress, and
+# whether its latest ended run failed. Its own read, so the list's stats stay keyed by the page.
+query GroupGraphStatus($groupIds: [Long!]!) {
+  operations {
+    manifestGroups {
+      stats(groupIds: $groupIds) {
+        groupId
+        inProgress
+        lastEndedRunFailed
+      }
+    }
+  }
+}

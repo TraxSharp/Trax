@@ -1,0 +1,9 @@
+mutation CancelManifest($externalId: String!) {
+  operations {
+    cancelManifest(externalId: $externalId) {
+      success
+      count
+      message
+    }
+  }
+}

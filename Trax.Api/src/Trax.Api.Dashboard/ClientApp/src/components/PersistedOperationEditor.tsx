@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useMutation } from "urql";
-import { UPLOAD_PERSISTED_OPERATION } from "../graphql/mutations";
 import { Modal } from "./Modal";
 import { Spinner } from "./Spinner";
-import type { PersistedOperationError, PersistedOperationPayload } from "../types";
+import type { PersistedOperationError } from "../types";
+import { useTraxMutation } from "../lib/consoleClient";
+import { uploadPersistedOperationDocument } from "../trax/index.g";
 
 const ERROR_TITLE: Record<string, string> = {
   INVALID_INPUT: "Invalid input",
@@ -39,7 +39,7 @@ export function PersistedOperationEditor({
   onSaved: () => void;
   onClose: () => void;
 }) {
-  const [, upload] = useMutation(UPLOAD_PERSISTED_OPERATION);
+  const [, upload] = useTraxMutation(uploadPersistedOperationDocument);
   const [id, setId] = useState(existing?.id ?? "");
   const [tenantKey, setTenantKey] = useState(existing?.tenantKey ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
@@ -65,8 +65,7 @@ export function PersistedOperationEditor({
       },
     });
     setBusy(false);
-    const payload: PersistedOperationPayload | undefined =
-      r.data?.persistedOperations?.uploadPersistedOperation;
+    const payload = r.data?.persistedOperations?.uploadPersistedOperation;
     if (r.error) setOtherError(r.error.message);
     else if (payload?.success) {
       onSaved();

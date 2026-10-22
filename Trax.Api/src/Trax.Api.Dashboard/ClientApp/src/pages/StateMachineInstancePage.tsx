@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery, useSubscription } from "urql";
-import { MACHINES, MACHINE_INSTANCE } from "../graphql/queries";
-import { CANCEL_MACHINE_INSTANCE } from "../graphql/mutations";
-import { ON_MACHINE_INSTANCE_CHANGED } from "../graphql/subscriptions";
 import { StateBadge } from "../components/StateBadge";
 import { BackLink, DetailLink, DetailPanel, Fields, Loading } from "../components/detail";
 import { MachineDiagram } from "../components/MachineDiagram";
@@ -15,35 +11,16 @@ import { machinePath, parseOwnerSegment } from "../lib/machineInstances";
 import { usePoll } from "../lib/poll";
 import { toast } from "../lib/toast";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
-import type {
-  MachineDefinition,
-  MachineInstanceCancelResponse,
-  MachineInstanceChange,
-  MachineInstanceDetail,
-} from "../types";
 import { confirmAction } from "../lib/confirm";
 import { TransitionHistory } from "../components/TransitionHistory";
-
-interface InstanceData {
-  operations: { machineInstance: MachineInstanceDetail | null };
-}
-
-interface MachinesData {
-  operations: { machines: MachineDefinition[] };
-}
-
-interface CancelData {
-  operations: { cancelMachineInstance: MachineInstanceCancelResponse };
-}
-
-interface FeedData {
-  onMachineInstanceChanged: MachineInstanceChange;
-}
-
-interface FeedState {
-  live: MachineInstanceChange | null;
-  seen: number;
-}
+import { useTraxMutation, useTraxQuery, useTraxSubscription } from "../lib/consoleClient";
+import {
+  cancelMachineInstanceDocument,
+  machineInstanceDocument,
+  machinesDocument,
+  onMachineInstanceChangedDocument,
+  type OnMachineInstanceChangedResult,
+} from "../trax/index.g";
 
 /**
  * One state-machine instance, at /machines/:machine/:owner/:id, with ?row= for a user's draft
@@ -71,24 +48,22 @@ export function StateMachineInstancePage() {
         ? "A user's draft is named by its row as well as its id, because several users can each hold a draft under one id. Open it from its machine's page."
         : null;
 
-  const [result, reexecute] = useQuery<InstanceData>({
-    query: MACHINE_INSTANCE,
-    variables: { machine, ownerKind, id, rowId },
+  const [result, reexecute] = useTraxQuery(machineInstanceDocument, {
+    variables: { machine, ownerKind: ownerKind ?? "SYSTEM", id, rowId },
     pause: refusal != null,
   });
-  const [machines] = useQuery<MachinesData>({ query: MACHINES, pause: refusal != null });
+  const [machines] = useTraxQuery(machinesDocument, { pause: refusal != null });
   // reexecute ignores pause, so a route the API cannot look up must not refetch at all: every
   // change would send a read that can only fail.
   const refetch = () => {
-    if (refusal == null) reexecute({ requestPolicy: "network-only" });
+    if (refusal == null) reexecute();
   };
 
   // The instance as the feed last wrote it. The feed carries its state and when it was written,
   // so the lit state moves at once; the rest (its timer, its run) is read again. The reducer keeps
   // only this instance's events and the reloads, so another instance's write changes nothing.
-  const [{ data: feed }] = useSubscription<FeedData, FeedState>(
-    { query: ON_MACHINE_INSTANCE_CHANGED, variables: { machine }, pause: refusal != null },
-    (prev, next) => {
+  const [{ data: feed }] = useTraxSubscription(onMachineInstanceChangedDocument, { variables: { machine }, pause: refusal != null },
+    (prev: { live: OnMachineInstanceChangedResult["onMachineInstanceChanged"] | null; seen: number } | undefined, next) => {
       const e = next.onMachineInstanceChanged;
       const ours = e.id === id && e.ownerKind === ownerKind && (rowId == null || e.rowId === rowId);
       if (!ours && !e.reload) return prev ?? { live: null, seen: 0 };
@@ -110,7 +85,7 @@ export function StateMachineInstancePage() {
   });
   // Its run moves with the work queue and the runs themselves, which do not write the instance.
   useRefetchOnChange(["EXECUTION", "WORK_QUEUE"], refetch);
-  const [, cancelInstance] = useMutation<CancelData>(CANCEL_MACHINE_INSTANCE);
+  const [, cancelInstance] = useTraxMutation(cancelMachineInstanceDocument);
   const [cancelling, setCancelling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 

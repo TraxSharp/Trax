@@ -1,41 +1,11 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import {
-  EXECUTIONS,
-  MANIFEST_DETAIL,
-  MANIFEST_EXCLUSIONS,
-  MANIFEST_SCHEDULE,
-  MANIFEST_STATS,
-} from "../graphql/queries";
-import {
-  CANCEL_MANIFEST,
-  DISABLE_MANIFEST,
-  ENABLE_MANIFEST,
-  SET_MANIFESTS_REPLAY_DECISIONS_ON_RETRY,
-  TRIGGER_MANIFEST,
-  TRIGGER_MANIFEST_DELAYED,
-} from "../graphql/mutations";
-import {
-  BackLink,
-  DetailPanel,
-  Fields,
-  JsonPanel,
-  Loading,
-  NotFound,
-} from "../components/detail";
+import { BackLink, DetailPanel, Fields, JsonPanel, Loading, NotFound } from "../components/detail";
 import { enumLabel, formatTime } from "../lib/format";
 import { ManifestEditForm } from "../components/ManifestEditForm";
 import { StateBadge } from "../components/StateBadge";
 import { toast } from "../lib/toast";
-import type {
-  ExecutionSummary,
-  ManifestDetail,
-  ManifestExclusion,
-  ManifestExecutionStats,
-  ManifestSchedule,
-  PagedResult,
-} from "../types";
+import type { ManifestExclusion } from "../types";
 import { useAnswers } from "../lib/answerable";
 import { useNow } from "../lib/useNow";
 import { RunSparkline } from "../components/schedules";
@@ -43,23 +13,30 @@ import { untilText, utcText } from "../lib/schedules";
 import { confirmAction } from "../lib/confirm";
 import { Modal } from "../components/Modal";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
-
-interface ManData {
-  operations: { manifestDetail: ManifestDetail | null };
-}
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import {
+  cancelManifestDocument,
+  disableManifestDocument,
+  enableManifestDocument,
+  executionsDocument,
+  manifestDetailDocument,
+  manifestExclusionsDocument,
+  manifestScheduleDocument,
+  manifestStatsDocument,
+  setManifestsReplayDecisionsOnRetryDocument,
+  triggerManifestDelayedDocument,
+  triggerManifestDocument,
+} from "../trax/index.g";
 
 export function ManifestDetailPage() {
   const id = Number(useParams().id);
-  const [result, reexecute] = useQuery<ManData>({
-    query: MANIFEST_DETAIL,
-    variables: { id },
-  });
-  const [, trigger] = useMutation(TRIGGER_MANIFEST);
-  const [, triggerDelayed] = useMutation(TRIGGER_MANIFEST_DELAYED);
-  const [, cancelManifest] = useMutation(CANCEL_MANIFEST);
-  const [, enable] = useMutation(ENABLE_MANIFEST);
-  const [, disable] = useMutation(DISABLE_MANIFEST);
-  const [, setReplay] = useMutation(SET_MANIFESTS_REPLAY_DECISIONS_ON_RETRY);
+  const [result, reexecute] = useTraxQuery(manifestDetailDocument, { variables: { id } });
+  const [, trigger] = useTraxMutation(triggerManifestDocument);
+  const [, triggerDelayed] = useTraxMutation(triggerManifestDelayedDocument);
+  const [, cancelManifest] = useTraxMutation(cancelManifestDocument);
+  const [, enable] = useTraxMutation(enableManifestDocument);
+  const [, disable] = useTraxMutation(disableManifestDocument);
+  const [, setReplay] = useTraxMutation(setManifestsReplayDecisionsOnRetryDocument);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [later, setLater] = useState(false);
@@ -76,7 +53,7 @@ export function ManifestDetailPage() {
   if (result.fetching && !m) return <Loading />;
   if (!m) return <NotFound what="manifest" />;
 
-  const refetch = () => reexecute({ requestPolicy: "network-only" });
+  const refetch = () => reexecute();
   async function onCancelRuns() {
     if (
       !(await confirmAction({
@@ -323,8 +300,7 @@ export function ManifestDetailPage() {
 // them. Not drawn where the client cannot answer it (the demo, until the recordings hold it).
 function SchedulePanel({ manifestId, isEnabled }: { manifestId: number; isEnabled: boolean }) {
   const answered = useAnswers("ManifestSchedule");
-  const [{ data }] = useQuery<{ operations: { manifestDetail: ManifestSchedule | null } }>({
-    query: MANIFEST_SCHEDULE,
+  const [{ data }] = useTraxQuery(manifestScheduleDocument, {
     variables: { id: manifestId, count: 5 },
     pause: !answered,
     requestPolicy: "cache-and-network",
@@ -361,10 +337,7 @@ function SchedulePanel({ manifestId, isEnabled }: { manifestId: number; isEnable
 
 // ── Summary cards ──────────────────────────────────────────────────────────
 function StatCards({ manifestId }: { manifestId: number }) {
-  const [{ data }] = useQuery<{ operations: { manifestStats: ManifestExecutionStats } }>({
-    query: MANIFEST_STATS,
-    variables: { manifestId },
-  });
+  const [{ data }] = useTraxQuery(manifestStatsDocument, { variables: { manifestId } });
   const s = data?.operations?.manifestStats;
   if (!s) return null;
   return (
@@ -390,10 +363,7 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone?:
 
 // ── Exclusion windows ───────────────────────────────────────────────────────
 function ExclusionsPanel({ manifestId }: { manifestId: number }) {
-  const [{ data }] = useQuery<{ operations: { manifestExclusions: ManifestExclusion[] } }>({
-    query: MANIFEST_EXCLUSIONS,
-    variables: { manifestId },
-  });
+  const [{ data }] = useTraxQuery(manifestExclusionsDocument, { variables: { manifestId } });
   const rows = data?.operations?.manifestExclusions ?? [];
   if (rows.length === 0) return null;
   return (
@@ -440,10 +410,7 @@ function titleCase(s: string): string {
 
 // ── Recent run history ────────────────────────────────────────────────
 function ExecutionHistory({ manifestId }: { manifestId: number }) {
-  const [{ data }] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
-    query: EXECUTIONS,
-    variables: { take: 10, manifestId },
-  });
+  const [{ data }] = useTraxQuery(executionsDocument, { variables: { take: 10, manifestId } });
   const items = data?.operations?.executions?.items ?? [];
   return (
     <DetailPanel title="Recent runs">

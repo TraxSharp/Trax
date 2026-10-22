@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { setHideAdminTrains } from "../lib/adminTrains";
@@ -49,11 +49,11 @@ function renderExecutions(baseRows: unknown[]) {
     },
   });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/runs"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   return store;
 }

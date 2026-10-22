@@ -1,0 +1,12 @@
+# Queue a train for background execution. id is the new work queue entry.
+mutation QueueTrain($input: QueueTrainInput!) {
+  operations {
+    workQueue {
+      queueTrain(input: $input) {
+        success
+        message
+        id
+      }
+    }
+  }
+}

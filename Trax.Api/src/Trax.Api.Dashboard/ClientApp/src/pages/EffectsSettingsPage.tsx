@@ -1,16 +1,11 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "urql";
-import { EFFECTS } from "../graphql/queries";
-import { SET_EFFECT_ENABLED } from "../graphql/mutations";
 import { prettyJson, shortName } from "../lib/format";
 import { toast } from "../lib/toast";
 import { ConfigureEffectDialog } from "../components/ConfigureEffectDialog";
 import type { EffectInfo } from "../types";
 import { TermHelp } from "../components/TermHelp";
-
-interface EffectsData {
-  operations: { effects: EffectInfo[] };
-}
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import { effectsDocument, setEffectEnabledDocument } from "../trax/index.g";
 
 // The registered effects and whether each runs, as the Blazor EffectsSettingsPage shows them: a
 // switch per toggleable effect and Enable all / Disable all edit the page, Save sends each changed
@@ -18,8 +13,8 @@ interface EffectsData {
 // are always on. A configurable effect's configuration is shown as the API returns it, sensitive
 // values already redacted, and Configure edits its settings through configureEffect.
 export function EffectsSettingsPage() {
-  const [result, reexecute] = useQuery<EffectsData>({ query: EFFECTS });
-  const [, setEffectEnabled] = useMutation(SET_EFFECT_ENABLED);
+  const [result, reexecute] = useTraxQuery(effectsDocument);
+  const [, setEffectEnabled] = useTraxMutation(setEffectEnabledDocument);
   const effects = result.data?.operations?.effects ?? [];
   // Local edits by fullName; the server's value applies to everything not edited.
   const [edits, setEdits] = useState<Record<string, boolean>>({});
@@ -46,14 +41,14 @@ export function EffectsSettingsPage() {
     }
     setSaving(false);
     setEdits({});
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
     if (failures.length > 0) toast(`Some effects were not saved. ${failures.join(" ")}`, "error");
     else toast("Effect settings updated.", "success");
   }
 
   function discard() {
     setEdits({});
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
     toast("Changes discarded. The page shows the effects' current state.", "info");
   }
 
@@ -135,7 +130,7 @@ export function EffectsSettingsPage() {
         <ConfigureEffectDialog
           effect={configuring}
           onClose={() => setConfiguring(null)}
-          onSaved={() => reexecute({ requestPolicy: "network-only" })}
+          onSaved={() => reexecute()}
         />
       )}
 

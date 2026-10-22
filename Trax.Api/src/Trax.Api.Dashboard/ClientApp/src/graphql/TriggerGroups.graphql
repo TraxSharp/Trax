@@ -1,0 +1,18 @@
+# Trigger / cancel the running executions of many manifest groups in one call.
+mutation TriggerGroups($ids: [Long!]!) {
+  operations {
+    triggerGroups(ids: $ids) {
+      success
+      matched
+      queued
+      alreadyQueued
+      tooLateToAskAfresh
+      skipped
+      message
+      notes {
+        id
+        message
+      }
+    }
+  }
+}

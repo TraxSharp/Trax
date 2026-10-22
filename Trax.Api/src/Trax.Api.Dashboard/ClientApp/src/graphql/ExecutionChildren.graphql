@@ -1,0 +1,16 @@
+# Child executions of a parent (parent/child tree on the detail page).
+query ExecutionChildren($parentId: Long!, $take: Int!, $afterId: Long) {
+  operations {
+    executionChildren(parentId: $parentId, take: $take, afterId: $afterId) {
+      items {
+        id
+        name
+        trainState
+        startTime
+        endTime
+      }
+      totalCount
+      nextCursor
+    }
+  }
+}

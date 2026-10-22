@@ -1,21 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import {
-  DEAD_LETTER_DETAIL,
-  EXECUTIONS,
-  EXECUTION_DETAIL,
-  MANIFEST_DETAIL,
-} from "../graphql/queries";
-import { ACKNOWLEDGE_DEAD_LETTER, REQUEUE_DEAD_LETTER } from "../graphql/mutations";
-import {
-  BackLink,
-  DetailLink,
-  DetailPanel,
-  Fields,
-  Loading,
-  NotFound,
-} from "../components/detail";
+import { BackLink, DetailLink, DetailPanel, Fields, Loading, NotFound } from "../components/detail";
 import { NotePrompt } from "../components/NotePrompt";
 import { Pager } from "../components/Pager";
 import { StateBadge } from "../components/StateBadge";
@@ -23,21 +8,20 @@ import { enumLabel, formatMs, formatTime, prettyJson, shortName } from "../lib/f
 import { useKeyset } from "../lib/useKeyset";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
-import type {
-  DeadLetterSummary,
-  ExecutionDetail,
-  ExecutionSummary,
-  ManifestDetail,
-  PagedResult,
-} from "../types";
+import type { ManifestDetail } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { offersDecisions, useTrainsAskingDecisions } from "../lib/decisions";
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import {
+  acknowledgeDeadLetterDocument,
+  deadLetterDetailDocument,
+  executionDetailDocument,
+  executionsDocument,
+  manifestDetailDocument,
+  requeueDeadLetterDocument,
+} from "../trax/index.g";
 
 const FAILED_PAGE_SIZE = 10;
-
-interface DlData {
-  operations: { deadLetters: { deadLetter: DeadLetterSummary | null } };
-}
 
 // One dead letter: its details, the manifest it belongs to (properties masked by the API), the
 // manifest's most recent failed run in full, and the manifest's failed runs. Mirrors the Blazor
@@ -45,20 +29,16 @@ interface DlData {
 export function DeadLetterDetailPage() {
   const id = Number(useParams().id);
   const navigate = useNavigate();
-  const [result, reexecute] = useQuery<DlData>({
-    query: DEAD_LETTER_DETAIL,
-    variables: { id },
-  });
-  useRefetchOnChange("DEAD_LETTER", () => reexecute({ requestPolicy: "network-only" }));
-  const [, requeue] = useMutation(REQUEUE_DEAD_LETTER);
-  const [, acknowledge] = useMutation(ACKNOWLEDGE_DEAD_LETTER);
+  const [result, reexecute] = useTraxQuery(deadLetterDetailDocument, { variables: { id } });
+  useRefetchOnChange("DEAD_LETTER", () => reexecute());
+  const [, requeue] = useTraxMutation(requeueDeadLetterDocument);
+  const [, acknowledge] = useTraxMutation(acknowledgeDeadLetterDocument);
   const [busy, setBusy] = useState(false);
   const [acking, setAcking] = useState(false);
   const d = result.data?.operations?.deadLetters?.deadLetter;
   const askingDecisions = useTrainsAskingDecisions();
 
-  const [manifestResult] = useQuery<{ operations: { manifestDetail: ManifestDetail | null } }>({
-    query: MANIFEST_DETAIL,
+  const [manifestResult] = useTraxQuery(manifestDetailDocument, {
     variables: { id: d?.manifestId ?? 0 },
     pause: d == null,
   });
@@ -74,7 +54,7 @@ export function DeadLetterDetailPage() {
   if (result.fetching && !d) return <Loading />;
   if (!d) return <NotFound what="dead letter" />;
 
-  const refetch = () => reexecute({ requestPolicy: "network-only" });
+  const refetch = () => reexecute();
   const awaiting = d.status === "AWAITING_INTERVENTION";
   const title = manifest ? shortName(manifest.name) : d.manifestName || `Dead letter #${d.id}`;
 
@@ -233,13 +213,9 @@ function ManifestPanel({ manifest: m }: { manifest: ManifestDetail }) {
 
 // The manifest's newest failed run, read whole (stack trace and input included).
 function LatestFailedRun({ manifestId }: { manifestId: number }) {
-  const [list] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
-    query: EXECUTIONS,
-    variables: { take: 1, manifestId, trainState: "FAILED" },
-  });
+  const [list] = useTraxQuery(executionsDocument, { variables: { take: 1, manifestId, trainState: "FAILED" } });
   const latestId = list.data?.operations?.executions?.items[0]?.id;
-  const [detail] = useQuery<{ operations: { executionDetail: ExecutionDetail | null } }>({
-    query: EXECUTION_DETAIL,
+  const [detail] = useTraxQuery(executionDetailDocument, {
     variables: { id: latestId ?? 0 },
     pause: latestId == null,
   });
@@ -287,10 +263,7 @@ function LatestFailedRun({ manifestId }: { manifestId: number }) {
 // Every failed run of the manifest, newest first, keyset-paged.
 function FailedRuns({ manifestId }: { manifestId: number }) {
   const { afterId, isFirstPage, next, prev } = useKeyset();
-  const [{ data, error }] = useQuery<{ operations: { executions: PagedResult<ExecutionSummary> } }>({
-    query: EXECUTIONS,
-    variables: { take: FAILED_PAGE_SIZE, afterId, manifestId, trainState: "FAILED" },
-  });
+  const [{ data, error }] = useTraxQuery(executionsDocument, { variables: { take: FAILED_PAGE_SIZE, afterId, manifestId, trainState: "FAILED" } });
   const page = data?.operations?.executions;
   const items = page?.items ?? [];
   return (

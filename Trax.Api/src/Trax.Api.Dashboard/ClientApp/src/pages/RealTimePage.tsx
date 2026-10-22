@@ -1,11 +1,16 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useSubscription } from "urql";
-import { ON_DATA_CHANGED, ON_TRAIN_STATE_CHANGED } from "../graphql/subscriptions";
 import { StateBadge } from "../components/StateBadge";
-import type { ChangeDomain, TrainLifecycleEvent, TrainState } from "../types";
+import type { ChangeDomain, TrainState } from "../types";
 import { useNow } from "../lib/useNow";
 import { enumLabel } from "../lib/format";
+import { useTraxSubscription } from "../lib/consoleClient";
+import {
+  onDataChangedDocument,
+  onTrainStateChangedDocument,
+  type OnDataChangedResult,
+  type OnTrainStateChangedResult,
+} from "../trax/index.g";
 
 const FEED_LIMIT = 60;
 const DOMAINS: ChangeDomain[] = [
@@ -16,11 +21,6 @@ const DOMAINS: ChangeDomain[] = [
   "SCHEDULER_CONFIG",
 ];
 
-interface DataSignal {
-  domain: ChangeDomain;
-  timestamp: string;
-}
-
 function shortName(fullName: string): string {
   const parts = fullName.split(".");
   return parts[parts.length - 1] || fullName;
@@ -29,17 +29,11 @@ function shortName(fullName: string): string {
 export function RealTimePage() {
   // Accumulate both streams. Lifecycle events drive the feed; data-change signals drive the
   // per-domain counters. Both are diagnostics for "is real-time healthy and what's flowing?".
-  const [{ data: lifecycle }] = useSubscription<
-    { onTrainStateChanged: TrainLifecycleEvent },
-    TrainLifecycleEvent[]
-  >({ query: ON_TRAIN_STATE_CHANGED }, (prev = [], data) =>
+  const [{ data: lifecycle }] = useTraxSubscription(onTrainStateChangedDocument, undefined, (prev: OnTrainStateChangedResult["onTrainStateChanged"][] = [], data) =>
     [data.onTrainStateChanged, ...prev].slice(0, FEED_LIMIT),
   );
 
-  const [{ data: signals }] = useSubscription<
-    { onDataChanged: DataSignal },
-    DataSignal[]
-  >({ query: ON_DATA_CHANGED }, (prev = [], data) =>
+  const [{ data: signals }] = useTraxSubscription(onDataChangedDocument, undefined, (prev: OnDataChangedResult["onDataChanged"][] = [], data) =>
     [data.onDataChanged, ...prev].slice(0, 500),
   );
 

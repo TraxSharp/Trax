@@ -1,0 +1,26 @@
+# Registered effects and their runtime state in the API process. The configuration is redacted by
+# the API: a [TraxSensitive] value never leaves the server.
+query Effects {
+  operations {
+    effects {
+      name
+      fullName
+      enabled
+      toggleable
+      isConfigurable
+      configurationTypeName
+      configuration
+      fields {
+        name
+        typeName
+        kind
+        nullable
+        enumValues
+        sensitive
+        hasValue
+        value
+        hint
+      }
+    }
+  }
+}

@@ -1,0 +1,5070 @@
+schema {
+  query: RootQuery
+  mutation: RootMutation
+  subscription: LifecycleSubscriptions
+}
+
+"""
+The purpose of the `cost` directive is to define a `weight` for GraphQL types, fields, and arguments. Static analysis can use these weights when calculating the overall cost of a query or response.
+"""
+directive @cost(
+  """
+  The `weight` argument defines what value to add to the overall cost for every appearance, or possible appearance, of a type, field, argument, etc.
+  """
+  weight: String!
+) on SCALAR | OBJECT | FIELD_DEFINITION | ARGUMENT_DEFINITION | ENUM | INPUT_FIELD_DEFINITION
+
+"""
+Event payload published by lifecycle hooks and consumed by GraphQL subscriptions.
+"""
+type TrainLifecycleEvent {
+  metadataId: Long!
+  externalId: String!
+  trainName: String!
+  trainState: TrainState!
+  timestamp: DateTime!
+  failureJunction: String
+  failureReason: String
+  hostName: String
+  hostEnvironment: String
+
+  """
+  This event's position in the subscription: 1 for the first event and one more for each after it. A jump of more than one means events were lost on the way to this subscriber; refetch what you show. The live feed is lossy under load.
+  """
+  sequence: Long!
+  output: Any
+}
+
+"""
+What happened to one step of a run: the payload of the onJunctionEvent subscription.
+"""
+type JunctionEvent {
+  """The run's execution id."""
+  metadataId: Long!
+
+  """The run's stable external id."""
+  externalId: String!
+
+  """The train's canonical name (its interface's full name)."""
+  trainName: String!
+
+  """What happened to the step."""
+  eventType: JunctionEventType!
+
+  """When the event was published (UTC)."""
+  timestamp: DateTime!
+
+  """The step."""
+  junction: JunctionStep!
+
+  """
+  This event's position in the subscription: 1 for the first event and one more for each after it. A jump of more than one means events were lost on the way to this subscriber. The feed is shared by every run on the host, so a gap can come from another run's steps rather than this one's. In the operations view read operations.junctionRuns again to recover; a broadcast subscriber cannot read it, and has no way to recover a gap. The live feed is lossy under load.
+  """
+  sequence: Long!
+}
+
+"""
+One step of a run: a junction that ran, a question a routing step asked, or the track it took.
+The onJunctionEvent subscription carries one per event, and
+operations.junctionRuns returns a run's steps as AddJunctionEvents() recorded them.
+"""
+type JunctionStep {
+  """
+  Where the step falls in the run, from 0. A junction's start and end share it.
+  """
+  position: Int!
+
+  """What the step is."""
+  kind: JunctionRunKind!
+
+  """The junction's class name without its namespace, or a question's key."""
+  name: String!
+
+  """Where the step stands."""
+  state: JunctionRunState!
+
+  """
+  When the junction started, or when the question was answered or the track taken (UTC).
+  """
+  startedAt: DateTime!
+
+  """When the junction returned (UTC), or null while it runs."""
+  endedAt: DateTime
+
+  """Milliseconds from StartedAt to EndedAt, or null while it runs."""
+  durationMs: Float
+
+  """How a failed junction's failure is classified; null unless it failed."""
+  failureClass: FailureClass
+
+  """
+  The type name of the exception a junction failed or was cancelled with, never its message.
+  """
+  failureException: String
+
+  """The question's key, for a question or a track."""
+  questionKey: String
+
+  """
+  The answer the run acted on, or null for a junction, a refused answer and a withheld one.
+  """
+  answer: String
+
+  """How sure the decider was, for a choice or a score; null when withheld."""
+  confidence: Float
+
+  """True when the answer came from an earlier run rather than a decider."""
+  replayed: Boolean!
+
+  """
+  The full name of the decider's type. Live events only; the recorded timeline does not keep it.
+  """
+  decider: String
+
+  """
+  True when the question is about a [TraxSensitive] type, so its answer and confidence are absent.
+  """
+  answerWithheld: Boolean!
+
+  """
+  Which attempt of its manifest the run is, or null for a run with no manifest.
+  """
+  attempt: Int
+
+  """
+  True when Name is (withheld): the step is on a decision track, and its
+  name would give away an answer this caller is not shown.
+  """
+  nameWithheld: Boolean!
+
+  """
+  The position of the latest routing step before this one, or null before any. Every step
+  after a route, a junction, a question or a further route, counts as on its track.
+  """
+  trackPosition: Int
+
+  """
+  The id of the declared node this step ran for, as operations.runGraph names it. Null for a step recorded before node ids were, and wherever the step's name is withheld, since the id names the track.
+  """
+  nodeId: String
+
+  """
+  The path of the Parallel branch the step ran in, such as Parallel#0/cocitation, or null outside any branch. Withheld wherever the step's name is.
+  """
+  branchPath: String
+}
+
+"""
+Predefined operational queries: health, trains, manifests, manifest groups, execution
+history, and the nested deadLetters namespace.
+"""
+type OperationsQueries {
+  """
+  What needs an operator's attention: whether the manifest manager and the job dispatcher are
+  switched on (scheduler), the dead letters awaiting intervention grouped by train and
+  reason (deadLetters), the trains whose failure rate in the last hour is above their
+  rate over the week before it (failingTrains), the stuck state-machine instances by
+  machine and state (stuckInstances), the queued work that is due and how long the
+  oldest has waited (queue), and the hosts that have missed three heartbeats
+  (offlineHosts). Each entry's link is the console path and query that lists
+  it. Read through CancellationToken).
+  """
+  attention: Attention!
+
+  """
+  Every bulk operation this node knows, newest first: the one running, and those that
+  finished in the last 24 hours (at most 100). An operation started on another node, or
+  before this node restarted, is not listed.
+  """
+  bulkOperations: [BulkOperation!]!
+
+  """
+  One bulk operation by id, or null when this node does not know it: it was started on
+  another node, this node has restarted since, or it finished more than 24 hours ago.
+  """
+  bulkOperation(
+    """The operation's id, as startBulkOperation returned it."""
+    id: UUID!
+  ): BulkOperation
+
+  """
+  Nested namespace exposing dead letter queries (deadLetters, deadLetter).
+  """
+  deadLetters: DeadLetterQueries!
+
+  """Nested namespace exposing work queue queries (workQueues, workQueue)."""
+  workQueue: WorkQueueQueries!
+
+  """Nested namespace exposing manifest group queries (graph)."""
+  manifestGroups: ManifestGroupQueries!
+
+  """
+  Nested namespace exposing log queries (paginated reads of the log records trains write).
+  """
+  logs: LogQueries!
+
+  """
+  Nested namespace exposing dashboard / server metrics. Same data the dashboard
+  Index page renders.
+  """
+  metrics: MetricsQueries!
+
+  """
+  Nested namespace exposing live scheduler runtime config (what the dashboard's
+  ServerSettingsPage reads).
+  """
+  config: ConfigQueries!
+
+  """
+  The current health summary: queue depth, running and recently failed executions, and dead
+  letters awaiting intervention. Computed on every call.
+  """
+  health: HealthStatus!
+
+  """
+  Canonical FullNames of the internal/administrative scheduler trains (JobDispatcher,
+  ManifestManager, JobRunner, cleanup, etc.). Clients filter these out of live subscription
+  feeds; the executions query filters them server-side via hideAdminTrains.
+  """
+  adminTrainNames: [String!]!
+
+  """
+  Every train registered with this host, with its input schema, authorization requirements and
+  how it is exposed in GraphQL.
+  """
+  trains(
+    """Leave out the scheduler's own internal trains (see adminTrainNames)."""
+    hideAdminTrains: Boolean! = false
+  ): [TrainInfo!]!
+
+  """
+  The observational effects registered in THIS process, with their enabled + toggleable state
+  and, for a factory that exposes runtime settings, those settings: as JSON, and as
+  fields an editor can be built from. Read through
+  IEffectSettingsService, the call the dashboard's effects page makes. The
+  registry and each settings object are in-memory per-process singletons, so this reflects the
+  API host only, not the scheduler/worker processes where effects run;
+  operations.setEffectEnabled and operations.configureEffect change them here.
+  Empty when the host registers no effect registry.
+  """
+  effects: [EffectInfo!]!
+
+  """
+  One run's recorded decisions, in the order it made them: each question it asked a decider,
+  the answer it acted on (or refused), and the tracks routing steps took on it. Read through
+  CancellationToken), the read the dashboard's run
+  page makes. Empty for a run that recorded none, and for an id with no run. A run's replay
+  link is on executionDetail (replayDecisionsOf, replayAbandoned).
+  """
+  decisions(
+    """The run's id."""
+    metadataId: Long!
+
+    """Only decisions recorded after this one (a page's nextCursor)."""
+    afterId: Long
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 50
+  ): DecisionPage!
+
+  """
+  The schedule exclusion windows configured on a manifest (the days/dates/ranges/time windows
+  during which it is intentionally skipped). Empty when the manifest has none or does not
+  exist. Backs the exclusions panel on the dashboard's manifest detail page.
+  """
+  manifestExclusions(manifestId: Long!): [ManifestExclusion!]!
+
+  """
+  A page of manifests, newest first. Pass the previous page's nextCursor as
+  afterId to page deeply; skip is ignored when afterId is set. Carries no
+  train input; manifestDetail does.
+  """
+  manifests(
+    """
+    How many manifests to skip (negative is treated as 0; above 10,000 is refused with TRAX_SKIP_TOO_DEEP, so page deeper with afterId).
+    """
+    skip: Int! = 0
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 25
+
+    """Only enabled (true) or disabled (false) manifests."""
+    isEnabled: Boolean
+
+    """Only manifests with this schedule type."""
+    scheduleType: ScheduleType
+
+    """Only manifests whose train name contains this text."""
+    nameContains: String
+
+    """Only manifests older than this id (a keyset cursor)."""
+    afterId: Long
+
+    """Only manifests in this group."""
+    manifestGroupId: Long
+
+    """
+    Leave out the scheduler's own internal trains' manifests (see adminTrainNames).
+    """
+    hideAdminTrains: Boolean! = false
+  ): PagedResultOfManifestSummary!
+
+  """
+  Full detail for one manifest, including the train input it runs with. The input is on this
+  single-row read only, never on the manifests list, the way an execution's input is on
+  executionDetail alone. The manifest keeps it unmasked because its runs start from it;
+  here each [TraxSensitive] member reads {"_redacted": true}, and an input this
+  host cannot read as its type is masked whole. Returns null when the manifest does
+  not exist.
+  """
+  manifestDetail(id: Long!): ManifestDetail
+
+  """
+  Execution roll-up for a single manifest: run counts by state plus the most recent run and
+  most recent successful run. Backs the summary cards on the dashboard's manifest detail page,
+  and reads through the same IOperationsService call. A manifest with no runs,
+  or an id with no manifest, gets zeros and nulls.
+  """
+  manifestStats(manifestId: Long!): ManifestExecutionStats!
+
+  """
+  Execution roll-up for one train, keyed by its interface FullName (the name every
+  execution records). Backs the per-train detail page.
+  """
+  trainStats(trainName: String!): TrainExecutionStats!
+
+  """
+  The host processes that have beaten in the last day, from trax.host_heartbeat: each
+  one's identity, Trax version, start, last heartbeat, whether it is online, what it runs, and
+  how many runs it has in progress. Every host with a data provider beats every 15 seconds
+  whether or not it has work, and one is offline once three beats are missed (45 seconds).
+  Online hosts come first, then by name.
+  """
+  hosts: [HostInfo!]!
+
+  """
+  A page of executions. Pass the previous page's nextCursor as afterId to page
+  deeply in either order; skip is ignored when afterId is set. Unfiltered, the
+  total may be an estimate (isEstimatedCount). Filtered by failure text, it counts at
+  most 10,000 matches: past that it reads 10,000 with isCountCapped true, a lower bound.
+  Under any other filter it is exact. Carries no input, output or stack trace;
+  executionDetail does.
+  """
+  executions(
+    """
+    How many executions to skip (negative is treated as 0; above 10,000 is refused with TRAX_SKIP_TOO_DEEP, so page deeper with afterId).
+    """
+    skip: Int! = 0
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 25
+
+    """Only executions in this state."""
+    trainState: TrainState
+
+    """
+    Only executions of this train (the train interface's full name, matched exactly).
+    """
+    trainName: String
+
+    """Only executions that started at or after this time (UTC)."""
+    startedAfter: DateTime
+
+    """Only executions that started at or before this time (UTC)."""
+    startedBefore: DateTime
+
+    """Newest first (the default) or oldest first."""
+    order: SortOrder! = NEWEST
+
+    """A keyset cursor: the page continues after this id in the chosen order."""
+    afterId: Long
+
+    """Only executions scheduled by this manifest."""
+    manifestId: Long
+
+    """Only executions scheduled by a manifest in this group."""
+    manifestGroupId: Long
+
+    """Leave out the scheduler's own internal trains."""
+    hideAdminTrains: Boolean! = false
+
+    """Only executions whose failure was classified this way."""
+    failureClass: FailureClass
+
+    """Only the execution with this external id (matched exactly)."""
+    externalId: String
+
+    """Only executions started from inside this execution's run."""
+    parentId: Long
+
+    """Only executions run on the machine with this name (matched exactly)."""
+    hostName: String
+
+    """
+    Only executions whose failure reason contains this text, ignoring case.
+    """
+    failureReasonContains: String
+
+    """
+    Only executions that failed in the junction with this name (matched exactly).
+    """
+    failureJunction: String
+  ): PagedResultOfExecutionSummary!
+
+  """
+  Full detail for one execution, including its input, output, stack trace and the number of
+  executions it started, what it is linked to (the state-machine instance that invoked it,
+  the work queue entry it ran from, the dead letter it retries), or null when none has
+  that id.
+  """
+  executionDetail(id: Long!): ExecutionDetail
+
+  """
+  Paginated child executions of a parent: the executions it started, newest first.
+  Keyset-paginated on id like the top-level executions list.
+  """
+  executionChildren(parentId: Long!, take: Int! = 25, afterId: Long): PagedResultOfExecutionSummary!
+
+  """
+  The steps of one execution, in the order it reached them, as AddJunctionEvents()
+  recorded them: each junction that ran, each question a routing step asked and the track it
+  took. Empty for an execution with none recorded, and for an id with no execution.
+  """
+  junctionRuns(
+    """The execution's id."""
+    metadataId: Long!
+
+    """Only steps after this position (a keyset cursor for the next page)."""
+    afterPosition: Int
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 500
+  ): [JunctionStep!]!
+
+  """
+  One execution drawn on its train's declared chain: each node with the steps the run
+  recorded for it and where it stands (completed, failed, skipped on a track not taken, not
+  reached), the track each routing step took, and the steps that match no node. Null for an
+  id with no execution.
+  """
+  runGraph(
+    """The execution's id."""
+    metadataId: Long!
+  ): RunGraph
+
+  """
+  What an id, key or name names, when the caller does not know its kind: runs (id, external
+  id), manifests (id, external id, name), work queue entries (id, external id, subject key),
+  dead letters (id), state-machine instances (their GUID) and registered trains (full or
+  friendly name). Each match says its kind and id, which page it opens, a
+  label, and the field it matched on. Read through
+  CancellationToken), the call the console's search makes.
+  """
+  lookup(
+    """The id, key or name to look up."""
+    text: String!
+  ): [LookupMatch!]!
+
+  """
+  A page of state-machine instances, system-owned and user-owned alike, newest first by when
+  each was last written. Each carries its machine, owner kind, id, state, version,
+  timestamps and whether it waits on a train run it invoked; never its context or its
+  owner's key. Page with skip and take; there is no cursor, because the order
+  is by a time that moves. The total counts at most 10,000 instances: past that it reads
+  10,000 with isCountCapped true, and machineInstanceCounts has the exact
+  numbers by state.
+  """
+  machineInstances(
+    """Only instances of this machine (its id, matched exactly)."""
+    machine: String
+
+    """Only instances in this state (matched exactly)."""
+    state: String
+
+    """Only instances a user owns, or only those the system owns."""
+    ownerKind: SnapshotOwnerKind
+
+    """
+    How many instances to skip (negative is treated as 0; above 10,000 is refused with TRAX_SKIP_TOO_DEEP).
+    """
+    skip: Int! = 0
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 25
+
+    """
+    True for only the stuck instances (a timer overdue, or waiting on a run that failed or was
+    cancelled), false for only the others; omitted, both.
+    """
+    stuck: Boolean
+  ): PagedResultOfMachineInstance!
+
+  """
+  One state-machine instance with the train runs it invoked (invokedRuns, newest
+  first, at most 50, the one its state waits on marked isLive; a user's draft lists
+  only its live run), or null when none matches. The owner kind is always named,
+  because a user can hold a draft under the same id as a system instance. A system instance
+  is unique by machine and id; a user's draft is named by its rowId too (refused with
+  TRAX_ROW_ID_REQUIRED without one), because several users can each hold a draft
+  under one id and an operator is not shown whose a draft is.
+  """
+  machineInstance(
+    """The machine's id."""
+    machine: String!
+
+    """Who owns the instance."""
+    ownerKind: SnapshotOwnerKind!
+
+    """The instance or draft id."""
+    id: UUID!
+
+    """The row's key, from the list; required for a user's draft."""
+    rowId: Long
+  ): MachineInstanceDetail
+
+  """
+  How many instances each machine has in each state, for each owner kind, ordered by machine,
+  state and owner kind, and how many of them are stuck. Exact. Read through the call the dashboard's State machines page
+  makes for its counts, which each host keeps for 5 seconds per machine filter, so every
+  caller polling them shares one read and a count can be that old.
+  """
+  machineInstanceCounts(
+    """Only this machine's counts; omitted, every machine's."""
+    machine: String
+  ): [MachineInstanceCount!]!
+
+  """
+  Every state machine the host registers, ordered by name, whether or not it has any
+  instances: its version and its graph, read from its IR by the same reading
+  trax machine show draws it from. Each state says whether it is initial, final or
+  committed, and which train it invokes or machine it spawns; each transition says what takes
+  it (COMMAND, TIMER or OUTCOME) and its guard; each timer how long its
+  state is held. A machine declared with C# delegates has no IR, and is listed with
+  graphUnavailableReason instead of a graph.
+  """
+  machines: [MachineDefinition!]!
+}
+
+"""
+Queries for dead letter records with optional status filtering and pagination.
+"""
+type DeadLetterQueries {
+  """
+  A page of dead letters, newest first. Pass the previous page's nextCursor as
+  afterId to page deeply; skip is ignored when afterId is set.
+  """
+  deadLetters(
+    """
+    How many dead letters to skip (negative is treated as 0; above 10,000 is refused with TRAX_SKIP_TOO_DEEP, so page deeper with afterId).
+    """
+    skip: Int! = 0
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 25
+
+    """Only dead letters in this status; null for all."""
+    status: DeadLetterStatus
+
+    """Only dead letters older than this id (a keyset cursor)."""
+    afterId: Long
+
+    """Only dead letters of this manifest."""
+    manifestId: Long
+  ): PagedResultOfDeadLetterSummary!
+
+  """
+  A requeue-all job requeueAllDeadLetters started on this node, or null when this
+  node does not know the id: it was started on another node, this node has restarted since,
+  or it finished more than 24 hours ago. A job is read on the node that started it; the
+  backlog itself is deadLetters(status: AWAITING_INTERVENTION).totalCount on any node.
+  """
+  requeueAllJob(id: UUID!): DeadLetterRequeueJob
+
+  """One dead letter by id, or null when none has that id."""
+  deadLetter(id: Long!): DeadLetterSummary
+}
+
+"""
+Queries for the work queue: pending, dispatched, and cancelled entries with optional
+status / train name filtering and keyset pagination.
+"""
+type WorkQueueQueries {
+  """
+  A page of work queue entries, newest first. Pass the previous page's nextCursor as
+  afterId to page deeply; skip is ignored when afterId is set. Carries no
+  train input; detail does.
+  """
+  workQueues(
+    """
+    How many entries to skip (negative is treated as 0; above 10,000 is refused with TRAX_SKIP_TOO_DEEP, so page deeper with afterId).
+    """
+    skip: Int! = 0
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 25
+
+    """Only entries in this status."""
+    status: WorkQueueStatus
+
+    """Only entries for this train (matched exactly)."""
+    trainName: String
+
+    """Only entries older than this id (a keyset cursor)."""
+    afterId: Long
+
+    """Only entries that serialize on this subject (matched exactly)."""
+    subjectKey: String
+
+    """Only entries queued for this manifest."""
+    manifestId: Long
+  ): PagedResultOfWorkQueueSummary!
+
+  """
+  Full detail for one work queue entry: its train input, and for a queued entry with a
+  subject, what it is waiting on. The input is on this single-row read only, never on the
+  workQueues list, the way an execution's input is on executionDetail alone.
+  The entry keeps the input unmasked because the run starts from it; here each
+  [TraxSensitive] member reads {"_redacted": true}, as in an execution's
+  recorded input, and an input this host cannot read as its type is masked whole.
+  Returns null when the entry does not exist.
+  """
+  detail(id: Long!): WorkQueueDetail
+}
+
+"""
+Queries under operations.manifestGroups. Holds the paginated list of manifest
+groups, single-group lookup, and the 1-hop cross-group dependency neighborhood used
+by the dashboard's DAG visualisation. graph goes through the same service the
+dashboard uses, so both see identical nodes and edges.
+"""
+type ManifestGroupQueries {
+  """
+  Paginated list of manifest groups, newest first. Lives here (not on
+  OperationsQueries) because the parent's manifestGroups field
+  returns this namespace; a sibling field with the same camelCased name would
+  collide and HotChocolate would silently drop one.
+  """
+  groups(skip: Int! = 0, take: Int! = 25, nameContains: String, afterId: Long): PagedResultOfManifestGroupSummary!
+
+  """
+  Single-group lookup by id. Returns null when the group does not exist.
+  Required by the dashboard's group detail page so it can pre-populate the
+  maxActiveJobs, priority, and isEnabled form before the
+  operator submits a patch.
+  """
+  group(id: Long!): ManifestGroupSummary
+
+  """
+  Execution roll-up for a set of manifest groups: manifest count, executions by state, and
+  last run per group. Batched so the dashboard's groups list fetches stats for just the
+  visible page in one round-trip, through the same IOperationsService call.
+  Every requested id gets a row (zeros when it has no manifests or executions), once, in the
+  order requested, so the caller can zip it to its rows. More than 1000 distinct ids fails
+  the field with TRAX_TOO_MANY_IDS.
+  """
+  stats(groupIds: [Long!]!): [ManifestGroupStats!]!
+
+  """
+  Returns the dependency graph for the given group, or null if the group
+  does not exist. Empty groups still return a single-node graph (the focal group)
+  so the UI can render it.
+  """
+  graph(groupId: Long!): ManifestGroupDependencyGraph
+
+  """
+  The whole cross-group dependency graph: every group as a node and every cross-group
+  dependency as a directed parent → dependent edge. Nothing is highlighted. Backs the
+  dashboard's global dependency graph on the manifest-groups page.
+  """
+  dependencyGraph: ManifestGroupDependencyGraph!
+}
+
+"""
+Queries over the log records trains write, for the dashboard's Logs page and ad-hoc API consumers.
+Reads only; logs are written by the framework. The page and the filtered count come from
+IOperationsService, which the dashboard reads too, so both apply one filter.
+"""
+type LogQueries {
+  """
+  A page of log records written by trains, newest first unless order says otherwise.
+  Pass the previous page's nextCursor as afterId to page deeply in either order;
+  skip is ignored when afterId is set. Unfiltered, the total may be an estimate
+  (isEstimatedCount). Filtered by text, it counts at most 10,000 matches: past that it
+  reads 10,000 with isCountCapped true, a lower bound. Under any other filter it is
+  exact.
+  """
+  logs(
+    """
+    How many records to skip (negative is treated as 0; above 10,000 is refused with TRAX_SKIP_TOO_DEEP, so page deeper with afterId).
+    """
+    skip: Int! = 0
+
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 25
+
+    """Only records written by this execution."""
+    metadataId: Long
+
+    """Only records at this level or above."""
+    minimumLevel: LogLevel
+
+    """Only records with exactly this logger category."""
+    category: String
+
+    """A keyset cursor: the page continues after this id in the chosen order."""
+    afterId: Long
+
+    """Only records whose message contains this text, ignoring case."""
+    messageContains: String
+
+    """Only records whose logger category contains this text, ignoring case."""
+    categoryContains: String
+
+    """Newest first (the default) or oldest first, as a run's log reads."""
+    order: SortOrder! = NEWEST
+  ): PagedResultOfLogEntry!
+}
+
+"""
+Queries under operations.metrics. Backed entirely by
+IOperationsService so the dashboard's KPI cards / charts and the
+GraphQL API see identical numbers.
+"""
+type MetricsQueries {
+  """
+  The dashboard's headline counts, the executions-over-time chart for range, and the
+  seven-day top failures, slowest trains and throughput series: the same numbers the
+  dashboard's overview shows.
+  """
+  dashboard(
+    """The window and bucket size of the time series."""
+    range: MetricsRange! = LAST24_HOURS
+
+    """Leave the scheduler's own internal trains out of the counts."""
+    hideAdminTrains: Boolean! = false
+  ): DashboardMetrics!
+
+  """
+  Runs over time for one train, manifest or group: for each bucket of range, how many
+  runs that started in it completed, failed or were cancelled, and the median and 95th
+  percentile duration of the completed ones. Every bucket is returned, oldest first.
+  """
+  series(
+    """What the runs are of."""
+    scope: MetricSeriesScope!
+
+    """
+    The window: the last hour in minutes, 24 hours in quarter hours, or 7 days in hours. LAST30_DAYS is refused with TRAX_METRICS_SERIES_ARGUMENT: the existing indexes cannot serve it inside the metrics budget.
+    """
+    range: MetricSeriesRange!
+
+    """The manifest's or group's id, for a MANIFEST or GROUP scope."""
+    id: Long
+
+    """The train's interface FullName, for a TRAIN scope."""
+    name: String
+  ): MetricSeries!
+
+  """
+  Runtime metrics of this API process: start time, uptime, working set and managed heap
+  size, read when called. CPU is on serverCpuPercent.
+  """
+  server: ServerMetrics!
+
+  """
+  This API process's CPU utilisation since the previous poll (0-100, normalised by core
+  count). Separate from IOperationsService) because it is stateful per process: it needs
+  a delta between two samples, so the first poll returns null while the baseline primes.
+  """
+  serverCpuPercent: Float
+}
+
+"""
+Queries under operations.config. Returns the live scheduler runtime settings;
+matches what the dashboard's ServerSettingsPage reads, since both go through
+IOperationsService.
+"""
+type ConfigQueries {
+  """
+  The scheduler's current runtime settings, as this process holds them in memory (including
+  any change made with updateScheduler).
+  """
+  scheduler: SchedulerConfigSnapshot!
+
+  """
+  The API host's environment name (IHostEnvironment.EnvironmentName), which the
+  dashboard shows as its environment badge.
+  """
+  environmentName: String!
+
+  """
+  The version of Trax serving this API, such as 1.46.0: the Trax.Api.GraphQL
+  package's version without its build metadata. It is what the operations console's footer
+  shows, and it says which Trax release the host runs, not the host application's own
+  version.
+  """
+  version: String!
+
+  """
+  The level each category configured under the API host's Logging:LogLevel section
+  filters at now, Default first and the rest by name, including any change made with
+  setLogLevels. Read through ILogLevelService, the call the dashboard's
+  server settings make. Only that section is read; nothing else in configuration is reachable
+  from here. Empty when the host configures none.
+  """
+  logLevels: [LogLevelSetting!]!
+}
+
+"""
+One run drawn on its train's declared chain: every node the train declares, each with the steps
+the run recorded for it and where it stands, and the steps that match no node. Read through
+RunGraphs, which operations.runGraph and the dashboard's run page both call.
+"""
+type RunGraph {
+  """The run's id."""
+  metadataId: Long!
+
+  """The run's train, by its canonical name."""
+  train: String!
+
+  """
+  False when the host has no graph for the train (not registered here, or its chain cannot be read outside a request): nodes is empty and every step is unmatched.
+  """
+  hasGraph: Boolean!
+
+  """The graph's Hash, or null without a graph."""
+  hash: String
+
+  """
+  True when the run recorded its chain's hash when it started and it differs from hash: the chain has changed since the run, and the nodes it is drawn on may not be the ones it ran. False when the run recorded none or there is no graph.
+  """
+  chainChanged: Boolean!
+
+  """The declared nodes, in the order the chain declares them."""
+  nodes: [RunGraphNode!]!
+
+  """
+  Every node of the graph at any depth, in one list: depth first, each node before the nodes on its tracks, each track's nodes in declared order. Each says where it sits (parentId, track, depth), so a client can rebuild the tree without following nested tracks, which a query cannot follow past the server's field-cycle limit. Select only the tracks' own fields here (name, taken, ...), not their nodes.
+  """
+  allNodes: [RunGraphNode!]!
+
+  """
+  Steps that match no node of the current graph: recorded before node ids were, on a withheld track, or for a chain that has changed since the run.
+  """
+  unmatchedSteps: [JunctionStep!]!
+
+  """
+  True when the run recorded more steps than one read matches (500), so a later node can show as not reached when it ran.
+  """
+  moreSteps: Boolean!
+
+  """
+  True when resumeExecution without from can resume the run after its latest checkpoint: it failed or was cancelled, no state machine's step started it, and the resume check over the declared chain allows it. The mutation can still refuse the run for its saved input or a resume already queued.
+  """
+  canResume: Boolean!
+}
+
+"""
+A train available in the system, including its input schema for API consumers.
+"""
+type TrainInfo {
+  """
+  The train's declared chain, drawn the way runGraph draws a run of it, with no run: the same nodes in the same order, every one NOT_REACHED, no steps, and metadataId 0. hasGraph is false when this host cannot read the train's chain.
+  """
+  chain: RunGraph!
+
+  """
+  True when the train declares a step that asks a decider and records the decision (a Decide, or a Switch, Gate or Scale that asks its own question). Only such a train's runs have decisions a requeue can replay or ask afresh. False when this host cannot read the train's chain.
+  """
+  asksDecisions: Boolean!
+  serviceTypeName: String!
+  implementationTypeName: String!
+  inputTypeName: String!
+  outputTypeName: String!
+  lifetime: String!
+  inputSchema: [InputPropertySchema!]!
+  requiredPolicies: [String!]!
+  requiredRoles: [String!]!
+  isQuery: Boolean!
+  isMutation: Boolean!
+  graphQLName: String
+  isBroadcastEnabled: Boolean!
+
+  """
+  The train's canonical name: its service interface's FullName, which every other
+  operations field that takes a train keys on (workQueue.queueTrain,
+  workQueue.runTrain, trainStats, executions(trainName:),
+  workQueues(trainName:)). ServiceTypeName is a friendly name for
+  display and is not accepted by those fields.
+  """
+  fullName: String!
+
+  """
+  Whether the train overrides QueueSubjectKey, so its queued runs for one subject run
+  one at a time (an override may still return no key for a given input). A run started with
+  workQueue.runTrain bypasses that serialization and may run alongside queued or
+  in-flight work for the same subject, which is what the dashboard's Run dialog warns about.
+  """
+  hasQueueSubjectKey: Boolean!
+}
+
+"""
+Scheduler management mutations: trigger, disable, enable, and cancel manifests and groups.
+Also exposes the nested deadLetters namespace.
+"""
+type OperationsMutations {
+  """
+  Applies kind to every run, dead letter or manifest filter matches, the filter
+  the list read of that kind takes: CANCEL to runs (filter.executions),
+  REQUEUE and ACKNOWLEDGE to dead letters (filter.deadLetters), and
+  TRIGGER, ENABLE and DISABLE to manifests (filter.manifests).
+  The matching ids are read once, now. When there are not exactly expectedCount of
+  them, the number the operator confirmed, nothing starts and matched is the number
+  there are. Otherwise the operation starts in the background on this node and is returned at
+  once; read operations.bulkOperation(id) until its status is no longer
+  RUNNING. It runs in batches of at most 500 ids, each through the operation the
+  matching id-list mutation calls (cancelExecutions, requeueDeadLetters,
+  acknowledgeDeadLetters, triggerManifests, setManifestsEnabled), and
+  records each id that did not take with its reason. There is no limit on how many ids it
+  matches. askAfresh applies to REQUEUE and TRIGGER only, and
+  note, required, to ACKNOWLEDGE only. One runs per node at a time: while one
+  runs, this starts nothing and returns that one. The caller is recorded as its
+  actor, and when the host audits the API (AddAudit) its outcome is written to
+  the audit too.
+  """
+  startBulkOperation(
+    """What to do to each id."""
+    kind: BulkOperationKind!
+
+    """Which list, filtered as its read filters it."""
+    filter: BulkOperationFilterInput!
+
+    """How many matches the operator confirmed."""
+    expectedCount: Int!
+
+    """Every requeued or triggered run asks its deciders afresh."""
+    askAfresh: Boolean! = false
+
+    """Why the dead letters are acknowledged; at most 1,000 characters."""
+    note: String
+  ): StartBulkOperationResponse!
+
+  """
+  Nested namespace exposing dead letter mutations (requeue, acknowledge, batch ops).
+  """
+  deadLetters: DeadLetterMutations!
+
+  """
+  Nested namespace exposing work queue mutations (queue a train, cancel queued entries).
+  """
+  workQueue: WorkQueueMutations!
+
+  """
+  Nested namespace exposing manifest group mutations (updateManifestGroup).
+  """
+  manifestGroups: ManifestGroupMutations!
+
+  """
+  Nested namespace exposing scheduler config mutations (updateScheduler).
+  """
+  config: ConfigMutations!
+
+  """
+  Queues an immediate run of the manifest with this external id, outside its normal schedule,
+  which continues unaffected. A manifest holds at most one queued entry, so when it already has
+  one, that entry is brought forward to now instead of a second one being queued. When that
+  entry is a retry, askAfresh: true makes it ask its deciders again instead of replaying
+  the failed run's decisions; if the dispatcher had already claimed the retry, it is too late to
+  change: the mutation still succeeds, and its message says the run replays the failed run's
+  decisions. The message says which happened (a new run queued, a queued one brought forward,
+  or one already due released as the trigger) and id is that work queue entry. Through
+  CancellationToken), the call the dashboard's Trigger
+  buttons make. An unknown external id, or a host with no database provider, where nothing
+  dispatches the queue, returns success: false and changes nothing.
+  """
+  triggerManifest(externalId: String!, askAfresh: Boolean! = false): OperationResponse!
+
+  """
+  Queues a run of the manifest with this external id that becomes eligible for dispatch once
+  delay has passed (an ISO-8601 duration such as PT5M). The normal schedule
+  continues unaffected. When the manifest already has a queued entry, no second one is
+  queued: that entry keeps its time if it is due sooner, and is brought forward to
+  now + delay otherwise. With askAfresh: true a queued retry the trigger
+  releases asks its deciders again instead of replaying the failed run's decisions; as with
+  triggerManifest, the message says so when the dispatcher had already claimed it and it
+  still replays. As with triggerManifest, the message says which happened and id
+  is the entry. An unknown external id, or a host where nothing dispatches the queue, returns
+  success: false and changes nothing.
+  """
+  triggerManifestDelayed(externalId: String!, delay: Duration!, askAfresh: Boolean! = false): OperationResponse!
+
+  """
+  Disables the manifest with this external id so the scheduler stops running it. The manifest
+  is kept; enableManifest turns it back on. An unknown external id returns
+  success: false and changes nothing.
+  """
+  disableManifest(externalId: String!): OperationResponse!
+
+  """
+  Enables the manifest with this external id so the scheduler runs it again. An unknown
+  external id returns success: false and changes nothing.
+  """
+  enableManifest(externalId: String!): OperationResponse!
+
+  """
+  Requests cancellation of every pending and running execution of the manifest with this
+  external id. A running train stops at its next junction boundary and ends Cancelled, and is
+  not retried. count is the number of executions flagged. An unknown external id
+  returns success: false and changes nothing.
+  """
+  cancelManifest(externalId: String!): OperationResponse!
+
+  """
+  Queues an immediate run of every enabled manifest in the group that can run on its own.
+  Dependent manifests are skipped, since they run after their parent. count is the number
+  of manifests a new run was queued for; the message also counts the ones that already had a
+  queued run, which now runs as the trigger. Through
+  CancellationToken), the call the dashboard's group
+  Trigger makes. A host where nothing dispatches the queue returns success: false.
+  """
+  triggerGroup(groupId: Long!): OperationResponse!
+
+  """
+  Requests cancellation of every pending and running execution of every manifest in the group.
+  count is the number of executions flagged.
+  """
+  cancelGroup(groupId: Long!): OperationResponse!
+
+  """
+  Triggers the listed manifests by id, each as triggerManifest triggers one: an
+  immediate run is queued, or the manifest's queued entry is brought forward to now when it
+  already has one. Through CancellationToken), the call the
+  dashboard's Trigger Selected makes. With askAfresh: true a queued retry the trigger
+  releases asks its deciders again instead of replaying the failed run's decisions; one the
+  dispatcher had already claimed still replays, and is counted in tooLateToAskAfresh
+  with a note. Unknown ids are skipped and noted without stopping the rest. An empty list, or
+  more than 1000 ids, returns success: false and triggers nothing.
+  """
+  triggerManifests(ids: [Long!]!, askAfresh: Boolean! = false): BatchTriggerResponse!
+
+  """
+  Triggers every listed manifest group by id, each as triggerGroup triggers one: every
+  enabled member that runs on its own schedule is triggered, and dependent members are left to
+  run after their parent. Through CancellationToken),
+  the call the dashboard's Trigger Selected on the groups page makes. The counts are of
+  manifests, except matched and skipped, which count group ids. An empty list,
+  or more than 1000 ids, returns success: false and triggers nothing.
+  """
+  triggerGroups(ids: [Long!]!): BatchTriggerResponse!
+
+  """
+  Requests cancellation of every pending and running execution of every manifest in the
+  listed groups, as cancelGroup does for one, through
+  CancellationToken), the call the dashboard's Cancel
+  Running makes. count is the number of executions flagged, zero included. An empty
+  list, or more than 1000 ids, returns success: false and flags nothing.
+  """
+  cancelGroups(ids: [Long!]!): OperationResponse!
+
+  """
+  Requests cancellation of a single execution by id, when it is still pending or in
+  progress. The request is durable: the process running the train sees it and ends the run
+  as Cancelled, and a run on this host is cancelled at once. count is 1 when the
+  execution was flagged; an execution that is already finished or does not exist returns
+  success: false with count 0. So does a run a step of a user's state-machine
+  draft started, with the reason: a user's draft is read-only to operators, and only its user
+  cancels the run, by leaving the state (central ADR 0046).
+  """
+  cancelExecution(id: Long!): OperationResponse!
+
+  """
+  Requests cancellation of the listed executions, as cancelExecution does for one:
+  every one still pending or in progress is flagged, and finished or unknown ids are skipped.
+  A run a step of a user's state-machine draft started is skipped too, and the message says
+  how many and why. count is the number flagged, zero included. An empty list, or more
+  than 1000 ids, returns success: false and flags nothing.
+  """
+  cancelExecutions(ids: [Long!]!): OperationResponse!
+
+  """
+  Enables or disables the listed manifests by id. Only manifests whose flag differs are
+  written; count is the number changed, zero included. An empty list, or more than
+  1000 ids, returns success: false and changes nothing.
+  """
+  setManifestsEnabled(ids: [Long!]!, enabled: Boolean!): OperationResponse!
+
+  """
+  Sets whether retries of the listed manifests replay the decisions of the run they retry
+  (replayDecisionsOnRetry). Only manifests whose flag differs are written; count
+  is the number changed, zero included. Turning it off also clears the replay link of each
+  manifest's queued entry, so a retry waiting out its backoff asks afresh. An empty list, or
+  more than 1000 ids, returns success: false and changes nothing.
+  """
+  setManifestsReplayDecisionsOnRetry(ids: [Long!]!, replay: Boolean!): OperationResponse!
+
+  """
+  Re-queues an execution: queues a fresh run of the same train with the input the execution
+  recorded, through CancellationToken), the same call the
+  dashboard's Re-queue button makes. Fails without queueing when the execution does not exist,
+  recorded no input, recorded a placeholder in place of its input (too large, unserializable
+  or disposed), or recorded an input with [TraxSensitive] members masked. When the
+  execution recorded decisions, the new run replays them, so it takes the tracks the
+  execution took; with askAfresh: true it asks its deciders again instead. When a
+  queued entry or a run already replays that execution, the new run is queued afresh either
+  way, and the message says so.
+  """
+  requeueExecution(id: Long!, askAfresh: Boolean! = false): OperationResponse!
+
+  """
+  Resumes a failed or cancelled execution from a checkpoint instead of running every step
+  again: queues a run of the same train, with the input the execution recorded, that skips
+  to the step from names (a node id, as runGraph gives it), or to the step after
+  the execution's latest checkpoint when from is omitted. Through
+  CancellationToken), the same call the dashboard's Resume
+  and Resume from here buttons make. It is a requeue in every check but where the run starts,
+  so it enqueues through the mediator and the train's [TraxAuthorize] applies, and the
+  new run replays the execution's decisions. Fails without queueing, with the reason, when
+  the execution does not exist, is not failed or cancelled, was started by a state machine's
+  step, has a saved input a requeue would refuse, already has a queued resume, or when no
+  checkpoint it wrote lets it resume at that step.
+  """
+  resumeExecution(
+    """The execution (metadata) id."""
+    id: Long!
+
+    """
+    The node id of the step to resume at, or null for after the latest checkpoint.
+    """
+    from: String
+  ): OperationResponse!
+
+  """
+  Patches mutable settings on a single manifest (enabled, retries, priority, timeout,
+  schedule). Each field on input is independent; null leaves it
+  unchanged. See UpdateManifestInput for the clear-timeout semantics.
+  A value the scheduler could not use returns success: false with the reason and saves
+  nothing: a timeout or interval that is not positive, a negative retry count, a priority
+  outside 0 to 31, a cron expression the scheduler cannot parse or that never fires, a switch
+  to CRON without an expression, a switch to INTERVAL without an interval, and a
+  switch to ONCE, DEPENDENT or DORMANT_DEPENDENT, which need a time or a
+  parent this input cannot give. The schedule is checked only when the input changes it. Through
+  CancellationToken), which runs every check.
+  """
+  updateManifest(id: Long!, input: UpdateManifestInput!): OperationResponse!
+
+  """
+  Turns the observational effect whose factory has this full type name on or off in THIS
+  process, through Boolean), the call the
+  dashboard's effects page makes. The change is in memory: it does not reach the scheduler or
+  worker processes where trains usually run, and a restart restores the configured state. An
+  effect the registry does not track, or tracks as not toggleable, is refused and nothing
+  changes, as is any effect when the host registers no effect registry. On success
+  count is 1.
+  """
+  setEffectEnabled(fullName: String!, enabled: Boolean!): OperationResponse!
+
+  """
+  Writes settings of the configurable effect whose factory has this full type name, in THIS
+  process, through String}), the call the
+  dashboard's Configure dialog makes. Send only the settings you change: one not listed is
+  not written. It is all or nothing: every value is read as its setting's type and checked
+  against the setting's validation before any is written, and nothing is written when one is
+  refused; errors then says why, setting by setting. A sensitive setting can be
+  written though it is never read back. A setting listed twice, an empty list, or more than
+  1000 entries is refused. The change is in memory and applies to the next run in this
+  process; it does not reach the scheduler or worker processes where trains usually run, and
+  a restart restores the configured settings.
+  """
+  configureEffect(
+    """The effect factory's full type name, as effects lists it."""
+    fullName: String!
+
+    """The settings to write, by name, as text."""
+    values: [EffectSettingValueInput!]!
+  ): ConfigureEffectResponse!
+
+  """
+  Cancels a system-owned state-machine instance's live train run, and the instance then
+  moves through its state's OnCancelled edge. A run still queued is cancelled before
+  it starts and, when this host registers the machine, the instance moves in this call
+  (outcome: MOVED, state the state it entered); otherwise a host that does
+  moves it (RUN_CANCELLED). A dispatched run has its cancel requested: it stops at its
+  next junction and the instance moves when it ends (CANCEL_REQUESTED). Refused with
+  success: false and a typed outcome, changing nothing: a user-owned instance
+  (USER_OWNED; operators see users' drafts read-only), no such system instance
+  (NOT_FOUND), a state that waits on no run (NO_LIVE_RUN), and a run that has
+  already ended (RUN_ENDED). The message is the dashboard's, word for word.
+  """
+  cancelMachineInstance(
+    """The machine's id."""
+    machine: String!
+
+    """Who owns the instance; only SYSTEM can be cancelled."""
+    ownerKind: SnapshotOwnerKind!
+
+    """The instance id."""
+    id: UUID!
+  ): MachineInstanceCancelResponse!
+}
+
+"""
+Dead letter management mutations: requeue, acknowledge, and batch operations.
+"""
+type DeadLetterMutations {
+  """
+  Queues a new run for one dead letter's manifest and marks the dead letter retried. Only a dead
+  letter awaiting intervention can be requeued, and a manifest holds one queued entry at a time:
+  if it already has one, the result reports failure and the dead letter stays awaiting intervention.
+  The new run replays the decisions of the manifest's failed run when that is sound, as a retry
+  does; askAfresh: true makes it ask its deciders again.
+  """
+  requeueDeadLetter(id: Long!, askAfresh: Boolean! = false): DeadLetterOperationResult!
+
+  """
+  Marks one dead letter acknowledged without running it again, recording note as the
+  reason. A note longer than 1,000 characters is refused by the scheduler and nothing changes.
+  """
+  acknowledgeDeadLetter(id: Long!, note: String!): DeadLetterOperationResult!
+
+  """
+  Requeues the listed dead letters. At most one work queue entry is created per manifest: dead
+  letters that share a manifest are folded into one entry and all resolved, and a dead letter
+  whose manifest already has a queued entry is skipped and left awaiting intervention.
+  askAfresh: true makes every new run ask its deciders again rather than replay.
+  """
+  requeueDeadLetters(ids: [Long!]!, askAfresh: Boolean! = false): BatchDeadLetterResult!
+
+  """
+  Marks the listed dead letters acknowledged without running them again, recording note
+  on each. A note longer than 1,000 characters is refused: count is 0 and nothing changes.
+  """
+  acknowledgeDeadLetters(ids: [Long!]!, note: String!): BatchDeadLetterResult!
+
+  """
+  Starts requeueing every dead letter awaiting intervention, creating at most one work queue
+  entry per manifest as requeueDeadLetters does, and returns at once with the job's
+  handle rather than holding the request for the whole backlog. Read
+  operations.deadLetters.requeueAllJob(id) on the same node until its status is no
+  longer RUNNING. The fold is not tied to this request: it finishes after the client
+  goes away, and only the node shutting down stops it. While one is running on this node,
+  this returns that one with started: false. askAfresh: true makes every new run
+  ask its deciders again rather than replay.
+  """
+  requeueAllDeadLetters(askAfresh: Boolean! = false): DeadLetterRequeueJob!
+
+  """
+  Marks every dead letter awaiting intervention acknowledged, recording note on each. A
+  note longer than 1,000 characters is refused: count is 0 and nothing changes.
+  """
+  acknowledgeAllDeadLetters(note: String!): BatchDeadLetterResult!
+}
+
+"""
+Mutations for the work queue: queue a train for execution, run one now, and cancel queued entries.
+Thin wrappers around IOperationsService, which the dashboard also calls. Both
+share validation and the enqueue path; the train's own authorization applies here, while the
+dashboard enqueues as the admin surface its host gates (see docs/0017).
+"""
+type WorkQueueMutations {
+  """Creates a new work queue entry that the dispatcher will pick up."""
+  queueTrain(input: QueueTrainInput!): OperationResponse!
+
+  """
+  Runs a train now, through the same CancellationToken) call as
+  the dashboard's Run dialog: its Pending execution row is written and handed to the job
+  submitter the train is routed to, skipping the work queue. The train's own authorization
+  applies, as for CancellationToken).
+  """
+  runTrain(input: RunTrainInput!): OperationResponse!
+
+  """
+  Cancels a queued work queue entry. Only entries with status Queued can be
+  cancelled, and not one a step of a user's state-machine draft queued: a user's draft is
+  read-only to operators, and only its user cancels the run, by leaving the state (central
+  ADR 0046).
+  """
+  cancelWorkQueueEntry(id: Long!): OperationResponse!
+
+  """
+  Cancels many queued entries in one statement. Only entries still in Queued are
+  affected; already-dispatched or cancelled ids are skipped, and so are entries a step of a
+  user's state-machine draft queued, which the message counts and explains. count is
+  the number actually cancelled, zero included. An empty list, or more than 1000 ids, returns
+  success: false and cancels nothing.
+  """
+  cancelWorkQueueEntries(ids: [Long!]!): OperationResponse!
+}
+
+"""
+Mutations under operations.manifestGroups. Patches mutable fields on a manifest
+group (max active jobs, priority, enabled) and enables or disables groups in bulk. Thin wrapper around
+CancellationToken) so the dashboard and API
+share validation and persistence.
+"""
+type ManifestGroupMutations {
+  """
+  Patches mutable settings on a manifest group. Each field on input
+  is independent; passing null leaves a field unchanged.
+  """
+  updateManifestGroup(id: Long!, input: UpdateManifestGroupInput!): OperationResponse!
+
+  """
+  Enables or disables the listed manifest groups by id. Only groups whose flag differs are
+  written, with updatedAt bumped; count is the number changed, zero included.
+  An empty list, or more than 1000 ids, returns success: false and changes nothing.
+  """
+  setManifestGroupsEnabled(ids: [Long!]!, enabled: Boolean!): OperationResponse!
+
+  """
+  Enables or disables every manifest group. A field of its own so that "all" is never what an
+  empty or missing list means. count is the number changed, zero included.
+  """
+  setAllManifestGroupsEnabled(enabled: Boolean!): OperationResponse!
+}
+
+"""
+Mutations under operations.config. Patches mutable scheduler runtime
+settings; the same service powers the dashboard's ServerSettingsPage save action.
+"""
+type ConfigMutations {
+  """
+  Changes the scheduler's runtime settings. Only the fields you set change; the rest keep their
+  current values. The change takes effect at once in this process and is saved so it
+  survives a restart. On success count is the number of fields that changed. A value
+  outside the range the scheduler can run with refuses the whole patch: the result reports
+  failure, names each offending field, and nothing is applied.
+  """
+  updateScheduler(input: UpdateSchedulerConfigInput!): OperationResponse!
+
+  """
+  Sets the level each listed log category filters at in THIS process, through
+  ILogLevelService, the call the dashboard's server settings make. Only a
+  category configured under Logging:LogLevel (or changed here before) can be set; a
+  list naming any other, an empty list, or more than 1000 entries is refused whole and
+  nothing changes. When a category is listed twice, the last level wins. The change lasts
+  until the process restarts and does not reach the other processes of the deployment.
+  notApplied lists categories whose loggers still filter at another level, which
+  happens when the host sets the filter itself after Trax.
+  """
+  setLogLevels(
+    """The categories to set, and their levels."""
+    levels: [LogLevelSettingInput!]!
+  ): SetLogLevelsResponse!
+}
+
+"""
+Body of the persistedOperations query namespace at the root, behind the management gate.
+Each field calls IPersistedOperationsService.
+"""
+type PersistedOperationQueries {
+  """List persisted operations, most recently updated first, paginated."""
+  persistedOperations(filter: PersistedOperationFilterInput, skip: Int! = 0, take: Int! = 50): PersistedOperationsPage!
+
+  """Look up a single persisted operation. Returns null when missing."""
+  persistedOperation(id: String!, tenantKey: String): PersistedOperationDto
+
+  """Audit history for an operation, most-recent-first."""
+  persistedOperationHistory(id: String!, tenantKey: String, skip: Int! = 0, take: Int! = 50): [PersistedOperationHistoryDto!]!
+}
+
+"""
+Body of the persistedOperations mutation namespace at the root, behind the management
+gate. Each mutation calls IPersistedOperationsService, which returns refusals as
+payload errors[] entries with stable code values; mutations never throw to the
+client.
+"""
+type PersistedOperationMutations {
+  """
+  Upload (insert or update) a persisted operation. Validates the document against the live
+  schema, requires exactly one operation, and rejects shape-changing edits unless
+  bypassShapeDiff is set.
+  """
+  uploadPersistedOperation(input: UploadPersistedOperationInput!): UploadPersistedOperationPayload!
+
+  """Soft-delete an operation. Requires a non-empty reason."""
+  deactivatePersistedOperation(input: DeactivatePersistedOperationInput!): DeactivatePersistedOperationPayload!
+
+  """Reactivate a previously deactivated operation."""
+  restorePersistedOperation(input: RestorePersistedOperationInput!): RestorePersistedOperationPayload!
+}
+
+"""The `Long` scalar type represents a signed 64-bit integer."""
+scalar Long
+
+"""
+The `UUID` scalar type represents a Universally Unique Identifier (UUID) as defined by RFC 9562.
+"""
+scalar UUID
+
+"""
+The `DateTime` scalar type represents a date and time with time zone offset information.
+"""
+scalar DateTime
+
+"""The `Any` scalar type represents any valid GraphQL value."""
+scalar Any
+
+"""One declared node of a RunGraph, with what the run did there."""
+type RunGraphNode {
+  """The node's id; see ChainGraph."""
+  id: String!
+
+  """Which chain primitive declared the step."""
+  kind: ChainStepKind!
+
+  """The junction or decider type, or null for a step that names none."""
+  junction: String
+
+  """The type the step consumes from Memory, or null."""
+  in: String
+
+  """The type the step contributes to Memory, or null."""
+  out: String
+
+  """True when what runs is decided only at run time (Opaque)."""
+  opaque: Boolean!
+
+  """
+  Where the node stands in this run. A PARALLEL step records nothing itself: it is FAILED when any branch failed, CANCELLED when one was stopped, IN_PROGRESS while any branch is still going, down the tracks its routing steps took, and COMPLETED once every branch has finished. A CHECKPOINT is COMPLETED once the run stored it. In a resumed run, a node before the point it resumed at is RESTORED: the run skipped it. Once the run has ended, a step whose end was never recorded (the host stopped mid-junction, or the end event was dropped) is INTERRUPTED, never IN_PROGRESS.
+  """
+  state: RunNodeState!
+
+  """
+  The id of the routing or PARALLEL step whose track this node sits on, or null at the chain's top level.
+  """
+  parentId: String
+
+  """
+  The name of the track or branch this node sits on, or null at the chain's top level.
+  """
+  track: String
+
+  """How many tracks deep the node sits: 0 at the chain's top level."""
+  depth: Int!
+
+  """
+  True when resumeExecution(id, from) can resume the run at this node: the run failed or was cancelled and a checkpoint before the node lets it run on what that checkpoint restores.
+  """
+  canResume: Boolean!
+
+  """
+  True when a checkpoint the run can resume from is stored at this node. Only that it exists: what it holds is never returned.
+  """
+  checkpointed: Boolean!
+
+  """True when an answer the node acted on came from an earlier run."""
+  replayed: Boolean!
+
+  """
+  The track a routing step took, or null when it took none or it cannot be told. Always null for a PARALLEL step, which runs every branch.
+  """
+  trackTaken: String
+
+  """The run's steps recorded for this node, in position order."""
+  steps: [JunctionStep!]!
+
+  """
+  A routing step's tracks, or a PARALLEL step's branches, in declared order. Empty for any other step.
+  """
+  tracks: [RunGraphTrack!]!
+}
+
+"""
+One event of the operator's live feed, onMachineInstanceChanged: a state-machine
+instance as it was just written, or, with Deleted set, as it was last seen
+before it was deleted or expired.
+"""
+type MachineInstanceChange {
+  """The row's key, which names one incarnation of the instance."""
+  rowId: Long!
+
+  """The machine's id."""
+  machine: String!
+
+  """Whether a user or the system owns the instance."""
+  ownerKind: SnapshotOwnerKind!
+
+  """The instance or draft id."""
+  id: UUID!
+
+  """The state it is in."""
+  state: String!
+
+  """The machine definition version it was last written under."""
+  version: Int!
+
+  """When it was created, or null where that is not known."""
+  createdAt: DateTime
+
+  """When it was last written."""
+  updatedAt: DateTime!
+
+  """True while its state waits on the outcome of a train run it invoked."""
+  hasLiveInvokedRun: Boolean!
+
+  """Its revision: 1 when it was created, one more for every write since."""
+  revision: Long
+
+  """
+  True when the instance was deleted or expired; nothing follows for this row.
+  """
+  deleted: Boolean!
+
+  """
+  True when writes may have been missed (the host's change listener started or reconnected, or this feed fell
+  behind): the event names no instance, and the subscriber reads the instances it shows again.
+  """
+  reload: Boolean!
+}
+
+"""
+A page of one state-machine instance's history, newest first, as machineInstance { transitions } reads it.
+Pass NextCursor as the next request's after to read older transitions.
+"""
+type MachineInstanceTransitions {
+  """The transitions on this page, newest first."""
+  items: [MachineInstanceTransition!]!
+
+  """
+  The revision to pass as after for the next page, or null on the last page.
+  """
+  nextCursor: Long
+}
+
+"""
+One track of a routing node, or one branch of a Parallel node, in a RunGraph.
+"""
+type RunGraphTrack {
+  """The track's or branch's name."""
+  name: String!
+
+  """What the track is for, as offered to the decider; null for a branch."""
+  description: String
+
+  """True for the Otherwise or Unsure track; never for a branch."""
+  isFallback: Boolean!
+
+  """
+  True when the run took this track. Every branch of a PARALLEL step is taken once the step has started.
+  """
+  taken: Boolean!
+
+  """The track's nodes, in declared order."""
+  nodes: [RunGraphNode!]!
+}
+
+"""Represents the possible states of a train during its lifecycle."""
+enum TrainState {
+  """The train has been created but has not yet started execution."""
+  PENDING
+
+  """The train has successfully completed execution."""
+  COMPLETED
+
+  """
+  The train encountered an error during execution and did not complete successfully.
+  """
+  FAILED
+
+  """The train is currently executing."""
+  IN_PROGRESS
+
+  """The train was explicitly cancelled by an operator or system signal."""
+  CANCELLED
+}
+
+"""What happened to a step of a run."""
+enum JunctionEventType {
+  """A junction started."""
+  JUNCTION_STARTED
+
+  """A junction returned a result."""
+  JUNCTION_COMPLETED
+
+  """A junction failed."""
+  JUNCTION_FAILED
+
+  """A junction was stopped by a cancellation the run was asked for."""
+  JUNCTION_CANCELLED
+
+  """A routing step asked a question and the run acts on the answer."""
+  DECIDED
+
+  """A decider's answer the run would not act on; the routing step fails."""
+  DECISION_REFUSED
+
+  """A routing step sent the run down a track."""
+  ROUTED
+}
+
+"""
+What one step of a run's timeline is: a junction that ran, a question a routing step asked, or
+the track a routing step took. Carried by junction events and stored in
+trax.junction_run.kind.
+"""
+enum JunctionRunKind {
+  """An EffectJunction that ran."""
+  JUNCTION
+
+  """A question answered by choosing one of its options (Decide, Switch)."""
+  CHOICE
+
+  """A question answered by a position on ordered levels (Scale)."""
+  SCORE
+
+  """A question answered by the probability of yes (Gate)."""
+  YES_NO
+
+  """The track a routing step sent the run down."""
+  ROUTE
+}
+
+"""
+Where one step of a run's timeline stands. Carried by junction events and stored in
+trax.junction_run.state.
+"""
+enum JunctionRunState {
+  """The junction has started and not yet returned."""
+  IN_PROGRESS
+
+  """
+  The junction returned a result, or the question was answered, or the track taken.
+  """
+  COMPLETED
+
+  """
+  The junction failed, or a decider's answer was refused and the routing step failed on it.
+  """
+  FAILED
+
+  """The junction stopped because the run was asked to cancel."""
+  CANCELLED
+}
+
+"""
+What kind of failure a train hit, so a consumer can decide whether to retry, rebase, or give up
+without matching on exception messages at every call site.
+"""
+enum FailureClass {
+  """
+  No classifier was registered, or it did not recognise this failure. Means "decide as you
+  would have before this existed": the default, so behaviour is unchanged until something
+  deliberately acts on a classification.
+  """
+  UNCLASSIFIED
+
+  """
+  Expected to succeed if attempted again: a throttle, a lost connection, a server timeout
+  reported as an error.
+  """
+  TRANSIENT
+
+  """
+  Someone else changed the thing first. The work is valid but was built on a state that has
+  moved, so the answer is usually to rebuild against current state and try again, not to
+  compensate.
+  """
+  CONFLICT
+
+  """
+  Will fail the same way every time: a validation error, a missing record, a rejected
+  credential. Retrying is waste.
+  """
+  PERMANENT
+}
+
+"""
+What needs an operator's attention right now, read in one call by
+CancellationToken): whether the scheduler is paused, the dead
+letters awaiting intervention, the trains failing more than usual, the stuck state-machine
+instances, the queue backlog and the hosts that stopped beating. Each entry carries
+Link, the operations console's path and query that lists what it counts.
+"""
+type Attention {
+  """Whether the manifest manager and the job dispatcher are switched on."""
+  scheduler: AttentionScheduler!
+
+  """
+  The dead letters awaiting intervention, one group per train and reason, largest first, at most
+  AttentionListCap groups.
+  """
+  deadLetters: [AttentionDeadLetterGroup!]!
+
+  """
+  The trains whose failure rate in the last hour is above their rate over the six days and 23
+  hours before it, highest rate first, at most AttentionListCap.
+  """
+  failingTrains: [AttentionFailingTrain!]!
+
+  """
+  The stuck state-machine instances, one group per machine and state, largest first, at most
+  AttentionListCap groups.
+  """
+  stuckInstances: [AttentionStuckInstances!]!
+
+  """How much queued work is waiting and how long the oldest has waited."""
+  queue: AttentionQueue!
+
+  """
+  The hosts that beat in the last day and have since missed three beats, most recently seen
+  first, at most AttentionListCap.
+  """
+  offlineHosts: [AttentionHost!]!
+
+  """When the read was made (UTC); ages and rates are measured from it."""
+  asOf: DateTime!
+}
+
+"""
+One action applied to every id a filter matched, run in the background in batches on the node
+that started it. startBulkOperation returns one at once, and
+operations.bulkOperation(id) reads it again until status is no longer
+RUNNING.
+"""
+type BulkOperation {
+  """
+  The ids that did not take, in id order, each with its reason. Pass the last id of a page as
+  afterId for the next. The first
+  10,000 failures are kept; past that they
+  are counted in failed and failureReasons only.
+  """
+  failures(
+    """The page size, clamped to 1 through 500."""
+    take: Int! = 100
+
+    """Only failures with a larger id (the previous page's last id)."""
+    afterId: Long
+  ): [BulkOperationFailure!]!
+
+  """Identifies the operation to bulkOperation on the node that started it."""
+  id: UUID!
+
+  """What it does to each id."""
+  kind: BulkOperationKind!
+
+  """The filter it was started with, as it was given."""
+  filter: BulkOperationFilter!
+
+  """
+  Who started it: the caller's principal id ({scheme}:{id}), else the name the
+  caller signed in with, else <anonymous>.
+  """
+  actor: String!
+
+  """
+  true when every run it requeues or triggers asks its deciders afresh rather than
+  replaying recorded decisions.
+  """
+  askAfresh: Boolean!
+
+  """When it started (UTC)."""
+  startedAt: DateTime!
+
+  """When it stopped (UTC), or null while running."""
+  finishedAt: DateTime
+
+  """Where it is."""
+  status: BulkOperationStatus!
+
+  """
+  How many ids the filter matched when it started, every one it will attempt.
+  """
+  total: Int!
+
+  """
+  How many ids are in the state the operation asks for once their batch ran: cancellation
+  requested, requeued, acknowledged, triggered, enabled or disabled.
+  """
+  done: Int!
+
+  """How many ids their batch ran on and did not take; each has a reason."""
+  failed: Int!
+
+  """A human-readable description of where it is or how it ended."""
+  message: String!
+
+  """Every failure, grouped by its reason, the most common first."""
+  failureReasons: [BulkOperationFailureReason!]!
+}
+
+"""
+A point-in-time health summary of the Trax system, computed from the shared store on each
+request. Status is Degraded when any dead letter awaits intervention
+or more than 10 executions failed in the last hour, and Healthy otherwise.
+"""
+type HealthStatus {
+  """Healthy or Degraded."""
+  status: String!
+
+  """A one-line human-readable explanation of Status."""
+  description: String!
+
+  """How many work queue entries are queued and not yet dispatched."""
+  queueDepth: Int!
+
+  """How many executions are running now."""
+  inProgress: Int!
+
+  """How many executions failed with an end time in the last hour."""
+  failedLastHour: Int!
+
+  """How many dead letters await intervention."""
+  deadLetters: Int!
+}
+
+"""
+A registered observational effect and its runtime state, as seen by THIS process. The effect
+registry is an in-memory per-process singleton with no persistence or cross-process broadcast,
+so operations.setEffectEnabled changes this process only, not the scheduler or worker
+processes where trains usually run, and a restart restores the configured state. Backs the
+dashboard's effects list.
+"""
+type EffectInfo {
+  """The effect provider factory's type name."""
+  name: String!
+
+  """The effect provider factory's full type name, which identifies it."""
+  fullName: String!
+
+  """Whether the effect currently runs in this process."""
+  enabled: Boolean!
+
+  """
+  Whether the effect registry allows the effect to be enabled and disabled at runtime.
+  """
+  toggleable: Boolean!
+
+  """
+  Whether the effect's factory exposes runtime settings (it implements
+  IConfigurableProviderFactory).
+  """
+  isConfigurable: Boolean!
+
+  """The full name of the settings type, when configurable."""
+  configurationTypeName: String
+
+  """
+  The factory's current settings serialized as JSON, when configurable. Settings can hold
+  credentials, so this is only reachable through the operations namespace and its gate,
+  the same gate that guards an execution's input.
+  """
+  configuration: String
+
+  """
+  The settings of a configurable effect, one per public read-write property of its settings
+  type, editable ones first in declaration order; empty when the effect is not configurable.
+  operations.configureEffect writes them by Name. A
+  setting marked [TraxSensitive] never carries its value.
+  """
+  fields: [EffectSettingInfo!]!
+}
+
+"""
+A page of one run's recorded decisions, in the order they were recorded.
+"""
+type DecisionPage {
+  """The decisions on this page."""
+  items: [DecisionRecord!]!
+
+  """The page size used, after clamping."""
+  take: Int!
+
+  """
+  The id of the last decision on the page, to pass as the next call's afterId; null when
+  the page is empty.
+  """
+  nextCursor: Long
+}
+
+"""
+A single manifest schedule exclusion window, mirroring the domain Exclusion: a
+flat discriminated shape where Type selects which fields apply. DaysOfWeek is set
+for DaysOfWeek, Dates for Dates, StartDate/EndDate for DateRange, and
+StartTime/EndTime for TimeWindow. Backs the exclusions panel on the manifest detail page.
+"""
+type ManifestExclusion {
+  type: ExclusionType!
+  daysOfWeek: [DayOfWeek!]
+  dates: [LocalDate!]
+  startDate: LocalDate
+  endDate: LocalDate
+  startTime: LocalTime
+  endTime: LocalTime
+}
+
+type PagedResultOfManifestSummary {
+  items: [ManifestSummary!]!
+  totalCount: Int!
+  skip: Int!
+  take: Int!
+  isEstimatedCount: Boolean!
+  nextCursor: Long
+  isCountCapped: Boolean!
+}
+
+"""Defines how a manifest should be scheduled for execution."""
+enum ScheduleType {
+  """The manifest can only be triggered manually via API or code."""
+  NONE
+
+  """The manifest runs on a schedule defined by a cron expression."""
+  CRON
+
+  """The manifest runs at a fixed interval."""
+  INTERVAL
+
+  """
+  The manifest is designed for bulk/batch operations triggered programmatically.
+  """
+  ON_DEMAND
+
+  """The manifest runs after a parent manifest completes successfully."""
+  DEPENDENT
+
+  """
+  The manifest is declared as a dependent but only fires when explicitly activated
+  at runtime by the parent train via IDormantDependentContext.
+  """
+  DORMANT_DEPENDENT
+
+  """
+  The manifest fires exactly once at a scheduled time, then auto-disables.
+  """
+  ONCE
+}
+
+"""
+Full detail for a single manifest: everything ManifestSummary carries plus the
+train input it runs with (Properties) and the rest of its scheduling settings.
+"""
+type ManifestDetail {
+  id: Long!
+  externalId: String!
+  name: String!
+  isEnabled: Boolean!
+  scheduleType: ScheduleType!
+  cronExpression: String
+  intervalSeconds: Int
+  maxRetries: Int!
+  timeoutSeconds: Int
+  lastSuccessfulRun: DateTime
+  manifestGroupId: Long!
+  manifestGroupName: String!
+  dependsOnManifestId: Long
+  priority: Int!
+  propertyTypeName: String
+  properties: String
+  misfirePolicy: MisfirePolicy!
+  misfireThresholdSeconds: Int
+  scheduledAt: DateTime
+  nextScheduledRun: DateTime
+  varianceSeconds: Int
+
+  """
+  Whether a retry of the manifest's failed run (an automatic retry, or a requeue of its dead
+  letter) replays the decisions that run recorded rather than asking the decider again.
+  Set at scheduling with ScheduleOptions.ReplayDecisionsOnRetry, and afterwards with the
+  setManifestsReplayDecisionsOnRetry mutation (or the dashboard's matching action).
+  """
+  replayDecisionsOnRetry: Boolean!
+
+  """
+  The next times the scheduler will run this manifest, earliest first, in UTC, read from the manifest manager's own due-ness check: exclusion windows and the misfire policy apply, and each run is assumed to succeed when it is due. The first is now when the manifest is due already. Empty for a manual, on-demand, dependent or dormant dependent manifest (scheduleText says what starts it), and for one that is disabled, in a disabled group, or has a dead letter awaiting intervention.
+  """
+  nextRuns(
+    """How many times to list, clamped to 0 through 10."""
+    count: Int! = 5
+  ): [DateTime!]!
+
+  """
+  The schedule in plain words: "Daily at 02:00 UTC", "Every 5 minutes", "After nightly-import succeeds", "On demand". A cron expression with no plain reading is shown as itself, in UTC.
+  """
+  scheduleText: String!
+}
+
+"""
+Execution roll-up for a single manifest: total run count broken down by state, plus the most
+recent run and most recent successful run. Backs the summary cards on the dashboard's manifest
+detail page.
+"""
+type ManifestExecutionStats {
+  """The manifest the counts are for."""
+  manifestId: Long!
+
+  """All of the manifest's executions, in any state."""
+  total: Long!
+
+  """Executions that completed."""
+  completed: Long!
+
+  """Executions that failed."""
+  failed: Long!
+
+  """Executions running now."""
+  inProgress: Long!
+
+  """Executions created but not yet started."""
+  pending: Long!
+
+  """Executions that were cancelled."""
+  cancelled: Long!
+
+  """When the most recent execution started (UTC), or null if it never ran."""
+  lastRun: DateTime
+
+  """
+  When the most recent completed execution ended (UTC), or null if none completed.
+  """
+  lastSuccessfulRun: DateTime
+}
+
+"""
+Execution roll-up for a single train (by interface FullName): its runs broken down by state,
+most recent and most recent successful run, and average completed duration. Backs the summary
+cards on the dashboard's per-train detail page. Keyed by the train interface's full name,
+the name every execution records.
+"""
+type TrainExecutionStats {
+  trainName: String!
+  total: Long!
+  completed: Long!
+  failed: Long!
+  inProgress: Long!
+  pending: Long!
+  cancelled: Long!
+  lastRun: DateTime
+  lastSuccessfulRun: DateTime
+  averageMilliseconds: Float
+}
+
+"""
+A host process, from the heartbeat row it rewrites every 15 seconds in
+trax.host_heartbeat. Backs the console's cluster view, which answers "which processes
+are up, what do they run, and is any of them taking the work that waits?" across a split API,
+scheduler and worker deployment.
+"""
+type HostInfo {
+  """
+  The process's instance id (a pod name, an ECS task id, or machine name and process id), the same id stamped on each run it executes.
+  """
+  instanceId: String!
+
+  """The machine or container host name."""
+  name: String!
+
+  """
+  The kind of environment the process runs in, such as server, ecs, kubernetes or lambda.
+  """
+  environment: String!
+
+  """The Trax version the process runs."""
+  traxVersion: String!
+
+  """When the process began beating."""
+  startedAt: DateTime!
+
+  """When the process last wrote its row."""
+  lastHeartbeat: DateTime!
+
+  """
+  Whether the last heartbeat is less than 45 seconds old, three beats. An offline host has stopped, hung, or lost its database.
+  """
+  online: Boolean!
+
+  """
+  Whether the process runs the job dispatcher, which moves queued work to workers, with it switched on.
+  """
+  runsDispatcher: Boolean!
+
+  """
+  Whether the process runs the manifest manager, which queues scheduled work, with it switched on.
+  """
+  runsManifestManager: Boolean!
+
+  """How many local workers the process runs, or null when it runs none."""
+  workerSlots: Int
+
+  """
+  How many of those workers were running a job at the last heartbeat, or null when it runs none.
+  """
+  workerSlotsInUse: Int
+
+  """Runs attributed to this process that are still InProgress."""
+  currentlyRunning: Int!
+}
+
+type PagedResultOfExecutionSummary {
+  items: [ExecutionSummary!]!
+  totalCount: Int!
+  skip: Int!
+  take: Int!
+  isEstimatedCount: Boolean!
+  nextCursor: Long
+  isCountCapped: Boolean!
+}
+
+"""
+Ordering for paginated list reads. Both directions stay keyset-safe (they page on the
+monotonic id index), so deep paging is O(page size) either way. Arbitrary-column
+sorting is intentionally not offered: it is incompatible with keyset pagination at
+millions of rows (it forces OFFSET scans or a full sort), which the stress suite guards
+against. Filter to narrow the set instead.
+"""
+enum SortOrder {
+  """Newest first (id descending). The default."""
+  NEWEST
+
+  """Oldest first (id ascending)."""
+  OLDEST
+}
+
+"""
+Full detail for a single execution, including the input/output payloads and stack trace
+that ExecutionSummary deliberately omits so paginated list reads stay lean.
+Junction-level context is limited to CurrentlyRunningJunction while the
+execution runs and FailureJunction once it has failed.
+"""
+type ExecutionDetail {
+  """The execution's database id."""
+  id: Long!
+
+  """The execution's stable external id."""
+  externalId: String!
+
+  """The name of the train that ran."""
+  name: String!
+
+  """The execution's current state."""
+  trainState: TrainState!
+
+  """When the execution started (UTC)."""
+  startTime: DateTime!
+
+  """When the execution finished (UTC), or null while it is still running."""
+  endTime: DateTime
+
+  """The junction that failed, for a failed execution."""
+  failureJunction: String
+
+  """The failure message, for a failed execution."""
+  failureReason: String
+
+  """The full name of the exception type that failed the execution."""
+  failureException: String
+
+  """The stack trace of the failure."""
+  stackTrace: String
+
+  """The serialized train input."""
+  input: String
+
+  """
+  The serialized train output, when the execution completed and recorded one.
+  """
+  output: String
+
+  """
+  The manifest that scheduled the execution, or null for a run not started by a manifest.
+  """
+  manifestId: Long
+
+  """Whether cancellation has been requested for the execution."""
+  cancellationRequested: Boolean!
+
+  """The junction running now, while the execution is in progress."""
+  currentlyRunningJunction: String
+
+  """When CurrentlyRunningJunction started (UTC)."""
+  junctionStartedAt: DateTime
+
+  """The machine name of the process that ran the execution."""
+  hostName: String
+
+  """
+  The kind of environment the process ran in (for example server, ecs or lambda).
+  """
+  hostEnvironment: String
+
+  """
+  The instance-level id of the host (for example an ECS task id or a pod name).
+  """
+  hostInstanceId: String
+
+  """The number of executions this one started."""
+  childCount: Int!
+
+  """How the failure was classified, or Unclassified."""
+  failureClass: FailureClass!
+
+  """The execution that started this one, or null for a top-level run."""
+  parentId: Long
+
+  """When the run was due, for a scheduled run; null otherwise."""
+  scheduledTime: DateTime
+
+  """The project (entry assembly) of the process that ran it."""
+  executor: String
+
+  """The host's user-supplied labels as a JSON object, or null."""
+  hostLabels: String
+
+  """
+  The execution whose recorded decisions this one was queued to replay (a requeue, or a
+  manifest's retry that replays), as the dashboard's "Replays Decisions Of" shows it;
+  null for a run queued to ask its questions afresh.
+  """
+  replayDecisionsOf: Long
+
+  """
+  True when the execution was queued to replay the decisions of
+  ReplayDecisionsOf and asked its deciders afresh instead, because that replay
+  could not be honoured (the run it replays was not found, for one). False for a run that
+  replayed, or was never queued to.
+  """
+  replayAbandoned: Boolean!
+
+  """
+  The failed or cancelled execution this one resumed from a checkpoint, as the dashboard's
+  "Resumes" shows it; null for a run that ran from the top. See
+  Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.
+  """
+  resumeFrom: Long
+
+  """
+  The step this execution resumed at, or null when it resumed after the latest
+  checkpoint of ResumeFrom (or did not resume).
+  """
+  resumeAt: String
+
+  """
+  The state-machine instance whose invoking state queued this execution, or null for
+  a run no machine started. It names the machine, the instance and who owns it, never whose
+  a user's draft is: the run does not record that. See
+  Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md.
+  """
+  invokedBy: RunInvoker
+
+  """
+  The work queue entry this execution was dispatched from, or null for a run that
+  was not queued (one started inline, for one).
+  """
+  workQueueEntryId: Long
+
+  """
+  The dead letter this execution retries: the run a dead letter's requeue started. null
+  for every other run. A run that failed into a dead letter is not linked to it here, because
+  a dead letter records its manifest and not the run that exhausted the retries.
+  """
+  deadLetterId: Long
+}
+
+"""
+One thing CancellationToken) found, with what a console needs to
+open its page.
+"""
+type LookupMatch {
+  """What it is."""
+  kind: LookupKind!
+
+  """
+  Its id, as text: a number for a run, manifest, entry or dead letter, a GUID for an instance,
+  the full name for a train.
+  """
+  id: String!
+
+  """
+  A short description to show: the train, manifest or machine, and its state.
+  """
+  label: String!
+
+  """
+  Which of its fields the text matched: id, externalId, name or subjectKey.
+  """
+  matchedOn: String!
+
+  """For an instance, its machine's id; null otherwise."""
+  machine: String
+
+  """For an instance, whether a user or the system owns it; null otherwise."""
+  ownerKind: SnapshotOwnerKind
+
+  """
+  For an instance, its row's key, which machineInstance takes with a user's draft;
+  null otherwise.
+  """
+  rowId: Long
+}
+
+type PagedResultOfMachineInstance {
+  items: [MachineInstance!]!
+  totalCount: Int!
+  skip: Int!
+  take: Int!
+  isEstimatedCount: Boolean!
+  nextCursor: Long
+  isCountCapped: Boolean!
+}
+
+"""
+Who owns a state-machine draft. Stored in trax.snapshot_draft.owner_kind.
+"""
+enum SnapshotOwnerKind {
+  """
+  A user owns the draft. Its user_key names that user, and only that user's requests reach it.
+  """
+  USER
+
+  """
+  The system owns the instance. It has no user_key, it is created only from code, and no user
+  request reads, writes, lists or expires it.
+  """
+  SYSTEM
+}
+
+"""
+One state-machine instance read on its own, by operations.machineInstance. It has the
+list item's fields and the runs the instance invoked, which only this lookup reads, so a page
+of instances never pays for a lookup per row.
+"""
+type MachineInstanceDetail {
+  """The row's key."""
+  rowId: Long!
+
+  """The machine's id."""
+  machine: String!
+
+  """Whether a user or the system owns the instance."""
+  ownerKind: SnapshotOwnerKind!
+
+  """The instance or draft id."""
+  id: UUID!
+
+  """The state it is in."""
+  state: String!
+
+  """The machine definition version it was last written under."""
+  version: Int!
+
+  """When it was created, or null for one written before Trax recorded it."""
+  createdAt: DateTime
+
+  """When it was last written."""
+  updatedAt: DateTime!
+
+  """True while its state waits on the outcome of a train run it invoked."""
+  hasLiveInvokedRun: Boolean!
+
+  """
+  The train runs the instance invoked, newest first, at most 50, with the one its state
+  waits on marked isLive. A user's draft lists only its live run.
+  """
+  invokedRuns: [MachineInstanceInvokedRun!]!
+
+  """True when the instance invoked more runs than InvokedRuns lists."""
+  isInvokedRunsCapped: Boolean!
+
+  """
+  The instance's revision: 1 when it was created, one more for every write since.
+  """
+  revision: Long
+
+  """
+  The work queue entry of the run the state waits on while it is still queued, and so not
+  yet in InvokedRuns; null otherwise.
+  """
+  queuedInvokedRunEntryId: Long
+
+  """
+  When the timer of its state fires, or null when that state has no timer.
+  """
+  dueAt: DateTime
+
+  """
+  True when DueAt is past by more than the host's timer poll: the timer has not fired.
+  """
+  overdue: Boolean!
+
+  """
+  The run its state waits on and where that run is, or null when it waits on none.
+  """
+  waitingOn: MachineInstanceWaitingRun
+
+  """
+  When it entered its state, as far as Trax records it: until a transition log is kept, when it last
+  changed (updatedAt). Show it as "last changed".
+  """
+  inStateSince: DateTime!
+
+  """
+  True when it cannot move on its own: Overdue, or its run failed or was cancelled.
+  """
+  stuck: Boolean!
+
+  """
+  The instance's history, newest first: one transition for every snapshot write Trax recorded, with the command, the states, who made it (never which user), when, and the run or child it started. Pass nextCursor as after to read older ones.
+  """
+  transitions(
+    """The page size, clamped to 1 through 500."""
+    first: Int! = 25
+
+    """Only transitions older than this revision: a page's nextCursor."""
+    after: Long
+  ): MachineInstanceTransitions!
+}
+
+"""
+How many instances of one machine are in one state, for one owner kind.
+"""
+type MachineInstanceCount {
+  """The machine's id."""
+  machine: String!
+
+  """The state."""
+  state: String!
+
+  """Who owns the instances counted."""
+  ownerKind: SnapshotOwnerKind!
+
+  """How many there are."""
+  count: Long!
+
+  """
+  How many of them are stuck: a timer overdue, or waiting on a run that failed or was cancelled.
+  """
+  stuck: Long!
+}
+
+"""
+One state machine the host registers, as operations.machines serves it: its name, version and graph,
+whether or not it has any instances.
+"""
+type MachineDefinition {
+  """The machine's id."""
+  name: String!
+
+  """The definition version the machine declares."""
+  version: Int!
+
+  """True when only the system holds its instances."""
+  systemOwned: Boolean!
+
+  """
+  The hash of the machine's IR; null for a machine with no exportable IR.
+  """
+  schemaHash: String
+
+  """
+  The state an instance starts in; null when the machine has no exportable IR.
+  """
+  initialState: String
+
+  """Every state, in the order the IR lists them."""
+  states: [MachineDefinitionState!]!
+
+  """
+  Every transition: commands, then timers, then outcomes in the order they are tried.
+  """
+  transitions: [MachineDefinitionTransition!]!
+
+  """Every timed state's timer."""
+  timers: [MachineDefinitionTimer!]!
+
+  """
+  Why the machine has no graph (it was declared with C# delegates); null when it has one.
+  """
+  graphUnavailableReason: String
+}
+
+type PagedResultOfDeadLetterSummary {
+  items: [DeadLetterSummary!]!
+  totalCount: Int!
+  skip: Int!
+  take: Int!
+  isEstimatedCount: Boolean!
+  nextCursor: Long
+  isCountCapped: Boolean!
+}
+
+"""Represents the resolution status of a dead-lettered job."""
+enum DeadLetterStatus {
+  """
+  The dead letter has not been addressed and requires manual intervention.
+  """
+  AWAITING_INTERVENTION
+
+  """The dead letter has been retried and a new execution was created."""
+  RETRIED
+
+  """The dead letter has been acknowledged by an operator without retrying."""
+  ACKNOWLEDGED
+}
+
+"""
+A requeue of every dead letter awaiting intervention, running in the background on the node
+that started it. requeueAllDeadLetters returns one at once, and
+operations.deadLetters.requeueAllJob(id) reads it again until Status is
+no longer Running.
+"""
+type DeadLetterRequeueJob {
+  """Identifies the job to requeueAllJob on the node that started it."""
+  id: UUID!
+
+  """Where the job is."""
+  status: DeadLetterRequeueJobStatus!
+
+  """How many dead letters were awaiting intervention when it started."""
+  awaitingAtStart: Int!
+
+  """When it started (UTC)."""
+  startedAt: DateTime!
+
+  """When it stopped (UTC), or null while running."""
+  finishedAt: DateTime
+
+  """How many dead letters it requeued, once it has succeeded; null before."""
+  count: Int
+
+  """A human-readable description of where it is or how it ended."""
+  message: String!
+
+  """
+  false when a requeue-all was already running on this node, so no second one was
+  started and this is the one already running.
+  """
+  started: Boolean!
+
+  """
+  How many dead letters the job has requeued so far, updated as each page commits; with
+  AwaitingAtStart it says how far a running job has got. Once it has succeeded
+  it equals Count.
+  """
+  processed: Int!
+}
+
+"""
+A dead letter: a manifest run that exhausted its retries and now waits for an operator to
+retry or acknowledge it. The scheduler never retries a dead letter on its own.
+"""
+type DeadLetterSummary {
+  """The dead letter's id, used by the retry and acknowledge mutations."""
+  id: Long!
+
+  """The id of the manifest whose run was dead-lettered."""
+  manifestId: Long!
+
+  """
+  The name of the train that manifest runs, or Unknown when the manifest can no longer be read.
+  """
+  manifestName: String!
+
+  """
+  Whether the dead letter still awaits intervention, was retried, or was acknowledged.
+  """
+  status: DeadLetterStatus!
+
+  """When the run was dead-lettered (UTC)."""
+  deadLetteredAt: DateTime!
+
+  """Why the run was dead-lettered."""
+  reason: String!
+
+  """How many retries had been made when the run was dead-lettered."""
+  retryCountAtDeadLetter: Int!
+
+  """
+  When the dead letter was retried or acknowledged (UTC), or null while it awaits intervention.
+  """
+  resolvedAt: DateTime
+
+  """The note the operator left when resolving it, if any."""
+  resolutionNote: String
+
+  """
+  The id of the execution a retry started, once the dead letter has been retried.
+  """
+  retryMetadataId: Long
+
+  """
+  The external id of the manifest whose run was dead-lettered, the name an operator gave it
+  when scheduling it; null when the manifest can no longer be read.
+  """
+  manifestExternalId: String
+}
+
+type PagedResultOfWorkQueueSummary {
+  items: [WorkQueueSummary!]!
+  totalCount: Int!
+  skip: Int!
+  take: Int!
+  isEstimatedCount: Boolean!
+  nextCursor: Long
+  isCountCapped: Boolean!
+}
+
+"""Represents the lifecycle status of a work queue entry."""
+enum WorkQueueStatus {
+  """The entry is waiting to be picked up by the JobDispatcher."""
+  QUEUED
+
+  """
+  The entry has been dispatched — a Metadata record was created and the job was enqueued.
+  """
+  DISPATCHED
+
+  """The entry was cancelled before dispatch."""
+  CANCELLED
+}
+
+"""
+Full detail for a single work queue entry: everything WorkQueueSummary carries,
+the train input it was queued with, and what a queued entry with a subject is waiting on.
+"""
+type WorkQueueDetail {
+  """The entry's database id."""
+  id: Long!
+
+  """The entry's stable external id."""
+  externalId: String!
+
+  """The name of the train the entry runs."""
+  trainName: String!
+
+  """The entry's status."""
+  status: WorkQueueStatus!
+
+  """When the entry was queued (UTC)."""
+  createdAt: DateTime!
+
+  """When the entry was dispatched (UTC), or null while it is queued."""
+  dispatchedAt: DateTime
+
+  """
+  The earliest time the entry may be dispatched (UTC), for a delayed entry.
+  """
+  scheduledAt: DateTime
+
+  """The entry's dispatch priority."""
+  priority: Int!
+
+  """How many times dispatch has been attempted."""
+  dispatchAttempts: Int!
+
+  """The manifest that queued the entry, if any."""
+  manifestId: Long
+
+  """The execution the entry started, once dispatched."""
+  metadataId: Long
+
+  """The dead letter the entry was requeued from, if any."""
+  deadLetterId: Long
+
+  """The full name of the train input type."""
+  inputTypeName: String
+
+  """
+  When the entry became eligible for dispatch (UTC), or null while it is still being staged.
+  """
+  confirmedAt: DateTime
+
+  """The subject the entry serializes on, or null for none."""
+  subjectKey: String
+
+  """The serialized train input."""
+  input: String
+
+  """
+  For a queued entry with a subject: the dispatched entry for the same subject whose run is
+  still pending or in progress. Dispatch skips the subject until that run finishes.
+  """
+  subjectHeldBy: Long
+
+  """
+  For a queued entry with a subject that nothing is holding: the queued entry for the same
+  subject that dispatch would offer first. Dispatch offers one entry per subject each cycle.
+  """
+  subjectQueuedBehind: Long
+
+  """
+  The execution whose recorded decisions the run this entry starts will replay (a requeue,
+  or a manifest's retry that replays); null when it will ask its questions afresh.
+  """
+  replayDecisionsOf: Long
+}
+
+type PagedResultOfManifestGroupSummary {
+  items: [ManifestGroupSummary!]!
+  totalCount: Int!
+  skip: Int!
+  take: Int!
+  isEstimatedCount: Boolean!
+  nextCursor: Long
+  isCountCapped: Boolean!
+}
+
+"""
+A manifest group: a named set of manifests that share a concurrency limit, a dispatch
+priority and an enabled switch.
+"""
+type ManifestGroupSummary {
+  """The group's id."""
+  id: Long!
+
+  """The group's unique name."""
+  name: String!
+
+  """
+  The most executions from this group that may run at once, or null for no per-group limit (only the global limit applies).
+  """
+  maxActiveJobs: Int
+
+  """
+  The group's dispatch priority, 0 to 31; work from a higher-priority group is dispatched first.
+  """
+  priority: Int!
+
+  """
+  Whether the group's manifests are eligible to be queued and dispatched.
+  """
+  isEnabled: Boolean!
+
+  """When the group was created (UTC)."""
+  createdAt: DateTime!
+
+  """When the group was last changed (UTC)."""
+  updatedAt: DateTime!
+}
+
+"""
+Execution roll-up for a single manifest group: how many manifests it holds and its executions
+broken down by state, plus the group's most recent run. Backs the per-group stat columns on the
+dashboard's manifest groups list. Fetched in a batch keyed by the visible page's group ids.
+"""
+type ManifestGroupStats {
+  groupId: Long!
+  manifestCount: Long!
+  totalExecutions: Long!
+  completed: Long!
+  failed: Long!
+  inProgress: Long!
+  lastRun: DateTime
+
+  """
+  Whether the group's latest ended run failed: of its runs that completed, failed or were
+  cancelled, the one that started last. False when none has ended.
+  """
+  lastEndedRunFailed: Boolean!
+}
+
+"""
+1-hop neighborhood of cross-group dependencies for a manifest group.
+Returned by CancellationToken) and
+consumed by both the GraphQL operations.manifestGroups.graph query and the
+dashboard's dependency DAG visualisation.
+"""
+type ManifestGroupDependencyGraph {
+  """All groups in the neighborhood plus the focal group itself."""
+  nodes: [DependencyGraphNode!]!
+
+  """Directed edges between groups (parent → dependent)."""
+  edges: [DependencyGraphEdge!]!
+}
+
+type PagedResultOfLogEntry {
+  items: [LogEntry!]!
+  totalCount: Int!
+  skip: Int!
+  take: Int!
+  isEstimatedCount: Boolean!
+  nextCursor: Long
+  isCountCapped: Boolean!
+}
+
+enum LogLevel {
+  TRACE
+  DEBUG
+  INFORMATION
+  WARNING
+  ERROR
+  CRITICAL
+  NONE
+}
+
+"""
+Snapshot of dashboard-relevant metrics. Returned by
+CancellationToken); consumed by the dashboard
+Index page and the GraphQL operations.metrics.dashboard query.
+"""
+type DashboardMetrics {
+  kpis: DashboardKpis!
+  executionsOverTime: [ExecutionsBucket!]!
+  topFailures: [TrainFailureCount!]!
+  topAverageDurations: [TrainAverageDuration!]!
+  throughputSeries: [ThroughputSeries!]!
+}
+
+"""
+Selects the granularity of the executions-over-time series in
+DashboardMetrics. The other series in the dashboard metrics block
+(throughput, top failures, avg durations) are always over the last 7 days.
+"""
+enum MetricsRange {
+  """Last 60 minutes, 60 buckets, 1 minute each."""
+  LAST60_MINUTES
+
+  """Last 24 hours, 24 buckets, 1 hour each."""
+  LAST24_HOURS
+}
+
+"""
+Runs over time for one train, manifest or group: per bucket, how many finished in each state
+and how long the completed ones took. Returned by
+CancellationToken).
+"""
+type MetricSeries {
+  """What the runs are of."""
+  scope: MetricSeriesScope!
+
+  """The window."""
+  range: MetricSeriesRange!
+
+  """The first bucket's start, in UTC."""
+  from: DateTime!
+
+  """The last bucket's end, in UTC: the end of the bucket holding now."""
+  to: DateTime!
+
+  """How long each bucket is."""
+  bucketSeconds: Int!
+
+  """Every bucket in the window, oldest first, empty ones included."""
+  buckets: [MetricSeriesBucket!]!
+}
+
+"""What a MetricSeries counts the runs of."""
+enum MetricSeriesScope {
+  """Every run of one train, named by its interface FullName."""
+  TRAIN
+
+  """The runs of one manifest."""
+  MANIFEST
+
+  """The runs of every manifest in one manifest group."""
+  GROUP
+}
+
+"""The window a MetricSeries covers, and so its bucket size."""
+enum MetricSeriesRange {
+  """The last hour, 60 buckets of one minute."""
+  LAST_HOUR
+
+  """The last 24 hours, 96 buckets of 15 minutes."""
+  LAST24_HOURS
+
+  """The last 7 days, 168 buckets of one hour."""
+  LAST7_DAYS
+
+  """
+  The last 30 days, 120 buckets of 6 hours. Refused today by
+  MetricSeriesRange): the existing indexes cannot serve it
+  inside the metrics budget at a million runs.
+  """
+  LAST30_DAYS
+}
+
+"""
+Process-level health snapshot. Memory/GC/uptime are exact at call time; CPU%
+requires consumer-side sampling state and is intentionally omitted from the shared
+service.
+"""
+type ServerMetrics {
+  """When the host process started."""
+  processStartTimeUtc: DateTime!
+
+  """Seconds since process start."""
+  uptimeSeconds: Float!
+
+  """Resident set size (Process.WorkingSet64)."""
+  workingSetBytes: Long!
+
+  """Total GC-managed heap (GC.GetTotalMemory(false))."""
+  gcHeapBytes: Long!
+}
+
+"""
+Snapshot of the live scheduler runtime settings: the dashboard-editable subset of
+SchedulerConfiguration, LocalWorkerOptions, and
+MetadataCleanupConfiguration. Returned by
+GetSchedulerConfig; consumed by both the
+dashboard's ServerSettingsPage and the GraphQL operations.config.scheduler
+query.
+"""
+type SchedulerConfigSnapshot {
+  manifestManagerEnabled: Boolean!
+  jobDispatcherEnabled: Boolean!
+  manifestManagerPollingInterval: Duration!
+  jobDispatcherPollingInterval: Duration!
+  maxActiveJobs: Int
+  defaultMaxRetries: Int!
+  defaultRetryDelay: Duration!
+  retryBackoffMultiplier: Float!
+  maxRetryDelay: Duration!
+  defaultJobTimeout: Duration!
+  stalePendingTimeout: Duration!
+  recoverStuckJobsOnStartup: Boolean!
+  deadLetterRetentionPeriod: Duration!
+  autoPurgeDeadLetters: Boolean!
+  localWorkerCount: Int
+  metadataCleanupInterval: Duration
+  metadataCleanupRetention: Duration
+
+  """
+  How far back a manifest's failed runs are counted toward its retry backoff and its dead
+  letter (SchedulerConfiguration.FailureCountWindow).
+  """
+  failureCountWindow: Duration!
+}
+
+"""
+One log category the host configures under Logging:LogLevel (or has changed at runtime),
+and the level its loggers filter at.
+"""
+type LogLevelSetting {
+  """The logging category, Default for the fallback."""
+  category: String!
+
+  """
+  The level the category's loggers filter at now, by its LogLevel name: a level
+  set at runtime when there is one, otherwise the configured one.
+  """
+  level: String!
+
+  """
+  The value configured under Logging:LogLevel, as written; null when the category is
+  not configured there.
+  """
+  configuredLevel: String
+
+  """
+  Whether a level was set at runtime with config.setLogLevels, so Level
+  is not the configured one. Lasts until the process restarts.
+  """
+  overridden: Boolean!
+}
+
+"""Describes a single property on a train's input type."""
+type InputPropertySchema {
+  """
+  The JSON name the input reader expects: the property name under the system JSON naming
+  policy, or its [JsonPropertyName] when it has one.
+  """
+  name: String!
+
+  """A readable name for the property's CLR type."""
+  typeName: String!
+
+  """Whether the property accepts null."""
+  isNullable: Boolean!
+
+  """
+  The values the property accepts when its type is an enum (or a nullable enum), spelled the way
+  the input reader expects them; null for any other type.
+  """
+  enumValues: [String!]
+}
+
+"""Defines how the scheduler handles missed/overdue runs for a manifest."""
+enum MisfirePolicy {
+  """If overdue, fire once immediately. This is the default behavior."""
+  FIRE_ONCE_NOW
+
+  """
+  If overdue beyond the misfire threshold, skip and wait for the next natural
+  occurrence. For interval-based schedules, the scheduler advances to the most
+  recent interval boundary and checks whether we are within threshold of it.
+  """
+  DO_NOTHING
+}
+
+"""
+One train run a state-machine instance invoked: the fields the run listings show, never its
+input or output. executionDetail(id) reads the rest, with sensitive members masked.
+"""
+type MachineInstanceInvokedRun {
+  """The execution's id."""
+  id: Long!
+
+  """The execution's external id."""
+  externalId: String!
+
+  """The train that ran (the train interface's full name)."""
+  name: String!
+
+  """Where the run is."""
+  trainState: TrainState!
+
+  """When it started (UTC)."""
+  startTime: DateTime!
+
+  """When it ended (UTC), or null while it has not."""
+  endTime: DateTime
+
+  """How its failure was classified, or Unclassified."""
+  failureClass: FailureClass!
+
+  """Whether a cancel has been requested for it."""
+  cancellationRequested: Boolean!
+
+  """True for the run the instance's current state waits on."""
+  isLive: Boolean!
+}
+
+"""
+The train run a state-machine instance's state waits on: which run, and where it is. Never the
+instance's invoke token.
+"""
+type MachineInstanceWaitingRun {
+  """The run's id, or null while it is queued and has no run yet."""
+  executionId: Long
+
+  """
+  Where the run is: its state once dispatched, PENDING while its entry is queued,
+  CANCELLED when the entry was cancelled before it started; null when neither is found.
+  """
+  trainState: TrainState
+
+  """The run's work queue entry, or null when none is found."""
+  workQueueEntryId: Long
+}
+
+"""
+The answer to startBulkOperation. A refusal starts nothing: success is
+false and message says why. When the filter matched a different number of
+ids than the caller confirmed, matched is the number it matches now, to confirm
+and start again. While another bulk operation runs on this node, operation is
+that one.
+"""
+type StartBulkOperationResponse {
+  """Whether an operation was started."""
+  success: Boolean!
+
+  """What happened, for an operator."""
+  message: String!
+
+  """How many ids the filter matched, or null when it was not read."""
+  matched: Int
+
+  """The started operation, or the one already running; else null."""
+  operation: BulkOperation
+}
+
+"""What a bulk operation does to each id it matched."""
+enum BulkOperationKind {
+  """Requests cancellation of each run, as cancelExecutions does."""
+  CANCEL
+
+  """Requeues each dead letter, as requeueDeadLetters does."""
+  REQUEUE
+
+  """
+  Acknowledges each dead letter with the operation's note, as acknowledgeDeadLetters does.
+  """
+  ACKNOWLEDGE
+
+  """Triggers each manifest, as triggerManifests does."""
+  TRIGGER
+
+  """Enables each manifest, as setManifestsEnabled(enabled: true) does."""
+  ENABLE
+
+  """Disables each manifest, as setManifestsEnabled(enabled: false) does."""
+  DISABLE
+}
+
+"""
+What a bulk operation applies to: exactly one of its three lists, filtered the way that list's
+read filters it. startBulkOperation refuses a filter that gives none or more than one,
+and one the operation's kind does not apply to: CANCEL takes executions,
+REQUEUE and ACKNOWLEDGE take deadLetters, and TRIGGER,
+ENABLE and DISABLE take manifests. A bulk operation reads it back
+as it was given.
+"""
+input BulkOperationFilterInput {
+  """Runs, filtered as operations.executions filters them."""
+  executions: BulkExecutionFilterInput
+
+  """
+  Dead letters, filtered as operations.deadLetters.deadLetters filters them.
+  """
+  deadLetters: BulkDeadLetterFilterInput
+
+  """Manifests, filtered as operations.manifests filters them."""
+  manifests: BulkManifestFilterInput
+}
+
+"""
+The result of an operations mutation. A mutation that could not do what was asked (the target
+does not exist, is in the wrong state, or the request was refused) returns
+Success = false with a Message rather than a GraphQL error. A failure of
+the server itself, or a caller not allowed to run the train, is a GraphQL error instead.
+"""
+type OperationResponse {
+  """Whether the operation did what was asked."""
+  success: Boolean!
+
+  """
+  How many items the operation affected, for operations that act on a set; null otherwise.
+  """
+  count: Int
+
+  """A human-readable description of the outcome."""
+  message: String
+
+  """
+  The id of the one row the operation acted on, when there is one: the work queue entry
+  queueTrain and requeueExecution created, the execution (metadata) id
+  runTrain started, the work queue entry a manifest trigger queued or released, or the
+  manifest or group updateManifest or updateManifestGroup patched. null
+  otherwise, and on a failure that touched no row.
+  """
+  id: Long
+}
+
+"""The `Duration` scalar type represents a duration of time."""
+scalar Duration
+
+"""
+What a batch trigger did: triggerManifests or triggerGroups. The counts are of
+manifests either way. A batch that could not be taken as given (no ids, or more than 1000)
+returns Success = false with every count zero, having triggered nothing.
+"""
+type BatchTriggerResponse {
+  """
+  False only when the batch was refused as given; then nothing was triggered.
+  """
+  success: Boolean!
+
+  """
+  How many of the given ids named a manifest (or a group) that exists and was triggered.
+  """
+  matched: Int!
+
+  """Manifests a new work queue entry was queued for."""
+  queued: Int!
+
+  """
+  Manifests that already had a queued entry, so nothing more was queued: that entry became the
+  triggered run and was brought forward to now when it was due later. Also counts an entry the
+  dispatcher claimed before the trigger reached it, which is already running.
+  """
+  alreadyQueued: Int!
+
+  """
+  Manifests triggered to ask afresh whose queued retry the dispatcher claimed first, so that run
+  replays the decisions of the run it retries anyway. Zero unless the trigger asked afresh. Each
+  has a line in Notes naming the run it replays.
+  """
+  tooLateToAskAfresh: Int!
+
+  """
+  Given ids that named no manifest (or no group). Each has a line in Notes.
+  """
+  skipped: Int!
+
+  """One line saying what happened, for an operator."""
+  message: String!
+
+  """
+  One line per id that did not get what the trigger asked for: unknown, or still replaying.
+  Empty when every id was triggered as asked.
+  """
+  notes: [BatchTriggerNote!]!
+}
+
+"""
+Patch input for operations.updateManifest. Every field is independent: a
+null value leaves that field unchanged. Set ClearTimeout to remove
+the per-execution timeout (since a null TimeoutSeconds means "no
+change", not "clear").
+"""
+input UpdateManifestInput {
+  isEnabled: Boolean
+  maxRetries: Int
+  priority: Int
+  timeoutSeconds: Int
+  clearTimeout: Boolean! = false
+  scheduleType: ScheduleType
+  cronExpression: String
+  intervalSeconds: Int
+}
+
+"""
+What operations.configureEffect did. Nothing is written unless every value is accepted.
+"""
+type ConfigureEffectResponse {
+  """Whether the settings were written."""
+  success: Boolean!
+
+  """How many settings were written; 0 on failure."""
+  count: Int!
+
+  """One line for an operator."""
+  message: String!
+
+  """
+  Why each refused setting was refused. Empty on success, and on a failure that is not one
+  setting's, such as an unknown effect.
+  """
+  errors: [EffectSettingError!]!
+}
+
+"""One setting to write with operations.configureEffect."""
+input EffectSettingValueInput {
+  """The setting's name, as Name gives it."""
+  name: String!
+
+  """
+  The value as text, read as the setting's type: numbers in invariant culture, a date or time
+  with no offset as UTC, a boolean as true or false, an enum by member name. Null
+  or blank is no value for a setting that accepts null and the empty string for a text setting
+  that does not.
+  """
+  value: String
+}
+
+"""
+The result of operations.cancelMachineInstance: what the cancel did, or why it did
+nothing, in the operations service's words, which the dashboard shows too.
+"""
+type MachineInstanceCancelResponse {
+  """True when the run was cancelled or its cancel requested."""
+  success: Boolean!
+
+  """What happened, or the typed reason nothing did."""
+  outcome: MachineInstanceCancelOutcome!
+
+  """The outcome in words."""
+  message: String!
+
+  """
+  The state the instance moved into, when this call moved it; null otherwise.
+  """
+  state: String
+}
+
+"""Result of a single dead letter operation (requeue or acknowledge)."""
+type DeadLetterOperationResult {
+  success: Boolean!
+  workQueueId: Long
+  message: String!
+}
+
+"""Result of a batch dead letter operation."""
+type BatchDeadLetterResult {
+  count: Int!
+  message: String!
+}
+
+"""
+Request describing a train to queue for execution.
+Shared input record used by both the GraphQL operations.workQueue.queueTrain
+mutation and the dashboard's QueueTrainDialog so both surfaces have identical
+validation and persistence semantics.
+"""
+input QueueTrainInput {
+  """
+  Fully qualified name of the train interface (matches what
+  operations.getTrains returns as ServiceTypeName).
+  """
+  trainName: String!
+
+  """
+  JSON payload that deserializes to the train's input type. null or blank is read as
+  an empty object, so a train whose input needs no values can be queued without one.
+  """
+  inputJson: String
+
+  """Dispatch priority 0-31. Higher values run first. Defaults to 0."""
+  priority: Int! = 0
+
+  """
+  Earliest UTC time the entry should be picked up. null means dispatch immediately.
+  """
+  scheduledAt: DateTime
+}
+
+"""
+Request describing a train to run now, on a worker, without going through the work queue.
+Shared by the dashboard's Run dialog and any API surface that exposes a run, so both read
+the input, authorize and submit the same way.
+"""
+input RunTrainInput {
+  """
+  Fully qualified name of the train interface, the same name
+  TrainName takes.
+  """
+  trainName: String!
+
+  """
+  JSON payload that deserializes to the train's input type. Property names match whatever their
+  case, and a property given twice is refused (docs/0023). null or blank is read as
+  an empty object, so a train whose input needs no values can be run without one.
+  """
+  inputJson: String
+}
+
+"""
+Patch input for CancellationToken). Each field
+is independent: any property left null is left untouched. Pass only the values
+you want to change.
+"""
+input UpdateManifestGroupInput {
+  """New per-group concurrency limit. Null = no change."""
+  maxActiveJobs: Int
+
+  """When true, sets MaxActiveJobs to null (removes the limit)."""
+  clearMaxActiveJobs: Boolean! = false
+
+  """New priority. Null = no change."""
+  priority: Int
+
+  """Whether the group is active. Null = no change."""
+  isEnabled: Boolean
+}
+
+"""
+Patch input for CancellationToken). Each
+field is independent: null means "leave unchanged".
+"""
+input UpdateSchedulerConfigInput {
+  manifestManagerEnabled: Boolean
+  jobDispatcherEnabled: Boolean
+  manifestManagerPollingInterval: Duration
+  jobDispatcherPollingInterval: Duration
+  maxActiveJobs: Int
+  clearMaxActiveJobs: Boolean! = false
+  defaultMaxRetries: Int
+  defaultRetryDelay: Duration
+  retryBackoffMultiplier: Float
+  maxRetryDelay: Duration
+  defaultJobTimeout: Duration
+  stalePendingTimeout: Duration
+  recoverStuckJobsOnStartup: Boolean
+  deadLetterRetentionPeriod: Duration
+  autoPurgeDeadLetters: Boolean
+  localWorkerCount: Int
+  clearLocalWorkerCount: Boolean! = false
+  metadataCleanupInterval: Duration
+  metadataCleanupRetention: Duration
+
+  """
+  A new failure count window, or null to leave it unchanged. Must be between one
+  second and ten years.
+  """
+  failureCountWindow: Duration
+}
+
+"""
+What config.setLogLevels did. A list naming an unknown category sets nothing.
+"""
+type SetLogLevelsResponse {
+  """Whether the levels were set."""
+  success: Boolean!
+
+  """How many categories were set; 0 on failure."""
+  count: Int!
+
+  """
+  Categories set whose loggers still filter at another level, which happens when the host sets
+  the filter itself after Trax. Empty on failure.
+  """
+  notApplied: [String!]!
+
+  """One line for an operator."""
+  message: String!
+}
+
+"""A level to set for one category with config.setLogLevels."""
+input LogLevelSettingInput {
+  """The category, as configured under Logging:LogLevel; case is ignored."""
+  category: String!
+
+  """The level to filter it at."""
+  level: LogLevel!
+}
+
+"""Paged result for the persistedOperations query."""
+type PersistedOperationsPage {
+  items: [PersistedOperationDto!]!
+  totalCount: Int!
+}
+
+"""Filter for the persistedOperations query."""
+input PersistedOperationFilterInput {
+  isActive: Boolean
+  tenantKey: String
+  idStartsWith: String
+}
+
+"""GraphQL surface for a persisted operation row."""
+type PersistedOperationDto {
+  id: String!
+  tenantKey: String
+  operationName: String!
+  version: Int!
+  document: String!
+  shapeFingerprint: String!
+  isActive: Boolean!
+  deprecationReason: String
+  description: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""One row from the operation's audit log."""
+type PersistedOperationHistoryDto {
+  historyId: Long!
+  id: String!
+  tenantKey: String
+  document: String!
+  shapeFingerprint: String!
+  changeType: String!
+  changedAt: DateTime!
+  changedReason: String
+}
+
+"""
+Result of uploadPersistedOperation. Exactly one of
+Operation and Errors is populated.
+"""
+type UploadPersistedOperationPayload {
+  operation: PersistedOperationDto
+  errors: [PersistedOperationError!]!
+
+  """True when the upload succeeded."""
+  success: Boolean!
+}
+
+"""Input for the uploadPersistedOperation mutation."""
+input UploadPersistedOperationInput {
+  id: String!
+  document: String!
+  description: String
+  bypassShapeDiff: Boolean! = false
+  version: Int! = 0
+  tenantKey: String
+}
+
+"""Result of deactivatePersistedOperation."""
+type DeactivatePersistedOperationPayload {
+  operation: PersistedOperationDto
+  errors: [PersistedOperationError!]!
+
+  """True when the change succeeded."""
+  success: Boolean!
+}
+
+"""Input for the deactivatePersistedOperation mutation."""
+input DeactivatePersistedOperationInput {
+  id: String!
+  reason: String!
+  tenantKey: String
+}
+
+"""Result of restorePersistedOperation."""
+type RestorePersistedOperationPayload {
+  operation: PersistedOperationDto
+  errors: [PersistedOperationError!]!
+
+  """True when the change succeeded."""
+  success: Boolean!
+}
+
+"""Input for the restorePersistedOperation mutation."""
+input RestorePersistedOperationInput {
+  id: String!
+  tenantKey: String
+}
+
+"""The kind of step a train's junction chain declares."""
+enum ChainStepKind {
+  """A junction resolved by its concrete type."""
+  CHAIN
+
+  """A junction resolved from Memory by its interface type."""
+  I_CHAIN
+
+  """A junction that may end the chain early with the train's return value."""
+  SHORT_CIRCUIT
+
+  """A projection from one type in Memory to another."""
+  EXTRACT
+
+  """The terminal step that produces the train's result."""
+  RESOLVE
+
+  """
+  A value handed to the chain directly, by AddServices or by Extract given a
+  value, which puts its type into Memory without a junction producing it.
+  """
+  SEED
+
+  """
+  Asks a decider a question about a value in Memory and puts the typed decision in Memory.
+  The step's junction is the decider, its input the state and its output the decision. A
+  Decide asking several questions records one step per question.
+  """
+  DECIDE
+
+  """
+  Routes on a choice in Memory to one of several declared tracks, which
+  Int32) holds.
+  """
+  SWITCH
+
+  """
+  Routes on a yes/no probability in Memory to its Yes, No or Unsure track.
+  """
+  GATE
+
+  """Routes on a score in Memory to the track for the level it reaches."""
+  SCALE
+
+  """
+  Runs a fixed set of named branches side by side, each on its own copy of Memory, and
+  merges what they produce. Int32) holds the branches.
+  """
+  PARALLEL
+
+  """
+  Stores the state type in Memory the chain names, so a later run can resume after it. The
+  step's input is the state; it contributes nothing to Memory.
+  """
+  CHECKPOINT
+}
+
+"""Where one declared node stands in a run."""
+enum RunNodeState {
+  """No step was recorded for it, and nothing says it was passed over."""
+  NOT_REACHED
+
+  """Its junction has started and not yet returned."""
+  IN_PROGRESS
+
+  """Every step recorded for it completed."""
+  COMPLETED
+
+  """
+  A step recorded for it failed: the junction threw, or a decider's answer was refused.
+  """
+  FAILED
+
+  """A step recorded for it stopped because the run was asked to cancel."""
+  CANCELLED
+
+  """
+  It sits on a track the run did not take. A branch of a Parallel step is never passed
+  over, so a node there is skipped only when the step itself sits on such a track.
+  """
+  SKIPPED
+
+  """
+  A kind of step that records nothing when it runs (Extract, Seed, Resolve),
+  so the run cannot say whether it ran.
+  """
+  NOT_RECORDED
+
+  """
+  It comes after a route whose answer is withheld (a question about a [TraxSensitive]
+  type), so the steps the run recorded there name no node: which ran would give the answer away.
+  Those steps are in UnmatchedSteps.
+  """
+  WITHHELD
+
+  """
+  The run resumed from a checkpoint, and this node comes before the point it resumed at, so
+  the run skipped it and recorded no step for it: what the steps before the checkpoint
+  produced was restored from it instead.
+  """
+  RESTORED
+
+  """
+  Its junction started and never recorded an end, and the run has ended: the host stopped
+  mid-junction, or the step's end event was dropped. The step's row stays in progress, so the
+  node is read with the run's state rather than shown as still running.
+  """
+  INTERRUPTED
+}
+
+"""
+One transition in a state-machine instance's history: the command that moved it, from where to where, who made
+it, when, and the run or child machine it started.
+"""
+type MachineInstanceTransition {
+  """The revision the write gave the instance."""
+  revision: Long!
+
+  """What wrote it: a start, a command, a save, a timer or a run's outcome."""
+  kind: SnapshotTransitionKind!
+
+  """
+  The command that moved it (an event, a timer's event, or State.done, State.failed or
+  State.cancelled for a run's outcome), or null for a creation, a save, or an outcome that could not
+  be applied.
+  """
+  trigger: String
+
+  """Who made it: the owner, host code, or the machine itself."""
+  actor: SnapshotTransitionActor!
+
+  """The state it left, or null for the instance's creation."""
+  fromState: String
+
+  """The state it entered."""
+  toState: String!
+
+  """When it was written."""
+  at: DateTime!
+
+  """
+  When the transition before it was written: At minus this is how long the instance stayed in
+  FromState since its previous write. null for the oldest recorded one.
+  """
+  previousAt: DateTime
+
+  """The train run entering ToState queued, or null."""
+  startedRun: MachineInstanceTransitionRun
+
+  """The child machine instance entering ToState spawned, or null."""
+  startedChild: MachineInstanceTransitionChild
+}
+
+"""
+The child machine instance a transition spawned, named as machineInstance takes it. Never its owner.
+"""
+type MachineInstanceTransitionChild {
+  """The child's machine."""
+  machine: String!
+
+  """Who owns the child: the parent's owner."""
+  ownerKind: SnapshotOwnerKind!
+
+  """The child's id."""
+  id: UUID!
+
+  """The child's row, which a lookup of a user's draft needs."""
+  rowId: Long!
+}
+
+"""
+The train run a transition queued: which run, and where it is now. Never its token.
+"""
+type MachineInstanceTransitionRun {
+  """The run's id, or null while it is queued and has no run yet."""
+  executionId: Long
+
+  """
+  Where the run is: its state once dispatched, PENDING while its entry is queued, CANCELLED when the
+  entry was cancelled before it started; null when neither is found any more.
+  """
+  trainState: TrainState
+
+  """The run's work queue entry, or null when none is found."""
+  workQueueEntryId: Long
+}
+
+"""
+Who made one transition of a state-machine instance. Stored in trax.snapshot_transition.actor. It names a
+kind of actor, never a user: a user-owned instance's history does not say whose it is.
+"""
+enum SnapshotTransitionActor {
+  """
+  A client acting for the owner of a user's instance, host code acting as one included.
+  """
+  OWNER
+
+  """Host code driving a system-owned instance (IMachineInstances)."""
+  HOST
+
+  """
+  Trax moving the instance itself: a timer, a run's outcome, or a parent spawning it.
+  """
+  MACHINE
+}
+
+"""
+What wrote one row of a state-machine instance's history. Stored in trax.snapshot_transition.kind.
+"""
+enum SnapshotTransitionKind {
+  """
+  The instance was created: a start, a save that created a draft, or a parent spawning it.
+  """
+  START
+
+  """
+  A command (a machine event) moved it, sent by a client or by host code, or an effect it bound ran.
+  """
+  COMMAND
+
+  """
+  A save wrote the snapshot without a command: a client's autosave, or host code writing through the store.
+  """
+  SAVE
+
+  """A timer of its state fired."""
+  TIMER
+
+  """
+  A train run it invoked ended, and its outcome was applied, or could not be and left it stranded.
+  """
+  OUTCOME
+}
+
+"""
+Structured error surfaced inside a mutation payload. Mutations never throw
+to the GraphQL caller; failures are returned in the errors field
+with a stable code so clients can branch without string-matching.
+"""
+type PersistedOperationError {
+  code: String!
+  message: String!
+  locations: [PersistedOperationErrorLocation!]
+  path: [String!]
+  oldFingerprint: String
+  newFingerprint: String
+}
+
+"""
+What CancellationToken) did, or why it did nothing.
+The first three are successes; the rest are refusals and change nothing.
+"""
+enum MachineInstanceCancelOutcome {
+  """
+  The live run was still queued and is cancelled before it started, and this call moved the
+  instance through its OnCancelled edge.
+  """
+  MOVED
+
+  """
+  The live run was still queued and is cancelled before it started. The instance moves
+  through its OnCancelled edge when a host that registers the machine applies the
+  outcome (this host does not, or another delivery got there first).
+  """
+  RUN_CANCELLED
+
+  """
+  The live run was already dispatched, and its cancel is requested: it stops at its next
+  junction, ends Cancelled, and the instance then moves through its OnCancelled edge.
+  """
+  CANCEL_REQUESTED
+
+  """
+  The instance is owned by a user; operators may cancel only system-owned instances.
+  """
+  USER_OWNED
+
+  """No system-owned instance has this machine and id."""
+  NOT_FOUND
+
+  """
+  The instance's state waits on no train run, so there is nothing to cancel.
+  """
+  NO_LIVE_RUN
+
+  """
+  The live run has already ended; its outcome is being applied, and a cancel cannot change it.
+  """
+  RUN_ENDED
+}
+
+"""A setting operations.configureEffect refused, and why."""
+type EffectSettingError {
+  """The setting's name, as it was given."""
+  field: String!
+
+  """Why it was refused."""
+  message: String!
+}
+
+"""
+One id in a batch trigger, and what happened to it that the caller should know.
+"""
+type BatchTriggerNote {
+  """The id as given: a manifest id, or a group id."""
+  id: Long!
+
+  """What happened to it."""
+  message: String!
+}
+
+"""The filter arguments of operations.manifests, without its paging."""
+input BulkManifestFilterInput {
+  """Only enabled (true) or disabled (false) manifests."""
+  isEnabled: Boolean
+
+  """Only manifests with this schedule type."""
+  scheduleType: ScheduleType
+
+  """Only manifests whose train name contains this text."""
+  nameContains: String
+
+  """Only manifests in this group."""
+  manifestGroupId: Long
+
+  """Leave out the scheduler's own internal trains' manifests."""
+  hideAdminTrains: Boolean
+}
+
+"""
+The filter arguments of operations.deadLetters.deadLetters, without its paging.
+"""
+input BulkDeadLetterFilterInput {
+  """Only dead letters in this status."""
+  status: DeadLetterStatus
+
+  """Only dead letters of this manifest."""
+  manifestId: Long
+}
+
+"""
+The filter arguments of operations.executions, without its paging and order. An
+omitted field filters nothing, as it does on the list. The list's total under a failure text
+filter stops at 10,000; a bulk operation counts every match.
+"""
+input BulkExecutionFilterInput {
+  """Only runs in this state."""
+  trainState: TrainState
+
+  """
+  Only runs of this train (the train interface's full name, matched exactly).
+  """
+  trainName: String
+
+  """Only runs that started at or after this time (UTC)."""
+  startedAfter: DateTime
+
+  """Only runs that started at or before this time (UTC)."""
+  startedBefore: DateTime
+
+  """Only runs scheduled by this manifest."""
+  manifestId: Long
+
+  """Only runs scheduled by a manifest in this group."""
+  manifestGroupId: Long
+
+  """Leave out the scheduler's own internal trains."""
+  hideAdminTrains: Boolean
+
+  """Only runs whose failure was classified this way."""
+  failureClass: FailureClass
+
+  """Only the run with this external id (matched exactly)."""
+  externalId: String
+
+  """Only runs started from inside this run."""
+  parentId: Long
+
+  """Only runs run on the machine with this name (matched exactly)."""
+  hostName: String
+
+  """Only runs whose failure reason contains this text, ignoring case."""
+  failureReasonContains: String
+
+  """
+  Only runs that failed in the junction with this name (matched exactly).
+  """
+  failureJunction: String
+}
+
+"""
+One bucket of a MetricSeries. A run belongs to the bucket its start time falls
+in. Runs still pending or in progress are not counted.
+"""
+type MetricSeriesBucket {
+  """The bucket's start, in UTC."""
+  start: DateTime!
+
+  """Runs that completed."""
+  completed: Int!
+
+  """Runs that failed."""
+  failed: Int!
+
+  """Runs that were cancelled."""
+  cancelled: Int!
+
+  """
+  The median duration of the completed runs, in milliseconds, or null when none completed. Read
+  from a histogram of durations whose bins are about 13% wide, so it is within one bin of the
+  exact value, and never outside the durations recorded.
+  """
+  p50DurationMs: Float
+
+  """
+  The 95th percentile duration of the completed runs, as for P50DurationMs.
+  """
+  p95DurationMs: Float
+}
+
+"""
+One per-train series for the 7-day throughput sparkline. The dashboard renders the
+top 3 trains plus an "Other" series. The service emits the top-N (default 3) series
+plus an "Other" bucket in the same shape; consumers can render however they want.
+"""
+type ThroughputSeries {
+  """
+  Train interface FullName, or the literal string "Other" for the aggregated
+  remainder series.
+  """
+  trainName: String!
+
+  """28 buckets of 6 hours each, oldest first."""
+  buckets: [ThroughputBucket!]!
+}
+
+type TrainAverageDuration {
+  """Train interface FullName."""
+  trainName: String!
+
+  """Mean execution time over completed root-level runs in the last 7 days."""
+  averageMilliseconds: Float!
+}
+
+type TrainFailureCount {
+  """Train interface FullName as stored on Metadata.Name."""
+  trainName: String!
+
+  """Number of failures over the time window (last 7 days)."""
+  count: Int!
+}
+
+"""
+One bucket of the executions-over-time chart, broken down by terminal state.
+"""
+type ExecutionsBucket {
+  """UTC start of the bucket."""
+  timestamp: DateTime!
+
+  """Count of completed executions in this bucket."""
+  completed: Int!
+
+  """Count of failed executions."""
+  failed: Int!
+
+  """Count of cancelled executions."""
+  cancelled: Int!
+}
+
+type DashboardKpis {
+  """Total executions started today (UTC), all states."""
+  executionsToday: Int!
+
+  """
+  Completed / (Completed + Failed) as a percentage. Zero when no terminal executions.
+  """
+  successRate: Float!
+
+  """Executions in InProgress state right now."""
+  currentlyRunning: Int!
+
+  """Dead letters in AwaitingIntervention state."""
+  unresolvedDeadLetters: Int!
+}
+
+"""
+One log record written by a train while it ran, as the paged log read returns it.
+"""
+type LogEntry {
+  """The log record's id; pages are keyed on it."""
+  id: Long!
+
+  """
+  The id of the execution that wrote it, or 0 when the record names none. Trax's own log writer
+  does not record the run, so its records carry 0.
+  """
+  metadataId: Long!
+
+  """The EventId the message was logged with (0 when none was given)."""
+  eventId: Int!
+
+  """The level it was logged at."""
+  level: LogLevel!
+
+  """
+  The logger category, usually the full name of the class that logged it.
+  """
+  category: String!
+
+  """The formatted message."""
+  message: String!
+
+  """The exception message, when one was logged with the record."""
+  exception: String
+
+  """The stack trace of that exception, when there is one."""
+  stackTrace: String
+}
+
+type DependencyGraphEdge {
+  """Parent group ID (the group whose manifests are depended on)."""
+  fromId: Long!
+
+  """Dependent group ID (the group whose manifests depend on the parent)."""
+  toId: Long!
+}
+
+type DependencyGraphNode {
+  """Database ID of the manifest group."""
+  id: Long!
+
+  """Group name as stored on the row."""
+  name: String!
+
+  """True for the focal group; the UI uses this to render it differently."""
+  isHighlighted: Boolean!
+
+  """
+  Whether the group is enabled: a disabled group's manifests are not queued.
+  """
+  isEnabled: Boolean!
+}
+
+"""
+A work queue entry as the list reads return it: a request to run a train that waits to be
+dispatched. Carries no input; the single-entry detail read returns WorkQueueDetail
+with it.
+"""
+type WorkQueueSummary {
+  """The entry's id."""
+  id: Long!
+
+  """The entry's stable external id."""
+  externalId: String!
+
+  """The name of the train the entry runs."""
+  trainName: String!
+
+  """The entry's status."""
+  status: WorkQueueStatus!
+
+  """When the entry was queued (UTC)."""
+  createdAt: DateTime!
+
+  """When the entry was dispatched (UTC), or null while it is queued."""
+  dispatchedAt: DateTime
+
+  """
+  The earliest time the entry may be dispatched (UTC), for a delayed entry.
+  """
+  scheduledAt: DateTime
+
+  """The entry's dispatch priority."""
+  priority: Int!
+
+  """How many times dispatch has been attempted."""
+  dispatchAttempts: Int!
+
+  """The manifest that queued the entry, if any."""
+  manifestId: Long
+
+  """The execution the entry started, once dispatched."""
+  metadataId: Long
+
+  """The dead letter the entry was requeued from, if any."""
+  deadLetterId: Long
+
+  """The full name of the train input type."""
+  inputTypeName: String
+
+  """
+  When the entry became eligible for dispatch (UTC), or null while it is still being staged.
+  """
+  confirmedAt: DateTime
+
+  """The subject the entry serializes on, or null for none."""
+  subjectKey: String
+
+  """
+  The execution whose recorded decisions the run this entry starts will replay (a requeue,
+  or a manifest's retry that replays); null when it will ask its questions afresh.
+  """
+  replayDecisionsOf: Long
+}
+
+"""Where a DeadLetterRequeueJob is."""
+enum DeadLetterRequeueJobStatus {
+  """The fold is still requeueing dead letters."""
+  RUNNING
+
+  """The fold finished; Count is what it requeued."""
+  SUCCEEDED
+
+  """
+  The fold stopped on a server failure. The detail is in the server's log only.
+  """
+  FAILED
+
+  """The node was shutting down, so the fold stopped between pages."""
+  CANCELED
+}
+
+"""One timed state's timer."""
+type MachineDefinitionTimer {
+  """The timed state."""
+  state: String!
+
+  """The timer's trigger."""
+  command: String!
+
+  """The state the timer moves an instance to."""
+  target: String!
+
+  """The fixed duration (ISO-8601), or null when a context field holds it."""
+  after: String
+
+  """The context field that holds the duration, or null for a fixed one."""
+  field: String
+
+  """The shortest duration the field may hold (ISO-8601), or null."""
+  min: String
+
+  """The longest duration the field may hold (ISO-8601), or null."""
+  max: String
+}
+
+"""One transition of a MachineDefinition."""
+type MachineDefinitionTransition {
+  """The state it leaves."""
+  from: String!
+
+  """
+  What takes it: a command's name, the timer's trigger, or an outcome trigger (Building.done).
+  """
+  command: String!
+
+  """The state it enters."""
+  to: String!
+
+  """Whether a command, a timer or an outcome takes it."""
+  kind: MachineTransitionKind!
+
+  """The guard's message, or the name of its rule; null when unguarded."""
+  guard: String
+
+  """
+  The key prefix of the effect the transition runs exactly once, or null.
+  """
+  effect: String
+
+  """
+  For a timer, how long its state is held (ISO-8601, or a context field with its bounds); null otherwise.
+  """
+  after: String
+}
+
+"""One state of a MachineDefinition."""
+type MachineDefinitionState {
+  """The state's name."""
+  name: String!
+
+  """True for the state an instance starts in."""
+  isInitial: Boolean!
+
+  """True when no transition leaves the state."""
+  isFinal: Boolean!
+
+  """
+  True when the state is committed: once the server puts an instance there, it cannot be discarded.
+  """
+  isCommitted: Boolean!
+
+  """
+  The train the state invokes on entry (its interface's full name), or null.
+  """
+  invokesTrain: String
+
+  """The machine the state spawns on entry (its id), or null."""
+  spawnsMachine: String
+}
+
+"""
+One state-machine instance in the operator's list: which machine, who owns it, what state it
+is in and when it got there.
+"""
+type MachineInstance {
+  """
+  The row's key. Pass it to machineInstance to read a user's draft, since several users
+  can each hold a draft under one id.
+  """
+  rowId: Long!
+
+  """The machine's id."""
+  machine: String!
+
+  """Whether a user or the system owns the instance."""
+  ownerKind: SnapshotOwnerKind!
+
+  """The instance or draft id."""
+  id: UUID!
+
+  """The state it is in."""
+  state: String!
+
+  """The machine definition version it was last written under."""
+  version: Int!
+
+  """When it was created, or null for one written before Trax recorded it."""
+  createdAt: DateTime
+
+  """When it was last written."""
+  updatedAt: DateTime!
+
+  """True while its state waits on the outcome of a train run it invoked."""
+  hasLiveInvokedRun: Boolean!
+
+  """
+  The instance's revision: 1 when it was created, one more for every write since.
+  """
+  revision: Long
+
+  """
+  When the timer of its state fires, or null when that state has no timer.
+  """
+  dueAt: DateTime
+
+  """
+  True when DueAt is past by more than the host's timer poll: the timer has not fired.
+  """
+  overdue: Boolean!
+
+  """
+  The run its state waits on and where that run is, or null when it waits on none.
+  """
+  waitingOn: MachineInstanceWaitingRun
+
+  """
+  When it entered its state, as far as Trax records it: until a transition log is kept, when it last
+  changed (updatedAt). Show it as "last changed".
+  """
+  inStateSince: DateTime!
+
+  """
+  True when it cannot move on its own: Overdue, or its run failed or was cancelled.
+  """
+  stuck: Boolean!
+}
+
+"""What a LookupMatch is."""
+enum LookupKind {
+  """A run (a metadata row); its id is the run's id."""
+  RUN
+
+  """A manifest; its id is the manifest's id."""
+  MANIFEST
+
+  """A work queue entry; its id is the entry's id."""
+  WORK_QUEUE_ENTRY
+
+  """A dead letter; its id is the dead letter's id."""
+  DEAD_LETTER
+
+  """
+  A state-machine instance; its id is the instance's GUID, with
+  Machine, OwnerKind and
+  RowId naming the row.
+  """
+  MACHINE_INSTANCE
+
+  """A registered train; its id is the train's full name."""
+  TRAIN
+}
+
+"""
+The state-machine instance whose invoking state queued a run, as
+InvokedBy names it. Never the context of the instance, and never
+whose a user's draft is.
+"""
+type RunInvoker {
+  """The machine's id."""
+  machine: String!
+
+  """The instance's id."""
+  instanceId: UUID!
+
+  """Whether a user or the system owns the instance."""
+  ownerKind: SnapshotOwnerKind!
+
+  """
+  The instance's row while it still waits on this run, the key machineInstance takes
+  with a user's draft; null once it has moved on, or when the row is gone.
+  """
+  rowId: Long
+}
+
+"""
+One execution (a single run of a train) as the list and point reads return it. Carries no
+input, output or stack trace: those are on ExecutionDetail, which the
+single-execution detail read returns.
+"""
+type ExecutionSummary {
+  """The execution's id."""
+  id: Long!
+
+  """The execution's stable external id."""
+  externalId: String!
+
+  """The name of the train that ran (the train interface's full name)."""
+  name: String!
+
+  """The execution's current state."""
+  trainState: TrainState!
+
+  """When the execution started (UTC)."""
+  startTime: DateTime!
+
+  """When the execution finished (UTC), or null while it is still running."""
+  endTime: DateTime
+
+  """The junction that failed, for a failed execution."""
+  failureJunction: String
+
+  """The failure message, for a failed execution."""
+  failureReason: String
+
+  """
+  The manifest that scheduled the execution, or null for a run not started by a manifest.
+  """
+  manifestId: Long
+
+  """Whether cancellation has been requested for the execution."""
+  cancellationRequested: Boolean!
+
+  """The machine name of the process that ran the execution, if recorded."""
+  hostName: String
+
+  """
+  The kind of environment that process ran in (for example server, ecs or lambda), if recorded.
+  """
+  hostEnvironment: String
+
+  """
+  The instance-level id of that process (for example an ECS task id or a pod name), if recorded.
+  """
+  hostInstanceId: String
+
+  """How the failure was classified, or Unclassified."""
+  failureClass: FailureClass!
+
+  """
+  The execution that started this one, for a run started from inside another train's run;
+  null otherwise. executionChildren lists a parent's runs the other way.
+  """
+  parentId: Long
+
+  """
+  The junction the execution is running now, while it is in progress; null otherwise.
+  """
+  currentlyRunningJunction: String
+}
+
+"""
+A manifest as the list and point reads return it. Carries no Properties: the train
+input a manifest holds is on ManifestDetail alone, the way an execution's input
+is on ExecutionDetail and not on ExecutionSummary.
+"""
+type ManifestSummary {
+  """The manifest's database id."""
+  id: Long!
+
+  """The manifest's stable external id."""
+  externalId: String!
+
+  """The name of the train the manifest runs."""
+  name: String!
+
+  """Whether the scheduler will run the manifest."""
+  isEnabled: Boolean!
+
+  """How the manifest is scheduled."""
+  scheduleType: ScheduleType!
+
+  """The cron expression, for a cron-scheduled manifest."""
+  cronExpression: String
+
+  """The interval in seconds, for an interval-scheduled manifest."""
+  intervalSeconds: Int
+
+  """How many times a failed run is retried before it is dead-lettered."""
+  maxRetries: Int!
+
+  """The run timeout in seconds, or null for none."""
+  timeoutSeconds: Int
+
+  """When the manifest last ran successfully (UTC)."""
+  lastSuccessfulRun: DateTime
+
+  """The id of the manifest group it belongs to."""
+  manifestGroupId: Long!
+
+  """The manifest this one runs after, for a dependent manifest."""
+  dependsOnManifestId: Long
+
+  """The dispatch priority of the work it queues."""
+  priority: Int!
+
+  """The name of the manifest group it belongs to."""
+  manifestGroupName: String
+
+  """
+  Whether a retry of the manifest's failed run (an automatic retry, or a requeue of its dead
+  letter) replays the decisions that run recorded rather than asking the decider again.
+  Set at scheduling with ScheduleOptions.ReplayDecisionsOnRetry, and afterwards with the
+  setManifestsReplayDecisionsOnRetry mutation (or the dashboard's matching action).
+  """
+  replayDecisionsOnRetry: Boolean!
+
+  """
+  The next times the scheduler will run this manifest, earliest first, in UTC, read from the manifest manager's own due-ness check: exclusion windows and the misfire policy apply, and each run is assumed to succeed when it is due. The first is now when the manifest is due already. Empty for a manual, on-demand, dependent or dormant dependent manifest (scheduleText says what starts it), and for one that is disabled, in a disabled group, or has a dead letter awaiting intervention.
+  """
+  nextRuns(
+    """How many times to list, clamped to 0 through 10."""
+    count: Int! = 5
+  ): [DateTime!]!
+
+  """
+  The schedule in plain words: "Daily at 02:00 UTC", "Every 5 minutes", "After nightly-import succeeds", "On demand". A cron expression with no plain reading is shown as itself, in UTC.
+  """
+  scheduleText: String!
+}
+
+"""
+The `LocalTime` scalar type represents a time of day without date or time zone information.
+"""
+scalar LocalTime
+
+"""
+The `LocalDate` scalar type represents a date without time or time zone information.
+"""
+scalar LocalDate
+
+enum DayOfWeek {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+"""Defines the kind of exclusion window."""
+enum ExclusionType {
+  """Exclude specific days of the week (e.g., weekends)."""
+  DAYS_OF_WEEK
+
+  """Exclude specific dates (e.g., holidays)."""
+  DATES
+
+  """Exclude a contiguous date range (start–end inclusive)."""
+  DATE_RANGE
+
+  """Exclude a daily time window (e.g., 2am–4am maintenance)."""
+  TIME_WINDOW
+}
+
+"""
+One question a run asked a decider, as operations.decisions returns it: the answer the
+run acted on (or refused) and the tracks routing steps took on it, with what must not be shown
+left out.
+"""
+type DecisionRecord {
+  """The decision's id; decisions are recorded in id order."""
+  id: Long!
+
+  """The run that asked."""
+  metadataId: Long!
+
+  """The question's key; null on a withheld track."""
+  questionKey: String
+
+  """Which asking of the question this was in the run, from 0."""
+  occurrence: Int!
+
+  """choice, score or yes_no; null on a withheld track."""
+  kind: String
+
+  """The question as asked, as JSON; null on a withheld track."""
+  question: String
+
+  """
+  The answer the run acted on (for a refusal, the one it would not act on), as JSON; null when withheld.
+  """
+  answer: String
+
+  """
+  Why the run would not act on the answer; null for an answer it acted on, and when withheld.
+  """
+  refused: String
+
+  """True when the run refused the answer and its step failed on it."""
+  isRefused: Boolean!
+
+  """
+  Identifies the asking the answer was given to; null on a withheld track.
+  """
+  fingerprint: String
+
+  """
+  The model that answered, when the decider is a model; null on a withheld track.
+  """
+  model: String
+
+  """
+  The decider's type; null when the answer was replayed, or the track is withheld.
+  """
+  decider: String
+
+  """True when the answer came from an earlier run rather than a decider."""
+  replayed: Boolean!
+
+  """What each shadow decider answered, as JSON; null when withheld."""
+  shadows: String
+
+  """
+  The tracks routing steps took on the decision, as a JSON array; null when none did, or when withheld.
+  """
+  routes: String
+
+  """
+  The hash of the state the question was asked about; null when none was recorded, or the track is withheld.
+  """
+  stateHash: String
+
+  """When the question was answered (UTC)."""
+  decidedAt: DateTime!
+
+  """True when the question is about a type marked [TraxSensitive]."""
+  answerWithheld: Boolean!
+
+  """True when the run had already taken a track on a withheld answer."""
+  trackWithheld: Boolean!
+
+  """
+  Why an earlier run's answer was not replayed, so the decider was asked afresh: the
+  replay_refused member of Answer. Null when the answer carries none,
+  and when the answer is withheld.
+  """
+  replayRefused: String
+}
+
+"""
+One setting of a configurable effect: what it is, how it is edited, and its current value
+unless it is sensitive.
+"""
+type EffectSettingInfo {
+  """The property's name, which operations.configureEffect takes."""
+  name: String!
+
+  """The property's type name, without Nullable<>, such as Int32."""
+  typeName: String!
+
+  """
+  How the setting is edited: a switch, one of EnumValues, text, or not here at all.
+  """
+  kind: EffectFieldKind!
+
+  """
+  Whether the setting accepts no value; a null or blank value writes null.
+  """
+  nullable: Boolean!
+
+  """The member names, for an enum; null otherwise."""
+  enumValues: [String!]
+
+  """
+  True when the property is marked [TraxSensitive]: Value is always
+  null. It can still be written.
+  """
+  sensitive: Boolean!
+
+  """
+  Whether the setting holds a value (is not null). True for a sensitive setting that holds one.
+  """
+  hasValue: Boolean!
+
+  """
+  The current value as text, in the form configureEffect reads back; null when there is
+  none, when the setting is sensitive, and for SET_IN_CODE.
+  """
+  value: String
+
+  """What to type, such as yyyy-MM-dd HH:mm:ss (UTC)."""
+  hint: String!
+}
+
+"""One reason a bulk operation's ids did not take, and how many."""
+type BulkOperationFailureReason {
+  """The reason."""
+  reason: String!
+
+  """How many ids failed for it."""
+  count: Int!
+}
+
+"""Where a bulk operation is."""
+enum BulkOperationStatus {
+  """Batches are still running."""
+  RUNNING
+
+  """
+  Every id it matched was attempted. failed counts the ones that
+  did not take, each with its reason.
+  """
+  FINISHED
+
+  """
+  It stopped before the end: the server refused a batch (the message says why) or failed
+  (the detail is in the server's log). The ids it had not reached were not attempted.
+  """
+  FAILED
+
+  """The server was shutting down, so it stopped between batches."""
+  CANCELED
+}
+
+"""
+What a bulk operation applies to: exactly one of its three lists, filtered the way that list's
+read filters it. startBulkOperation refuses a filter that gives none or more than one,
+and one the operation's kind does not apply to: CANCEL takes executions,
+REQUEUE and ACKNOWLEDGE take deadLetters, and TRIGGER,
+ENABLE and DISABLE take manifests. A bulk operation reads it back
+as it was given.
+"""
+type BulkOperationFilter {
+  """Runs, filtered as operations.executions filters them."""
+  executions: BulkExecutionFilter
+
+  """
+  Dead letters, filtered as operations.deadLetters.deadLetters filters them.
+  """
+  deadLetters: BulkDeadLetterFilter
+
+  """Manifests, filtered as operations.manifests filters them."""
+  manifests: BulkManifestFilter
+}
+
+"""One id a bulk operation did not apply to, and why."""
+type BulkOperationFailure {
+  """The run, dead letter or manifest id."""
+  id: Long!
+
+  """Why it did not take, in the operator's words."""
+  reason: String!
+}
+
+"""A host that has missed three heartbeats in a row."""
+type AttentionHost {
+  """The process's identity, as stamped on its runs."""
+  instanceId: String!
+
+  """The machine it ran on."""
+  hostName: String!
+
+  """When it last beat (UTC)."""
+  lastHeartbeatAt: DateTime!
+
+  """Whether it ran the job dispatcher at its last beat."""
+  runsDispatcher: Boolean!
+
+  """The console's hosts."""
+  link: String!
+}
+
+"""The queued work that is due and has not been dispatched."""
+type AttentionQueue {
+  """
+  How many entries are queued, confirmed and due (no scheduled time, or one that has passed): what
+  the dispatcher would offer to a worker now.
+  """
+  queued: Long!
+
+  """When the oldest of them was queued (UTC); null when none is."""
+  oldestQueuedAt: DateTime
+
+  """How long the oldest has waited, in seconds; null when none is queued."""
+  oldestAgeSeconds: Float
+
+  """The console's queue, filtered to queued entries."""
+  link: String!
+}
+
+"""
+The stuck instances of one machine in one state, system instances and users' drafts together.
+Stuck is the rule Stuck states.
+"""
+type AttentionStuckInstances {
+  """The machine's id."""
+  machine: String!
+
+  """The state they are stuck in."""
+  state: String!
+
+  """How many."""
+  count: Long!
+
+  """The console's machine page, filtered to this state's stuck instances."""
+  link: String!
+}
+
+"""
+A train failing more often in the last hour than over the week before it. A rate is failed runs
+over finished runs (completed or failed); cancelled runs count in neither.
+"""
+type AttentionFailingTrain {
+  """The train (the train interface's full name)."""
+  trainName: String!
+
+  """Runs that started in the last hour and failed."""
+  failedLastHour: Long!
+
+  """Runs that started in the last hour and completed or failed."""
+  finishedLastHour: Long!
+
+  """The last hour's failure rate, 0 to 1."""
+  lastHourFailureRate: Float!
+
+  """
+  The failure rate of runs that started in the seven days before the last hour, 0 to 1; 0 when
+  none finished.
+  """
+  baselineFailureRate: Float!
+
+  """The console's runs, filtered to this train's failed runs."""
+  link: String!
+}
+
+"""
+The dead letters awaiting intervention that share a train and a reason.
+"""
+type AttentionDeadLetterGroup {
+  """The train their manifests run (the train interface's full name)."""
+  trainName: String!
+
+  """Why each was dead-lettered."""
+  reason: String!
+
+  """How many there are."""
+  count: Long!
+
+  """When the oldest of them was dead-lettered (UTC)."""
+  oldestDeadLetteredAt: DateTime!
+
+  """
+  The console's dead letters, filtered to this train, reason and awaiting intervention.
+  """
+  link: String!
+}
+
+"""
+Whether the scheduler's two loops are switched on, as the live settings hold them.
+"""
+type AttentionScheduler {
+  """Whether the manifest manager queues scheduled work."""
+  manifestManagerEnabled: Boolean!
+
+  """Whether the job dispatcher moves queued work to workers."""
+  jobDispatcherEnabled: Boolean!
+
+  """The console's scheduler settings, where both are switched."""
+  link: String!
+
+  """True when either loop is switched off."""
+  paused: Boolean!
+}
+
+"""
+Payload for the onDataChanged subscription. Carries only which domain changed, not the
+changed rows: a subscriber uses it as a nudge to refetch its (bounded, paged) view. Signals are
+coalesced server-side, so one event stands in for a whole burst of writes to that domain.
+"""
+type DataChangedEvent {
+  domain: ChangeDomain!
+  timestamp: DateTime!
+}
+
+"""
+Identifies which slice of scheduler/admin data changed. Carried by
+ITraxChangeSignal so a subscriber can refetch just the affected
+view instead of polling. The signal names the domain only, never row data.
+"""
+enum ChangeDomain {
+  """The work queue (entries queued, dispatched, or cancelled)."""
+  WORK_QUEUE
+
+  """
+  Dead letters (created when retries are exhausted, or requeued/acknowledged).
+  """
+  DEAD_LETTER
+
+  """Manifest scheduling/retry settings (edited, enabled, or disabled)."""
+  MANIFEST
+
+  """Manifest group configuration."""
+  MANIFEST_GROUP
+
+  """Scheduler configuration."""
+  SCHEDULER_CONFIG
+
+  """Train runs (metadata rows), for example runs an operator cancelled."""
+  EXECUTION
+}
+
+"""The filter arguments of operations.manifests, without its paging."""
+type BulkManifestFilter {
+  """Only enabled (true) or disabled (false) manifests."""
+  isEnabled: Boolean
+
+  """Only manifests with this schedule type."""
+  scheduleType: ScheduleType
+
+  """Only manifests whose train name contains this text."""
+  nameContains: String
+
+  """Only manifests in this group."""
+  manifestGroupId: Long
+
+  """Leave out the scheduler's own internal trains' manifests."""
+  hideAdminTrains: Boolean
+}
+
+"""
+The filter arguments of operations.deadLetters.deadLetters, without its paging.
+"""
+type BulkDeadLetterFilter {
+  """Only dead letters in this status."""
+  status: DeadLetterStatus
+
+  """Only dead letters of this manifest."""
+  manifestId: Long
+}
+
+"""
+The filter arguments of operations.executions, without its paging and order. An
+omitted field filters nothing, as it does on the list. The list's total under a failure text
+filter stops at 10,000; a bulk operation counts every match.
+"""
+type BulkExecutionFilter {
+  """Only runs in this state."""
+  trainState: TrainState
+
+  """
+  Only runs of this train (the train interface's full name, matched exactly).
+  """
+  trainName: String
+
+  """Only runs that started at or after this time (UTC)."""
+  startedAfter: DateTime
+
+  """Only runs that started at or before this time (UTC)."""
+  startedBefore: DateTime
+
+  """Only runs scheduled by this manifest."""
+  manifestId: Long
+
+  """Only runs scheduled by a manifest in this group."""
+  manifestGroupId: Long
+
+  """Leave out the scheduler's own internal trains."""
+  hideAdminTrains: Boolean
+
+  """Only runs whose failure was classified this way."""
+  failureClass: FailureClass
+
+  """Only the run with this external id (matched exactly)."""
+  externalId: String
+
+  """Only runs started from inside this run."""
+  parentId: Long
+
+  """Only runs run on the machine with this name (matched exactly)."""
+  hostName: String
+
+  """Only runs whose failure reason contains this text, ignoring case."""
+  failureReasonContains: String
+
+  """
+  Only runs that failed in the junction with this name (matched exactly).
+  """
+  failureJunction: String
+}
+
+"""How a setting is edited."""
+enum EffectFieldKind {
+  """A switch: true or false."""
+  BOOLEAN
+
+  """One of EnumValues."""
+  ENUM
+
+  """
+  Text read as the property's type (a number, string, date, time, duration, GUID or character).
+  """
+  TEXT
+
+  """
+  A type with no text form (a delegate, a collection, an object): it is set in code and
+  cannot be written here.
+  """
+  SET_IN_CODE
+}
+
+"""What takes a transition."""
+enum MachineTransitionKind {
+  """A command a caller sends."""
+  COMMAND
+
+  """The state's timer, which only the server fires."""
+  TIMER
+
+  """
+  The outcome of the train the state invoked, or of the machine it spawned.
+  """
+  OUTCOME
+}
+
+type ThroughputBucket {
+  """UTC start of the bucket."""
+  timestamp: DateTime!
+
+  """Number of completed executions in the bucket."""
+  count: Int!
+}
+
+"""1-based location in the candidate document."""
+type PersistedOperationErrorLocation {
+  line: Int!
+  column: Int!
+}
+
+"""
+Root query type. Empty by default. Sub-namespaces are added dynamically:
+
+  operations — added by TraxGraphQLBuilder.ExposeOperationQueries().
+  discover — added by  when trains
+    annotated with [TraxQuery] or query-model registrations are present.
+"""
+type RootQuery {
+  operations: OperationsQueries
+
+  """
+  Persisted-operation management: the stored documents and their history. Behind the management gate the host declared.
+  """
+  persistedOperations: PersistedOperationQueries
+}
+
+"""
+Root mutation type. Empty by default. Sub-namespaces are added dynamically:
+
+  operations — added by TraxGraphQLBuilder.ExposeOperationMutations().
+  dispatch — added by  when trains
+    annotated with [TraxMutation] are registered.
+"""
+type RootMutation {
+  operations: OperationsMutations
+
+  """
+  Persisted-operation management: upload, deactivate and restore stored documents. Behind the management gate the host declared.
+  """
+  persistedOperations: PersistedOperationMutations
+}
+
+"""
+GraphQL subscription root for real-time push. Carries per-train lifecycle events plus a
+coalesced onDataChanged signal that admin UIs use to refetch a domain's view without
+polling. Clients connect via WebSocket at the GraphQL endpoint.
+"""
+type LifecycleSubscriptions {
+  """
+  Fires when a train you may see starts running. Pass externalId to receive only
+  the run with that external id, such as the one a queue mutation returned.
+  """
+  onTrainStarted(
+    """
+    Only the run with this external id (matched exactly); every run when omitted.
+    """
+    externalId: String
+  ): TrainLifecycleEvent!
+
+  """
+  Fires when a train you may see completes successfully. Pass externalId to receive only
+  the run with that external id, such as the one a queue mutation returned.
+  """
+  onTrainCompleted(
+    """
+    Only the run with this external id (matched exactly); every run when omitted.
+    """
+    externalId: String
+  ): TrainLifecycleEvent!
+
+  """
+  Fires when a train you may see fails. Pass externalId to receive only
+  the run with that external id, such as the one a queue mutation returned.
+  """
+  onTrainFailed(
+    """
+    Only the run with this external id (matched exactly); every run when omitted.
+    """
+    externalId: String
+  ): TrainLifecycleEvent!
+
+  """
+  Fires when a train you may see is cancelled. Pass externalId to receive only
+  the run with that external id, such as the one a queue mutation returned.
+  """
+  onTrainCancelled(
+    """
+    Only the run with this external id (matched exactly); every run when omitted.
+    """
+    externalId: String
+  ): TrainLifecycleEvent!
+
+  """
+  Fires on every state change of a train you may see, including the start, completion, failure
+  and cancellation that the other lifecycle subscriptions report individually. Pass
+  externalId to follow one run, such as the one a queue mutation returned.
+  """
+  onTrainStateChanged(
+    """
+    Only the run with this external id (matched exactly); every run when omitted.
+    """
+    externalId: String
+  ): TrainLifecycleEvent!
+
+  """
+  Fires for each step of the run metadataId: a junction starting, completing,
+  failing or being cancelled, a question a routing step asked, and the track it took. Only a
+  host that called AddJunctionEvents() publishes them, and you receive them exactly when
+  you would receive that run's train events. In the operations view, read
+  operations.junctionRuns for the steps a run took before you subscribed or that a gap
+  in sequence lost. A broadcast subscriber cannot read it, so it has no way to recover a
+  lost step: it sees only the steps that reach it after it subscribed.
+  """
+  onJunctionEvent(
+    """The run to follow (its execution id)."""
+    metadataId: Long!
+  ): JunctionEvent!
+
+  """
+  Fires when a scheduler/admin data domain changes (work queue, dead letters, manifests,
+  manifest groups, scheduler config). One event per coalesced burst; the payload names the
+  domain so a client can refetch just that view.
+  """
+  onDataChanged: DataChangedEvent!
+
+  """
+  Every state-machine instance as it is written, or every instance of one machine: its state, revision and whether it waits on a run it invoked, and once more with deleted set when it is deleted or expires. Never its context or its owner. Behind the operations gate.
+  """
+  onMachineInstanceChanged(
+    """Only this machine's instances."""
+    machine: String
+  ): MachineInstanceChange!
+}

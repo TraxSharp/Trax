@@ -1,0 +1,10 @@
+# Manifest controls. trigger enqueues an immediate run; enable/disable toggle scheduling.
+# askAfresh: a queued retry the trigger releases asks the model afresh instead of replaying.
+mutation TriggerManifest($externalId: String!, $askAfresh: Boolean! = false) {
+  operations {
+    triggerManifest(externalId: $externalId, askAfresh: $askAfresh) {
+      success
+      message
+    }
+  }
+}

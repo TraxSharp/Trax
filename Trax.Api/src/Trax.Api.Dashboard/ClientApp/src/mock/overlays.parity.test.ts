@@ -11,47 +11,51 @@ import {
   persistedOperationsScenario,
   schedulerConfigScenario,
 } from "./scenarios";
-import { USER_OWNED_CANCEL_REFUSAL, USER_OWNED_RUN_CANCEL_REFUSAL, defaultOverlays, userDraftRunsOverlay } from "./store/overlays";
+import {
+  USER_OWNED_CANCEL_REFUSAL,
+  USER_OWNED_RUN_CANCEL_REFUSAL,
+  defaultOverlays,
+  userDraftRunsOverlay,
+} from "./store/overlays";
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import {
-  EFFECTS,
-  EXECUTIONS,
-  LOG_LEVELS,
-  EXECUTION_DETAIL,
-  MACHINE_INSTANCE,
-  MACHINE_INSTANCES_ATTENTION,
-  MANIFESTS,
-  MANIFEST_DETAIL,
-  MANIFEST_GROUPS,
-  PERSISTED_OPERATIONS,
-  PERSISTED_OPERATION_DETAIL,
-  WORK_QUEUE,
-  WORK_QUEUE_DETAIL,
-} from "../graphql/queries";
-import {
-  CANCEL_EXECUTION,
-  CANCEL_EXECUTIONS,
-  CANCEL_WORK_QUEUE_ENTRIES,
-  CANCEL_GROUPS,
-  CANCEL_MACHINE_INSTANCE,
-  CANCEL_WORK_QUEUE_ENTRY,
-  RESUME_EXECUTION,
-  CONFIGURE_EFFECT,
-  SET_LOG_LEVELS,
-  TRIGGER_GROUPS,
-  TRIGGER_MANIFESTS,
-  DEACTIVATE_PERSISTED_OPERATION,
-  QUEUE_TRAIN,
-  REQUEUE_EXECUTION,
-  RESTORE_PERSISTED_OPERATION,
-  RUN_TRAIN,
-  SET_ALL_MANIFEST_GROUPS_ENABLED,
-  SET_EFFECT_ENABLED,
-  SET_MANIFESTS_ENABLED,
-  SET_MANIFESTS_REPLAY_DECISIONS_ON_RETRY,
-  SET_MANIFEST_GROUPS_ENABLED,
-  UPLOAD_PERSISTED_OPERATION,
-} from "../graphql/mutations";
+  cancelExecutionDocument,
+  cancelExecutionsDocument,
+  cancelGroupsDocument,
+  cancelMachineInstanceDocument,
+  cancelWorkQueueEntriesDocument,
+  cancelWorkQueueEntryDocument,
+  configureEffectDocument,
+  deactivatePersistedOperationDocument,
+  effectsDocument,
+  executionDetailDocument,
+  executionsDocument,
+  logLevelsDocument,
+  machineInstanceDocument,
+  machineInstancesAttentionDocument,
+  manifestDetailDocument,
+  manifestGroupsDocument,
+  manifestsDocument,
+  persistedOperationDetailDocument,
+  persistedOperationsDocument,
+  queueTrainDocument,
+  requeueExecutionDocument,
+  restorePersistedOperationDocument,
+  resumeExecutionDocument,
+  runTrainDocument,
+  setAllManifestGroupsEnabledDocument,
+  setEffectEnabledDocument,
+  setLogLevelsDocument,
+  setManifestGroupsEnabledDocument,
+  setManifestsEnabledDocument,
+  setManifestsReplayDecisionsOnRetryDocument,
+  triggerGroupsDocument,
+  triggerManifestsDocument,
+  uploadPersistedOperationDocument,
+  workQueueDetailDocument,
+  workQueueDocument,
+  type SnapshotOwnerKind,
+} from "../trax/index.g";
 
 // Read-after-write for the overlays added with the Blazor-parity pages: each mutation writes the
 // session delta and the matching read shows it.
@@ -62,7 +66,6 @@ function client(overrides?: MockSchemaOverrides) {
     fixtures: false,
   });
 }
-const NET = { requestPolicy: "network-only" as const };
 const get = (o: unknown, path: string) =>
   path.split(".").reduce<unknown>((a, k) => (a as Record<string, unknown>)?.[k], o);
 type Row = Record<string, unknown> & { id: number };
@@ -71,23 +74,22 @@ describe("work queue / runs", () => {
   test("queueTrain returns the entry's id, and the list and detail show it", async () => {
     const c = client();
     const ack = await c
-      .mutation(QUEUE_TRAIN, { input: { trainName: "Trax.Demo.OrderTrain", inputJson: '{"a":1}', priority: 3 } })
-      .toPromise();
+      .mutation(queueTrainDocument, { input: { trainName: "Trax.Demo.OrderTrain", inputJson: '{"a":1}', priority: 3 } });
     const id = get(ack.data, "operations.workQueue.queueTrain.id") as number;
     expect(get(ack.data, "operations.workQueue.queueTrain.success")).toBe(true);
-    const detail = await c.query(WORK_QUEUE_DETAIL, { id }, NET).toPromise();
+    const detail = await c.query(workQueueDetailDocument, { id });
     expect(get(detail.data, "operations.workQueue.detail.trainName")).toBe("Trax.Demo.OrderTrain");
     expect(get(detail.data, "operations.workQueue.detail.priority")).toBe(3);
-    const list = await c.query(WORK_QUEUE, { take: 25 }, NET).toPromise();
+    const list = await c.query(workQueueDocument, { take: 25 });
     expect((get(list.data, "operations.workQueue.workQueues.items") as Row[])[0].id).toBe(id);
   });
 
   // Ids count per store, so what a story or test sees does not depend on what ran before it.
   test("every store hands out the same ids from the start, each once", async () => {
     const queue = (c: ReturnType<typeof client>) =>
-      c.mutation(QUEUE_TRAIN, { input: { trainName: "T", inputJson: "{}" } }).toPromise().then((r) => get(r.data, "operations.workQueue.queueTrain.id"));
+      c.mutation(queueTrainDocument, { input: { trainName: "T", inputJson: "{}" } }).then((r) => get(r.data, "operations.workQueue.queueTrain.id"));
     const run = (c: ReturnType<typeof client>) =>
-      c.mutation(RUN_TRAIN, { input: { trainName: "T" } }).toPromise().then((r) => get(r.data, "operations.workQueue.runTrain.id"));
+      c.mutation(runTrainDocument, { input: { trainName: "T" } }).then((r) => get(r.data, "operations.workQueue.runTrain.id"));
     const first = client();
     const ids = [await queue(first), await queue(first), await run(first), await run(first)];
     expect(new Set(ids).size).toBe(4);
@@ -103,22 +105,22 @@ describe("work queue / runs", () => {
       overrides: executionDetailScenario,
       overlays: [...defaultOverlays, userDraftRunsOverlay([7110], [7202])],
     });
-    const one = get((await c.mutation(CANCEL_EXECUTION, { id: 7110 }).toPromise()).data, "operations.cancelExecution");
+    const one = get((await c.mutation(cancelExecutionDocument, { id: 7110 })).data, "operations.cancelExecution");
     expect(one).toEqual({ success: false, count: 0, message: USER_OWNED_RUN_CANCEL_REFUSAL });
-    const many = get((await c.mutation(CANCEL_EXECUTIONS, { ids: [7110, 7] }).toPromise()).data, "operations.cancelExecutions");
+    const many = get((await c.mutation(cancelExecutionsDocument, { ids: [7110, 7] })).data, "operations.cancelExecutions");
     expect(many).toEqual({
       success: true,
       count: 1,
       message: `Cancellation requested for 1 of 2 execution(s). 1 skipped: ${USER_OWNED_RUN_CANCEL_REFUSAL}`,
     });
     for (const [id, flagged] of [[7110, false], [7, true]] as const) {
-      const d = await c.query(EXECUTION_DETAIL, { id }, NET).toPromise();
+      const d = await c.query(executionDetailDocument, { id });
       expect(get(d.data, "operations.executionDetail.cancellationRequested")).toBe(flagged);
     }
-    const entry = get((await c.mutation(CANCEL_WORK_QUEUE_ENTRY, { id: 7202 }).toPromise()).data, "operations.workQueue.cancelWorkQueueEntry");
+    const entry = get((await c.mutation(cancelWorkQueueEntryDocument, { id: 7202 })).data, "operations.workQueue.cancelWorkQueueEntry");
     expect(entry).toEqual({ success: false, message: USER_OWNED_RUN_CANCEL_REFUSAL });
     const entries = get(
-      (await c.mutation(CANCEL_WORK_QUEUE_ENTRIES, { ids: [7202, 7203] }).toPromise()).data,
+      (await c.mutation(cancelWorkQueueEntriesDocument, { ids: [7202, 7203] })).data,
       "operations.workQueue.cancelWorkQueueEntries",
     );
     expect(entries).toEqual({
@@ -130,64 +132,64 @@ describe("work queue / runs", () => {
 
   test("queueTrain and runTrain refuse input that is not JSON", async () => {
     const c = client();
-    const q = await c.mutation(QUEUE_TRAIN, { input: { trainName: "T", inputJson: "{bad" } }).toPromise();
+    const q = await c.mutation(queueTrainDocument, { input: { trainName: "T", inputJson: "{bad" } });
     expect(get(q.data, "operations.workQueue.queueTrain.success")).toBe(false);
-    const r = await c.mutation(RUN_TRAIN, { input: { trainName: "T", inputJson: "{bad" } }).toPromise();
+    const r = await c.mutation(runTrainDocument, { input: { trainName: "T", inputJson: "{bad" } });
     expect(get(r.data, "operations.workQueue.runTrain.message")).toMatch(/not valid JSON/);
   });
 
   test("runTrain returns the run's id, and the execution detail shows that train", async () => {
     const c = client();
-    const ack = await c.mutation(RUN_TRAIN, { input: { trainName: "Trax.Demo.PingTrain" } }).toPromise();
+    const ack = await c.mutation(runTrainDocument, { input: { trainName: "Trax.Demo.PingTrain" } });
     const id = get(ack.data, "operations.workQueue.runTrain.id") as number;
-    const detail = await c.query(EXECUTION_DETAIL, { id }, NET).toPromise();
+    const detail = await c.query(executionDetailDocument, { id });
     expect(get(detail.data, "operations.executionDetail.name")).toBe("Trax.Demo.PingTrain");
   });
 
   test("requeueExecution returns a work queue entry the detail page resolves", async () => {
     const c = client();
-    const ack = await c.mutation(REQUEUE_EXECUTION, { id: 5, askAfresh: true }).toPromise();
+    const ack = await c.mutation(requeueExecutionDocument, { id: 5, askAfresh: true });
     const id = get(ack.data, "operations.requeueExecution.id") as number;
     expect(get(ack.data, "operations.requeueExecution.message")).toMatch(/asks afresh/);
-    const detail = await c.query(WORK_QUEUE_DETAIL, { id }, NET).toPromise();
+    const detail = await c.query(workQueueDetailDocument, { id });
     expect(get(detail.data, "operations.workQueue.detail.status")).toBe("QUEUED");
   });
 
   test("resumeExecution queues an entry the detail page resolves, and refuses a second while it is queued", async () => {
     const c = client();
-    const ack = await c.mutation(RESUME_EXECUTION, { id: 902, from: "Summarize#2" }).toPromise();
+    const ack = await c.mutation(resumeExecutionDocument, { id: 902, from: "Summarize#2" });
     expect(get(ack.data, "operations.resumeExecution")).toMatchObject({ success: true, message: null });
     const id = get(ack.data, "operations.resumeExecution.id") as number;
-    const detail = await c.query(WORK_QUEUE_DETAIL, { id }, NET).toPromise();
+    const detail = await c.query(workQueueDetailDocument, { id });
     expect(get(detail.data, "operations.workQueue.detail.status")).toBe("QUEUED");
-    const again = await c.mutation(RESUME_EXECUTION, { id: 902, from: null }).toPromise();
+    const again = await c.mutation(resumeExecutionDocument, { id: 902, from: null });
     expect(get(again.data, "operations.resumeExecution")).toEqual({
       success: false,
       message: `A resume of execution 902 is already queued (WorkQueue ${id}); a run is resumed once at a time. Nothing was queued.`,
       id: null,
     });
     // Once that entry is cancelled, the run can be resumed again.
-    await c.mutation(CANCEL_WORK_QUEUE_ENTRY, { id }).toPromise();
-    const third = await c.mutation(RESUME_EXECUTION, { id: 902, from: null }).toPromise();
+    await c.mutation(cancelWorkQueueEntryDocument, { id });
+    const third = await c.mutation(resumeExecutionDocument, { id: 902, from: null });
     expect(get(third.data, "operations.resumeExecution.success")).toBe(true);
   });
 
   test("cancelExecutions flags every selected execution", async () => {
     const c = client();
-    const ack = await c.mutation(CANCEL_EXECUTIONS, { ids: [7, 8] }).toPromise();
+    const ack = await c.mutation(cancelExecutionsDocument, { ids: [7, 8] });
     expect(get(ack.data, "operations.cancelExecutions.count")).toBe(2);
     for (const id of [7, 8]) {
-      const d = await c.query(EXECUTION_DETAIL, { id }, NET).toPromise();
+      const d = await c.query(executionDetailDocument, { id });
       expect(get(d.data, "operations.executionDetail.cancellationRequested")).toBe(true);
     }
   });
 });
 
 describe("state machines", () => {
-  const instance = (c: ReturnType<typeof client>, id: string, ownerKind = "SYSTEM", rowId: number | null = null) =>
-    c.query(MACHINE_INSTANCE, { machine: ownerKind === "SYSTEM" ? "source-partition" : "topic-map", ownerKind, id, rowId }, NET).toPromise();
+  const instance = (c: ReturnType<typeof client>, id: string, ownerKind: SnapshotOwnerKind = "SYSTEM", rowId: number | null = null) =>
+    c.query(machineInstanceDocument, { machine: ownerKind === "SYSTEM" ? "source-partition" : "topic-map", ownerKind, id, rowId });
   const cancel = (c: ReturnType<typeof client>, id: string, ownerKind = "SYSTEM", machine = "source-partition") =>
-    c.mutation(CANCEL_MACHINE_INSTANCE, { machine, ownerKind, id }).toPromise();
+    c.mutation(cancelMachineInstanceDocument, { machine, ownerKind, id });
 
   test("cancelling a dispatched run requests its cancel, and the instance and the run show it", async () => {
     const c = client(machineScenario);
@@ -209,7 +211,7 @@ describe("state machines", () => {
       [7101, true],
       [7090, false],
     ]);
-    const run = await c.query(EXECUTION_DETAIL, { id: 7101 }, NET).toPromise();
+    const run = await c.query(executionDetailDocument, { id: 7101 });
     expect(get(run.data, "operations.executionDetail.cancellationRequested")).toBe(true);
   });
 
@@ -219,7 +221,7 @@ describe("state machines", () => {
     const ack = get((await cancel(c, MACHINE_IDS.queued)).data, "operations.cancelMachineInstance");
     expect(ack).toMatchObject({ success: true, outcome: "RUN_CANCELLED" });
     expect(get((await instance(c, MACHINE_IDS.queued)).data, "operations.machineInstance.queuedInvokedRunEntryId")).toBeNull();
-    const entry = await c.query(WORK_QUEUE_DETAIL, { id: 7201 }, NET).toPromise();
+    const entry = await c.query(workQueueDetailDocument, { id: 7201 });
     expect(get(entry.data, "operations.workQueue.detail.status")).toBe("CANCELLED");
   });
 
@@ -245,7 +247,7 @@ describe("state machines", () => {
     const c = client(machineScenario);
     const queued = get((await cancel(c, MACHINE_IDS.queued)).data, "operations.cancelMachineInstance");
     expect(queued).toMatchObject({ success: true, outcome: "RUN_CANCELLED" });
-    const entry = await c.query(WORK_QUEUE_DETAIL, { id: 7201 }, NET).toPromise();
+    const entry = await c.query(workQueueDetailDocument, { id: 7201 });
     expect(get(entry.data, "operations.workQueue.detail.status")).toBe("CANCELLED");
     const idle = get((await cancel(client(machineScenario), MACHINE_IDS.idle)).data, "operations.cancelMachineInstance");
     expect(idle).toMatchObject({ success: false, outcome: "NO_LIVE_RUN" });
@@ -253,7 +255,7 @@ describe("state machines", () => {
 
   test("no read returns an instance's context", async () => {
     const c = client(machineScenario);
-    const list = await c.query(MACHINE_INSTANCES_ATTENTION, { skip: 0, take: 20 }, NET).toPromise();
+    const list = await c.query(machineInstancesAttentionDocument, { skip: 0, take: 20 });
     const detail = await instance(c, MACHINE_IDS.dispatched);
     expect(JSON.stringify([list.data, detail.data])).not.toMatch(/context/i);
   });
@@ -262,23 +264,23 @@ describe("state machines", () => {
 describe("manifests and groups", () => {
   test("setManifestsEnabled and setManifestsReplayDecisionsOnRetry patch list and detail", async () => {
     const c = client(manifestScenario);
-    await c.mutation(SET_MANIFESTS_ENABLED, { ids: [803, 804], enabled: true }).toPromise();
-    await c.mutation(SET_MANIFESTS_REPLAY_DECISIONS_ON_RETRY, { ids: [801], replay: false }).toPromise();
-    const list = await c.query(MANIFESTS, { take: 25 }, NET).toPromise();
+    await c.mutation(setManifestsEnabledDocument, { ids: [803, 804], enabled: true });
+    await c.mutation(setManifestsReplayDecisionsOnRetryDocument, { ids: [801], replay: false });
+    const list = await c.query(manifestsDocument, { take: 25 });
     const rows = get(list.data, "operations.manifests.items") as Row[];
     expect(rows.every((r) => r.isEnabled)).toBe(true);
     expect(rows.find((r) => r.id === 801)!.replayDecisionsOnRetry).toBe(false);
-    const detail = await c.query(MANIFEST_DETAIL, { id: 801 }, NET).toPromise();
+    const detail = await c.query(manifestDetailDocument, { id: 801 });
     expect(get(detail.data, "operations.manifestDetail.replayDecisionsOnRetry")).toBe(false);
   });
 
   test("setManifestGroupsEnabled, then setAllManifestGroupsEnabled overrides it", async () => {
     const c = client(groupScenario);
-    await c.mutation(SET_MANIFEST_GROUPS_ENABLED, { ids: [2], enabled: true }).toPromise();
-    let rows = get((await c.query(MANIFEST_GROUPS, { take: 25 }, NET).toPromise()).data, "operations.manifestGroups.groups.items") as Row[];
+    await c.mutation(setManifestGroupsEnabledDocument, { ids: [2], enabled: true });
+    let rows = get((await c.query(manifestGroupsDocument, { take: 25 })).data, "operations.manifestGroups.groups.items") as Row[];
     expect(rows.find((r) => r.id === 2)!.isEnabled).toBe(true);
-    await c.mutation(SET_ALL_MANIFEST_GROUPS_ENABLED, { enabled: false }).toPromise();
-    rows = get((await c.query(MANIFEST_GROUPS, { take: 25 }, NET).toPromise()).data, "operations.manifestGroups.groups.items") as Row[];
+    await c.mutation(setAllManifestGroupsEnabledDocument, { enabled: false });
+    rows = get((await c.query(manifestGroupsDocument, { take: 25 })).data, "operations.manifestGroups.groups.items") as Row[];
     expect(rows.every((r) => r.isEnabled === false)).toBe(true);
   });
 });
@@ -287,8 +289,8 @@ describe("effects", () => {
   test("setEffectEnabled flips the effect in the list", async () => {
     const c = client(effectsScenario);
     const name = "Trax.Effect.Provider.Parameter.ParameterEffectProviderFactory";
-    await c.mutation(SET_EFFECT_ENABLED, { fullName: name, enabled: true }).toPromise();
-    const list = await c.query(EFFECTS, {}, NET).toPromise();
+    await c.mutation(setEffectEnabledDocument, { fullName: name, enabled: true });
+    const list = await c.query(effectsDocument, {});
     const row = (get(list.data, "operations.effects") as { fullName: string; enabled: boolean }[]).find(
       (e) => e.fullName === name,
     );
@@ -298,17 +300,16 @@ describe("effects", () => {
 
 describe("persisted operations", () => {
   const detail = (c: ReturnType<typeof client>, id: string, tenantKey: string | null = null) =>
-    c.query(PERSISTED_OPERATION_DETAIL, { id, tenantKey, historyTake: 100 }, NET).toPromise();
+    c.query(persistedOperationDetailDocument, { id, tenantKey, historyTake: 100 });
 
   test("an upload is listed and resolvable, with an Upsert in its history", async () => {
     const c = client(persistedOperationsScenario);
     const ack = await c
-      .mutation(UPLOAD_PERSISTED_OPERATION, {
+      .mutation(uploadPersistedOperationDocument, {
         input: { id: "new.v1", document: "query New { operations { health { status } } }", description: "fresh" },
-      })
-      .toPromise();
+      });
     expect(get(ack.data, "persistedOperations.uploadPersistedOperation.success")).toBe(true);
-    const list = await c.query(PERSISTED_OPERATIONS, { skip: 0, take: 25 }, NET).toPromise();
+    const list = await c.query(persistedOperationsDocument, { skip: 0, take: 25 });
     const page = get(list.data, "persistedOperations.persistedOperations") as {
       items: { id: string }[];
       totalCount: number;
@@ -323,7 +324,7 @@ describe("persisted operations", () => {
   test("a shape-changing edit is refused with both fingerprints unless bypassed", async () => {
     const c = client(persistedOperationsScenario);
     const up = (document: string, bypassShapeDiff = false) =>
-      c.mutation(UPLOAD_PERSISTED_OPERATION, { input: { id: "s.v1", document, bypassShapeDiff } }).toPromise();
+      c.mutation(uploadPersistedOperationDocument, { input: { id: "s.v1", document, bypassShapeDiff } });
     await up("query S { operations { health { status } } }");
     const refused = await up("query S { operations { health { status queueDepth } } }");
     const payload = get(refused.data, "persistedOperations.uploadPersistedOperation") as {
@@ -340,8 +341,7 @@ describe("persisted operations", () => {
   test("an unbalanced document is a parse error with its location", async () => {
     const c = client(persistedOperationsScenario);
     const r = await c
-      .mutation(UPLOAD_PERSISTED_OPERATION, { input: { id: "p.v1", document: "query P {" } })
-      .toPromise();
+      .mutation(uploadPersistedOperationDocument, { input: { id: "p.v1", document: "query P {" } });
     expect(get(r.data, "persistedOperations.uploadPersistedOperation.errors.0.code")).toBe("PARSE_FAILED");
     expect(get(r.data, "persistedOperations.uploadPersistedOperation.errors.0.locations.0.line")).toBe(1);
   });
@@ -349,23 +349,21 @@ describe("persisted operations", () => {
   test("deactivate needs a reason, then restore brings the operation back", async () => {
     const c = client(persistedOperationsScenario);
     const blank = await c
-      .mutation(DEACTIVATE_PERSISTED_OPERATION, { input: { id: "greet.v1", reason: "  " } })
-      .toPromise();
+      .mutation(deactivatePersistedOperationDocument, { input: { id: "greet.v1", reason: "  " } });
     expect(get(blank.data, "persistedOperations.deactivatePersistedOperation.errors.0.code")).toBe(
       "INVALID_INPUT",
     );
     await c
-      .mutation(DEACTIVATE_PERSISTED_OPERATION, { input: { id: "greet.v1", reason: "retired" } })
-      .toPromise();
+      .mutation(deactivatePersistedOperationDocument, { input: { id: "greet.v1", reason: "retired" } });
     let d = await detail(c, "greet.v1");
     expect(get(d.data, "persistedOperations.persistedOperation.isActive")).toBe(false);
     expect(get(d.data, "persistedOperations.persistedOperation.deprecationReason")).toBe("retired");
-    const list = await c.query(PERSISTED_OPERATIONS, { skip: 0, take: 25 }, NET).toPromise();
+    const list = await c.query(persistedOperationsDocument, { skip: 0, take: 25 });
     const row = (
       get(list.data, "persistedOperations.persistedOperations.items") as { id: string; isActive: boolean }[]
     ).find((r) => r.id === "greet.v1");
     expect(row!.isActive).toBe(false);
-    await c.mutation(RESTORE_PERSISTED_OPERATION, { input: { id: "greet.v1" } }).toPromise();
+    await c.mutation(restorePersistedOperationDocument, { input: { id: "greet.v1" } });
     d = await detail(c, "greet.v1");
     expect(get(d.data, "persistedOperations.persistedOperation.isActive")).toBe(true);
     expect(get(d.data, "persistedOperations.persistedOperationHistory.0.changeType")).toBe("Restore");
@@ -376,17 +374,17 @@ describe("batch triggers", () => {
   test("triggerManifests queues an entry per manifest, and a second trigger finds it already queued", async () => {
     const c = client(manifestScenario);
     const first = get(
-      (await c.mutation(TRIGGER_MANIFESTS, { ids: [801, 802, 801] }).toPromise()).data,
+      (await c.mutation(triggerManifestsDocument, { ids: [801, 802, 801] })).data,
       "operations.triggerManifests",
     ) as Record<string, unknown>;
     expect(first).toMatchObject({ success: true, matched: 2, queued: 2, alreadyQueued: 0, skipped: 0, notes: [] });
     const entries = get(
-      (await c.query(WORK_QUEUE, { take: 25, manifestId: 801 }, NET).toPromise()).data,
+      (await c.query(workQueueDocument, { take: 25, manifestId: 801 })).data,
       "operations.workQueue.workQueues.items",
     ) as Row[];
     expect(entries.filter((e) => e.manifestId === 801 && e.status === "QUEUED")).toHaveLength(1);
     const again = get(
-      (await c.mutation(TRIGGER_MANIFESTS, { ids: [801], askAfresh: true }).toPromise()).data,
+      (await c.mutation(triggerManifestsDocument, { ids: [801], askAfresh: true })).data,
       "operations.triggerManifests",
     ) as Record<string, unknown>;
     expect(again).toMatchObject({ queued: 0, alreadyQueued: 1 });
@@ -396,29 +394,29 @@ describe("batch triggers", () => {
   test("a deleted manifest is skipped with a note; an empty batch is refused", async () => {
     const c = client(manifestScenario);
     const noted = get(
-      (await c.mutation(TRIGGER_MANIFESTS, { ids: [803, 1_000_009] }).toPromise()).data,
+      (await c.mutation(triggerManifestsDocument, { ids: [803, 1_000_009] })).data,
       "operations.triggerManifests",
     ) as Record<string, unknown>;
     expect(noted).toMatchObject({ success: true, matched: 1, queued: 1, skipped: 1 });
     expect(noted.notes).toEqual([{ id: 1_000_009, message: "Manifest 1000009 not found." }]);
     const refused = get(
-      (await c.mutation(TRIGGER_MANIFESTS, { ids: [] }).toPromise()).data,
+      (await c.mutation(triggerManifestsDocument, { ids: [] })).data,
       "operations.triggerManifests",
     ) as Record<string, unknown>;
     expect(refused).toMatchObject({ success: false, message: "No ids were given.", queued: 0 });
     const tooMany = Array.from({ length: 1001 }, (_, i) => i + 1);
     expect(
-      get((await c.mutation(TRIGGER_MANIFESTS, { ids: tooMany }).toPromise()).data, "operations.triggerManifests.success"),
+      get((await c.mutation(triggerManifestsDocument, { ids: tooMany })).data, "operations.triggerManifests.success"),
     ).toBe(false);
   });
 
   test("triggerGroups counts each group's manifests, then finds them already queued", async () => {
     const c = client(groupScenario);
-    const first = get((await c.mutation(TRIGGER_GROUPS, { ids: [1, 2] }).toPromise()).data, "operations.triggerGroups");
+    const first = get((await c.mutation(triggerGroupsDocument, { ids: [1, 2] })).data, "operations.triggerGroups");
     expect(first).toMatchObject({ success: true, matched: 2, queued: 4, alreadyQueued: 0 });
-    const again = get((await c.mutation(TRIGGER_GROUPS, { ids: [2, 1_000_002] }).toPromise()).data, "operations.triggerGroups");
+    const again = get((await c.mutation(triggerGroupsDocument, { ids: [2, 1_000_002] })).data, "operations.triggerGroups");
     expect(again).toMatchObject({ matched: 1, queued: 0, alreadyQueued: 2, skipped: 1 });
-    expect(get((await c.mutation(TRIGGER_GROUPS, { ids: [] }).toPromise()).data, "operations.triggerGroups.success")).toBe(false);
+    expect(get((await c.mutation(triggerGroupsDocument, { ids: [] })).data, "operations.triggerGroups.success")).toBe(false);
   });
 
   test("cancelGroups flags the active runs of a cancelled group's executions", async () => {
@@ -452,19 +450,19 @@ describe("batch triggers", () => {
         },
       }),
     });
-    const ack = get((await c.mutation(CANCEL_GROUPS, { ids: [1] }).toPromise()).data, "operations.cancelGroups");
+    const ack = get((await c.mutation(cancelGroupsDocument, { ids: [1] })).data, "operations.cancelGroups");
     expect(ack).toMatchObject({ success: true, count: 1 });
     const rows = get(
-      (await c.query(EXECUTIONS, { take: 25, manifestGroupId: 1 }, NET).toPromise()).data,
+      (await c.query(executionsDocument, { take: 25, manifestGroupId: 1 })).data,
       "operations.executions.items",
     ) as Row[];
     expect(rows.map((r) => r.cancellationRequested)).toEqual([true, false]);
     const other = get(
-      (await c.query(EXECUTIONS, { take: 25, manifestGroupId: 2 }, NET).toPromise()).data,
+      (await c.query(executionsDocument, { take: 25, manifestGroupId: 2 })).data,
       "operations.executions.items",
     ) as Row[];
     expect(other[0].cancellationRequested).toBe(false);
-    expect(get((await c.mutation(CANCEL_GROUPS, { ids: [] }).toPromise()).data, "operations.cancelGroups.message")).toBe(
+    expect(get((await c.mutation(cancelGroupsDocument, { ids: [] })).data, "operations.cancelGroups.message")).toBe(
       "No ids were given.",
     );
   });
@@ -475,7 +473,7 @@ describe("effect settings", () => {
   type Field = { name: string; value: string | null; hasValue: boolean };
   const fieldsOf = async (c: ReturnType<typeof client>) =>
     (
-      (get((await c.query(EFFECTS, {}, NET).toPromise()).data, "operations.effects") as {
+      (get((await c.query(effectsDocument, {})).data, "operations.effects") as {
         fullName: string;
         fields: Field[];
         configuration: string | null;
@@ -488,7 +486,7 @@ describe("effect settings", () => {
     const ack = get(
       (
         await c
-          .mutation(CONFIGURE_EFFECT, {
+          .mutation(configureEffectDocument, {
             fullName: JSON_EFFECT,
             values: [
               { name: "MaxBytes", value: "2048" },
@@ -496,7 +494,6 @@ describe("effect settings", () => {
               { name: "ConnectionString", value: "s3cret" },
             ],
           })
-          .toPromise()
       ).data,
       "operations.configureEffect",
     );
@@ -509,7 +506,7 @@ describe("effect settings", () => {
     expect(effect.configuration).not.toMatch(/s3cret/);
     expect(JSON.parse(effect.configuration!).logLevel).toBe("Debug");
     // A nullable setting cleared reads back as no value.
-    await c.mutation(CONFIGURE_EFFECT, { fullName: JSON_EFFECT, values: [{ name: "MaxBytes", value: "" }] }).toPromise();
+    await c.mutation(configureEffectDocument, { fullName: JSON_EFFECT, values: [{ name: "MaxBytes", value: "" }] });
     expect(Object.fromEntries((await fieldsOf(c)).fields.map((f) => [f.name, f])).MaxBytes).toMatchObject({
       value: null,
       hasValue: false,
@@ -522,7 +519,7 @@ describe("effect settings", () => {
     const res = get(
       (
         await c
-          .mutation(CONFIGURE_EFFECT, {
+          .mutation(configureEffectDocument, {
             fullName: JSON_EFFECT,
             values: [
               { name: "MaxBytes", value: "4096" },
@@ -533,7 +530,6 @@ describe("effect settings", () => {
               { name: "MaxBytes", value: "1" },
             ],
           })
-          .toPromise()
       ).data,
       "operations.configureEffect",
     ) as { success: boolean; errors: { field: string; message: string }[]; message: string };
@@ -548,12 +544,12 @@ describe("effect settings", () => {
     expect(res.message).toMatch(/^The configuration was not saved: /);
     expect(Object.fromEntries((await fieldsOf(c)).fields.map((f) => [f.name, f])).MaxBytes.value).toBe("1048576");
     const unknown = get(
-      (await c.mutation(CONFIGURE_EFFECT, { fullName: "X.Y", values: [{ name: "A", value: "1" }] }).toPromise()).data,
+      (await c.mutation(configureEffectDocument, { fullName: "X.Y", values: [{ name: "A", value: "1" }] })).data,
       "operations.configureEffect.message",
     );
     expect(unknown).toBe("No effect named 'X.Y' is registered in this process.");
     const none = get(
-      (await c.mutation(CONFIGURE_EFFECT, { fullName: JSON_EFFECT, values: [] }).toPromise()).data,
+      (await c.mutation(configureEffectDocument, { fullName: JSON_EFFECT, values: [] })).data,
       "operations.configureEffect.message",
     );
     expect(none).toBe("No settings were given.");
@@ -563,13 +559,13 @@ describe("effect settings", () => {
 describe("log levels", () => {
   type Level = { category: string; level: string; overridden: boolean; configuredLevel: string | null };
   const levels = async (c: ReturnType<typeof client>) =>
-    get((await c.query(LOG_LEVELS, {}, NET).toPromise()).data, "operations.config.logLevels") as Level[];
+    get((await c.query(logLevelsDocument, {})).data, "operations.config.logLevels") as Level[];
 
   test("setLogLevels sets a configured category, matched ignoring case, and the read shows it overridden", async () => {
     const c = client(schedulerConfigScenario);
     await levels(c);
     const ack = get(
-      (await c.mutation(SET_LOG_LEVELS, { levels: [{ category: "microsoft.aspnetcore", level: "ERROR" }] }).toPromise()).data,
+      (await c.mutation(setLogLevelsDocument, { levels: [{ category: "microsoft.aspnetcore", level: "ERROR" }] })).data,
       "operations.config.setLogLevels",
     );
     expect(ack).toMatchObject({ success: true, count: 1, notApplied: [], message: "1 log level(s) set in this process." });
@@ -581,7 +577,7 @@ describe("log levels", () => {
     const c = client(schedulerConfigScenario);
     await levels(c);
     const ack = get(
-      (await c.mutation(SET_LOG_LEVELS, { levels: [{ category: "Microsoft.Hosting.Lifetime", level: "WARNING" }] }).toPromise())
+      (await c.mutation(setLogLevelsDocument, { levels: [{ category: "Microsoft.Hosting.Lifetime", level: "WARNING" }] }))
         .data,
       "operations.config.setLogLevels",
     );
@@ -595,20 +591,19 @@ describe("log levels", () => {
     const refused = get(
       (
         await c
-          .mutation(SET_LOG_LEVELS, {
+          .mutation(setLogLevelsDocument, {
             levels: [
               { category: "Default", level: "DEBUG" },
               { category: "Nope", level: "DEBUG" },
             ],
           })
-          .toPromise()
       ).data,
       "operations.config.setLogLevels",
     );
     expect(refused).toMatchObject({ success: false, message: "Not a category configured under Logging:LogLevel: Nope." });
     expect((await levels(c)).find((l) => l.category === "Default")!.level).toBe("Information");
     expect(
-      get((await c.mutation(SET_LOG_LEVELS, { levels: [] }).toPromise()).data, "operations.config.setLogLevels.message"),
+      get((await c.mutation(setLogLevelsDocument, { levels: [] })).data, "operations.config.setLogLevels.message"),
     ).toBe("No levels were given.");
   });
 });

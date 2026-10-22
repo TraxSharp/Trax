@@ -1,0 +1,40 @@
+# One instance with the runs it invoked (newest first, at most 50) and what says it needs attention
+# (as MACHINE_INSTANCES_ATTENTION reads it). A user's draft is named by its
+# rowId too, because several users can each hold a draft under one id.
+query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {
+  operations {
+    machineInstance(machine: $machine, ownerKind: $ownerKind, id: $id, rowId: $rowId) {
+      machine
+      ownerKind
+      id
+      rowId
+      state
+      version
+      createdAt
+      updatedAt
+      hasLiveInvokedRun
+      queuedInvokedRunEntryId
+      isInvokedRunsCapped
+      inStateSince
+      dueAt
+      overdue
+      stuck
+      waitingOn {
+        executionId
+        trainState
+        workQueueEntryId
+      }
+      invokedRuns {
+        id
+        externalId
+        name
+        trainState
+        startTime
+        endTime
+        failureClass
+        cancellationRequested
+        isLive
+      }
+    }
+  }
+}

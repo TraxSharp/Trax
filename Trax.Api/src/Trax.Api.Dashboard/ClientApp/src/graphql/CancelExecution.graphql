@@ -1,0 +1,10 @@
+# Cancel / re-queue a single execution.
+mutation CancelExecution($id: Long!) {
+  operations {
+    cancelExecution(id: $id) {
+      success
+      count
+      message
+    }
+  }
+}

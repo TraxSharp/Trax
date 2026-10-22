@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useSubscription } from "urql";
-import { ATTENTION, OVERVIEW } from "../graphql/queries";
-import { ON_TRAIN_STATE_CHANGED } from "../graphql/subscriptions";
 import { useAnswers } from "../lib/answerable";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { useRefetchOnReconnect } from "../lib/useRefetchOnReconnect";
@@ -10,18 +7,10 @@ import { useHideAdminTrains } from "../lib/adminTrains";
 import { useOverviewPanels } from "../lib/overviewPanels";
 import { shortName } from "../lib/format";
 import { TermHelp } from "../components/TermHelp";
-import {
-  ExecutionsOverTimeChart,
-  ThroughputChart,
-  TopBarChart,
-} from "../components/OverviewCharts";
-import type {
-  Attention,
-  DashboardMetrics,
-  HealthStatus,
-  MetricsRange,
-  TrainLifecycleEvent,
-} from "../types";
+import { ExecutionsOverTimeChart, ThroughputChart, TopBarChart } from "../components/OverviewCharts";
+import type { Attention, DashboardMetrics, MetricsRange } from "../types";
+import { useTraxQuery, useTraxSubscription } from "../lib/consoleClient";
+import { attentionDocument, onTrainStateChangedDocument, overviewDocument } from "../trax/index.g";
 
 const POLL_MS = 5000;
 
@@ -32,45 +21,28 @@ const RANGES: { value: MetricsRange; label: string; chartLabel: string; bucketMi
   { value: "LAST60_MINUTES", label: "1h", chartLabel: "last hour", bucketMinutes: 1 },
 ];
 
-interface OverviewData {
-  operations: {
-    health: HealthStatus;
-    metrics: { dashboard: DashboardMetrics };
-  };
-}
-
-interface AttentionData {
-  operations: { attention: Attention };
-}
-
 export function OverviewPage() {
   const [range, setRange] = useState<MetricsRange>("LAST24_HOURS");
   const hideAdmin = useHideAdminTrains();
   // Which panels the user shows (User settings > Overview panels).
   const show = useOverviewPanels();
-  const [result, reexecute] = useQuery<OverviewData>({
-    query: OVERVIEW,
-    variables: { range, hideAdmin },
-  });
+  const [result, reexecute] = useTraxQuery(overviewDocument, { variables: { range, hideAdmin } });
   // The demo answers only what its recordings hold; without the attention read the page still
   // draws its charts.
   const answersAttention = useAnswers("Attention");
-  const [attentionResult, reexecuteAttention] = useQuery<AttentionData>({
-    query: ATTENTION,
-    pause: !answersAttention,
-  });
+  const [attentionResult, reexecuteAttention] = useTraxQuery(attentionDocument, { pause: !answersAttention });
 
   const refresh = () => {
-    reexecute({ requestPolicy: "network-only" });
-    if (answersAttention) reexecuteAttention({ requestPolicy: "network-only" });
+    reexecute();
+    if (answersAttention) reexecuteAttention();
   };
 
   // metrics.dashboard is the heaviest read, so refresh on an interval rather than
   // on every interaction (see the scaling notes in the API reference).
   useEffect(() => {
     const id = setInterval(() => {
-      reexecute({ requestPolicy: "network-only" });
-      if (answersAttention) reexecuteAttention({ requestPolicy: "network-only" });
+      reexecute();
+      if (answersAttention) reexecuteAttention();
     }, POLL_MS);
     return () => clearInterval(id);
   }, [reexecute, reexecuteAttention, answersAttention]);
@@ -81,16 +53,14 @@ export function OverviewPage() {
   // Live nudge: when runs change, refresh sooner than the poll. The handler returns
   // the latest event, and the debounced effect coalesces bursts into a single refetch so a
   // flood of events never hammers the heavy metrics query.
-  const [{ data: lastEvent }] = useSubscription<
-    { onTrainStateChanged: TrainLifecycleEvent },
-    TrainLifecycleEvent
-  >({ query: ON_TRAIN_STATE_CHANGED }, (_prev, data) => data.onTrainStateChanged);
+  const [{ data: lastFrame }] = useTraxSubscription(onTrainStateChangedDocument);
+  const lastEvent = lastFrame?.onTrainStateChanged;
 
   useEffect(() => {
     if (!lastEvent) return;
     const t = setTimeout(() => {
-      reexecute({ requestPolicy: "network-only" });
-      if (answersAttention) reexecuteAttention({ requestPolicy: "network-only" });
+      reexecute();
+      if (answersAttention) reexecuteAttention();
     }, 1500);
     return () => clearTimeout(t);
   }, [lastEvent, reexecute, reexecuteAttention, answersAttention]);
@@ -102,7 +72,7 @@ export function OverviewPage() {
 
   if (result.error)
     return <ErrorBox message={result.error.message} />;
-  if (!result.data)
+  if (!result.data?.operations)
     return <p className="text-muted">Loading…</p>;
 
   const { health, metrics } = result.data.operations;

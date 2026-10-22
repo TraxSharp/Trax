@@ -1,0 +1,32 @@
+# One run's recorded decisions, in the order it made them. afterId is the previous page's
+# nextCursor. Withheld answers and tracks arrive already blanked by the API.
+query Decisions($metadataId: Long!, $afterId: Long, $take: Int!) {
+  operations {
+    decisions(metadataId: $metadataId, afterId: $afterId, take: $take) {
+      items {
+        id
+        metadataId
+        questionKey
+        occurrence
+        kind
+        question
+        answer
+        refused
+        isRefused
+        fingerprint
+        model
+        decider
+        replayed
+        shadows
+        routes
+        stateHash
+        decidedAt
+        answerWithheld
+        trackWithheld
+        replayRefused
+      }
+      take
+      nextCursor
+    }
+  }
+}

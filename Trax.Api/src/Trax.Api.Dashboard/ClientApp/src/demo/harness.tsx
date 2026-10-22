@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { isActive } from "../lib/activity";
 import { hashVariables } from "../mock/variables-hash";
@@ -49,11 +49,11 @@ export function renderDemo(route: string, ledger: Ledger) {
   });
   ledger.where = route;
   return render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 }
 

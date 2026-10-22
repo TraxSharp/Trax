@@ -1,0 +1,16 @@
+# A requeue-all job, read on the node that started it; null once that node no longer knows it.
+query RequeueAllJob($id: UUID!) {
+  operations {
+    deadLetters {
+      requeueAllJob(id: $id) {
+        id
+        status
+        awaitingAtStart
+        startedAt
+        finishedAt
+        count
+        message
+      }
+    }
+  }
+}

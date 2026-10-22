@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useClient } from "urql";
 import { Search as SearchIcon } from "lucide-react";
-import { LOOKUP } from "../graphql/queries";
 import { LOOKUP_KIND_LABEL, lookupPath } from "../lib/lookup";
 import type { LookupMatch } from "../types";
+import { useConsoleClient } from "../lib/consoleClient";
+import { lookupDocument } from "../trax/index.g";
 
 /**
  * The header's search: any id an operator holds (a run's id or external id, a manifest's name, a
@@ -12,7 +12,7 @@ import type { LookupMatch } from "../types";
  * several are listed by kind. "/" focuses it from anywhere on the page.
  */
 export function Search() {
-  const client = useClient();
+  const client = useConsoleClient();
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -43,7 +43,7 @@ export function Search() {
     const q = text.trim();
     if (!q) return;
     setBusy(true);
-    const r = await client.query(LOOKUP, { text: q }, { requestPolicy: "network-only" }).toPromise();
+    const r = await client.query(lookupDocument, { text: q });
     setBusy(false);
     const found: LookupMatch[] = r.data?.operations?.lookup ?? [];
     if (found.length === 1) open(found[0]);

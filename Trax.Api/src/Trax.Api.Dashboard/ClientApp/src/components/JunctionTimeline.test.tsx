@@ -1,6 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import { expect, test } from "vitest";
-import { Provider, type Client } from "urql";
+import { ConsoleClient, ConsoleClientProvider } from "../lib/consoleClient";
+import type { TraxTransport } from "../trax/index.g";
 import { JunctionTimeline } from "./JunctionTimeline";
 import type { JunctionEvent, JunctionStep } from "../types";
 
@@ -32,20 +33,15 @@ function step(state: JunctionStep["state"], endedAt: string | null): JunctionSte
 function fakeClient() {
   const reads: ((steps: JunctionStep[]) => void)[] = [];
   let push: ((r: { data: { onJunctionEvent: JunctionEvent } }) => void) | null = null;
-  const client = {
-    query: () => ({
-      toPromise: () =>
-        new Promise((resolve) =>
-          reads.push((steps) => resolve({ data: { operations: { junctionRuns: steps } } })),
-        ),
-    }),
-    subscription: () => ({
-      subscribe: (next: typeof push) => {
-        push = next;
-        return { unsubscribe: () => {} };
-      },
-    }),
-  } as unknown as Client;
+  const transport: TraxTransport = {
+    execute: () =>
+      new Promise((resolve) => reads.push((steps) => resolve({ data: { operations: { junctionRuns: steps } } }))),
+    subscribe: (_request, sink) => {
+      push = (answer) => sink.next(answer);
+      return () => {};
+    },
+  };
+  const client = new ConsoleClient(transport);
   return {
     client,
     answerRead: (steps: JunctionStep[]) => act(async () => reads.shift()!(steps)),
@@ -71,14 +67,14 @@ function fakeClient() {
 test("a step that ends while the first read is in flight is not undone by that read", async () => {
   const { client, answerRead, pushStep } = fakeClient();
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <JunctionTimeline
         metadataId={7}
         startTime={new Date(0).toISOString()}
         endTime={null}
         trainState="IN_PROGRESS"
       />
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 
   // The step ends and is pushed before the first read, taken while it ran, comes back.

@@ -1,17 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "urql";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  GROUP_DEPENDENCY_GRAPH,
-  MANIFEST_GROUPS,
-  MANIFEST_GROUP_STATS,
-} from "../graphql/queries";
-import {
-  CANCEL_GROUPS,
-  SET_ALL_MANIFEST_GROUPS_ENABLED,
-  SET_MANIFEST_GROUPS_ENABLED,
-  TRIGGER_GROUPS,
-} from "../graphql/mutations";
 import { reportBatchTrigger, type BatchTriggerReport } from "../lib/batchTrigger";
 import { BatchTriggerNotice } from "../components/BatchTriggerNotice";
 import { useSelection } from "../lib/useSelection";
@@ -24,39 +12,35 @@ import { useGroupGraphStatus } from "../lib/schedules";
 import { useKeyset } from "../lib/useKeyset";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
-import type {
-  BatchTriggerResponse,
-  OperationResponse,
-  ManifestGroupDependencyGraph,
-  ManifestGroupStats,
-  ManifestGroupSummary,
-  PagedResult,
-} from "../types";
+import type { BatchTriggerResponse, OperationResponse } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { TermHelp } from "../components/TermHelp";
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import {
+  cancelGroupsDocument,
+  groupDependencyGraphDocument,
+  manifestGroupStatsDocument,
+  manifestGroupsDocument,
+  setAllManifestGroupsEnabledDocument,
+  setManifestGroupsEnabledDocument,
+  triggerGroupsDocument,
+} from "../trax/index.g";
 
 const PAGE_SIZE = 25;
-
-interface GroupsData {
-  operations: { manifestGroups: { groups: PagedResult<ManifestGroupSummary> } };
-}
 
 export function ManifestGroupsPage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
   const [name, setName] = useState("");
   const navigate = useNavigate();
-  const [result, reexecute] = useQuery<GroupsData>({
-    query: MANIFEST_GROUPS,
-    variables: { take: PAGE_SIZE, afterId, nameContains: name || null },
-  });
-  useRefetchOnChange("MANIFEST_GROUP", () => reexecute({ requestPolicy: "network-only" }));
-  usePoll(() => reexecute({ requestPolicy: "network-only" }));
+  const [result, reexecute] = useTraxQuery(manifestGroupsDocument, { variables: { take: PAGE_SIZE, afterId, nameContains: name || null } });
+  useRefetchOnChange("MANIFEST_GROUP", () => reexecute());
+  usePoll(() => reexecute());
   const { selected, toggle, setMany, clear } = useSelection();
   const [busy, setBusy] = useState(false);
-  const [, setGroupsEnabled] = useMutation(SET_MANIFEST_GROUPS_ENABLED);
-  const [, setAllGroupsEnabled] = useMutation(SET_ALL_MANIFEST_GROUPS_ENABLED);
-  const [, triggerGroups] = useMutation(TRIGGER_GROUPS);
-  const [, cancelGroups] = useMutation(CANCEL_GROUPS);
+  const [, setGroupsEnabled] = useTraxMutation(setManifestGroupsEnabledDocument);
+  const [, setAllGroupsEnabled] = useTraxMutation(setAllManifestGroupsEnabledDocument);
+  const [, triggerGroups] = useTraxMutation(triggerGroupsDocument);
+  const [, cancelGroups] = useTraxMutation(cancelGroupsDocument);
   const [batchReport, setBatchReport] = useState<BatchTriggerReport | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
 
@@ -83,7 +67,7 @@ export function ManifestGroupsPage() {
     const r = await setAllGroupsEnabled({ enabled });
     setBusy(false);
     report(r.error?.message, r.data?.operations?.manifestGroups?.setAllManifestGroupsEnabled, enabled ? "All groups enabled." : "All groups disabled.");
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   }
 
   async function onSetSelected(enabled: boolean) {
@@ -92,7 +76,7 @@ export function ManifestGroupsPage() {
     setBusy(false);
     report(r.error?.message, r.data?.operations?.manifestGroups?.setManifestGroupsEnabled, enabled ? "Groups enabled." : "Groups disabled.");
     clear();
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   }
 
   // Trigger Selected and Cancel Running go through the operations service in one call each, as
@@ -121,7 +105,7 @@ export function ManifestGroupsPage() {
     if (report.refused) return;
     toast(report.message, report.severity);
     clear();
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   }
 
   async function onCancelSelected() {
@@ -149,20 +133,18 @@ export function ManifestGroupsPage() {
     }
     toast(res.message ?? "Cancellation requested.", res.count === 0 ? "warning" : "success");
     clear();
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   }
 
   // Global cross-group dependency graph. Refetches on the same signal as the grid, so adding or
   // wiring up a group updates the picture live.
-  const [graphResult, reexecuteGraph] = useQuery<{
-    operations: { manifestGroups: { dependencyGraph: ManifestGroupDependencyGraph } };
-  }>({ query: GROUP_DEPENDENCY_GRAPH });
+  const [graphResult, reexecuteGraph] = useTraxQuery(groupDependencyGraphDocument);
   const graph = graphResult.data?.operations?.manifestGroups?.dependencyGraph;
   // Each node is toned by whether its group is enabled, running or failing; the status moves
   // with runs, so it refetches with the grid's poll as well as on a group change.
   const status = useGroupGraphStatus(graph);
   useRefetchOnChange("MANIFEST_GROUP", () => {
-    reexecuteGraph({ requestPolicy: "network-only" });
+    reexecuteGraph();
     status.refetch();
   });
   usePoll(status.refetch);
@@ -171,10 +153,7 @@ export function ManifestGroupsPage() {
   // Fetch per-group stats for just the visible page, in one batched call (see the API notes on
   // why this is not folded into the list query: it is a heavier aggregation).
   const ids = (page?.items ?? []).map((g) => g.id);
-  const [statsResult] = useQuery<{
-    operations: { manifestGroups: { stats: ManifestGroupStats[] } };
-  }>({
-    query: MANIFEST_GROUP_STATS,
+  const [statsResult] = useTraxQuery(manifestGroupStatsDocument, {
     variables: { groupIds: ids },
     pause: ids.length === 0,
   });

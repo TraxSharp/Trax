@@ -1,0 +1,40 @@
+# Logs, in id order (NEWEST first by default; a run's own log reads OLDEST first). afterId pages
+# in the chosen order. messageContains / categoryContains match anywhere, ignoring case; a text
+# filter counts at most 10,000 matches and then sets isCountCapped.
+query Logs(
+  $take: Int!
+  $afterId: Long
+  $metadataId: Long
+  $minimumLevel: LogLevel
+  $messageContains: String
+  $categoryContains: String
+  $order: SortOrder! = NEWEST
+) {
+  operations {
+    logs {
+      logs(
+        take: $take
+        afterId: $afterId
+        metadataId: $metadataId
+        minimumLevel: $minimumLevel
+        messageContains: $messageContains
+        categoryContains: $categoryContains
+        order: $order
+      ) {
+        items {
+          id
+          metadataId
+          eventId
+          level
+          category
+          message
+          exception
+        }
+        totalCount
+        isEstimatedCount
+        isCountCapped
+        nextCursor
+      }
+    }
+  }
+}

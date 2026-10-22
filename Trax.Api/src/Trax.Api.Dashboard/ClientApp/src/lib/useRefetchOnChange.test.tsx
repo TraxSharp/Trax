@@ -1,6 +1,6 @@
 import { render, waitFor, act } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "./consoleClient";
 import { createMockClient, createMockStore } from "../mock";
 import { useRefetchOnChange, type ChangeDomain } from "./useRefetchOnChange";
 
@@ -15,7 +15,7 @@ function Probe({
   return null;
 }
 
-// Let urql establish the subscription source before the one-shot store event, so the event isn't
+// Let the client open the stream before the one-shot store event, so the event isn't
 // published into the void. A microtask yield, not a timing-dependent sleep.
 async function flushSubscription() {
   await act(async () => {
@@ -34,9 +34,9 @@ function renderProbe(domain: ChangeDomain | ChangeDomain[]) {
   const client = createMockClient({ store });
   const refetch = vi.fn();
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <Probe domain={domain} onRefetch={refetch} />
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   return { store, refetch };
 }

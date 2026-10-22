@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { TRAIN_DETAIL_TRAIN, TRAIN_NEVER_RAN, trainDetailScenario } from "../mock/scenarios";
@@ -12,11 +12,11 @@ afterEach(cleanup);
 function renderTrain(train: string, query = "") {
   const client = createMockClient({ store: createMockStore(), fixtures: false, overrides: trainDetailScenario });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[`/trains/${encodeURIComponent(train)}${query}`]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 }
 

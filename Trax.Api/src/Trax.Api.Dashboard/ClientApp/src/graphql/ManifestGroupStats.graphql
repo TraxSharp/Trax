@@ -1,0 +1,17 @@
+# Batched per-group stats (manifest count + execution counts + last run) for the visible page
+# of the manifest groups list.
+query ManifestGroupStats($groupIds: [Long!]!) {
+  operations {
+    manifestGroups {
+      stats(groupIds: $groupIds) {
+        groupId
+        manifestCount
+        totalExecutions
+        completed
+        failed
+        inProgress
+        lastRun
+      }
+    }
+  }
+}

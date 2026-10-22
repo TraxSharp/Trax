@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Trax.Samples.ApiDashboard.Browser.Fixtures;
 
@@ -9,9 +8,9 @@ namespace Trax.Samples.ApiDashboard.Browser.Tests;
 /// Every route the console serves and every mutation and subscription it sends is named by a browser test's
 /// <see cref="CoversAttribute"/>, so a page or a button cannot ship with no test that drives it. The routes are
 /// read from <c>ClientApp/src/AppRoutes.tsx</c> (the pages, and the routes from before the navigation moved, which
-/// redirect); the operations from <c>ClientApp/console-documents.json</c> (Api ADR 0042) and, for the persisted-
-/// operation management the host runs as text, from <c>src/graphql/mutations.ts</c>. It fails naming each route or
-/// operation no test covers, and each <c>[Covers]</c> that names one that no longer exists.
+/// redirect); the operations from the documents the console sends, one per file in <c>ClientApp/src/graphql</c>,
+/// the persisted-operation management a host runs as text among them. It fails naming each route or operation no
+/// test covers, and each <c>[Covers]</c> that names one that no longer exists.
 /// </summary>
 /// <remarks>
 /// <para>Not ADR-enforcing: it keeps the console's browser suite as wide as the console, a completeness check on a
@@ -65,8 +64,8 @@ public partial class ConsoleCoverageTests
         stale
             .Should()
             .BeEmpty(
-                "every [Covers(...)] names a route in AppRoutes.tsx or an operation in console-documents.json or "
-                    + "src/graphql/mutations.ts; these name one that no longer exists"
+                "every [Covers(...)] names a route in AppRoutes.tsx or an operation in src/graphql; these name one "
+                    + "that no longer exists"
             );
     }
 
@@ -97,24 +96,24 @@ public partial class ConsoleCoverageTests
         foreach (Match m in MovedPath().Matches(routes))
             surface.Add($"route:{m.Groups["from"].Value}");
 
-        using var documents = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(clientApp, "console-documents.json"))
-        );
-        foreach (var document in documents.RootElement.GetProperty("documents").EnumerateArray())
+        foreach (
+            var file in Directory.EnumerateFiles(
+                Path.Combine(clientApp, "src", "graphql"),
+                "*.graphql"
+            )
+        )
         {
-            var m = Operation().Match(document.GetProperty("text").GetString()!);
+            // A comment may name an operation in prose, so only the document itself is read.
+            var m = Operation()
+                .Match(
+                    string.Join(
+                        '\n',
+                        File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith('#'))
+                    )
+                );
             if (m.Success && m.Groups["kind"].Value != "query")
                 surface.Add($"{m.Groups["kind"].Value}:{m.Groups["name"].Value}");
         }
-        // The persisted-operation management documents are left out of console-documents.json: the host runs them
-        // as text behind their own gate. The console still sends them from its pages.
-        foreach (var file in new[] { "mutations.ts", "subscriptions.ts" })
-        foreach (
-            Match m in Operation()
-                .Matches(File.ReadAllText(Path.Combine(clientApp, "src", "graphql", file)))
-        )
-            if (m.Groups["kind"].Value != "query")
-                surface.Add($"{m.Groups["kind"].Value}:{m.Groups["name"].Value}");
 
         surface.Count.Should().BeGreaterThan(40, "AppRoutes.tsx and the documents were read");
         return surface;

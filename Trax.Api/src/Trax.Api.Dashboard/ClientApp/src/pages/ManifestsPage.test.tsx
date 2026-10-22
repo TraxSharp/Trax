@@ -1,7 +1,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { utcText } from "../lib/schedules";
@@ -51,11 +51,11 @@ function renderManifests() {
     },
   });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/schedules"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 }
 

@@ -1,0 +1,9 @@
+# Turn a toggleable effect on or off in the API process (applies to the next train scope).
+mutation SetEffectEnabled($fullName: String!, $enabled: Boolean!) {
+  operations {
+    setEffectEnabled(fullName: $fullName, enabled: $enabled) {
+      success
+      message
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Batch cancel queued work queue entries (bulk selection).
+mutation CancelWorkQueueEntries($ids: [Long!]!) {
+  operations {
+    workQueue {
+      cancelWorkQueueEntries(ids: $ids) {
+        success
+        count
+        message
+      }
+    }
+  }
+}

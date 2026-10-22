@@ -1,8 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { Provider } from "urql";
-import type { Client } from "@urql/core";
+import { ConsoleClientProvider } from "./lib/consoleClient";
 import "./lib/theme"; // applies persisted/system theme before first paint
 import { ConnectionGate } from "./components/ConnectionGate";
 import { removeStoredCredentials, setHostAuthenticates } from "./lib/auth";
@@ -38,15 +37,15 @@ async function boot() {
     const store = createMockStore();
     // Fixtures (captured real data) are on by default, so every page renders realistically; the
     // seed answers what the fixtures do not hold (run graphs, state machines).
-    const client: Client = createMockClient({ store, overrides: devMockSeed });
+    const client = createMockClient({ store, overrides: devMockSeed });
     startTrainEventSimulator(store, { intervalMs: 2500 });
     root.render(
       <StrictMode>
-        <Provider value={client}>
+        <ConsoleClientProvider client={client}>
           <BrowserRouter>
             <AppRoutes />
           </BrowserRouter>
-        </Provider>
+        </ConsoleClientProvider>
       </StrictMode>,
     );
     return;
@@ -65,7 +64,7 @@ async function boot() {
   setHostAuthenticates(config.hostAuthenticates);
   root.render(
     <StrictMode>
-      <Provider value={client}>{config.hostAuthenticates ? app : <ConnectionGate>{app}</ConnectionGate>}</Provider>
+      <ConsoleClientProvider client={client}>{config.hostAuthenticates ? app : <ConnectionGate>{app}</ConnectionGate>}</ConsoleClientProvider>
     </StrictMode>,
   );
 }

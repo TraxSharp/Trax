@@ -1,0 +1,57 @@
+# Executions, newest first. Paginate with keyset cursors: pass the previous page's
+# nextCursor as afterId. Never use a deep `skip` (it scans every skipped row).
+query Executions(
+  $take: Int!
+  $afterId: Long
+  $trainState: TrainState
+  $trainName: String
+  $startedAfter: DateTime
+  $startedBefore: DateTime
+  $order: SortOrder
+  $manifestId: Long
+  $manifestGroupId: Long
+  $hideAdminTrains: Boolean
+  $failureClass: FailureClass
+  $externalId: String
+  $parentId: Long
+  $hostName: String
+) {
+  operations {
+    executions(
+      take: $take
+      afterId: $afterId
+      trainState: $trainState
+      trainName: $trainName
+      startedAfter: $startedAfter
+      startedBefore: $startedBefore
+      order: $order
+      manifestId: $manifestId
+      manifestGroupId: $manifestGroupId
+      hideAdminTrains: $hideAdminTrains
+      failureClass: $failureClass
+      externalId: $externalId
+      parentId: $parentId
+      hostName: $hostName
+    ) {
+      items {
+        id
+        externalId
+        name
+        trainState
+        startTime
+        endTime
+        failureJunction
+        failureReason
+        manifestId
+        hostName
+        failureClass
+        cancellationRequested
+        parentId
+        currentlyRunningJunction
+      }
+      totalCount
+      isEstimatedCount
+      nextCursor
+    }
+  }
+}

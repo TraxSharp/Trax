@@ -1,0 +1,54 @@
+# One bulk operation with its filter and what did not take; null once this node no longer knows it.
+query BulkOperation($id: UUID!, $failuresAfter: Long, $failuresTake: Int! = 100) {
+  operations {
+    bulkOperation(id: $id) {
+      id
+      kind
+      status
+      actor
+      askAfresh
+      startedAt
+      finishedAt
+      total
+      done
+      failed
+      message
+      filter {
+        executions {
+          trainState
+          trainName
+          startedAfter
+          startedBefore
+          manifestId
+          manifestGroupId
+          hideAdminTrains
+          failureClass
+          externalId
+          parentId
+          hostName
+          failureReasonContains
+          failureJunction
+        }
+        deadLetters {
+          status
+          manifestId
+        }
+        manifests {
+          isEnabled
+          scheduleType
+          nameContains
+          manifestGroupId
+          hideAdminTrains
+        }
+      }
+      failureReasons {
+        reason
+        count
+      }
+      failures(take: $failuresTake, afterId: $failuresAfter) {
+        id
+        reason
+      }
+    }
+  }
+}

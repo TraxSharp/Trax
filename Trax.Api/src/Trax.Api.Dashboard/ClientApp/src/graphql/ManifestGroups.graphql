@@ -1,0 +1,21 @@
+# Manifest groups, newest first.
+query ManifestGroups($take: Int!, $afterId: Long, $nameContains: String) {
+  operations {
+    manifestGroups {
+      groups(take: $take, afterId: $afterId, nameContains: $nameContains) {
+        items {
+          id
+          name
+          maxActiveJobs
+          priority
+          isEnabled
+          createdAt
+          updatedAt
+        }
+        totalCount
+        isEstimatedCount
+        nextCursor
+      }
+    }
+  }
+}

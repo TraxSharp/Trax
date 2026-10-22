@@ -1,0 +1,28 @@
+query TrainChains($hideAdmin: Boolean!) {
+  operations {
+    trains(hideAdminTrains: $hideAdmin) {
+      fullName
+      asksDecisions
+      chain {
+        train
+        hasGraph
+        allNodes {
+          id
+          kind
+          junction
+          opaque
+          state
+          parentId
+          track
+          depth
+          tracks {
+            name
+            description
+            isFallback
+            taken
+          }
+        }
+      }
+    }
+  }
+}

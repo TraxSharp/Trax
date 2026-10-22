@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import type { Root } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { setConnectionStatus } from "../lib/connection";
 import { setFailureAlertLimit } from "../lib/notify";
@@ -34,11 +34,11 @@ export async function bootDemo(root: Root): Promise<void> {
   setConnectionStatus("connected");
   root.render(
     <StrictMode>
-      <Provider value={client}>
+      <ConsoleClientProvider client={client}>
         <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AppRoutes />
         </BrowserRouter>
-      </Provider>
+      </ConsoleClientProvider>
     </StrictMode>,
   );
 }

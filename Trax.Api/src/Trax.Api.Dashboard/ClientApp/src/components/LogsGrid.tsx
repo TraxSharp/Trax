@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useUrlState } from "../lib/urlState";
-import { useQuery } from "urql";
-import { LOGS } from "../graphql/queries";
 import { Pager } from "./Pager";
 import { useKeyset } from "../lib/useKeyset";
 import { usePoll } from "../lib/poll";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { shortName } from "../lib/format";
-import type { LogEntry, LogLevel, PagedResult } from "../types";
+import type { LogLevel } from "../types";
+import { useTraxQuery } from "../lib/consoleClient";
+import { logsDocument } from "../trax/index.g";
 
 const LEVELS: (LogLevel | "")[] = ["", "TRACE", "DEBUG", "INFORMATION", "WARNING", "ERROR", "CRITICAL"];
 
@@ -23,10 +23,6 @@ const LEVEL_STYLE: Record<LogLevel, string> = {
 };
 
 const INPUT = "text-sm border border-line-strong rounded-md px-2 py-1 bg-field";
-
-interface LogsData {
-  operations: { logs: { logs: PagedResult<LogEntry> } };
-}
 
 export type LogOrder = "NEWEST" | "OLDEST";
 
@@ -66,8 +62,7 @@ export function LogsGrid({
   const messageContains = useDebouncedValue(message.trim());
   const fixedRun = metadataId != null;
 
-  const [result, reexecute] = useQuery<LogsData>({
-    query: LOGS,
+  const [result, reexecute] = useTraxQuery(logsDocument, {
     variables: {
       take: pageSize,
       afterId,
@@ -79,7 +74,7 @@ export function LogsGrid({
     },
   });
   usePoll(() => {
-    if (poll) reexecute({ requestPolicy: "network-only" });
+    if (poll) reexecute();
   });
 
   const page = result.data?.operations?.logs?.logs;

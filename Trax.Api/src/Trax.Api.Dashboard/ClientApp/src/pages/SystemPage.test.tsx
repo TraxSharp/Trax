@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient } from "../mock";
 import { clusterScenario, schedulerConfigScenario } from "../mock/scenarios";
@@ -18,16 +18,16 @@ function Where() {
 // every mutation the page sends recorded.
 function open(route: string, overrides: MockSchemaOverrides = schedulerConfigScenario) {
   const client = createMockClient({ fixtures: false, overrides });
-  const mutations = vi.spyOn(client, "executeMutation");
+  const mutations = vi.spyOn(client, "mutation");
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
         <AppRoutes />
         <Where />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
-  return { sent: () => mutations.mock.calls.map(([op]) => op.variables) };
+  return { sent: () => mutations.mock.calls.map(([, variables]) => variables) };
 }
 
 test("pausing the job dispatcher is one confirmed mutation, and the header then says dispatch is paused", async () => {

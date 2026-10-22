@@ -1,0 +1,17 @@
+# Execution roll-up for a single train, keyed by interface FullName. Backs the train detail page.
+query TrainStats($trainName: String!) {
+  operations {
+    trainStats(trainName: $trainName) {
+      trainName
+      total
+      completed
+      failed
+      inProgress
+      pending
+      cancelled
+      lastRun
+      lastSuccessfulRun
+      averageMilliseconds
+    }
+  }
+}

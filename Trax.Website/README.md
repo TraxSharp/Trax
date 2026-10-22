@@ -19,7 +19,7 @@ operations dashboard, whose source is in Trax.Api
 | Tailwind CSS 4 | Styling, dark theme |
 | `next-mdx-remote`, `rehype-pretty-code` and Shiki | Render the docs as CommonMark (not MDX) with highlighted code; raw HTML is limited to a few tags by `rehype-sanitize` |
 | Trax.Docs | The page content, synced in at dev and build time |
-| `../Trax.Api/src/Trax.Api.Dashboard/ClientApp` | The operations dashboard (Vite, React, urql), its own npm project; its demo build is served at `/dashboard/demo/` |
+| `../Trax.Api/src/Trax.Api.Dashboard/ClientApp` | The operations dashboard (Vite, React, and the client `trax client --operations` generates), its own npm project; its demo build is served at `/dashboard/demo/` |
 
 ## Run it locally
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { useSubscription } from "urql";
-import { ON_DATA_CHANGED } from "../graphql/subscriptions";
 import { useRefetchOnReconnect } from "./useRefetchOnReconnect";
+import { useTraxSubscription } from "./consoleClient";
+import { onDataChangedDocument } from "../trax/index.g";
 
 // GraphQL enum values (HotChocolate serializes ChangeDomain as CONSTANT_CASE).
 export type ChangeDomain =
@@ -24,7 +24,7 @@ const DEBOUNCE_MS = 300;
 // the same domain coalesces server-side into one signal and again here into one refetch.
 //
 // The reducer keeps only matching events, so unrelated domains never touch `data` and thus never
-// cancel a pending refetch. urql shares one WebSocket operation across every subscriber of the same
+// cancel a pending refetch. The console client shares one stream across every subscriber of the same
 // document, so many pages using this hook cost a single subscription.
 export function useRefetchOnChange(
   domains: ChangeDomain | ChangeDomain[],
@@ -32,11 +32,8 @@ export function useRefetchOnChange(
 ): void {
   const wanted = Array.isArray(domains) ? domains : [domains];
 
-  const [{ data }] = useSubscription<
-    { onDataChanged: DataChangedEvent },
-    DataChangedEvent
-  >({ query: ON_DATA_CHANGED }, (prev, next) =>
-    wanted.includes(next.onDataChanged.domain) ? next.onDataChanged : (prev as DataChangedEvent),
+  const [{ data }] = useTraxSubscription(onDataChangedDocument, undefined, (prev: DataChangedEvent | undefined, next) =>
+    wanted.includes(next.onDataChanged.domain) ? next.onDataChanged : prev,
   );
 
   // Also refetch when the socket recovers: a signal emitted while it was down was never delivered,

@@ -1,0 +1,16 @@
+# Per-manifest run stats (counts by state + last run), for the manifest detail summary cards.
+query ManifestStats($manifestId: Long!) {
+  operations {
+    manifestStats(manifestId: $manifestId) {
+      manifestId
+      total
+      completed
+      failed
+      inProgress
+      pending
+      cancelled
+      lastRun
+      lastSuccessfulRun
+    }
+  }
+}

@@ -13,5 +13,9 @@ export default defineConfig({
     testTimeout: 15_000,
     // The e2e suite has its own config (vitest.e2e.config.ts) and needs a live devhost.
     exclude: ["node_modules/**", "dist/**", "src/e2e/**"],
+    // The mock's schema comes from graphql-tools and is executed by src/mock/schema-transport.ts.
+    // Left external, graphql-tools would load graphql's CommonJS build while the source loads its
+    // ES module, and graphql refuses a schema from the other copy; inlined, both load the same one.
+    server: { deps: { inline: [/@graphql-tools\//] } },
   },
 });

@@ -1,0 +1,29 @@
+# workQueue.detail: the entry, its input (sensitive values masked by the API), and the entry it
+# waits on for its subject. Null when no entry has the id.
+query WorkQueueDetail($id: Long!) {
+  operations {
+    workQueue {
+      detail(id: $id) {
+        id
+        externalId
+        trainName
+        status
+        createdAt
+        dispatchedAt
+        scheduledAt
+        priority
+        dispatchAttempts
+        manifestId
+        metadataId
+        deadLetterId
+        inputTypeName
+        confirmedAt
+        subjectKey
+        replayDecisionsOf
+        input
+        subjectHeldBy
+        subjectQueuedBehind
+      }
+    }
+  }
+}

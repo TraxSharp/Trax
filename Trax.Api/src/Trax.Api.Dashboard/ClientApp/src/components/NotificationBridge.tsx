@@ -1,9 +1,8 @@
 import { useEffect, useRef } from "react";
-import { useSubscription } from "urql";
-import { ON_TRAIN_STATE_CHANGED } from "../graphql/subscriptions";
 import { fireFailureNotification, takeFailureAlert } from "../lib/notify";
 import { toast } from "../lib/toast";
-import type { TrainLifecycleEvent } from "../types";
+import { useTraxSubscription } from "../lib/consoleClient";
+import { onTrainStateChangedDocument } from "../trax/index.g";
 
 // Mounted once under the Layout. Watches the live state feed and surfaces failures as a
 // toast plus (if the user opted in) a browser notification. Dedupes by metadataId so a
@@ -11,10 +10,8 @@ import type { TrainLifecycleEvent } from "../types";
 export function NotificationBridge() {
   const seen = useRef<Set<number>>(new Set());
 
-  const [{ data }] = useSubscription<
-    { onTrainStateChanged: TrainLifecycleEvent },
-    TrainLifecycleEvent | null
-  >({ query: ON_TRAIN_STATE_CHANGED }, (_prev, d) => d.onTrainStateChanged);
+  const [{ data: frame }] = useTraxSubscription(onTrainStateChangedDocument);
+  const data = frame?.onTrainStateChanged;
 
   useEffect(() => {
     if (!data || data.trainState !== "FAILED") return;

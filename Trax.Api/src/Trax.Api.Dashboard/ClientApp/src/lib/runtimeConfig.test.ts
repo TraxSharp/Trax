@@ -61,3 +61,23 @@ describe("the GraphQL URLs", () => {
     });
   });
 });
+
+describe("the console document ids the host names", () => {
+  test("keeps only ids under the console prefix", () => {
+    setConfigMeta(
+      JSON.stringify({
+        documents: {
+          Overview: "trax_console_Overview_abc",
+          Elsewhere: "trax_client_Elsewhere_abc",
+          "not a name": "trax_console_x",
+        },
+      }),
+    );
+    expect(readRuntimeConfig().documents).toEqual({ Overview: "trax_console_Overview_abc" });
+  });
+
+  test("is empty when the host names none", () => {
+    setConfigMeta(JSON.stringify({}));
+    expect(readRuntimeConfig().documents).toEqual({});
+  });
+});

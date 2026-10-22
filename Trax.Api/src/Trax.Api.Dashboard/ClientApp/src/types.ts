@@ -201,13 +201,14 @@ export interface WorkQueueSummary {
   status: WorkQueueStatus;
   createdAt: string;
   dispatchedAt: string | null;
-  scheduledAt: string | null;
+  // Read by the detail page; the list does not select them.
+  scheduledAt?: string | null;
   priority: number;
   dispatchAttempts: number;
   manifestId: number | null;
   metadataId: number | null;
-  deadLetterId: number | null;
-  inputTypeName: string | null;
+  deadLetterId?: number | null;
+  inputTypeName?: string | null;
   // Null while a two-phase enqueue has staged the entry and its OnQueue hook has not returned.
   confirmedAt?: string | null;
   subjectKey?: string | null;
@@ -218,6 +219,9 @@ export interface WorkQueueSummary {
 
 // workQueue.detail: the entry plus its masked input and what it waits on for its subject.
 export interface WorkQueueDetail extends WorkQueueSummary {
+  scheduledAt: string | null;
+  deadLetterId: number | null;
+  inputTypeName: string | null;
   input: string | null;
   // The running entry that holds this entry's subject.
   subjectHeldBy: number | null;
@@ -238,7 +242,8 @@ export interface DeadLetterSummary {
   retryCountAtDeadLetter: number;
   resolvedAt: string | null;
   resolutionNote: string | null;
-  retryMetadataId: number | null;
+  // Read by the detail page; the list does not select it.
+  retryMetadataId?: number | null;
 }
 
 export interface LogEntry {
@@ -261,10 +266,11 @@ export interface ManifestSummary {
   cronExpression: string | null;
   intervalSeconds: number | null;
   maxRetries: number;
-  timeoutSeconds: number | null;
+  // Read by the detail page; the lists do not select them.
+  timeoutSeconds?: number | null;
   lastSuccessfulRun: string | null;
   manifestGroupId: number;
-  dependsOnManifestId: number | null;
+  dependsOnManifestId?: number | null;
   priority: number;
   manifestGroupName?: string | null;
   // On: a retry of a failed run replays the decisions that run recorded. Off: it asks afresh.
@@ -275,6 +281,8 @@ export type MisfirePolicy = "FIRE_ONCE_NOW" | "DO_NOTHING";
 
 // operations.manifestDetail: the manifest plus its schedule and (masked) properties.
 export interface ManifestDetail extends ManifestSummary {
+  timeoutSeconds: number | null;
+  dependsOnManifestId: number | null;
   manifestGroupName: string | null;
   propertyTypeName: string | null;
   // The manifest's input as JSON, with [TraxSensitive] values already masked by the API.
@@ -293,8 +301,9 @@ export interface ManifestGroupSummary {
   maxActiveJobs: number | null;
   priority: number;
   isEnabled: boolean;
-  createdAt: string;
-  updatedAt: string;
+  // The groups list selects them; a group's own page does not.
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DependencyGraphNode {
@@ -824,7 +833,8 @@ export interface LookupMatch {
   kind: LookupKind;
   id: string;
   label: string;
-  matchedOn: "id" | "externalId" | "name" | "subjectKey";
+  // "id", "externalId", "name" or "subjectKey".
+  matchedOn: string;
   machine: string | null;
   ownerKind: SnapshotOwnerKind | null;
   rowId: number | null;

@@ -1,24 +1,24 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery } from "urql";
-import { WORK_QUEUE } from "../graphql/queries";
-import {
-  CANCEL_WORK_QUEUE_ENTRIES,
-  CANCEL_WORK_QUEUE_ENTRY,
-} from "../graphql/mutations";
 import { QueueTrainDialog } from "../components/QueueTrainDialog";
 import { useKeyset } from "../lib/useKeyset";
 import { useSelection } from "../lib/useSelection";
 import { usePoll } from "../lib/poll";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { toast } from "../lib/toast";
-import type { PagedResult, WorkQueueStatus, WorkQueueSummary } from "../types";
+import type { WorkQueueStatus, WorkQueueSummary } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
 import { RunsTabs } from "../components/RunsTabs";
 import { BatchBar, EmptyState, ListView, MaybeIdLink, type Column } from "../components/ListView";
 import { enumLabel, shortName } from "../lib/format";
+import { useTraxMutation, useTraxQuery } from "../lib/consoleClient";
+import {
+  cancelWorkQueueEntriesDocument,
+  cancelWorkQueueEntryDocument,
+  workQueueDocument,
+} from "../trax/index.g";
 
 const PAGE_SIZE = 25;
 const STATUSES: (WorkQueueStatus | "")[] = ["", "QUEUED", "DISPATCHED", "CANCELLED"];
@@ -28,10 +28,6 @@ const STATUS_STYLE: Record<WorkQueueStatus, string> = {
   DISPATCHED: "bg-info-soft text-info-fg",
   CANCELLED: "bg-raised text-fg-2",
 };
-
-interface WorkQueueData {
-  operations: { workQueue: { workQueues: PagedResult<WorkQueueSummary> } };
-}
 
 export function WorkQueuePage() {
   const { afterId, isFirstPage, next, prev, reset } = useKeyset();
@@ -46,8 +42,7 @@ export function WorkQueuePage() {
   const { selected, toggle, setMany, clear } = useSelection();
   const [busy, setBusy] = useState(false);
 
-  const [result, reexecute] = useQuery<WorkQueueData>({
-    query: WORK_QUEUE,
+  const [result, reexecute] = useTraxQuery(workQueueDocument, {
     variables: {
       take: PAGE_SIZE,
       afterId,
@@ -57,16 +52,16 @@ export function WorkQueuePage() {
       manifestId: manifestId ? Number(manifestId) : null,
     },
   });
-  const [, cancelEntry] = useMutation(CANCEL_WORK_QUEUE_ENTRY);
-  const [, cancelMany] = useMutation(CANCEL_WORK_QUEUE_ENTRIES);
-  useRefetchOnChange("WORK_QUEUE", () => reexecute({ requestPolicy: "network-only" }));
-  usePoll(() => reexecute({ requestPolicy: "network-only" }));
+  const [, cancelEntry] = useTraxMutation(cancelWorkQueueEntryDocument);
+  const [, cancelMany] = useTraxMutation(cancelWorkQueueEntriesDocument);
+  useRefetchOnChange("WORK_QUEUE", () => reexecute());
+  usePoll(() => reexecute());
 
   // Chain optionally: a GraphQL error can return { operations: null }.
   const page = result.data?.operations?.workQueue?.workQueues;
   const refetch = () => {
     clear();
-    reexecute({ requestPolicy: "network-only" });
+    reexecute();
   };
 
   const selectedIds = [...selected];

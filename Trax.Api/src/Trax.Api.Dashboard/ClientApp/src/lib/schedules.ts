@@ -1,8 +1,8 @@
-import { useQuery } from "urql";
-import { GROUP_GRAPH_STATUS } from "../graphql/queries";
 import { useAnswers } from "./answerable";
 import type { GroupStatus } from "./groupGraph";
 import type { ManifestGroupDependencyGraph } from "../types";
+import { useTraxQuery } from "./consoleClient";
+import { groupGraphStatusDocument } from "../trax/index.g";
 
 // Times as the Schedules area words them, and the status a group dependency graph is toned by.
 
@@ -44,17 +44,14 @@ export function useGroupGraphStatus(graph: ManifestGroupDependencyGraph | null |
 } {
   const answered = useAnswers("GroupGraphStatus");
   const groupIds = (graph?.nodes ?? []).slice(0, MAX_STATUS_IDS).map((n) => n.id);
-  const [{ data }, reexecute] = useQuery<{
-    operations: { manifestGroups: { stats: GroupStatus[] } };
-  }>({
-    query: GROUP_GRAPH_STATUS,
+  const [{ data }, reexecute] = useTraxQuery(groupGraphStatusDocument, {
     variables: { groupIds },
     pause: !answered || groupIds.length === 0,
   });
   return {
     statuses: data?.operations?.manifestGroups?.stats ?? NO_STATUSES,
     refetch: () => {
-      if (answered && groupIds.length > 0) reexecute({ requestPolicy: "network-only" });
+      if (answered && groupIds.length > 0) reexecute();
     },
   };
 }

@@ -1,0 +1,11 @@
+# Patch mutable scheduler runtime settings.
+mutation UpdateScheduler($input: UpdateSchedulerConfigInput!) {
+  operations {
+    config {
+      updateScheduler(input: $input) {
+        success
+        message
+      }
+    }
+  }
+}

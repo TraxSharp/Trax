@@ -1,9 +1,5 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery, useSubscription } from "urql";
-import { EXECUTIONS, ADMIN_TRAIN_NAMES } from "../graphql/queries";
-import { CANCEL_EXECUTIONS } from "../graphql/mutations";
-import { ON_TRAIN_STATE_CHANGED } from "../graphql/subscriptions";
 import { StateBadge } from "../components/StateBadge";
 import { useSelection } from "../lib/useSelection";
 import { useHideAdminTrains, setHideAdminTrains } from "../lib/adminTrains";
@@ -11,13 +7,7 @@ import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import { useRefetchOnReconnect } from "../lib/useRefetchOnReconnect";
 import { toast } from "../lib/toast";
 import { enumLabel } from "../lib/format";
-import type {
-  ExecutionSummary,
-  FailureClass,
-  PagedResult,
-  TrainLifecycleEvent,
-  TrainState,
-} from "../types";
+import type { ExecutionSummary, FailureClass, TrainLifecycleEvent, TrainState } from "../types";
 import { confirmAction } from "../lib/confirm";
 import { useUrlState } from "../lib/urlState";
 import { TermHelp } from "../components/TermHelp";
@@ -25,6 +15,14 @@ import { RunsTabs } from "../components/RunsTabs";
 import { ApplyToAllMatching } from "../components/ApplyToAllMatching";
 import { BatchBar, EmptyState, ListView, MaybeIdLink, type Column } from "../components/ListView";
 import { useKeyset } from "../lib/useKeyset";
+import { useTraxMutation, useTraxQuery, useTraxSubscription } from "../lib/consoleClient";
+import {
+  adminTrainNamesDocument,
+  cancelExecutionsDocument,
+  executionsDocument,
+  onTrainStateChangedDocument,
+  type OnTrainStateChangedResult,
+} from "../trax/index.g";
 
 const ACTIVE_STATES = new Set<TrainState>(["PENDING", "IN_PROGRESS"]);
 
@@ -45,10 +43,6 @@ const STATES: (TrainState | "")[] = [
   "FAILED",
   "CANCELLED",
 ];
-
-interface ExecutionsData {
-  operations: { executions: PagedResult<ExecutionSummary> };
-}
 
 export function ExecutionsPage() {
   // All and Failed are two views (components/RunsTabs.tsx): moving between them starts the other
@@ -88,8 +82,7 @@ function RunsList() {
   // "hide scheduler trains" preference does not empty it.
   const hideAdmin = useHideAdminTrains() && trainName === "";
 
-  const [result, reexecuteExecutions] = useQuery<ExecutionsData>({
-    query: EXECUTIONS,
+  const [result, reexecuteExecutions] = useTraxQuery(executionsDocument, {
     variables: {
       take: PAGE_SIZE,
       afterId,
@@ -107,19 +100,17 @@ function RunsList() {
   });
   // The live feed re-subscribes on reconnect but misses events during the gap; refetch the base
   // grid so it reflects anything that happened while the socket was down.
-  useRefetchOnReconnect(() => reexecuteExecutions({ requestPolicy: "network-only" }));
+  useRefetchOnReconnect(() => reexecuteExecutions());
   // A cancel request sets cancellationRequested without a lifecycle event, so the feed never sees
   // it; the EXECUTION change signal does.
-  useRefetchOnChange("EXECUTION", () => reexecuteExecutions({ requestPolicy: "network-only" }));
+  useRefetchOnChange("EXECUTION", () => reexecuteExecutions());
   const page = result.data?.operations?.executions;
   const { selected, toggle, setMany, clear } = useSelection();
-  const [, cancelExecutions] = useMutation(CANCEL_EXECUTIONS);
+  const [, cancelExecutions] = useTraxMutation(cancelExecutionsDocument);
 
   // Canonical FullNames of the admin trains, so the live feed can be filtered by the same rule the
   // server applies to the grid (the subscription streams every train on an admin host).
-  const [adminNamesResult] = useQuery<{ operations: { adminTrainNames: string[] } }>({
-    query: ADMIN_TRAIN_NAMES,
-  });
+  const [adminNamesResult] = useTraxQuery(adminTrainNamesDocument);
   const adminNames = useMemo(
     () => new Set(adminNamesResult.data?.operations?.adminTrainNames ?? []),
     [adminNamesResult.data],
@@ -127,10 +118,7 @@ function RunsList() {
 
   // One subscription drives both the live feed and the in-place table merge. It accumulates every
   // train; admin filtering happens at render time so toggling the setting re-filters instantly.
-  const [{ data: allEvents }] = useSubscription<
-    { onTrainStateChanged: TrainLifecycleEvent },
-    TrainLifecycleEvent[]
-  >({ query: ON_TRAIN_STATE_CHANGED }, (prev = [], data) =>
+  const [{ data: allEvents }] = useTraxSubscription(onTrainStateChangedDocument, undefined, (prev: OnTrainStateChangedResult["onTrainStateChanged"][] = [], data) =>
     [data.onTrainStateChanged, ...prev].slice(0, FEED_LIMIT),
   );
   const events = useMemo(

@@ -1,0 +1,12 @@
+# Enable / disable the selected manifest groups, or every group.
+mutation SetManifestGroupsEnabled($ids: [Long!]!, $enabled: Boolean!) {
+  operations {
+    manifestGroups {
+      setManifestGroupsEnabled(ids: $ids, enabled: $enabled) {
+        success
+        count
+        message
+      }
+    }
+  }
+}

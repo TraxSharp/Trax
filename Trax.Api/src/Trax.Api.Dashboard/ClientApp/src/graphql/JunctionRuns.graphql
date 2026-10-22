@@ -1,0 +1,26 @@
+# A run's steps, as AddJunctionEvents recorded them, ordered by position. afterPosition is a
+# keyset cursor: only steps after it. The API clamps take to 500, the page the timeline caps at.
+query JunctionRuns($metadataId: Long!, $afterPosition: Int, $take: Int!) {
+  operations {
+    junctionRuns(metadataId: $metadataId, afterPosition: $afterPosition, take: $take) {
+      position
+      kind
+      name
+      state
+      startedAt
+      endedAt
+      durationMs
+      failureClass
+      failureException
+      questionKey
+      answer
+      confidence
+      replayed
+      decider
+      answerWithheld
+      attempt
+      nameWithheld
+      trackPosition
+    }
+  }
+}

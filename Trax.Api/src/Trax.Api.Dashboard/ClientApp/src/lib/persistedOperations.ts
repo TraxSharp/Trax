@@ -1,17 +1,13 @@
-import { useMemo } from "react";
-import { useQuery } from "urql";
-import { PERSISTED_OPERATIONS_AVAILABLE } from "../graphql/queries";
+import { useTraxQuery } from "./consoleClient";
+import { persistedOperationsAvailableDocument } from "../trax/index.g";
 
 // Whether the host serves persistedOperations to this caller (it calls UsePersistedOperations and
 // GateManagement, and the caller meets the gate). The probe selects only the namespace's
 // __typename, which reads nothing; a host without the namespace fails it at validation, and a
 // caller outside the gate is refused. Its failure is the answer, not a broken refresh, so it opts out of the
-// header's "last refresh failed" mark. urql dedupes it across the sidebar and the pages.
+// header's "last refresh failed" mark. The console client sends it once for the sidebar and the pages.
 export function usePersistedOperationsAvailable(): { available: boolean; checking: boolean } {
-  const context = useMemo(() => ({ ignoreRefreshStatus: true }), []);
-  const [{ data, fetching, error }] = useQuery<{
-    persistedOperations: { __typename: string } | null;
-  }>({ query: PERSISTED_OPERATIONS_AVAILABLE, context });
+  const [{ data, fetching, error }] = useTraxQuery(persistedOperationsAvailableDocument, { ignoreRefreshStatus: true });
   const available = !error && Boolean(data?.persistedOperations);
   return { available, checking: fetching && !data && !error };
 }

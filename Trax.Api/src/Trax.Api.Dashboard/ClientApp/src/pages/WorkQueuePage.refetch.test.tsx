@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 
@@ -45,11 +45,11 @@ test("WorkQueuePage refetches its grid when a WORK_QUEUE signal fires", async ()
   });
 
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/runs/queued"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 
   // Initial load renders the first resolver result. Once it's on screen the page (and its

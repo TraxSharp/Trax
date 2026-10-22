@@ -1,16 +1,16 @@
-import { print, type DocumentNode } from "graphql";
 import { createClient } from "graphql-ws";
+import type { TraxDocument } from "../trax/index.g";
 
-// Minimal fetch-based GraphQL client for the e2e suite (node env, no urql/ws). Points at the
-// disposable e2e devhost that `npm run test:e2e` brings up.
+// Minimal fetch-based GraphQL client for the e2e suite (node env). It sends each console document's
+// text, so it needs no persisted operations on the disposable e2e devhost `npm run test:e2e` brings up.
 export const E2E_URL = process.env.TRAX_E2E_URL ?? "http://localhost:5311/trax/graphql";
 export const E2E_KEY = process.env.TRAX_E2E_KEY ?? "admin-key-do-not-use-in-production";
 
 export async function gql<T = Record<string, unknown>>(
-  doc: DocumentNode | string,
+  doc: TraxDocument<unknown, unknown> | string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  const query = typeof doc === "string" ? doc : print(doc);
+  const query = typeof doc === "string" ? doc : doc.text;
   const res = await fetch(E2E_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Api-Key": E2E_KEY },
@@ -52,7 +52,7 @@ export const E2E_ORIGIN = new URL(E2E_URL).origin;
  * resolve with the first event `accept` takes, or reject after `timeoutMs`.
  */
 export function nextEvent<T = Record<string, unknown>>(
-  doc: DocumentNode,
+  doc: TraxDocument<unknown, unknown>,
   variables: Record<string, unknown>,
   accept: (data: T) => boolean,
   timeoutMs: number,
@@ -69,7 +69,7 @@ export function nextEvent<T = Record<string, unknown>>(
   const event = new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`no matching event within ${timeoutMs}ms`)), timeoutMs);
     client.subscribe<T>(
-      { query: print(doc), variables },
+      { query: doc.text, variables },
       {
         next: (msg) => {
           if (msg.errors) {

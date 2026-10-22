@@ -1,7 +1,4 @@
-import { useMemo } from "react";
-import { useQuery } from "urql";
 import { Link } from "react-router-dom";
-import { ENVIRONMENT_NAME, SCHEDULER_CONFIG } from "../graphql/queries";
 import { usePollSeconds } from "../lib/poll";
 import { useRefreshStatus } from "../lib/refreshStatus";
 import { useNow } from "../lib/useNow";
@@ -9,6 +6,8 @@ import { environmentBadgeColor } from "../lib/environment";
 import { schedulerPaused } from "../lib/scheduler";
 import { Search } from "./Search";
 import { CirclePause, Clock, RotateCw, TriangleAlert } from "lucide-react";
+import { useTraxQuery } from "../lib/consoleClient";
+import { environmentNameDocument, schedulerConfigDocument } from "../trax/index.g";
 
 /**
  * The top bar, as the Blazor DashboardHeader: the host's environment badge, a "Last refresh
@@ -16,18 +15,10 @@ import { CirclePause, Clock, RotateCw, TriangleAlert } from "lucide-react";
  * is set in User settings), and the current UTC time.
  */
 export function DashboardHeader() {
-  const context = useMemo(() => ({ ignoreRefreshStatus: true }), []);
-  const [{ data }] = useQuery<{ operations: { config: { environmentName: string } } | null }>({
-    query: ENVIRONMENT_NAME,
-    context,
-  });
+  const [{ data }] = useTraxQuery(environmentNameDocument, { ignoreRefreshStatus: true });
   const environment = data?.operations?.config?.environmentName ?? "";
   // Pausing the scheduler stops every schedule and every dispatch, so it shows on every page.
-  const [{ data: scheduler }] = useQuery<{
-    operations: {
-      config: { scheduler: { manifestManagerEnabled: boolean; jobDispatcherEnabled: boolean } | null } | null;
-    } | null;
-  }>({ query: SCHEDULER_CONFIG, context });
+  const [{ data: scheduler }] = useTraxQuery(schedulerConfigDocument, { ignoreRefreshStatus: true });
   const paused = schedulerPaused(scheduler?.operations?.config?.scheduler ?? null);
   const { lastRefreshAt, lastError } = useRefreshStatus();
   const pollSeconds = usePollSeconds();

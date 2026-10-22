@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation } from "urql";
-import { RUN_TRAIN } from "../graphql/mutations";
 import { Modal } from "./Modal";
 import { Spinner } from "./Spinner";
 import { TrainInputForm } from "./TrainInputForm";
 import { useTrainInputForm } from "../lib/useTrainInputForm";
-import type { OperationResponse } from "../types";
+import { useTraxMutation } from "../lib/consoleClient";
+import { runTrainDocument } from "../trax/index.g";
 
 // Modal form to run a train now (operations.workQueue.runTrain): the input goes to the host's job
 // submitter with no work queue entry, so dispatch never sees it. Mirrors the Blazor RunTrainDialog:
@@ -18,7 +17,7 @@ export function RunTrainDialog({
   onClose: () => void;
   initialTrain?: string;
 }) {
-  const [, runTrain] = useMutation(RUN_TRAIN);
+  const [, runTrain] = useTraxMutation(runTrainDocument);
   const navigate = useNavigate();
   const form = useTrainInputForm(initialTrain);
   const [busy, setBusy] = useState(false);
@@ -35,7 +34,7 @@ export function RunTrainDialog({
       return;
     }
     // A refusal (unknown train, bad input, no job submitter) keeps the dialog open with its reason.
-    const result: OperationResponse | undefined = r.data?.operations?.workQueue?.runTrain;
+    const result = r.data?.operations?.workQueue?.runTrain;
     if (!result?.success) {
       setError(result?.message ?? "The train did not run.");
       return;

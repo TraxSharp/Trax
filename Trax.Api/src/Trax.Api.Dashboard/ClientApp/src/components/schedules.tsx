@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { useQuery } from "urql";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { METRIC_SERIES } from "../graphql/queries";
 import { useAnswers } from "../lib/answerable";
 import { untilText, utcText } from "../lib/schedules";
-import type { MetricSeries, MetricSeriesRange } from "../types";
+import type { MetricSeriesRange } from "../types";
+import { useTraxQuery } from "../lib/consoleClient";
+import { metricSeriesDocument } from "../trax/index.g";
 
 // The parts the Schedules area shares: the tab strip between manifests and groups, when a
 // manifest runs next, and a run-history sparkline from operations.metrics.series.
@@ -75,8 +75,7 @@ const TOOLTIP: React.CSSProperties = {
 export function RunSparkline({ scope, id }: { scope: "MANIFEST" | "GROUP"; id: number }) {
   const [range, setRange] = useState<MetricSeriesRange>("LAST24_HOURS");
   const answered = useAnswers("MetricSeries");
-  const [{ data, error }] = useQuery<{ operations: { metrics: { series: MetricSeries } } }>({
-    query: METRIC_SERIES,
+  const [{ data, error }] = useTraxQuery(metricSeriesDocument, {
     variables: { scope, range, id },
     pause: !answered,
   });

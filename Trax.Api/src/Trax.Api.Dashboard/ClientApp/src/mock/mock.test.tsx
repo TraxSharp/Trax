@@ -1,7 +1,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "./index";
 import { persistedOperationsUnavailable } from "./scenarios";
@@ -12,11 +12,11 @@ import { persistedOperationsUnavailable } from "./scenarios";
 test("the app landing page (/) boots offline in mock mode", async () => {
   const client = createMockClient({ store: createMockStore() });
   const { findByRole } = render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   // The Overview page heading renders with no backend (metrics from fixtures).
   expect(await findByRole("heading", { name: "Overview" })).toBeInTheDocument();
@@ -25,11 +25,11 @@ test("the app landing page (/) boots offline in mock mode", async () => {
 test("fixtures render real captured data on the Work queue page", async () => {
   const client = createMockClient({ store: createMockStore() }); // fixtures on by default
   const { findAllByText } = render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/runs/queued"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   // The captured stress dataset uses IStressTrainN names; auto-mock would not produce these.
   const rows = await findAllByText(/IStressTrain/);
@@ -39,11 +39,11 @@ test("fixtures render real captured data on the Work queue page", async () => {
 test("the sidebar lists Persisted operations when the host exposes the namespace", async () => {
   const client = createMockClient({ store: createMockStore(), fixtures: false });
   const { findByRole, findByTestId } = render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/trains"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   expect(await findByRole("link", { name: /Persisted operations/ })).toBeInTheDocument();
   // The header shows the host's environment.
@@ -57,11 +57,11 @@ test("the sidebar hides Persisted operations on a host that does not serve their
     overrides: persistedOperationsUnavailable,
   });
   const { findByRole, queryByRole } = render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/trains"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   expect(await findByRole("link", { name: /Queued/ })).toBeInTheDocument();
   await waitFor(() => expect(queryByRole("link", { name: /Persisted operations/ })).not.toBeInTheDocument());

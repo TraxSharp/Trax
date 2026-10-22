@@ -1,6 +1,6 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { NotificationBridge } from "../components/NotificationBridge";
 import { setFailureAlertLimit } from "../lib/notify";
 import { getToasts, setToastLimit, subscribeToasts, toast, type Toast } from "../lib/toast";
@@ -67,9 +67,9 @@ test("toasts only the first two failures of the page load, across loops of the r
 
   const store = createMockStore({ persist: false, exposeOnWindow: false });
   render(
-    <Provider value={createDemoClient({ recordings: recordings(), store })}>
+    <ConsoleClientProvider client={createDemoClient({ recordings: recordings(), store })}>
       <NotificationBridge />
-    </Provider>,
+    </ConsoleClientProvider>,
   );
   await act(async () => {}); // the bridge's subscription starts
   const stop = startReplay(store, recordings(), () => true);

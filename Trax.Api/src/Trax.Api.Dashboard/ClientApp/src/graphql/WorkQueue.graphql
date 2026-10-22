@@ -1,0 +1,42 @@
+# Work queue entries, newest first. Optional status / trainName filters, a subject's queue
+# (subjectKey, matched exactly) and a manifest's entries (manifestId).
+query WorkQueue(
+  $take: Int!
+  $afterId: Long
+  $status: WorkQueueStatus
+  $trainName: String
+  $subjectKey: String
+  $manifestId: Long
+) {
+  operations {
+    workQueue {
+      workQueues(
+        take: $take
+        afterId: $afterId
+        status: $status
+        trainName: $trainName
+        subjectKey: $subjectKey
+        manifestId: $manifestId
+      ) {
+        items {
+          id
+          externalId
+          trainName
+          status
+          createdAt
+          dispatchedAt
+          priority
+          dispatchAttempts
+          manifestId
+          metadataId
+          subjectKey
+          confirmedAt
+          replayDecisionsOf
+        }
+        totalCount
+        isEstimatedCount
+        nextCursor
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+# One run drawn on its train's declared chain (operations.runGraph), the read the Blazor run page's
+# run graph makes. A query cannot follow nested tracks past the server's field-cycle limit, so it
+# reads every node at any depth from the flat allNodes list, each with where it sits (parentId,
+# track, depth) and only its tracks' own fields; lib/runGraphTree rebuilds the tree.
+query RunGraph($metadataId: Long!) {
+  operations {
+    runGraph(metadataId: $metadataId) {
+      metadataId
+      hasGraph
+      chainChanged
+      moreSteps
+      canResume
+      unmatchedSteps {
+        position
+        name
+        nameWithheld
+        state
+      }
+      allNodes {
+        id
+        kind
+        junction
+        in
+        out
+        opaque
+        replayed
+        checkpointed
+        canResume
+        state
+        steps {
+          position
+          kind
+          name
+          nameWithheld
+          state
+          startedAt
+          durationMs
+          attempt
+          failureClass
+          failureException
+          questionKey
+          answer
+          answerWithheld
+          confidence
+          decider
+          replayed
+        }
+        parentId
+        track
+        depth
+        tracks {
+          name
+          description
+          isFallback
+          taken
+        }
+      }
+    }
+  }
+}

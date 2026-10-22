@@ -1,7 +1,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider } from "urql";
+import { ConsoleClientProvider } from "../lib/consoleClient";
 import { AppRoutes } from "../AppRoutes";
 import { createMockClient, createMockStore } from "../mock";
 import { attentionNeedsWork, overviewScenario } from "../mock/scenarios";
@@ -11,11 +11,11 @@ afterEach(cleanup);
 function renderOverview(overrides = overviewScenario(attentionNeedsWork, { runs: true })) {
   const client = createMockClient({ store: createMockStore(), fixtures: false, overrides });
   render(
-    <Provider value={client}>
+    <ConsoleClientProvider client={client}>
       <MemoryRouter initialEntries={["/"]}>
         <AppRoutes />
       </MemoryRouter>
-    </Provider>,
+    </ConsoleClientProvider>,
   );
 }
 

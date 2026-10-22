@@ -1,0 +1,14 @@
+# The level each category configured under Logging:LogLevel filters at now, with the configured
+# value and whether a runtime change overrides it.
+query LogLevels {
+  operations {
+    config {
+      logLevels {
+        category
+        level
+        configuredLevel
+        overridden
+      }
+    }
+  }
+}

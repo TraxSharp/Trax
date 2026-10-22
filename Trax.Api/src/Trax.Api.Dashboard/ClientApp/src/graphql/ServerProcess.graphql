@@ -1,0 +1,14 @@
+# The process serving the dashboard: uptime, memory and CPU. Backs the Hosts page's panel for this
+# host; the other hosts report only their heartbeat.
+query ServerProcess {
+  operations {
+    metrics {
+      server {
+        uptimeSeconds
+        workingSetBytes
+        gcHeapBytes
+      }
+      serverCpuPercent
+    }
+  }
+}

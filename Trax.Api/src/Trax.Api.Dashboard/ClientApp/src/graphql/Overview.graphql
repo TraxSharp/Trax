@@ -1,0 +1,52 @@
+# Overview: health + the dashboard metrics block. metrics.dashboard is the heaviest read
+# (several aggregations over the 7-day window), so pages poll it on an interval rather than
+# on every interaction. See Trax.Docs/sdk-reference/graphql-api/queries.md.
+query Overview($range: MetricsRange!, $hideAdmin: Boolean!) {
+  operations {
+    health {
+      status
+      description
+      queueDepth
+      inProgress
+      failedLastHour
+      deadLetters
+    }
+    metrics {
+      server {
+        uptimeSeconds
+        workingSetBytes
+        gcHeapBytes
+      }
+      serverCpuPercent
+      dashboard(range: $range, hideAdminTrains: $hideAdmin) {
+        kpis {
+          executionsToday
+          successRate
+          currentlyRunning
+          unresolvedDeadLetters
+        }
+        executionsOverTime {
+          timestamp
+          completed
+          failed
+          cancelled
+        }
+        topFailures {
+          trainName
+          count
+        }
+        topAverageDurations {
+          trainName
+          averageMilliseconds
+        }
+        throughputSeries {
+          trainName
+          buckets {
+            timestamp
+            count
+          }
+        }
+      }
+    }
+  }
+}

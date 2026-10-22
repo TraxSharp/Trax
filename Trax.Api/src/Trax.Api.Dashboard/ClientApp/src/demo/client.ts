@@ -1,9 +1,7 @@
-import { Client, cacheExchange, makeErrorResult, makeResult, type Exchange, type Operation } from "@urql/core";
-import { filter, map, pipe } from "wonka";
-import { activityExchange } from "../lib/activity-exchange";
-import { limitAnswers } from "../lib/answerable";
+import { TraxTransportError, type TraxTransport } from "../trax/index.g";
+import { ConsoleClient } from "../lib/consoleClient";
 import type { MockStore } from "../mock/store/mock-store";
-import { statefulExchange } from "../mock/store/stateful-exchange";
+import { statefulTransport } from "../mock/store/stateful-transport";
 import { defaultOverlays, type MutationOverlay, type StatefulOverlay } from "../mock/store/overlays";
 import { lookupQuery, recordedMutations, type Served } from "./lookup";
 import type { RecordedMutation, Recordings } from "./recordings";
@@ -14,13 +12,6 @@ type Rec = Record<string, unknown>;
 export type ServeListener = (op: string, variables: Rec, served: Served) => void;
 
 export const NO_RECORDING = "This demo has no recording for this view.";
-
-function operationName(op: Operation): string {
-  for (const def of op.query.definitions) {
-    if (def.kind === "OperationDefinition" && def.name) return def.name.value;
-  }
-  return "";
-}
 
 // A write the host refused answers success: false, or with errors, somewhere in its payload.
 function refused(value: unknown): boolean {
@@ -77,31 +68,31 @@ export function recordedWordingOverlays(recordings: Recordings, overlays = defau
 }
 
 /**
- * The end of the demo's exchange chain: answers queries from the recordings (see lookup.ts) and a
- * write no overlay handles from its recorded answer. Nothing reaches a network.
+ * The end of the demo's transport: answers queries from the recordings (see lookup.ts) and a write
+ * no overlay handles from its recorded answer. Nothing reaches a network.
  */
-export function recordingExchange(recordings: Recordings, onServe?: ServeListener): Exchange {
-  return () => (ops$) =>
-    pipe(
-      ops$,
-      filter((op) => op.kind !== "teardown"),
-      map((op) => {
-        const name = operationName(op);
-        const variables = (op.variables ?? {}) as Rec;
-        if (op.kind === "query") {
-          const result = lookupQuery(recordings, name, variables);
-          onServe?.(name, variables, result.served);
-          return result.data ? makeResult(op, { data: result.data }) : makeErrorResult(op, new Error(NO_RECORDING));
-        }
-        if (op.kind === "mutation") {
-          const { exact } = recordedMutations(recordings, name, variables);
-          onServe?.(name, variables, exact?.data ? "recorded" : "missing");
-          return exact?.data ? makeResult(op, { data: exact.data }) : makeErrorResult(op, new Error(NO_RECORDING));
-        }
-        onServe?.(name, variables, "missing");
-        return makeErrorResult(op, new Error(NO_RECORDING));
-      }),
-    );
+export function recordingTransport(recordings: Recordings, onServe?: ServeListener): TraxTransport {
+  return {
+    async execute({ document, variables }) {
+      const name = document.name;
+      const vars = { ...variables } as Rec;
+      if (document.kind === "query") {
+        const result = lookupQuery(recordings, name, vars);
+        onServe?.(name, vars, result.served);
+        if (!result.data) throw new TraxTransportError(NO_RECORDING);
+        return { data: result.data };
+      }
+      const { exact } = recordedMutations(recordings, name, vars);
+      onServe?.(name, vars, exact?.data ? "recorded" : "missing");
+      if (!exact?.data) throw new TraxTransportError(NO_RECORDING);
+      return { data: exact.data };
+    },
+    subscribe({ document, variables }, sink) {
+      onServe?.(document.name, { ...variables } as Rec, "missing");
+      sink.error(new TraxTransportError(NO_RECORDING));
+      return () => {};
+    },
+  };
 }
 
 export interface DemoClientOptions {
@@ -112,19 +103,12 @@ export interface DemoClientOptions {
   overlays?: StatefulOverlay[];
 }
 
-/** A urql client that answers from the recordings, with the mock's overlays for writes. */
-export function createDemoClient({ recordings, store, onServe, overlays = [] }: DemoClientOptions): Client {
-  const client = new Client({
-    url: "/demo", // never fetched: recordingExchange ends every operation
-    requestPolicy: "cache-and-network",
-    exchanges: [
-      activityExchange,
-      cacheExchange,
-      statefulExchange(store, [...recordedWordingOverlays(recordings), ...overlays]),
-      recordingExchange(recordings, onServe),
-    ],
-  });
+/** A console client that answers from the recordings, with the mock's overlays for writes. */
+export function createDemoClient({ recordings, store, onServe, overlays = [] }: DemoClientOptions): ConsoleClient {
+  const stateful = statefulTransport(store, [...recordedWordingOverlays(recordings), ...overlays], () => top);
+  const top: TraxTransport = stateful(recordingTransport(recordings, onServe));
+  const client = new ConsoleClient(top);
   // A page does not offer what no recording answers (see lib/answerable.ts).
-  limitAnswers(client, Object.keys(recordings.queries));
+  client.limitAnswers(Object.keys(recordings.queries));
   return client;
 }
