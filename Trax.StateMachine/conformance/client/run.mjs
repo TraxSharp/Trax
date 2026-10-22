@@ -79,11 +79,20 @@ function answerOf(value) {
   return value.problem ? { ...PROBLEM_DEFAULTS, ...value } : { ...ANSWER_DEFAULTS, ...value };
 }
 
-// Whether every key `expected` names holds the same value in `got`.
+// Whether every key `expected` names holds the same value in `got`. A due time is compared as the instant it names: a
+// client may hold it in another offset than the host wrote, or with more digits.
 const matches = (expected, got) =>
   got !== null &&
   typeof got === "object" &&
-  Object.entries(expected).every(([k, v]) => canonical(v) === canonical(got[k] ?? null));
+  Object.entries(expected).every(([k, v]) =>
+    k === "dueAt" ? sameInstant(v, got[k] ?? null) : canonical(v) === canonical(got[k] ?? null),
+  );
+
+function sameInstant(expected, got) {
+  if (typeof expected !== "string" || typeof got !== "string") return canonical(expected) === canonical(got);
+  const [a, b] = [Date.parse(expected), Date.parse(got)];
+  return !Number.isNaN(a) && a === b;
+}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

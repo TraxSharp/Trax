@@ -84,7 +84,9 @@ came to:
   "pending": true, "problem": null, "error": null, "deleted": null }
 ```
 
-`status` is `loading`, `ready` or `stopped`. `state` and `context` are what to show (the prediction while one is
+`status` is `loading`, `ready` or `stopped`. `dueAt` is the due time as an ISO-8601 instant with its offset, in
+whatever offset and precision the client holds it; the runner compares it as the instant it names, so
+`2026-10-22T12:10:00.000+02:00` and `2026-10-22T10:10:00Z` are one value, and one read without its offset is not. `state` and `context` are what to show (the prediction while one is
 pending), `confirmed` what the host last confirmed. `problem` is the code of the last refusal or transport failure,
 `error` the code that stopped the client (`GONE`, `CLIENT_OUTDATED`), and `deleted` whether a `GONE` came from a
 deletion (true) or a host that holds no such instance for the caller (false). A context holds no member whose value
