@@ -15,5 +15,6 @@ namespace Trax.Api.Dashboard.Extensions
     public static class ApiDashboardEndpointExtensions
     {
         public static Microsoft.AspNetCore.Builder.IEndpointConventionBuilder UseTraxApiDashboard(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, System.Action<Trax.Api.Dashboard.Configuration.TraxApiDashboardOptions> configure, string path = "/trax/dashboard") { }
+        public static Microsoft.AspNetCore.Routing.IEndpointRouteBuilder UseTraxOperatorConsoleDocuments(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints) { }
     }
 }

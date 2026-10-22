@@ -114,6 +114,50 @@ public partial class ConsoleDocumentsE2ETests
         (await DocumentIdsAsync(host.Host)).Should().BeEmpty();
     }
 
+    [Test]
+    public async Task A_host_that_registers_the_documents_without_the_page_runs_them_by_id()
+    {
+        const string database = "trax_sm_console_docs_bare";
+        await E2EHost.RecreateDatabaseAsync(database);
+        var options = Options(persisted: true) with
+        {
+            Endpoints = endpoints => endpoints.UseTraxOperatorConsoleDocuments(),
+        };
+        await using var host = new HostedDatabase(
+            database,
+            await E2EHost.StartAsync(database, new CountingCharge(), options)
+        );
+
+        using var answer = await host.Host.PostPersistedAsync(
+            ConsoleIdOf("Hosts"),
+            apiKey: E2EHost.OperatorKey
+        );
+        var page = await host.Host.GetTestServer().CreateClient().GetAsync("/trax/dashboard/");
+
+        answer
+            .RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse(MachineDocumentOps.Show(answer));
+        page.StatusCode.Should().Be(HttpStatusCode.NotFound, "no page is served");
+    }
+
+    // The id a host gives a console document, from the documents the dashboard package embeds.
+    private static string ConsoleIdOf(string name)
+    {
+        using var stream =
+            typeof(ApiDashboardEndpointExtensions).Assembly.GetManifestResourceStream(
+                "TraxApiDashboardDocuments/console-documents.json"
+            )!;
+        using var file = JsonDocument.Parse(stream);
+        var text = file
+            .RootElement.GetProperty("documents")
+            .EnumerateArray()
+            .Single(d => d.GetProperty("name").GetString() == name)
+            .GetProperty("text")
+            .GetString()!;
+        return Trax.Api.GraphQL.PersistedOperations.Services.ConsoleDocuments.IdOf(name, text);
+    }
+
     // The ids the page is told, read from the runtime config the dashboard writes into its entry page.
     private static async Task<Dictionary<string, string>> DocumentIdsAsync(IHost host)
     {

@@ -40,3 +40,4 @@ app.UseTraxApiDashboard(dashboard => dashboard.RequirePolicy("TraxAdmin")); // /
 | Page | Description |
 |------|-------------|
 | [UseTraxApiDashboard](/docs/sdk-reference/api-dashboard/use-trax-api-dashboard) | Serves the app at a path, behind the authorization posture you choose, with its security and caching headers; `TraxApiDashboardOptions` |
+| [UseTraxOperatorConsoleDocuments](/docs/sdk-reference/api-dashboard/use-trax-operator-console-documents) | Registers the console's documents without serving the app, for a host operators reach only through `trax-console` |
