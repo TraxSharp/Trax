@@ -483,11 +483,14 @@ struct Actor<S> {
 
 impl<S: MachineServer> Actor<S> {
     async fn run(mut self, mut inbox: mpsc::UnboundedReceiver<Msg>) {
+        // The task holds a sender of its own for the answers and timers it starts, so the inbox never closes by itself:
+        // it ends on dispose, which dropping the controller sends. Every waiter is settled by then; a late answer finds
+        // the inbox gone, and a call made after it settles as disposed.
         while let Some(message) = inbox.recv().await {
             self.handle(message);
-            if self.disposed && self.queue.is_empty() && self.start_waiters.is_empty() {
-                // Late answers are dropped; nothing more is owed to anyone.
+            if self.disposed {
                 self.settle_open();
+                return;
             }
         }
     }

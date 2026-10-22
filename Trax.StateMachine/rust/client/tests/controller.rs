@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use trax_state_machine::Value;
 use trax_state_machine_client::{
@@ -88,4 +89,45 @@ async fn an_ir_that_hashes_to_the_manifests_hash_is_accepted() {
     let (server, _) = silent();
 
     assert!(ServerMachineController::new(ServerMachineOptions::new(ir, hash, server)).is_ok());
+}
+
+// Waits for the controller's task to end: its view's sender goes with it.
+async fn task_ends(mut view: tokio::sync::watch::Receiver<Arc<trax_state_machine_client::MachineView>>) -> bool {
+    tokio::time::timeout(Duration::from_secs(5), async { while view.changed().await.is_ok() {} })
+        .await
+        .is_ok()
+}
+
+#[tokio::test]
+async fn a_dropped_controller_ends_its_task() {
+    let (ir, hash) = turnstile();
+    let (server, _) = silent();
+    let controller = ServerMachineController::new(ServerMachineOptions::new(ir, hash, server)).unwrap();
+    let view = controller.watch();
+
+    drop(controller);
+
+    assert!(task_ends(view).await, "the controller's task outlived it");
+}
+
+#[tokio::test]
+async fn a_disposed_controller_ends_its_task_with_a_request_in_flight() {
+    let (ir, hash) = turnstile();
+    let (server, _) = silent();
+    let mut options = ServerMachineOptions::new(ir, hash, server);
+    options.id = Some("i-1".into());
+    let controller = ServerMachineController::new(options).unwrap();
+    let view = controller.watch();
+    let started = controller.start();
+    let sent = controller.send("Coin", None);
+
+    controller.dispose();
+    started.await;
+    let outcome = sent.await;
+
+    assert!(
+        matches!(&outcome, trax_state_machine_client::SendOutcome::Failed(p) if p.code == "DISPOSED"),
+        "{outcome:?}"
+    );
+    assert!(task_ends(view).await, "the disposed controller's task kept running");
 }
