@@ -40,7 +40,7 @@ internal sealed record ClientOperation(
 /// manifest's types allow. A file of fragments only holds named fragments any
 /// operation may spread. Each refusal names the file, line and column.
 /// </summary>
-internal sealed class ClientDocumentSet
+internal sealed partial class ClientDocumentSet
 {
     private const string Prefix = "trax_client_";
 
@@ -78,6 +78,21 @@ internal sealed class ClientDocumentSet
         IReadOnlyList<ClientDocumentFile> files,
         ClientManifest manifest,
         SdlTypes types
+    ) =>
+        Read(
+            files,
+            types,
+            (file, operation, checker) => Operation(file, operation, manifest, types, checker),
+            (operation, text) => IdOf(operation.Name, text)
+        );
+
+    // Reads the files, checks each fragment and each operation (by `operationOf`, which holds the rules of what a
+    // document may reach), and names each operation's text by `idOf`.
+    private static ClientDocumentSet Read(
+        IReadOnlyList<ClientDocumentFile> files,
+        SdlTypes types,
+        Func<ClientDocumentFile, GraphQLOperationDefinition, Checker, ClientOperation?> operationOf,
+        Func<ClientOperation, string, string> idOf
     )
     {
         var errors = new List<string>();
@@ -170,7 +185,7 @@ internal sealed class ClientDocumentSet
                 errors.Add(At(file, ops[1], "holds a second operation; a file holds one."));
                 continue;
             }
-            if (Operation(file, ops[0], manifest, types, checker) is { } operation)
+            if (operationOf(file, ops[0], checker) is { } operation)
                 operations.Add(operation);
         }
 
@@ -210,7 +225,7 @@ internal sealed class ClientDocumentSet
                             .Select(f => "\n\n" + Print(fragments[f].Definition))
                     )
                     + "\n";
-                return o with { Text = text, Id = IdOf(o.Name, text) };
+                return o with { Text = text, Id = idOf(o, text) };
             })
             .OrderBy(o => o.Name, StringComparer.Ordinal)
             .ToList();
@@ -576,7 +591,8 @@ internal sealed class ClientDocumentSet
                     scope,
                     argument.Value,
                     declared.Type,
-                    $"the argument '{argName}' of '{train.Field}'"
+                    $"the argument '{argName}' of '{train.Field}'",
+                    declared.HasDefault
                 );
             }
             foreach (var (argName, (argType, hasDefault)) in arguments)
@@ -814,7 +830,8 @@ internal sealed class ClientDocumentSet
                     scope,
                     argument.Value,
                     argDefinition.Type,
-                    $"the argument '{argument.Name.StringValue}' of {typeName}.{name}"
+                    $"the argument '{argument.Name.StringValue}' of {typeName}.{name}",
+                    argDefinition.DefaultValue is not null
                 );
             }
             foreach (var (argName, argDefinition) in declared)
@@ -834,7 +851,15 @@ internal sealed class ClientDocumentSet
         }
 
         // A value given to an argument: each variable it holds is declared, used, and of a type the argument takes.
-        private void Value(Scope scope, GraphQLValue value, GraphQLType expected, string where)
+        // `locationHasDefault`: the argument or input field the value is given to has a default, so a nullable variable
+        // may be passed where it takes a non-null type, as GraphQL allows.
+        private void Value(
+            Scope scope,
+            GraphQLValue value,
+            GraphQLType expected,
+            string where,
+            bool locationHasDefault = false
+        )
         {
             switch (value)
             {
@@ -852,7 +877,13 @@ internal sealed class ClientDocumentSet
                         return;
                     }
                     scope.UsedVariables.Add(name);
-                    if (!Accepts(expected, definition.Type, definition.DefaultValue is not null))
+                    if (
+                        !Accepts(
+                            expected,
+                            definition.Type,
+                            definition.DefaultValue is not null || locationHasDefault
+                        )
+                    )
                         Errors.Add(
                             At(
                                 scope.File,
@@ -918,7 +949,8 @@ internal sealed class ClientDocumentSet
                             scope,
                             field.Value,
                             inputField.Type,
-                            $"'{fieldName}' of {input.Name.StringValue}"
+                            $"'{fieldName}' of {input.Name.StringValue}",
+                            inputField.DefaultValue is not null
                         );
                     }
                     foreach (var (fieldName, inputField) in declared)

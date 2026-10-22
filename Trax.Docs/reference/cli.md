@@ -483,7 +483,8 @@ dotnet tool restore && dotnet tool run trax client --target react --manifest web
 | Option | What it does |
 | --- | --- |
 | `--target` | The framework. `react`, the default, is the only one today. |
-| `--manifest` | The manifest the host wrote with `--trax-export-client`. Required. |
+| `--manifest` | The manifest the host wrote with `--trax-export-client`. Required, unless `--operations` is given. |
+| `--operations` | The operations schema, as SDL, in place of `--manifest`. Generates the client for documents that reach the operations surface, as the operations console's do. See [The operations console's client](#the-operations-consoles-client). |
 | `--out` | The directory the client is written to, inside the frontend's source. Required. A file `trax client` wrote under it that the manifest no longer generates is deleted, and a folder that leaves empty. A client module is its own when its first line is its header. A twin is when it is `<machine>/<machine>.machine.g.ts` or `.contexts.g.ts` with the twin generator's header for that machine, and the previous run served the machine: the `manifest.json` it left in `--out` names it, or `<machine>/<machine>.client.g.ts` is still there. With neither, a twin is kept, so one `trax machine generate` wrote is never deleted. Any other file is left alone, a linked folder is not entered, and a file that is not a regular one (a FIFO, a device) is not read. A link at a path it writes, or at a folder on the way there, is refused, and nothing is written. |
 | `--check` | Writes nothing; exits 1 when the client in `--out` is not what the manifest generates, naming each file. A checkout that writes CRLF is not a difference. |
 | `--specifier` | The module the client imports the runtime from (default `@traxsharp/state-machine`). |
@@ -520,11 +521,37 @@ With `--documents`, each document is checked as the host checks it at startup: o
 (a file may hold only fragments), its root `discover` or `dispatch`, under it only the manifest's trains and their
 namespaces, a mutation exactly one train, no directive; every field, argument, variable and fragment as the
 manifest's types allow, no variable unused, no fragment unused or spreading itself, and no key naming two different
-selections. Every refusal is reported at once, each with its file, line and column. An operation or fragment name
+selections. A nullable variable may be passed to a non-null argument or input field that has a default, as GraphQL
+allows. Every refusal is reported at once, each with its file, line and column. An operation or fragment name
 that another part of the client already uses is refused like any other name. A malformed manifest is refused with a sentence
 saying where. The app installs `graphql-ws` beside `@traxsharp/state-machine` (`npm install @traxsharp/state-machine
 graphql-ws`), and the generated code typechecks under the `tsconfig` a Vite React template writes
 (`erasableSyntaxOnly`, `verbatimModuleSyntax`, `noUnusedLocals`).
+
+### The operations console's client
+
+The operations console (`Trax.Api.Dashboard`) sends only the documents in its `src/graphql/`, through a client
+`trax client --operations` generates from them and from the operations schema. A host's client manifest never lists
+the operations surface, so this mode reads no manifest:
+
+```bash
+trax client --operations operations.graphql --documents 'src/graphql/*.graphql' --out src/trax
+trax client --operations operations.graphql --documents 'src/graphql/*.graphql' --out src/trax --check   # in CI
+```
+
+Each document is checked as a host checks a console document before it registers it: one named operation per file,
+no alias at the root and no directive; a query or mutation selects only `operations`, or only `persistedOperations`;
+a subscription selects one of the operator's streams (`onTrainStateChanged`, `onDataChanged`, `onJunctionEvent`,
+`onMachineInstanceChanged`). Every field, argument and variable is checked against the schema as above. It writes,
+under `--out`:
+
+| File | What it holds |
+| --- | --- |
+| `client.g.ts` | The runtime, which imports only `graphql-ws`. `configureTraxOperations(transport)`, `execute`, `send` and `subscribe`, which go through the transport the app gives it, and `httpTransport({ url, socketUrl, headers?, connectionParams?, byId?, socket?, fetch? })`: every request as POST, one socket for the streams. A document goes by its id when `byId` says so (by default, when it has one), with no text; otherwise as text. `TraxOperationError` holds the errors of an answer, `TraxTransportError` a request that got none. |
+| `types.g.ts` | The enums and inputs the schema declares. |
+| `documents/<operation>.g.ts` | `<operation>Document`, the operation's name, kind, id (`trax_console_<name>_<hash of its text>`, or `null` for persisted-operation management, which a host runs as text) and text; `<Operation>Variables` and `<Operation>Result`, typed from the schema; and `<operation>(variables)`, or for a subscription `<operation>(variables, sink)`, which returns the function that stops it. |
+| `console-documents.json` | Every document with an id, `{ "format": 1, "documents": [{ "name", "text" }] }` in name order: the file `Trax.Api.Dashboard` embeds and a host registers. |
+| `index.g.ts` | Everything above re-exported. |
 
 ## SDK Reference
 

@@ -19,10 +19,17 @@ internal static class ClientCommand
             Description = "The framework the client is for. Only react is generated today.",
             DefaultValueFactory = _ => "react",
         };
-        var manifest = new Option<FileInfo>("--manifest")
+        var manifest = new Option<FileInfo?>("--manifest")
         {
-            Description = "The client manifest the host exported with --trax-export-client.",
-            Required = true,
+            Description =
+                "The client manifest the host exported with --trax-export-client. Required unless --operations is given.",
+        };
+        var operations = new Option<FileInfo?>("--operations")
+        {
+            Description =
+                "The operations schema, as SDL, in place of --manifest: generates a client for documents that reach "
+                + "only operations and the operator's streams, as the operations console's do, and the "
+                + "console-documents.json a host registers them from. Needs --documents.",
         };
         var output = new Option<DirectoryInfo>("--out")
         {
@@ -66,6 +73,7 @@ internal static class ClientCommand
         {
             target,
             manifest,
+            operations,
             output,
             check,
             specifier,
@@ -74,23 +82,31 @@ internal static class ClientCommand
             node,
         };
         command.SetAction(parseResult =>
-            Run(
-                parseResult.GetValue(target) ?? "react",
-                parseResult.GetRequiredValue(manifest).FullName,
-                parseResult.GetRequiredValue(output).FullName,
-                parseResult.GetValue(check),
-                parseResult.GetValue(specifier),
-                parseResult.GetValue(toolsDir)?.FullName,
-                new NodeRunner(parseResult.GetValue(node) ?? "node"),
-                parseResult.GetValue(documents) ?? []
-            )
+            parseResult.GetValue(operations) is { } schema
+                ? RunOperations(
+                    parseResult.GetValue(manifest)?.FullName,
+                    schema.FullName,
+                    parseResult.GetRequiredValue(output).FullName,
+                    parseResult.GetValue(check),
+                    parseResult.GetValue(documents) ?? []
+                )
+                : Run(
+                    parseResult.GetValue(target) ?? "react",
+                    parseResult.GetValue(manifest)?.FullName,
+                    parseResult.GetRequiredValue(output).FullName,
+                    parseResult.GetValue(check),
+                    parseResult.GetValue(specifier),
+                    parseResult.GetValue(toolsDir)?.FullName,
+                    new NodeRunner(parseResult.GetValue(node) ?? "node"),
+                    parseResult.GetValue(documents) ?? []
+                )
         );
         return command;
     }
 
     internal static int Run(
         string target,
-        string manifestPath,
+        string? manifestPath,
         string outDir,
         bool check,
         string? specifier,
@@ -109,6 +125,10 @@ internal static class ClientCommand
                 throw new InvalidOperationException(
                     $"--specifier '{specifier}' is not an npm package name with an optional subpath."
                 );
+            if (manifestPath is null)
+                throw new InvalidOperationException(
+                    "Name the host's client manifest with --manifest, or the operations schema with --operations."
+                );
             if (!File.Exists(manifestPath))
                 throw new InvalidOperationException($"No client manifest at {manifestPath}.");
             IReadOnlyList<ClientDocumentFile>? documentFiles = null;
@@ -117,27 +137,10 @@ internal static class ClientCommand
             {
                 var cwd = Directory.GetCurrentDirectory();
                 // The schema written for the editor is a .graphql file too: never read it as a document.
-                var editorSchema = Path.GetFullPath(
-                    Path.Combine(outDir, ClientGenerator.EditorSchemaFileName)
+                documentFiles = ReadDocuments(
+                    documentGlobs,
+                    Path.GetFullPath(Path.Combine(outDir, ClientGenerator.EditorSchemaFileName))
                 );
-                var found = new SortedSet<string>(StringComparer.Ordinal);
-                foreach (var glob in documentGlobs)
-                {
-                    var matches = Glob.Files(cwd, glob)
-                        .Where(f => !string.Equals(f, editorSchema, StringComparison.Ordinal))
-                        .ToList();
-                    if (matches.Count == 0)
-                        throw new InvalidOperationException(
-                            $"--documents '{glob}' matches no file under {cwd}."
-                        );
-                    found.UnionWith(matches);
-                }
-                documentFiles = found
-                    .Select(path => new ClientDocumentFile(
-                        Path.GetRelativePath(cwd, path).Replace('\\', '/'),
-                        File.ReadAllText(path)
-                    ))
-                    .ToList();
                 editorGlobs = documentGlobs.Select(g => Glob.RelativeTo(cwd, outDir, g)).ToList();
             }
             var options = new ClientGenerateOptions(
@@ -179,5 +182,90 @@ internal static class ClientCommand
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    internal static int RunOperations(
+        string? manifestPath,
+        string schemaPath,
+        string outDir,
+        bool check,
+        IReadOnlyList<string> documentGlobs
+    )
+    {
+        try
+        {
+            if (manifestPath is not null)
+                throw new InvalidOperationException(
+                    "--operations generates the operations client, which reads no manifest; leave out --manifest."
+                );
+            if (documentGlobs.Count == 0)
+                throw new InvalidOperationException(
+                    "--operations needs the documents it generates functions for: name them with --documents."
+                );
+            if (!File.Exists(schemaPath))
+                throw new InvalidOperationException($"No operations schema at {schemaPath}.");
+            var options = new OperationsGenerateOptions(
+                File.ReadAllText(schemaPath),
+                ReadDocuments(documentGlobs, Path.GetFullPath(schemaPath))
+            );
+
+            if (check)
+            {
+                var drift = ClientGenerator.Check(options, outDir);
+                foreach (var file in drift)
+                    Console.WriteLine(
+                        $"  {(file.Status == DriftStatus.Missing ? "MISSING" : "DRIFT"), -8}{file.Path}"
+                    );
+                if (drift.Count == 0)
+                {
+                    Console.WriteLine($"The client in {outDir} is what the documents generate.");
+                    return 0;
+                }
+                Console.Error.WriteLine(
+                    "The client is stale: run 'trax client --operations' again after changing a document or the schema."
+                );
+                return 1;
+            }
+
+            var written = ClientGenerator.Write(options, outDir);
+            foreach (var file in written)
+                Console.WriteLine($"  {file.Path}");
+            Console.WriteLine($"Generated {written.Count} file(s) in {outDir}.");
+            return 0;
+        }
+        catch (Exception ex)
+            when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    // The .graphql files the globs match under the current directory, by their path relative to it, never `exclude`
+    // (a schema written as a .graphql file a glob would match too).
+    private static List<ClientDocumentFile> ReadDocuments(
+        IReadOnlyList<string> globs,
+        string exclude
+    )
+    {
+        var cwd = Directory.GetCurrentDirectory();
+        var found = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var glob in globs)
+        {
+            var matches = Glob.Files(cwd, glob)
+                .Where(f => !string.Equals(f, exclude, StringComparison.Ordinal))
+                .ToList();
+            if (matches.Count == 0)
+                throw new InvalidOperationException(
+                    $"--documents '{glob}' matches no file under {cwd}."
+                );
+            found.UnionWith(matches);
+        }
+        return found
+            .Select(path => new ClientDocumentFile(
+                Path.GetRelativePath(cwd, path).Replace('\\', '/'),
+                File.ReadAllText(path)
+            ))
+            .ToList();
     }
 }

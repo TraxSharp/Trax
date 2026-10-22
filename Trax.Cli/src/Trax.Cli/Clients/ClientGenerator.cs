@@ -233,9 +233,11 @@ internal sealed partial class ClientGenerator
     /// folder is not entered. A link at any path the client writes, or at a folder on the way there, is refused
     /// before anything is written.
     /// </summary>
-    public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir)
+    public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir) =>
+        Write(Render(options), outDir);
+
+    private static IReadOnlyList<ClientFile> Write(IReadOnlyList<ClientFile> files, string outDir)
     {
-        var files = Render(options);
         RefuseLinks(files, outDir);
         foreach (var stale in Stale(files, outDir))
         {
@@ -304,9 +306,11 @@ internal sealed partial class ClientGenerator
     /// missing or changed, and a file this generator wrote that would no longer be written. Line endings are not a
     /// difference, so a checkout that writes CRLF passes.
     /// </summary>
-    public IReadOnlyList<ClientDrift> Check(ClientGenerateOptions options, string outDir)
+    public IReadOnlyList<ClientDrift> Check(ClientGenerateOptions options, string outDir) =>
+        Check(Render(options), outDir);
+
+    private static IReadOnlyList<ClientDrift> Check(IReadOnlyList<ClientFile> files, string outDir)
     {
-        var files = Render(options);
         RefuseLinks(files, outDir);
         var drift = new List<ClientDrift>();
         foreach (var file in files)
@@ -409,7 +413,7 @@ internal sealed partial class ClientGenerator
         var first = FirstLine(path);
         if (first is null)
             return false;
-        if (first == ClientHeaderLine)
+        if (first == ClientHeaderLine || first == OperationsHeaderLine)
             return true;
         return relative.Split('/') is [var id, var name]
             && served.Contains(id)

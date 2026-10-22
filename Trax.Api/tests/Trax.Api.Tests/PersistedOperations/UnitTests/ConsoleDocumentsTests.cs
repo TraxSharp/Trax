@@ -65,6 +65,23 @@ public class ConsoleDocumentsTests
     }
 
     [Test]
+    public void The_host_and_trax_client_name_a_console_document_alike()
+    {
+        var cases = FixtureCases();
+        cases.Should().NotBeEmpty();
+        foreach (var (name, text, id) in cases)
+            ConsoleDocuments
+                .IdOf(name, text)
+                .Should()
+                .Be(
+                    id,
+                    "the console's generated client sends the id trax client gives the text, which the host must "
+                        + "give it too, per "
+                        + Adr
+                );
+    }
+
+    [Test]
     public void A_console_id_is_reserved_and_reads_back_to_its_slot_and_name()
     {
         var id = ConsoleDocuments.IdOf(
@@ -142,5 +159,42 @@ public class ConsoleDocumentsTests
 
         served.Select(d => d.Name).Should().Equal("Hosts");
         skipped.Should().ContainSingle().Which.Should().StartWith("'Gone'");
+    }
+
+    // The cases both this suite and trax client's read, from the source tree above the test's directory.
+    private static List<(string Name, string Text, string Id)> FixtureCases()
+    {
+        for (
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            dir is not null;
+            dir = dir.Parent
+        )
+        {
+            var candidate = System.IO.Path.Combine(
+                dir.FullName,
+                "Trax.Api",
+                "tests",
+                "Trax.Api.Tests",
+                "PersistedOperations",
+                "Fixtures",
+                "console-document-ids.json"
+            );
+            if (!File.Exists(candidate))
+                continue;
+            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(candidate));
+            return json
+                .RootElement.GetProperty("cases")
+                .EnumerateArray()
+                .Select(c =>
+                    (
+                        c.GetProperty("name").GetString()!,
+                        c.GetProperty("text").GetString()!,
+                        c.GetProperty("id").GetString()!
+                    )
+                )
+                .ToList();
+        }
+        Assert.Fail("console-document-ids.json not found above the test's directory.");
+        return [];
     }
 }
