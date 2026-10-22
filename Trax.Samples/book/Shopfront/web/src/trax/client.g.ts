@@ -19,11 +19,6 @@ export interface TraxConnection {
    * with the headers, so the two cannot disagree for a render.
    */
   user?: string;
-  /**
-   * Lets a machine's server send to an absolute `http:` url on a host that is not loopback. Only for a trusted
-   * network: the headers would travel in cleartext. Off by default, and a machine's server refuses such a url.
-   */
-  allowInsecureTransport?: boolean;
 }
 
 let connection: TraxConnection | null = null;
