@@ -38,7 +38,7 @@ internal sealed class MachineInstanceWindow : Window
         _context = context;
         _machine = machine;
         _instance = instance;
-        Title = $"{machine.Name} {instance.Id}";
+        Title = TerminalText.Line($"{machine.Name} {instance.Id}");
         _header = new Label { Width = Dim.Fill(), Text = "Reading..." };
         _list = new KeyedList
         {
@@ -141,7 +141,7 @@ internal sealed class MachineInstanceWindow : Window
             message =>
             {
                 if (load == Volatile.Read(ref _loading))
-                    _header.Text = message;
+                    _header.Text = TerminalText.Line(message);
             }
         );
     }
@@ -161,23 +161,25 @@ internal sealed class MachineInstanceWindow : Window
         {
             _header.Text = detail.Succeeded
                 ? "The instance is gone."
-                : $"Refused: {detail.Message}";
+                : $"Refused: {TerminalText.Line(detail.Message)}";
             return;
         }
-        _header.Text =
+        _header.Text = TerminalText.Line(
             $"{now.State}  ·  version {now.Version}  ·  since {Wire.Time(now.InStateSince)}"
-            + (now.DueAt is { } due ? $"  ·  timer due {Wire.Time(due)}" : "")
-            + (
-                now.Stuck ? "  ·  STUCK"
-                : now.Overdue ? "  ·  overdue"
-                : ""
-            )
-            + "  ·  j/k move  H/L sideways  r across/down  v trace a run  q close";
+                + (now.DueAt is { } due ? $"  ·  timer due {Wire.Time(due)}" : "")
+                + (
+                    now.Stuck ? "  ·  STUCK"
+                    : now.Overdue ? "  ·  overdue"
+                    : ""
+                )
+                + "  ·  j/k move  H/L sideways  r across/down  v trace a run  q close"
+        );
         _lines.Clear();
         _runs.Clear();
+        // Every line carries the host's names; none of them reaches the terminal as anything but text.
         void Line(string text, long? run = null)
         {
-            _lines.Add(text);
+            _lines.Add(TerminalText.Line(text));
             _runs.Add(run);
         }
         foreach (var line in MachineGraph.Lines(_machine, now.State, _context.VerticalGraphs))
@@ -242,7 +244,7 @@ internal sealed class MachineInstanceWindow : Window
                     if (_last is { } shown)
                         Show(shown.Detail, shown.History);
                 },
-                message => _header.Text = message
+                message => _header.Text = TerminalText.Line(message)
             );
             return true;
         }

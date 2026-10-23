@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 
 namespace Trax.Api.Console.Terminal.Machines;
@@ -8,7 +9,8 @@ namespace Trax.Api.Console.Terminal.Machines;
 /// A machine's graph as boxes and arrows (<see cref="GraphLayout"/>), from what <c>Machines</c> answers: a transition
 /// taken by a command is labelled with it, one taken by the outcome of the train its state invokes with
 /// <c>on</c> and the outcome, and one a timer takes with <c>after</c> and its delay. What a state invokes or spawns is
-/// in the legend under the graph. A machine's drawing is kept for each current state and direction it was drawn with,
+/// in the legend under the graph. Every name and label is the host's text, written with nothing in it a terminal would
+/// act on (<see cref="TerminalText"/>). A machine's drawing is kept for each current state and direction it was drawn with,
 /// for as long as the machine's record is, so a window read again on every change does not lay it out again.
 /// </summary>
 internal static class MachineGraph
@@ -34,28 +36,30 @@ internal static class MachineGraph
     )
     {
         if (machine.GraphUnavailableReason is { } reason)
-            return [$"No graph: {reason}"];
+            return [$"No graph: {TerminalText.Line(reason)}"];
         var states = machine
             .States.Select(s => new GraphState(
-                s.Name,
+                TerminalText.Line(s.Name),
                 s.IsInitial || s.Name == machine.InitialState,
                 s.IsFinal,
-                Note(s)
+                Note(s) is { } note ? TerminalText.Line(note) : null
             ))
             .ToList();
         var edges = machine
             .Transitions.Select(t => new GraphEdge(
-                t.From,
-                t.To,
-                t.Kind switch
-                {
-                    MachineTransitionKind.Timer => $"after {Delay(t.After) ?? t.Command}",
-                    // An outcome is named after the state that invokes the train (Ordered.done): the line leaves
-                    // that state already.
-                    MachineTransitionKind.Outcome =>
-                        $"on {(t.Command.StartsWith(t.From + ".", StringComparison.Ordinal) ? t.Command[(t.From.Length + 1)..] : t.Command)}",
-                    _ => t.Command,
-                }
+                TerminalText.Line(t.From),
+                TerminalText.Line(t.To),
+                TerminalText.Line(
+                    t.Kind switch
+                    {
+                        MachineTransitionKind.Timer => $"after {Delay(t.After) ?? t.Command}",
+                        // An outcome is named after the state that invokes the train (Ordered.done): the line leaves
+                        // that state already.
+                        MachineTransitionKind.Outcome =>
+                            $"on {(t.Command.StartsWith(t.From + ".", StringComparison.Ordinal) ? t.Command[(t.From.Length + 1)..] : t.Command)}",
+                        _ => t.Command,
+                    }
+                )
             ))
             .ToList();
         foreach (var timer in machine.Timers)
@@ -66,12 +70,19 @@ internal static class MachineGraph
             )
                 edges.Add(
                     new GraphEdge(
-                        timer.State,
-                        timer.Target,
-                        $"after {Delay(timer.After) ?? timer.Field ?? timer.Command}"
+                        TerminalText.Line(timer.State),
+                        TerminalText.Line(timer.Target),
+                        TerminalText.Line(
+                            $"after {Delay(timer.After) ?? timer.Field ?? timer.Command}"
+                        )
                     )
                 );
-        return GraphLayout.Render(states, edges, current, vertical);
+        return GraphLayout.Render(
+            states,
+            edges,
+            current is null ? null : TerminalText.Line(current),
+            vertical
+        );
     }
 
     // An ISO 8601 duration as the console writes a delay: PT30M is 30m, P1DT2H is 1d2h.

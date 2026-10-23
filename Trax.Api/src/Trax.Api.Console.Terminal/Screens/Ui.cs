@@ -2,6 +2,7 @@ using Terminal.Gui.App;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Lists;
 
 namespace Trax.Api.Console.Terminal.Screens;
 
@@ -58,14 +59,15 @@ internal static class Ui
     {
         var dialog = new Dialog
         {
-            Title = title,
+            Title = TerminalText.Line(title),
             Width = Dim.Percent(60),
             Height = Dim.Auto(),
         };
         dialog.Add(
             new Label
             {
-                Text = message,
+                // The message may quote the host (a refusal): its lines are kept, anything else it carries is not.
+                Text = TerminalText.Block(message.Replace("\r\n", "\n")),
                 X = 1,
                 Y = 1,
                 Width = Dim.Fill(1),
@@ -120,7 +122,7 @@ internal static class Ui
     {
         var dialog = new Dialog
         {
-            Title = title,
+            Title = TerminalText.Line(title),
             Width = Dim.Percent(70),
             Height = Dim.Auto(),
         };
@@ -178,12 +180,12 @@ internal static class Ui
 
     /// <summary>
     /// A read-only, scrolling list of text lines. A line with breaks in it is several, so a stack trace reads as
-    /// one.
+    /// one; anything else in it the terminal would act on is replaced.
     /// </summary>
     public static ListView Lines(IEnumerable<string> lines)
     {
         var items = new System.Collections.ObjectModel.ObservableCollection<string>(
-            lines.SelectMany(l => l.Replace("\r\n", "\n").Split('\n'))
+            lines.SelectMany(l => TerminalText.Block(l.Replace("\r\n", "\n")).Split('\n'))
         );
         return new ListView { Source = new ListWrapper<string>(items) };
     }
@@ -193,7 +195,7 @@ internal static class Ui
     {
         var dialog = new Dialog
         {
-            Title = title,
+            Title = TerminalText.Line(title),
             Width = Dim.Percent(90),
             Height = Dim.Percent(85),
         };

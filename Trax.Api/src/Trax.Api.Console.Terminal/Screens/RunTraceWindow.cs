@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Trace;
 
 namespace Trax.Api.Console.Terminal.Screens;
@@ -54,7 +55,9 @@ internal sealed class RunTraceWindow : Window
                 step => context.App.Invoke(() => Upsert(step)),
                 () => context.App.Invoke(Load),
                 reason =>
-                    context.App.Invoke(() => _header.Text = $"{Summary()}  ·  not live: {reason}")
+                    context.App.Invoke(() =>
+                        _header.Text = $"{Summary()}  ·  not live: {TerminalText.Line(reason)}"
+                    )
             );
             Load();
         };
@@ -83,7 +86,7 @@ internal sealed class RunTraceWindow : Window
                 _arrived.Clear();
                 if (answer.Data is not { } entries)
                 {
-                    _header.Text = $"Refused: {answer.Message}";
+                    _header.Text = $"Refused: {TerminalText.Line(answer.Message)}";
                     return;
                 }
                 _entries.Clear();
@@ -98,7 +101,7 @@ internal sealed class RunTraceWindow : Window
                     return;
                 _reading = false;
                 _arrived.Clear();
-                _header.Text = message;
+                _header.Text = TerminalText.Line(message);
             }
         );
     }
@@ -132,9 +135,11 @@ internal sealed class RunTraceWindow : Window
         _text.Clear();
         foreach (var entry in _entries)
             _text.Add(
-                entry.Kind == TraceKind.Log
-                    ? $"{"", 19}  {entry.Text}"
-                    : $"{Lists.Wire.Time(entry.At)}  {entry.Text}"
+                TerminalText.Line(
+                    entry.Kind == TraceKind.Log
+                        ? $"{"", 19}  {entry.Text}"
+                        : $"{Wire.Time(entry.At)}  {entry.Text}"
+                )
             );
         _header.Text = Summary();
         if (_lines.SelectedItem is null && _text.Count > 0)

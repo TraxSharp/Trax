@@ -122,14 +122,15 @@ internal sealed class MachinesScreen : View
             {
                 if (answer.Data?.Operations?.Machines is not { } machines)
                 {
-                    _instancesHeader.Text = $"Refused: {answer.Message ?? "no machines namespace"}";
+                    _instancesHeader.Text =
+                        $"Refused: {TerminalText.Line(answer.Message ?? "no machines namespace")}";
                     return;
                 }
                 var selected = Selected?.Name;
                 _machines = machines.Where(m => !m.SystemOwned).OrderBy(m => m.Name).ToList();
                 _machineNames.Clear();
                 foreach (var machine in _machines)
-                    _machineNames.Add($"{machine.Name} v{machine.Version}");
+                    _machineNames.Add(TerminalText.Line($"{machine.Name} v{machine.Version}"));
                 if (_machines.Count == 0)
                 {
                     _graph.Clear();
@@ -140,7 +141,7 @@ internal sealed class MachinesScreen : View
                 _machineList.SelectedItem = at;
                 ShowMachine();
             },
-            message => _instancesHeader.Text = message
+            message => _instancesHeader.Text = TerminalText.Line(message)
         );
 
     private void ShowMachine()
@@ -170,7 +171,7 @@ internal sealed class MachinesScreen : View
             message =>
             {
                 if (draw == Volatile.Read(ref _drawing))
-                    _graph.Add(message);
+                    _graph.Add(TerminalText.Line(message));
             }
         );
     }
@@ -208,20 +209,26 @@ internal sealed class MachinesScreen : View
                     return;
                 if (answer.Data?.Operations?.MachineInstances is not { } page)
                 {
-                    _instancesHeader.Text = $"Refused: {answer.Message}";
+                    _instancesHeader.Text = $"Refused: {TerminalText.Line(answer.Message)}";
                     return;
                 }
                 _instances = page.Items;
                 _instanceLines.Clear();
                 foreach (var i in page.Items)
                     _instanceLines.Add(
-                        $"{i.State, -20} {Wire.Name(i.OwnerKind).ToLowerInvariant(), -6} {i.Id}  since {Wire.Time(i.InStateSince)}"
-                            + (
-                                i.Stuck ? "  STUCK"
-                                : i.Overdue ? "  overdue"
-                                : ""
-                            )
-                            + (i.WaitingOn?.ExecutionId is { } run ? $"  waits on run {run}" : "")
+                        TerminalText.Line(
+                            $"{i.State, -20} {Wire.Name(i.OwnerKind).ToLowerInvariant(), -6} {i.Id}  since {Wire.Time(i.InStateSince)}"
+                                + (
+                                    i.Stuck ? "  STUCK"
+                                    : i.Overdue ? "  overdue"
+                                    : ""
+                                )
+                                + (
+                                    i.WaitingOn?.ExecutionId is { } run
+                                        ? $"  waits on run {run}"
+                                        : ""
+                                )
+                        )
                     );
                 _instancesHeader.Text =
                     $"{page.TotalCount}{(page.IsCountCapped ? "+" : "")} instances{(stuck ? " stuck" : "")}"
@@ -230,7 +237,7 @@ internal sealed class MachinesScreen : View
             message =>
             {
                 if (load == Volatile.Read(ref _loading))
-                    _instancesHeader.Text = message;
+                    _instancesHeader.Text = TerminalText.Line(message);
             }
         );
     }

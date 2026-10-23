@@ -67,7 +67,7 @@ internal sealed class MainWindow : Window
         {
             Y = Pos.Bottom(feed),
             Width = Dim.Fill(),
-            Text = banner,
+            Text = TerminalText.Line(banner),
         };
         var bar = new StatusBar([
             new Shortcut(Key.F1, "Keys", ShowKeys),
@@ -76,7 +76,8 @@ internal sealed class MainWindow : Window
         ]);
         Add(_tabs, feed, _status, bar);
 
-        context.Status = text => _status.Text = text;
+        // The status line carries the host's words (an action's outcome, a refusal): one line, nothing it acts on.
+        context.Status = text => _status.Text = TerminalText.Line(text);
         context.OpenTrace = OpenTrace;
         context.Tab = MoveTab;
         context.Quit = () => _context.App.RequestStop();
@@ -91,7 +92,7 @@ internal sealed class MainWindow : Window
                 return;
             _started = true;
             _lists[0].SetFocus();
-            _status.Text = $"{banner}  ·  {_lists[0].Help}";
+            _status.Text = TerminalText.Line($"{banner}  ·  {_lists[0].Help}");
             RefreshAll();
             _machines.Follow();
             // The feed starts once the host has named its own trains, so none of them slips in first.
@@ -238,13 +239,15 @@ internal sealed class MainWindow : Window
                     if (_adminTrains.Contains(change.TrainName))
                         return;
                     _feed.Add(
-                        $"{Wire.Time(change.Timestamp)}  {change.MetadataId, 8}  {change.TrainName}  "
-                            + $"{Wire.Name(change.TrainState)}"
-                            + (
-                                change.FailureReason is { } reason
-                                    ? $"  {change.FailureJunction}: {reason}"
-                                    : ""
-                            )
+                        TerminalText.Line(
+                            $"{Wire.Time(change.Timestamp)}  {change.MetadataId, 8}  {change.TrainName}  "
+                                + $"{Wire.Name(change.TrainState)}"
+                                + (
+                                    change.FailureReason is { } reason
+                                        ? $"  {change.FailureJunction}: {reason}"
+                                        : ""
+                                )
+                        )
                     );
                     while (_feed.Count > 100)
                         _feed.RemoveAt(0);
@@ -259,16 +262,19 @@ internal sealed class MainWindow : Window
         switch (e)
         {
             case TraxStreamEvent<T>.Interrupted interrupted:
-                _status.Text = $"Live updates interrupted ({interrupted.Reason}); reconnecting.";
+                _status.Text = TerminalText.Line(
+                    $"Live updates interrupted ({interrupted.Reason}); reconnecting."
+                );
                 break;
             case TraxStreamEvent<T>.Ended ended:
-                _status.Text =
+                _status.Text = TerminalText.Line(
                     "Live updates stopped: "
-                    + (
-                        ended.Failure?.Message
-                        ?? string.Join("; ", ended.Errors.Select(x => x.Message))
-                    )
-                    + ". F5 reads the lists again.";
+                        + (
+                            ended.Failure?.Message
+                            ?? string.Join("; ", ended.Errors.Select(x => x.Message))
+                        )
+                        + ". F5 reads the lists again."
+                );
                 break;
         }
     }

@@ -113,13 +113,13 @@ internal sealed class ListScreen : View
                     return;
                 if (answer.Data is not { } page)
                 {
-                    _header.Text = $"Refused: {answer.Message}";
+                    _header.Text = $"Refused: {TerminalText.Line(answer.Message)}";
                     return;
                 }
                 _pageFilters = query.Filters;
                 Show(page);
             },
-            message => _header.Text = message
+            message => _header.Text = TerminalText.Line(message)
         );
     }
 
@@ -320,7 +320,9 @@ internal sealed class ListScreen : View
                 var width = fields.Count == 0 ? 0 : fields.Max(f => f.Label.Length);
                 _context.Prompts.Show(
                     $"{List.Title} {row.Id}",
-                    fields.Select(f => $"{f.Label.PadRight(width)}  {f.Value}")
+                    fields.Select(f =>
+                        $"{f.Label.PadRight(width)}  {TerminalText.Block(f.Value.Replace("\r\n", "\n"))}"
+                    )
                 );
             },
             message => _context.Status(message)
@@ -508,8 +510,11 @@ internal sealed class ListScreen : View
 
         public int Rows => rows.Count;
 
+        // A cell is the host's text: written on one line, with nothing in it the terminal would act on.
         public object this[int row, int col] =>
-            col == 0 ? (marked.Contains(rows[row].Id) ? "*" : " ") : rows[row].Cells[col - 1];
+            col == 0
+                ? (marked.Contains(rows[row].Id) ? "*" : " ")
+                : TerminalText.Line(rows[row].Cells[col - 1]);
     }
 }
 
