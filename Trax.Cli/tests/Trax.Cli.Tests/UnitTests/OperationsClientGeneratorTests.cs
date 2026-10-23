@@ -729,6 +729,63 @@ public class OperationsClientGeneratorTests
             );
     }
 
+    [Test]
+    public void A_field_named_like_a_member_every_record_has_is_renamed()
+    {
+        string[] members =
+        [
+            "clone",
+            "deconstruct",
+            "equalityContract",
+            "equals",
+            "finalize",
+            "getHashCode",
+            "getType",
+            "memberwiseClone",
+            "printMembers",
+            "referenceEquals",
+            "toString",
+        ];
+        var schema =
+            Schema
+            + "\ninput Odd {\n"
+            + string.Concat(members.Select(m => $"  {m}: Int\n"))
+            + "}\n";
+        var selection = string.Join(" ", members.Select(m => $"{m}: id"));
+        var files = ClientGenerator.RenderCSharp(
+            new OperationsGenerateOptions(
+                schema,
+                [
+                    new(
+                        "src/graphql/Odd.graphql",
+                        $"query Odd {{ operations {{ run(id: 1) {{ {selection} }} }} }}"
+                    ),
+                ]
+            ),
+            ClientGenerator.DefaultOperationsNamespace
+        );
+
+        foreach (var member in members)
+        {
+            var property = char.ToUpperInvariant(member[0]) + member[1..] + "Value";
+            Text(files, "Types.g.cs")
+                .Should()
+                .Contain(
+                    $"    [{Json}JsonPropertyName(\"{member}\")]\n    public {Client}Optional<int?> {property} {{ get; init; }}"
+                );
+            Text(files, "Documents/Odd.g.cs")
+                .Should()
+                .Contain(
+                    $"    [{Json}JsonPropertyName(\"{member}\")]\n    public required long {property} {{ get; init; }}"
+                );
+        }
+        CompileCSharp(files, out _)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty();
+    }
+
     [TestCase("rust", null, "--lang 'rust' is not one trax client writes")]
     [TestCase(null, "My.App", "give it with --lang csharp")]
     [TestCase("csharp", "My.class", "is not a C# namespace")]

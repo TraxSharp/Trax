@@ -655,11 +655,29 @@ internal sealed partial class ClientGenerator
             return char.ToUpperInvariant(clean[0]) + clean[1..];
         }
 
-        // A property: the type name of the key, with Value after it when it would take its record's own name.
+        // The members a record declares or inherits whatever its fields are: a property of one of these names would
+        // clash with it (CS0102) or hide it (CS0108).
+        private static readonly HashSet<string> RecordMembers = new(StringComparer.Ordinal)
+        {
+            "Clone",
+            "Deconstruct",
+            "EqualityContract",
+            "Equals",
+            "Finalize",
+            "GetHashCode",
+            "GetType",
+            "MemberwiseClone",
+            "PrintMembers",
+            "ReferenceEquals",
+            "ToString",
+        };
+
+        // A property: the type name of the key, with Value after it when it would take its record's own name or one
+        // of the members every record has.
         public static string Member(string key, string record)
         {
             var name = TypeName(key);
-            return name == record ? name + "Value" : name;
+            return name == record || RecordMembers.Contains(name) ? name + "Value" : name;
         }
 
         // An enum member: SCREAMING_CASE as PascalCase (LAST24_HOURS is Last24Hours), anything else as a type name.
