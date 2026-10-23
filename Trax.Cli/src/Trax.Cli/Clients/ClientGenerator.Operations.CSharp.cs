@@ -176,7 +176,7 @@ internal sealed partial class ClientGenerator
             var members = new Names(rename: Rename);
             sb.Append(Summary(@enum.Description?.Value.ToString(), ""));
             sb.Append(
-                $"[{Serialization}JsonConverter(typeof({Serialization}JsonStringEnumConverter<{name}>))]\n"
+                $"[{Serialization}JsonConverter(typeof({Client}TraxEnumConverter<{name}>))]\n"
             );
             sb.Append($"internal enum {name}\n{{\n");
             foreach (var value in @enum.Values?.Items ?? [])

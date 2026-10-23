@@ -107,6 +107,8 @@ public readonly record struct Optional<T>
 | `Optional<T>` | A variable or input field that may be left out, which GraphQL tells apart from null. `default` is left out, and the host uses the argument's default or leaves the value as it is; any value converts to one that is sent, null included, which clears it. `HasValue` says whether it is sent and `Value` holds it. |
 | `TraxJson.Options` | The web defaults (camelCase, case-insensitive reads), with every `Optional<T>` property that holds no value left out of the JSON. It reads types by reflection. A `TraxClient` leaves an unset `Optional<T>` out with any options given in `TraxClientOptions.Json` too, a source-generated context included; only JSON written outside the client, with options it never saw, carries an unset one as `default(T)`. |
 | `OptionalJsonConverterFactory` | The converter `Optional<T>` names in its `[JsonConverter]`, public so a source-generated context in another assembly can create it. Nothing calls it directly. |
+| `TraxEnumConverter<TEnum>` | The converter a generated enum names: reads and writes each member by its `JsonStringEnumMemberName`. A name the enum lacks, which a newer host may send, is read as a value no member holds instead of failing the answer, and written back as that name. It remembers up to 256 such names per enum and refuses the answer past that. |
+| `TraxEnum` | `IsUnknown(value)`: whether a value is none of the enum's members, a name the host sent that this client lacks. |
 
 ### Answers
 

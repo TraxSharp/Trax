@@ -113,7 +113,7 @@ internal sealed record BulkOperationFilterInput
 }
 
 /// <summary>What a bulk operation does to each id it matched.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<BulkOperationKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<BulkOperationKind>))]
 internal enum BulkOperationKind
 {
     /// <summary>Requests cancellation of each run, as cancelExecutions does.</summary>
@@ -137,7 +137,7 @@ internal enum BulkOperationKind
 }
 
 /// <summary>Where a bulk operation is.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<BulkOperationStatus>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<BulkOperationStatus>))]
 internal enum BulkOperationStatus
 {
     /// <summary>Batches are still running.</summary>
@@ -155,7 +155,7 @@ internal enum BulkOperationStatus
 }
 
 /// <summary>The kind of step a train's junction chain declares.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<ChainStepKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<ChainStepKind>))]
 internal enum ChainStepKind
 {
     /// <summary>A junction resolved by its concrete type.</summary>
@@ -197,7 +197,7 @@ internal enum ChainStepKind
 }
 
 /// <summary>Identifies which slice of scheduler/admin data changed. Carried by ITraxChangeSignal so a subscriber can refetch just the affected view instead of polling. The signal names the domain only, never row data.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<ChangeDomain>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<ChangeDomain>))]
 internal enum ChangeDomain
 {
     /// <summary>The work queue (entries queued, dispatched, or cancelled).</summary>
@@ -220,7 +220,7 @@ internal enum ChangeDomain
     Execution,
 }
 
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<DayOfWeek>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<DayOfWeek>))]
 internal enum DayOfWeek
 {
     [global::System.Text.Json.Serialization.JsonStringEnumMemberName("SUNDAY")]
@@ -253,7 +253,7 @@ internal sealed record DeactivatePersistedOperationInput
 }
 
 /// <summary>Where a DeadLetterRequeueJob is.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<DeadLetterRequeueJobStatus>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<DeadLetterRequeueJobStatus>))]
 internal enum DeadLetterRequeueJobStatus
 {
     /// <summary>The fold is still requeueing dead letters.</summary>
@@ -271,7 +271,7 @@ internal enum DeadLetterRequeueJobStatus
 }
 
 /// <summary>Represents the resolution status of a dead-lettered job.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<DeadLetterStatus>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<DeadLetterStatus>))]
 internal enum DeadLetterStatus
 {
     /// <summary>The dead letter has not been addressed and requires manual intervention.</summary>
@@ -286,7 +286,7 @@ internal enum DeadLetterStatus
 }
 
 /// <summary>How a setting is edited.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<EffectFieldKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<EffectFieldKind>))]
 internal enum EffectFieldKind
 {
     /// <summary>A switch: true or false.</summary>
@@ -316,7 +316,7 @@ internal sealed record EffectSettingValueInput
 }
 
 /// <summary>Defines the kind of exclusion window.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<ExclusionType>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<ExclusionType>))]
 internal enum ExclusionType
 {
     /// <summary>Exclude specific days of the week (e.g., weekends).</summary>
@@ -334,7 +334,7 @@ internal enum ExclusionType
 }
 
 /// <summary>What kind of failure a train hit, so a consumer can decide whether to retry, rebase, or give up without matching on exception messages at every call site.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<FailureClass>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<FailureClass>))]
 internal enum FailureClass
 {
     /// <summary>No classifier was registered, or it did not recognise this failure. Means "decide as you would have before this existed": the default, so behaviour is unchanged until something deliberately acts on a classification.</summary>
@@ -352,7 +352,7 @@ internal enum FailureClass
 }
 
 /// <summary>What happened to a step of a run.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<JunctionEventType>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<JunctionEventType>))]
 internal enum JunctionEventType
 {
     /// <summary>A junction started.</summary>
@@ -379,7 +379,7 @@ internal enum JunctionEventType
 }
 
 /// <summary>What one step of a run's timeline is: a junction that ran, a question a routing step asked, or the track a routing step took. Carried by junction events and stored in trax.junction_run.kind.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<JunctionRunKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<JunctionRunKind>))]
 internal enum JunctionRunKind
 {
     /// <summary>An EffectJunction that ran.</summary>
@@ -400,7 +400,7 @@ internal enum JunctionRunKind
 }
 
 /// <summary>Where one step of a run's timeline stands. Carried by junction events and stored in trax.junction_run.state.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<JunctionRunState>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<JunctionRunState>))]
 internal enum JunctionRunState
 {
     /// <summary>The junction has started and not yet returned.</summary>
@@ -417,7 +417,7 @@ internal enum JunctionRunState
     Cancelled,
 }
 
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<LogLevel>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<LogLevel>))]
 internal enum LogLevel
 {
     [global::System.Text.Json.Serialization.JsonStringEnumMemberName("TRACE")]
@@ -449,7 +449,7 @@ internal sealed record LogLevelSettingInput
 }
 
 /// <summary>What a LookupMatch is.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<LookupKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<LookupKind>))]
 internal enum LookupKind
 {
     /// <summary>A run (a metadata row); its id is the run's id.</summary>
@@ -473,7 +473,7 @@ internal enum LookupKind
 }
 
 /// <summary>What CancellationToken) did, or why it did nothing. The first three are successes; the rest are refusals and change nothing.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<MachineInstanceCancelOutcome>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<MachineInstanceCancelOutcome>))]
 internal enum MachineInstanceCancelOutcome
 {
     /// <summary>The live run was still queued and is cancelled before it started, and this call moved the instance through its OnCancelled edge.</summary>
@@ -500,7 +500,7 @@ internal enum MachineInstanceCancelOutcome
 }
 
 /// <summary>What takes a transition.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<MachineTransitionKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<MachineTransitionKind>))]
 internal enum MachineTransitionKind
 {
     /// <summary>A command a caller sends.</summary>
@@ -515,7 +515,7 @@ internal enum MachineTransitionKind
 }
 
 /// <summary>The window a MetricSeries covers, and so its bucket size.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<MetricSeriesRange>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<MetricSeriesRange>))]
 internal enum MetricSeriesRange
 {
     /// <summary>The last hour, 60 buckets of one minute.</summary>
@@ -533,7 +533,7 @@ internal enum MetricSeriesRange
 }
 
 /// <summary>What a MetricSeries counts the runs of.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<MetricSeriesScope>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<MetricSeriesScope>))]
 internal enum MetricSeriesScope
 {
     /// <summary>Every run of one train, named by its interface FullName.</summary>
@@ -548,7 +548,7 @@ internal enum MetricSeriesScope
 }
 
 /// <summary>Selects the granularity of the executions-over-time series in DashboardMetrics. The other series in the dashboard metrics block (throughput, top failures, avg durations) are always over the last 7 days.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<MetricsRange>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<MetricsRange>))]
 internal enum MetricsRange
 {
     /// <summary>Last 60 minutes, 60 buckets, 1 minute each.</summary>
@@ -560,7 +560,7 @@ internal enum MetricsRange
 }
 
 /// <summary>Defines how the scheduler handles missed/overdue runs for a manifest.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<MisfirePolicy>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<MisfirePolicy>))]
 internal enum MisfirePolicy
 {
     /// <summary>If overdue, fire once immediately. This is the default behavior.</summary>
@@ -615,7 +615,7 @@ internal sealed record RestorePersistedOperationInput
 }
 
 /// <summary>Where one declared node stands in a run.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<RunNodeState>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<RunNodeState>))]
 internal enum RunNodeState
 {
     /// <summary>No step was recorded for it, and nothing says it was passed over.</summary>
@@ -663,7 +663,7 @@ internal sealed record RunTrainInput
 }
 
 /// <summary>Defines how a manifest should be scheduled for execution.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<ScheduleType>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<ScheduleType>))]
 internal enum ScheduleType
 {
     /// <summary>The manifest can only be triggered manually via API or code.</summary>
@@ -690,7 +690,7 @@ internal enum ScheduleType
 }
 
 /// <summary>Who owns a state-machine draft. Stored in trax.snapshot_draft.owner_kind.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<SnapshotOwnerKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<SnapshotOwnerKind>))]
 internal enum SnapshotOwnerKind
 {
     /// <summary>A user owns the draft. Its user_key names that user, and only that user's requests reach it.</summary>
@@ -702,7 +702,7 @@ internal enum SnapshotOwnerKind
 }
 
 /// <summary>Who made one transition of a state-machine instance. Stored in trax.snapshot_transition.actor. It names a kind of actor, never a user: a user-owned instance's history does not say whose it is.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<SnapshotTransitionActor>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<SnapshotTransitionActor>))]
 internal enum SnapshotTransitionActor
 {
     /// <summary>A client acting for the owner of a user's instance, host code acting as one included.</summary>
@@ -717,7 +717,7 @@ internal enum SnapshotTransitionActor
 }
 
 /// <summary>What wrote one row of a state-machine instance's history. Stored in trax.snapshot_transition.kind.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<SnapshotTransitionKind>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<SnapshotTransitionKind>))]
 internal enum SnapshotTransitionKind
 {
     /// <summary>The instance was created: a start, a save that created a draft, or a parent spawning it.</summary>
@@ -738,7 +738,7 @@ internal enum SnapshotTransitionKind
 }
 
 /// <summary>Ordering for paginated list reads. Both directions stay keyset-safe (they page on the monotonic id index), so deep paging is O(page size) either way. Arbitrary-column sorting is intentionally not offered: it is incompatible with keyset pagination at millions of rows (it forces OFFSET scans or a full sort), which the stress suite guards against. Filter to narrow the set instead.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<SortOrder>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<SortOrder>))]
 internal enum SortOrder
 {
     /// <summary>Newest first (id descending). The default.</summary>
@@ -750,7 +750,7 @@ internal enum SortOrder
 }
 
 /// <summary>Represents the possible states of a train during its lifecycle.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<TrainState>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<TrainState>))]
 internal enum TrainState
 {
     /// <summary>The train has been created but has not yet started execution.</summary>
@@ -906,7 +906,7 @@ internal sealed record UploadPersistedOperationInput
 }
 
 /// <summary>Represents the lifecycle status of a work queue entry.</summary>
-[global::System.Text.Json.Serialization.JsonConverter(typeof(global::System.Text.Json.Serialization.JsonStringEnumConverter<WorkQueueStatus>))]
+[global::System.Text.Json.Serialization.JsonConverter(typeof(global::Trax.Client.TraxEnumConverter<WorkQueueStatus>))]
 internal enum WorkQueueStatus
 {
     /// <summary>The entry is waiting to be picked up by the JobDispatcher.</summary>

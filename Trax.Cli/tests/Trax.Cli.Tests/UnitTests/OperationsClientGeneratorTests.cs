@@ -465,7 +465,7 @@ public class OperationsClientGeneratorTests
         Text(files, "Types.g.cs")
             .Should()
             .Contain(
-                $"[{Json}JsonConverter(typeof({Json}JsonStringEnumConverter<RunState>))]\ninternal enum RunState"
+                $"[{Json}JsonConverter(typeof({Client}TraxEnumConverter<RunState>))]\ninternal enum RunState"
             )
             .And.Contain($"    [{Json}JsonStringEnumMemberName(\"RUNNING\")]\n    Running,");
     }

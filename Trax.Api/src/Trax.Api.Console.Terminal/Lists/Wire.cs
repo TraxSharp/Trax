@@ -18,7 +18,7 @@ internal static class Wire
             .Select(f => f.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name ?? f.Name)
             .ToList();
 
-    /// <summary>The name the host writes <paramref name="value"/> as.</summary>
+    /// <summary>The name the host writes <paramref name="value"/> as, one this console's enum lacks included.</summary>
     public static string Name<TEnum>(TEnum value)
         where TEnum : struct, Enum => JsonSerializer.Serialize(value, TraxJson.Options).Trim('"');
 

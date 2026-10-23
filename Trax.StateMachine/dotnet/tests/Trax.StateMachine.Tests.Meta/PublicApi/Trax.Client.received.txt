@@ -111,6 +111,18 @@ namespace Trax.Client
     {
         public TraxDocument(string Name, Trax.Client.TraxOperationKind Kind, string? Id, string Text) { }
     }
+    public static class TraxEnum
+    {
+        public static bool IsUnknown<TEnum>(TEnum value)
+            where TEnum :  struct, System.Enum { }
+    }
+    public sealed class TraxEnumConverter<[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicFields)]  TEnum> : System.Text.Json.Serialization.JsonConverter<TEnum>
+        where TEnum :  struct, System.Enum
+    {
+        public TraxEnumConverter() { }
+        public override TEnum Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, TEnum value, System.Text.Json.JsonSerializerOptions options) { }
+    }
     public sealed class TraxGraphQLError : System.IEquatable<Trax.Client.TraxGraphQLError>
     {
         public TraxGraphQLError(string Message, string? Code, System.Text.Json.Nodes.JsonArray? Path, System.Text.Json.Nodes.JsonObject? Extensions) { }

@@ -563,7 +563,7 @@ trax client --operations operations.graphql --documents 'src/graphql/*.graphql' 
 
 | File | What it holds |
 | --- | --- |
-| `Types.g.cs` | The enums and inputs the schema declares. An enum value is named in PascalCase and sent as written (`LAST24_HOURS` is `Last24Hours`). |
+| `Types.g.cs` | The enums and inputs the schema declares. An enum value is named in PascalCase and sent as written (`LAST24_HOURS` is `Last24Hours`). A value a newer host sends that the enum lacks is read rather than failing the answer, written back as the host sent it, and told apart with `TraxEnum.IsUnknown`. |
 | `Documents/<Operation>.g.cs` | `<Operation>Variables`, a record whose required variables are `required` properties and whose others are `Optional<T>`, left out of the request unless set (set to `null`, they send null); `<Operation>Result` and a record per object it selects, named by the path to it (`ExecutionsResultOperationsExecutionsItems`); `TraxOperations.<Operation>`, the document with its name, kind, id and the text the id is computed from, byte for byte; and `client.<Operation>Async(variables)` on `TraxClient`, or for a subscription `client.<Operation>(variables, onEvent)`, which returns the handle that stops it. A document with no variables takes none, and a query or mutation whose variables may all be left out can be sent without them (`client.RunsAsync()`). |
 
 Every type is `internal`: the client belongs to the app it is written into. What it takes from Trax.Client and the BCL
