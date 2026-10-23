@@ -30,7 +30,11 @@ public class RabbitMqReceiverShutdownTests
     private static RabbitMqTrainEventReceiver ReceiverWhoseConnectionIsClosedUnderIt()
     {
         var receiver = new RabbitMqTrainEventReceiver(
-            new RabbitMqBroadcasterOptions { ConnectionString = "amqp://localhost/" },
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = "amqp://localhost/",
+                SigningKey = TestBroadcastKey.Value,
+            },
             NullLogger<RabbitMqTrainEventReceiver>.Instance
         );
 

@@ -18,6 +18,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
 {
     private readonly RabbitMqBroadcasterOptions _options;
     private readonly ILogger<RabbitMqTrainEventReceiver>? _logger;
+    private readonly BroadcastMessageVerifier _verifier;
 
     private IConnection? _connection;
     private IChannel? _channel;
@@ -33,10 +34,21 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         RabbitMqBroadcasterOptions options,
         ILogger<RabbitMqTrainEventReceiver>? logger = null
     )
+        : this(options, logger, null) { }
+
+    internal RabbitMqTrainEventReceiver(
+        RabbitMqBroadcasterOptions options,
+        ILogger<RabbitMqTrainEventReceiver>? logger,
+        TimeProvider? time
+    )
     {
         _options = options;
         _logger = logger;
+        _verifier = new BroadcastMessageVerifier(options, logger, time);
     }
+
+    /// <summary>Messages dropped for a missing, wrong or stale signature. For tests.</summary>
+    internal long RefusedMessages => _verifier.Refused;
 
     /// <summary>
     /// Connects, declares the train fanout exchange, binds a new exclusive auto-delete queue to it
@@ -48,11 +60,18 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
     /// Called once per event. A delivery is acknowledged after the handler returns; if the handler
     /// or deserialization throws, the error is logged and the delivery is rejected without requeue,
     /// so that event is lost to this receiver. A body that deserializes to null is acknowledged and
-    /// skipped.
+    /// skipped. With a <see cref="RabbitMqBroadcasterOptions.SigningKey"/>, a delivery whose
+    /// signature is missing, does not match, or is older than
+    /// <see cref="RabbitMqBroadcasterOptions.MaxClockSkew"/> never reaches the handler: it is
+    /// rejected without requeue and logged, as a warning at most once a minute.
     /// </param>
     /// <param name="ct">Cancels the startup calls, and is also the token passed to every handler call.</param>
     /// <exception cref="InvalidOperationException">
-    /// <see cref="RabbitMqBroadcasterOptions.PrefetchCount"/> is 0.
+    /// <see cref="RabbitMqBroadcasterOptions.PrefetchCount"/> is 0; there is no
+    /// <see cref="RabbitMqBroadcasterOptions.SigningKey"/> and
+    /// <see cref="RabbitMqBroadcasterOptions.AllowUnsignedMessages"/> was not called, or the key is
+    /// too short; or the broker is not loopback and not <c>amqps://</c> without
+    /// <see cref="RabbitMqBroadcasterOptions.AllowInsecureTransport"/>.
     /// </exception>
     /// <remarks>
     /// Calling it again, as <c>TrainEventReceiverService</c> does when it retries a failed start,
@@ -73,6 +92,9 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             );
         }
 
+        if (_options.Problem() is { } problem)
+            throw new InvalidOperationException(problem);
+
         await ReleaseAsync();
 
         try
@@ -90,6 +112,19 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             _options.ExchangeName,
             _queueName
         );
+
+        if (_options.SigningKey is null)
+            _logger?.LogWarning(
+                "RabbitMQ receiver on exchange {Exchange} accepts unsigned messages "
+                    + "(AllowUnsignedMessages): anyone who can publish to the exchange can send it events.",
+                _options.ExchangeName
+            );
+
+        if (_options.InsecureTransportInUse)
+            _logger?.LogWarning(
+                "RabbitMQ receiver reaches its broker without TLS (AllowInsecureTransport): the "
+                    + "broker credentials and every event cross the network in cleartext."
+            );
     }
 
     private async Task OpenAsync(
@@ -142,6 +177,18 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         {
             try
             {
+                var signature = BroadcastMessageSignature.Read(ea.BasicProperties.Headers);
+                if (!_verifier.Accept(ea.Exchange, ea.Body.Span, signature))
+                {
+                    await channel.BasicNackAsync(
+                        ea.DeliveryTag,
+                        multiple: false,
+                        requeue: false,
+                        cancellationToken: ct
+                    );
+                    return;
+                }
+
                 var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(ea.Body.Span);
 
                 if (message is not null && FromItsExchange(message, ea.Exchange))

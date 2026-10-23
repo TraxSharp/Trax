@@ -45,7 +45,12 @@ public class RabbitMqBroadcasterResilienceTests
     public async Task PublishAsync_ToAnUnreachableBroker_ReturnsWithoutWaitingOnTheNetwork()
     {
         await using var broadcaster = new RabbitMqTrainEventBroadcaster(
-            new RabbitMqBroadcasterOptions { ConnectionString = BlackholedBroker },
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = BlackholedBroker,
+                SigningKey = TestBroadcastKey.Value,
+                AllowInsecureTransport = true,
+            },
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
 
@@ -70,7 +75,12 @@ public class RabbitMqBroadcasterResilienceTests
     public async Task DisposeAsync_WithAnUnreachableBroker_GivesUpWithinItsDrainBound()
     {
         var broadcaster = new RabbitMqTrainEventBroadcaster(
-            new RabbitMqBroadcasterOptions { ConnectionString = BlackholedBroker },
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = BlackholedBroker,
+                SigningKey = TestBroadcastKey.Value,
+                AllowInsecureTransport = true,
+            },
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
         );
         await broadcaster.PublishAsync(Message(), CancellationToken.None);
@@ -91,7 +101,12 @@ public class RabbitMqBroadcasterResilienceTests
     public async Task PublishAsync_WhenTheQueueIsFull_DropsAndCountsInsteadOfWaiting()
     {
         await using var broadcaster = new RabbitMqTrainEventBroadcaster(
-            new RabbitMqBroadcasterOptions { ConnectionString = BlackholedBroker },
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = BlackholedBroker,
+                SigningKey = TestBroadcastKey.Value,
+                AllowInsecureTransport = true,
+            },
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance,
             queueCapacity: 2
         );
@@ -111,6 +126,7 @@ public class RabbitMqBroadcasterResilienceTests
             new RabbitMqBroadcasterOptions
             {
                 ConnectionString = AmqpUri,
+                SigningKey = TestBroadcastKey.Value,
                 ExchangeName = $"trax.test.replace.{Guid.NewGuid():N}",
             },
             NullLogger<RabbitMqTrainEventBroadcaster>.Instance
@@ -138,6 +154,7 @@ public class RabbitMqBroadcasterResilienceTests
         var options = new RabbitMqBroadcasterOptions
         {
             ConnectionString = AmqpUri,
+            SigningKey = TestBroadcastKey.Value,
             ExchangeName = $"trax.test.order.{Guid.NewGuid():N}",
         };
         await using var receiver = new RabbitMqTrainEventReceiver(
@@ -198,7 +215,12 @@ public class RabbitMqBroadcasterResilienceTests
 
         var logger = new ErrorSignal();
         var broadcaster = new RabbitMqTrainEventBroadcaster(
-            new RabbitMqBroadcasterOptions { ConnectionString = AmqpUri, ExchangeName = exchange },
+            new RabbitMqBroadcasterOptions
+            {
+                ConnectionString = AmqpUri,
+                ExchangeName = exchange,
+                SigningKey = TestBroadcastKey.Value,
+            },
             logger
         );
         try

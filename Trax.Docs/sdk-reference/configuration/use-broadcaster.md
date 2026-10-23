@@ -166,7 +166,8 @@ The database remains the **single source of truth** for all train data. The broa
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
-        .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
+        .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString, opts =>
+            opts.SigningKey = Convert.FromBase64String(configuration["Trax:BroadcastSigningKey"]!)))
     )
     .AddMediator(typeof(IShipOrderTrain).Assembly)
 );

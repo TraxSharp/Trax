@@ -25,6 +25,7 @@ public class RabbitMqReceiverRestartTests
         new()
         {
             ConnectionString = AmqpUri,
+            SigningKey = TestBroadcastKey.Value,
             ExchangeName = $"trax.test.restart.{Guid.NewGuid():N}",
         };
 

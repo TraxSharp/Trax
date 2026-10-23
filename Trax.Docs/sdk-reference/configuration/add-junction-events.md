@@ -191,7 +191,8 @@ services.AddTrax(trax => trax
         .AddDecisionRecording()
         .AddJunctionEvents()
         .UseBroadcaster(b => b
-            .UseRabbitMq(rabbitMqConnectionString)
+            .UseRabbitMq(rabbitMqConnectionString, opts =>
+                opts.SigningKey = Convert.FromBase64String(configuration["Trax:BroadcastSigningKey"]!))
             .UseSignalRHub(opts => opts.WithJunctionEvents()))
     )
     .AddMediator(typeof(IShipOrderTrain).Assembly)

@@ -1,6 +1,6 @@
 ---
 title: UseRabbitMq
-description: "Reference for UseRabbitMq, the RabbitMQ broadcaster transport: its options, exchanges, publisher confirms, queue limits and RabbitMqTrainEventReceiver."
+description: "Reference for UseRabbitMq, the RabbitMQ broadcaster transport: its options, message signing, TLS, exchanges, delivery and RabbitMqTrainEventReceiver."
 type: reference
 area: effects
 parent: Configuration
@@ -35,7 +35,7 @@ public static BroadcasterBuilder UseRabbitMq(
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `connectionString` | `string` | The AMQP connection URI, such as `amqp://guest:guest@localhost:5672` |
+| `connectionString` | `string` | The AMQP connection URI, such as `amqps://trax:secret@rabbitmq.internal:5671` or `amqp://guest:guest@localhost:5672`. Plain `amqp://` is refused for a host that is not loopback unless `AllowInsecureTransport` is set |
 | `configure` | `Action<RabbitMqBroadcasterOptions>?` | Changes the options below |
 
 ### RabbitMqBroadcasterOptions
@@ -46,6 +46,19 @@ public static BroadcasterBuilder UseRabbitMq(
 | `ExchangeName` | `string` | `"trax.lifecycle"` | Fanout exchange name |
 | `JunctionExchangeName` | `string?` | `ExchangeName` + `".junctions"` | Fanout exchange [junction events](/docs/effect/junction-events) are published to. Must differ from `ExchangeName`, or `UseRabbitMq` throws `ArgumentException`. |
 | `PrefetchCount` | `ushort` | `64` | How many received events the receiver may hold unacknowledged at once. The broker holds the rest until the handlers acknowledge one, so a slow handler leaves events queued on the broker rather than in the receiving process. `0` (no limit) is refused: `UseRabbitMq` throws `ArgumentException`, and a directly constructed receiver throws `InvalidOperationException` from `StartAsync`. |
+| `SigningKey` | `byte[]?` | `null` | The key every process on the exchange shares, at least `MinimumSigningKeyLength` (32) bytes. Required unless `AllowUnsignedMessages()` is called. See [Signing and transport](#signing-and-transport). |
+| `MaxClockSkew` | `TimeSpan` | 5 minutes | How far a signed message's timestamp may be from the receiver's clock, either way, before it is dropped. Must be positive. |
+| `AllowInsecureTransport` | `bool` | `false` | Accepts plain `amqp://` to a broker that is not on this machine. Set it only when the network to the broker is trusted. |
+| `UnsignedMessagesAllowed` | `bool` | `false` | Whether `AllowUnsignedMessages()` was called. Read-only. |
+
+| Method | Description |
+|--------|-------------|
+| `AllowUnsignedMessages()` | Without a `SigningKey`, publishes unsigned and accepts unsigned messages. Anyone who can publish to the exchange can then send every receiver any event, so the receiver logs a warning when it starts. Has no effect when a key is set. Returns the options. |
+
+`UseRabbitMq` throws `ArgumentException` when there is neither a `SigningKey` nor a call to
+`AllowUnsignedMessages()`, when the key is shorter than 32 bytes, or when the URI is plain `amqp://` to a host that is
+not loopback without `AllowInsecureTransport`. The broadcaster checks the same when it is created, and a directly
+constructed receiver throws `InvalidOperationException` from `StartAsync`, before it connects.
 
 ## Returns
 
@@ -70,6 +83,34 @@ When the queue is full, junction events give way first, then non-terminal events
 A connection the broker closed is disposed before it is replaced. On shutdown the broadcaster waits up to 5 seconds for queued events to be sent, and does not wait at all while it is failing to reach the broker. Delivery is best effort.
 
 Stopping the receiver tolerates a connection the broker has already closed, for example when the broker restarts or another host sharing it shuts down first. When `TrainEventReceiverService` retries a receiver that failed to start, each new start closes and disposes the connection the previous attempt opened, and a start that fails partway releases what it opened.
+
+### Signing and transport
+
+With a `SigningKey`, the broadcaster signs every message it publishes, in a `trax-signature` header: HMAC-SHA256 over
+the body, the exchange it is published to, a timestamp and a random message id. It signs again on each attempt, so
+an event it resends carries a fresh timestamp. The receiver checks the signature before it reads the body, comparing
+in constant time, and drops (rejects without requeue) a message whose signature is missing, does not match, or is
+more than `MaxClockSkew` from its own clock. The first drop is logged as a `Warning`, and later ones go to `Debug`
+until a minute has passed, when the next warning gives the count dropped since. A message signed for one exchange
+does not verify on another.
+
+Every process on the exchange needs the same key, so a hub and its workers are configured together. Generate it once
+(32 random bytes), keep it with the other secrets, and read it from configuration:
+
+```csharp fragment
+opts.SigningKey = Convert.FromBase64String(configuration["Trax:BroadcastSigningKey"]!);
+```
+
+A message signed in a window of `MaxClockSkew` can be delivered again within it by someone who can publish to the
+exchange; receivers already tolerate a duplicate, which the publisher's own resends produce.
+
+`AllowUnsignedMessages()` is the opt-out, for a broker no one else can publish to. With it and no key, nothing is
+signed or checked, and the receiver logs a warning when it starts. Hosts move to a key together: a receiver with a
+key drops what an unsigned publisher sends.
+
+The connection URI must be `amqps://` unless the broker is on this machine (`localhost`, `127.0.0.0/8`, `::1`), since
+the broker credentials in it and every event would otherwise cross the network in cleartext. `AllowInsecureTransport
+= true` accepts plain `amqp://` to another host, and the receiver logs a warning when it starts.
 
 ### Junction events
 
@@ -100,7 +141,7 @@ those.
 | Member | Description |
 |--------|-------------|
 | `RabbitMqTrainEventReceiver(options, logger)` | Opens no connection until `StartAsync` |
-| `StartAsync(handler, ct)` | Connects, declares the train exchange, binds a new exclusive, auto-delete queue to it (and to the junction exchange, on a channel of its own, when it binds that), and consumes. A delivery is acknowledged after `handler` returns; when the handler or deserialization throws, the error is logged and the delivery rejected without requeue. Throws `InvalidOperationException` when `PrefetchCount` is 0. A second call first closes what the previous one opened. |
+| `StartAsync(handler, ct)` | Checks the options first (as `UseRabbitMq` does) and throws `InvalidOperationException` before connecting when they are refused. Connects, declares the train exchange, binds a new exclusive, auto-delete queue to it (and to the junction exchange, on a channel of its own, when it binds that), and consumes. A delivery whose signature is refused never reaches `handler`. A delivery is acknowledged after `handler` returns; when the handler or deserialization throws, the error is logged and the delivery rejected without requeue. Throws `InvalidOperationException` when `PrefetchCount` is 0. A second call first closes what the previous one opened. |
 | `StopAsync(ct)` | Stops consuming and closes the connection, tolerating one the broker already closed |
 | `DisposeAsync()` | Stops and releases the connection |
 
@@ -111,7 +152,10 @@ services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)
         .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString, opts =>
-            opts.ExchangeName = "my-app.lifecycle"))
+        {
+            opts.ExchangeName = "my-app.lifecycle";
+            opts.SigningKey = Convert.FromBase64String(configuration["Trax:BroadcastSigningKey"]!);
+        }))
     )
     .AddMediator(typeof(IShipOrderTrain).Assembly)
 );

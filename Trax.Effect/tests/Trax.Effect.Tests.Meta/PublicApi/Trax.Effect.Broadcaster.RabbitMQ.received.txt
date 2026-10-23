@@ -9,11 +9,17 @@ namespace Trax.Effect.Broadcaster.RabbitMQ
 {
     public class RabbitMqBroadcasterOptions
     {
+        public const int MinimumSigningKeyLength = 32;
         public RabbitMqBroadcasterOptions() { }
+        public bool AllowInsecureTransport { get; set; }
         public required string ConnectionString { get; set; }
         public string ExchangeName { get; set; }
         public string? JunctionExchangeName { get; set; }
+        public System.TimeSpan MaxClockSkew { get; set; }
         public ushort PrefetchCount { get; set; }
+        public byte[]? SigningKey { get; set; }
+        public bool UnsignedMessagesAllowed { get; }
+        public Trax.Effect.Broadcaster.RabbitMQ.RabbitMqBroadcasterOptions AllowUnsignedMessages() { }
     }
     public class RabbitMqTrainEventReceiver : System.IAsyncDisposable, Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver
     {

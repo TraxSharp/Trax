@@ -28,7 +28,12 @@ public static class RabbitMqBroadcasterExtensions
     /// </remarks>
     /// <exception cref="ArgumentException">
     /// <paramref name="configure"/> set <see cref="RabbitMqBroadcasterOptions.PrefetchCount"/> to 0,
-    /// which RabbitMQ reads as "no limit".
+    /// which RabbitMQ reads as "no limit"; or it set no
+    /// <see cref="RabbitMqBroadcasterOptions.SigningKey"/> and did not call
+    /// <see cref="RabbitMqBroadcasterOptions.AllowUnsignedMessages"/>, or set a key shorter than
+    /// <see cref="RabbitMqBroadcasterOptions.MinimumSigningKeyLength"/>; or
+    /// <paramref name="connectionString"/> is plain <c>amqp://</c> to a host that is not loopback
+    /// and <see cref="RabbitMqBroadcasterOptions.AllowInsecureTransport"/> is not set.
     /// </exception>
     public static BroadcasterBuilder UseRabbitMq(
         this BroadcasterBuilder builder,
@@ -58,6 +63,9 @@ public static class RabbitMqBroadcasterExtensions
                 nameof(configure)
             );
         }
+
+        if (options.Problem() is { } problem)
+            throw new ArgumentException($"UseRabbitMq(): {problem}", nameof(configure));
 
         builder.ServiceCollection.AddSingleton(options);
         builder

@@ -118,6 +118,9 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         TimeSpan? firstRetryDelay = null
     )
     {
+        if (options.Problem() is { } problem)
+            throw new InvalidOperationException(problem);
+
         _options = options;
         _logger = logger;
         _queueCapacity = queueCapacity;
@@ -355,18 +358,31 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         var channel = await EnsureChannelAsync(junction, ct);
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
 
+        // A junction event goes to an exchange of its own, which only receivers that know junction
+        // events bind, so one that predates them never receives one.
+        var exchange = junction ? _options.EffectiveJunctionExchangeName : _options.ExchangeName;
+
         var properties = new BasicProperties
         {
             ContentType = "application/json",
             DeliveryMode = DeliveryModes.Transient,
         };
 
+        // Signed on every attempt, so a resent event carries a fresh timestamp.
+        if (_options.SigningKey is { } key)
+            properties.Headers = new Dictionary<string, object?>
+            {
+                [BroadcastMessageSignature.Header] = BroadcastMessageSignature.Create(
+                    key,
+                    exchange,
+                    body,
+                    UtcNow()
+                ),
+            };
+
         // The channel tracks confirms, so this completes once the broker has confirmed the event.
         using var bound = CancellationTokenSource.CreateLinkedTokenSource(ct);
         bound.CancelAfter(_publishTimeout);
-        // A junction event goes to an exchange of its own, which only receivers that know junction
-        // events bind, so one that predates them never receives one.
-        var exchange = junction ? _options.EffectiveJunctionExchangeName : _options.ExchangeName;
 
         await channel.BasicPublishAsync(
             exchange: exchange,
