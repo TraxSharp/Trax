@@ -32,6 +32,7 @@ internal sealed class MachinesScreen : View
     private IDisposable? _stream;
     private bool _pending;
     private int _loading;
+    private int _drawing;
     private string? _instancesOf;
 
     public MachinesScreen(ConsoleContext context)
@@ -148,13 +149,30 @@ internal sealed class MachinesScreen : View
         LoadInstances();
     }
 
+    // The graph is laid out off the UI thread; only the drawing of the machine selected last is shown.
     private void ShowGraph()
     {
         if (Selected is not { } machine)
             return;
-        _graph.Clear();
-        foreach (var line in MachineGraph.Lines(machine, vertical: _context.VerticalGraphs))
-            _graph.Add(line);
+        var draw = Interlocked.Increment(ref _drawing);
+        var vertical = _context.VerticalGraphs;
+        Ui.Start(
+            _context.App,
+            () => Task.Run(() => MachineGraph.Lines(machine, vertical: vertical)),
+            lines =>
+            {
+                if (draw != Volatile.Read(ref _drawing))
+                    return;
+                _graph.Clear();
+                foreach (var line in lines)
+                    _graph.Add(line);
+            },
+            message =>
+            {
+                if (draw == Volatile.Read(ref _drawing))
+                    _graph.Add(message);
+            }
+        );
     }
 
     private void LoadInstances()

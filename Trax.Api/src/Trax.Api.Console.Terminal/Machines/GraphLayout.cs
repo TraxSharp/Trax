@@ -20,6 +20,8 @@ internal sealed record GraphEdge(string From, string To, string Label);
 /// runs around the boxes. A transition to the same state is written inside the box. The current state has a double
 /// border. Laid out vertically, the columns are rows instead, top to bottom, and lines leave downward and enter from
 /// above; a label with no horizontal stretch of line to sit on is written beside the line.
+/// A machine too big to draw in a terminal is listed instead, state by state with its transitions; a transition to a
+/// state the machine does not declare, or a second state of one name, is said under the graph.
 /// </summary>
 internal static class GraphLayout
 {
@@ -37,6 +39,9 @@ internal static class GraphLayout
     private const int RowGap = 2;
     private const int MinColumnGap = 8;
 
+    /// <summary>The most cells a drawing may take before the machine is listed instead.</summary>
+    public const int MaxCells = 400_000;
+
     /// <summary>The graph's lines, then a blank line and the legend.</summary>
     public static IReadOnlyList<string> Render(
         IReadOnlyList<GraphState> states,
@@ -47,10 +52,27 @@ internal static class GraphLayout
     {
         if (states.Count == 0)
             return ["(no states)"];
+        // What the graph cannot draw is said under it rather than left out.
+        var problems = new List<string>();
+        // A second state of a name is drawn once.
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var twice = new HashSet<string>(StringComparer.Ordinal);
+        var distinct = new List<GraphState>(states.Count);
+        foreach (var state in states)
+            if (names.Add(state.Name))
+                distinct.Add(state);
+            else if (twice.Add(state.Name))
+                problems.Add($"{state.Name}: declared more than once, drawn once");
+        states = distinct;
         var index = states
             .Select((s, i) => (s.Name, i))
             .ToDictionary(p => p.Name, p => p.i, StringComparer.Ordinal);
         var known = edges.Where(e => index.ContainsKey(e.From) && index.ContainsKey(e.To)).ToList();
+        problems.AddRange(
+            edges
+                .Where(e => !index.ContainsKey(e.From) || !index.ContainsKey(e.To))
+                .Select(e => $"{e.From} ──▶ {e.To}: {e.Label}  (not a state of this machine)")
+        );
 
         // A transition every state takes the same way (StartOver from anywhere) is said once under the graph, not
         // drawn from each.
@@ -86,6 +108,8 @@ internal static class GraphLayout
         var boxes = vertical
             ? PlaceDown(states, columns, lines, loops, out width, out height)
             : Place(states, columns, lines, loops, index, out width, out height);
+        if ((long)width * height > MaxCells)
+            return Listed(states, known, current, problems);
 
         var canvas = new Canvas(width, height, vertical);
         foreach (var box in boxes)
@@ -136,11 +160,46 @@ internal static class GraphLayout
             )
         );
         legend.AddRange(unplaced);
+        legend.AddRange(problems);
         legend.AddRange(states.Where(s => s.Note is not null).Select(s => $"{s.Name}: {s.Note}"));
         if (legend.Count > 0)
         {
             output.Add("");
             output.AddRange(legend);
+        }
+        return output;
+    }
+
+    // A machine too big to draw: each state, marked as the graph would mark it, and the transitions that leave it.
+    private static List<string> Listed(
+        IReadOnlyList<GraphState> states,
+        List<GraphEdge> edges,
+        string? current,
+        List<string> problems
+    )
+    {
+        var leaving = edges.ToLookup(e => e.From, StringComparer.Ordinal);
+        var output = new List<string>
+        {
+            $"{states.Count} states and {edges.Count} transitions, too many to draw here:",
+            "",
+        };
+        foreach (var state in states)
+        {
+            output.Add(
+                (state.Name == current ? "▶ " : "  ")
+                    + state.Name
+                    + (state.Initial ? "  (initial)" : "")
+                    + (state.Final ? "  (final)" : "")
+                    + (state.Note is { } note ? $"  {note}" : "")
+            );
+            foreach (var edge in leaving[state.Name])
+                output.Add($"      {edge.Label} ──▶ {edge.To}");
+        }
+        if (problems.Count > 0)
+        {
+            output.Add("");
+            output.AddRange(problems);
         }
         return output;
     }
@@ -170,15 +229,30 @@ internal static class GraphLayout
         // A transition into a state still on the walk's path goes back: it is left out of the layering.
         var back = new HashSet<(int, int)>();
         var mark = new int[n]; // 0 unseen, 1 on the path, 2 done
-        void Walk(int v)
+        // Depth first with a stack of its own, not the call stack, so a long chain of states does not overflow it.
+        var path = new Stack<(int V, int Next)>();
+        void Walk(int root)
         {
-            mark[v] = 1;
-            foreach (var w in outgoing[v])
+            mark[root] = 1;
+            path.Push((root, 0));
+            while (path.Count > 0)
+            {
+                var (v, next) = path.Pop();
+                if (next == outgoing[v].Count)
+                {
+                    mark[v] = 2;
+                    continue;
+                }
+                path.Push((v, next + 1));
+                var w = outgoing[v][next];
                 if (mark[w] == 1)
                     back.Add((v, w));
                 else if (mark[w] == 0)
-                    Walk(w);
-            mark[v] = 2;
+                {
+                    mark[w] = 1;
+                    path.Push((w, 0));
+                }
+            }
         }
         var start = states.ToList().FindIndex(s => s.Initial);
         if (start >= 0)
@@ -213,9 +287,12 @@ internal static class GraphLayout
             }
         }
         // A state with nothing leading to it but not the initial one goes after the initial state's column.
+        var reached = new bool[n];
+        foreach (var e in lines)
+            reached[index[e.To]] = true;
         if (start >= 0)
             for (var v = 0; v < n; v++)
-                if (v != start && layer[v] == 0 && lines.All(e => index[e.To] != v))
+                if (v != start && layer[v] == 0 && !reached[v])
                     layer[v] = 1;
         return layer;
     }
@@ -229,10 +306,9 @@ internal static class GraphLayout
         int n
     )
     {
-        var columns = Enumerable
-            .Range(0, layer.Max() + 1)
-            .Select(c => Enumerable.Range(0, n).Where(v => layer[v] == c).ToList())
-            .ToList();
+        var columns = Enumerable.Range(0, layer.Max() + 1).Select(_ => new List<int>()).ToList();
+        for (var v = 0; v < n; v++)
+            columns[layer[v]].Add(v);
         var neighbours = Enumerable.Range(0, n).Select(_ => new List<int>()).ToArray();
         foreach (var e in lines)
         {
@@ -274,9 +350,6 @@ internal static class GraphLayout
         }
         return columns;
     }
-
-    private static int ColumnOf(List<List<int>> columns, int v) =>
-        columns.FindIndex(c => c.Contains(v));
 
     private sealed record Placed(GraphState State, int Column, int X, int Y, int Width, int Height)
     {
@@ -353,6 +426,17 @@ internal static class GraphLayout
             .Select(c => c.Sum(v => BoxHeight(states[v])) + RowGap * Math.Max(0, c.Count - 1))
             .ToList();
         var tallest = columnHeight.Count == 0 ? 0 : columnHeight.Max();
+        var columnOf = new int[states.Count];
+        for (var c = 0; c < columns.Count; c++)
+            foreach (var v in columns[c])
+                columnOf[v] = c;
+        // The longest label of the lines that start their run across each gap, whichever way they go.
+        var labels = new int[columns.Count];
+        foreach (var e in lines)
+        {
+            var c = Math.Min(columnOf[index[e.From]], columnOf[index[e.To]]);
+            labels[c] = Math.Max(labels[c], e.Label.Length);
+        }
         var placed = new Placed[states.Count];
         var x = Lead;
         for (var c = 0; c < columns.Count; c++)
@@ -372,20 +456,21 @@ internal static class GraphLayout
                 );
                 y += placed[v].Height + RowGap;
             }
-            // Wide enough for the label of any line that starts its run across this gap, whichever way it goes.
-            var labels = lines
-                .Where(e =>
-                    Math.Min(ColumnOf(columns, index[e.From]), ColumnOf(columns, index[e.To])) == c
-                )
-                .Select(e => e.Label.Length)
-                .DefaultIfEmpty(0)
-                .Max();
-            x += columnWidth + Math.Max(MinColumnGap, labels + 6);
+            // Wide enough for the label of any line that starts its run across this gap.
+            x += columnWidth + Math.Max(MinColumnGap, labels[c] + 6);
         }
         width = x + Margin;
         height = tallest + 2 * Margin;
         return [.. placed];
     }
+
+    // A drawing of at most this many cells is searched whole for each line; a bigger one around the line's boxes first,
+    // this many cells out, then wider.
+    private const int WholeSearch = 40_000;
+    private const int SearchMargin = 12;
+
+    // The steps all of one drawing's searches may take together.
+    private const long SearchBudget = 4_000_000;
 
     // A grid of cells: box text, and the line segments each cell joins, which make its glyph.
     private sealed class Canvas(int width, int height, bool vertical)
@@ -395,6 +480,17 @@ internal static class GraphLayout
         private readonly int[,] _uses = new int[width, height];
         private readonly bool[,] _blocked = new bool[width, height];
         private readonly bool[,] _fixed = new bool[width, height];
+
+        // The search's cost and way back for each cell and heading, kept across lines: a line searches only the cells
+        // around its two boxes, and resets only those.
+        private readonly int[] _dist = new int[width * height * 4];
+        private readonly int[] _prev = new int[width * height * 4];
+
+        // What is left of the steps every line's search may take together, so a machine that would take long to draw
+        // has its remaining lines said under the graph instead.
+        private long _budget = SearchBudget;
+
+        private int Cell(int x, int y, int d) => ((y * width) + x) * 4 + d;
 
         public void Box(Placed box, bool current, List<string>? loops)
         {
@@ -456,6 +552,43 @@ internal static class GraphLayout
             IReadOnlySet<(int X, int Y)> trunk
         )
         {
+            // A small drawing is searched whole. A big one is searched around the two boxes first, wider each time
+            // no line is found, until the search covers it all.
+            var margin =
+                (long)width * height <= WholeSearch ? Math.Max(width, height) : SearchMargin;
+            for (; ; margin *= 3)
+            {
+                var x0 = Math.Max(0, Math.Min(from.X, to.X) - margin);
+                var y0 = Math.Max(0, Math.Min(from.Y, to.Y) - margin);
+                var x1 = Math.Min(
+                    width - 1,
+                    Math.Max(from.X + from.Width, to.X + to.Width) + margin
+                );
+                var y1 = Math.Min(
+                    height - 1,
+                    Math.Max(from.Y + from.Height, to.Y + to.Height) + margin
+                );
+                var path = Route(from, to, trunk, x0, y0, x1, y1);
+                if (
+                    path is not null
+                    || _budget <= 0
+                    || (x0 == 0 && y0 == 0 && x1 == width - 1 && y1 == height - 1)
+                )
+                    return path;
+            }
+        }
+
+        private List<(int X, int Y)>? Route(
+            Placed from,
+            Placed to,
+            IReadOnlySet<(int X, int Y)> trunk,
+            int x0,
+            int y0,
+            int x1,
+            int y1
+        )
+        {
+            bool Inside(int x, int y) => x >= x0 && y >= y0 && x <= x1 && y <= y1;
             var starts = Ports(from)
                 .Select(p => (p.X, p.Y, Dir: p.Out, Cost: p.SideCost + Facing(from, to, p.Out)))
                 .ToList();
@@ -464,22 +597,20 @@ internal static class GraphLayout
                     p => (p.X, p.Y),
                     p => (In: (p.Out + 2) % 4, Cost: EndCost(p.Out) + Facing(to, from, p.Out))
                 );
-            var dist = new int[width, height, 4];
-            var prev = new (int X, int Y, int D)[width, height, 4];
-            for (var x = 0; x < width; x++)
-            for (var y = 0; y < height; y++)
-            for (var d = 0; d < 4; d++)
-                dist[x, y, d] = int.MaxValue;
+            var dist = _dist;
+            var prev = _prev;
+            for (var y = y0; y <= y1; y++)
+                Array.Fill(dist, int.MaxValue, Cell(x0, y, 0), (x1 - x0 + 1) * 4);
             var queue = new PriorityQueue<(int X, int Y, int D), int>();
             foreach (var s in starts)
             {
-                if (!Free(s.X, s.Y))
+                if (!Inside(s.X, s.Y) || !Free(s.X, s.Y))
                     continue;
                 var cost = s.Cost + Penalty(s.X, s.Y, s.Dir);
-                if (cost < dist[s.X, s.Y, s.Dir])
+                if (cost < dist[Cell(s.X, s.Y, s.Dir)])
                 {
-                    dist[s.X, s.Y, s.Dir] = cost;
-                    prev[s.X, s.Y, s.Dir] = (-1, -1, -1);
+                    dist[Cell(s.X, s.Y, s.Dir)] = cost;
+                    prev[Cell(s.X, s.Y, s.Dir)] = -1;
                     queue.Enqueue((s.X, s.Y, s.Dir), cost);
                 }
             }
@@ -488,8 +619,13 @@ internal static class GraphLayout
             var bestCost = int.MaxValue;
             while (queue.TryDequeue(out var at, out var cost))
             {
-                if (cost > dist[at.X, at.Y, at.D] || cost >= bestCost)
+                // Every cell still queued costs at least this much: none of them makes a cheaper line.
+                if (cost >= bestCost)
+                    break;
+                if (cost > dist[Cell(at.X, at.Y, at.D)])
                     continue;
+                if (--_budget <= 0)
+                    return null;
                 // The arrowhead's cell is reached heading into the box, so the arrow points the way the line runs.
                 if (ends.TryGetValue((at.X, at.Y), out var end) && at.D == end.In)
                 {
@@ -506,7 +642,7 @@ internal static class GraphLayout
                     if (d == (at.D + 2) % 4)
                         continue;
                     var (nx, ny) = (at.X + Dx[d], at.Y + Dy[d]);
-                    if (nx < 0 || ny < 0 || nx >= width || ny >= height)
+                    if (!Inside(nx, ny))
                         continue;
                     // Stepping onto a line already drawn into the same state ends here: this one joins it, at a
                     // right angle, so the junction reads.
@@ -529,10 +665,10 @@ internal static class GraphLayout
                     var step =
                         vertical && d is 1 or 3 ? 1 + Math.Max(0, ny - (from.Y + from.Height)) : 1;
                     var next = cost + step + (d == at.D ? 0 : 4) + Penalty(nx, ny, d);
-                    if (next < dist[nx, ny, d])
+                    if (next < dist[Cell(nx, ny, d)])
                     {
-                        dist[nx, ny, d] = next;
-                        prev[nx, ny, d] = at;
+                        dist[Cell(nx, ny, d)] = next;
+                        prev[Cell(nx, ny, d)] = Cell(at.X, at.Y, at.D);
                         queue.Enqueue((nx, ny, d), next);
                     }
                 }
@@ -541,8 +677,8 @@ internal static class GraphLayout
                 return null;
 
             var path = new List<(int X, int Y, int D)>();
-            for (var p = last; p.X >= 0; p = prev[p.X, p.Y, p.D])
-                path.Add(p);
+            for (var cell = Cell(last.X, last.Y, last.D); cell >= 0; cell = prev[cell])
+                path.Add((cell / 4 % width, cell / 4 / width, cell % 4));
             path.Reverse();
             if (join is { } j)
             {
