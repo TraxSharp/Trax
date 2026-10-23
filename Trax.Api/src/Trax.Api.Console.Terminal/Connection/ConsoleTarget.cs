@@ -1,4 +1,6 @@
 using System.Net;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using Trax.Api.Console.Terminal.Lists;
 
 namespace Trax.Api.Console.Terminal.Connection;
@@ -123,14 +125,28 @@ internal sealed record ConsoleTarget(
     public const int MaxFileSize = 64 * 1024;
 
     // Other users' access to the file is as good as the credential itself, so a file they can read or write is
-    // refused rather than warned of. A device, a pipe or anything longer than a credential is refused too.
+    // refused rather than warned of. A link, a device, a pipe or anything longer than a credential is refused too.
+    // The file is looked at before it is opened, and opened without waiting, so naming a pipe cannot hang the
+    // console until something writes to it.
     private static string Read(FileInfo file, string option)
     {
         var path = file.FullName;
         string text;
         try
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read);
+            file.Refresh();
+            if (file.LinkTarget is not null)
+                throw new InvalidOperationException(
+                    $"{option}: {path} is a link. Name the file it points to."
+                );
+            if (!file.Exists)
+                throw new InvalidOperationException(
+                    $"{option}: cannot read {path} (it does not exist, or is not a file)."
+                );
+            using var stream = OpenWithoutWaiting(path);
+            // A pipe, a socket or a terminal cannot seek; a regular file can.
+            if (!stream.CanSeek)
+                throw new InvalidOperationException($"{option}: {path} is not a regular file.");
             var length = stream.Length;
             if (length > MaxFileSize)
                 throw new InvalidOperationException(
@@ -146,7 +162,15 @@ internal sealed record ConsoleTarget(
             // A regular file holds as much as its length says; a device such as /dev/zero says 0 and holds more.
             if (read > length)
                 throw new InvalidOperationException($"{option}: {path} is not a regular file.");
-            if (!OperatingSystem.IsWindows())
+            if (OperatingSystem.IsWindows())
+            {
+                if (CredentialFile.SharedWith(CredentialFile.AllowRules(stream)) is { } others)
+                    throw new InvalidOperationException(
+                        $"{option}: {others} can read or change {path}. Remove them from its "
+                            + "permissions (Properties, Security) so only you have access."
+                    );
+            }
+            else
             {
                 var mode = File.GetUnixFileMode(stream.SafeFileHandle);
                 const UnixFileMode others =
@@ -170,6 +194,27 @@ internal sealed record ConsoleTarget(
             );
         }
         return Value(text) ?? throw new InvalidOperationException($"{option}: {path} is empty.");
+    }
+
+    // On Unix the file is opened with O_NONBLOCK, so a pipe with no writer answers at once instead of blocking the
+    // open, and O_NOFOLLOW, so a link swapped in after the check above is refused. Elsewhere it is opened as usual.
+    private static FileStream OpenWithoutWaiting(string path)
+    {
+        if (CredentialFile.OpenFlags() is not { } flags)
+            return new FileStream(path, FileMode.Open, FileAccess.Read);
+        var fd = CredentialFile.Open(path, flags);
+        if (fd < 0)
+            throw new IOException(Marshal.GetLastPInvokeErrorMessage());
+        var handle = new SafeFileHandle(fd, ownsHandle: true);
+        try
+        {
+            return new FileStream(handle, FileAccess.Read, bufferSize: 0);
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
     }
 
     // The first line, trimmed, so a file written with a trailing newline holds the same credential.
