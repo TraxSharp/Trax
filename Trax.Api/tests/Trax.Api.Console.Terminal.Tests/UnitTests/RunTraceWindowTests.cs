@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Terminal.Gui.Input;
 using Trax.Api.Console.Terminal.Screens;
@@ -100,6 +101,82 @@ public class RunTraceWindowTests
             .CodeToOpen.Should()
             .Be("ChargeCard", "o closes the trace naming the step's junction");
     }
+
+    [Test]
+    public async Task A_step_that_ends_before_the_first_read_answers_is_kept()
+    {
+        var held = new TaskCompletionSource<JsonObject>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var host = new FakeHost()
+            .AnswerLater("JunctionRuns", _ => held.Task)
+            .Answer("Decisions", Decisions)
+            .Answer("Logs", Logs);
+        var (terminal, window) = await Open(host);
+        await using var _ = terminal;
+        await terminal.Until(
+            () => host.Follows("OnJunctionEvent") && host.Sent("JunctionRuns").Count == 1,
+            "the steps are followed and read"
+        );
+
+        host.Push("OnJunctionEvent", Failed(sequence: 1));
+        await terminal.OnUi(() => { });
+        held.SetResult(Parse(Steps));
+
+        await terminal.Until(() => window.Entries.Count == 4, "the trace is read");
+        window
+            .Entries.Single(e => e.Key == "step:2")
+            .Text.Should()
+            .Contain(
+                "FAILED",
+                "the read answered before the step ended, and the stream said it had"
+            );
+    }
+
+    [Test]
+    public async Task A_step_that_ends_while_the_trace_is_read_again_is_kept()
+    {
+        var held = new TaskCompletionSource<JsonObject>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var reads = 0;
+        var host = new FakeHost()
+            .AnswerLater(
+                "JunctionRuns",
+                _ =>
+                    Interlocked.Increment(ref reads) == 1
+                        ? Task.FromResult(Parse(Steps))
+                        : held.Task
+            )
+            .Answer("Decisions", Decisions)
+            .Answer("Logs", Logs);
+        var (terminal, window) = await Open(host);
+        await using var _ = terminal;
+        await terminal.Until(
+            () => window.Entries.Count == 4 && host.Follows("OnJunctionEvent"),
+            "the trace is read and followed"
+        );
+
+        // Sequence 1, then 3: a frame was lost, so the trace is read again, and the step ends while it is.
+        host.Push("OnJunctionEvent", Failed(sequence: 1));
+        host.Push("OnJunctionEvent", Failed(sequence: 3));
+        await terminal.Until(() => host.Sent("JunctionRuns").Count == 2, "the trace is read again");
+        held.SetResult(Parse(Steps));
+        await terminal.Until(() => host.Sent("Logs").Count == 2, "the second read answers");
+        await Task.Delay(200);
+        await terminal.OnUi(() => { });
+
+        window.Entries.Should().HaveCount(4);
+        window.Entries.Single(e => e.Key == "step:2").Text.Should().Contain("FAILED");
+    }
+
+    private static string Failed(int sequence) =>
+        """{"onJunctionEvent":{"metadataId":4812,"eventType":"JUNCTION_FAILED","timestamp":"2026-10-22T10:00:03Z","sequence":SEQ,"junction":{"position":2,"kind":"JUNCTION","name":"ChargeCard","state":"FAILED","startedAt":"2026-10-22T10:00:02Z","durationMs":1200,"failureException":"card_declined","replayed":false,"answerWithheld":false,"nameWithheld":false}}}""".Replace(
+            "SEQ",
+            sequence.ToString()
+        );
+
+    private static JsonObject Parse(string data) => JsonNode.Parse(data)!.AsObject();
 
     private static Task<(TerminalHarness, RunTraceWindow)> Open(FakeHost host) =>
         TerminalHarness.StartAsync(app => new RunTraceWindow(

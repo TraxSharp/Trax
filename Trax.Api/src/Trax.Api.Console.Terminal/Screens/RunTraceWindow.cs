@@ -8,7 +8,9 @@ namespace Trax.Api.Console.Terminal.Screens;
 
 /// <summary>
 /// One run as a timeline: its steps and decisions as they happened, then its log, with the steps followed live while
-/// the window is open. Esc closes it; o opens the source of the step under the cursor.
+/// the window is open. The steps are followed before the trace is read, and a step that arrives while it is read is
+/// kept if it is newer than what the read answers, so neither order loses a change. Esc closes it; o opens the source
+/// of the step under the cursor.
 /// </summary>
 internal sealed class RunTraceWindow : Window
 {
@@ -18,7 +20,12 @@ internal sealed class RunTraceWindow : Window
     private readonly KeyedList _lines;
     private readonly ObservableCollection<string> _text = [];
     private readonly List<TraceEntry> _entries = [];
+
+    // The steps that arrived since the oldest read still out began, merged into its answer.
+    private readonly Dictionary<string, TraceEntry> _arrived = new(StringComparer.Ordinal);
     private IDisposable? _stream;
+    private int _loading;
+    private bool _reading;
 
     public RunTraceWindow(ConsoleContext context, long run)
     {
@@ -41,7 +48,6 @@ internal sealed class RunTraceWindow : Window
             if (!e.Value || _stream is not null)
                 return;
             _lines.SetFocus();
-            Load();
             _stream = RunTrace.Follow(
                 context.Client,
                 run,
@@ -50,6 +56,7 @@ internal sealed class RunTraceWindow : Window
                 reason =>
                     context.App.Invoke(() => _header.Text = $"{Summary()}  ·  not live: {reason}")
             );
+            Load();
         };
     }
 
@@ -59,12 +66,21 @@ internal sealed class RunTraceWindow : Window
     /// <summary>The lines shown, in order.</summary>
     public IReadOnlyList<TraceEntry> Entries => _entries;
 
-    private void Load() =>
+    private void Load()
+    {
+        var load = Interlocked.Increment(ref _loading);
+        _reading = true;
         Ui.Start(
             _context.App,
             () => RunTrace.LoadAsync(_context.Client, _run, CancellationToken.None),
             answer =>
             {
+                // An answer to an older read, overtaken by a newer one, is dropped; the newer one's merge covers it.
+                if (load != Volatile.Read(ref _loading))
+                    return;
+                _reading = false;
+                var arrived = _arrived.Values.ToList();
+                _arrived.Clear();
                 if (answer.Data is not { } entries)
                 {
                     _header.Text = $"Refused: {answer.Message}";
@@ -72,23 +88,43 @@ internal sealed class RunTraceWindow : Window
                 }
                 _entries.Clear();
                 _entries.AddRange(entries);
+                foreach (var step in arrived)
+                    Place(step);
                 Render();
             },
-            message => _header.Text = message
+            message =>
+            {
+                if (load != Volatile.Read(ref _loading))
+                    return;
+                _reading = false;
+                _arrived.Clear();
+                _header.Text = message;
+            }
         );
+    }
 
-    // A step that changed replaces its line; a new one goes after the last step before the log.
     private void Upsert(TraceEntry step)
+    {
+        if (_reading)
+            _arrived[step.Key] = _arrived.TryGetValue(step.Key, out var seen)
+                ? TraceEntry.Newest(seen, step)
+                : step;
+        Place(step);
+        Render();
+    }
+
+    // A step that changed replaces its line unless the line is newer; a new one goes after the last step before the
+    // log.
+    private void Place(TraceEntry step)
     {
         var at = _entries.FindIndex(e => e.Key == step.Key);
         if (at >= 0)
-            _entries[at] = step;
+            _entries[at] = TraceEntry.Newest(_entries[at], step);
         else
         {
             var log = _entries.FindIndex(e => e.Kind == TraceKind.Log);
             _entries.Insert(log < 0 ? _entries.Count : log, step);
         }
-        Render();
     }
 
     private void Render()
