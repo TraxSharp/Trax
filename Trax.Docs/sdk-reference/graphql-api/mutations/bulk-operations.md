@@ -55,7 +55,10 @@ The server reads the matching ids once, now, in pages of 10,000. When there are 
 `expectedCount` of them it starts nothing: `success` is `false` and `matched` is the number there are
 now, to show the operator and confirm again. A list's `totalCount` can be an estimate (unfiltered
 runs or manifests) or capped at 10,000 (runs filtered by failure text); the refusal's `matched` is
-always exact. Otherwise the operation starts and is returned at once with `status: RUNNING`.
+always exact. One operation acts on at most 100,000 ids: a start whose filter matches more, or whose
+`expectedCount` is more, is refused with `matched: null` and starts nothing, and the server stops
+reading at the page that crosses the limit. Split a larger cleanup into narrower filters. Otherwise
+the operation starts and is returned at once with `status: RUNNING`.
 
 Each `BulkOperationKind` applies to one list, and a filter for another is refused:
 
@@ -80,7 +83,10 @@ and failed otherwise, with the reason its row gives ("It had already ended (comp
 longer exists.").
 
 One bulk operation runs per node at a time. While one runs, `startBulkOperation` returns
-`success: false` with that one as `operation`.
+`success: false` with that one as `operation`. A start holds that place from before it reads its
+snapshot, so of two starts that arrive together only one runs; the other is refused the same way,
+with `operation: null` when the first has not finished reading. A start that is refused or fails
+gives the place back.
 
 The caller is recorded as `actor`. When the host audits the API (`AddAudit`), the request that
 started the operation is audited as usual, and its outcome is written as a second entry with

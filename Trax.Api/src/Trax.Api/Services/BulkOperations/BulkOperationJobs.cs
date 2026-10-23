@@ -39,6 +39,12 @@ internal sealed class BulkOperationJobs
     /// <summary>The most finished operations kept; the oldest is forgotten first.</summary>
     public const int MaxRetained = 100;
 
+    /// <summary>
+    /// The most ids one operation acts on. A start whose filter matches more is refused before
+    /// anything is applied: the snapshot is held in this node's memory for the whole operation.
+    /// </summary>
+    public const int MaxTargets = 100_000;
+
     /// <summary>The most ids one batch acts on: the largest page an operations read returns.</summary>
     public const int BatchSize = OperationsService.MaxPageSize;
 
@@ -60,6 +66,10 @@ internal sealed class BulkOperationJobs
     private readonly object _gate = new();
     private readonly Dictionary<Guid, BulkOperationRun> _runs = [];
     private Guid? _running;
+
+    // A start that has passed the running check and is taking its snapshot. It holds the node's
+    // one slot until it either becomes the running operation or is refused.
+    private bool _starting;
 
     /// <summary>
     /// Creates the node's list. Dependency injection supplies every argument; each batch resolves
@@ -83,6 +93,12 @@ internal sealed class BulkOperationJobs
     /// <summary>The task of the operation most recently started, for tests to await.</summary>
     internal Task Current { get; private set; } = Task.CompletedTask;
 
+    /// <summary>Test seam: the most ids a snapshot may hold, <see cref="MaxTargets"/> unless a test lowers it.</summary>
+    internal int TargetLimit { get; set; } = MaxTargets;
+
+    /// <summary>Test seam: runs once a start holds the node's slot, before its snapshot.</summary>
+    internal Func<CancellationToken, Task>? BeforeSnapshot { get; set; }
+
     /// <summary>Test seam: runs after the snapshot, before the first batch.</summary>
     internal Func<CancellationToken, Task>? BeforeFirstBatch { get; set; }
 
@@ -101,60 +117,85 @@ internal sealed class BulkOperationJobs
     {
         if (Refusal(request) is { } refusal)
             return new StartBulkOperationResponse(false, refusal, null, null);
-        if (RunningRefusal() is { } busy)
+        if (Reserve() is { } busy)
             return busy;
 
-        BulkOperationSnapshot snapshot;
-        await using (var scope = _scopes.CreateAsyncScope())
-            snapshot = await BulkOperationTargets.SnapshotAsync(
-                scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>(),
-                request.Kind,
-                request.Filter,
-                ct
-            );
-        var ids = snapshot.Ids;
-
-        var noun = BulkOperationRun.Noun(request.Kind);
-        if (ids.Length != request.ExpectedCount)
-            return new StartBulkOperationResponse(
-                false,
-                $"The filter matches {ids.Length} {noun} now, not the {request.ExpectedCount} "
-                    + "confirmed, so nothing was started. Confirm the new count and start again.",
-                ids.Length,
-                null
-            );
-        if (ids.Length == 0)
-            return new StartBulkOperationResponse(
-                false,
-                $"The filter matches no {noun}, so nothing was started.",
-                0,
-                null
-            );
-
-        lock (_gate)
+        // The slot is this start's until it hands it to the run it starts; every other way out
+        // gives it back, a refusal or a failed snapshot included.
+        var started = false;
+        try
         {
-            if (_running is { } runningId)
-                return Busy(_runs[runningId]);
+            if (BeforeSnapshot is { } seam)
+                await seam(ct);
 
-            Prune();
-            var run = new BulkOperationRun(
-                Guid.NewGuid(),
-                request,
-                actor,
-                _time.GetUtcNow().UtcDateTime,
-                snapshot
-            );
-            _runs[run.Id] = run;
-            _running = run.Id;
+            BulkOperationSnapshot? snapshot;
+            await using (var scope = _scopes.CreateAsyncScope())
+                snapshot = await BulkOperationTargets.SnapshotAsync(
+                    scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>(),
+                    request.Kind,
+                    request.Filter,
+                    TargetLimit,
+                    ct
+                );
 
-            // Task.Run, not the caller's context: the batches must not share the caller's lifetime.
-            Current = Task.Run(() => RunAsync(run));
-            return new StartBulkOperationResponse(
-                true,
-                $"Started: {run.Total} {noun}.",
-                run.Total,
-                run.Read()
-            );
+            var noun = BulkOperationRun.Noun(request.Kind);
+            if (snapshot is null)
+                return new StartBulkOperationResponse(
+                    false,
+                    $"The filter matches more than {TargetLimit} {noun}, the most one bulk "
+                        + "operation acts on, so nothing was started. Narrow the filter and start "
+                        + "again.",
+                    null,
+                    null
+                );
+
+            var ids = snapshot.Ids;
+            if (ids.Length != request.ExpectedCount)
+                return new StartBulkOperationResponse(
+                    false,
+                    $"The filter matches {ids.Length} {noun} now, not the {request.ExpectedCount} "
+                        + "confirmed, so nothing was started. Confirm the new count and start again.",
+                    ids.Length,
+                    null
+                );
+            if (ids.Length == 0)
+                return new StartBulkOperationResponse(
+                    false,
+                    $"The filter matches no {noun}, so nothing was started.",
+                    0,
+                    null
+                );
+
+            lock (_gate)
+            {
+                Prune();
+                var run = new BulkOperationRun(
+                    Guid.NewGuid(),
+                    request,
+                    actor,
+                    _time.GetUtcNow().UtcDateTime,
+                    snapshot
+                );
+                _runs[run.Id] = run;
+                _running = run.Id;
+                _starting = false;
+                started = true;
+
+                // Task.Run, not the caller's context: the batches must not share the caller's lifetime.
+                Current = Task.Run(() => RunAsync(run));
+                return new StartBulkOperationResponse(
+                    true,
+                    $"Started: {run.Total} {noun}.",
+                    run.Total,
+                    run.Read()
+                );
+            }
+        }
+        finally
+        {
+            if (!started)
+                lock (_gate)
+                    _starting = false;
         }
     }
 
@@ -191,6 +232,9 @@ internal sealed class BulkOperationJobs
             return wrongList;
         if (request.ExpectedCount < 0)
             return "expectedCount is the number of matches you confirmed; it cannot be negative.";
+        if (request.ExpectedCount > MaxTargets)
+            return $"expectedCount is {request.ExpectedCount}; one bulk operation acts on at most "
+                + $"{MaxTargets}. Narrow the filter and start again.";
         if (
             request.AskAfresh
             && request.Kind is not (BulkOperationKind.Requeue or BulkOperationKind.Trigger)
@@ -209,19 +253,28 @@ internal sealed class BulkOperationJobs
         return null;
     }
 
-    private StartBulkOperationResponse? RunningRefusal()
+    // Takes the node's one slot for a start, or says why it cannot. Checked and taken under one
+    // lock, so two starts that arrive together cannot both pass.
+    private StartBulkOperationResponse? Reserve()
     {
         lock (_gate)
-            return _running is { } runningId ? Busy(_runs[runningId]) : null;
+        {
+            if (_running is { } runningId)
+                return Busy(_runs[runningId].Read());
+            if (_starting)
+                return Busy(null);
+            _starting = true;
+            return null;
+        }
     }
 
-    private static StartBulkOperationResponse Busy(BulkOperationRun running) =>
+    private static StartBulkOperationResponse Busy(BulkOperation? running) =>
         new(
             false,
             "A bulk operation is already running on this node, so this one was not started. Read "
                 + "bulkOperation(id) until it finishes, then start again.",
             null,
-            running.Read()
+            running
         );
 
     private async Task RunAsync(BulkOperationRun run)
