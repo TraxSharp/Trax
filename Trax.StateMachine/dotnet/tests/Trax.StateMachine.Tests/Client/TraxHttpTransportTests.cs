@@ -35,6 +35,42 @@ public class TraxHttpTransportTests
             }
         );
 
+    [TestCase("http://api.example.com/trax/graphql")]
+    [TestCase("http://10.0.0.5/trax/graphql")]
+    public void A_cleartext_endpoint_on_another_host_is_refused(string endpoint)
+    {
+        var build = () =>
+            new TraxHttpTransport(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient(),
+                    Endpoint = new Uri(endpoint),
+                }
+            );
+
+        build.Should().Throw<ArgumentException>().WithMessage("*not over TLS*");
+    }
+
+    [Test]
+    public void A_relative_endpoint_is_checked_against_the_clients_base_address()
+    {
+        TraxHttpTransport Build(string baseAddress) =>
+            new(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient { BaseAddress = new Uri(baseAddress) },
+                    Endpoint = new Uri("trax/graphql", UriKind.Relative),
+                }
+            );
+
+        ((Action)(() => Build("http://api.example.com/")))
+            .Should()
+            .Throw<ArgumentException>()
+            .WithMessage("*not over TLS*");
+        ((Action)(() => Build("https://api.example.com/"))).Should().NotThrow();
+        ((Action)(() => Build("http://localhost:5000/"))).Should().NotThrow();
+    }
+
     [Test]
     public async Task A_cancellation_the_caller_asked_for_throws()
     {

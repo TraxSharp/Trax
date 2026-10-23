@@ -119,7 +119,6 @@ namespace Trax.Client
         public System.Threading.Tasks.Task<Trax.Client.TraxAnswer> ExecuteAsync(Trax.Client.TraxRequest request, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Text.Json.Nodes.JsonObject Payload(Trax.Client.TraxRequest request) { }
         public System.IDisposable Subscribe(Trax.Client.TraxRequest request, Trax.Client.ISubscriptionSink sink) { }
-        public static System.Threading.Tasks.Task<Trax.Client.TraxAnswer> PostAsync(System.Net.Http.HttpClient http, System.Uri endpoint, System.Text.Json.Nodes.JsonObject body, long maxResponseSize = 16777216, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public sealed class TraxHttpTransportOptions : System.IEquatable<Trax.Client.TraxHttpTransportOptions>
     {

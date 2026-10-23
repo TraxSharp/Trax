@@ -153,9 +153,10 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// failure (a status that is not success with no errors among them, whatever data came with it), and so is a
     /// body larger than <paramref name="maxResponseSize"/>, which is refused as it arrives rather than read whole, a
     /// body that breaks off, and a request that outlasts <see cref="HttpClient.Timeout"/>, body included. Throws only
-    /// when <paramref name="cancellationToken"/> is cancelled.
+    /// when <paramref name="cancellationToken"/> is cancelled. Internal: the endpoint is checked for TLS by whoever
+    /// built it, a transport or the machine server.
     /// </summary>
-    public static async Task<TraxAnswer> PostAsync(
+    internal static async Task<TraxAnswer> PostAsync(
         HttpClient http,
         Uri endpoint,
         JsonObject body,
