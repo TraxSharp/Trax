@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Trax.Api.Console.Terminal.Connection;
 
 namespace Trax.Api.Console.Terminal.Code;
 
@@ -22,6 +23,13 @@ internal static partial class CodeFinder
         ".vs",
         ".idea",
     };
+
+    // The variables a credential is read from, which the editor does not inherit.
+    private static readonly string[] Secrets =
+    [
+        ConsoleTarget.ApiKeyVariable,
+        ConsoleTarget.TokenVariable,
+    ];
 
     /// <summary>The first declaration of the type <paramref name="name"/> under <paramref name="root"/>, or null.</summary>
     public static SourceLocation? Find(string root, string name)
@@ -91,6 +99,9 @@ internal static partial class CodeFinder
     {
         var parts = editor.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var info = new ProcessStartInfo(parts[0]) { UseShellExecute = false };
+        // The editor, and whatever it runs (a plugin, a language server), has no use for the console's credential.
+        foreach (var secret in Secrets)
+            info.Environment.Remove(secret);
         foreach (var part in parts.Skip(1))
             info.ArgumentList.Add(part);
         switch (Path.GetFileNameWithoutExtension(parts[0]))

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Trax.Api.Console.Terminal.Code;
+using Trax.Api.Console.Terminal.Connection;
 
 namespace Trax.Api.Console.Terminal.Tests.UnitTests;
 
@@ -62,6 +63,31 @@ public class CodeFinderTests
             .Open(editor, new SourceLocation("/x/A.cs", 4))
             .ArgumentList.Should()
             .Equal(arguments);
+
+    [Test]
+    public void The_editor_does_not_inherit_the_credential()
+    {
+        var saved = (
+            Key: Environment.GetEnvironmentVariable(ConsoleTarget.ApiKeyVariable),
+            Token: Environment.GetEnvironmentVariable(ConsoleTarget.TokenVariable)
+        );
+        try
+        {
+            Environment.SetEnvironmentVariable(ConsoleTarget.ApiKeyVariable, "sk_live_1");
+            Environment.SetEnvironmentVariable(ConsoleTarget.TokenVariable, "eyJ.token");
+
+            var info = CodeFinder.Open("nvim", new SourceLocation("/x/A.cs", 4));
+
+            info.Environment.Should().NotContainKey(ConsoleTarget.ApiKeyVariable);
+            info.Environment.Should().NotContainKey(ConsoleTarget.TokenVariable);
+            info.Environment.Should().ContainKey("PATH");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ConsoleTarget.ApiKeyVariable, saved.Key);
+            Environment.SetEnvironmentVariable(ConsoleTarget.TokenVariable, saved.Token);
+        }
+    }
 
     [Test]
     public void The_editor_is_VISUAL_then_EDITOR_then_vi()
