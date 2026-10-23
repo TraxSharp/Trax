@@ -136,7 +136,8 @@ with different values becomes `Status2` rather than reusing the first. An inline
 takes the name of a component schema.
 
 Descriptions and OpenAPI paths are copied as text, never refused. Each one is collapsed onto a
-single line, and escaped for where it lands: XML markup is escaped in `///` comments, and
+single line, with every control and format character (the bidirectional controls among them) made a
+space, and escaped for where it lands: XML markup is escaped in `///` comments, and
 backslashes and quotes are escaped in the `Description = "..."` string of the train attribute.
 
 [`trax machine new`](#trax-machine-new-name) holds its arguments to the same rule: the machine name must make a

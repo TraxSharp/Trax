@@ -1425,6 +1425,38 @@ public class OperationsClientGeneratorTests
         document.Id.Should().Be(ClientDocumentSet.ConsoleIdOf("Hostile", document.Text));
     }
 
+    [Test]
+    public void A_description_carries_no_bidirectional_control_into_the_typescript_client()
+    {
+        const string bidi =
+            "\u061C\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069";
+        var described = $"safe \u202E*/ evil()\u2066 text\u200F\nnext\u2028line";
+        var schema =
+            Schema.Replace(
+                "enum RunState {\n  RUNNING",
+                $"enum RunState {{\n  {Block(described)}\n  RUNNING"
+            ) + $"\n{Block(described)}\ninput Odd {{\n  {Block(described)}\n  value: Int\n}}\n";
+        var files = ClientGenerator.Render(
+            new OperationsGenerateOptions(schema, [new("src/graphql/Runs.graphql", Runs)])
+        );
+
+        var types = Text(files, "types.g.ts");
+        types.IndexOfAny(bidi.ToCharArray()).Should().Be(-1, types);
+        types.Should().Contain(" * safe  *\\/ evil()  text\n * next\n * line\n");
+    }
+
+    [TestCase("\u202E")]
+    [TestCase("\u2066")]
+    [TestCase("\u200F")]
+    [TestCase("\u061C")]
+    [TestCase("\u200B")]
+    public void A_typescript_comment_holds_no_format_character(string c)
+    {
+        TypeScript.CommentText($"a{c}b").Should().Be("a b");
+        TypeScript.Doc($"a{c}b").Should().Be("/** a b */\n");
+        TypeScript.CommentText("a */ b\nc").Should().Be("a *\\/ b c");
+    }
+
     // A GraphQL block string holding text exactly.
     private static string Block(string text) =>
         "\"\"\"" + text.Replace("\"\"\"", "\\\"\"\"") + "\"\"\"";

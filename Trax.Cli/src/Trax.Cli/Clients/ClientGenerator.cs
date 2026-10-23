@@ -1524,7 +1524,7 @@ internal sealed partial class ClientGenerator
         return string.Join(", ", parts) + ". The host checks it either way.";
     }
 
-    private static string EscapeDocText(string text) => text.Replace("*/", "*\\/");
+    private static string EscapeDocText(string text) => TypeScript.CommentText(text);
 
     // The identifiers the client's index exports, or the paths of its files, so two never collide. rename is what a
     // collision's message asks for.

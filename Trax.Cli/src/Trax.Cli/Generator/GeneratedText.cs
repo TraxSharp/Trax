@@ -11,9 +11,11 @@ namespace Trax.Cli.Generator;
 internal static partial class GeneratedText
 {
     /// <summary>
-    /// Collapses every run of control characters and line or paragraph separators into one space,
-    /// which covers each character C# treats as a line terminator (CR, LF, U+0085, U+2028,
-    /// U+2029), so the result is always a single line.
+    /// Collapses every run of control characters, format characters and line or paragraph
+    /// separators into one space. That covers each character C# treats as a line terminator (CR,
+    /// LF, U+0085, U+2028, U+2029), so the result is always a single line, and every bidirectional
+    /// control (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069), so the text cannot
+    /// make the code around it display in another order than the compiler reads it.
     /// </summary>
     internal static string SingleLine(string text) => LineBreaks().Replace(text, " ").Trim();
 
@@ -50,6 +52,6 @@ internal static partial class GeneratedText
         return sb.ToString();
     }
 
-    [GeneratedRegex(@"[\p{Cc}\p{Zl}\p{Zp}]+")]
+    [GeneratedRegex(@"[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+")]
     private static partial Regex LineBreaks();
 }

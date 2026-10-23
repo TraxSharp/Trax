@@ -47,6 +47,43 @@ public class SchemaTextRenderingTests
         AssertOnOneDocLine(result, Collapsed);
     }
 
+    // Every bidirectional control, which would let a description reorder how the code around it displays.
+    private const string BidiControls =
+        "\u061C\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069";
+
+    [Test]
+    public void A_description_carries_no_bidirectional_control_into_the_generated_code()
+    {
+        var description = "safe \u202E} class Emitted {\u2066 text\u200F end\u061C";
+        var op = Operation(description: description, fieldDescription: description);
+
+        foreach (
+            var source in new[]
+            {
+                _renderer.RenderTrainImplementation(op, "MyApi"),
+                _renderer.RenderInput(op, "MyApi"),
+            }
+        )
+            source
+                .IndexOfAny(BidiControls.ToCharArray())
+                .Should()
+                .Be(-1, "a format character in a description is replaced ({0}):\n{1}", Adr, source);
+    }
+
+    [Test]
+    public void Every_format_character_is_a_space()
+    {
+        foreach (var c in BidiControls + "\u200B\u2060\uFEFF\u00AD")
+        {
+            GeneratedText
+                .SingleLine($"a{c}b")
+                .Should()
+                .Be("a b", $"U+{(int)c:X4} is a format character");
+            GeneratedText.StringLiteralContent($"a{c}b").Should().Be("a b");
+            GeneratedText.DocComment($"a{c}b").Should().Be("a b");
+        }
+    }
+
     [Test]
     public void An_enum_value_that_is_a_keyword_is_escaped()
     {
