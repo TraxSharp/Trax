@@ -52,7 +52,9 @@ It returns `endpoints`, for chaining.
   ([Trax.Api ADR 0042](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0042-the-operations-console-is-registered-as-persisted-documents.md)).
   A document the host cannot serve is left out and logged.
 - **What it does not change.** Who may run them. Every request is still decided by the operations gate
-  (`GateOperations(...)` or `RequireAuthorization()`), and no page, route or anonymous access is added.
+  (`GateOperations(...)` or `RequireAuthorization()`), or, for a stream (`onTrainStateChanged`, `onDataChanged`,
+  `onJunctionEvent`, `onMachineInstanceChanged`), by its per-subscriber authorization, which delivers each event only
+  to a caller who may see it. No page, route or anonymous access is added.
 - **Without persisted operations** nothing is registered, and a frontend sends the documents' text.
 
 ## Exceptions
