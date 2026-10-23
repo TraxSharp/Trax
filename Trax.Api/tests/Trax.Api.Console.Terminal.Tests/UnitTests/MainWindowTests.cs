@@ -129,7 +129,7 @@ public class MainWindowTests
         await _terminal.UntilShown("SendInvoice");
         await _terminal.OnUi(() => _window.Lists[0].SetFocus());
 
-        _prompts.Choices.Enqueue(1);
+        _prompts.Choices.Enqueue(null);
         await _terminal.Press(Key.C);
         await _terminal.OnUi(() => { });
 
@@ -199,6 +199,61 @@ public class MainWindowTests
             .Shown[0]
             .Lines.Should()
             .Contain(l => l.StartsWith("failureClass") && l.EndsWith("PERMANENT"));
+    }
+
+    [Test]
+    public async Task Vim_keys_move_through_rows_and_tabs()
+    {
+        _host.Answer(
+            "CancelExecutions",
+            """{"operations":{"cancelExecutions":{"success":true,"count":1,"message":"Asked."}}}"""
+        );
+        await _terminal.UntilShown("SyncCustomers");
+
+        await _terminal.Press(Key.J);
+        await _terminal.Press(Key.Space);
+        _prompts.Choices.Enqueue(0);
+        await _terminal.Press(Key.C);
+        await _terminal.Until(
+            () => _host.Sent("CancelExecutions").Count == 1,
+            "the cancel is sent"
+        );
+        _host.Sent("CancelExecutions")[0]["ids"]!
+            .ToJsonString()
+            .Should()
+            .Be("[4807]", "j moved to the second run");
+
+        await _terminal.Press(Key.L);
+        await _terminal.UntilShown("NightlyBilling");
+        (await _terminal.OnUi(() => _window.Lists[1].HasFocus))
+            .Should()
+            .BeTrue("l moved to the next tab");
+        await _terminal.Press(Key.D4);
+        (await _terminal.OnUi(() => _window.Lists[3].HasFocus))
+            .Should()
+            .BeTrue("4 moved to the fourth tab");
+    }
+
+    [Test]
+    public async Task The_schedulers_own_trains_are_hidden_from_the_runs_and_the_feed()
+    {
+        await _terminal.Until(() => _host.Follows("OnTrainStateChanged"), "the feed is followed");
+
+        _host.Push(
+            "OnTrainStateChanged",
+            """{"onTrainStateChanged":{"metadataId":1,"externalId":"a","trainName":"Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain","trainState":"COMPLETED","timestamp":"2026-10-22T10:05:00Z"}}"""
+        );
+        _host.Push(
+            "OnTrainStateChanged",
+            """{"onTrainStateChanged":{"metadataId":2,"externalId":"b","trainName":"ShipOrder","trainState":"COMPLETED","timestamp":"2026-10-22T10:05:01Z"}}"""
+        );
+
+        await _terminal.Until(
+            () => _window.Feed.Count == 1,
+            "the run that is not the scheduler's shows"
+        );
+        _window.Feed.Single().Should().Contain("ShipOrder");
+        _host.Sent("Executions").Should().OnlyContain(v => v["hideAdminTrains"]!.GetValue<bool>());
     }
 
     [Test]

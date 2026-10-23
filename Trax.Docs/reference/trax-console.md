@@ -51,7 +51,8 @@ A credential is sent over HTTPS only, or to this machine; `http://` to another h
 ## The console
 
 A tab per list (runs, dead letters, the work queue, manifests) and one for machines, the live feed of run state
-changes under them, and a status line. A list is read again a moment after the host says it changed
+changes under them, and a status line. Runs, manifests and the feed leave out the scheduler's own trains, as the
+browser console does; the filter `admin-trains=show` brings them back to a list. A list is read again a moment after the host says it changed
 (`onDataChanged`), and when the socket comes back after a drop.
 
 | Key | What it does |
@@ -68,9 +69,30 @@ changes under them, and a status line. A list is read again a moment after the h
 | `o` | Open the source of the train a row names, or of a step in a trace, in `$VISUAL` or `$EDITOR`, from the checkout `trax-console` runs in. The console comes back where it was when the editor exits. |
 | F5, F1, Ctrl+Q | Read everything again, list the keys, quit. |
 
-The machines tab shows each machine's graph as text, its instances (`s` keeps the stuck ones), and an instance's
-place on the graph, what it waits on, the runs it invoked and its history, read again when it changes. It is read
-only: the operations surface sends a machine no command.
+Everywhere, `j` and `k` move, `g` and `G` go to the top and the end, `Ctrl+d` and `Ctrl+u` move half a page, `h` and
+`l` go to the tab before and after, `1` to `5` go to a tab by number, and `q` closes a trace or an instance, or quits.
+The arrows work too.
+
+The machines tab draws each machine as boxes and arrows: states in columns by how far they are from the initial one,
+each transition a line labelled with its command (`on done` for the outcome of a train the state invokes, `after 30m`
+for a timer), the current state of an instance in a double border. A transition three or more states take the same
+way (`StartOver` from anywhere) is said once under the graph rather than drawn from each. `H` and `L` scroll a graph
+wider than the screen. It also lists the machine's instances (`s` keeps the stuck ones), and opens one with its place
+on the graph, what it waits on, the runs it invoked and its history, read again when it changes. It is read only: the
+operations surface sends a machine no command.
+
+```
+                                 ╭─────────╮                          ╭───────────╮
+               ┌───after 30m────▶│ Cleared │                        ┌▶│ Cancelled │
+    ┌──────────┴┐                ╰─────────╯                        │ ╰───────────╯
+ ●─▶│ Cart      ├──PlaceOrder──┐                                    │
+    │ ↻ AddItem │              │                                    │
+    └───────────┘              │ ┌─────────┐                        │ ╭───────────╮
+                               └▶│ Ordered ├──on cancelled, failed──┘ │ Delivered │
+                                 └────────┬┘                          ╰───────────╯
+                                          │                            ▲
+                                          └──────────on done───────────┘
+```
 
 ## JSON lines
 
@@ -84,6 +106,7 @@ reached, saying why on standard error.
 | `bulk <list> <action> --where ... --expect n [--note] [--ask-afresh] [--dry-run]` | The bulk operation it started, then its progress until it ends. |
 | `watch runs`, `watch changes`, `watch run <id>`, `watch machines [name]` | A stream, an event per line, until interrupted. |
 | `trace <run>` | A run's steps, decisions and log. |
+| `graph [machine]` | Each machine the host serves, or the one named, drawn as above. Plain text, not JSON. |
 | `check` | The host's release, and whether this console serves it. |
 
 ```bash

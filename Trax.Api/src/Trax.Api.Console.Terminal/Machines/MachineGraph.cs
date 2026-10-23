@@ -1,11 +1,12 @@
-using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 
 namespace Trax.Api.Console.Terminal.Machines;
 
 /// <summary>
-/// A machine's graph as text, from what <c>Machines</c> answers: each state, marked initial, final or current, with
-/// what takes it where (a command, an outcome of the train it invokes, a timer).
+/// A machine's graph as boxes and arrows (<see cref="GraphLayout"/>), from what <c>Machines</c> answers: a transition
+/// taken by a command is labelled with it, one taken by the outcome of the train its state invokes with
+/// <c>on</c> and the outcome, and one a timer takes with <c>after</c> and its delay. What a state invokes or spawns is
+/// in the legend under the graph.
 /// </summary>
 internal static class MachineGraph
 {
@@ -16,41 +17,80 @@ internal static class MachineGraph
     {
         if (machine.GraphUnavailableReason is { } reason)
             return [$"No graph: {reason}"];
-        var lines = new List<string>();
-        foreach (var state in machine.States)
-        {
-            var mark =
-                state.Name == current ? "▶"
-                : state.IsInitial ? "●"
-                : state.IsFinal ? "■"
-                : "○";
-            var notes = new[]
-            {
-                state.IsInitial ? "initial" : null,
-                state.IsFinal ? "final" : null,
-                state.IsCommitted ? "committed" : null,
-                state.InvokesTrain is { } train ? $"invokes {train}" : null,
-                state.SpawnsMachine is { } child ? $"spawns {child}" : null,
-                state.Name == current ? "current" : null,
-            }.Where(n => n is not null);
-            var name = state.Name == current ? $"[{state.Name}]" : state.Name;
-            lines.Add($"{mark} {name}{(notes.Any() ? $"  ({string.Join(", ", notes)})" : "")}");
-            foreach (var t in machine.Transitions.Where(t => t.From == state.Name))
-            {
-                var how = t.After is { } after ? $"after {after}" : t.Command;
-                var extra = new[]
+        var states = machine
+            .States.Select(s => new GraphState(
+                s.Name,
+                s.IsInitial || s.Name == machine.InitialState,
+                s.IsFinal,
+                Note(s)
+            ))
+            .ToList();
+        var edges = machine
+            .Transitions.Select(t => new GraphEdge(
+                t.From,
+                t.To,
+                t.Kind switch
                 {
-                    Wire.Name(t.Kind).ToLowerInvariant(),
-                    t.Guard is { } guard ? $"if {guard}" : null,
-                    t.Effect is { } effect ? $"then {effect}" : null,
-                }.Where(e => e is not null);
-                lines.Add($"    {how} ──▶ {t.To}  ({string.Join(", ", extra)})");
-            }
-            foreach (var timer in machine.Timers.Where(t => t.State == state.Name))
-                lines.Add(
-                    $"    timer {timer.Command} after {timer.After ?? timer.Field ?? "?"} ──▶ {timer.Target}"
+                    MachineTransitionKind.Timer => $"after {Delay(t.After) ?? t.Command}",
+                    // An outcome is named after the state that invokes the train (Ordered.done): the line leaves
+                    // that state already.
+                    MachineTransitionKind.Outcome =>
+                        $"on {(t.Command.StartsWith(t.From + ".", StringComparison.Ordinal) ? t.Command[(t.From.Length + 1)..] : t.Command)}",
+                    _ => t.Command,
+                }
+            ))
+            .ToList();
+        foreach (var timer in machine.Timers)
+            if (
+                !machine.Transitions.Any(t =>
+                    t.From == timer.State && t.To == timer.Target && t.Command == timer.Command
+                )
+            )
+                edges.Add(
+                    new GraphEdge(
+                        timer.State,
+                        timer.Target,
+                        $"after {Delay(timer.After) ?? timer.Field ?? timer.Command}"
+                    )
                 );
+        return GraphLayout.Render(states, edges, current);
+    }
+
+    // An ISO 8601 duration as the console writes a delay: PT30M is 30m, P1DT2H is 1d2h.
+    private static string? Delay(string? iso)
+    {
+        if (iso is null)
+            return null;
+        TimeSpan span;
+        try
+        {
+            span = System.Xml.XmlConvert.ToTimeSpan(iso);
         }
-        return lines;
+        catch (FormatException)
+        {
+            return iso;
+        }
+        var parts = new[]
+        {
+            span.Days > 0 ? $"{span.Days}d" : null,
+            span.Hours > 0 ? $"{span.Hours}h" : null,
+            span.Minutes > 0 ? $"{span.Minutes}m" : null,
+            span.Seconds > 0 ? $"{span.Seconds}s" : null,
+        }.Where(p => p is not null);
+        var text = string.Concat(parts);
+        return text.Length == 0 ? "0s" : text;
+    }
+
+    private static string? Note(MachinesResultOperationsMachinesStates state)
+    {
+        var notes = new[]
+        {
+            state.IsCommitted ? "committed" : null,
+            state.InvokesTrain is { } train ? $"invokes {train}" : null,
+            state.SpawnsMachine is { } child ? $"spawns {child}" : null,
+        }
+            .Where(n => n is not null)
+            .ToList();
+        return notes.Count == 0 ? null : string.Join(", ", notes);
     }
 }

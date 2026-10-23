@@ -42,7 +42,7 @@ internal sealed class MachinesScreen : View
 
         _machineList = new KeyedList
         {
-            Width = Dim.Percent(25),
+            Width = 24,
             Height = Dim.Fill(),
             Source = new ListWrapper<string>(_machineNames),
         };
@@ -52,10 +52,10 @@ internal sealed class MachinesScreen : View
             Title = "Graph",
             X = Pos.Right(_machineList) + 1,
             Width = Dim.Fill(),
-            Height = Dim.Percent(50),
+            Height = Dim.Percent(60),
         };
         graph.Add(
-            new ListView
+            new KeyedList
             {
                 Width = Dim.Fill(),
                 Height = Dim.Fill(),
@@ -99,7 +99,8 @@ internal sealed class MachinesScreen : View
         );
 
     /// <summary>The keys this screen takes, for the status line.</summary>
-    public string Help => "up/down machine  tab instances  enter open  s stuck only";
+    public string Help =>
+        $"{VimKeys.Help}  tab machines/graph/instances  H/L scroll the graph  enter open  s stuck only";
 
     /// <summary>The machine selected now.</summary>
     public MachinesResultOperationsMachines? Selected =>
@@ -211,6 +212,8 @@ internal sealed class MachinesScreen : View
 
     private bool OnKey(View from, Key key)
     {
+        if (VimKeys.Window(_context, key))
+            return true;
         if (Ui.Typed(key) == "s")
         {
             _stuckOnly = !_stuckOnly;

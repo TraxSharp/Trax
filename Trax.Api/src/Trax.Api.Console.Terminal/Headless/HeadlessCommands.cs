@@ -273,6 +273,38 @@ internal static class HeadlessCommands
         return 0;
     }
 
+    /// <summary>Prints each machine's graph as boxes and arrows, or the one named; plain text, not JSON.</summary>
+    public static async Task<int> GraphAsync(
+        ConsoleSession session,
+        string? machine,
+        TextWriter output,
+        CancellationToken ct
+    )
+    {
+        var answer = await session.Client.MachinesAsync(ct);
+        if (answer.Data?.Operations?.Machines is not { } machines)
+            return Refused(answer, System.Console.Error);
+        var shown = machines
+            .Where(m => machine is null ? !m.SystemOwned : m.Name == machine)
+            .OrderBy(m => m.Name)
+            .ToList();
+        if (shown.Count == 0)
+            throw new InvalidOperationException(
+                machine is null
+                    ? "This host serves no machines."
+                    : $"This host serves no machine '{machine}'. It serves {string.Join(", ", machines.Select(m => m.Name))}."
+            );
+        foreach (var m in shown)
+        {
+            await output.WriteLineAsync($"{m.Name} v{m.Version}");
+            await output.WriteLineAsync();
+            foreach (var line in Machines.MachineGraph.Lines(m))
+                await output.WriteLineAsync(line);
+            await output.WriteLineAsync();
+        }
+        return 0;
+    }
+
     public static async Task<int> CheckAsync(
         ConsoleSession session,
         VersionCheck version,

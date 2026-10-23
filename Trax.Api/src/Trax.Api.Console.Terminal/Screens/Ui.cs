@@ -46,17 +46,61 @@ internal static class Ui
             ? null
             : g;
 
-    /// <summary>Asks a question with <paramref name="buttons"/>; the index of the one chosen, or null for Esc.</summary>
-    public static int? Ask(
-        IApplication app,
-        string title,
-        string message,
-        params string[] buttons
-    ) => MessageBox.Query(app, title, message, buttons);
+    /// <summary>
+    /// Asks a question. The first choice is the default (Enter); Cancel is added after the choices and, like Esc,
+    /// answers null. The index of the choice taken, or null.
+    /// </summary>
+    public static int? Ask(IApplication app, string title, string message, params string[] choices)
+    {
+        var dialog = new Dialog
+        {
+            Title = title,
+            Width = Dim.Percent(60),
+            Height = Dim.Auto(),
+        };
+        dialog.Add(
+            new Label
+            {
+                Text = message,
+                X = 1,
+                Y = 1,
+                Width = Dim.Fill(1),
+                Height = Dim.Auto(),
+            }
+        );
+        int? chosen = null;
+        var buttons = new List<Button>();
+        void Add(string text, int? index)
+        {
+            var button = new Button { Text = text };
+            button.Accepting += (_, e) =>
+            {
+                chosen = index;
+                dialog.RequestStop();
+                e.Handled = true;
+            };
+            dialog.AddButton(button);
+            buttons.Add(button);
+        }
+        for (var i = 0; i < choices.Length; i++)
+            Add(choices[i], i);
+        Add("Cancel", null);
+        Default(buttons, buttons[0]);
+        app.Run(dialog);
+        dialog.Dispose();
+        return chosen;
+    }
 
     /// <summary>Says something the operator should read before going on.</summary>
     public static void Tell(IApplication app, string title, string message) =>
-        MessageBox.Query(app, title, message, "OK");
+        Ask(app, title, message, "OK");
+
+    // The dialog makes the last button added the default; the console's default is the action, never Cancel.
+    private static void Default(IReadOnlyList<Button> buttons, Button chosen)
+    {
+        foreach (var button in buttons)
+            button.IsDefault = button == chosen;
+    }
 
     /// <summary>
     /// A form of labelled text fields. Each field is (label, initial value); the values entered, in order, or null
@@ -99,9 +143,11 @@ internal static class Ui
             above = name;
         }
         int? chosen = null;
+        var buttons = new List<Button>();
         void Button(string text, int index)
         {
             var button = new Button { Text = text };
+            buttons.Add(button);
             button.Accepting += (_, e) =>
             {
                 chosen = index;
@@ -114,6 +160,7 @@ internal static class Ui
         if (clear is not null)
             Button(clear, 1);
         Button("Cancel", 2);
+        Default(buttons, buttons[0]);
         app.Run(dialog);
         var values = inputs.Select(i => i.Value ?? "").ToList();
         dialog.Dispose();

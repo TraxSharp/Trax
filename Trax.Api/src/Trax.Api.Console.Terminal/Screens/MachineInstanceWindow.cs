@@ -128,7 +128,7 @@ internal sealed class MachineInstanceWindow : Window
                 : now.Overdue ? "  ·  overdue"
                 : ""
             )
-            + "  ·  v trace a run  esc close";
+            + "  ·  j/k move  H/L sideways  v trace a run  q close";
         _lines.Clear();
         _runs.Clear();
         void Line(string text, long? run = null)
@@ -180,6 +180,11 @@ internal sealed class MachineInstanceWindow : Window
 
     private bool OnKey(Key key)
     {
+        if (Ui.Typed(key) == "q")
+        {
+            RequestStop();
+            return true;
+        }
         if (
             Ui.Typed(key) != "v"
             || _list.SelectedItem is not { } index

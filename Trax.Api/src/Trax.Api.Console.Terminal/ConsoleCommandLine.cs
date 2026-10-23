@@ -269,6 +269,33 @@ internal static class ConsoleCommandLine
                 )
         );
 
+        var machineName = new Argument<string?>("machine")
+        {
+            Description = "The machine; every machine the host serves when left out.",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var graph = new Command(
+            "graph",
+            "Draw a machine's states and transitions as boxes and arrows."
+        )
+        {
+            machineName,
+        };
+        graph.SetAction(
+            (p, ct) =>
+                Run(
+                    () => Target(p),
+                    p.GetValue(anyVersion),
+                    (session, _) =>
+                        HeadlessCommands.GraphAsync(
+                            session,
+                            p.GetValue(machineName),
+                            System.Console.Out,
+                            ct
+                        )
+                )
+        );
+
         var check = new Command(
             "check",
             "Say whether the host serves this console: its Trax release, and whether the credential reaches operations."
@@ -288,6 +315,7 @@ internal static class ConsoleCommandLine
         root.Subcommands.Add(bulk);
         root.Subcommands.Add(watch);
         root.Subcommands.Add(trace);
+        root.Subcommands.Add(graph);
         root.Subcommands.Add(check);
         return root;
     }

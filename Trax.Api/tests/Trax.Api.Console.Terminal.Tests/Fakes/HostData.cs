@@ -62,7 +62,11 @@ internal static class HostData
             .Answer("DeadLetters", DeadLetters(1, DeadLetter(7, "NightlyBilling")))
             .Answer("WorkQueue", NoQueue)
             .Answer("Manifests", NoManifests)
-            .Answer("Machines", NoMachines);
+            .Answer("Machines", NoMachines)
+            .Answer(
+                "AdminTrainNames",
+                """{"operations":{"adminTrainNames":["Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain"]}}"""
+            );
 
     public static string Variables(JsonObject variables) => variables.ToJsonString();
 

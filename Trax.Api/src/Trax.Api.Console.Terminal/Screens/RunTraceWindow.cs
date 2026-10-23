@@ -109,10 +109,15 @@ internal sealed class RunTraceWindow : Window
     private string Summary() =>
         $"{_entries.Count(e => e.Kind == TraceKind.Step)} steps  ·  "
         + $"{_entries.Count(e => e.Kind == TraceKind.Decision)} decisions  ·  "
-        + $"{_entries.Count(e => e.Kind == TraceKind.Log)} log lines  ·  live  ·  o source  esc close";
+        + $"{_entries.Count(e => e.Kind == TraceKind.Log)} log lines  ·  live  ·  j/k move  o source  q close";
 
     private bool OnKey(Key key)
     {
+        if (Ui.Typed(key) == "q")
+        {
+            RequestStop();
+            return true;
+        }
         if (Ui.Typed(key) != "o" || _lines.SelectedItem is not { } index || index >= _entries.Count)
             return false;
         var entry = _entries[index];

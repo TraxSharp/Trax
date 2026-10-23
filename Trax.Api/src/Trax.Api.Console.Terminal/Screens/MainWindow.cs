@@ -28,6 +28,9 @@ internal sealed class MainWindow : Window
     private readonly List<IDisposable> _streams = [];
     private readonly HashSet<ListScreen> _pending = [];
 
+    // The scheduler's own trains, which the feed leaves out as the browser console's does.
+    private readonly HashSet<string> _adminTrains = new(StringComparer.Ordinal);
+
     public MainWindow(ConsoleContext context, ConsoleState? state, string banner)
     {
         _context = context;
@@ -75,6 +78,8 @@ internal sealed class MainWindow : Window
 
         context.Status = text => _status.Text = text;
         context.OpenTrace = OpenTrace;
+        context.Tab = MoveTab;
+        context.Quit = () => _context.App.RequestStop();
 
         if (state is not null && state.Tab < _lists.Count + 1)
             _tabs.Value = state.Tab < _lists.Count ? _lists[state.Tab] : _machines;
@@ -85,9 +90,12 @@ internal sealed class MainWindow : Window
             if (!e.Value || _started)
                 return;
             _started = true;
+            _lists[0].SetFocus();
+            _status.Text = $"{banner}  ·  {_lists[0].Help}";
             RefreshAll();
-            Follow();
             _machines.Follow();
+            // The feed starts once the host has named its own trains, so none of them slips in first.
+            ReadAdminTrains(then: Follow);
         };
     }
 
@@ -108,6 +116,21 @@ internal sealed class MainWindow : Window
     /// <summary>The live feed's lines, newest last.</summary>
     public IReadOnlyList<string> Feed => _feed;
 
+    // Every tab, in order: the lists, then the machines.
+    private IReadOnlyList<View> TabViews => [.. _lists, _machines];
+
+    private void MoveTab(int? by, int? to)
+    {
+        var tabs = TabViews;
+        var at = Math.Max(0, tabs.ToList().IndexOf(_tabs.Value!));
+        var next = to is { } number ? number - 1 : (at + (by ?? 0) + tabs.Count) % tabs.Count;
+        if (next < 0 || next >= tabs.Count)
+            return;
+        _tabs.Value = tabs[next];
+        tabs[next].SetFocus();
+        ShowHelp();
+    }
+
     private void ShowHelp() =>
         _status.Text = _tabs.Value switch
         {
@@ -120,7 +143,9 @@ internal sealed class MainWindow : Window
         _context.Prompts.Show(
             "Keys",
             [
-                "Tabs           Tab / Shift+Tab, or click",
+                "Tabs           h / l, or 1 to 5",
+                "Move           j / k, g / G for top and end, Ctrl+d / Ctrl+u half a page (or the arrows)",
+                "Sideways       H / L, in a graph wider than the screen",
                 "Pages          n next, p previous",
                 "Filter         f (empty fields clear it)",
                 "Mark           space; an action runs on the marked rows, or the current one",
@@ -129,7 +154,7 @@ internal sealed class MainWindow : Window
                 "Source         o, on a row that names a train, inside a checkout ($VISUAL or $EDITOR)",
                 "All matching   b, an action on every row the filter matches, run by the host",
                 "Refresh        F5",
-                "Quit           Ctrl+Q",
+                "Close, quit    q closes a trace or an instance, and quits the console (or Ctrl+Q)",
                 "",
                 .. Catalog.All.SelectMany(l =>
                     l.ActionInfos.Select(a => $"{l.Title, -14} {a.Key} {a.Name}: {a.Description}")
@@ -143,6 +168,18 @@ internal sealed class MainWindow : Window
             screen.Refresh();
         _machines.Refresh();
     }
+
+    private void ReadAdminTrains(Action then) =>
+        Ui.Start(
+            _context.App,
+            () => _context.Client.AdminTrainNamesAsync(),
+            answer =>
+            {
+                _adminTrains.UnionWith(answer.Data?.Operations?.AdminTrainNames ?? []);
+                then();
+            },
+            _ => then()
+        );
 
     // Reads a list again a moment after the host says it changed, once for a burst of changes.
     private void Soon(ListScreen screen)
@@ -197,6 +234,8 @@ internal sealed class MainWindow : Window
                         return;
                     }
                     var change = next.Data.OnTrainStateChanged;
+                    if (_adminTrains.Contains(change.TrainName))
+                        return;
                     _feed.Add(
                         $"{Wire.Time(change.Timestamp)}  {change.MetadataId, 8}  {change.TrainName}  "
                             + $"{Wire.Name(change.TrainState)}"

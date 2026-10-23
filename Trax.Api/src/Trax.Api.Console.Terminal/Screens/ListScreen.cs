@@ -82,6 +82,7 @@ internal sealed class ListScreen : View
             "  ",
             new[]
             {
+                VimKeys.Help,
                 "n/p page",
                 "f filter",
                 "space mark",
@@ -148,6 +149,11 @@ internal sealed class ListScreen : View
 
     private void OnKey(object? sender, Key key)
     {
+        if (Move(key) || VimKeys.Window(_context, key))
+        {
+            key.Handled = true;
+            return;
+        }
         if (key == Key.Enter)
             Handle(key, Detail);
         else if (key == Key.Space)
@@ -188,6 +194,32 @@ internal sealed class ListScreen : View
         {
             key.Handled = true;
             action();
+        }
+    }
+
+    // vim's moves through the rows, beside the arrows.
+    private bool Move(Key key)
+    {
+        if (key == Key.D.WithCtrl)
+            return _table.PageDown(false, null) || true;
+        if (key == Key.U.WithCtrl)
+            return _table.PageUp(false, null) || true;
+        switch (Ui.Typed(key))
+        {
+            case "j":
+                _table.MoveCursorByOffset(0, 1, false, null);
+                return true;
+            case "k":
+                _table.MoveCursorByOffset(0, -1, false, null);
+                return true;
+            case "g":
+                _table.MoveCursorToStartOfTable(false, null);
+                return true;
+            case "G":
+                _table.MoveCursorToEndOfTable(false, null);
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -291,8 +323,7 @@ internal sealed class ListScreen : View
                 Capital(action.Name),
                 $"{Capital(action.Name)} {what}? A run that asks decisions may replay its answers or ask afresh.",
                 "Replay answers",
-                "Ask afresh",
-                "Cancel"
+                "Ask afresh"
             );
             if (chosen is not (0 or 1))
                 return;
@@ -304,8 +335,7 @@ internal sealed class ListScreen : View
                 _context.Prompts.Ask(
                     Capital(action.Name),
                     $"{Capital(action.Name)} {what}?",
-                    Capital(action.Name),
-                    "Cancel"
+                    Capital(action.Name)
                 ) != 0
             )
                 return;
@@ -359,7 +389,7 @@ internal sealed class ListScreen : View
         var chosen = _context.Prompts.Ask(
             "All matching",
             $"Apply to all {page.TotalCount} {List.Title.ToLowerInvariant()} matching {filters}. The host refuses if the filter now matches another count.",
-            [.. actions.Select(a => Capital(a.Name)), "Cancel"]
+            [.. actions.Select(a => Capital(a.Name))]
         );
         if (chosen is not { } index || index >= actions.Count)
             return;
@@ -371,8 +401,7 @@ internal sealed class ListScreen : View
                 Capital(bulk.Name),
                 "Replay recorded answers, or ask afresh?",
                 "Replay answers",
-                "Ask afresh",
-                "Cancel"
+                "Ask afresh"
             );
             if (afresh is not (0 or 1))
                 return;

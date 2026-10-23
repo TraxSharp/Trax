@@ -9,6 +9,16 @@ namespace Trax.Api.Console.Terminal.Lists;
 /// </summary>
 internal static class Catalog
 {
+    /// <summary>
+    /// The scheduler's own trains (the manifest manager, the dispatcher, the runner), hidden unless asked for, as the
+    /// browser console hides them. Declared before the lists, which read it as they are built.
+    /// </summary>
+    private static readonly ListFilter AdminTrains = new(
+        "admin-trains",
+        "The scheduler's own trains: hidden unless shown.",
+        ["hide", "show"]
+    );
+
     public static ConsoleList<ExecutionsResultOperationsExecutionsItems> Runs { get; } =
         new()
         {
@@ -37,6 +47,7 @@ internal static class Catalog
                 new("parent", "The run that started it."),
                 new("host", "The host that ran it."),
                 new("external-id", "Its external id."),
+                AdminTrains,
             ],
             Load = async (client, query, ct) =>
             {
@@ -53,6 +64,7 @@ internal static class Catalog
                         ParentId = Long(f, "parent"),
                         HostName = Text(f, "host"),
                         ExternalId = Text(f, "external-id"),
+                        HideAdminTrains = HideAdmin(f),
                     },
                     ct
                 );
@@ -109,6 +121,7 @@ internal static class Catalog
                             ParentId = Long(f, "parent"),
                             HostName = Text(f, "host"),
                             ExternalId = Text(f, "external-id"),
+                            HideAdminTrains = HideAdmin(f),
                         },
                     }
                 ),
@@ -341,6 +354,7 @@ internal static class Catalog
                 new("schedule", "How it is scheduled.", Wire.Names<ScheduleType>()),
                 new("name", "Part of its name."),
                 new("group", "Its manifest group."),
+                AdminTrains,
             ],
             Load = async (client, query, ct) =>
             {
@@ -354,6 +368,7 @@ internal static class Catalog
                         ScheduleType = Enum<ScheduleType>(f, "schedule"),
                         NameContains = Text(f, "name"),
                         ManifestGroupId = Long(f, "group"),
+                        HideAdminTrains = HideAdmin(f),
                     },
                     ct
                 );
@@ -492,6 +507,7 @@ internal static class Catalog
                 ScheduleType = Enum<ScheduleType>(f, "schedule"),
                 NameContains = Text(f, "name"),
                 ManifestGroupId = Long(f, "group"),
+                HideAdminTrains = HideAdmin(f),
             },
         };
 
@@ -552,6 +568,13 @@ internal static class Catalog
                     answer.Failure
                     ?? (answer.Errors.Count == 0 ? new TraxTransportFailure("Not found.") : null),
             };
+
+    private static bool HideAdmin(IReadOnlyDictionary<string, string> f) =>
+        !string.Equals(
+            f.GetValueOrDefault("admin-trains"),
+            "show",
+            StringComparison.OrdinalIgnoreCase
+        );
 
     private static Optional<string?> Text(IReadOnlyDictionary<string, string> f, string name) =>
         f.TryGetValue(name, out var value) && value.Length > 0 ? value : default(Optional<string?>);

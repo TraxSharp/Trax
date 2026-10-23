@@ -31,21 +31,45 @@ public class MachineViewTests
         """;
 
     [Test]
-    public void The_graph_marks_each_state_and_what_takes_it_where()
+    public void The_graph_draws_each_state_as_a_box_and_each_transition_as_a_labelled_arrow()
     {
         var lines = MachineGraph.Lines(Machine(), current: "Paying");
+        var text = string.Join("\n", lines);
+        TestContext.Out.WriteLine(text);
 
+        text.Should().Contain("●─▶│ Cart", "the initial state is entered by the arrow");
+        text.Should().Contain("║ Paying ", "the current state has a double border");
+        text.Should().Contain("╭─").And.Contain("│ Shipped │", "a final state has rounded corners");
+        text.Should().Contain("Checkout").And.Contain("on Paid").And.Contain("after 15m");
         lines
+            .Sum(l => l.Count(c => c is '▶' or '◀' or '▲' or '▼'))
             .Should()
-            .Equal(
-                "● Cart  (initial)",
-                "    Checkout ──▶ Paying  (command)",
-                "▶ [Paying]  (committed, invokes Shop.IChargeTrain, current)",
-                "    Paid ──▶ Shipped  (outcome)",
-                "    after 15m ──▶ Abandoned  (timer)",
-                "■ Shipped  (final)",
-                "■ Abandoned  (final)"
-            );
+            .Be(4, "the entry and three transitions");
+        lines.Should().Contain("Paying: committed, invokes Shop.IChargeTrain");
+    }
+
+    [Test]
+    public void A_transition_back_and_one_to_the_same_state_are_drawn_too()
+    {
+        var lines = GraphLayout.Render(
+            [
+                new GraphState("Idle", Initial: true, Final: false),
+                new GraphState("Busy", Initial: false, Final: false),
+                new GraphState("Done", Initial: false, Final: true),
+            ],
+            [
+                new GraphEdge("Idle", "Busy", "Start"),
+                new GraphEdge("Busy", "Idle", "Pause"),
+                new GraphEdge("Busy", "Busy", "Tick"),
+                new GraphEdge("Busy", "Done", "Finish"),
+            ]
+        );
+        var text = string.Join("\n", lines);
+        TestContext.Out.WriteLine(text);
+
+        text.Should().Contain("↻ Tick", "a transition to the same state is written in its box");
+        text.Should().Contain("Pause").And.Contain("Start").And.Contain("Finish");
+        lines.Sum(l => l.Count(c => c is '▶' or '◀' or '▲' or '▼')).Should().Be(4);
     }
 
     [Test]
@@ -91,7 +115,7 @@ public class MachineViewTests
         await using var _ = terminal;
 
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("[Paying]")),
+            () => window.Lines.Any(l => l.Contains("║ Paying ")),
             "the instance is read"
         );
         window.Lines.Should().Contain("Waits on run 4900 (IN_PROGRESS)");
@@ -108,7 +132,7 @@ public class MachineViewTests
         );
 
         await terminal.Until(
-            () => window.Lines.Any(l => l.Contains("[Shipped]")),
+            () => window.Lines.Any(l => l.Contains("║ Shipped ")),
             "the change is read"
         );
     }

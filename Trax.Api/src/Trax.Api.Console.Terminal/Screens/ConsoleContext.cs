@@ -6,8 +6,11 @@ namespace Trax.Api.Console.Terminal.Screens;
 /// <summary>The questions a screen asks the operator, apart from the screen, so a test can answer them.</summary>
 internal interface IPrompts
 {
-    /// <summary>A question with <paramref name="buttons"/>; the index of the one chosen, or null when dismissed.</summary>
-    int? Ask(string title, string message, params string[] buttons);
+    /// <summary>
+    /// A question with <paramref name="choices"/>, the first the default, and a Cancel after them; the index of the
+    /// choice taken, or null when cancelled or dismissed.
+    /// </summary>
+    int? Ask(string title, string message, params string[] choices);
 
     /// <summary>Something the operator should read before going on.</summary>
     void Tell(string title, string message);
@@ -27,8 +30,8 @@ internal interface IPrompts
 /// <summary>The console's dialogs.</summary>
 internal sealed class DialogPrompts(IApplication app) : IPrompts
 {
-    public int? Ask(string title, string message, params string[] buttons) =>
-        Ui.Ask(app, title, message, buttons);
+    public int? Ask(string title, string message, params string[] choices) =>
+        Ui.Ask(app, title, message, choices);
 
     public void Tell(string title, string message) => Ui.Tell(app, title, message);
 
@@ -67,4 +70,10 @@ internal sealed class ConsoleContext(
 
     /// <summary>Opens the source of a type a row names (a train, a junction) in the operator's editor.</summary>
     public Action<string> OpenCode { get; set; } = _ => { };
+
+    /// <summary>Moves to the tab so many places on (h, l), or to the tab of a number (1 to 9).</summary>
+    public Action<int?, int?> Tab { get; set; } = (_, _) => { };
+
+    /// <summary>Quits the console (q).</summary>
+    public Action Quit { get; set; } = () => { };
 }
