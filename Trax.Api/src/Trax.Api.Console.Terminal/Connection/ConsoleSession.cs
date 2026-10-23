@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json.Nodes;
+using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
 
@@ -64,9 +65,15 @@ internal sealed class ConsoleSession : IAsyncDisposable
         Action<System.Net.WebSockets.ClientWebSocketOptions>? configureSocket = null
     )
     {
-        var http = handler is null
-            ? new HttpClient()
-            : new HttpClient(handler, disposeHandler: false);
+        // The credential is a default header, so a redirect would carry it to wherever the host points. None is
+        // followed: a 3xx is a failure that names where it pointed.
+        var http = new HttpClient(
+            new NoRedirects
+            {
+                InnerHandler = handler ?? new SocketsHttpHandler { AllowAutoRedirect = false },
+            },
+            disposeHandler: handler is null
+        );
         http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("trax-console", ToolVersion)
         );
@@ -135,6 +142,40 @@ internal sealed class ConsoleSession : IAsyncDisposable
     {
         await _socket.DisposeAsync();
         _http.Dispose();
+    }
+}
+
+/// <summary>Turns a redirect into a failure, so the credential goes to the endpoint the operator named and no other.</summary>
+internal sealed class NoRedirects : DelegatingHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken
+    )
+    {
+        var response = await base.SendAsync(request, cancellationToken);
+        if ((int)response.StatusCode is < 300 or >= 400)
+            return response;
+        var location = response.Headers.Location;
+        response.Dispose();
+        throw new HttpRequestException(
+            $"{request.RequestUri} redirected to {Shown(request.RequestUri, location)}, and trax-console follows no "
+                + "redirect. Give --host and --graphql-path of the endpoint itself."
+        );
+    }
+
+    // Where it pointed, without userinfo, on one line, and short.
+    private static string Shown(Uri? from, Uri? location)
+    {
+        if (location is null)
+            return "nowhere";
+        if (!location.IsAbsoluteUri && from is not null)
+            location = new Uri(from, location);
+        var text = location.IsAbsoluteUri
+            ? new UriBuilder(location) { UserName = "", Password = "" }.Uri.ToString()
+            : location.OriginalString;
+        text = TerminalText.Line(text);
+        return text.Length > 200 ? text[..200] + "..." : text;
     }
 }
 
