@@ -89,8 +89,8 @@ public readonly record struct Optional<T>
 | Member | What it is |
 | --- | --- |
 | `TraxClient` | Sends documents through an `ITraxTransport`, writing variables and reading data with `TraxJson.Options` unless `TraxClientOptions.Json` says otherwise. It never talks to the network itself. Built in an app that turned reflection-based serialization off, it throws `ArgumentException` unless `TraxClientOptions.Json` names a resolver. |
-| `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, or for a subscription document, which `Subscribe` follows. Data that does not fit `TResult`, or that the options cannot read at all, is a `Failure`, not a throw. |
-| `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`, one call at a time. Throws `ArgumentException` for a document that is not a subscription. An `onEvent` that throws ends its stream: the last call it gets is `Ended`, whose `Failure` names the exception. Other streams go on. |
+| `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, and, before anything is sent, `ArgumentException` for a subscription document (which `Subscribe` follows) or for variables that do not serialize to a JSON object. Data that does not fit `TResult`, or that the options cannot read at all, is a `Failure`, not a throw. |
+| `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`, one call at a time. Throws `ArgumentException` for a document that is not a subscription, or for variables that do not serialize to a JSON object. An `onEvent` that throws ends its stream: the last call it gets is `Ended`, whose `Failure` names the exception. Other streams go on. |
 | `Transport` | The transport the client sends through. |
 | `DefaultResubscribeDelays` | 1, 2, then 5 seconds: the delays before subscribing again after the socket dropped a stream. |
 | `TraxClientOptions` | `Json`, the serializer options (`TraxJson.Options` when null), which the client reads through a copy that leaves every unset `Optional<T>` out, whatever their resolver; `ResubscribeDelays`, whose last delay repeats for as long as the stream is followed (`DefaultResubscribeDelays` when null or empty); `Time`, the `TimeProvider` the delays run on (the system's when null). |
@@ -143,7 +143,9 @@ public readonly record struct Optional<T>
 
 - **Totality.** `SendAsync` and `ExecuteAsync` answer every refusal and every transport failure as a value: an
   unreachable host, a broken or oversized body, an answer that does not fit the result. A timeout the caller did not
-  ask for is a `Failure`; a cancellation the caller asked for throws.
+  ask for is a `Failure`; a cancellation the caller asked for throws. The only other throws are `SendAsync`'s
+  `ArgumentException`s, for a subscription document or for variables that do not serialize to a JSON object, before
+  anything is sent.
 - **By id or by text.** A document with an id goes by its id unless `ById` says otherwise, and its text is then not
   sent at all. A host that requires persisted operations accepts only those. Either way the request carries
   `operationName`.

@@ -636,6 +636,49 @@ public class TraxClientTests
     }
 
     [Test]
+    public async Task Variables_that_cannot_be_written_throw_before_anything_is_sent()
+    {
+        var host = new Host("{}");
+        var document = new TraxDocument<int, RunsResult>(
+            "Runs",
+            TraxOperationKind.Query,
+            null,
+            "query Runs { x }"
+        );
+
+        var send = () => Client(host).SendAsync(document, 5);
+
+        await send.Should().ThrowAsync<ArgumentException>().WithMessage("*JSON object*");
+        host.Bodies.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Variables_the_serializer_refuses_throw_before_anything_is_sent()
+    {
+        var host = new Host("{}");
+        var document = new TraxDocument<Unwritable, RunsResult>(
+            "Runs",
+            TraxOperationKind.Query,
+            null,
+            "query Runs { x }"
+        );
+
+        var send = () => Client(host).SendAsync(document, new Unwritable());
+
+        (await send.Should().ThrowAsync<ArgumentException>())
+            .WithMessage("*could not be written*")
+            .WithInnerException<NotSupportedException>();
+        host.Bodies.Should().BeEmpty();
+    }
+
+    public sealed record Unwritable
+    {
+        // System.Text.Json refuses to write a Type (NotSupportedException).
+        [JsonPropertyName("kind")]
+        public Type Kind { get; init; } = typeof(int);
+    }
+
+    [Test]
     public async Task A_document_with_no_id_goes_by_its_text_whatever_ById_says()
     {
         var host = new Host("""{"data":{"operations":{"runs":[]}}}""");

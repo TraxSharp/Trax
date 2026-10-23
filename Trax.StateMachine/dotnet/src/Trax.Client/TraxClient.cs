@@ -92,8 +92,9 @@ public sealed class TraxClient
     public ITraxTransport Transport => _transport;
 
     /// <summary>
-    /// Sends a query or mutation. Throws only when <paramref name="cancellationToken"/> is cancelled, or for a
-    /// subscription document, which <see cref="Subscribe{TVariables, TResult}"/> follows.
+    /// Sends a query or mutation. Throws only when <paramref name="cancellationToken"/> is cancelled, for a
+    /// subscription document, which <see cref="Subscribe{TVariables, TResult}"/> follows, or for variables that do not
+    /// serialize to a JSON object (an <see cref="ArgumentException"/>, before anything is sent).
     /// </summary>
     public async Task<TraxAnswer<TResult>> SendAsync<TVariables, TResult>(
         TraxDocument<TVariables, TResult> document,
@@ -118,7 +119,8 @@ public sealed class TraxClient
     /// and the stream's interruptions, resumptions and end, one call at a time. A frame with errors ends the stream. So
     /// does an <paramref name="onEvent"/> that throws: the stream is closed, and its last call is the
     /// <see cref="TraxStreamEvent{T}.Ended"/> whose <see cref="TraxStreamEvent{T}.Ended.Failure"/> names the exception.
-    /// Throws an <see cref="ArgumentException"/> for a document that is not a subscription.
+    /// Throws an <see cref="ArgumentException"/> for a document that is not a subscription, or for variables that do
+    /// not serialize to a JSON object.
     /// </summary>
     public IDisposable Subscribe<TVariables, TResult>(
         TraxDocument<TVariables, TResult> document,
@@ -142,14 +144,29 @@ public sealed class TraxClient
         return stream;
     }
 
-    private JsonObject VariablesOf<TVariables>(TVariables variables) =>
-        variables is null or TraxNoVariables
-            ? new JsonObject()
-            : JsonSerializer.SerializeToNode(variables, TypeInfo<TVariables>()) as JsonObject
-                ?? throw new ArgumentException(
-                    "The variables must serialize to a JSON object.",
-                    nameof(variables)
-                );
+    private JsonObject VariablesOf<TVariables>(TVariables variables)
+    {
+        if (variables is null or TraxNoVariables)
+            return new JsonObject();
+        JsonNode? written;
+        try
+        {
+            written = JsonSerializer.SerializeToNode(variables, TypeInfo<TVariables>());
+        }
+        catch (Exception ex) when (ex is not ArgumentException)
+        {
+            throw new ArgumentException(
+                $"The variables could not be written: {ex.Message}",
+                nameof(variables),
+                ex
+            );
+        }
+        return written as JsonObject
+            ?? throw new ArgumentException(
+                "The variables must serialize to a JSON object.",
+                nameof(variables)
+            );
+    }
 
     // The contract for T from the client's options: no reflection of its own, so a source-generated context is enough.
     private JsonTypeInfo<T> TypeInfo<T>() => (JsonTypeInfo<T>)_json.GetTypeInfo(typeof(T));
