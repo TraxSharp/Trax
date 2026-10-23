@@ -86,6 +86,7 @@ public class DependencyDirectionTests
     >(StringComparer.Ordinal)
     {
         ["Trax.Client"] = "Trax.StateMachine",
+        ["Trax.Runner.Lambda"] = "Trax.Scheduler",
     };
 
     [Test]
@@ -115,7 +116,8 @@ public class DependencyDirectionTests
                 $"{repo} may reference only its own family and its allowed upstream "
                     + $"[{string.Join(", ", AllowedUpstream[repo!])}] per the Trax dependency chain. A "
                     + "package or project reference to any other Trax family points the wrong way "
-                    + "(downstream or parallel). Offenders:\n  "
+                    + "(downstream or parallel), and one to a Trax id with no family must be mapped "
+                    + "to the folder that ships it, in Families or Unprefixed. Offenders:\n  "
                     + string.Join("\n  ", Offenders(repo!, projects))
             );
     }
@@ -134,6 +136,17 @@ public class DependencyDirectionTests
             );
     }
 
+    [TestCase("Trax.Core", "Trax.Unmapped")]
+    [TestCase("Trax.Samples", "Trax.Unmapped.Testing")]
+    public void A_reference_to_a_Trax_id_with_no_family_is_refused(string folder, string referenced)
+    {
+        Offenders(folder, [("x.csproj", ProjectReferencing(referenced))])
+            .Should()
+            .ContainSingle(
+                $"{referenced} is in no family, so the chain cannot say whether {folder} may reach it"
+            );
+    }
+
     [TestCase("Trax.StateMachine", "Trax.Effect.Data")]
     [TestCase("Trax.Mediator", "Trax.StateMachine.Persistence")]
     public void A_reference_along_the_chain_is_allowed(string folder, string referenced)
@@ -143,8 +156,8 @@ public class DependencyDirectionTests
             .BeEmpty($"{referenced} is in a family upstream of {folder}");
     }
 
-    // Every reference in the given projects to a Trax family the folder may not reach, as
-    // "project -> reference [family]".
+    // Every reference in the given projects to a Trax family the folder may not reach, or to a Trax id
+    // in no family, as "project -> reference [family]".
     private static List<string> Offenders(
         string repo,
         IEnumerable<(string Path, XDocument Project)> projects
@@ -160,12 +173,14 @@ public class DependencyDirectionTests
                 if (include is null || !include.StartsWith("Trax.", StringComparison.Ordinal))
                     continue;
 
-                // A Trax package outside the folder families (e.g. a standalone Trax.Runner.*)
-                // is out of scope for this chain guard; skip it rather than flag it.
+                // A Trax id outside every family is refused rather than skipped: the chain cannot
+                // say whether the folder may reach it until it is mapped to the folder that ships it.
                 var family = FamilyOf(include);
                 if (family is null)
-                    continue;
-                if (!allowed.Contains(family))
+                    offenders.Add(
+                        $"{path} -> {include} [no family: map it in Families or Unprefixed]"
+                    );
+                else if (!allowed.Contains(family))
                     offenders.Add($"{path} -> {include} [{family}]");
             }
         }
