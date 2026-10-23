@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using Trax.Api.Console.Terminal.Operations;
 
 namespace Trax.Api.Console.Terminal.Machines;
@@ -6,14 +8,29 @@ namespace Trax.Api.Console.Terminal.Machines;
 /// A machine's graph as boxes and arrows (<see cref="GraphLayout"/>), from what <c>Machines</c> answers: a transition
 /// taken by a command is labelled with it, one taken by the outcome of the train its state invokes with
 /// <c>on</c> and the outcome, and one a timer takes with <c>after</c> and its delay. What a state invokes or spawns is
-/// in the legend under the graph.
+/// in the legend under the graph. A machine's drawing is kept for each current state and direction it was drawn with,
+/// for as long as the machine's record is, so a window read again on every change does not lay it out again.
 /// </summary>
 internal static class MachineGraph
 {
+    private static readonly ConditionalWeakTable<
+        MachinesResultOperationsMachines,
+        ConcurrentDictionary<(string? Current, bool Vertical), IReadOnlyList<string>>
+    > Drawn = new();
+
     public static IReadOnlyList<string> Lines(
         MachinesResultOperationsMachines machine,
         string? current = null,
         bool vertical = false
+    ) =>
+        Drawn
+            .GetValue(machine, _ => new())
+            .GetOrAdd((current, vertical), key => Draw(machine, key.Current, key.Vertical));
+
+    private static IReadOnlyList<string> Draw(
+        MachinesResultOperationsMachines machine,
+        string? current,
+        bool vertical
     )
     {
         if (machine.GraphUnavailableReason is { } reason)

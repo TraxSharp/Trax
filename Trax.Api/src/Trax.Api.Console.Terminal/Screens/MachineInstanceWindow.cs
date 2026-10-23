@@ -11,7 +11,8 @@ namespace Trax.Api.Console.Terminal.Screens;
 
 /// <summary>
 /// One machine instance: where it is on its machine's graph, what it waits on, the runs it invoked and the history of
-/// its transitions, read again whenever the host says it changed. v opens the trace of the run under the cursor.
+/// its transitions, read again a moment after the host says it changed (once for a burst of changes, and only the
+/// latest read shown). The graph is drawn off the UI thread. v opens the trace of the run under the cursor.
 /// </summary>
 internal sealed class MachineInstanceWindow : Window
 {
@@ -25,6 +26,8 @@ internal sealed class MachineInstanceWindow : Window
     private readonly KeyedList _list;
     private readonly List<long?> _runs = [];
     private IDisposable? _stream;
+    private int _loading;
+    private bool _pending;
 
     public MachineInstanceWindow(
         ConsoleContext context,
@@ -67,7 +70,9 @@ internal sealed class MachineInstanceWindow : Window
                         && next.Data.OnMachineInstanceChanged.Id == _instance.Id
                         && next.Data.OnMachineInstanceChanged.OwnerKind == _instance.OwnerKind
                     )
-                        Load();
+                        Soon();
+                    else if (e is TraxStreamEvent<OnMachineInstanceChangedResult>.Resumed)
+                        Soon();
                 })
         );
     }
@@ -78,7 +83,27 @@ internal sealed class MachineInstanceWindow : Window
     /// <summary>The lines shown, in order.</summary>
     public IReadOnlyList<string> Lines => _lines;
 
-    private void Load() =>
+    // Reads it again a moment after a change, once for a burst of them.
+    private void Soon()
+    {
+        if (_pending)
+            return;
+        _pending = true;
+        _context.App.AddTimeout(
+            MainWindow.RefreshDelay,
+            () =>
+            {
+                _pending = false;
+                Load();
+                return false;
+            }
+        );
+    }
+
+    private void Load()
+    {
+        var load = Interlocked.Increment(ref _loading);
+        var vertical = _context.VerticalGraphs;
         Ui.Start(
             _context.App,
             async () =>
@@ -102,11 +127,24 @@ internal sealed class MachineInstanceWindow : Window
                         First = TransitionsShown,
                     }
                 );
+                // Drawn here, off the UI thread; Show finds it drawn.
+                if (detail.Data?.Operations?.MachineInstance is { } now)
+                    MachineGraph.Lines(_machine, now.State, vertical);
                 return (detail, history);
             },
-            answers => Show(answers.detail, answers.history),
-            message => _header.Text = message
+            answers =>
+            {
+                // An answer to an older read, overtaken by a newer one, is dropped.
+                if (load == Volatile.Read(ref _loading))
+                    Show(answers.detail, answers.history);
+            },
+            message =>
+            {
+                if (load == Volatile.Read(ref _loading))
+                    _header.Text = message;
+            }
         );
+    }
 
     private (
         TraxAnswer<MachineInstanceResult> Detail,
@@ -193,8 +231,19 @@ internal sealed class MachineInstanceWindow : Window
         }
         if (Ui.Typed(key) == "r" && _last is { } last)
         {
-            _context.VerticalGraphs = !_context.VerticalGraphs;
-            Show(last.Detail, last.History);
+            var vertical = _context.VerticalGraphs = !_context.VerticalGraphs;
+            var state = last.Detail.Data?.Operations?.MachineInstance?.State;
+            // Drawn off the UI thread, then shown with the latest answer, which may be newer than this one.
+            Ui.Start(
+                _context.App,
+                () => Task.Run(() => MachineGraph.Lines(_machine, state, vertical)),
+                _ =>
+                {
+                    if (_last is { } shown)
+                        Show(shown.Detail, shown.History);
+                },
+                message => _header.Text = message
+            );
             return true;
         }
         if (

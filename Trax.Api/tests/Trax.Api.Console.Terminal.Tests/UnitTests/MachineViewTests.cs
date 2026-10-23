@@ -203,12 +203,121 @@ public class MachineViewTests
             "OnMachineInstanceChanged",
             """{"onMachineInstanceChanged":{"rowId":5,"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","state":"Shipped","updatedAt":"2026-10-22T10:02:00Z","hasLiveInvokedRun":false,"deleted":false,"reload":false}}"""
         );
+        await terminal.OnUi(() => { });
+        await terminal.OnUi(() => terminal.Time.Advance(TimeSpan.FromSeconds(1)));
 
         await terminal.Until(
             () => window.Lines.Any(l => l.Contains("║ Shipped ")),
             "the change is read"
         );
     }
+
+    [Test]
+    public async Task A_burst_of_changes_is_read_once_and_an_overtaken_answer_is_dropped()
+    {
+        MainWindow.RefreshDelay = TimeSpan.FromMilliseconds(300);
+        var held = new TaskCompletionSource<System.Text.Json.Nodes.JsonObject>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var reads = 0;
+        var host = new FakeHost()
+            .AnswerLater(
+                "MachineInstance",
+                _ =>
+                    Interlocked.Increment(ref reads) switch
+                    {
+                        1 => Task.FromResult(Detail("Paying")),
+                        2 => held.Task,
+                        _ => Task.FromResult(Detail("Shipped")),
+                    }
+            )
+            .Answer("MachineInstanceTransitions", Transitions);
+        var (terminal, window) = await TerminalHarness.StartAsync(app => new MachineInstanceWindow(
+            new ConsoleContext(
+                app,
+                new TraxClient(host),
+                new Uri("https://ops.example.com/trax/graphql")
+            ),
+            Machine(),
+            Instance()
+        ));
+        await using var _ = terminal;
+        await terminal.Until(
+            () =>
+                window.Lines.Any(l => l.Contains("║ Paying "))
+                && host.Follows("OnMachineInstanceChanged"),
+            "the instance is read and followed"
+        );
+
+        for (var i = 0; i < 5; i++)
+            host.Push("OnMachineInstanceChanged", Changed);
+        await terminal.OnUi(() => { });
+        await terminal.OnUi(() => terminal.Time.Advance(TimeSpan.FromSeconds(1)));
+        await terminal.Until(
+            () => host.Sent("MachineInstance").Count == 2,
+            "the burst is read once"
+        );
+        host.Push("OnMachineInstanceChanged", Changed);
+        await terminal.OnUi(() => { });
+        await terminal.OnUi(() => terminal.Time.Advance(TimeSpan.FromSeconds(1)));
+        await terminal.Until(
+            () => window.Lines.Any(l => l.Contains("║ Shipped ")),
+            "the newer read is shown"
+        );
+
+        held.SetResult(Detail("Cart"));
+        await terminal.Until(
+            () => host.Sent("MachineInstanceTransitions").Count == 3,
+            "the overtaken read finishes"
+        );
+        await Task.Delay(200);
+        await terminal.OnUi(() => { });
+
+        host.Sent("MachineInstance").Should().HaveCount(3);
+        window.Lines.Should().Contain(l => l.Contains("║ Shipped "));
+        window
+            .Lines.Should()
+            .NotContain(l => l.Contains("║ Cart "), "the older answer was dropped");
+    }
+
+    [Test]
+    public void A_machine_drawn_again_the_same_way_is_not_laid_out_again()
+    {
+        var machine = Machine();
+
+        MachineGraph
+            .Lines(machine, "Paying", vertical: true)
+            .Should()
+            .BeSameAs(MachineGraph.Lines(machine, "Paying", vertical: true));
+        MachineGraph
+            .Lines(machine, "Paying")
+            .Should()
+            .NotBeSameAs(MachineGraph.Lines(machine, "Paying", vertical: true));
+    }
+
+    private const string Changed =
+        """{"onMachineInstanceChanged":{"rowId":5,"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","state":"Shipped","updatedAt":"2026-10-22T10:02:00Z","hasLiveInvokedRun":false,"deleted":false,"reload":false}}""";
+
+    private const string Transitions = """
+        {"operations":{"machineInstance":{"rowId":5,"transitions":{"items":[]}}}}
+        """;
+
+    private static System.Text.Json.Nodes.JsonObject Detail(string state) =>
+        (System.Text.Json.Nodes.JsonObject)
+            System.Text.Json.Nodes.JsonNode.Parse(
+                """
+                {"operations":{"machineInstance":{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001",
+                 "rowId":5,"state":"STATE","version":2,"updatedAt":"2026-10-22T10:01:00Z","hasLiveInvokedRun":false,
+                 "isInvokedRunsCapped":false,"inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false,
+                 "waitingOn":null,"invokedRuns":[]}}}
+                """.Replace("STATE", state)
+            )!;
+
+    private static MachineInstancesAttentionResultOperationsMachineInstancesItems Instance() =>
+        JsonSerializer.Deserialize<MachineInstancesAttentionResultOperationsMachineInstancesItems>(
+            """{"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","rowId":5,"state":"Paying","updatedAt":"2026-10-22T10:01:00Z","inStateSince":"2026-10-22T10:01:00Z","overdue":false,"stuck":false}""",
+            TraxJson.Options
+        )!;
 
     private static MachinesResultOperationsMachines Machine() =>
         JsonSerializer.Deserialize<MachinesResultOperationsMachines>(Checkout, TraxJson.Options)!;
