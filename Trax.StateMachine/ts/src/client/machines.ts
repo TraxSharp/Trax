@@ -22,6 +22,8 @@
 import { RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
 import {
+  DEFAULT_MAX_RESPONSE_SIZE,
+  readBounded,
   requireNoRedirect,
   requireSecureEndpoint,
   type HttpExecutorOptions,
@@ -167,7 +169,7 @@ type Answered = { answer: TypedAnswer | null | undefined } | { refused: Snapshot
  * which the session reports as a transport error; a refusal is a problem, as data, and so is `CLIENT_OUTDATED` or
  * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine. An absolute
  * `http:` endpoint on a host that is not loopback throws unless `allowInsecureTransport` is set. A redirect is not
- * followed: it fails the request.
+ * followed, and a body larger than `maxResponseSize` (16 MiB by default) is not read: either fails the request.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineExecutor(
@@ -176,6 +178,7 @@ export function createMachineExecutor(
 ): SnapshotExecutor {
   requireSecureEndpoint(endpoint, options.allowInsecureTransport);
   const doFetch = options.fetch ?? globalThis.fetch;
+  const maxResponseSize = options.maxResponseSize ?? DEFAULT_MAX_RESPONSE_SIZE;
   const machines = new Map(options.machines.map((m) => [m.machine.id, { ...m, byOperation: documentsOf(m) }]));
 
   const post = async (body: Record<string, unknown>, name: string): Promise<Answered> => {
@@ -191,9 +194,10 @@ export function createMachineExecutor(
       data?: { machines?: Record<string, Record<string, unknown>> } | null;
       errors?: { message: string; extensions?: { code?: string } }[];
     };
+    const text = await readBounded(response, maxResponseSize);
     let answered: Body | null;
     try {
-      answered = (await response.json()) as Body;
+      answered = JSON.parse(text) as Body;
     } catch (error) {
       if (response.ok) throw error;
       answered = null;

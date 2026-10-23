@@ -12,7 +12,7 @@ const recording = (...bodies: unknown[]) => {
   const sent: Record<string, unknown>[] = [];
   const fetch = (async (_url: string, init: { body: string }) => {
     sent.push(JSON.parse(init.body) as Record<string, unknown>);
-    return { ok: true, status: 200, statusText: 'OK', json: async () => bodies.shift() };
+    return new Response(JSON.stringify(bodies.shift()), { status: 200, statusText: 'OK' });
   }) as unknown as typeof globalThis.fetch;
   return { sent, fetch };
 };
@@ -206,12 +206,8 @@ describe('createMachineExecutor with persisted documents', () => {
 
   it('throws on a status that is not 2xx, whatever answer its body carries', async () => {
     const body = answer('get', { id: 'draft-1', revision: 2, state: 'Cart', context: { items: [] }, problem: null });
-    const fetch = (async () => ({
-      ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      json: async () => body,
-    })) as unknown as typeof globalThis.fetch;
+    const fetch = (async () =>
+      new Response(JSON.stringify(body), { status: 500, statusText: 'Internal Server Error' })) as typeof globalThis.fetch;
     const session = createDraftSession({ executor: persisted(fetch), machine: checkout, id: 'draft-1' });
 
     const loaded = await session.load();
@@ -220,12 +216,11 @@ describe('createMachineExecutor with persisted documents', () => {
   });
 
   it('answers client-outdated on any status, as the host may choose one', async () => {
-    const fetch = (async () => ({
-      ok: false,
-      status: 409,
-      statusText: 'Conflict',
-      json: async () => ({ errors: [{ message: 'Reload.', extensions: { code: 'CLIENT_OUTDATED' } }] }),
-    })) as unknown as typeof globalThis.fetch;
+    const fetch = (async () =>
+      new Response(JSON.stringify({ errors: [{ message: 'Reload.', extensions: { code: 'CLIENT_OUTDATED' } }] }), {
+        status: 409,
+        statusText: 'Conflict',
+      })) as typeof globalThis.fetch;
     const session = createDraftSession({ executor: persisted(fetch), machine: checkout, id: 'draft-1' });
 
     expect(await session.load()).toEqual({ ok: false, code: 'CLIENT_OUTDATED', message: 'Reload.' });

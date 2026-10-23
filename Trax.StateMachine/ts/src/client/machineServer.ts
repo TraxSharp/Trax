@@ -44,7 +44,11 @@ export interface MachineServerOptions extends HttpExecutorOptions {
    * included. Each must be of this machine and of the IR its twin was generated from.
    */
   documents: readonly MachineDocument[];
-  /** The socket the change stream is subscribed over. */
+  /**
+   * The socket the change stream is subscribed over. The page owns it and parses its frames, so no limit here bounds
+   * them: cap a frame's size on the socket itself, for a graphql-ws client by giving it a `webSocketImpl` that closes
+   * the socket on a message larger than the page accepts.
+   */
   socket: PersistedSubscriptionSocket;
   /**
    * Delays, in milliseconds, before subscribing again after a stream that ended without saying why (its host stopped,
@@ -181,6 +185,7 @@ export function createMachineServer(endpoint: string, options: MachineServerOpti
       fetch: options.fetch,
       headers: options.headers,
       allowInsecureTransport: options.allowInsecureTransport,
+      maxResponseSize: options.maxResponseSize,
       machines: [{ machine, documents }],
     }),
   );

@@ -47,7 +47,7 @@ const http = (...bodies: unknown[]) => {
   const sent: Sent[] = [];
   const fetch = (async (_url: string, init: { body: string }) => {
     sent.push(JSON.parse(init.body) as Sent);
-    return { ok: true, status: 200, statusText: 'OK', json: async () => bodies.shift() };
+    return new Response(JSON.stringify(bodies.shift()), { status: 200, statusText: 'OK' });
   }) as unknown as typeof globalThis.fetch;
   return { sent, fetch };
 };
