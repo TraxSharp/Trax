@@ -124,6 +124,73 @@ public class ListScreenTests
         _host.Sent("SetManifestsEnabled").Should().BeEmpty();
     }
 
+    [Test]
+    public async Task An_answer_overtaken_by_a_newer_read_is_dropped()
+    {
+        var held = new TaskCompletionSource<JsonObject>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var reads = 0;
+        _host.AnswerLater(
+            "Executions",
+            _ =>
+                Interlocked.Increment(ref reads) == 1
+                    ? held.Task
+                    : Task.FromResult(Parse(HostData.Runs(1, null, HostData.Run(4799, "Archive"))))
+        );
+
+        await _terminal.OnUi(() => _window.Lists[0].Refresh());
+        await _terminal.OnUi(() => _window.Lists[0].Refresh());
+        await _terminal.UntilShown("Archive");
+        held.SetResult(Parse(HostData.Runs(1, null, HostData.Run(4700, "Stale"))));
+        await _terminal.Until(() => _host.Sent("Executions").Count >= 3, "both reads were sent");
+        await _terminal.OnUi(() => { });
+
+        (await _terminal.OnUi(() => _window.Lists[0].Rows.Select(r => r.Id).ToList()))
+            .Should()
+            .Equal(4799);
+    }
+
+    [Test]
+    public async Task All_matching_waits_for_the_count_of_a_new_filter()
+    {
+        var held = new TaskCompletionSource<JsonObject>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        _host.AnswerLater("Executions", _ => held.Task);
+        _host.Answer(
+            "StartBulkOperation",
+            """{"operations":{"startBulkOperation":{"success":true,"message":"Started.","matched":1,"operation":null}}}"""
+        );
+        _prompts.Forms.Enqueue(["failed", "", "", "", "", "", ""]);
+        await _terminal.Press(Key.F);
+        await _terminal.Until(
+            () => _host.Sent("Executions").Count >= 2,
+            "the runs are read with the filter"
+        );
+
+        _prompts.Choices.Enqueue(0);
+        await _terminal.Press(Key.B);
+        await _terminal.OnUi(() => { });
+
+        _host
+            .Sent("StartBulkOperation")
+            .Should()
+            .BeEmpty("the count shown is the one read without the filter");
+        _prompts.Asked.Should().Contain(a => a.StartsWith("All matching: The list is being read"));
+
+        held.SetResult(Parse(HostData.Runs(1, null, HostData.Run(4812, "SendInvoice"))));
+        await _terminal.UntilShown("1 in all");
+        await _terminal.Press(Key.B);
+        await _terminal.Until(
+            () => _host.Sent("StartBulkOperation").Count == 1,
+            "the bulk operation starts"
+        );
+        var sent = _host.Sent("StartBulkOperation")[0];
+        sent["expectedCount"]!.GetValue<int>().Should().Be(1);
+        sent["filter"]!["executions"]!["trainState"]!.GetValue<string>().Should().Be("FAILED");
+    }
+
     private static JsonObject Parse(string data) => JsonNode.Parse(data)!.AsObject();
 
     private static string Manifest(long id, string name) =>

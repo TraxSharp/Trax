@@ -22,6 +22,9 @@ internal sealed class ListScreen : View
     private Dictionary<string, string> _filters = new(StringComparer.Ordinal);
     private long? _after;
     private ListPage<ConsoleRow>? _page;
+
+    // The filters the page shown was read with: its count is the count of these, not of a filter typed since.
+    private IReadOnlyDictionary<string, string> _pageFilters = new Dictionary<string, string>();
     private int _loading;
 
     public ListScreen(ConsoleContext context, IConsoleList list, ListState? state = null)
@@ -113,6 +116,7 @@ internal sealed class ListScreen : View
                     _header.Text = $"Refused: {answer.Message}";
                     return;
                 }
+                _pageFilters = query.Filters;
                 Show(page);
             },
             message => _header.Text = message
@@ -395,11 +399,20 @@ internal sealed class ListScreen : View
             );
             return;
         }
+        if (!SameFilters(_pageFilters, _filters))
+        {
+            _context.Prompts.Tell(
+                "All matching",
+                "The list is being read with the new filter. Wait until it shows, so the count you confirm is that filter's."
+            );
+            return;
+        }
+        var filterSnapshot = new Dictionary<string, string>(_pageFilters);
         var actions = List.BulkActions;
         var filters =
-            _filters.Count == 0
+            filterSnapshot.Count == 0
                 ? "every row"
-                : string.Join(", ", _filters.Select(f => $"{f.Key}={f.Value}"));
+                : string.Join(", ", filterSnapshot.Select(f => $"{f.Key}={f.Value}"));
         var chosen = _context.Prompts.Ask(
             "All matching",
             $"Apply to all {page.TotalCount} {List.Title.ToLowerInvariant()} matching {filters}. The host refuses if the filter now matches another count.",
@@ -432,7 +445,6 @@ internal sealed class ListScreen : View
                 return;
             options = options with { Note = text.Trim() };
         }
-        var filterSnapshot = new Dictionary<string, string>(_filters);
         _context.Status($"{Capital(bulk.Name)} all {page.TotalCount}: starting...");
         Ui.Start(
             _context.App,
@@ -471,6 +483,15 @@ internal sealed class ListScreen : View
             ? $"{ids.Count} {title} ({list} and {ids.Count - named} more)"
             : $"{ids.Count} {title} ({list})";
     }
+
+    private static bool SameFilters(
+        IReadOnlyDictionary<string, string> a,
+        IReadOnlyDictionary<string, string> b
+    ) =>
+        a.Count == b.Count
+        && a.All(f =>
+            b.TryGetValue(f.Key, out var v) && string.Equals(v, f.Value, StringComparison.Ordinal)
+        );
 
     private static string Capital(string name) => char.ToUpperInvariant(name[0]) + name[1..];
 

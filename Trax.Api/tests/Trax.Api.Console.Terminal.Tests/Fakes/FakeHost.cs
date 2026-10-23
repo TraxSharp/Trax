@@ -9,7 +9,7 @@ namespace Trax.Api.Console.Terminal.Tests.Fakes;
 /// </summary>
 internal sealed class FakeHost : ITraxTransport
 {
-    private readonly Dictionary<string, Func<JsonObject, JsonObject>> _answers = new(
+    private readonly Dictionary<string, Func<JsonObject, Task<JsonObject>>> _answers = new(
         StringComparer.Ordinal
     );
     private readonly List<TraxRequest> _requests = [];
@@ -20,7 +20,14 @@ internal sealed class FakeHost : ITraxTransport
         Answer(operation, _ => (JsonObject)JsonNode.Parse(data)!);
 
     /// <summary>Answers <paramref name="operation"/> with the data <paramref name="answer"/> builds from its variables.</summary>
-    public FakeHost Answer(string operation, Func<JsonObject, JsonObject> answer)
+    public FakeHost Answer(string operation, Func<JsonObject, JsonObject> answer) =>
+        AnswerLater(operation, v => Task.FromResult(answer(v)));
+
+    /// <summary>
+    /// Answers <paramref name="operation"/> when the task <paramref name="answer"/> returns completes, so a test can
+    /// hold one answer back and let a later request overtake it.
+    /// </summary>
+    public FakeHost AnswerLater(string operation, Func<JsonObject, Task<JsonObject>> answer)
     {
         lock (_answers)
             _answers[operation] = answer;
@@ -41,32 +48,30 @@ internal sealed class FakeHost : ITraxTransport
     public IReadOnlyList<JsonObject> Sent(string operation) =>
         Requests.Where(r => r.Document.Name == operation).Select(r => r.Variables).ToList();
 
-    public Task<TraxAnswer> ExecuteAsync(
+    public async Task<TraxAnswer> ExecuteAsync(
         TraxRequest request,
         CancellationToken cancellationToken = default
     )
     {
         lock (_requests)
             _requests.Add(request);
-        Func<JsonObject, JsonObject>? answer;
+        Func<JsonObject, Task<JsonObject>>? answer;
         lock (_answers)
             _answers.TryGetValue(request.Document.Name, out answer);
-        return Task.FromResult(
-            answer is null
-                ? new TraxAnswer
-                {
-                    Errors =
-                    [
-                        new TraxGraphQLError(
-                            $"The fake host has no answer for {request.Document.Name}.",
-                            "FAKE",
-                            null,
-                            null
-                        ),
-                    ],
-                }
-                : new TraxAnswer { Data = answer(request.Variables) }
-        );
+        return answer is null
+            ? new TraxAnswer
+            {
+                Errors =
+                [
+                    new TraxGraphQLError(
+                        $"The fake host has no answer for {request.Document.Name}.",
+                        "FAKE",
+                        null,
+                        null
+                    ),
+                ],
+            }
+            : new TraxAnswer { Data = await answer(request.Variables) };
     }
 
     public IDisposable Subscribe(TraxRequest request, ISubscriptionSink sink)
