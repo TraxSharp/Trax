@@ -7,6 +7,7 @@ using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.Samples.Recovery.Machines;
+using Trax.Samples.Recovery.Trains.Topics;
 using Trax.StateMachine.Persistence;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
@@ -298,16 +299,22 @@ public class TopicMapMachineTests : RecoveryTestFixture
     [Test]
     public async Task CancellingTheBuild_GoesBackToTheRange_AndCancelsItsRun()
     {
-        await _draft.CreateAsync();
-        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
-        var run = (await Runs()).Single();
+        // The run waits at its co-citation question until the cancel is sent, so it is never in its last
+        // junction when the instance leaves Building: one that is would complete instead of cancelling.
+        Trax.Effect.Models.WorkQueue.WorkQueue run;
+        using (Decider.Hold(nameof(SameTopic)))
+        {
+            await _draft.CreateAsync();
+            await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+            run = (await Runs()).Single();
 
-        var back = await _draft.AdvanceAsync(nameof(TopicMapTrigger.CancelBuild));
+            var back = await _draft.AdvanceAsync(nameof(TopicMapTrigger.CancelBuild));
 
-        back.State.Should().Be(nameof(TopicMapState.ChoosingRange));
+            back.State.Should().Be(nameof(TopicMapState.ChoosingRange));
+        }
 
-        // Still queued, the entry is marked cancelled; dispatched, the run reads its cancel flag at
-        // its next junction and ends cancelled.
+        // Still queued, the entry is marked cancelled; held at the question, the run reads its cancel
+        // flag at its next junction and ends cancelled.
         (
             await Shared.Testing.Polling.WaitUntilAsync(
                 () => RunCancelled(run.ExternalId),
