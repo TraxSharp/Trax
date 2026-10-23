@@ -12,9 +12,21 @@ namespace Trax.Api.Console.Terminal;
 /// </summary>
 internal static class ConsoleCommandLine
 {
-    public static RootCommand Create(Func<string, string?>? environment = null)
+    /// <summary>
+    /// The command line. A test gives <paramref name="open"/> to reach a host of its own, and the writers that stand
+    /// for standard output and standard error.
+    /// </summary>
+    public static RootCommand Create(
+        Func<string, string?>? environment = null,
+        Func<ConsoleTarget, ConsoleSession>? open = null,
+        TextWriter? output = null,
+        TextWriter? error = null
+    )
     {
         environment ??= Environment.GetEnvironmentVariable;
+        open ??= target => ConsoleSession.Open(target);
+        var stdout = output ?? System.Console.Out;
+        var stderr = error ?? System.Console.Error;
         var host = new Option<string?>("--host")
         {
             Description =
@@ -84,6 +96,8 @@ internal static class ConsoleCommandLine
         root.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     p.GetValue(anyVersion),
                     async (session, version) =>
@@ -120,6 +134,8 @@ internal static class ConsoleCommandLine
         list.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     p.GetValue(anyVersion),
                     (session, _) =>
@@ -129,8 +145,8 @@ internal static class ConsoleCommandLine
                             Filters(p.GetValue(where)),
                             p.GetValue(take),
                             p.GetValue(after),
-                            System.Console.Out,
-                            System.Console.Error,
+                            stdout,
+                            stderr,
                             ct
                         )
                 )
@@ -170,6 +186,8 @@ internal static class ConsoleCommandLine
         doCommand.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     p.GetValue(anyVersion),
                     (session, _) =>
@@ -180,7 +198,7 @@ internal static class ConsoleCommandLine
                             p.GetValue(ids)!,
                             new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
                             p.GetValue(dryRun),
-                            System.Console.Out,
+                            stdout,
                             ct
                         )
                 )
@@ -208,6 +226,8 @@ internal static class ConsoleCommandLine
         bulk.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     p.GetValue(anyVersion),
                     (session, _) =>
@@ -219,7 +239,7 @@ internal static class ConsoleCommandLine
                             p.GetValue(expect),
                             new ActionOptions(p.GetValue(note), p.GetValue(askAfresh)),
                             p.GetValue(dryRun),
-                            System.Console.Out,
+                            stdout,
                             ct
                         )
                 )
@@ -243,6 +263,8 @@ internal static class ConsoleCommandLine
         watch.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     p.GetValue(anyVersion),
                     (session, _) =>
@@ -250,8 +272,8 @@ internal static class ConsoleCommandLine
                             session,
                             p.GetValue(stream)!,
                             p.GetValue(id),
-                            System.Console.Out,
-                            System.Console.Error,
+                            stdout,
+                            stderr,
                             ct
                         )
                 )
@@ -265,13 +287,16 @@ internal static class ConsoleCommandLine
         trace.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     p.GetValue(anyVersion),
                     (session, _) =>
                         HeadlessCommands.TraceAsync(
                             session,
                             p.GetValue(run),
-                            System.Console.Out,
+                            stdout,
+                            stderr,
                             ct
                         )
                 )
@@ -292,6 +317,8 @@ internal static class ConsoleCommandLine
         graph.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     p.GetValue(anyVersion),
                     (session, _) =>
@@ -299,7 +326,8 @@ internal static class ConsoleCommandLine
                             session,
                             p.GetValue(machineName),
                             p.GetValue(verticalGraphs),
-                            System.Console.Out,
+                            stdout,
+                            stderr,
                             ct
                         )
                 )
@@ -312,10 +340,12 @@ internal static class ConsoleCommandLine
         check.SetAction(
             (p, ct) =>
                 Run(
+                    open,
+                    stderr,
                     () => Target(p),
                     anyVersion: true,
                     (session, version) =>
-                        HeadlessCommands.CheckAsync(session, version, System.Console.Out)
+                        HeadlessCommands.CheckAsync(session, version, stdout)
                 )
         );
 
@@ -331,6 +361,8 @@ internal static class ConsoleCommandLine
 
     // Connects, checks the host's release, and runs the command; a refusal is a message and exit code 1.
     private static async Task<int> Run(
+        Func<ConsoleTarget, ConsoleSession> open,
+        TextWriter error,
         Func<ConsoleTarget> target,
         bool anyVersion,
         Func<ConsoleSession, VersionCheck, Task<int>> command
@@ -339,11 +371,11 @@ internal static class ConsoleCommandLine
         ConsoleSession session;
         try
         {
-            session = ConsoleSession.Open(target());
+            session = open(target());
         }
         catch (InvalidOperationException ex)
         {
-            System.Console.Error.WriteLine(ex.Message);
+            error.WriteLine(TerminalText.Block(ex.Message));
             return 2;
         }
         await using (session)
@@ -352,12 +384,16 @@ internal static class ConsoleCommandLine
             switch (version)
             {
                 case VersionCheck.Failed failed when !anyVersion:
-                    System.Console.Error.WriteLine(
-                        failed.Code is null ? failed.Message : $"{failed.Code}: {failed.Message}"
+                    error.WriteLine(
+                        TerminalText.Block(
+                            failed.Code is null
+                                ? failed.Message
+                                : $"{failed.Code}: {failed.Message}"
+                        )
                     );
                     return 1;
                 case VersionCheck.Other other when !anyVersion:
-                    System.Console.Error.WriteLine(other.Message);
+                    error.WriteLine(TerminalText.Line(other.Message));
                     return 1;
             }
             try
@@ -366,7 +402,7 @@ internal static class ConsoleCommandLine
             }
             catch (InvalidOperationException ex)
             {
-                System.Console.Error.WriteLine(ex.Message);
+                error.WriteLine(ex.Message);
                 return 2;
             }
         }

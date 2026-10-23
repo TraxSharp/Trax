@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Trax.Api.Console.Terminal.Lists;
 using Trax.Api.Console.Terminal.Operations;
 using Trax.Client;
@@ -11,10 +12,16 @@ namespace Trax.Api.Console.Terminal.Connection;
 /// One connection to a host: the HTTP client and the socket the generated client sends through, carrying the
 /// credential the operations gate checks.
 /// </summary>
-internal sealed class ConsoleSession : IAsyncDisposable
+internal sealed partial class ConsoleSession : IAsyncDisposable
 {
-    private readonly HttpClient _http;
-    private readonly GraphQLSubscriptionSocket _socket;
+    private readonly HttpClient? _http;
+    private readonly GraphQLSubscriptionSocket? _socket;
+
+    private ConsoleSession(ConsoleTarget target, TraxClient client)
+    {
+        Target = target;
+        Client = client;
+    }
 
     private ConsoleSession(ConsoleTarget target, HttpClient http, GraphQLSubscriptionSocket socket)
     {
@@ -112,6 +119,10 @@ internal sealed class ConsoleSession : IAsyncDisposable
         return new ConsoleSession(target, http, socket);
     }
 
+    /// <summary>A session over <paramref name="transport"/>, for a test that scripts the host.</summary>
+    internal static ConsoleSession Over(ConsoleTarget target, ITraxTransport transport) =>
+        new(target, new TraxClient(transport));
+
     /// <summary>
     /// Asks the host which Trax release it runs and refuses one of another: the console's documents are content
     /// addressed, so a host of another release registers others and answers these <c>CLIENT_OUTDATED</c>.
@@ -130,18 +141,41 @@ internal sealed class ConsoleSession : IAsyncDisposable
                 null,
                 "The host answered no operations: the credential may not reach the operations surface."
             );
+        // It is printed, and put in an install line the operator may paste into a shell.
+        if (!IsRelease(host))
+            return new VersionCheck.Failed(
+                null,
+                "The host answered a version that is not a Trax release number."
+            );
         return host == ToolVersion ? new VersionCheck.Same(host) : new VersionCheck.Other(host);
     }
 
     /// <summary>The install line for the trax-console that matches a host.</summary>
+    /// <exception cref="ArgumentException"><paramref name="version"/> is not a release number.</exception>
     public static string InstallLine(string version) =>
-        $"dotnet tool update -g Trax.Api.Console.Terminal --version {version}";
+        IsRelease(version)
+            ? $"dotnet tool update -g Trax.Api.Console.Terminal --version {version}"
+            : throw new ArgumentException(
+                "Not a release number, so not put in an install line.",
+                nameof(version)
+            );
+
+    /// <summary>Whether <paramref name="version"/> is a release number: SemVer, without build metadata.</summary>
+    public static bool IsRelease(string version) =>
+        version.Length <= 64 && ReleaseNumber().IsMatch(version);
+
+    [GeneratedRegex(
+        @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?\z",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex ReleaseNumber();
 
     /// <summary>Closes the socket and the HTTP client.</summary>
     public async ValueTask DisposeAsync()
     {
-        await _socket.DisposeAsync();
-        _http.Dispose();
+        if (_socket is not null)
+            await _socket.DisposeAsync();
+        _http?.Dispose();
     }
 }
 

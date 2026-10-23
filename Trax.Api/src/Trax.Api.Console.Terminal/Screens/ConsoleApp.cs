@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Terminal.Gui.App;
 using Trax.Api.Console.Terminal.Code;
 using Trax.Api.Console.Terminal.Connection;
+using Trax.Api.Console.Terminal.Lists;
 
 namespace Trax.Api.Console.Terminal.Screens;
 
@@ -23,7 +24,7 @@ internal static class ConsoleApp
             VersionCheck.Same same => $"Trax .NET {same.Version}. F1 keys.",
             VersionCheck.Other other =>
                 $"This host runs Trax .NET {other.HostVersion}, this console {ConsoleSession.ToolVersion}: documents that differ are refused.",
-            VersionCheck.Failed failed => failed.Message,
+            VersionCheck.Failed failed => TerminalText.Line(failed.Message),
             _ => "",
         };
         ConsoleState? state = null;
@@ -45,7 +46,7 @@ internal static class ConsoleApp
                     if (found is null)
                     {
                         context.Status(
-                            $"No declaration of {name} under {Directory.GetCurrentDirectory()}: run trax-console in the checkout."
+                            $"No declaration of {TerminalText.Line(name)} under {Directory.GetCurrentDirectory()}: run trax-console in the checkout."
                         );
                         return;
                     }

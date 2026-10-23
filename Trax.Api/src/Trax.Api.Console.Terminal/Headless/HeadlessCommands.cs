@@ -254,12 +254,13 @@ internal static class HeadlessCommands
         ConsoleSession session,
         long run,
         TextWriter output,
+        TextWriter error,
         CancellationToken ct
     )
     {
         var answer = await RunTrace.LoadAsync(session.Client, run, ct);
         if (answer.Data is not { } entries)
-            return Refused(answer, System.Console.Error);
+            return Refused(answer, error);
         foreach (var entry in entries)
             await output.WriteLineAsync(
                 new JsonObject
@@ -279,12 +280,13 @@ internal static class HeadlessCommands
         string? machine,
         bool vertical,
         TextWriter output,
+        TextWriter error,
         CancellationToken ct
     )
     {
         var answer = await session.Client.MachinesAsync(ct);
         if (answer.Data?.Operations?.Machines is not { } machines)
-            return Refused(answer, System.Console.Error);
+            return Refused(answer, error);
         var shown = machines
             .Where(m => machine is null ? !m.SystemOwned : m.Name == machine)
             .OrderBy(m => m.Name)
@@ -295,12 +297,13 @@ internal static class HeadlessCommands
                     ? "This host serves no machines."
                     : $"This host serves no machine '{machine}'. It serves {string.Join(", ", machines.Select(m => m.Name))}."
             );
+        // Plain text the host's names are in, so each line is cleaned as the console's screens are.
         foreach (var m in shown)
         {
-            await output.WriteLineAsync($"{m.Name} v{m.Version}");
+            await output.WriteLineAsync(TerminalText.Line($"{m.Name} v{m.Version}"));
             await output.WriteLineAsync();
             foreach (var line in Machines.MachineGraph.Lines(m, vertical: vertical))
-                await output.WriteLineAsync(line);
+                await output.WriteLineAsync(TerminalText.Line(line));
             await output.WriteLineAsync();
         }
         return 0;
