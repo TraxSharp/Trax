@@ -66,7 +66,7 @@ browser console does; the filter `admin-trains=show` brings them back to a list.
 | `r`, `a` | Dead letters: requeue (replaying recorded answers, or asking afresh), acknowledge with a note. |
 | `t`, `e`, `d` | Manifests: trigger, enable, disable. |
 | `b` | All matching: one of the list's actions on every row the filter matches, run by the host as a bulk operation. The count is the one the list shows, and the host refuses it when the filter now matches another. |
-| `v` | A run's trace: its steps and decisions in time order, then its log, the steps followed live. |
+| `v` | A run's trace: its steps and decisions in time order, then its log, the steps followed live. It reads at most 500 of each. |
 | `o` | Open the source of the train a row names, or of a step in a trace, in `$VISUAL` or `$EDITOR`, from the checkout `trax-console` runs in. The console comes back where it was when the editor exits. |
 | F5, F1, Ctrl+Q | Read everything again, list the keys, quit. |
 
@@ -113,11 +113,11 @@ release at connect: the refusal names the code and the install line, here and in
 
 | Command | What it prints |
 |---|---|
-| `list <list> [--where name=value]... [--take n] [--after cursor]` | A page of runs, dead-letters, work-queue or manifests, a row per line as the host wrote it; the total and the next cursor on standard error. An unknown filter is refused with the list's filters. |
+| `list <list> [--where name=value]... [--take n] [--after cursor]` | A page of runs, dead-letters, work-queue or manifests, a row per line as the host wrote it; the total and the next cursor on standard error. `--take` is 25 by default and at most 500; page on with `--after`. An unknown filter is refused with the list's filters. |
 | `do <list> <action> <id>... [--note] [--ask-afresh] [--dry-run]` | What the host said of the action. |
 | `bulk <list> <action> --where ... --expect n [--note] [--ask-afresh] [--dry-run]` | The bulk operation it started, then its progress until it ends. |
 | `watch runs`, `watch changes`, `watch run <id>`, `watch machines [name]` | A stream, an event per line, until interrupted. |
-| `trace <run>` | A run's steps, decisions and log. |
+| `trace <run>` | A run's steps, decisions and log, at most 500 of each. When one of them reaches 500 there may be more, and a line on standard error names it: `{"truncated":["step"],"limit":500}`. |
 | `graph [machine]` | Each machine the host serves, or the one named, drawn as above (top to bottom with `--vertical-graphs`). Plain text, not JSON. |
 | `check` | The host's release, and whether this console serves it. |
 

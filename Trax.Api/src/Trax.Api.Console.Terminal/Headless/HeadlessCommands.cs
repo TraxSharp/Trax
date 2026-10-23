@@ -271,6 +271,19 @@ internal static class HeadlessCommands
                     ["data"] = entry.Json?.DeepClone(),
                 }.ToJsonString()
             );
+        // Each part is read up to RunTrace.Take; one that filled it may hold more than was printed.
+        var truncated = new[] { TraceKind.Step, TraceKind.Decision, TraceKind.Log }
+            .Where(kind => entries.Count(e => e.Kind == kind) >= RunTrace.Take)
+            .Select(kind => (JsonNode)kind.ToString().ToLowerInvariant())
+            .ToArray();
+        if (truncated.Length > 0)
+            await error.WriteLineAsync(
+                new JsonObject
+                {
+                    ["truncated"] = new JsonArray(truncated),
+                    ["limit"] = RunTrace.Take,
+                }.ToJsonString()
+            );
         return 0;
     }
 
