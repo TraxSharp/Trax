@@ -217,6 +217,37 @@ public static class E2EHost
     }
 
     /// <summary>
+    /// Writes a draft straight to the store under <paramref name="ownerKey"/>, as host code does. The generic save
+    /// serves only machines with no server-side behaviour, so a test that needs a draft of a guarded machine at a
+    /// given state seeds it this way. An API key's owner key is <c>TraxApiKey:{id}</c>.
+    /// </summary>
+    public static async Task SeedDraftAsync(
+        this IHost host,
+        string ownerKey,
+        Guid id,
+        string snapshotJson
+    )
+    {
+        var wire = System.Text.Json.Nodes.JsonNode.Parse(snapshotJson)!.AsObject();
+        using var scope = host.Services.CreateScope();
+        var stored = await scope
+            .ServiceProvider.GetRequiredService<ISnapshotStore>()
+            .Upsert(
+                ownerKey,
+                id,
+                new Trax.StateMachine.Snapshot
+                {
+                    Machine = wire["machine"]!.GetValue<string>(),
+                    Version = wire["version"]!.GetValue<int>(),
+                    State = wire["state"]!.GetValue<string>(),
+                    Context = wire["context"]!.AsObject().DeepClone().AsObject(),
+                }
+            );
+        if (!stored)
+            throw new InvalidOperationException($"The draft {id} could not be seeded.");
+    }
+
+    /// <summary>
     /// POST a GraphQL operation (optionally with variables and an API key). Returns the parsed response
     /// (data + errors, if any). Passing the snapshot as a variable keeps the raw JSON off the query string.
     /// </summary>

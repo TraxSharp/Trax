@@ -192,39 +192,31 @@ public class GenericOptInE2ETests
             }
         );
 
-        using var saved = await host.PostAsync(
+        using var started = await host.PostAsync(
             """
-            mutation Save($input: SaveSnapshotInput!) {
-              dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot problem { code } } } } }
+            mutation Start($input: StartSnapshotInput!) {
+              dispatch { stateMachine { startSnapshot(input: $input) { output { id problem { code } } } } }
             }
             """,
-            new
-            {
-                input = new
-                {
-                    machine = "turnstile",
-                    id = Guid.NewGuid().ToString(),
-                    snapshot = TurnstileMachine.InitialJson,
-                },
-            },
+            new { input = new { machine = "turnstile", requestId = $"start-{Guid.NewGuid():N}" } },
             E2EHost.AdminApiKey
         );
-        saved
+        started
             .RootElement.TryGetProperty("errors", out _)
             .Should()
             .BeFalse(
                 "the raw-delegate turnstile stays usable through the generic opt-in: "
-                    + saved.RootElement.GetRawText()
+                    + started.RootElement.GetRawText()
             );
-        saved
+        started
             .RootElement.GetProperty("data")
             .GetProperty("dispatch")
             .GetProperty("stateMachine")
-            .GetProperty("saveSnapshot")
+            .GetProperty("startSnapshot")
             .GetProperty("output")
             .GetProperty("problem")
             .ValueKind.Should()
-            .Be(JsonValueKind.Null);
+            .Be(JsonValueKind.Null, started.RootElement.GetRawText());
 
         var executor = await host.ExecutorAsync();
         SchemaWalk

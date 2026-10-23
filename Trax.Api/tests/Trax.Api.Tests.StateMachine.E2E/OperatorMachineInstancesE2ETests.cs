@@ -57,28 +57,10 @@ public class OperatorMachineInstancesE2ETests
         await E2EHost.RecreateDatabaseAsync(Database);
         _host = await StartAsync(E2EHost.ConnectionString(Database));
 
-        // The shopper's own draft, advanced into a state whose context holds what it paid with.
+        // The shopper's own draft, advanced into a state whose context holds what it paid with. The
+        // turnstile guards its coin, so the generic save does not serve it: the host writes the draft.
         _draftId = Guid.NewGuid();
-        using var save = await _host.PostAsync(
-            """
-            mutation Save($input: SaveSnapshotInput!) {
-              dispatch { stateMachine { saveSnapshot(input: $input) { output { snapshot } } } }
-            }
-            """,
-            new
-            {
-                input = new
-                {
-                    machine = "turnstile",
-                    id = _draftId.ToString(),
-                    snapshot = TurnstileMachine.InitialJson,
-                },
-            },
-            ShopperKey
-        );
-        save.RootElement.TryGetProperty("errors", out _)
-            .Should()
-            .BeFalse(save.RootElement.GetRawText());
+        await _host.SeedDraftAsync("TraxApiKey:shopper", _draftId, TurnstileMachine.InitialJson);
         using var advance = await _host.PostAsync(
             """
             mutation Advance($input: AdvanceSnapshotInput!) {

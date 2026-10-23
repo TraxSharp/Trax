@@ -13,25 +13,22 @@ public class TurnstileMachineTests
     private static readonly Guid Id = Guid.Parse("a0000000-0000-0000-0000-000000000001");
     private const string User = "alice";
 
-    private static async Task<ISnapshotDraftService> LockedTurnstile(InMemorySnapshotStore store)
+    // The turnstile guards its coin, so the generic save does not serve it; the draft is seeded through
+    // the store, as host code would.
+    private static ISnapshotDraftService LockedTurnstile(InMemorySnapshotStore store)
     {
-        var service = new TurnstileMachine().CreateService(store, claims: null);
-        (
-            await service.Autosave(
-                User,
-                Id,
-                "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}"
-            )
-        )
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
-        return service;
+        store.Seed(
+            User,
+            Id,
+            "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}"
+        );
+        return new TurnstileMachine().CreateService(store, claims: null);
     }
 
     [Test]
     public async Task An_accepted_coin_unlocks_and_records_how_it_was_paid()
     {
-        var service = await LockedTurnstile(new InMemorySnapshotStore());
+        var service = LockedTurnstile(new InMemorySnapshotStore());
 
         var snapshot = (
             await service.Advance(User, Id, "Coin", JsonNode.Parse("{\"coin\":\"quarter\"}"))
@@ -47,7 +44,7 @@ public class TurnstileMachineTests
     [Test]
     public async Task An_unaccepted_coin_is_rejected_and_the_draft_stays_locked()
     {
-        var service = await LockedTurnstile(new InMemorySnapshotStore());
+        var service = LockedTurnstile(new InMemorySnapshotStore());
 
         (await service.Advance(User, Id, "Coin", JsonNode.Parse("{\"coin\":\"penny\"}")))
             .Should()

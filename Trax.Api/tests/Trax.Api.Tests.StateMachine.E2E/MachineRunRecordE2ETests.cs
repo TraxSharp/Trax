@@ -107,7 +107,7 @@ public class MachineRunRecordE2ETests
     }
 
     [Test]
-    public async Task The_generic_save_stores_its_snapshot_masked_and_no_output()
+    public async Task The_generic_save_stores_its_snapshot_masked_and_no_output_when_refused()
     {
         const string marker = "save-context-marker";
         var id = Guid.NewGuid();
@@ -140,15 +140,13 @@ public class MachineRunRecordE2ETests
             .GetProperty("stateMachine")
             .GetProperty("saveSnapshot")
             .GetProperty("output");
+        // The turnstile guards its coin, so the save is refused; its run is recorded all the same.
         output
             .GetProperty("problem")
-            .ValueKind.Should()
-            .Be(JsonValueKind.Null, saved.RootElement.GetRawText());
-        output
-            .GetProperty("snapshot")
+            .GetProperty("code")
             .GetString()
             .Should()
-            .Contain(marker, "the caller still gets the stored snapshot back");
+            .Be("SAVE_NOT_ALLOWED", saved.RootElement.GetRawText());
 
         var input = await E2ESql.ScalarAsync<string>(
             Database,
