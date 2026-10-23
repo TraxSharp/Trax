@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -287,6 +288,8 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             socket.Options.KeepAliveInterval = _options.KeepAliveInterval;
             socket.Options.KeepAliveTimeout = _options.KeepAliveTimeout;
+            // Keeps the upgrade's status, so a host that refuses the upgrade (401, 403) is told from one that is down.
+            socket.Options.CollectHttpResponseDetails = true;
         }
         _options.ConfigureSocket?.Invoke(socket.Options);
         var acknowledged = new TaskCompletionSource(
@@ -306,9 +309,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             )
             {
                 timeout.CancelAfter(_options.ConnectTimeout);
-                await connection
-                    .Socket.ConnectAsync(_options.Endpoint, timeout.Token)
-                    .ConfigureAwait(false);
+                await ConnectAsync(connection.Socket, timeout.Token).ConfigureAwait(false);
                 var init = new JsonObject { ["type"] = "connection_init" };
                 if (_options.ConnectionParams is { } parameters)
                     init["payload"] = await parameters(timeout.Token).ConfigureAwait(false);
@@ -341,6 +342,25 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             if (connection.Overflowed)
                 connection.Socket.Abort();
             connection.Socket.Dispose();
+        }
+    }
+
+    // Connects, telling a host that refused the upgrade (401, 403) from one that could not be reached.
+    private async Task ConnectAsync(ClientWebSocket socket, CancellationToken token)
+    {
+        try
+        {
+            await socket.ConnectAsync(_options.Endpoint, token).ConfigureAwait(false);
+        }
+        catch (WebSocketException)
+            when (socket.HttpStatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            var status = (int)socket.HttpStatusCode;
+            throw new SocketClosedException(
+                $"The host refused the socket's upgrade: {status} {socket.HttpStatusCode}.",
+                null,
+                status
+            );
         }
     }
 
@@ -569,21 +589,32 @@ public sealed class SubscriptionErrorException : Exception
 }
 
 /// <summary>
-/// The socket closed, before it was acknowledged or while subscribed. <see cref="CloseStatus"/> is the code the server
-/// closed it with, when it sent one: a 44xx code is the host refusing the connection (4401 unauthorized, 4403 forbidden),
-/// and subscribing again will not change its answer.
+/// The socket closed, before it was acknowledged or while subscribed, or the host refused to open it.
+/// <see cref="CloseStatus"/> is the code the server closed it with, when it sent one: a 44xx code is the host refusing
+/// the connection (4401 unauthorized, 4403 forbidden), and subscribing again will not change its answer. So is an
+/// upgrade answered 401 or 403 (<see cref="HttpStatus"/>).
 /// </summary>
 public sealed class SocketClosedException : IOException
 {
     /// <summary>Builds the exception.</summary>
-    public SocketClosedException(string message, int? closeStatus)
-        : base(message) => CloseStatus = closeStatus;
+    public SocketClosedException(string message, int? closeStatus, int? httpStatus = null)
+        : base(message)
+    {
+        CloseStatus = closeStatus;
+        HttpStatus = httpStatus;
+    }
 
     /// <summary>The close code the server sent, or null when the socket closed without one.</summary>
     public int? CloseStatus { get; }
 
-    /// <summary>Whether the server refused the connection itself (a 4400 to 4499 close), so a retry gets the same answer.</summary>
-    public bool Refused => CloseStatus is >= 4400 and <= 4499;
+    /// <summary>The HTTP status the host refused the upgrade with, or null when the socket opened.</summary>
+    public int? HttpStatus { get; }
+
+    /// <summary>
+    /// Whether the host refused the connection itself (a 4400 to 4499 close, or an upgrade answered 401 or 403), so a
+    /// retry gets the same answer.
+    /// </summary>
+    public bool Refused => CloseStatus is >= 4400 and <= 4499 || HttpStatus is 401 or 403;
 }
 
 /// <summary>

@@ -214,6 +214,42 @@ public class GraphQLSubscriptionSocketTests
             .Be("No.");
     }
 
+    [TestCase(401)]
+    [TestCase(403)]
+    public async Task An_upgrade_the_host_refuses_is_a_refused_close(int status)
+    {
+        await using var host = new WireHost(peer => peer.RefuseAsync(status, "No"));
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var sink = new Sink();
+
+        using var subscription = socket.Subscribe(Payload, sink);
+
+        var closed = (await sink.Failed.Task.WaitAsync(Wait))
+            .Should()
+            .BeOfType<SocketClosedException>()
+            .Subject;
+        closed.HttpStatus.Should().Be(status);
+        closed.Refused.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task An_upgrade_answered_with_another_status_is_not_refused()
+    {
+        await using var host = new WireHost(peer => peer.RefuseAsync(502, "Bad Gateway"));
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var sink = new Sink();
+
+        using var subscription = socket.Subscribe(Payload, sink);
+
+        (await sink.Failed.Task.WaitAsync(Wait))
+            .Should()
+            .NotBeOfType<SocketClosedException>("a 502 is a host that may be back soon");
+    }
+
     [Test]
     public async Task A_disposed_socket_fails_a_new_subscription_as_unavailable()
     {

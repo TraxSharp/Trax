@@ -522,6 +522,32 @@ public class TraxClientTests
     }
 
     [Test]
+    public async Task An_upgrade_the_host_refuses_ends_the_stream_instead_of_retrying()
+    {
+        await using var host = new WireHost(peer => peer.RefuseAsync(401, "Unauthorized"));
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions { Endpoint = host.Endpoint }
+        );
+        var events = new EventLog<ChangedResult>();
+        var client = new TraxClient(
+            Transport(socket),
+            new TraxClientOptions { ResubscribeDelays = [TimeSpan.FromMilliseconds(10)] }
+        );
+
+        using var stream = client.Subscribe(Changed, TraxNoVariables.Instance, events.Add);
+
+        (await events.Take(1))
+            .Single()
+            .Should()
+            .BeOfType<TraxStreamEvent<ChangedResult>.Ended>()
+            .Which.Failure!.Status.Should()
+            .Be(401);
+        // negative-wait: a retry would have connected again within the 10 ms delay.
+        await Task.Delay(300);
+        host.Connections.Should().Be(1);
+    }
+
+    [Test]
     public async Task A_malformed_frame_interrupts_the_stream_and_it_resumes_on_a_new_connection()
     {
         await using var host = new WireHost(

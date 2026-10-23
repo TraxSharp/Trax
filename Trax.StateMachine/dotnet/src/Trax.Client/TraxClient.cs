@@ -247,7 +247,7 @@ public sealed class TraxClient
                     );
                     return;
                 case SocketClosedException { Refused: true } closed:
-                    End([], new TraxTransportFailure(closed.Message));
+                    End([], new TraxTransportFailure(closed.Message, closed.HttpStatus));
                     return;
                 case SocketUnavailableException:
                     End([], new TraxTransportFailure(error.Message));

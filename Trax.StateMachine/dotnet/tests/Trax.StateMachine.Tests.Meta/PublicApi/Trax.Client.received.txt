@@ -45,8 +45,9 @@ namespace Trax.Client
     }
     public sealed class SocketClosedException : System.IO.IOException
     {
-        public SocketClosedException(string message, int? closeStatus) { }
+        public SocketClosedException(string message, int? closeStatus, int? httpStatus = default) { }
         public int? CloseStatus { get; }
+        public int? HttpStatus { get; }
         public bool Refused { get; }
     }
     public sealed class SocketUnavailableException : System.Exception
