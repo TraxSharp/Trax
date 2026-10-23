@@ -77,6 +77,52 @@ public class JunctionLoggerProviderTests
     }
 
     [Test]
+    public async Task BeforeAndAfterJunctionExecution_LogTheMaskedStringNotTheRecord()
+    {
+        var (train, junction) = BuildPair("LoggedAsString");
+        await junction.RailwayJunction(Either<Exception, string>.Right("v"), train);
+        var logger = new StateCapturingLogger<JunctionLoggerProvider>();
+        var provider = new JunctionLoggerProvider(TestConfig(), logger);
+
+        await provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+        await provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+
+        logger.States.Should().HaveCount(2);
+        foreach (var state in logger.States)
+        {
+            state.Should().NotBeSameAs(junction.Metadata);
+            var values = state
+                .Should()
+                .BeAssignableTo<IReadOnlyList<KeyValuePair<string, object?>>>()
+                .Subject;
+            values.Should().NotContain(kv => kv.Key.StartsWith('@'));
+            values
+                .Where(kv => kv.Key != "{OriginalFormat}")
+                .Should()
+                .AllSatisfy(kv => kv.Value.Should().BeOfType<string>());
+        }
+    }
+
+    /// <summary>Records the state object of every entry, so a test can see what a structured sink is handed.</summary>
+    internal sealed class StateCapturingLogger<T> : ILogger<T>
+    {
+        public List<object?> States { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        ) => States.Add(state);
+    }
+
+    [Test]
     public async Task BeforeJunctionExecution_NullMetadata_Throws()
     {
         var train = new TestTrain();

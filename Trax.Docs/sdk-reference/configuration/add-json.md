@@ -44,14 +44,15 @@ dashboard's Effects page can turn it off at runtime. Each run gets a `JsonEffect
 |--------|-------------|
 | `Track(model)` | Serializes the model and keeps the JSON as its starting state |
 | `Update(model)` | Does nothing |
-| `SaveChanges(cancellationToken)` | Serializes every tracked model again and logs each one whose JSON changed to `ILogger<JsonEffectProvider>`, as the structured argument `{@Metadata}`, at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level) |
+| `SaveChanges(cancellationToken)` | Serializes every tracked model again and logs the masked JSON of each one that changed to `ILogger<JsonEffectProvider>`, as the string argument `{Metadata}`, at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level) |
 | `Dispose()` | Drops the tracked models |
 
 A run saves its effects twice, when its first row is written and when its outcome is, so the log shows a model
 as it started and as it ended. It cannot attribute a change to a junction. Every tracked model is serialized on
 every save, changed or not. The JSON compared is the effect configuration's serializer through
 `TraxLogSerialization.ForLogging`, which masks `[TraxSensitive]` members and writes the copies a train is run from as
-`{"_omitted": true}`. What the log line shows of the model is up to the logging provider.
+`{"_omitted": true}`. The log line carries that JSON string and never the model object, so a structured sink that
+destructures its arguments sees the masked copy only.
 
 ## Example
 
