@@ -324,6 +324,35 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
+    public void The_socket_is_held_to_TLS_and_an_answer_is_capped()
+    {
+        var files = Render();
+        var client = Text(files, "client.g.ts");
+
+        client
+            .Should()
+            .Contain(
+                "requireSecureSocket(socketUrl, allowInsecureTransport);",
+                "the socket carries the credential in connection_init, so a ws: socket to another host is refused"
+            )
+            .And.Contain("export function requireSecureSocket(")
+            .And.Contain("redirect: \"error\",")
+            .And.Contain("maxResponseBytes?: number;")
+            .And.Contain("await readJson(response, maxResponseBytes)")
+            .And.NotContain("response.json()");
+        client
+            .IndexOf("requireSecureSocket(socketUrl", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(
+                client.IndexOf("createClient({", StringComparison.Ordinal),
+                "the socket is checked before it is made"
+            );
+        Text(files, "index.g.ts")
+            .Should()
+            .Contain("export { configureTrax, requireSecureSocket, TraxOperationError");
+    }
+
+    [Test]
     public void A_host_whose_trains_can_be_followed_gets_a_progress_module()
     {
         var files = Render();

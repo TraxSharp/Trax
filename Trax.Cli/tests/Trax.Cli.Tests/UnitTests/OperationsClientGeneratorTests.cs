@@ -144,6 +144,45 @@ public class OperationsClientGeneratorTests
     }
 
     [Test]
+    public void The_transport_refuses_cleartext_follows_no_redirect_and_caps_an_answer()
+    {
+        var files = Render(("src/graphql/Runs.graphql", Runs));
+
+        Text(files, "client.g.ts")
+            .Should()
+            .Contain(
+                "requireSecureEndpoint(options.url, options.allowInsecureTransport);",
+                "a credential is sent over TLS, or to loopback, unless the app said the network is trusted"
+            )
+            .And.Contain(
+                "requireSecureSocket(options.socketUrl, options.allowInsecureTransport);",
+                "the socket carries the credential in connection_init, so it is held to the same rule"
+            )
+            .And.Contain("redirect: \"error\",")
+            .And.Contain("answer = await readJson(response, options.maxResponseBytes);")
+            .And.Contain("const defaultMaxResponseBytes = 16 * 1024 * 1024;")
+            .And.NotContain("response.json()");
+        Text(files, "index.g.ts")
+            .Should()
+            .Contain("httpTransport, requireSecureEndpoint, requireSecureSocket, ");
+    }
+
+    [TestCase("requireSecureEndpoint")]
+    [TestCase("requireSecureSocket")]
+    public void A_document_named_like_a_transport_check_is_refused(string name)
+    {
+        var render = () =>
+            Render(
+                (
+                    "src/graphql/Odd.graphql",
+                    $"query {char.ToUpperInvariant(name[0])}{name[1..]} {{ operations {{ runs {{ id }} }} }}"
+                )
+            );
+
+        render.Should().Throw<InvalidOperationException>().WithMessage($"*{name}*");
+    }
+
+    [Test]
     public void A_nullable_variable_may_feed_an_argument_that_has_a_default()
     {
         // take: Int! = 25 takes $take: Int, as GraphQL allows; the host would run it.

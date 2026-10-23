@@ -77,7 +77,7 @@ internal sealed partial class ClientGenerator
 
         var index = new StringBuilder(Header).Append("import \"./format.g\";\n");
         index.Append(
-            "export { configureTrax, TraxOperationError, type TraxConnection } from \"./client.g\";\n"
+            "export { configureTrax, requireSecureSocket, TraxOperationError, type TraxConnection } from \"./client.g\";\n"
         );
 
         // Every name is claimed before anything runs, so a manifest that cannot be generated is refused before node is.
@@ -609,6 +609,7 @@ internal sealed partial class ClientGenerator
     private static readonly string[] RuntimeNames =
     [
         "configureTrax",
+        "requireSecureSocket",
         "TraxOperationError",
         "TraxConnection",
     ];
@@ -761,6 +762,84 @@ internal sealed partial class ClientGenerator
                 + "into its twin. Rename it on the host."
         );
 
+    // What both TypeScript clients check before they talk to a host: the socket's URL, and how much of an answer they
+    // read. The machine client takes requireSecureEndpoint from the engine's client; the operations client, which does
+    // not depend on the engine, carries its own (OperationsEndpointGuard).
+    private const string TransportGuards = """
+
+        /** The most bytes of an answer the client reads, unless the app names another limit: 16 MiB. */
+        const defaultMaxResponseBytes = 16 * 1024 * 1024;
+
+        /**
+         * Refuses a socket URL whose traffic would be in cleartext: `wss:` is accepted, `ws:` only to a loopback host
+         * (`localhost`, `127.0.0.0/8`, `::1`) or to the origin of a page that was itself served over `http:`, and anything
+         * that is not an absolute `ws:` or `wss:` URL is refused. `allowInsecure` lifts the refusal, for a network you
+         * trust. A page that builds its own graphql-ws client calls it on the URL first.
+         */
+        export function requireSecureSocket(socketUrl: string, allowInsecure: boolean | undefined): void {
+          let url: URL;
+          try {
+            url = new URL(socketUrl);
+          } catch {
+            throw new Error(`The socket URL ${socketUrl} is not an absolute ws:// or wss:// URL.`);
+          }
+          if (url.protocol !== "ws:" && url.protocol !== "wss:")
+            throw new Error(`The socket URL ${url.protocol}//${url.host} is not a ws:// or wss:// URL.`);
+          if (allowInsecure || url.protocol === "wss:" || isLoopbackHost(url.hostname)) return;
+          // A page's own origin is trusted as a relative url is; outside a browser there is no page.
+          const page = (globalThis as { location?: { protocol: string; host: string } }).location;
+          if (page?.protocol === "http:" && page.host === url.host) return;
+          throw new Error(
+            `The socket ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use wss://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
+          );
+        }
+
+        function isLoopbackHost(hostname: string): boolean {
+          return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+        }
+
+        /**
+         * The answer's body as JSON, read to at most `maxBytes`: a longer one is cancelled and refused with a RangeError
+         * rather than held in memory.
+         */
+        async function readJson(response: Response, maxBytes: number = defaultMaxResponseBytes): Promise<unknown> {
+          if (!(maxBytes > 0) || !Number.isFinite(maxBytes)) throw new RangeError(`maxResponseBytes must be a positive number, got ${maxBytes}.`);
+          const tooLarge = () => new RangeError(`The host answered with more than ${maxBytes} bytes, the most this client reads.`);
+          const declared = Number(response.headers?.get("Content-Length") ?? Number.NaN);
+          if (declared > maxBytes) {
+            await response.body?.cancel().catch(() => undefined);
+            throw tooLarge();
+          }
+          const reader = response.body?.getReader();
+          if (!reader) {
+            // A response with no body stream (an empty one, or a stand-in for fetch): its text, held to the same limit.
+            const text = await response.text();
+            if (new TextEncoder().encode(text).byteLength > maxBytes) throw tooLarge();
+            return JSON.parse(text);
+          }
+          const chunks: Uint8Array[] = [];
+          let size = 0;
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > maxBytes) {
+              await reader.cancel().catch(() => undefined);
+              throw tooLarge();
+            }
+            chunks.push(value);
+          }
+          const bytes = new Uint8Array(size);
+          let offset = 0;
+          for (const chunk of chunks) {
+            bytes.set(chunk, offset);
+            offset += chunk.byteLength;
+          }
+          return JSON.parse(new TextDecoder().decode(bytes));
+        }
+
+        """;
+
     private static string Format(string spec) =>
         Header
         + "// Every generated module imports this first, so a runtime that does not serve this client's format refuses\n"
@@ -793,11 +872,13 @@ internal sealed partial class ClientGenerator
                */
               user?: string;
               /**
-               * Lets the client send to an absolute `http:` url on a host that is not loopback. Only for a trusted network:
-               * the headers would travel in cleartext. Off by default, and every train function and machine server refuses
-               * such a url.
+               * Lets the client send to an absolute `http:` url, or open a `ws:` socketUrl, on a host that is not loopback.
+               * Only for a trusted network: the headers and connectionParams would travel in cleartext. Off by default, and
+               * every train function, machine server and socket refuses such a url.
                */
               allowInsecureTransport?: boolean;
+              /** The most bytes of an answer a train function reads before it refuses it. 16 MiB when not given. */
+              maxResponseBytes?: number;
             }
 
             let connection: TraxConnection | null = null;
@@ -841,8 +922,10 @@ internal sealed partial class ClientGenerator
 
             /** The one socket every push shares, opened with the first subscription. */
             export function traxSocket(): Client {
-              const { socketUrl, connectionParams } = traxConnection();
-              return (socket ??= createClient({
+              const { socketUrl, connectionParams, allowInsecureTransport } = traxConnection();
+              if (socket) return socket;
+              requireSecureSocket(socketUrl, allowInsecureTransport);
+              return (socket = createClient({
                 url: socketUrl,
                 connectionParams,
                 lazy: true,
@@ -864,14 +947,16 @@ internal sealed partial class ClientGenerator
 
             /** Sends a persisted document by its id, never its text, and returns the field at `path` of its answer. */
             export async function sendDocument<T>(id: string, variables: Record<string, unknown>, path: readonly string[]): Promise<T> {
-              const { url, headers, allowInsecureTransport } = traxConnection();
+              const { url, headers, allowInsecureTransport, maxResponseBytes } = traxConnection();
               requireSecureEndpoint(url, allowInsecureTransport);
               const response = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...headers?.() },
                 body: JSON.stringify({ id, variables: withoutUndefined(variables) }),
+                // A redirect would carry the headers to wherever it points.
+                redirect: "error",
               });
-              const answer = (await response.json()) as {
+              const answer = (await readJson(response, maxResponseBytes)) as {
                 data?: Record<string, unknown> | null;
                 errors?: { message: string; extensions?: { code?: string } }[];
               };
@@ -886,7 +971,8 @@ internal sealed partial class ClientGenerator
               return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
             }
 
-            """;
+            """
+        + TransportGuards;
 
     private IEnumerable<ClientFile> Twin(
         ClientManifestMachine machine,
