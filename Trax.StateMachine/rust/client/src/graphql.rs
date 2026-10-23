@@ -797,7 +797,12 @@ pub fn machine_field(id: &str) -> String {
             if i == 0 {
                 p.to_owned()
             } else {
-                p[..1].to_uppercase() + &p[1..]
+                // By character, not byte, so a part that starts with a character of several bytes is upper-cased whole.
+                let mut chars = p.chars();
+                chars
+                    .next()
+                    .map(|c| c.to_uppercase().chain(chars).collect())
+                    .unwrap_or_default()
             }
         })
         .collect()
@@ -1043,6 +1048,13 @@ mod tests {
         let answer = server.get("i-1".into()).await.unwrap();
 
         assert!(matches!(answer, ServerAnswer::Refused(ServerProblem { code, .. }) if code == "NOT_FOUND"));
+    }
+
+    #[test]
+    fn a_machine_id_whose_part_starts_with_a_character_of_several_bytes_is_named_without_a_panic() {
+        assert_eq!(machine_field("topic-\u{e9}t\u{e9}"), "topic\u{c9}t\u{e9}");
+        assert_eq!(machine_field("a-\u{1f600}x"), "a\u{1f600}x");
+        assert_eq!(machine_field("map-2d"), "map2d");
     }
 
     // How the host answers one connection's connection_init.
