@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.Dashboard.Extensions;
@@ -141,6 +142,30 @@ public partial class ConsoleDocumentsE2ETests
         page.StatusCode.Should().Be(HttpStatusCode.NotFound, "no page is served");
     }
 
+    [Test]
+    public async Task Registering_the_documents_after_the_host_started_throws()
+    {
+        IEndpointRouteBuilder? mapped = null;
+        var options = Options(persisted: true) with
+        {
+            Endpoints = endpoints =>
+            {
+                endpoints.UseTraxOperatorConsoleDocuments();
+                mapped = endpoints;
+            },
+        };
+        await using var host = await HostAsync("trax_sm_console_docs_late", options);
+
+        var console = () => mapped!.UseTraxOperatorConsoleDocuments();
+        var dashboard = () => mapped!.UseTraxApiDashboard(d => d.AllowAnonymousShell());
+
+        console.Should().Throw<InvalidOperationException>().WithMessage("*after the host started*");
+        dashboard
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*after the host started*");
+    }
+
     // The id a host gives a console document, from the documents the dashboard package embeds.
     private static string ConsoleIdOf(string name)
     {
@@ -187,12 +212,22 @@ public partial class ConsoleDocumentsE2ETests
             Endpoints = endpoints => endpoints.UseTraxApiDashboard(d => d.AllowAnonymousShell()),
         };
 
-    private static async Task<HostedDatabase> HostAsync(string database, bool persisted)
+    // A host that registers the documents without serving the page.
+    private static E2EHostOptions PageLess(bool persisted) =>
+        Options(persisted) with
+        {
+            Endpoints = endpoints => endpoints.UseTraxOperatorConsoleDocuments(),
+        };
+
+    private static Task<HostedDatabase> HostAsync(string database, bool persisted) =>
+        HostAsync(database, Options(persisted));
+
+    private static async Task<HostedDatabase> HostAsync(string database, E2EHostOptions options)
     {
         await E2EHost.RecreateDatabaseAsync(database);
         try
         {
-            var host = await E2EHost.StartAsync(database, new CountingCharge(), Options(persisted));
+            var host = await E2EHost.StartAsync(database, new CountingCharge(), options);
             return new HostedDatabase(database, host);
         }
         catch

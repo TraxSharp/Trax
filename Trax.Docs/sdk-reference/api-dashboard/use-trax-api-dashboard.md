@@ -153,7 +153,9 @@ document text. The persisted-operation pages still send text: they are reached t
 Registering a document changes which documents may run, not who may run them: every request still
 passes the operations gate, or, for a stream such as `onTrainStateChanged`, its per-subscriber
 authorization, which delivers each event only to a caller who may see it. The decision is
-`Trax.Api/docs/adr/0042`.
+`Trax.Api/docs/adr/0042`. The documents are read once, when the host finishes starting, so
+`UseTraxApiDashboard` called after that throws rather than serve a page whose documents were never
+registered.
 
 ## What it serves
 

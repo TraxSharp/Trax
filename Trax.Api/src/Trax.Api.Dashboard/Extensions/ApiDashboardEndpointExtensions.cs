@@ -43,7 +43,8 @@ public static class ApiDashboardEndpointExtensions
     /// <returns><paramref name="endpoints"/>, for chaining.</returns>
     /// <exception cref="InvalidOperationException">
     /// <c>AddTraxGraphQL()</c> was not called, or does not expose the operations namespace
-    /// (<c>ExposeOperationQueries()</c>), which every console document reads.
+    /// (<c>ExposeOperationQueries()</c>), which every console document reads; or the host has already started and
+    /// registered its persisted documents.
     /// </exception>
     public static IEndpointRouteBuilder UseTraxOperatorConsoleDocuments(
         this IEndpointRouteBuilder endpoints
@@ -55,8 +56,22 @@ public static class ApiDashboardEndpointExtensions
             nameof(UseTraxOperatorConsoleDocuments),
             "console"
         );
-        graphQL.ConsoleDocuments = ConsoleDocumentsResource.Documents;
+        HandOverConsoleDocuments(graphQL, nameof(UseTraxOperatorConsoleDocuments));
         return endpoints;
+    }
+
+    // Hands the console's documents to the GraphQL configuration, for a host that runs persisted operations to
+    // register when it starts. Idempotent before the host has started; after, the registration has read them for the
+    // last time, so a call then would silently register nothing.
+    private static void HandOverConsoleDocuments(GraphQLConfiguration graphQL, string caller)
+    {
+        if (graphQL.ConsoleDocumentsClosed)
+            throw new InvalidOperationException(
+                $"{caller}() was called after the host started, when the operations console's documents have "
+                    + "already been registered, so they would never be. Call it while configuring the "
+                    + "app, before app.Run() or app.StartAsync()."
+            );
+        graphQL.ConsoleDocuments = ConsoleDocumentsResource.Documents;
     }
 
     // The GraphQL configuration an operator frontend's documents need: AddTraxGraphQL, exposing the operations
@@ -122,8 +137,9 @@ public static class ApiDashboardEndpointExtensions
     /// No posture was chosen; the named policy is not registered; a policy or roles posture has
     /// no authentication scheme to challenge a caller with; <c>AddTraxGraphQL()</c> was not
     /// called, or does not expose the operations namespace (<c>ExposeOperationQueries()</c>); or
-    /// this build of the package carries no app; or <c>AllowAnonymous()</c> was added to a policy
-    /// or roles posture (thrown when the host starts).
+    /// this build of the package carries no app; the host has already started and registered its
+    /// persisted documents; or <c>AllowAnonymous()</c> was added to a policy or roles posture
+    /// (thrown when the host starts).
     /// </exception>
     public static IEndpointConventionBuilder UseTraxApiDashboard(
         this IEndpointRouteBuilder endpoints,
@@ -165,7 +181,7 @@ public static class ApiDashboardEndpointExtensions
 
         // The documents the app sends, for a host that runs persisted operations to register when it starts; it hands
         // back the id of each, which the app is told in its runtime config.
-        graphQL.ConsoleDocuments = ConsoleDocumentsResource.Documents;
+        HandOverConsoleDocuments(graphQL, nameof(UseTraxApiDashboard));
 
         VerifyAuthorizationPosture(services, options);
 

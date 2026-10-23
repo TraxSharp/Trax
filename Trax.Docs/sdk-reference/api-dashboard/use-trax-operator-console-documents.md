@@ -56,9 +56,13 @@ It returns `endpoints`, for chaining.
   `onJunctionEvent`, `onMachineInstanceChanged`), by its per-subscriber authorization, which delivers each event only
   to a caller who may see it. No page, route or anonymous access is added.
 - **Without persisted operations** nothing is registered, and a frontend sends the documents' text.
+- **Call it before the host starts.** Calling it again, or beside `UseTraxApiDashboard`, registers each document once.
+  A call after the host has started and registered its persisted documents throws, since the documents would never be
+  registered.
 
 ## Exceptions
 
 | Exception | When |
 |-----------|------|
 | `InvalidOperationException` | `AddTraxGraphQL()` was not called, or does not expose the operations namespace (`ExposeOperationQueries()`). |
+| `InvalidOperationException` | The host has already started and registered its persisted documents. |

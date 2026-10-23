@@ -178,12 +178,12 @@ internal sealed class MachineDocumentRegistration(
     public async Task StartedAsync(CancellationToken cancellationToken)
     {
         // A host that maps the console in a Startup's Configure, which runs while the web host starts, hands over the
-        // console's documents only after StartingAsync. They are registered now, once every endpoint is mapped.
-        if (
-            !_consoleIncluded
-            && services.GetService<GraphQLConfiguration>()?.ConsoleDocuments
-                is { Count: > 0 } console
-        )
+        // console's documents only after StartingAsync. They are registered now, once every endpoint is mapped, and
+        // never read again: a later UseTraxOperatorConsoleDocuments() or UseTraxApiDashboard() refuses.
+        var graphQL = services.GetService<GraphQLConfiguration>();
+        if (graphQL is not null)
+            graphQL.ConsoleDocumentsClosed = true;
+        if (!_consoleIncluded && graphQL?.ConsoleDocuments is { Count: > 0 } console)
         {
             var executor = await services
                 .GetRequiredService<IRequestExecutorProvider>()
