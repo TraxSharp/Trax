@@ -1,11 +1,14 @@
+using System.Globalization;
 using System.Text;
 
 namespace Trax.Api.Console.Terminal.Lists;
 
 /// <summary>
 /// Text the host sent, made safe to write to a terminal. A host's error message, a state's name or a log line could
-/// carry an escape sequence (a clipboard write, a retitle, text hidden by colour) or a bidirectional override that
-/// reorders what the operator reads, so every control character and override is replaced before it is printed.
+/// carry an escape sequence (a clipboard write, a retitle, text hidden by colour), a bidirectional control that
+/// reorders what the operator reads, or an invisible character, so every control character, format character
+/// (<c>\p{Cf}</c>: the bidirectional embeddings, overrides, isolates and marks U+061C, U+200E and U+200F among them)
+/// and line or paragraph separator is replaced before it is printed.
 /// </summary>
 internal static class TerminalText
 {
@@ -21,21 +24,24 @@ internal static class TerminalText
     {
         if (string.IsNullOrEmpty(text))
             return "";
-        if (!text.Any(c => Unsafe(c, keepLines)))
+        // By code point, so a format character outside the BMP (a tag character) is found, and a lone surrogate,
+        // which EnumerateRunes reads as U+FFFD, is replaced too.
+        if (!text.EnumerateRunes().Any(r => Unsafe(r, keepLines) || r == Rune.ReplacementChar))
             return text;
         var clean = new StringBuilder(text.Length);
-        foreach (var c in text)
-            clean.Append(Unsafe(c, keepLines) ? Replacement : c);
+        foreach (var rune in text.EnumerateRunes())
+            clean.Append(Unsafe(rune, keepLines) ? Replacement.ToString() : rune.ToString());
         return clean.ToString();
     }
 
-    private static bool Unsafe(char c, bool keepLines)
+    private static bool Unsafe(Rune c, bool keepLines)
     {
-        if (keepLines && c is '\n' or '\t')
+        if (keepLines && c.Value is '\n' or '\t')
             return false;
-        return char.IsControl(c)
-            || c is >= '\u202A' and <= '\u202E'
-            || c is >= '\u2066' and <= '\u2069'
-            || c is '\u2028' or '\u2029';
+        return Rune.GetUnicodeCategory(c)
+            is UnicodeCategory.Control
+                or UnicodeCategory.Format
+                or UnicodeCategory.LineSeparator
+                or UnicodeCategory.ParagraphSeparator;
     }
 }
