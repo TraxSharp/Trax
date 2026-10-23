@@ -121,7 +121,15 @@ builder.Services.AddTrax(trax =>
                 .UseBroadcaster(b =>
                     b.UseRabbitMq(
                         rabbitMqConnectionString,
-                        o => o.ExchangeName = LifecycleEvents.ExchangeName
+                        o =>
+                        {
+                            o.ExchangeName = LifecycleEvents.ExchangeName;
+                            // Signs each event, and drops one not signed with this key.
+                            o.SigningKey = BroadcastSigningKey.Resolve(
+                                builder.Configuration,
+                                builder.Environment.IsDevelopment()
+                            );
+                        }
                     )
                 )
         )

@@ -21,6 +21,13 @@ var rabbitMq =
     builder.Configuration.GetConnectionString("RabbitMq")
     ?? throw new InvalidOperationException("ConnectionStrings:RabbitMq is not set.");
 
+// The key the hub and the workers sign their events with. A process drops any event not signed
+// with it. appsettings.Development.json holds a key printed in the book, for Development only.
+var broadcastKey = Convert.FromBase64String(
+    builder.Configuration["Broadcast:SigningKey"]
+        ?? throw new InvalidOperationException("Broadcast:SigningKey is not set.")
+);
+
 builder.Services.AddShopfront(connectionString);
 
 // The trains ask who the caller is. On the worker nobody is, and that is the answer they get.
@@ -31,7 +38,21 @@ builder.Services.AddTrax(trax =>
             effects
                 .UsePostgres(connectionString)
                 // The runs this worker executes reach the hub's subscriptions over RabbitMQ.
-                .UseBroadcaster(broadcaster => broadcaster.UseRabbitMq(rabbitMq))
+                .UseBroadcaster(broadcaster =>
+                    broadcaster.UseRabbitMq(
+                        rabbitMq,
+                        rabbit =>
+                        {
+                            rabbit.SigningKey = broadcastKey;
+                            // Set by compose.yaml, whose broker is reached by name on its own
+                            // network. A broker anywhere else is reached over amqps://.
+                            rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
+                                "Broadcast:AllowInsecureTransport",
+                                false
+                            );
+                        }
+                    )
+                )
                 .SaveTrainParameters()
                 .AddJunctionLogger(serializeJunctionData: true)
                 .AddJunctionProgress()

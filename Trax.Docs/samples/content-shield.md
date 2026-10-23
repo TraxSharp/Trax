@@ -77,7 +77,7 @@ key answers `Not authorized.` with code `TRAX_AUTHORIZATION`.
 
 ```
 samples/EphemeralWorkers/
-├── Trax.Samples.ContentShield/          trains, roles, RunnerSigningKey
+├── Trax.Samples.ContentShield/          trains, roles, RunnerSigningKey, BroadcastSigningKey
 ├── Trax.Samples.ContentShield.Api/      GraphQL + dispatch + operations console (port 5204)
 └── Trax.Samples.ContentShield.Runner/   Function : TraxLambdaFunction; Program.cs runs it locally (port 5205)
 ```
@@ -100,7 +100,15 @@ builder.Services.AddTrax(trax =>
                 .UseBroadcaster(b =>
                     b.UseRabbitMq(
                         rabbitMqConnectionString,
-                        o => o.ExchangeName = LifecycleEvents.ExchangeName
+                        o =>
+                        {
+                            o.ExchangeName = LifecycleEvents.ExchangeName;
+                            // Signs each event, and drops one not signed with this key.
+                            o.SigningKey = BroadcastSigningKey.Resolve(
+                                builder.Configuration,
+                                builder.Environment.IsDevelopment()
+                            );
+                        }
                     )
                 )
         )
@@ -188,7 +196,15 @@ public class Function : TraxLambdaFunction
                         .UseBroadcaster(b =>
                             b.UseRabbitMq(
                                 rabbitMqConnectionString,
-                                o => o.ExchangeName = LifecycleEvents.ExchangeName
+                                o =>
+                                {
+                                    o.ExchangeName = LifecycleEvents.ExchangeName;
+                                    // Signs each event, and drops one not signed with this key.
+                                    o.SigningKey = BroadcastSigningKey.Resolve(
+                                        configuration,
+                                        IsDevelopment(configuration)
+                                    );
+                                }
                             )
                         )
                 )
@@ -218,7 +234,8 @@ checks the `Trax-Signature` header before reading the body. See
 [Remote Execution: Authorization Posture](/docs/scheduler/remote-execution#authorization-posture).
 
 The function reads its configuration from `appsettings.json` next to the binary and from environment
-variables (`ConnectionStrings__TraxDatabase`, `Trax__RunnerSigningKey`, `DOTNET_ENVIRONMENT`). It does
+variables (`ConnectionStrings__TraxDatabase`, `Trax__RunnerSigningKey`, `Trax__BroadcastSigningKey`,
+`DOTNET_ENVIRONMENT`). It does
 not see command-line arguments, and it has no `IHostEnvironment`, which is why its own
 `IsDevelopment` helper reads `DOTNET_ENVIRONMENT` (or `ASPNETCORE_ENVIRONMENT`) from configuration.
 
@@ -274,7 +291,10 @@ builder.Services.AddTraxGraphQL(graphql =>
 
 The API and the runner both publish on `contentshield.lifecycle` (`LifecycleEvents.ExchangeName`),
 an exchange of their own, so another Trax application on the same broker does not receive their
-events. See [UseBroadcaster: RabbitMQ](/docs/sdk-reference/configuration/use-rabbit-mq).
+events. Each signs what it publishes with the key `BroadcastSigningKey` resolves (`Trax:BroadcastSigningKey`,
+or a published demo key in Development) and drops an event that is not signed with it; outside
+Development a host without the key does not start. See
+[UseRabbitMq: Signing and transport](/docs/sdk-reference/configuration/use-rabbit-mq#signing-and-transport).
 
 Subscriptions need a credential even for anonymous trains. Once an API-key scheme is registered,
 every WebSocket must carry a key in its `connection_init` payload, and a socket without one is

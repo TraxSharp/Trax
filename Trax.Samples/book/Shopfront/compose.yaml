@@ -5,6 +5,11 @@
 x-shopfront: &shopfront
   ConnectionStrings__Shopfront: Host=database;Database=shopfront;Username=shopfront;Password=${POSTGRES_PASSWORD}
   ConnectionStrings__RabbitMq: amqp://shopfront:${RABBITMQ_PASSWORD}@rabbitmq:5672
+  # The key every process signs its events with: 32 random bytes, base64, the same in each.
+  Broadcast__SigningKey: ${BROADCAST_SIGNING_KEY:?set BROADCAST_SIGNING_KEY}
+  # The broker is reached without TLS, by its service name, on the network compose creates for
+  # these containers alone. A broker anywhere else is reached over amqps://.
+  Broadcast__AllowInsecureTransport: "true"
 
 services:
   database:
