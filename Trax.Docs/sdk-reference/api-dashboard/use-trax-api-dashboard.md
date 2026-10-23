@@ -151,7 +151,11 @@ document text. The persisted-operation pages still send text: they are reached t
 | A document this host cannot serve, such as an operations mutation on a host that exposes only the queries | Leaves it out and logs which and why when it starts. The app sends that one as text, which a host that requires persisted operations refuses, so only the pages that use it fail. |
 
 Registering a document changes which documents may run, not who may run them: every request still
-passes the operations gate. The decision is `Trax.Api/docs/adr/0042`.
+passes the operations gate, or, for a stream such as `onTrainStateChanged`, its per-subscriber
+authorization, which delivers each event only to a caller who may see it. The decision is
+`Trax.Api/docs/adr/0042`. The documents are read once, when the host finishes starting, so
+`UseTraxApiDashboard` called after that throws rather than serve a page whose documents were never
+registered.
 
 ## What it serves
 

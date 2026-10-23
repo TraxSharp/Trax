@@ -184,7 +184,7 @@ export async function runTranscript(transcript, host, askTestee) {
       subscription.complete();
     } else if (step.dropSocket !== undefined) {
       if (!subscription) fail("no socket to drop");
-      subscription.drop();
+      subscription.drop(step.dropSocket === true ? undefined : step.dropSocket);
     } else if (step.view !== undefined) {
       const deadline = Date.now() + STEP_TIMEOUT;
       let got;

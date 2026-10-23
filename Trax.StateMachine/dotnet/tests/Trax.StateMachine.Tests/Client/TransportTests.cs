@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Trax.Client;
 using Trax.StateMachine.Client;
 using Trax.StateMachine.Tests.Fakes;
 
@@ -40,11 +41,8 @@ public class TransportTests
 
     private sealed class NoSocket : ISubscriptionSocket
     {
-        public IDisposable Subscribe(
-            string documentId,
-            JsonObject variables,
-            ISubscriptionSink sink
-        ) => throw new NotSupportedException();
+        public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink) =>
+            throw new NotSupportedException();
     }
 
     private static GraphQLMachineServer Server(
@@ -297,7 +295,10 @@ public class TransportTests
         );
         var sink = new Sink();
 
-        using var subscription = client.Subscribe("changed-1", new JsonObject(), sink);
+        using var subscription = client.Subscribe(
+            new JsonObject { ["id"] = "changed-1", ["variables"] = new JsonObject() },
+            sink
+        );
         var error = await sink.Failed.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         error.Message.Should().Contain("larger than 1024");

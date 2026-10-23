@@ -236,6 +236,9 @@
         "resolved": "6.0.0",
         "contentHash": "CPc6tWO1LAer3IzfZufDBRL+UZQcj5uS207NHALQzP84Vp/z6wF0Aa0YZImOQY8iStY0A2zI/e3ihKNPfUm8XA=="
       },
+      "trax.client": {
+        "type": "Project"
+      },
       "trax.core": {
         "type": "Project",
         "dependencies": {
@@ -276,6 +279,7 @@
       "trax.statemachine.client": {
         "type": "Project",
         "dependencies": {
+          "Trax.Client": "[1.99.99, )",
           "Trax.StateMachine": "[1.99.99, )"
         }
       },

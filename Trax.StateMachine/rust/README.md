@@ -35,8 +35,10 @@ match machine.advance(&draft, "Pay", Some(&Value::parse(r#"{"receipt":null}"#)?)
 `trax-state-machine-client` (`client/`) is the client over it: `ServerMachineController` drives one instance a host
 serves, predicting each event with the machine built from the manifest's IR, over `GraphQLMachineServer` (persisted
 ids over HTTP, the change stream over graphql-transport-ws, on tokio). An event with an edge that rests on a custom
-rule is sent with no prediction, since the client binds no handler. It is held to the client conformance kit, as the
-TypeScript and C# clients are.
+rule is sent with no prediction, since the client binds no handler. A stream that ends without saying why is
+subscribed again after `resubscribe_delays`; a socket the host refused (closed with 4401 or 4403, or an upgrade
+answered 401 or 403) is not, and stops the controller as `UNAUTHENTICATED` or `FORBIDDEN`. It is held to the client
+conformance kit, as the TypeScript and C# clients are.
 
 `advance` takes the triggers a client sends, `apply_outcome` an invoked train's outcome and `apply_timer` a state's
 timer. A custom rule is bound by name with `with_guard` or `with_reducer`; one with no handler fails, so the engine

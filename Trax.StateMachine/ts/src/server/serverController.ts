@@ -60,8 +60,9 @@ export type StreamMessage =
   /** The stream ended because the server no longer serves this client's version of the machine. */
   | { type: 'client-outdated' }
   /**
-   * The transport ended the stream for good, for a reason of its own (a generated client's `CONNECTION_CHANGED`): it is
-   * not subscribed again, and the controller stops with this code and message.
+   * The transport ended the stream for good, for a reason of its own (a generated client's `CONNECTION_CHANGED`, or
+   * `UNAUTHENTICATED` or `FORBIDDEN` for a socket the host refused): it is not subscribed again, and the controller stops
+   * with this code and message.
    */
   | { type: 'ended'; code: string; message: string };
 

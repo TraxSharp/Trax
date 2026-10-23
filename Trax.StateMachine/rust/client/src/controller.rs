@@ -40,6 +40,8 @@ pub mod codes {
     pub(crate) const SERVER_OUTDATED: &str = "SERVER_OUTDATED";
     pub(crate) const CLIENT_DIVERGENCE: &str = "CLIENT_DIVERGENCE";
     pub(crate) const NOT_FOUND: &str = "NOT_FOUND";
+    pub(crate) const UNAUTHENTICATED: &str = "UNAUTHENTICATED";
+    pub(crate) const FORBIDDEN: &str = "FORBIDDEN";
 }
 
 /// Whether a problem is the server's refusal or a request that did not get through.
@@ -57,10 +59,11 @@ pub struct MachineProblem {
     pub message: String,
 }
 
-/// Why a controller stopped for good: the instance is gone, or this client is out of date and must reload.
+/// Why a controller stopped for good: the instance is gone, this client is out of date and must reload, or the host
+/// refused the socket.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MachineError {
-    /// `GONE` or `CLIENT_OUTDATED`.
+    /// `GONE`, `CLIENT_OUTDATED`, or `UNAUTHENTICATED` or `FORBIDDEN` for a socket the host refused.
     pub code: String,
     pub message: String,
     /// With `GONE`: true when the instance was deleted, false when the server answered `NOT_FOUND`.
@@ -744,6 +747,11 @@ impl<S: MachineServer> Actor<S> {
             StreamMessage::ClientOutdated => self.stop(MachineError {
                 code: codes::CLIENT_OUTDATED.to_owned(),
                 message: "The server no longer serves this version of the machine. Reload.".to_owned(),
+                deleted: None,
+            }),
+            StreamMessage::Refused(refusal) => self.stop(MachineError {
+                code: refusal.code,
+                message: refusal.message,
                 deleted: None,
             }),
             StreamMessage::Reload => self.reload(None),

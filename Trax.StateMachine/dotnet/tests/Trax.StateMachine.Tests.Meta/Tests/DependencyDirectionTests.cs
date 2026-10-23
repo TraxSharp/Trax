@@ -79,6 +79,16 @@ public class DependencyDirectionTests
         "Trax.Samples",
     };
 
+    // Packages whose id carries no family prefix, and the family whose folder ships them.
+    private static readonly IReadOnlyDictionary<string, string> Unprefixed = new Dictionary<
+        string,
+        string
+    >(StringComparer.Ordinal)
+    {
+        ["Trax.Client"] = "Trax.StateMachine",
+        ["Trax.Runner.Lambda"] = "Trax.Scheduler",
+    };
+
     [Test]
     public void No_project_references_a_downstream_or_parallel_Trax_package()
     {
@@ -106,7 +116,8 @@ public class DependencyDirectionTests
                 $"{repo} may reference only its own family and its allowed upstream "
                     + $"[{string.Join(", ", AllowedUpstream[repo!])}] per the Trax dependency chain. A "
                     + "package or project reference to any other Trax family points the wrong way "
-                    + "(downstream or parallel). Offenders:\n  "
+                    + "(downstream or parallel), and one to a Trax id with no family must be mapped "
+                    + "to the folder that ships it, in Families or Unprefixed. Offenders:\n  "
                     + string.Join("\n  ", Offenders(repo!, projects))
             );
     }
@@ -115,12 +126,24 @@ public class DependencyDirectionTests
     [TestCase("Trax.StateMachine", "Trax.Mediator.Testing")]
     [TestCase("Trax.Effect", "Trax.StateMachine")]
     [TestCase("Trax.Effect", "Trax.StateMachine.Persistence")]
+    [TestCase("Trax.Effect", "Trax.Client")]
     public void A_reference_against_the_chain_is_refused(string folder, string referenced)
     {
         Offenders(folder, [("x.csproj", ProjectReferencing(referenced))])
             .Should()
             .ContainSingle(
                 $"{folder} is upstream of {referenced}'s family, so referencing it points the wrong way"
+            );
+    }
+
+    [TestCase("Trax.Core", "Trax.Unmapped")]
+    [TestCase("Trax.Samples", "Trax.Unmapped.Testing")]
+    public void A_reference_to_a_Trax_id_with_no_family_is_refused(string folder, string referenced)
+    {
+        Offenders(folder, [("x.csproj", ProjectReferencing(referenced))])
+            .Should()
+            .ContainSingle(
+                $"{referenced} is in no family, so the chain cannot say whether {folder} may reach it"
             );
     }
 
@@ -133,8 +156,8 @@ public class DependencyDirectionTests
             .BeEmpty($"{referenced} is in a family upstream of {folder}");
     }
 
-    // Every reference in the given projects to a Trax family the folder may not reach, as
-    // "project -> reference [family]".
+    // Every reference in the given projects to a Trax family the folder may not reach, or to a Trax id
+    // in no family, as "project -> reference [family]".
     private static List<string> Offenders(
         string repo,
         IEnumerable<(string Path, XDocument Project)> projects
@@ -150,12 +173,14 @@ public class DependencyDirectionTests
                 if (include is null || !include.StartsWith("Trax.", StringComparison.Ordinal))
                     continue;
 
-                // A Trax package outside the folder families (e.g. a standalone Trax.Runner.*)
-                // is out of scope for this chain guard; skip it rather than flag it.
+                // A Trax id outside every family is refused rather than skipped: the chain cannot
+                // say whether the folder may reach it until it is mapped to the folder that ships it.
                 var family = FamilyOf(include);
                 if (family is null)
-                    continue;
-                if (!allowed.Contains(family))
+                    offenders.Add(
+                        $"{path} -> {include} [no family: map it in Families or Unprefixed]"
+                    );
+                else if (!allowed.Contains(family))
                     offenders.Add($"{path} -> {include} [{family}]");
             }
         }
@@ -183,10 +208,12 @@ public class DependencyDirectionTests
     }
 
     private static string? FamilyOf(string package) =>
-        Families.FirstOrDefault(f =>
-            package.Equals(f, StringComparison.Ordinal)
-            || package.StartsWith(f + ".", StringComparison.Ordinal)
-        );
+        Unprefixed.TryGetValue(package, out var family)
+            ? family
+            : Families.FirstOrDefault(f =>
+                package.Equals(f, StringComparison.Ordinal)
+                || package.StartsWith(f + ".", StringComparison.Ordinal)
+            );
 
     private static string? DetectRepo()
     {

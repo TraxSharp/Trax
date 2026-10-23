@@ -1,6 +1,6 @@
 ---
 authors: [Theauxm]
-repos: [api, cli]
+repos: [statemachine, api, cli]
 areas: [graphql]
 status: accepted
 ---
@@ -32,6 +32,14 @@ than copying a React app's GraphQL layer.
   no alias at the root, a query or mutation under `operations` alone or `persistedOperations` alone, a subscription
   to one operator stream), and to the schema, as it holds a client document to the manifest. Persisted-operation
   management gets no id: a host runs it as text behind its own gate.
+- **A .NET frontend gets the same client in C#.** `--lang csharp` writes, from the same documents and the same checks,
+  a record per variables and result, each document's name, kind, id and text, and an extension method on
+  `TraxClient` that sends it. The text is written byte for byte, so the id is the one the TypeScript client sends.
+  The runtime is `Trax.Client` (`Trax.StateMachine/dotnet`): BCL only, so a terminal tool or a MAUI app can take it
+  without the engine, and every refusal or transport failure is a value, as in the state-machine clients.
+  `Trax.StateMachine.Client` sends over the same transport. A variable or input field that may be left out is an
+  `Optional<T>`, since GraphQL tells left out from null. The generated types are internal: the client belongs to the
+  app it is generated into, as `trax-console`'s is committed in it.
 - **The ids are the host's.** `ClientDocumentSet.ConsoleIdOf` and `ConsoleDocuments.IdOf` give a text the same id,
   held equal by a fixture both suites read.
 
@@ -44,6 +52,9 @@ than copying a React app's GraphQL layer.
   for no gain: the console's surface does not vary by host.
 - **A hand-written operations client per language.** Rejected: two sources for one set of documents, and no check
   that a document is one the host registers.
+- **Put the C# runtime in `Trax.StateMachine.Client`, or in `Trax.Api.GraphQL.Client`.** Rejected: the first would
+  make an operator console depend on the engine for a transport, and the second sends text only, has no socket and
+  is built on a third-party client; neither is what a persisted-document client needs.
 - **Keep urql and point its fetch at the generated ids.** Rejected: the console's requests would still not be a Trax
   client, which is what a second frontend reuses.
 
@@ -57,7 +68,9 @@ than copying a React app's GraphQL layer.
 ## Exemplars
 
 **Enforced elsewhere:** `OperationsClientGeneratorTests` in `Trax.Cli.Tests` (the rules, the types, the ids, the file,
-and that `--operations` reads no manifest), `ConsoleDocumentsTests.The_host_and_trax_client_name_a_console_document_alike`
+that `--operations` reads no manifest, and that the whole console written as C# compiles and carries each document's
+text and id exactly), `TraxClientTests` in `Trax.StateMachine.Tests` (what the C# runtime sends and how it reads the
+answer), `ConsoleDocumentsTests.The_host_and_trax_client_name_a_console_document_alike`
 in `Trax.Api.Tests`, both reading `Trax.Api/tests/Trax.Api.Tests/PersistedOperations/Fixtures/console-document-ids.json`,
 and the `api-dashboard` job's "The committed client matches the documents" step, which runs `npm run client:check`.
 
@@ -67,4 +80,5 @@ Not covered: nothing stops a page from calling `fetch` itself; review catches th
 
 ## Changelog
 
+- **2026-10-22**: `--lang csharp`, over the new `Trax.Client` runtime, for `trax-console`.
 - **2026-10-22**: Recorded.

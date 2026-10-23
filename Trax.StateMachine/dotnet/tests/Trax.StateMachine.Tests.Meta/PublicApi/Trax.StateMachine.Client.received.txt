@@ -26,23 +26,7 @@ namespace Trax.StateMachine.Client
         public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
         public long MaxResponseSize { get; init; }
         public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
-        public required Trax.StateMachine.Client.ISubscriptionSocket Socket { get; init; }
-    }
-    public sealed class GraphQLSubscriptionSocket : System.IAsyncDisposable, Trax.StateMachine.Client.ISubscriptionSocket
-    {
-        public GraphQLSubscriptionSocket(Trax.StateMachine.Client.GraphQLSubscriptionSocketOptions options) { }
-        public System.Threading.Tasks.ValueTask DisposeAsync() { }
-        public System.IDisposable Subscribe(string documentId, System.Text.Json.Nodes.JsonObject variables, Trax.StateMachine.Client.ISubscriptionSink sink) { }
-    }
-    public sealed class GraphQLSubscriptionSocketOptions : System.IEquatable<Trax.StateMachine.Client.GraphQLSubscriptionSocketOptions>
-    {
-        public GraphQLSubscriptionSocketOptions() { }
-        public bool AllowInsecureTransport { get; init; }
-        public System.Action<System.Net.WebSockets.ClientWebSocketOptions>? ConfigureSocket { get; init; }
-        public System.TimeSpan ConnectTimeout { get; init; }
-        public System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Text.Json.Nodes.JsonObject?>>? ConnectionParams { get; init; }
-        public required System.Uri Endpoint { get; init; }
-        public int MaxMessageSize { get; init; }
+        public required Trax.Client.ISubscriptionSocket Socket { get; init; }
     }
     public interface IMachinePredictor
     {
@@ -59,16 +43,6 @@ namespace Trax.StateMachine.Client
         System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> GetAsync(string id, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.StateMachine.Client.ServerAnswer> StartAsync(System.Text.Json.Nodes.JsonNode? input, string requestId, System.Threading.CancellationToken cancellationToken = default);
         System.IDisposable Subscribe(string id, System.Action<Trax.StateMachine.Client.StreamMessage> onMessage);
-    }
-    public interface ISubscriptionSink
-    {
-        void Complete();
-        void Error(System.Exception error);
-        void Next(System.Text.Json.Nodes.JsonObject value);
-    }
-    public interface ISubscriptionSocket
-    {
-        System.IDisposable Subscribe(string documentId, System.Text.Json.Nodes.JsonObject variables, Trax.StateMachine.Client.ISubscriptionSink sink);
     }
     public sealed class MachineError : System.IEquatable<Trax.StateMachine.Client.MachineError>
     {
@@ -205,14 +179,15 @@ namespace Trax.StateMachine.Client
             public Gone(bool NotFound) { }
             public bool NotFound { get; init; }
         }
+        public sealed class Refused : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Refused>
+        {
+            public Refused(string Code, string Message) { }
+            public string Code { get; init; }
+            public string Message { get; init; }
+        }
         public sealed class Reload : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Reload>
         {
             public Reload() { }
         }
-    }
-    public sealed class SubscriptionErrorException : System.Exception
-    {
-        public SubscriptionErrorException(System.Text.Json.Nodes.JsonArray? errors) { }
-        public System.Text.Json.Nodes.JsonArray Errors { get; }
     }
 }

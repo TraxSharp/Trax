@@ -50,8 +50,11 @@ function Wizard({ id }: { id?: string }) {
   `jsonMessageReplacer` and it leaves the empty `query` out. The package does not depend on graphql-ws; any socket
   with its `subscribe(payload, sink)` shape (`PersistedSubscriptionSocket`) does.
 - **Maps the stream:** a snapshot with its `rowId` and `revision`; `gone: true` as gone, and the `NOT_FOUND` a missing
-  id is answered with as gone with `notFound`; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A socket error whose
-  `code` is in `terminalStreamErrors` ends the stream for good: it reaches the controller as `ended`, and is not
+  id is answered with as gone with `notFound`; `CLIENT_OUTDATED` as client-outdated; `reload: true` as a read. A socket
+  the host closed with 4401 or 4403 refused the caller, and subscribing again would get the same answer: it ends the
+  stream for good as `ended`, with `UNAUTHENTICATED` or `FORBIDDEN` and a message naming the close code (graphql-ws gives
+  up on 4401 at once and on 4403 after its own `retryAttempts`). A socket error whose `code` is in `terminalStreamErrors`
+  ends the stream for good too: it reaches the controller as `ended`, and is not
   subscribed again. A request rejected with one of those codes is not a transport failure either: the server's
   `endedBy` names it, and the controller stops on it the same way. The generated client lists `CONNECTION_CHANGED`
   there, which a server made before the last `configureTrax` refuses every request and stream with. A stream that ends any
@@ -87,7 +90,8 @@ function Wizard({ id }: { id?: string }) {
 - **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included. An
   answer with no revision is applied and not ordered. It reads the instance again only after `reload`, an incarnation change or a `CLIENT_DIVERGENCE`.
 - **Stops for good** on `gone`, `CLIENT_OUTDATED`, `ended`, or a request the server's `endedBy` names: `status` is
-  `stopped`, `error.code` says which (with `ended` or `endedBy`, the code given, such as `CONNECTION_CHANGED`), nothing
+  `stopped`, `error.code` says which (with `ended` or `endedBy`, the code given, such as `CONNECTION_CHANGED`, or
+  `UNAUTHENTICATED` or `FORBIDDEN` for a refused socket), nothing
   more is sent, `retry()` answers `stopped`, and a start request id the hook kept is forgotten. With `GONE`, `error.deleted` is true when the stream said the instance was deleted or expired, and false
   when the server answered `NOT_FOUND`, which it answers alike for a missing instance and another caller's. `dueAt` is shown, never fired: the server runs a state's timer and pushes the move. It is taken from
   every answer and push the hook accepts, and null always clears it: the state has no timer, or the server gave up

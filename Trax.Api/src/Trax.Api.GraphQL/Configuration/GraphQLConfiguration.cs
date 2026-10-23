@@ -55,6 +55,13 @@ public class GraphQLConfiguration
     internal IReadOnlyList<ConsoleDocumentText> ConsoleDocuments { get; set; } = [];
 
     /// <summary>
+    /// Set once a host that runs persisted operations has read <see cref="ConsoleDocuments"/> for the last time, when
+    /// it finishes starting. Documents handed over after that would never be registered, so Trax.Api.Dashboard
+    /// refuses them.
+    /// </summary>
+    internal bool ConsoleDocumentsClosed { get; set; }
+
+    /// <summary>
     /// The persisted id this node registered each console document under, by operation name;
     /// empty when the host runs no persisted operations. The dashboard hands it to the app, which
     /// then sends each document by its id.

@@ -1,0 +1,206 @@
+namespace Trax.Client
+{
+    public sealed class GraphQLSubscriptionSocket : System.IAsyncDisposable, Trax.Client.ISubscriptionSocket
+    {
+        public GraphQLSubscriptionSocket(Trax.Client.GraphQLSubscriptionSocketOptions options) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        public System.IDisposable Subscribe(System.Text.Json.Nodes.JsonObject payload, Trax.Client.ISubscriptionSink sink) { }
+    }
+    public sealed class GraphQLSubscriptionSocketOptions : System.IEquatable<Trax.Client.GraphQLSubscriptionSocketOptions>
+    {
+        public GraphQLSubscriptionSocketOptions() { }
+        public bool AllowInsecureTransport { get; init; }
+        public System.Action<System.Net.WebSockets.ClientWebSocketOptions>? ConfigureSocket { get; init; }
+        public System.TimeSpan ConnectTimeout { get; init; }
+        public System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Text.Json.Nodes.JsonObject?>>? ConnectionParams { get; init; }
+        public required System.Uri Endpoint { get; init; }
+        public System.TimeSpan KeepAliveInterval { get; init; }
+        public System.TimeSpan KeepAliveTimeout { get; init; }
+        public int MaxMessageSize { get; init; }
+    }
+    public interface ISubscriptionSink
+    {
+        void Complete();
+        void Error(System.Exception error);
+        void Next(System.Text.Json.Nodes.JsonObject value);
+        void Started();
+    }
+    public interface ISubscriptionSocket
+    {
+        System.IDisposable Subscribe(System.Text.Json.Nodes.JsonObject payload, Trax.Client.ISubscriptionSink sink);
+    }
+    public interface ITraxTransport
+    {
+        System.Threading.Tasks.Task<Trax.Client.TraxAnswer> ExecuteAsync(Trax.Client.TraxRequest request, System.Threading.CancellationToken cancellationToken = default);
+        System.IDisposable Subscribe(Trax.Client.TraxRequest request, Trax.Client.ISubscriptionSink sink);
+    }
+    public sealed class OptionalJsonConverterFactory : System.Text.Json.Serialization.JsonConverterFactory
+    {
+        public OptionalJsonConverterFactory() { }
+        public override bool CanConvert(System.Type typeToConvert) { }
+        public override System.Text.Json.Serialization.JsonConverter CreateConverter(System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+    }
+    [System.Text.Json.Serialization.JsonConverter(typeof(Trax.Client.OptionalJsonConverterFactory))]
+    public readonly struct Optional<T> : System.IEquatable<Trax.Client.Optional<T>>
+    {
+        public Optional(T value) { }
+        public bool HasValue { get; }
+        public T Value { get; }
+        public override string ToString() { }
+        public static Trax.Client.Optional<T> op_Implicit(T value) { }
+    }
+    public sealed class SocketClosedException : System.IO.IOException
+    {
+        public SocketClosedException(string message, int? closeStatus, int? httpStatus = default) { }
+        public int? CloseStatus { get; }
+        public int? HttpStatus { get; }
+        public bool Refused { get; }
+    }
+    public sealed class SocketUnavailableException : System.Exception
+    {
+        public SocketUnavailableException(string message) { }
+    }
+    public sealed class SubscriptionErrorException : System.Exception
+    {
+        public SubscriptionErrorException(System.Text.Json.Nodes.JsonArray? errors) { }
+        public System.Text.Json.Nodes.JsonArray Errors { get; }
+    }
+    public sealed class TraxAnswer : System.IEquatable<Trax.Client.TraxAnswer>
+    {
+        public TraxAnswer() { }
+        public System.Text.Json.Nodes.JsonNode? Data { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Client.TraxGraphQLError> Errors { get; init; }
+        public Trax.Client.TraxTransportFailure? Failure { get; init; }
+        public static Trax.Client.TraxAnswer Failed(string message, int? status = default) { }
+        public static Trax.Client.TraxAnswer? Of(System.Text.Json.Nodes.JsonNode? answer) { }
+    }
+    public sealed class TraxAnswer<T> : System.IEquatable<Trax.Client.TraxAnswer<T>>
+    {
+        public TraxAnswer() { }
+        public string? Code { get; }
+        public T Data { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Client.TraxGraphQLError> Errors { get; init; }
+        public Trax.Client.TraxTransportFailure? Failure { get; init; }
+        public string? Message { get; }
+        public bool Succeeded { get; }
+    }
+    public sealed class TraxClient
+    {
+        public static readonly System.Collections.Generic.IReadOnlyList<System.TimeSpan> DefaultResubscribeDelays;
+        public TraxClient(Trax.Client.ITraxTransport transport, Trax.Client.TraxClientOptions? options = null) { }
+        public Trax.Client.ITraxTransport Transport { get; }
+        public System.Threading.Tasks.Task<Trax.Client.TraxAnswer<TResult>> SendAsync<TVariables, TResult>(Trax.Client.TraxDocument<TVariables, TResult> document, TVariables variables, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.IDisposable Subscribe<TVariables, TResult>(Trax.Client.TraxDocument<TVariables, TResult> document, TVariables variables, System.Action<Trax.Client.TraxStreamEvent<TResult>> onEvent) { }
+    }
+    public sealed class TraxClientOptions : System.IEquatable<Trax.Client.TraxClientOptions>
+    {
+        public TraxClientOptions() { }
+        public System.Text.Json.JsonSerializerOptions? Json { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
+        public System.TimeProvider? Time { get; init; }
+    }
+    public abstract class TraxDocument : System.IEquatable<Trax.Client.TraxDocument>
+    {
+        protected TraxDocument(string Name, Trax.Client.TraxOperationKind Kind, string? Id, string Text) { }
+        public string? Id { get; init; }
+        public Trax.Client.TraxOperationKind Kind { get; init; }
+        public string Name { get; init; }
+        public string Text { get; init; }
+    }
+    public sealed class TraxDocument<TVariables, TResult> : Trax.Client.TraxDocument, System.IEquatable<Trax.Client.TraxDocument<TVariables, TResult>>
+    {
+        public TraxDocument(string Name, Trax.Client.TraxOperationKind Kind, string? Id, string Text) { }
+    }
+    public static class TraxEnum
+    {
+        public static bool IsUnknown<TEnum>(TEnum value)
+            where TEnum :  struct, System.Enum { }
+    }
+    public sealed class TraxEnumConverter<[System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicFields)]  TEnum> : System.Text.Json.Serialization.JsonConverter<TEnum>
+        where TEnum :  struct, System.Enum
+    {
+        public TraxEnumConverter() { }
+        public override TEnum Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, TEnum value, System.Text.Json.JsonSerializerOptions options) { }
+    }
+    public sealed class TraxGraphQLError : System.IEquatable<Trax.Client.TraxGraphQLError>
+    {
+        public TraxGraphQLError(string Message, string? Code, System.Text.Json.Nodes.JsonArray? Path, System.Text.Json.Nodes.JsonObject? Extensions) { }
+        public string? Code { get; init; }
+        public System.Text.Json.Nodes.JsonObject? Extensions { get; init; }
+        public string Message { get; init; }
+        public System.Text.Json.Nodes.JsonArray? Path { get; init; }
+    }
+    public sealed class TraxHttpTransport : Trax.Client.ITraxTransport
+    {
+        public TraxHttpTransport(Trax.Client.TraxHttpTransportOptions options) { }
+        public System.Threading.Tasks.Task<Trax.Client.TraxAnswer> ExecuteAsync(Trax.Client.TraxRequest request, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Text.Json.Nodes.JsonObject Payload(Trax.Client.TraxRequest request) { }
+        public System.IDisposable Subscribe(Trax.Client.TraxRequest request, Trax.Client.ISubscriptionSink sink) { }
+    }
+    public sealed class TraxHttpTransportOptions : System.IEquatable<Trax.Client.TraxHttpTransportOptions>
+    {
+        public const long DefaultMaxResponseSize = 16777216;
+        public TraxHttpTransportOptions() { }
+        public bool AllowInsecureTransport { get; init; }
+        public System.Func<Trax.Client.TraxDocument, bool>? ById { get; init; }
+        public required System.Uri Endpoint { get; init; }
+        public required System.Net.Http.HttpClient Http { get; init; }
+        public long MaxResponseSize { get; init; }
+        public Trax.Client.ISubscriptionSocket? Socket { get; init; }
+    }
+    public static class TraxJson
+    {
+        [get: System.Diagnostics.CodeAnalysis.RequiresDynamicCode("TraxJson.Options reads types by reflection. A trimmed or native AOT app passes Tr" +
+            "axClientOptions.Json with a source-generated JsonSerializerContext instead.")]
+        [get: System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("TraxJson.Options reads types by reflection. A trimmed or native AOT app passes Tr" +
+            "axClientOptions.Json with a source-generated JsonSerializerContext instead.")]
+        public static System.Text.Json.JsonSerializerOptions Options { get; }
+    }
+    public sealed class TraxNoVariables : System.IEquatable<Trax.Client.TraxNoVariables>
+    {
+        public static readonly Trax.Client.TraxNoVariables Instance;
+    }
+    public enum TraxOperationKind
+    {
+        Query = 0,
+        Mutation = 1,
+        Subscription = 2,
+    }
+    public sealed class TraxRequest : System.IEquatable<Trax.Client.TraxRequest>
+    {
+        public TraxRequest(Trax.Client.TraxDocument Document, System.Text.Json.Nodes.JsonObject Variables) { }
+        public Trax.Client.TraxDocument Document { get; init; }
+        public System.Text.Json.Nodes.JsonObject Variables { get; init; }
+    }
+    public abstract class TraxStreamEvent<T> : System.IEquatable<Trax.Client.TraxStreamEvent<T>>
+    {
+        public sealed class Ended : Trax.Client.TraxStreamEvent<T>, System.IEquatable<Trax.Client.TraxStreamEvent<T>.Ended>
+        {
+            public Ended(System.Collections.Generic.IReadOnlyList<Trax.Client.TraxGraphQLError> Errors, Trax.Client.TraxTransportFailure? Failure) { }
+            public System.Collections.Generic.IReadOnlyList<Trax.Client.TraxGraphQLError> Errors { get; init; }
+            public Trax.Client.TraxTransportFailure? Failure { get; init; }
+        }
+        public sealed class Interrupted : Trax.Client.TraxStreamEvent<T>, System.IEquatable<Trax.Client.TraxStreamEvent<T>.Interrupted>
+        {
+            public Interrupted(string Reason) { }
+            public string Reason { get; init; }
+        }
+        public sealed class Next : Trax.Client.TraxStreamEvent<T>, System.IEquatable<Trax.Client.TraxStreamEvent<T>.Next>
+        {
+            public Next(T Data) { }
+            public T Data { get; init; }
+        }
+        public sealed class Resumed : Trax.Client.TraxStreamEvent<T>, System.IEquatable<Trax.Client.TraxStreamEvent<T>.Resumed>
+        {
+            public Resumed() { }
+        }
+    }
+    public sealed class TraxTransportFailure : System.IEquatable<Trax.Client.TraxTransportFailure>
+    {
+        public const string Code = "TRANSPORT_ERROR";
+        public TraxTransportFailure(string Message, int? Status = default) { }
+        public string Message { get; init; }
+        public int? Status { get; init; }
+    }
+}
