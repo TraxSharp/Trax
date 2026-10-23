@@ -702,37 +702,6 @@ public class OperationsBatchMutationsTests
         await jobs.Current;
     }
 
-    [Test]
-    public async Task StartBulkOperation_AFilterMatchingMoreThanTheLimit_IsRefusedAndChangesNothing()
-    {
-        await SeedRuns(4, TrainState.Pending);
-        await using var host = BulkHost(out _);
-        var jobs = host.GetRequiredService<BulkOperationJobs>();
-        jobs.TargetLimit = 3;
-
-        var response = await Start(host, expectedCount: 4);
-
-        response.Success.Should().BeFalse();
-        response.Message.Should().Contain("more than 3 run(s)");
-        response.Matched.Should().BeNull();
-        jobs.List().Should().BeEmpty();
-        await using var db = await _factory.CreateDbContextAsync(default);
-        (await db.Metadatas.AnyAsync(m => m.CancellationRequested)).Should().BeFalse();
-    }
-
-    [Test]
-    public async Task StartBulkOperation_AConfirmedCountOverTheMaximum_IsRefusedWithoutASnapshot()
-    {
-        await using var host = BulkHost(out _);
-        var jobs = host.GetRequiredService<BulkOperationJobs>();
-        jobs.BeforeSnapshot = _ => throw new AssertionException("no snapshot is read");
-
-        var response = await Start(host, expectedCount: BulkOperationJobs.MaxTargets + 1);
-
-        response.Success.Should().BeFalse();
-        response.Message.Should().Contain($"at most {BulkOperationJobs.MaxTargets}");
-    }
-
     private static Task<StartBulkOperationResponse> Start(
         ServiceProvider host,
         int expectedCount

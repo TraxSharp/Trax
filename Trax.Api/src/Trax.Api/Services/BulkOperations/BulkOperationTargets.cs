@@ -61,19 +61,16 @@ internal static class BulkOperationTargets
     /// Every id the filter matches now, read a page at a time so no one read holds the table for
     /// long, and the batches to run them in: ascending ids, <see cref="BulkOperationJobs.BatchSize"/>
     /// at a time. Dead letters to requeue are the exception (see <see cref="RequeueBatches"/>).
-    /// <c>null</c> when the filter matches more than <paramref name="max"/>: reading stops at the
-    /// page that crosses it, so a broad filter is never read to its end.
     /// </summary>
-    public static async Task<BulkOperationSnapshot?> SnapshotAsync(
+    public static async Task<BulkOperationSnapshot> SnapshotAsync(
         IDataContextProviderFactory factory,
         BulkOperationKind kind,
         BulkOperationFilter filter,
-        int max,
         CancellationToken ct
     )
     {
         if (kind == BulkOperationKind.Requeue)
-            return await RequeueSnapshotAsync(factory, filter.DeadLetters!, max, ct);
+            return await RequeueSnapshotAsync(factory, filter.DeadLetters!, ct);
 
         var ids = new List<long>();
         var after = long.MinValue;
@@ -100,8 +97,6 @@ internal static class BulkOperationTargets
                 .Take(SnapshotPageSize)
                 .ToListAsync(ct);
             ids.AddRange(page);
-            if (ids.Count > max)
-                return null;
             if (page.Count < SnapshotPageSize)
                 break;
             after = page[^1];
@@ -128,10 +123,9 @@ internal static class BulkOperationTargets
     /// gets a batch of its own of up to <see cref="OperationsService.MaxBatchSize"/>, the most the
     /// shared requeue takes. Past that its dead letters are left awaiting, each with the reason.
     /// </summary>
-    private static async Task<BulkOperationSnapshot?> RequeueSnapshotAsync(
+    private static async Task<BulkOperationSnapshot> RequeueSnapshotAsync(
         IDataContextProviderFactory factory,
         BulkDeadLetterFilter filter,
-        int max,
         CancellationToken ct
     )
     {
@@ -150,8 +144,6 @@ internal static class BulkOperationTargets
                 .Select(d => new { d.ManifestId, d.Id })
                 .ToListAsync(ct);
             rows.AddRange(page.Select(r => (r.ManifestId, r.Id)));
-            if (rows.Count > max)
-                return null;
             if (page.Count < SnapshotPageSize)
                 break;
             after = (page[^1].ManifestId, page[^1].Id);

@@ -9,7 +9,7 @@ status: accepted
 `startBulkOperation(kind, filter, expectedCount)` applies one action (cancel, requeue, acknowledge,
 trigger, enable, disable) to every row a list read's filter matches. It reads the matching ids once,
 when it starts, and refuses to start when there are not exactly `expectedCount` of them, the number
-the operator was shown and confirmed, or when it matches more than 100,000. It then runs in the
+the operator was shown and confirmed. There is no cap on how many it matches. It then runs in the
 background, as requeue-all does ([0036](./0036-requeue-all-runs-in-the-background-and-returns-a-handle.md)),
 in batches through the shared operation the id-list mutation of its kind calls (central `0022`), and
 records who started it, how many ids took, and each one that did not with its reason.
@@ -26,17 +26,12 @@ Until 2026-10-18 the batch mutations took id lists of at most 1,000, so "cancel 
 this train since 02:00" meant paging and ticking, and nothing recorded who did it or what failed.
 Taking a filter instead removes the size limit, and with it the guard a page gave: the operator no
 longer sees every row the action touches. The confirmed count is what replaces that guard, and the
-batching is what keeps a large operation from holding a transaction.
+batching is what makes "no cap" safe.
 
 ## Considered options
 
-**No cap on the matched count.** What this recorded on 2026-10-18, so that an operator could cancel
-300,000 stuck runs in one go. Reversed on 2026-10-23: the snapshot is read in full and held in the
-node's memory for the whole operation, so an unbounded filter costs an unbounded read and an
-unbounded allocation before the confirmed count is even compared. The cap is 100,000
-(`BulkOperationJobs.MaxTargets`); a larger cleanup is several operations over narrower filters. The
-snapshot stops reading at the page that crosses it, and a confirmed count over it is refused
-without reading at all.
+**A cap on the matched count.** Rejected (the user, 2026-10-18): the operator who needs to cancel
+300,000 stuck runs needs it most. Instead the operation must pass the stress suite at its scale.
 
 **Apply the filter afresh to each batch.** Rejected: a cancel over "runs in progress" would chase
 runs started after the operator confirmed, and the count confirmed would mean nothing. The snapshot
@@ -73,7 +68,7 @@ authorizes or writes a row itself.
 
 ## Exemplars
 
-- `OperationsBatchMutationsTests` pins the snapshot refusal, the cap, two starts arriving together,
+- `OperationsBatchMutationsTests` pins the snapshot refusal, two starts arriving together,
   the slot given back after a refused or failed start, the per-id failures and reasons of a cancel
   whose runs end first, the actor and the audit entry, and the requeue batching by manifest.
 - `BulkOperationStressTests.cs` measures a cancel over every run in progress and a requeue over every
@@ -85,6 +80,5 @@ Not covered: nothing checks that an operation started on one node is read on tha
 
 ## Changelog
 
-- **2026-10-23**: A start matching more than 100,000 ids is refused, and a start holds the node's
-  slot from before its snapshot.
+- **2026-10-23**: A start holds the node's slot from before its snapshot.
 - **2026-10-18**: Recorded.

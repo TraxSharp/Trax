@@ -55,10 +55,7 @@ The server reads the matching ids once, now, in pages of 10,000. When there are 
 `expectedCount` of them it starts nothing: `success` is `false` and `matched` is the number there are
 now, to show the operator and confirm again. A list's `totalCount` can be an estimate (unfiltered
 runs or manifests) or capped at 10,000 (runs filtered by failure text); the refusal's `matched` is
-always exact. One operation acts on at most 100,000 ids: a start whose filter matches more, or whose
-`expectedCount` is more, is refused with `matched: null` and starts nothing, and the server stops
-reading at the page that crosses the limit. Split a larger cleanup into narrower filters. Otherwise
-the operation starts and is returned at once with `status: RUNNING`.
+always exact. Otherwise the operation starts and is returned at once with `status: RUNNING`.
 
 Each `BulkOperationKind` applies to one list, and a filter for another is refused:
 

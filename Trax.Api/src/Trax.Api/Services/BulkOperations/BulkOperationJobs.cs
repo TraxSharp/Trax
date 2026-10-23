@@ -39,12 +39,6 @@ internal sealed class BulkOperationJobs
     /// <summary>The most finished operations kept; the oldest is forgotten first.</summary>
     public const int MaxRetained = 100;
 
-    /// <summary>
-    /// The most ids one operation acts on. A start whose filter matches more is refused before
-    /// anything is applied: the snapshot is held in this node's memory for the whole operation.
-    /// </summary>
-    public const int MaxTargets = 100_000;
-
     /// <summary>The most ids one batch acts on: the largest page an operations read returns.</summary>
     public const int BatchSize = OperationsService.MaxPageSize;
 
@@ -93,9 +87,6 @@ internal sealed class BulkOperationJobs
     /// <summary>The task of the operation most recently started, for tests to await.</summary>
     internal Task Current { get; private set; } = Task.CompletedTask;
 
-    /// <summary>Test seam: the most ids a snapshot may hold, <see cref="MaxTargets"/> unless a test lowers it.</summary>
-    internal int TargetLimit { get; set; } = MaxTargets;
-
     /// <summary>Test seam: runs once a start holds the node's slot, before its snapshot.</summary>
     internal Func<CancellationToken, Task>? BeforeSnapshot { get; set; }
 
@@ -128,28 +119,17 @@ internal sealed class BulkOperationJobs
             if (BeforeSnapshot is { } seam)
                 await seam(ct);
 
-            BulkOperationSnapshot? snapshot;
+            BulkOperationSnapshot snapshot;
             await using (var scope = _scopes.CreateAsyncScope())
                 snapshot = await BulkOperationTargets.SnapshotAsync(
                     scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>(),
                     request.Kind,
                     request.Filter,
-                    TargetLimit,
                     ct
                 );
 
-            var noun = BulkOperationRun.Noun(request.Kind);
-            if (snapshot is null)
-                return new StartBulkOperationResponse(
-                    false,
-                    $"The filter matches more than {TargetLimit} {noun}, the most one bulk "
-                        + "operation acts on, so nothing was started. Narrow the filter and start "
-                        + "again.",
-                    null,
-                    null
-                );
-
             var ids = snapshot.Ids;
+            var noun = BulkOperationRun.Noun(request.Kind);
             if (ids.Length != request.ExpectedCount)
                 return new StartBulkOperationResponse(
                     false,
@@ -232,9 +212,6 @@ internal sealed class BulkOperationJobs
             return wrongList;
         if (request.ExpectedCount < 0)
             return "expectedCount is the number of matches you confirmed; it cannot be negative.";
-        if (request.ExpectedCount > MaxTargets)
-            return $"expectedCount is {request.ExpectedCount}; one bulk operation acts on at most "
-                + $"{MaxTargets}. Narrow the filter and start again.";
         if (
             request.AskAfresh
             && request.Kind is not (BulkOperationKind.Requeue or BulkOperationKind.Trigger)
