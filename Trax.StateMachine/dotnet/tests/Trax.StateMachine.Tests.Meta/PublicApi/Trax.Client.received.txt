@@ -47,6 +47,10 @@ namespace Trax.Client
         public int? CloseStatus { get; }
         public bool Refused { get; }
     }
+    public sealed class SocketUnavailableException : System.Exception
+    {
+        public SocketUnavailableException(string message) { }
+    }
     public sealed class SubscriptionErrorException : System.Exception
     {
         public SubscriptionErrorException(System.Text.Json.Nodes.JsonArray? errors) { }

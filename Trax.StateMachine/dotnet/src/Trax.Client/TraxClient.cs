@@ -37,8 +37,9 @@ public abstract record TraxStreamEvent<T>
     public sealed record Resumed : TraxStreamEvent<T>;
 
     /// <summary>
-    /// The stream is over and is not subscribed again: the host completed it, refused it (<see cref="Errors"/>), or
-    /// refused the connection (<see cref="Failure"/>).
+    /// The stream is over and is not subscribed again. The host completed it (neither is set), refused it or answered
+    /// a frame with errors (<see cref="Errors"/>); or <see cref="Failure"/> says why: the host refused the connection,
+    /// there is no socket to follow it over, a frame did not fit the document's result, or the handler threw.
     /// </summary>
     public sealed record Ended(
         IReadOnlyList<TraxGraphQLError> Errors,
@@ -105,7 +106,10 @@ public sealed class TraxClient
 
     /// <summary>
     /// Follows a subscription until the returned handle is disposed. <paramref name="onEvent"/> gets each frame's data,
-    /// and the stream's interruptions, resumptions and end. A frame with errors ends the stream.
+    /// and the stream's interruptions, resumptions and end, one call at a time. A frame with errors ends the stream. So
+    /// does an <paramref name="onEvent"/> that throws: the stream is closed, and its last call is the
+    /// <see cref="TraxStreamEvent{T}.Ended"/> whose <see cref="TraxStreamEvent{T}.Ended.Failure"/> names the exception.
+    /// Throws an <see cref="ArgumentException"/> for a document that is not a subscription.
     /// </summary>
     public IDisposable Subscribe<TVariables, TResult>(
         TraxDocument<TVariables, TResult> document,
@@ -150,8 +154,10 @@ public sealed class TraxClient
                 Errors = answer.Errors,
             };
         }
-        catch (JsonException ex)
+        catch (Exception ex)
         {
+            // JsonException for data of another shape; NotSupportedException or InvalidOperationException for a
+            // result the options cannot read at all. Either way the answer did not fit, and only this one fails.
             return new TraxAnswer<TResult>
             {
                 Errors = answer.Errors,
@@ -170,6 +176,9 @@ public sealed class TraxClient
     ) : ISubscriptionSink, IDisposable
     {
         private readonly object _gate = new();
+
+        // Held while onEvent runs, so it is never called from two threads at once.
+        private readonly object _deliver = new();
         private bool _wanted = true;
         private bool _ended;
         private bool _interrupted;
@@ -209,7 +218,7 @@ public sealed class TraxClient
                 _attempt = 0;
             }
             if (resumed)
-                onEvent(new TraxStreamEvent<TResult>.Resumed());
+                Deliver(new TraxStreamEvent<TResult>.Resumed());
         }
 
         public void Next(JsonObject value)
@@ -223,10 +232,7 @@ public sealed class TraxClient
                 End(answer.Errors, answer.Failure);
                 return;
             }
-            lock (_gate)
-                if (!_wanted || _ended)
-                    return;
-            onEvent(new TraxStreamEvent<TResult>.Next(answer.Data!));
+            Deliver(new TraxStreamEvent<TResult>.Next(answer.Data!));
         }
 
         public void Error(Exception error)
@@ -234,12 +240,16 @@ public sealed class TraxClient
             switch (error)
             {
                 case SubscriptionErrorException refused:
-                    End(TraxGraphQLError.ListOf(refused.Errors), null);
+                    var errors = TraxGraphQLError.ListOf(refused.Errors);
+                    End(
+                        errors,
+                        errors.Count == 0 ? new TraxTransportFailure(refused.Message) : null
+                    );
                     return;
                 case SocketClosedException { Refused: true } closed:
                     End([], new TraxTransportFailure(closed.Message));
                     return;
-                case ObjectDisposedException or InvalidOperationException:
+                case SocketUnavailableException:
                     End([], new TraxTransportFailure(error.Message));
                     return;
                 default:
@@ -262,7 +272,34 @@ public sealed class TraxClient
                 _current = null;
             }
             close?.Dispose();
-            onEvent(new TraxStreamEvent<TResult>.Ended(errors, failure));
+            Deliver(new TraxStreamEvent<TResult>.Ended(errors, failure), last: true);
+        }
+
+        // Hands one event to onEvent, unless the stream is over. A handler that throws ends the stream, so it is told
+        // rather than losing every event after; a throw from the last event has nowhere left to go.
+        private void Deliver(TraxStreamEvent<TResult> streamEvent, bool last = false)
+        {
+            Exception? thrown = null;
+            lock (_deliver)
+            {
+                lock (_gate)
+                    if (!_wanted || (_ended && !last))
+                        return;
+                try
+                {
+                    onEvent(streamEvent);
+                }
+                catch (Exception ex) when (!last)
+                {
+                    thrown = ex;
+                }
+                catch (Exception)
+                {
+                    // The stream is over and its handler was told; there is nobody left to tell.
+                }
+            }
+            if (thrown is not null)
+                End([], new TraxTransportFailure($"The stream's handler threw: {thrown.Message}"));
         }
 
         // The socket dropped the stream: say so once, and subscribe again after the next delay.
@@ -286,7 +323,7 @@ public sealed class TraxClient
             }
             close?.Dispose();
             if (first)
-                onEvent(new TraxStreamEvent<TResult>.Interrupted(reason));
+                Deliver(new TraxStreamEvent<TResult>.Interrupted(reason));
             _ = Task.Delay(delay, client._time, timer.Token)
                 .ContinueWith(
                     t =>

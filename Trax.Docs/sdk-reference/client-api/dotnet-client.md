@@ -91,8 +91,8 @@ public readonly record struct Optional<T>
 | Member | What it is |
 | --- | --- |
 | `TraxClient` | Sends documents through an `ITraxTransport`, writing variables and reading data with `TraxJson.Options` unless `TraxClientOptions.Json` says otherwise. It never talks to the network itself. |
-| `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, or for a subscription document, which `Subscribe` follows. Data that does not fit `TResult` is a `Failure`, not a throw. |
-| `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`. Throws for a document that is not a subscription. |
+| `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, or for a subscription document, which `Subscribe` follows. Data that does not fit `TResult`, or that the options cannot read at all, is a `Failure`, not a throw. |
+| `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`, one call at a time. Throws `ArgumentException` for a document that is not a subscription. An `onEvent` that throws ends its stream: the last call it gets is `Ended`, whose `Failure` names the exception. Other streams go on. |
 | `Transport` | The transport the client sends through. |
 | `DefaultResubscribeDelays` | 1, 2, then 5 seconds: the delays before subscribing again after the socket dropped a stream. |
 | `TraxClientOptions` | `Json`, the serializer options (`TraxJson.Options` when null); `ResubscribeDelays`, whose last delay repeats for as long as the stream is followed (`DefaultResubscribeDelays` when null or empty); `Time`, the `TimeProvider` the delays run on (the system's when null). |
@@ -117,14 +117,14 @@ public readonly record struct Optional<T>
 | `TraxAnswer` | An answer as it arrived, what an `ITraxTransport` returns: `Data` as JSON, `Errors` and `Failure`. `TraxAnswer.Of(json)` reads an answer's JSON and is null when it holds neither `data` nor `errors`; `TraxAnswer.Failed(message, status)` is one that never arrived. |
 | `TraxGraphQLError` | One error: its `Message`, its `Code` (`extensions.code`, such as `CLIENT_OUTDATED` or `AUTH_NOT_AUTHORIZED`), its `Path` and its `Extensions` as sent. |
 | `TraxTransportFailure` | A request that got no GraphQL answer: its `Message`, and the HTTP `Status` when a response arrived. `TraxTransportFailure.Code` is `TRANSPORT_ERROR`, the code the state-machine clients report a transport failure under. |
-| `TraxStreamEvent<T>` | What a followed stream delivers: `Next` with one frame's `Data`; `Interrupted` with the `Reason` the socket dropped it; `Resumed` once it is subscribed again; `Ended` with the `Errors` or the `Failure` it ended on, both empty when the host completed it. |
+| `TraxStreamEvent<T>` | What a followed stream delivers: `Next` with one frame's `Data`; `Interrupted` with the `Reason` the socket dropped it; `Resumed` once it is subscribed again, before its first `Next`; `Ended` with the `Errors` or the `Failure` it ended on, both empty only when the host completed it. |
 
 ### Transports
 
 | Member | What it is |
 | --- | --- |
 | `ITraxTransport` | How a request reaches a host: `ExecuteAsync` for a query or mutation, which answers a refusal or an unreachable host as a `TraxAnswer` and throws only on cancellation, and `Subscribe` for a stream. An app can give `TraxClient` its own: a recording, a fake, a wrapper that counts what is in flight. |
-| `TraxHttpTransport` | The transport over HTTP POST and a socket. `ExecuteAsync` posts the request; `Subscribe` sends it over the `Socket`, or fails the sink at once when there is none. `Payload(request)` is the body or subscribe payload it sends: `id` or `query`, with `operationName` and `variables`. |
+| `TraxHttpTransport` | The transport over HTTP POST and a socket. `ExecuteAsync` posts the request; `Subscribe` sends it over the `Socket`, or fails the sink at once with a `SocketUnavailableException` when there is none. `Payload(request)` is the body or subscribe payload it sends: `id` or `query`, with `operationName` and `variables`. |
 | `TraxHttpTransport.PostAsync(http, endpoint, body, maxResponseSize)` | POSTs one GraphQL body and reads the answer. A body with `errors` is an answer whatever its status, since a host answers a coded refusal with the status it chose, and a success with `data` is one too; a status that is not success with no errors (whatever data came with it), a host that could not be reached, or a body larger than `maxResponseSize` (refused as it arrives, never read whole), is a `Failure`. |
 | `TraxHttpTransportOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, a default header or a delegating handler); the GraphQL `Endpoint`; the `Socket` subscriptions go over; `ById`, which says whether a document goes by its id (by default every document with an id does; a host that registered only some of them, or none, names which); `MaxResponseSize`, the largest body read from an answer (`DefaultMaxResponseSize`, 16 MiB); and `AllowInsecureTransport`. Without it the transport refuses, when it is built, an `http` endpoint whose host is not this machine, since whatever authenticates the requests would cross the network in the clear. |
 
@@ -132,12 +132,13 @@ public readonly record struct Optional<T>
 
 | Member | What it is |
 | --- | --- |
-| `GraphQLSubscriptionSocket` | A graphql-transport-ws socket. It connects when the first subscription opens and closes when the last one ends. Each subscribe message carries the payload it is given. It does not reconnect by itself: a closed socket fails every open subscription with a `SocketClosedException`, and whoever subscribed decides when to subscribe again (`TraxClient` does, after its resubscribe delays). |
+| `GraphQLSubscriptionSocket` | A graphql-transport-ws socket. It connects when the first subscription opens and closes when the last one ends. Each subscribe message carries the payload it is given. It does not reconnect by itself: a closed or broken connection (a close, a dropped network, a message that is not graphql-transport-ws) fails every open subscription, with a `SocketClosedException` when it closed, and whoever subscribed decides when to subscribe again (`TraxClient` does, after its resubscribe delays). A failed connection is disposed. A sink that throws ends only its own subscription: the socket completes it with the host and hands the exception to that sink's `Error`. |
 | `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers, a proxy or client certificates on each `ClientWebSocket`; `ConnectTimeout` (10 seconds), how long a connection may take to be acknowledged; `MaxMessageSize` (16 MiB), the largest message read, past which the connection fails rather than reading on; and `AllowInsecureTransport`, without which a `ws` endpoint whose host is not this machine is refused. |
 | `ISubscriptionSocket` | The socket seam: `Subscribe(payload, sink)`, where `payload` is the subscribe message's payload (`id` or `query`, with `operationName` and `variables`). The returned handle ends the subscription. |
-| `ISubscriptionSink` | What a subscription delivers to: `Next` with each GraphQL result, `Error` when the server refused it or the socket closed, `Complete` when the server ended it, and `Started` once the subscribe message went out over an acknowledged connection (nothing by default). |
+| `ISubscriptionSink` | What a subscription delivers to: `Next` with each GraphQL result, `Error` when the server refused it, the connection closed or broke, or there is no socket, `Complete` when the server ended it, and `Started` once the subscribe message went out over an acknowledged connection (nothing by default). `GraphQLSubscriptionSocket` calls `Started` before the first `Next`, and never calls one subscription's sink from two threads at once. |
 | `SocketClosedException` | The `Error` a sink gets when the socket closed, before it was acknowledged or while subscribed. `CloseStatus` is the close code the server sent, if any. `Refused` is true for a 4400 to 4499 close, the host refusing the connection itself (4401 unauthorized, 4403 forbidden): subscribing again gets the same answer. |
-| `SubscriptionErrorException` | The `Error` a sink gets when the server ends a subscription with GraphQL errors, which it carries as `Errors`. |
+| `SocketUnavailableException` | The `Error` a sink gets when there is no socket to follow the subscription over: the transport has none, or the socket was disposed. |
+| `SubscriptionErrorException` | The `Error` a sink gets when the server ends a subscription with GraphQL errors, which it carries as `Errors` (empty when the server sent none). |
 
 ## Behavior
 
@@ -146,11 +147,15 @@ public readonly record struct Optional<T>
 - **By id or by text.** A document with an id goes by its id unless `ById` says otherwise, and its text is then not
   sent at all. A host that requires persisted operations accepts only those. Either way the request carries
   `operationName`.
-- **Streams.** A `Subscribe` stream ends for good (`Ended`) when the host completes it, answers a frame with errors,
-  refuses the subscription, or closes the socket with a 44xx code. Any other close is `Interrupted`, said once, and the
-  stream is subscribed again after the next of `ResubscribeDelays`; `Resumed` follows once the new subscription is
-  started, and frames sent meanwhile are lost, so read again what the stream may have missed. Disposing the handle ends
-  the stream and cancels a pending resubscribe.
+- **Streams.** A `Subscribe` stream ends for good (`Ended`) when the host completes it (no errors, no failure), answers a
+  frame with errors or refuses the subscription (`Errors`, or a `Failure` when the refusal carried none), or with a
+  `Failure` when it closes the socket with a 44xx code, sends a frame that does not fit
+  the result, when the transport has no socket or the socket was disposed, or when `onEvent` throws. Anything else that
+  drops the stream, a close, a broken connection or a malformed message, is `Interrupted`, said
+  once, and the stream is subscribed again after the next of `ResubscribeDelays`, starting over at the first once a
+  subscription starts. `Resumed` follows, before the new subscription's first `Next`; frames sent meanwhile are lost,
+  so read again what the stream may have missed. Disposing the handle ends the stream and cancels a pending
+  resubscribe.
 - **Optional fields.** A generated variables or input record types a field the host may leave as it is as an
   `Optional<T>`, so `MaxActiveJobs = null` sends `"maxActiveJobs": null` and leaving it unset sends nothing.
 

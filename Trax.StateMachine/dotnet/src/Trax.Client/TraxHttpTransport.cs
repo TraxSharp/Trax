@@ -63,7 +63,7 @@ public sealed record TraxHttpTransportOptions
 
     /// <summary>
     /// The socket subscriptions go over, usually a <see cref="GraphQLSubscriptionSocket"/>. Null fails every
-    /// subscription at once.
+    /// subscription at once, with a <see cref="SocketUnavailableException"/>.
     /// </summary>
     public ISubscriptionSocket? Socket { get; init; }
 
@@ -137,7 +137,7 @@ public sealed class TraxHttpTransport : ITraxTransport
         if (_options.Socket is not { } socket)
         {
             sink.Error(
-                new InvalidOperationException(
+                new SocketUnavailableException(
                     "This transport has no socket: give TraxHttpTransportOptions.Socket to follow a subscription."
                 )
             );

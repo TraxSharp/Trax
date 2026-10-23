@@ -11,13 +11,21 @@ public interface ISubscriptionSink
     /// <summary>One event: a GraphQL result, <c>data</c> or <c>errors</c>.</summary>
     void Next(JsonObject value);
 
-    /// <summary>The subscription failed: the server refused it, or the socket closed.</summary>
+    /// <summary>
+    /// The subscription failed: the server refused it (<see cref="SubscriptionErrorException"/>), the socket closed or
+    /// broke (<see cref="SocketClosedException"/> and others), or there is no socket to follow it over
+    /// (<see cref="SocketUnavailableException"/>).
+    /// </summary>
     void Error(Exception error);
 
     /// <summary>The server ended the subscription.</summary>
     void Complete();
 
-    /// <summary>The subscribe message went out over an acknowledged connection. Nothing by default.</summary>
+    /// <summary>
+    /// The subscribe message went out over an acknowledged connection. Nothing by default. A
+    /// <see cref="GraphQLSubscriptionSocket"/> calls it before the subscription's first <see cref="Next"/>, and never
+    /// calls one subscription's sink from two threads at once.
+    /// </summary>
     void Started() { }
 }
 
@@ -68,9 +76,14 @@ public sealed record GraphQLSubscriptionSocketOptions
 /// <summary>
 /// A graphql-transport-ws socket. Each subscribe message carries the payload it is given, a persisted document's id or
 /// a document's text. It connects when the first subscription opens and closes when the last one ends. It does not
-/// reconnect by itself: a closed socket fails every open subscription with a <see cref="SocketClosedException"/>, and
-/// whoever subscribed decides when to subscribe again (<see cref="TraxClient"/> does, after its resubscribe delays).
+/// reconnect by itself: a closed or broken socket fails every open subscription, with a
+/// <see cref="SocketClosedException"/> when it closed, and whoever subscribed decides when to subscribe again
+/// (<see cref="TraxClient"/> does, after its resubscribe delays).
 /// </summary>
+/// <remarks>
+/// A sink that throws ends its own subscription: the socket completes it with the host and hands the exception to the
+/// sink's <see cref="ISubscriptionSink.Error"/>. The other subscriptions over the connection go on.
+/// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/client-api/dotnet-client">SDK reference</seealso>
 public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDisposable
 {
@@ -105,7 +118,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     {
         public required ClientWebSocket Socket { get; init; }
         public required Task Ready { get; init; }
-        public Dictionary<string, ISubscriptionSink> Sinks { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Subscription> Sinks { get; } = new(StringComparer.Ordinal);
         public CancellationTokenSource Stop { get; } = new();
         public bool Closed { get; set; }
 
@@ -113,33 +126,59 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public bool Overflowed { get; set; }
     }
 
+    // One subscription. Its sink is called under Gate, so its callbacks never overlap, and Started always comes first.
+    private sealed class Subscription(string id, ISubscriptionSink sink)
+    {
+        public string Id { get; } = id;
+        public ISubscriptionSink Sink { get; } = sink;
+        public object Gate { get; } = new();
+        public bool Started { get; set; }
+
+        // Set once the sink has had its last callback, or its handle was disposed. Read without Gate by a disposal,
+        // which must not wait on a callback that may be waiting on it.
+        private volatile bool _ended;
+        public bool Ended
+        {
+            get => _ended;
+            set => _ended = value;
+        }
+    }
+
     /// <inheritdoc/>
     public IDisposable Subscribe(JsonObject payload, ISubscriptionSink sink)
     {
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(sink);
-        Connection connection;
-        string id;
+        Connection? connection = null;
+        Subscription subscription;
         lock (_gate)
         {
-            if (_disposed)
+            var id = (++_next).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            subscription = new Subscription(id, sink);
+            if (!_disposed)
             {
-                sink.Error(new ObjectDisposedException(nameof(GraphQLSubscriptionSocket)));
-                return new Handle(() => { });
+                connection = _connection is { Closed: false } open ? open : _connection = Connect();
+                connection.Sinks[id] = subscription;
             }
-            connection = _connection is { Closed: false } open ? open : _connection = Connect();
-            id = (++_next).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            connection.Sinks[id] = sink;
         }
-        _ = SubscribeAsync(connection, id, (JsonObject)payload.DeepClone(), sink);
-        return new Handle(() => Unsubscribe(connection, id));
+        if (connection is null)
+        {
+            End(
+                subscription,
+                new SocketUnavailableException(
+                    "The socket was disposed: it follows no more subscriptions."
+                )
+            );
+            return new Handle(() => { });
+        }
+        _ = SubscribeAsync(connection, subscription, (JsonObject)payload.DeepClone());
+        return new Handle(() => Unsubscribe(connection, subscription));
     }
 
     private async Task SubscribeAsync(
         Connection connection,
-        string id,
-        JsonObject payload,
-        ISubscriptionSink sink
+        Subscription subscription,
+        JsonObject payload
     )
     {
         try
@@ -149,26 +188,25 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                     connection,
                     new JsonObject
                     {
-                        ["id"] = id,
+                        ["id"] = subscription.Id,
                         ["type"] = "subscribe",
                         ["payload"] = payload,
                     }
                 )
                 .ConfigureAwait(false);
-            bool open;
-            lock (_gate)
-                open = connection.Sinks.ContainsKey(id);
-            if (open)
-                sink.Started();
         }
         catch (Exception ex)
         {
             Fail(connection, ex);
+            return;
         }
+        Deliver(connection, subscription, null);
     }
 
-    private void Unsubscribe(Connection connection, string id)
+    private void Unsubscribe(Connection connection, Subscription subscription)
     {
+        subscription.Ended = true;
+        var id = subscription.Id;
         bool last;
         lock (_gate)
         {
@@ -255,8 +293,12 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                     init["payload"] = await parameters(timeout.Token).ConfigureAwait(false);
                 await SendAsync(connection, init).ConfigureAwait(false);
                 var first = await ReceiveAsync(connection, timeout.Token).ConfigureAwait(false);
-                if (first?["type"]?.GetValue<string>() != "connection_ack")
+                if (first is null)
                     throw Closed(connection.Socket, "before it was acknowledged");
+                if (Text(first, "type") != "connection_ack")
+                    throw new WebSocketException(
+                        "The server answered connection_init with something other than connection_ack."
+                    );
             }
             acknowledged.TrySetResult();
 
@@ -277,6 +319,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             // racing the abort cannot fail the subscriptions with the aborted socket's error instead.
             if (connection.Overflowed)
                 connection.Socket.Abort();
+            connection.Socket.Dispose();
         }
     }
 
@@ -290,29 +333,94 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
     private async Task OnMessageAsync(Connection connection, JsonObject message)
     {
-        var type = message["type"]?.GetValue<string>();
-        var id = message["id"]?.GetValue<string>();
-        ISubscriptionSink? sink = null;
+        var type =
+            Text(message, "type")
+            ?? throw new WebSocketException("The server sent a message with no type.");
+        var id = Text(message, "id");
+        Subscription? subscription = null;
         if (id is not null)
             lock (_gate)
-                sink = connection.Sinks.GetValueOrDefault(id);
+                subscription = connection.Sinks.GetValueOrDefault(id);
         switch (type)
         {
             case "ping":
                 await SendAsync(connection, new JsonObject { ["type"] = "pong" })
                     .ConfigureAwait(false);
                 return;
-            case "next" when sink is not null && message["payload"] is JsonObject payload:
-                sink.Next(payload);
+            case "next" when subscription is not null && message["payload"] is JsonObject payload:
+                Deliver(connection, subscription, payload);
                 return;
-            case "error" when sink is not null:
+            case "error" when subscription is not null:
                 Remove(connection, id!);
-                sink.Error(new SubscriptionErrorException(message["payload"] as JsonArray));
+                End(subscription, new SubscriptionErrorException(message["payload"] as JsonArray));
                 return;
-            case "complete" when sink is not null:
+            case "complete" when subscription is not null:
                 Remove(connection, id!);
-                sink.Complete();
+                End(subscription, null);
                 return;
+        }
+    }
+
+    // A member of a message: null when it is absent, and a malformed message when it is there but not a string.
+    private static string? Text(JsonObject message, string name) =>
+        message[name] switch
+        {
+            null => null,
+            JsonValue value when value.TryGetValue<string>(out var text) => text,
+            _ => throw new WebSocketException(
+                $"The server sent a message whose {name} is not a string."
+            ),
+        };
+
+    // Started, once and first, then the event (none when the subscribe message just went out). A sink that throws
+    // ends its own subscription with that exception, and no other.
+    private void Deliver(Connection connection, Subscription subscription, JsonObject? next)
+    {
+        Exception? thrown = null;
+        lock (subscription.Gate)
+        {
+            if (subscription.Ended)
+                return;
+            try
+            {
+                if (!subscription.Started)
+                {
+                    subscription.Started = true;
+                    subscription.Sink.Started();
+                }
+                if (next is not null && !subscription.Ended)
+                    subscription.Sink.Next(next);
+            }
+            catch (Exception ex)
+            {
+                thrown = ex;
+            }
+        }
+        if (thrown is null)
+            return;
+        End(subscription, thrown);
+        Unsubscribe(connection, subscription);
+    }
+
+    // The sink's last call: Error with the error, or Complete when there is none. A throw from it has nowhere to go.
+    private static void End(Subscription subscription, Exception? error)
+    {
+        lock (subscription.Gate)
+        {
+            if (subscription.Ended)
+                return;
+            subscription.Ended = true;
+            try
+            {
+                if (error is null)
+                    subscription.Sink.Complete();
+                else
+                    subscription.Sink.Error(error);
+            }
+            catch (Exception)
+            {
+                // The subscription is over; the sink was told the one thing left to tell it.
+            }
         }
     }
 
@@ -325,18 +433,18 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     // The connection failed or closed: every subscription over it fails, and the next subscription connects again.
     private void Fail(Connection connection, Exception error)
     {
-        List<ISubscriptionSink> sinks;
+        List<Subscription> subscriptions;
         lock (_gate)
         {
             connection.Closed = true;
             if (_connection == connection)
                 _connection = null;
-            sinks = connection.Sinks.Values.ToList();
+            subscriptions = connection.Sinks.Values.ToList();
             connection.Sinks.Clear();
         }
         connection.Stop.Cancel();
-        foreach (var sink in sinks)
-            sink.Error(error);
+        foreach (var subscription in subscriptions)
+            End(subscription, error);
     }
 
     private async Task SendAsync(Connection connection, JsonObject message)
@@ -375,14 +483,17 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             if (result.EndOfMessage)
                 break;
         }
+        JsonNode? parsed;
         try
         {
-            return JsonNode.Parse(text.ToArray()) as JsonObject;
+            parsed = JsonNode.Parse(text.ToArray());
         }
         catch (JsonException ex)
         {
             throw new WebSocketException("The server sent a message that is not JSON.", ex);
         }
+        return parsed as JsonObject
+            ?? throw new WebSocketException("The server sent a message that is not a JSON object.");
     }
 
     /// <summary>Closes the socket. Every open subscription fails, and no new one connects.</summary>
@@ -397,7 +508,12 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
         if (connection is null)
             return;
-        Fail(connection, new ObjectDisposedException(nameof(GraphQLSubscriptionSocket)));
+        Fail(
+            connection,
+            new SocketUnavailableException(
+                "The socket was disposed: it follows no more subscriptions."
+            )
+        );
         await CloseAsync(connection).ConfigureAwait(false);
     }
 
@@ -419,7 +535,10 @@ public sealed class SubscriptionErrorException : Exception
     /// <summary>Builds the exception from the errors the server sent.</summary>
     public SubscriptionErrorException(JsonArray? errors)
         : base(
-            errors?[0]?["message"] is JsonValue message && message.TryGetValue<string>(out var text)
+            errors is { Count: > 0 }
+            && errors[0] is JsonObject first
+            && first["message"] is JsonValue message
+            && message.TryGetValue<string>(out var text)
                 ? text
                 : "The server ended the subscription with an error."
         ) => Errors = errors ?? [];
@@ -444,4 +563,15 @@ public sealed class SocketClosedException : IOException
 
     /// <summary>Whether the server refused the connection itself (a 4400 to 4499 close), so a retry gets the same answer.</summary>
     public bool Refused => CloseStatus is >= 4400 and <= 4499;
+}
+
+/// <summary>
+/// There is no socket to follow a subscription over: the transport has none, or the socket was disposed. Subscribing
+/// again gets the same answer.
+/// </summary>
+public sealed class SocketUnavailableException : Exception
+{
+    /// <summary>Builds the exception.</summary>
+    public SocketUnavailableException(string message)
+        : base(message) { }
 }
