@@ -196,9 +196,9 @@ at fault.
 | on a user-owned machine, a timer that enters a state invoking a train | the same |
 | an output type that reaches a `[TraxSensitive]` member | the output is reduced into a context stored as plain JSON and returned to the client |
 
-The `[TraxBroadcast]` and `[TraxSensitive]` refusals are made again at runtime: entering the state throws and queues
-nothing, and a sensitive output that reaches a run anyway is neither recorded for the machine nor applied to the
-context; the state goes to its `OnFailed` instead.
+The `[TraxBroadcast]` and `[TraxSensitive]` refusals, and the system-owned `[TraxAuthorize]` one, are made again at
+runtime: entering the state throws and queues nothing, and a sensitive output that reaches a run anyway is neither
+recorded for the machine nor applied to the context; the state goes to its `OnFailed` instead.
 
 `EffectJunction`'s railway step is sealed, so a subclass cannot skip the cancel check. A slow decider in `Decide` or
 `Gate` runs outside any junction, so no cancel check happens while it runs, and a train started from inside a

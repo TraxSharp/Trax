@@ -88,7 +88,9 @@ Everything downstream is trusted infrastructure:
   `ITrainBus`; a remote run (`UseRemoteRun`) goes through `ITrainExecutionService` inside a trusted
   scope (`"scheduler.remote-run"`), so the enforcer skips it.
 - A system-owned state machine instance starts its trains inside a trusted scope, as a scheduled
-  manifest would. A user-owned instance's trains are authorized against that user.
+  manifest would, so it may invoke only a train that declares no `[TraxAuthorize]`: the startup
+  check refuses such a machine and the launcher refuses such a run. A user-owned instance's trains
+  are authorized against that user.
 
 So a train can carry `[TraxAuthorize("Admin")]` and still be scheduled with `AddScheduler()` or run
 on a remote worker. Re-checking it there would need a caller who is not present: a scheduled run
