@@ -786,6 +786,84 @@ public class OperationsClientGeneratorTests
             .BeEmpty();
     }
 
+    [TestCase("", "")]
+    [TestCase("", "Csharp")]
+    [TestCase("Csharp", "")]
+    [TestCase("", "Csharp/Nested")]
+    public void The_typescript_and_csharp_clients_share_a_folder_and_neither_removes_the_other(
+        string typescript,
+        string csharp
+    )
+    {
+        var dir = Directory.CreateTempSubdirectory("trax-ops-both-");
+        try
+        {
+            var options = Options(
+                ("src/graphql/Runs.graphql", Runs),
+                ("src/graphql/Cancel.graphql", Cancel)
+            );
+            var ts = Path.Combine(dir.FullName, typescript);
+            var cs = Path.Combine(dir.FullName, csharp);
+            var ns = ClientGenerator.DefaultOperationsNamespace;
+
+            ClientGenerator.Write(options, ts);
+            ClientGenerator.WriteCSharp(options, ns, cs);
+            ClientGenerator.Write(options, ts);
+
+            ClientGenerator.Check(options, ts).Should().BeEmpty();
+            ClientGenerator.CheckCSharp(options, ns, cs).Should().BeEmpty();
+            File.Exists(Path.Combine(cs, "Documents", "Runs.g.cs")).Should().BeTrue();
+            File.Exists(Path.Combine(ts, "documents", "runs.g.ts")).Should().BeTrue();
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public void A_csharp_folder_that_empties_is_removed_and_one_holding_an_apps_own_file_is_kept()
+    {
+        var emptied = Directory.CreateTempSubdirectory("trax-ops-cs-");
+        var kept = Directory.CreateTempSubdirectory("trax-ops-cs-");
+        try
+        {
+            var ns = ClientGenerator.DefaultOperationsNamespace;
+            ClientGenerator.WriteCSharp(
+                Options(("src/graphql/Runs.graphql", Runs)),
+                ns,
+                emptied.FullName
+            );
+            ClientGenerator.WriteCSharp(
+                Options(("src/graphql/Cancel.graphql", Cancel)),
+                ns,
+                kept.FullName
+            );
+            File.WriteAllText(
+                Path.Combine(kept.FullName, "Documents", "Mine.g.cs"),
+                "// an app's own file\n"
+            );
+
+            ClientGenerator.WriteCSharp(Options(), ns, emptied.FullName);
+            ClientGenerator.WriteCSharp(Options(), ns, kept.FullName);
+
+            Directory
+                .Exists(Path.Combine(emptied.FullName, "Documents"))
+                .Should()
+                .BeFalse("a folder the client's files leave empty goes with them");
+            File.Exists(Path.Combine(emptied.FullName, "Types.g.cs")).Should().BeTrue();
+            File.Exists(Path.Combine(kept.FullName, "Documents", "Cancel.g.cs")).Should().BeFalse();
+            File.Exists(Path.Combine(kept.FullName, "Documents", "Mine.g.cs"))
+                .Should()
+                .BeTrue("a file without the client's header is never the client's");
+        }
+        finally
+        {
+            emptied.Delete(recursive: true);
+            kept.Delete(recursive: true);
+        }
+    }
+
     [TestCase("rust", null, "--lang 'rust' is not one trax client writes")]
     [TestCase(null, "My.App", "give it with --lang csharp")]
     [TestCase("csharp", "My.class", "is not a C# namespace")]

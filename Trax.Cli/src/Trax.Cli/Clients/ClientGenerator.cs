@@ -234,12 +234,16 @@ internal sealed partial class ClientGenerator
     /// before anything is written.
     /// </summary>
     public IReadOnlyList<ClientFile> Write(ClientGenerateOptions options, string outDir) =>
-        Write(Render(options), outDir);
+        Write(Render(options), outDir, Writer.Manifest);
 
-    private static IReadOnlyList<ClientFile> Write(IReadOnlyList<ClientFile> files, string outDir)
+    private static IReadOnlyList<ClientFile> Write(
+        IReadOnlyList<ClientFile> files,
+        string outDir,
+        Writer writer
+    )
     {
         RefuseLinks(files, outDir);
-        foreach (var stale in Stale(files, outDir))
+        foreach (var stale in Stale(files, outDir, writer))
         {
             var path = Path.Combine(outDir, stale);
             File.Delete(path);
@@ -307,9 +311,13 @@ internal sealed partial class ClientGenerator
     /// difference, so a checkout that writes CRLF passes.
     /// </summary>
     public IReadOnlyList<ClientDrift> Check(ClientGenerateOptions options, string outDir) =>
-        Check(Render(options), outDir);
+        Check(Render(options), outDir, Writer.Manifest);
 
-    private static IReadOnlyList<ClientDrift> Check(IReadOnlyList<ClientFile> files, string outDir)
+    private static IReadOnlyList<ClientDrift> Check(
+        IReadOnlyList<ClientFile> files,
+        string outDir,
+        Writer writer
+    )
     {
         RefuseLinks(files, outDir);
         var drift = new List<ClientDrift>();
@@ -325,34 +333,57 @@ internal sealed partial class ClientGenerator
             )
                 drift.Add(new(file.Path, DriftStatus.Drifted));
         }
-        foreach (var stale in Stale(files, outDir))
+        foreach (var stale in Stale(files, outDir, writer))
             drift.Add(new(stale, DriftStatus.Drifted));
         return drift;
     }
 
-    // The files under outDir this generator wrote and the client no longer holds, by their path under it. A client
-    // module is this generator's when its first line is the client's header. A twin is when it sits where this
-    // generator puts one, <id>/<id>.machine.g.ts or <id>/<id>.contexts.g.ts, starts with the header the twin generator
-    // writes for that id, and <id> is a machine the previous run served: trax machine generate writes the same header,
-    // so the header alone does not say which tool wrote it. Anything else, an app's own *.g.ts or another generator's,
-    // is left alone. A linked folder is not entered, so nothing outside outDir is read or deleted through it.
-    private static IReadOnlyList<string> Stale(IReadOnlyList<ClientFile> files, string outDir)
+    // Which of trax client's clients is written: each removes only the files it would write, so two can share --out
+    // or sit one inside the other.
+    private enum Writer
+    {
+        // The client of a host's manifest: *.g.ts, and the twins of the machines it served.
+        Manifest,
+
+        // The TypeScript operations client: *.g.ts.
+        OperationsTypeScript,
+
+        // The C# operations client: *.g.cs.
+        OperationsCSharp,
+    }
+
+    // The files under outDir this writer wrote and the client no longer holds, by their path under it: only files of
+    // the extension it writes. A client module is this writer's when its first line is the header it writes. A twin
+    // is the manifest client's when it sits where that client puts one, <id>/<id>.machine.g.ts or
+    // <id>/<id>.contexts.g.ts, starts with the header the twin generator writes for that id, and <id> is a machine the
+    // previous run served: trax machine generate writes the same header, so the header alone does not say which tool
+    // wrote it. Anything else, an app's own *.g.ts or *.g.cs or another writer's, is left alone. A linked folder is not
+    // entered, so nothing outside outDir is read or deleted through it.
+    private static IReadOnlyList<string> Stale(
+        IReadOnlyList<ClientFile> files,
+        string outDir,
+        Writer writer
+    )
     {
         if (!Directory.Exists(outDir))
             return [];
         var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
-        var served = Served(outDir);
+        var served = writer == Writer.Manifest ? Served(outDir) : [];
         var enumeration = new EnumerationOptions
         {
             RecurseSubdirectories = true,
             AttributesToSkip = FileAttributes.ReparsePoint,
             MatchCasing = MatchCasing.CaseSensitive,
         };
+        var header = writer == Writer.Manifest ? ClientHeaderLine : OperationsHeaderLine;
         return Directory
-            .EnumerateFiles(outDir, "*.g.ts", enumeration)
-            .Concat(Directory.EnumerateFiles(outDir, "*.g.cs", enumeration))
+            .EnumerateFiles(
+                outDir,
+                writer == Writer.OperationsCSharp ? "*.g.cs" : "*.g.ts",
+                enumeration
+            )
             .Select(p => (Full: p, Path: Path.GetRelativePath(outDir, p).Replace('\\', '/')))
-            .Where(f => !expected.Contains(f.Path) && Generated(f.Path, f.Full, served))
+            .Where(f => !expected.Contains(f.Path) && Generated(f.Path, f.Full, header, served))
             .Select(f => f.Path)
             .Order(StringComparer.Ordinal)
             .ToList();
@@ -409,12 +440,17 @@ internal sealed partial class ClientGenerator
         ("contexts", "generateContextTypes"),
     ];
 
-    private static bool Generated(string relative, string path, IReadOnlySet<string> served)
+    private static bool Generated(
+        string relative,
+        string path,
+        string header,
+        IReadOnlySet<string> served
+    )
     {
         var first = FirstLine(path);
         if (first is null)
             return false;
-        if (first == ClientHeaderLine || first == OperationsHeaderLine)
+        if (first == header)
             return true;
         return relative.Split('/') is [var id, var name]
             && served.Contains(id)

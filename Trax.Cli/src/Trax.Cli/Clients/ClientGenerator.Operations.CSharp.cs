@@ -91,14 +91,14 @@ internal sealed partial class ClientGenerator
         OperationsGenerateOptions options,
         string @namespace,
         string outDir
-    ) => Write(RenderCSharp(options, @namespace), outDir);
+    ) => Write(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
 
     /// <summary>What differs between the C# operations client the documents generate and the one under <paramref name="outDir"/>.</summary>
     public static IReadOnlyList<ClientDrift> CheckCSharp(
         OperationsGenerateOptions options,
         string @namespace,
         string outDir
-    ) => Check(RenderCSharp(options, @namespace), outDir);
+    ) => Check(RenderCSharp(options, @namespace), outDir, Writer.OperationsCSharp);
 
     private const string Rename = "Rename one of them.";
 

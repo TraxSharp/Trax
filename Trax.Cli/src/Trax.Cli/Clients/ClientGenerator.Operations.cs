@@ -134,13 +134,13 @@ internal sealed partial class ClientGenerator
     public static IReadOnlyList<ClientFile> Write(
         OperationsGenerateOptions options,
         string outDir
-    ) => Write(Render(options), outDir);
+    ) => Write(Render(options), outDir, Writer.OperationsTypeScript);
 
     /// <summary>What differs between the operations client the documents generate and the one under <paramref name="outDir"/>.</summary>
     public static IReadOnlyList<ClientDrift> Check(
         OperationsGenerateOptions options,
         string outDir
-    ) => Check(Render(options), outDir);
+    ) => Check(Render(options), outDir, Writer.OperationsTypeScript);
 
     // A console document's module: its descriptor, the types of its variables and of what it selects, and the function
     // that sends it (or, for a subscription, follows it).
