@@ -43,7 +43,10 @@ public class RemoteRunOptions
     /// <summary>
     /// The key shared with the runner's <c>AddTraxJobRunner(runner => runner.SigningKey = ...)</c>,
     /// at least 32 bytes. When set, every request carries a <c>Trax-Signature</c> over its body,
-    /// timestamp and nonce, which the runner verifies before it reads the request.
+    /// timestamp and nonce, which the runner verifies before it reads the request, and the
+    /// runner's answer must carry a <c>Trax-Response-Signature</c> over its body, bound to that
+    /// request's nonce; an answer without one, or with one that does not match, fails the run with
+    /// <see cref="Services.RunExecutor.RemoteRunException"/>.
     /// </summary>
     public byte[]? SigningKey { get; set; }
 }

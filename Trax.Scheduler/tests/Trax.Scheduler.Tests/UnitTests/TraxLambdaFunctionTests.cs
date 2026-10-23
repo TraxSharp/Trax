@@ -347,6 +347,41 @@ public class TraxLambdaFunctionTests
         fn.Handler.RunCalls.Should().HaveCount(1);
     }
 
+    [Test]
+    public async Task ConfigureRoutes_SigningKey_RunResponse_IsSignedForTheRequest()
+    {
+        var fn = new TestFunction(o => o.SigningKey = Key);
+        using var host = await CreateRouteHost(fn);
+        var payload = RunPayload();
+        var requestSignature = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            System.Text.Encoding.UTF8.GetBytes(payload)
+        );
+        var request = new HttpRequestMessage(HttpMethod.Post, "/trax/run")
+        {
+            Content = new StringContent(payload),
+        };
+        request.Headers.Add(RunnerRequestSignature.HeaderName, requestSignature);
+
+        var response = await host.GetTestClient().SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        RunnerRequestSignature
+            .VerifyResponse(
+                Key,
+                RunnerRequestPurpose.Run,
+                requestSignature,
+                response.Headers.GetValues(RunnerRequestSignature.ResponseHeaderName).Single(),
+                await response.Content.ReadAsByteArrayAsync()
+            )
+            .Should()
+            .BeTrue(
+                "the local run route signs its answer as UseTraxRunEndpoint does (see "
+                    + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
     [TestCase("/trax/execute")]
     [TestCase("/trax/run")]
     public async Task ConfigureRoutes_Unsigned_RequestFromAnotherMachine_Is401(string path)

@@ -127,7 +127,7 @@ Enforces the same posture as `UseTraxJobRunner`, and throws while mapping withou
 2. Refuses a train name that is one of the scheduler's own trains (ManifestManager, JobDispatcher, JobRunner, MetadataCleanup, DeadLetterCleanup), by full name, or by short name unless a host train shares it
 3. Resolves `ITrainExecutionService`, prepares the named train inside a trusted scope (`scheduler.remote-run`), which skips that train's own authorization, and runs it after the scope has closed, so a gated train it queues or runs from a junction is checked as anywhere else. A replacement `ITrainExecutionService` is called with `RunAsync(trainName, inputJson)` and no trusted scope
 4. Serializes the train output as JSON
-5. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type
+5. Returns `200 OK` with a `RemoteRunResponse` containing the metadata ID, output JSON, and output type. With a `SigningKey`, the answer, error or not, carries a `Trax-Response-Signature` header: `v1,s=<base64 HMAC-SHA256>` over the purpose, the nonce of the request it answers and the exact body, which `UseRemoteRun` checks. Without one it is unsigned
 6. On error: returns `200 OK` with `RemoteRunResponse.IsError = true` and structured error fields (`ErrorMessage`, `ExceptionType`, `FailureJunction`, `FailureClass`). `StackTrace` is always null, and `ErrorMessage` is fixed text unless the failure is a `TrainException`. `FailureClass` is the classification this process's `IFailureClassifier` assigned, or null when none is registered or it did not recognise the failure. `PublicMessage` is the message of a plain `TrainException` and null for anything else, including a type derived from `TrainException`. The response is written with Trax's own JSON options (enums as integers), not the host's, so a host configured to write enums as strings does not change the wire. The reading side also accepts names, and reads a class it does not know as `Unclassified`. Uses in-band errors to distinguish from infrastructure failures
 
 ### Shared requirements
@@ -145,6 +145,7 @@ Public because the runner and scheduler packages ship separately and share them;
 | Type or member | Description |
 |----------------|-------------|
 | `RunnerRequestSignature` | Signs a runner request and checks a signature. The value is `v1,t=<unix seconds>,n=<nonce>,s=<base64 HMAC-SHA256>` in the `Trax-Signature` header, a Lambda envelope's `Signature`, or an SQS message attribute |
+| `RunnerRequestSignature.ResponseHeaderName` | `Trax-Response-Signature`: the header a signing runner puts on a run's answer |
 | `RunnerRequestSignature.MinimumKeyLength` | `32`: the shortest signing key accepted, in bytes |
 | `RunnerRequestSignature.EnsureKey(key, paramName)` | Throws when the key is missing or shorter than `MinimumKeyLength` |
 | `RunnerRequestPurpose` | What a signed request is for, part of the signed text: `Execute` (a queued job) or `Run` (a synchronous run) |

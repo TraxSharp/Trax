@@ -356,6 +356,92 @@ public class JobRunnerEndpointTests
     }
 
     [Test]
+    public async Task SigningKey_RunResponse_IsSignedForTheRequestAndReadByTheExecutor()
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        handler
+            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new RemoteRunResponse(MetadataId: 31, ExternalId: "ext-31"));
+        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        var client = host.GetTestServer().CreateClient();
+        var request = SignedPost(
+            "/trax/run",
+            new RemoteRunRequest("T", "{}", "I"),
+            RunnerRequestPurpose.Run
+        );
+        var requestSignature = request
+            .Headers.GetValues(RunnerRequestSignature.HeaderName)
+            .Single();
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        var responseSignature = response
+            .Headers.GetValues(RunnerRequestSignature.ResponseHeaderName)
+            .Single();
+        RunnerRequestSignature
+            .VerifyResponse(
+                Key,
+                RunnerRequestPurpose.Run,
+                requestSignature,
+                responseSignature,
+                await response.Content.ReadAsByteArrayAsync()
+            )
+            .Should()
+            .BeTrue(
+                "a runner with a key signs its answer over the exact body, bound to the request "
+                    + "(see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+
+        // The scheduler's executor, with the same key, reads it.
+        var server = host.GetTestServer();
+        var executorClient = server.CreateClient();
+        executorClient.BaseAddress = new Uri(server.BaseAddress, "/trax/run");
+        var executor = new HttpRunExecutor(
+            executorClient,
+            new RemoteRunOptions
+            {
+                BaseUrl = executorClient.BaseAddress.ToString(),
+                SigningKey = Key,
+                Retry = new HttpRetryOptions { MaxRetries = 0 },
+            },
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpRunExecutor>.Instance
+        );
+        var result = await executor.ExecuteAsync(
+            "T",
+            new { Name = "x" },
+            typeof(Trax.Core.Functional.Unit)
+        );
+        result.MetadataId.Should().Be(31);
+        result.ExternalId.Should().Be("ext-31");
+    }
+
+    [Test]
+    public async Task UnsignedPosture_RunResponse_CarriesNoSignature()
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        handler
+            .RunTrainAsync(Arg.Any<RemoteRunRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new RemoteRunResponse(MetadataId: 1));
+        using var host = BuildHost(handler);
+        var client = host.GetTestServer().CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/trax/run",
+            new RemoteRunRequest("T", "{}", "I")
+        );
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        response
+            .Headers.Contains(RunnerRequestSignature.ResponseHeaderName)
+            .Should()
+            .BeFalse(
+                "a runner that accepts unsigned requests answers unsigned (see "
+                    + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
+    [Test]
     public async Task SigningKey_ReplayedSignedRequest_IsRefused()
     {
         var handler = Substitute.For<ITraxRequestHandler>();

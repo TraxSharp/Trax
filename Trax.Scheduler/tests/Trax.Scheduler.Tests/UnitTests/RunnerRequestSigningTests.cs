@@ -339,25 +339,53 @@ public class RunnerRequestSigningTests
         handler.Requests.Single().Signature.Should().BeNull();
     }
 
+    // How a runner with the key answers: signed over the exact body, bound to the request.
+    private static string? RunnerSigns(string? requestSignature, byte[] responseBody) =>
+        RunnerRequestSignature.CreateResponse(
+            Key,
+            RunnerRequestPurpose.Run,
+            requestSignature,
+            responseBody
+        );
+
+    private static HttpRunExecutor SigningRunExecutor(
+        HttpMessageHandler handler,
+        int retries = 0
+    ) =>
+        new(
+            new HttpClient(handler) { BaseAddress = new Uri("http://test/") },
+            new RemoteRunOptions
+            {
+                BaseUrl = "http://test/",
+                SigningKey = Key,
+                Retry = new HttpRetryOptions
+                {
+                    MaxRetries = retries,
+                    BaseDelay = TimeSpan.FromMilliseconds(1),
+                    MaxDelay = TimeSpan.FromMilliseconds(1),
+                },
+            },
+            NullLogger<HttpRunExecutor>.Instance
+        );
+
+    private static Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> RunThrough(
+        HttpRunExecutor executor
+    ) => executor.ExecuteAsync("My.Train", new { Name = "x" }, typeof(Trax.Core.Functional.Unit));
+
+    private static readonly string RunAnswer = JsonSerializer.Serialize(
+        new RemoteRunResponse(MetadataId: 1)
+    );
+
     [Test]
     public async Task HttpRunExecutor_WithSigningKey_SignsForRun()
     {
         var handler = new CapturingHandler(
             HttpStatusCode.OK,
-            JsonSerializer.Serialize(new RemoteRunResponse(MetadataId: 1))
-        );
-        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
-        var executor = new HttpRunExecutor(
-            client,
-            new RemoteRunOptions { BaseUrl = "http://test/", SigningKey = Key },
-            NullLogger<HttpRunExecutor>.Instance
+            RunAnswer,
+            responseSignature: RunnerSigns
         );
 
-        await executor.ExecuteAsync(
-            "My.Train",
-            new { Name = "x" },
-            typeof(Trax.Core.Functional.Unit)
-        );
+        await RunThrough(SigningRunExecutor(handler));
 
         var (body, signature) = handler.Requests.Single();
         (
@@ -366,6 +394,112 @@ public class RunnerRequestSigningTests
         )
             .Should()
             .Be(RunnerRequestVerdict.Accepted);
+    }
+
+    [Test]
+    public async Task HttpRunExecutor_WithSigningKey_AnUnsignedResponse_IsAFailure()
+    {
+        var handler = new CapturingHandler(HttpStatusCode.OK, RunAnswer);
+
+        var act = () => RunThrough(SigningRunExecutor(handler));
+
+        await act.Should()
+            .ThrowAsync<RemoteRunException>(
+                "with a signing key only an answer the runner signed is read (see "
+                    + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            )
+            .WithMessage(
+                $"*not signed for this request*{RunnerRequestSignature.ResponseHeaderName}*"
+            );
+    }
+
+    [Test]
+    public async Task HttpRunExecutor_WithSigningKey_AResponseSignedForAnotherRequest_IsAFailure()
+    {
+        var other = Sign(RunnerRequestPurpose.Run);
+        var handler = new CapturingHandler(
+            HttpStatusCode.OK,
+            RunAnswer,
+            responseSignature: (_, body) => RunnerSigns(other, body)
+        );
+
+        var act = () => RunThrough(SigningRunExecutor(handler));
+
+        await act.Should()
+            .ThrowAsync<RemoteRunException>(
+                "the response signature is bound to the nonce of the request it answers (see "
+                    + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            )
+            .WithMessage("*signature does not match*");
+    }
+
+    [Test]
+    public async Task HttpRunExecutor_WithSigningKey_AResponseWhoseBodyIsNotTheSignedOne_IsAFailure()
+    {
+        var signedFor = Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new RemoteRunResponse(MetadataId: 2))
+        );
+        var handler = new CapturingHandler(
+            HttpStatusCode.OK,
+            RunAnswer,
+            responseSignature: (request, _) => RunnerSigns(request, signedFor)
+        );
+
+        var act = () => RunThrough(SigningRunExecutor(handler));
+
+        await act.Should()
+            .ThrowAsync<RemoteRunException>(
+                "the response signature covers the exact body (see "
+                    + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            )
+            .WithMessage("*signature does not match*");
+    }
+
+    [Test]
+    public async Task HttpRunExecutor_WithSigningKey_AfterARetry_ReadsTheAnswerToTheLastAttempt()
+    {
+        var handler = new CapturingHandler(
+            HttpStatusCode.ServiceUnavailable,
+            RunAnswer,
+            okAfter: 1,
+            responseSignature: RunnerSigns
+        );
+
+        var result = await RunThrough(SigningRunExecutor(handler, retries: 2));
+
+        handler.Requests.Should().HaveCount(2);
+        result
+            .MetadataId.Should()
+            .Be(
+                1,
+                "the answer is checked against the attempt it answers, not the first one (see "
+                    + "docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+    }
+
+    [Test]
+    public void ResponseSignature_IsNotARequestSignature()
+    {
+        var request = Sign(RunnerRequestPurpose.Run);
+        var response = RunnerRequestSignature.CreateResponse(
+            Key,
+            RunnerRequestPurpose.Run,
+            request,
+            Body
+        );
+
+        RunnerRequestSignature
+            .VerifyResponse(Key, RunnerRequestPurpose.Run, request, response, Body)
+            .Should()
+            .BeTrue();
+        RunnerRequestSignature
+            .VerifyResponse(Key, RunnerRequestPurpose.Execute, request, response, Body)
+            .Should()
+            .BeFalse("the purpose is part of the signed text");
+        RunnerRequestSignature
+            .VerifyResponse(Key, RunnerRequestPurpose.Run, request, request, Body)
+            .Should()
+            .BeFalse("a request signature is not a response signature");
     }
 
     [Test]
@@ -404,10 +538,16 @@ public class RunnerRequestSigningTests
                 .Be(RunnerRequestVerdict.Accepted);
     }
 
+    /// <summary>
+    /// Records each request and answers it. <paramref name="responseSignature"/>, given the
+    /// request's signature and the response body, returns the response signature header to send,
+    /// or null for none.
+    /// </summary>
     private sealed class CapturingHandler(
         HttpStatusCode status,
         string responseBody,
-        int okAfter = 0
+        int okAfter = 0,
+        Func<string?, byte[], string?>? responseSignature = null
     ) : HttpMessageHandler
     {
         public List<(byte[] Body, string? Signature)> Requests { get; } = [];
@@ -427,10 +567,19 @@ public class RunnerRequestSigningTests
             Requests.Add((body, signature));
 
             var code = okAfter > 0 && Requests.Count > okAfter ? HttpStatusCode.OK : status;
-            return new HttpResponseMessage(code)
+            var response = new HttpResponseMessage(code)
             {
                 Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
             };
+            if (
+                responseSignature?.Invoke(signature, Encoding.UTF8.GetBytes(responseBody)) is
+                { } header
+            )
+                response.Headers.TryAddWithoutValidation(
+                    RunnerRequestSignature.ResponseHeaderName,
+                    header
+                );
+            return response;
         }
     }
 

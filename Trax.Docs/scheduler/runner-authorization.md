@@ -71,6 +71,15 @@ random nonce and the body. It travels in the `Trax-Signature` HTTP header, in th
 for one purpose does not verify for the other. The scheduler signs each retry afresh, so a retry is
 never refused as a replay.
 
+A signing runner signs its answer to a run too, on `/trax/run` and `RunLocalAsync`'s `/trax/run`:
+a `Trax-Response-Signature` header with an HMAC-SHA256, under the same key, over the purpose, the
+nonce of the request it answers and the exact body. `UseRemoteRun` with a `SigningKey` reads only
+an answer that verifies for the attempt it sent, and fails the run with `RemoteRunException`
+otherwise, so an answer made for another request is refused as well. A runner with
+`AllowUnsignedRequests()` answers unsigned, and a scheduler without a key reads unsigned answers.
+Upgrade a signing runner before its scheduler: a scheduler on this release refuses an older
+runner's unsigned answers.
+
 ### What each transport checks
 
 | Transport | Checked |

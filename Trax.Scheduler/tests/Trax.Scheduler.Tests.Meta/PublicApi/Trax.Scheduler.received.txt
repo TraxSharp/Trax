@@ -1383,6 +1383,7 @@ namespace Trax.Scheduler.Services.RequestSigning
     {
         public const string HeaderName = "Trax-Signature";
         public const int MinimumKeyLength = 32;
+        public const string ResponseHeaderName = "Trax-Response-Signature";
         public static string Create(byte[] key, Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose purpose, System.ReadOnlySpan<byte> body) { }
         public static void EnsureKey(byte[]? key, string paramName) { }
     }

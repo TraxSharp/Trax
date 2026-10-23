@@ -124,7 +124,7 @@ released versions the current directory. A `--contentRoot` argument, or `DOTNET_
 
 | Runner posture | What the local routes accept |
 |----------------|------------------------------|
-| `SigningKey` | Requests with a valid, fresh `Trax-Signature` header, from any address. The header is checked before the body is read (`401`), and a body over `MaxRequestBodyBytes` gets `413` |
+| `SigningKey` | Requests with a valid, fresh `Trax-Signature` header, from any address. The header is checked before the body is read (`401`), and a body over `MaxRequestBodyBytes` gets `413`. A `/trax/run` answer carries a `Trax-Response-Signature` bound to the request, as `UseTraxRunEndpoint`'s does |
 | `AllowUnsignedRequests()` | Unsigned requests from this machine's loopback address only, whatever address the server listens on, and only when the host's environment is `Development` or the function overrides `AllowUnsignedLocalDevelopmentRequests` to return `true`; any other request gets `401`. New in the next Trax.Runner.Lambda release: before it, the environment was not checked |
 
 The routes are mapped by an internal `ConfigureRoutes(IEndpointRouteBuilder)`, visible to the Trax

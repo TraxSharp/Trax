@@ -43,7 +43,7 @@ public SchedulerConfigurationBuilder UseRemoteRun(
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Configures the `HttpClient`: headers, and anything else the runner expects |
 | `Timeout` | `TimeSpan` | 5 minutes | The request timeout. A run request waits for the train to complete |
 | `Retry` | [`HttpRetryOptions`](/docs/sdk-reference/scheduler-api/use-remote-workers#httpretryoptions) | 5 retries, 1 second base, 30 seconds cap | Retries on HTTP 429, 502 and 503 |
-| `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request, and each retry, carries a `Trax-Signature` the runner verifies. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
+| `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request, and each retry, carries a `Trax-Signature` the runner verifies, and the runner's answer must carry a `Trax-Response-Signature` over its body, bound to the request it answers; an unsigned or mismatched answer fails the run with `RemoteRunException`. A runner signs its answers from the next Trax.Scheduler and Trax.Runner.Lambda release, so upgrade the runner before the scheduler. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
 ## Returns
 

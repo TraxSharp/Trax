@@ -87,6 +87,17 @@ retry into a lost job. What stops a redelivered `Execute` running twice is the j
 The scheduler signs each HTTP retry afresh, so a retry is never refused as a replay of the attempt
 before it.
 
+**A run's answer is signed back.** The scheduler acts on what a run returns (its output, or its
+failure), so a signing runner signs that too: `Trax-Response-Signature`, `v1,s=<base64
+HMAC-SHA256>` under the same key, over the purpose, the nonce of the request it answers and the
+exact body. Binding it to the nonce means an answer only verifies for the attempt it was made for.
+A scheduler with a key refuses an unsigned or mismatched answer as a failed run; a runner without
+one answers unsigned, as it reads unsigned. Like the request's, the signature is a header, so
+[0001](./0001-remote-execution-is-a-json-wire-contract.md)'s body is unchanged; the cost is the
+upgrade order, runner first, since a scheduler on the release that checks it refuses an older
+runner's answers. A queued job's answer is not signed: the job's metadata row, not the answer, is
+the record of what ran.
+
 ## Only registered trains
 
 A queued job's request names its input type. The runner looks that name up among the input types
@@ -158,7 +169,11 @@ request as stale.
   stale, replayed), the posture check and its startup warning, and the HTTP senders signing each
   attempt.
 - `JobRunnerEndpointTests` maps the endpoints with no runner, with no posture, with a policy and
-  with a key, and checks the refusals and that no message or stack trace is returned. It also
+  with a key, and checks the refusals and that no message or stack trace is returned. With a key a
+  run's answer carries a response signature that verifies for its request and that
+  `HttpRunExecutor` reads; with the unsigned posture it carries none. `RunnerRequestSigningTests`
+  refuses an unsigned answer, one signed for another request and one whose body changed, and reads
+  the answer to the last attempt after a retry. It also
   pins the reading order: a missing, malformed or stale signature is a 401 with a body stream
   that throws if read, a body over `MaxRequestBodyBytes` is a 413 with or without a declared
   length, and repeated refusals are one warning.
@@ -191,6 +206,9 @@ of its own. Sharing nonces across runner instances is
 
 ## Changelog
 
+- **2026-10-23**: A signing runner signs a run's answer, bound to the nonce of the request it
+  answers, and `UseRemoteRun` with a key refuses an answer that does not verify. The local Lambda
+  run route signs it the same way.
 - **2026-10-23**: The local Lambda routes honour an unsigned posture only in the `Development`
   environment, or when the function overrides `AllowUnsignedLocalDevelopmentRequests`, and still
   only for loopback callers. The separate opt-in this record had turned down is the override.

@@ -414,10 +414,27 @@ public abstract class TraxLambdaFunction
                     ctx.RequestAborted
                 );
 
-                ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(
-                    JsonSerializer.Serialize(result, result.GetType(), RemoteRunJson.Write)
+                // A run's answer is signed over these exact bytes, bound to the request it
+                // answers, when the runner has a signing key, as UseTraxRunEndpoint signs it.
+                var responseBody = JsonSerializer.SerializeToUtf8Bytes(
+                    result,
+                    result.GetType(),
+                    RemoteRunJson.Write
                 );
+                if (
+                    purpose == RunnerRequestPurpose.Run
+                    && verifier.SignResponse(
+                        purpose,
+                        ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
+                        responseBody
+                    )
+                        is { } responseSignature
+                )
+                    ctx.Response.Headers[RunnerRequestSignature.ResponseHeaderName] =
+                        responseSignature;
+
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.Body.WriteAsync(responseBody);
             }
         );
 

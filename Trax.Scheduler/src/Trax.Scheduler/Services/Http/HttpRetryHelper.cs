@@ -36,6 +36,8 @@ internal static class HttpRetryHelper
     /// <param name="ct">Cancellation token.</param>
     /// <param name="signingKey">When set, each attempt is signed with this key in the runner request signature header; null sends the request unsigned.</param>
     /// <param name="purpose">Which runner endpoint the signature is bound to.</param>
+    /// <param name="signed">Told each attempt's signature as it is sent, so a caller can check
+    /// the response against the attempt it answers: the last one it was told.</param>
     /// <returns>The final HTTP response (either successful or the last failed attempt).</returns>
     internal static async Task<HttpResponseMessage> PostWithRetryAsync(
         HttpClient client,
@@ -44,7 +46,8 @@ internal static class HttpRetryHelper
         ILogger? logger,
         CancellationToken ct,
         byte[]? signingKey = null,
-        RunnerRequestPurpose purpose = RunnerRequestPurpose.Execute
+        RunnerRequestPurpose purpose = RunnerRequestPurpose.Execute,
+        Action<string>? signed = null
     )
     {
         var maxRetries = Math.Max(0, options.MaxRetries);
@@ -68,10 +71,14 @@ internal static class HttpRetryHelper
                 },
             };
             if (signingKey is not null)
+            {
+                var signature = RunnerRequestSignature.Create(signingKey, purpose, body);
                 message.Headers.TryAddWithoutValidation(
                     RunnerRequestSignature.HeaderName,
-                    RunnerRequestSignature.Create(signingKey, purpose, body)
+                    signature
                 );
+                signed?.Invoke(signature);
+            }
 
             response = await client.SendAsync(message, ct);
 
