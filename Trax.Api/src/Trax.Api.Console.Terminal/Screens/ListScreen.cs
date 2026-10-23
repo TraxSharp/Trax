@@ -122,11 +122,19 @@ internal sealed class ListScreen : View
     private void Show(ListPage<ConsoleRow> page)
     {
         var selected = _table.Value?.SelectedCell.Y ?? 0;
+        var selectedId = Current?.Id;
         _page = page;
         _marked.IntersectWith(page.Rows.Select(r => r.Id));
         _table.Table = new RowsSource(List.ColumnNames, page.Rows, _marked);
+        // The cursor stays on the row it was on, wherever a refresh moved it, so a key pressed next acts on the row
+        // the operator was looking at; when that row is gone it stays at the same place.
+        var at = selectedId is { } id ? IndexOf(page.Rows, id) : -1;
         if (page.Rows.Count > 0)
-            _table.SetSelection(0, Math.Clamp(selected, 0, page.Rows.Count - 1), false);
+            _table.SetSelection(
+                0,
+                at >= 0 ? at : Math.Clamp(selected, 0, page.Rows.Count - 1),
+                false
+            );
         _table.Update();
         var filters =
             _filters.Count == 0
@@ -136,6 +144,14 @@ internal sealed class ListScreen : View
             $"page {_back.Count + 1}  ·  {(page.Estimated ? "about " : "")}{page.TotalCount} in all  ·  {filters}"
             + (_marked.Count > 0 ? $"  ·  {_marked.Count} marked" : "");
         SetNeedsDraw();
+    }
+
+    private static int IndexOf(IReadOnlyList<ConsoleRow> rows, long id)
+    {
+        for (var i = 0; i < rows.Count; i++)
+            if (rows[i].Id == id)
+                return i;
+        return -1;
     }
 
     private ConsoleRow? Current =>
@@ -312,10 +328,7 @@ internal sealed class ListScreen : View
         var ids = Targets;
         if (ids.Count == 0)
             return;
-        var what =
-            ids.Count == 1
-                ? $"{List.Title.ToLowerInvariant()} {ids[0]}"
-                : $"{ids.Count} {List.Title.ToLowerInvariant()}";
+        var what = Naming(ids);
         var options = new ActionOptions();
         if (action.AsksAfresh)
         {
@@ -329,7 +342,8 @@ internal sealed class ListScreen : View
                 return;
             options = options with { AskAfresh = chosen == 1 };
         }
-        else if (action.Confirm)
+        // An action that asks for a note is confirmed by its form, which names the rows; every other one is asked.
+        else if (action.Confirm || !action.NeedsNote)
         {
             if (
                 _context.Prompts.Ask(
@@ -343,7 +357,7 @@ internal sealed class ListScreen : View
         if (action.NeedsNote)
         {
             var note = _context.Prompts.Form(
-                Capital(action.Name),
+                $"{Capital(action.Name)} {what}",
                 [("Note", "")],
                 accept: Capital(action.Name)
             );
@@ -443,6 +457,19 @@ internal sealed class ListScreen : View
             },
             message => _context.Status(message)
         );
+    }
+
+    // The rows an action is about to run on, by id, so the operator confirms the rows and not a cursor position.
+    private string Naming(IReadOnlyList<long> ids)
+    {
+        var title = List.Title.ToLowerInvariant();
+        if (ids.Count == 1)
+            return $"{title} {ids[0]}";
+        const int named = 10;
+        var list = string.Join(", ", ids.Take(named));
+        return ids.Count > named
+            ? $"{ids.Count} {title} ({list} and {ids.Count - named} more)"
+            : $"{ids.Count} {title} ({list})";
     }
 
     private static string Capital(string name) => char.ToUpperInvariant(name[0]) + name[1..];
