@@ -161,6 +161,32 @@ public class ManifestTests
     }
 
     [Test]
+    public void PropertyType_AGenericArgumentInAnAssemblyThatIsNotLoaded_IsNotLoaded()
+    {
+        static bool IsLoaded() =>
+            AppDomain
+                .CurrentDomain.GetAssemblies()
+                .Any(a => a.GetName().Name == "System.Formats.Tar");
+        IsLoaded().Should().BeFalse("the test needs an assembly not yet loaded");
+        var m = NewManifest();
+        m.PropertyTypeName =
+            "System.Collections.Generic.List`1[[System.Formats.Tar.TarEntry, System.Formats.Tar]]";
+
+        Func<Type> act = () => m.PropertyType;
+
+        act.Should().Throw<TypeLoadException>().WithMessage("Unable to find type*");
+        IsLoaded().Should().BeFalse();
+    }
+
+    [Test]
+    public void NameType_AGenericFullNameOfLoadedTypes_Resolves()
+    {
+        var m = new Manifest { Name = typeof(Dictionary<string, SomeFakeTrain>).FullName! };
+
+        m.NameType.Should().Be(typeof(Dictionary<string, SomeFakeTrain>));
+    }
+
+    [Test]
     public void GetProperties_MatchesTheStoredNameAgainstTheGivenType()
     {
         var m = NewManifest();

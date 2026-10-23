@@ -664,27 +664,11 @@ public class Manifest : IModel
     /// <summary>
     /// Finds a type by its FullName among the assemblies already loaded. The name comes from a
     /// database row, so it is never handed to <see cref="Type.GetType(string)"/>, which loads the
-    /// assembly an assembly-qualified name points at.
+    /// assembly an assembly-qualified name points at. A name that names an assembly at its top
+    /// level is refused; the assembly-qualified generic arguments a FullName carries are parsed
+    /// and each is found among the loaded assemblies too (<see cref="LoadedTypeResolver"/>).
     /// </summary>
-    private static Type ResolveType(string typeName)
-    {
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            Type? type;
-            try
-            {
-                type = assembly.GetType(typeName, throwOnError: false);
-            }
-            catch (ArgumentException)
-            {
-                // GetType refuses an empty name with ArgumentException rather than returning null.
-                type = null;
-            }
-
-            if (type != null)
-                return type;
-        }
-
-        throw new TypeLoadException($"Unable to find type: {typeName}");
-    }
+    private static Type ResolveType(string typeName) =>
+        LoadedTypeResolver.Resolve(typeName, allowAssemblyQualified: false)
+        ?? throw new TypeLoadException($"Unable to find type: {typeName}");
 }

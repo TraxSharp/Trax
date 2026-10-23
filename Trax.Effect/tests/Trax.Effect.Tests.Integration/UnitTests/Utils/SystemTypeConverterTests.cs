@@ -116,6 +116,50 @@ public class SystemTypeConverterTests
         act.Should().Throw<JsonException>().WithMessage("*Unable to find type*");
     }
 
+    /// <summary>
+    /// System.Formats.Tar ships in the shared framework and nothing in this suite uses it, so a
+    /// name pointing at it names an assembly that is on disk and not loaded.
+    /// </summary>
+    private const string NotLoadedAssembly = "System.Formats.Tar";
+
+    private static bool IsLoaded(string assemblyName) =>
+        AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == assemblyName);
+
+    [Test]
+    [TestCase("System.Formats.Tar.TarEntry, System.Formats.Tar")]
+    [TestCase(
+        "System.Collections.Generic.List`1[[System.Formats.Tar.TarEntry, System.Formats.Tar]], System.Private.CoreLib"
+    )]
+    [TestCase("System.Formats.Tar.TarEntry[], System.Formats.Tar")]
+    public void Deserialize_ANameInAnAssemblyThatIsNotLoaded_IsRefusedAndNothingIsLoaded(
+        string typeName
+    )
+    {
+        IsLoaded(NotLoadedAssembly).Should().BeFalse("the test needs an assembly not yet loaded");
+        var json = JsonSerializer.Serialize(new { TypeProperty = typeName });
+
+        var act = () => JsonSerializer.Deserialize<TestClass>(json, _options);
+
+        act.Should().Throw<JsonException>().WithMessage("*Unable to find type*");
+        IsLoaded(NotLoadedAssembly).Should().BeFalse();
+    }
+
+    [Test]
+    [TestCase(typeof(List<TestClass>))]
+    [TestCase(typeof(Dictionary<string, int[]>))]
+    [TestCase(typeof(TestClass[]))]
+    [TestCase(typeof(int[,]))]
+    [TestCase(typeof(ValueTuple<string, Guid>))]
+    public void RoundTrip_AGenericOrArrayOfLoadedTypes_Resolves(Type typeToTest)
+    {
+        var original = new TestClass { TypeProperty = typeToTest };
+
+        var json = JsonSerializer.Serialize(original, _options);
+        var deserialized = JsonSerializer.Deserialize<TestClass>(json, _options);
+
+        deserialized!.TypeProperty.Should().Be(typeToTest);
+    }
+
     [Test]
     [TestCase(typeof(int))]
     [TestCase(typeof(string))]
