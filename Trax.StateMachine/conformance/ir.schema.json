@@ -98,6 +98,14 @@
       },
       "uniqueItems": true
     },
+    "fieldName": {
+      "description": "A field's name, or a dotted path of them. No segment is __proto__, constructor or prototype, which an engine that keeps a context as a plain object cannot hold as a member.",
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "(^|\\.)(__proto__|constructor|prototype)(\\.|$)"
+      }
+    },
     "type": {
       "enum": [
         "string",
@@ -145,8 +153,7 @@
       ],
       "properties": {
         "name": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/fieldName"
         },
         "type": {
           "$ref": "#/$defs/type"
@@ -316,8 +323,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             }
           },
           "additionalProperties": false
@@ -340,8 +346,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             }
           },
           "additionalProperties": false
@@ -364,8 +369,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             }
           },
           "additionalProperties": false
@@ -389,8 +393,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             },
             "type": {
               "$ref": "#/$defs/type"
@@ -417,8 +420,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             },
             "type": {
               "$ref": "#/$defs/type"
@@ -445,8 +447,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             },
             "values": {
               "type": "array",
@@ -477,8 +478,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             },
             "op": {
               "enum": [
@@ -515,8 +515,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             },
             "op": {
               "enum": [
@@ -553,8 +552,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             },
             "op": {
               "enum": [
@@ -590,8 +588,7 @@
               ]
             },
             "field": {
-              "type": "string",
-              "minLength": 1
+              "$ref": "#/$defs/fieldName"
             },
             "value": {
               "type": "boolean"
@@ -711,8 +708,7 @@
                 ],
                 "properties": {
                   "field": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/$defs/fieldName"
                   },
                   "value": {
                     "oneOf": [
@@ -723,8 +719,7 @@
                         ],
                         "properties": {
                           "input": {
-                            "type": "string",
-                            "minLength": 1
+                            "$ref": "#/$defs/fieldName"
                           }
                         },
                         "additionalProperties": false

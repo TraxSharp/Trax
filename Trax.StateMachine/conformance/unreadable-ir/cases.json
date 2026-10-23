@@ -1,5 +1,5 @@
 {
-  "_comment": "IRs every engine that builds machines from an IR must refuse to load, each naming one construct no engine knows. Interpreting one instead would run a guard that never holds or a reduction that does nothing. Each is the turnstile with one part replaced. See PROTOCOL.md.",
+  "_comment": "IRs every engine that builds machines from an IR must refuse to load, each naming one construct no engine knows, or a field no engine holds (`__proto__`, `constructor` or `prototype`). Interpreting one instead would run a guard that never holds or a reduction that does nothing. Each is the turnstile with one part replaced. See PROTOCOL.md.",
   "cases": [
     {
       "name": "unknown-rule",
@@ -410,6 +410,358 @@
                   "field": "paidWith",
                   "value": {
                     "input": "coin"
+                  }
+                }
+              ]
+            },
+            "to": "Unlocked",
+            "trigger": "Coin"
+          },
+          {
+            "from": "Unlocked",
+            "reduce": {
+              "reduce": "clear"
+            },
+            "to": "Locked",
+            "trigger": "Push"
+          }
+        ],
+        "triggers": [
+          "Coin",
+          "Push"
+        ],
+        "version": 1
+      }
+    },
+    {
+      "name": "prototype-set-field",
+      "description": "A set step that writes the field __proto__",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "Locked": {
+            "fields": []
+          },
+          "Unlocked": {
+            "fields": [
+              {
+                "constraints": [
+                  {
+                    "field": "paidWith",
+                    "rule": "nonEmpty",
+                    "source": "context"
+                  }
+                ],
+                "name": "paidWith",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "id": "turnstile",
+        "initialContext": {},
+        "initialState": "Locked",
+        "inputs": {
+          "Coin": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "coin",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "states": [
+          "Locked",
+          "Unlocked"
+        ],
+        "transitions": [
+          {
+            "from": "Locked",
+            "guard": {
+              "field": "coin",
+              "rule": "oneOf",
+              "source": "input",
+              "values": [
+                "quarter",
+                "dollar"
+              ]
+            },
+            "guardMessage": "Only a quarter or a dollar is accepted.",
+            "reduce": {
+              "reduce": "set",
+              "steps": [
+                {
+                  "field": "__proto__",
+                  "value": {
+                    "input": "coin"
+                  }
+                }
+              ]
+            },
+            "to": "Unlocked",
+            "trigger": "Coin"
+          },
+          {
+            "from": "Unlocked",
+            "reduce": {
+              "reduce": "clear"
+            },
+            "to": "Locked",
+            "trigger": "Push"
+          }
+        ],
+        "triggers": [
+          "Coin",
+          "Push"
+        ],
+        "version": 1
+      }
+    },
+    {
+      "name": "prototype-context-field",
+      "description": "A context field named constructor",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "Locked": {
+            "fields": []
+          },
+          "Unlocked": {
+            "fields": [
+              {
+                "constraints": [
+                  {
+                    "field": "paidWith",
+                    "rule": "nonEmpty",
+                    "source": "context"
+                  }
+                ],
+                "name": "constructor",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "id": "turnstile",
+        "initialContext": {},
+        "initialState": "Locked",
+        "inputs": {
+          "Coin": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "coin",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "states": [
+          "Locked",
+          "Unlocked"
+        ],
+        "transitions": [
+          {
+            "from": "Locked",
+            "guard": {
+              "field": "coin",
+              "rule": "oneOf",
+              "source": "input",
+              "values": [
+                "quarter",
+                "dollar"
+              ]
+            },
+            "guardMessage": "Only a quarter or a dollar is accepted.",
+            "reduce": {
+              "reduce": "set",
+              "steps": [
+                {
+                  "field": "paidWith",
+                  "value": {
+                    "input": "coin"
+                  }
+                }
+              ]
+            },
+            "to": "Unlocked",
+            "trigger": "Coin"
+          },
+          {
+            "from": "Unlocked",
+            "reduce": {
+              "reduce": "clear"
+            },
+            "to": "Locked",
+            "trigger": "Push"
+          }
+        ],
+        "triggers": [
+          "Coin",
+          "Push"
+        ],
+        "version": 1
+      }
+    },
+    {
+      "name": "prototype-rule-field",
+      "description": "A guard that reads a path through prototype",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "Locked": {
+            "fields": []
+          },
+          "Unlocked": {
+            "fields": [
+              {
+                "constraints": [
+                  {
+                    "field": "paidWith",
+                    "rule": "nonEmpty",
+                    "source": "context"
+                  }
+                ],
+                "name": "paidWith",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "id": "turnstile",
+        "initialContext": {},
+        "initialState": "Locked",
+        "inputs": {
+          "Coin": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "coin",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "states": [
+          "Locked",
+          "Unlocked"
+        ],
+        "transitions": [
+          {
+            "from": "Locked",
+            "guard": {
+              "field": "coin.prototype",
+              "rule": "oneOf",
+              "source": "input",
+              "values": [
+                "quarter",
+                "dollar"
+              ]
+            },
+            "guardMessage": "Only a quarter or a dollar is accepted.",
+            "reduce": {
+              "reduce": "set",
+              "steps": [
+                {
+                  "field": "paidWith",
+                  "value": {
+                    "input": "coin"
+                  }
+                }
+              ]
+            },
+            "to": "Unlocked",
+            "trigger": "Coin"
+          },
+          {
+            "from": "Unlocked",
+            "reduce": {
+              "reduce": "clear"
+            },
+            "to": "Locked",
+            "trigger": "Push"
+          }
+        ],
+        "triggers": [
+          "Coin",
+          "Push"
+        ],
+        "version": 1
+      }
+    },
+    {
+      "name": "prototype-input-source",
+      "description": "A set step that copies the input field __proto__",
+      "ir": {
+        "committedStates": [],
+        "context": {
+          "Locked": {
+            "fields": []
+          },
+          "Unlocked": {
+            "fields": [
+              {
+                "constraints": [
+                  {
+                    "field": "paidWith",
+                    "rule": "nonEmpty",
+                    "source": "context"
+                  }
+                ],
+                "name": "paidWith",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "id": "turnstile",
+        "initialContext": {},
+        "initialState": "Locked",
+        "inputs": {
+          "Coin": {
+            "fields": [
+              {
+                "constraints": [],
+                "name": "coin",
+                "nullable": false,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "states": [
+          "Locked",
+          "Unlocked"
+        ],
+        "transitions": [
+          {
+            "from": "Locked",
+            "guard": {
+              "field": "coin",
+              "rule": "oneOf",
+              "source": "input",
+              "values": [
+                "quarter",
+                "dollar"
+              ]
+            },
+            "guardMessage": "Only a quarter or a dollar is accepted.",
+            "reduce": {
+              "reduce": "set",
+              "steps": [
+                {
+                  "field": "paidWith",
+                  "value": {
+                    "input": "__proto__"
                   }
                 }
               ]

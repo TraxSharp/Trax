@@ -133,6 +133,11 @@ and the schema is normative: an engine reads every document it accepts, and the 
 Every object in it is closed, so a field it does not name is refused rather than ignored. Both runtimes' tests check
 every IR the exporter writes against it, so a field added to the IR without the schema fails them.
 
+A context or input field, a rule's field and a `set` step's field or input source may not be named `__proto__`,
+`constructor` or `prototype`, in any segment of a dotted path: an engine that keeps a context as a plain object would
+reach the object's prototype rather than a member. The schema refuses them, and every engine refuses to load an IR that
+names one.
+
 ## Transitions
 
 Each transition carries its structure plus its guard and reducer as data:

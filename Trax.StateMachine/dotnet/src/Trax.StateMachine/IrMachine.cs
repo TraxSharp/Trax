@@ -601,6 +601,23 @@ public sealed class IrMachine
             ? text
             : throw new FormatException($"'{what}' is not a string.");
 
+    // Names an engine that keeps a context as a plain object cannot hold as a field: assigning one would reach the
+    // object's prototype rather than a member. Every engine refuses them, in any segment of a path, so the three agree.
+    private static readonly HashSet<string> PrototypeNames = new(StringComparer.Ordinal)
+    {
+        "__proto__",
+        "constructor",
+        "prototype",
+    };
+
+    private static string FieldName(JsonNode? node, string what)
+    {
+        var name = Text(node, what);
+        if (name.Split('.').Any(PrototypeNames.Contains))
+            throw new FormatException($"'{name}' is not a field name any engine holds.");
+        return name;
+    }
+
     private static TimeSpan Duration(JsonNode? node) =>
         IsoDuration.TryParse(Text(node, "duration"), out var duration)
             ? duration
@@ -610,7 +627,7 @@ public sealed class IrMachine
         new(ReadFields(schema["fields"] as JsonArray ?? []));
 
     private static List<FieldSchema> ReadFields(JsonArray fields) =>
-        fields.Select(f => ReadField(f!.AsObject(), Text(f!["name"], "field name"))).ToList();
+        fields.Select(f => ReadField(f!.AsObject(), FieldName(f!["name"], "field name"))).ToList();
 
     private static FieldSchema ReadField(JsonObject f, string name) =>
         new FieldSchema(
@@ -648,7 +665,7 @@ public sealed class IrMachine
             "input" => RuleSource.Input,
             var other => throw new FormatException($"'{other}' is not a rule source."),
         };
-        var field = Text(r["field"], "field");
+        var field = FieldName(r["field"], "field");
         return kind switch
         {
             "present" => new Rule.Present(source, field),
@@ -687,7 +704,7 @@ public sealed class IrMachine
             "set" => new Reduction.Set(
                 (r["steps"] as JsonArray ?? [])
                     .Select(s => new SetStep(
-                        Text(s!["field"], "field"),
+                        FieldName(s!["field"], "field"),
                         ReadSource(s["value"]!.AsObject())
                     ))
                     .ToList()
@@ -697,7 +714,7 @@ public sealed class IrMachine
 
     private static ValueSource ReadSource(JsonObject value) =>
         value.ContainsKey("input")
-            ? new ValueSource.FromInput(Text(value["input"], "input"))
+            ? new ValueSource.FromInput(FieldName(value["input"], "input"))
             : new ValueSource.Constant(value["const"]?.DeepClone());
 
     private static JsonFieldType FieldType(string type) =>

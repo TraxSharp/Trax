@@ -213,3 +213,41 @@ describe("the edges a machine built from the IR cannot predict", () => {
     expect(bound.unpredictable).toEqual({});
   });
 });
+
+describe("an IR that names a field no engine holds", () => {
+  interface Loose {
+    context: Record<string, { fields: { name: string }[] }>;
+    transitions: { trigger: string; guard?: { field?: string }; reduce?: { steps?: { field: string; value: unknown }[] } }[];
+  }
+  const turnstile = () => JSON.parse(fs.readFileSync(irFile("turnstile"), "utf8")) as Loose;
+  const coin = (ir: Loose) => ir.transitions.find((t) => t.trigger === "Coin")!;
+  const load = (ir: Loose) => () => machineFromIr(ir as unknown as IrDocument);
+
+  it.each(["__proto__", "constructor", "prototype", "a.__proto__"])("refuses a set step that writes %s", (name) => {
+    const ir = turnstile();
+    coin(ir).reduce!.steps![0].field = name;
+    expect(load(ir)).toThrow(/cannot be read.*no engine holds/);
+  });
+
+  it("refuses a set step that copies the input field __proto__", () => {
+    const ir = turnstile();
+    coin(ir).reduce!.steps![0].value = { input: "__proto__" };
+    expect(load(ir)).toThrow(/no engine holds/);
+  });
+
+  it("refuses a guard that reads one, and a context field named one", () => {
+    const guarded = turnstile();
+    coin(guarded).guard!.field = "constructor";
+    expect(load(guarded)).toThrow(/no engine holds/);
+
+    const named = turnstile();
+    named.context.Unlocked!.fields[0]!.name = "prototype";
+    expect(load(named)).toThrow(/no engine holds/);
+  });
+
+  it("keeps a field whose name only contains one", () => {
+    const ir = turnstile();
+    coin(ir).reduce!.steps![0].field = "my__proto__";
+    expect(load(ir)).not.toThrow();
+  });
+});

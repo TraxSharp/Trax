@@ -50,6 +50,12 @@ describe("the IR schema", () => {
     expect(check(ir)).not.toEqual([]);
   });
 
+  it.each(["__proto__", "constructor", "prototype", "a.prototype"])("refuses a field named %s", (name) => {
+    const ir = read(irFile("turnstile")) as { transitions: { reduce?: { steps?: { field: string }[] } }[] };
+    ir.transitions.find((t) => t.reduce?.steps?.length)!.reduce!.steps![0]!.field = name;
+    expect(check(ir)).not.toEqual([]);
+  });
+
   it("refuses an output on an outcome other than done", () => {
     const ir = read(irFile("ingest")) as { outcomes: Record<string, Record<string, unknown>> };
     ir.outcomes["Fetching.failed"]!.output = { fields: [] };

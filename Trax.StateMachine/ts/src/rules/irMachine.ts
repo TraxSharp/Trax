@@ -276,13 +276,21 @@ const LEAF_RULES = new Set([
   "arrayOf",
 ]);
 const REDUCTIONS = new Set(["keep", "clear", "reset", "set", "custom"]);
+// Names an engine that keeps a context as a plain object cannot hold as a field: assigning one would reach the
+// object's prototype rather than a member. Every engine refuses them, so the three agree.
+const PROTOTYPE_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 
 // Refuses an IR that names a rule, a reduction, a field type, a comparison or a rule source this engine does not
 // know, as the C# IrMachine and the Rust engine do when they read it. Interpreting it instead would run a guard that
-// never holds or a reduction that does nothing, and answer differently from the server without saying so.
+// never holds or a reduction that does nothing, and answer differently from the server without saying so. A field
+// named `__proto__`, `constructor` or `prototype`, in any segment of its path, is refused too.
 function checkIr(ir: IrDocument): void {
   const fail = (message: string): never => {
     throw new Error(`This state-machine IR cannot be read: ${message}`);
+  };
+  const fieldName = (name: unknown, where: string): void => {
+    if (typeof name === "string" && name.split(".").some((segment) => PROTOTYPE_NAMES.has(segment)))
+      fail(`${where} names the field '${name}', which no engine holds.`);
   };
   const fieldType = (type: unknown, where: string): void => {
     if (typeof type !== "string" || !FIELD_TYPES.has(type))
@@ -295,6 +303,7 @@ function checkIr(ir: IrDocument): void {
       return;
     }
     if (r.rule === "custom") return;
+    fieldName(raw.field, where);
     if (typeof raw.source !== "string" || !RULE_SOURCES.has(raw.source))
       fail(`${where} reads an unknown source '${String(raw.source)}'.`);
     if (!LEAF_RULES.has(raw.rule as string))
@@ -307,6 +316,11 @@ function checkIr(ir: IrDocument): void {
   const reduction = (r: Reduction, where: string): void => {
     if (!REDUCTIONS.has(r.reduce))
       fail(`${where} is an unknown reduction '${String(r.reduce)}'.`);
+    if (r.reduce === "set")
+      for (const step of r.steps ?? []) {
+        fieldName(step.field, where);
+        fieldName((step.value as { input?: unknown } | undefined)?.input, where);
+      }
   };
   const value = (v: ValueSchema, where: string): void => {
     fieldType(v.type, where);
@@ -315,6 +329,7 @@ function checkIr(ir: IrDocument): void {
     if (v.keys) value(v.keys, where);
   };
   const field = (f: FieldSchema, where: string): void => {
+    fieldName(f.name, where);
     value(f, where);
     for (const c of f.constraints ?? []) rule(c, where);
   };
