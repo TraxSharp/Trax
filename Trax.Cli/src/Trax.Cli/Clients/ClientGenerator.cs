@@ -1329,8 +1329,12 @@ internal sealed partial class ClientGenerator
 
     private static string EscapeDocText(string text) => text.Replace("*/", "*\\/");
 
-    // The identifiers the client's index exports, or the paths of its files, so two never collide.
-    private sealed class Names(StringComparer? comparer = null)
+    // The identifiers the client's index exports, or the paths of its files, so two never collide. rename is what a
+    // collision's message asks for.
+    private sealed class Names(
+        StringComparer? comparer = null,
+        string rename = "Rename one of them on the host."
+    )
     {
         private readonly Dictionary<string, string> _owners = new(
             comparer ?? StringComparer.Ordinal
@@ -1342,7 +1346,7 @@ internal sealed partial class ClientGenerator
                 throw new InvalidOperationException(
                     other == owner
                         ? $"'{owner}' is listed twice in the manifest. Export the manifest again from the host."
-                        : $"'{other}' and '{owner}' both generate the name '{name}'. Rename one of them on the host."
+                        : $"'{other}' and '{owner}' both generate the name '{name}'. {rename}"
                 );
             _owners[name] = owner;
             return name;

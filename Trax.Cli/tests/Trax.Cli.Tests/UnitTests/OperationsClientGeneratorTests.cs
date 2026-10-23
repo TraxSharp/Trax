@@ -400,6 +400,12 @@ public class OperationsClientGeneratorTests
 
     private const string OnDataChanged = "subscription OnDataChanged { onDataChanged { domain } }";
 
+    // How the C# client names what it takes from System.Text.Json, Trax.Client and the BCL: from global::, so no type
+    // of the schema's can stand in for one.
+    private const string Json = "global::System.Text.Json.Serialization.";
+    private const string Client = "global::Trax.Client.";
+    private const string List = "global::System.Collections.Generic.IReadOnlyList";
+
     [Test]
     public void The_csharp_client_types_each_document_and_names_it_by_the_same_id()
     {
@@ -422,14 +428,14 @@ public class OperationsClientGeneratorTests
             )
             .And.Contain("namespace Trax.Operations;")
             .And.Contain(
-                "    [JsonPropertyName(\"state\")]\n    public Optional<RunState?> State { get; init; }",
+                $"    [{Json}JsonPropertyName(\"state\")]\n    public {Client}Optional<RunState?> State {{ get; init; }}",
                 "a nullable variable may be left out, which GraphQL tells apart from null"
             )
-            .And.Contain("    public Optional<int?> Take { get; init; }")
+            .And.Contain($"    public {Client}Optional<int?> Take {{ get; init; }}")
             .And.Contain("internal sealed record RunsResult\n{")
             .And.Contain("    public RunsResultOperations? Operations { get; init; }")
             .And.Contain(
-                "    public required IReadOnlyList<RunsResultOperationsRuns> Runs { get; init; }"
+                $"    public required {List}<RunsResultOperationsRuns> Runs {{ get; init; }}"
             )
             .And.Contain("    public required long Id { get; init; }")
             .And.Contain("    public string? Name { get; init; }")
@@ -437,24 +443,28 @@ public class OperationsClientGeneratorTests
                 $"        {CSharpLiteral(ClientDocumentSet.ConsoleIdOf("Runs", text))},",
                 "the C# client sends the same id as the TypeScript one, per " + Adr
             )
-            .And.Contain("    public static Task<TraxAnswer<RunsResult>> RunsAsync(")
+            .And.Contain(
+                $"    public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<RunsResult>> RunsAsync("
+            )
             .And.Contain("        RunsVariables? variables,")
             .And.Contain(
-                "client.SendAsync(TraxOperations.Runs, variables ?? new(), cancellationToken)"
+                "client.SendAsync(global::Trax.Operations.TraxOperations.Runs, variables ?? new(), cancellationToken)"
             );
         Text(files, "Documents/Cancel.g.cs")
             .Should()
             .Contain("    public required long Id { get; init; }")
-            .And.Contain("    public Optional<string?> Note { get; init; }")
-            .And.Contain("TraxOperationKind.Mutation")
+            .And.Contain($"    public {Client}Optional<string?> Note {{ get; init; }}")
+            .And.Contain($"{Client}TraxOperationKind.Mutation")
             .And.Contain("        CancelVariables variables,")
-            .And.Contain("client.SendAsync(TraxOperations.Cancel, variables, cancellationToken)");
+            .And.Contain(
+                "client.SendAsync(global::Trax.Operations.TraxOperations.Cancel, variables, cancellationToken)"
+            );
         Text(files, "Types.g.cs")
             .Should()
             .Contain(
-                "[JsonConverter(typeof(JsonStringEnumConverter<RunState>))]\ninternal enum RunState"
+                $"[{Json}JsonConverter(typeof({Json}JsonStringEnumConverter<RunState>))]\ninternal enum RunState"
             )
-            .And.Contain("    [JsonStringEnumMemberName(\"RUNNING\")]\n    Running,");
+            .And.Contain($"    [{Json}JsonStringEnumMemberName(\"RUNNING\")]\n    Running,");
     }
 
     [Test]
@@ -467,9 +477,11 @@ public class OperationsClientGeneratorTests
 
         module
             .Should()
-            .Contain("TraxDocument<TraxNoVariables, OnDataChangedResult> OnDataChanged")
+            .Contain(
+                $"{Client}TraxDocument<{Client}TraxNoVariables, OnDataChangedResult> OnDataChanged"
+            )
             .And.Contain(
-                "    public static IDisposable OnDataChanged(\n        this TraxClient client,\n        Action<TraxStreamEvent<OnDataChangedResult>> onEvent\n    ) => client.Subscribe(TraxOperations.OnDataChanged, TraxNoVariables.Instance, onEvent);"
+                $"    public static global::System.IDisposable OnDataChanged(\n        this {Client}TraxClient client,\n        global::System.Action<{Client}TraxStreamEvent<OnDataChangedResult>> onEvent\n    ) => client.Subscribe(global::Trax.Operations.TraxOperations.OnDataChanged, {Client}TraxNoVariables.Instance, onEvent);"
             );
     }
 
@@ -562,6 +574,159 @@ public class OperationsClientGeneratorTests
         {
             dir.Delete(recursive: true);
         }
+    }
+
+    [Test]
+    public void A_schema_type_named_like_a_runtime_or_BCL_type_declares_its_own_record_and_takes_nothing_over()
+    {
+        string[] shadows =
+        [
+            "TraxOperationKind",
+            "TraxNoVariables",
+            "TraxClient",
+            "TraxDocument",
+            "TraxAnswer",
+            "TraxStreamEvent",
+            "Optional",
+            "JsonElement",
+            "JsonPropertyName",
+            "JsonPropertyNameAttribute",
+            "Guid",
+            "DateTimeOffset",
+            "CancellationToken",
+            "IDisposable",
+            "IReadOnlyList",
+            "Task",
+            "Action",
+            "System",
+            "Trax",
+        ];
+        var schema =
+            Schema
+                .Replace("scalar Long", "scalar Long\nscalar UUID\nscalar DateTime\nscalar JSON")
+                .Replace(
+                    "type CancelResponse {",
+                    "type CancelResponse {\n  at: DateTime\n  key: UUID\n  data: JSON"
+                ) + string.Concat(shadows.Select(name => $"\ninput {name} {{\n  value: Int\n}}\n"));
+        var files = ClientGenerator.RenderCSharp(
+            new OperationsGenerateOptions(
+                schema,
+                [
+                    new("src/graphql/Runs.graphql", Runs),
+                    new(
+                        "src/graphql/Cancel.graphql",
+                        "mutation Cancel($id: Long!, $note: String) { operations { cancel(id: $id, note: $note) { success at key data } } }"
+                    ),
+                    new("src/graphql/OnDataChanged.graphql", OnDataChanged),
+                ]
+            ),
+            ClientGenerator.DefaultOperationsNamespace
+        );
+
+        foreach (var name in shadows)
+            Text(files, "Types.g.cs").Should().Contain($"internal sealed record {name}\n");
+        CompileCSharp(files, out _)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty("the client names what it takes from Trax.Client and the BCL from global::");
+    }
+
+    [Test]
+    public void A_document_named_like_a_runtime_type_takes_nothing_over()
+    {
+        var files = RenderCSharp(
+            (
+                "src/graphql/TraxOperationKind.graphql",
+                "query TraxOperationKind { operations { run(id: 1) { id } } }"
+            ),
+            (
+                "src/graphql/TraxNoVariables.graphql",
+                "subscription TraxNoVariables { onDataChanged { domain } }"
+            ),
+            (
+                "src/graphql/TraxStreamEvent.graphql",
+                "subscription TraxStreamEvent { onDataChanged { domain } }"
+            ),
+            (
+                "src/graphql/TraxOperationsClient.graphql",
+                "query TraxOperationsClient { operations { run(id: 1) { id } } }"
+            ),
+            ("src/graphql/Optional.graphql", Runs.Replace("query Runs", "query Optional"))
+        );
+
+        CompileCSharp(files, out _)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty();
+    }
+
+    [TestCase(
+        "query TraxOperations { operations { run(id: 1) { id } } }",
+        "'the class TraxOperations the client declares' and 'the console document TraxOperations (src/graphql/Doc.graphql)' both generate the name 'TraxOperations'. Rename one of them."
+    )]
+    [TestCase(
+        "subscription TraxOperationsClient { onDataChanged { domain } }",
+        "'the class TraxOperationsClient the client declares' and 'the console document TraxOperationsClient (src/graphql/Doc.graphql)' both generate the name 'TraxOperationsClient'. Rename one of them."
+    )]
+    public void A_document_named_like_a_class_the_client_declares_is_refused(
+        string document,
+        string message
+    )
+    {
+        var act = () => RenderCSharp(("src/graphql/Doc.graphql", document));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+    }
+
+    [TestCase("RunsVariables", "the variables of the console document Runs")]
+    [TestCase("RunsResult", "the result of the console document Runs")]
+    [TestCase("RunsResultOperations", "the key operations of the console document Runs")]
+    public void A_schema_type_that_takes_a_name_a_document_generates_is_refused(
+        string type,
+        string owner
+    )
+    {
+        var act = () =>
+            ClientGenerator.RenderCSharp(
+                new OperationsGenerateOptions(
+                    Schema + $"\ninput {type} {{\n  value: Int\n}}\n",
+                    [new("src/graphql/Runs.graphql", Runs)]
+                ),
+                ClientGenerator.DefaultOperationsNamespace
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                $"'the GraphQL type {type}' and '{owner}*' both generate the name '{type}'.*"
+            );
+    }
+
+    [Test]
+    public void Two_documents_that_take_one_file_or_one_method_are_refused()
+    {
+        var path = () =>
+            RenderCSharp(
+                ("src/graphql/a.graphql", "query runs { operations { run(id: 1) { id } } }"),
+                ("src/graphql/b.graphql", "query Runs { operations { run(id: 1) { id } } }")
+            );
+        var method = () =>
+            RenderCSharp(
+                ("src/graphql/a.graphql", "query Runs { operations { run(id: 1) { id } } }"),
+                ("src/graphql/b.graphql", "subscription RunsAsync { onDataChanged { domain } }")
+            );
+
+        path.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*both generate the name 'Documents/Runs.g.cs'*");
+        method
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                "'the console document Runs (src/graphql/a.graphql)' and 'the console document RunsAsync (src/graphql/b.graphql)' both generate the name 'RunsAsync'. Rename one of them."
+            );
     }
 
     [TestCase("rust", null, "--lang 'rust' is not one trax client writes")]

@@ -20,7 +20,9 @@ internal sealed partial class ClientGenerator
     /// <summary>The namespace the C# operations client is written in when none is named.</summary>
     public const string DefaultOperationsNamespace = "Trax.Operations";
 
-    // The static classes every C# operations client declares, which no generated record may take.
+    // The static classes every C# operations client declares, which no generated record may take. Everything the
+    // client takes from Trax.Client or the BCL is written as global::, so a schema type of the same name (an input
+    // named Optional or TraxClient) declares its own record and changes nothing else.
     private static readonly string[] CSharpRuntimeNames =
     [
         "TraxOperations",
@@ -64,13 +66,13 @@ internal sealed partial class ClientGenerator
             StringComparer.Ordinal
         );
 
-        var names = new Names();
+        var names = new Names(rename: Rename);
         foreach (var name in CSharpRuntimeNames)
             names.Claim(name, "the client's runtime");
         var declared = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var type in types.Declared)
             declared[type] = names.Claim(CSharp.TypeName(type), $"the GraphQL type {type}");
-        var paths = new Names(StringComparer.OrdinalIgnoreCase);
+        var paths = new Names(StringComparer.OrdinalIgnoreCase, Rename);
 
         var writer = new CSharpWriter(types, declared, fragments, names);
         var files = new List<ClientFile> { new("Types.g.cs", writer.Types(@namespace)) };
@@ -98,6 +100,8 @@ internal sealed partial class ClientGenerator
         string outDir
     ) => Check(RenderCSharp(options, @namespace), outDir);
 
+    private const string Rename = "Rename one of them.";
+
     private static bool IsNamespace(string text) =>
         text.Length > 0
         && text.Split('.')
@@ -117,6 +121,23 @@ internal sealed partial class ClientGenerator
     )
     {
         private const string Indent = "    ";
+
+        private const string Serialization = "global::System.Text.Json.Serialization.";
+
+        private const string Client = "global::Trax.Client.";
+
+        // The members of TraxOperations and of TraxOperationsClient, so no document's field or method takes the name
+        // of its class or of another document's.
+        private readonly Names _fields = Seeded("TraxOperations");
+
+        private readonly Names _methods = Seeded("TraxOperationsClient");
+
+        private static Names Seeded(string type)
+        {
+            var members = new Names(rename: Rename);
+            members.Claim(type, $"the class {type} the client declares");
+            return members;
+        }
 
         public string Types(string @namespace)
         {
@@ -152,9 +173,11 @@ internal sealed partial class ClientGenerator
         private void Enum(StringBuilder sb, GraphQLEnumTypeDefinition @enum)
         {
             var name = declared[@enum.Name.StringValue];
-            var members = new Names();
+            var members = new Names(rename: Rename);
             sb.Append(Summary(@enum.Description?.Value.ToString(), ""));
-            sb.Append($"[JsonConverter(typeof(JsonStringEnumConverter<{name}>))]\n");
+            sb.Append(
+                $"[{Serialization}JsonConverter(typeof({Serialization}JsonStringEnumConverter<{name}>))]\n"
+            );
             sb.Append($"internal enum {name}\n{{\n");
             foreach (var value in @enum.Values?.Items ?? [])
             {
@@ -164,7 +187,7 @@ internal sealed partial class ClientGenerator
                     $"the value {wire} of {@enum.Name.StringValue}"
                 );
                 sb.Append(Summary(value.Description?.Value.ToString(), Indent));
-                sb.Append($"{Indent}[JsonStringEnumMemberName({Literal(wire)})]\n");
+                sb.Append($"{Indent}[{Serialization}JsonStringEnumMemberName({Literal(wire)})]\n");
                 sb.Append($"{Indent}{member},\n");
             }
             sb.Append("}\n");
@@ -183,7 +206,7 @@ internal sealed partial class ClientGenerator
             )> fields
         )
         {
-            var members = new Names();
+            var members = new Names(rename: Rename);
             members.Claim(name, "the record itself");
             sb.Append($"internal sealed record {name}\n{{\n");
             var first = true;
@@ -199,10 +222,10 @@ internal sealed partial class ClientGenerator
                 var optional = type is not GraphQLNonNullType || hasDefault;
                 var value = InputType(type);
                 sb.Append(Summary(description, Indent));
-                sb.Append($"{Indent}[JsonPropertyName({Literal(wire)})]\n");
+                sb.Append($"{Indent}[{Serialization}JsonPropertyName({Literal(wire)})]\n");
                 sb.Append(
                     optional
-                        ? $"{Indent}public Optional<{Nullable(value, type)}> {property} {{ get; init; }}\n"
+                        ? $"{Indent}public {Client}Optional<{Nullable(value, type)}> {property} {{ get; init; }}\n"
                         : $"{Indent}public required {value} {property} {{ get; init; }}\n"
                 );
             }
@@ -228,7 +251,7 @@ internal sealed partial class ClientGenerator
             var variables = definition.Variables?.Items ?? [];
             var variablesType =
                 variables.Count == 0
-                    ? "TraxNoVariables"
+                    ? $"{Client}TraxNoVariables"
                     : names.Claim($"{name}Variables", $"the variables of {owner}");
             var resultType = names.Claim($"{name}Result", $"the result of {owner}");
 
@@ -276,6 +299,8 @@ internal sealed partial class ClientGenerator
                 v.Type is GraphQLNonNullType && v.DefaultValue is null
             );
             var idText = operation.Id.Length == 0 ? "null" : Literal(operation.Id);
+            _fields.Claim(name, owner);
+            var method = _methods.Claim(subscription ? name : $"{name}Async", owner);
             sb.Append('\n');
             sb.Append("internal static partial class TraxOperations\n{\n");
             sb.Append(
@@ -284,9 +309,9 @@ internal sealed partial class ClientGenerator
                     : $"{Indent}/// <summary>The {kind.ToLowerInvariant()} {Doc(operation.Name)} ({Doc(operation.Source)}), and the id a host that serves the console registers it under.</summary>\n"
             );
             sb.Append(
-                $"{Indent}public static readonly TraxDocument<{variablesType}, {resultType}> {name} = new(\n"
+                $"{Indent}public static readonly {Client}TraxDocument<{variablesType}, {resultType}> {name} = new(\n"
                     + $"{Indent}{Indent}{Literal(operation.Name)},\n"
-                    + $"{Indent}{Indent}TraxOperationKind.{kind},\n"
+                    + $"{Indent}{Indent}{Client}TraxOperationKind.{kind},\n"
                     + $"{Indent}{Indent}{idText},\n"
                     + $"{Indent}{Indent}{Literal(operation.Text)}\n"
                     + $"{Indent});\n"
@@ -299,24 +324,25 @@ internal sealed partial class ClientGenerator
                 : required ? $"{variablesType} variables, "
                 : $"{variablesType}? variables, ";
             var value =
-                variables.Count == 0 ? "TraxNoVariables.Instance"
+                variables.Count == 0 ? $"{Client}TraxNoVariables.Instance"
                 : required ? "variables"
                 : "variables ?? new()";
+            var document = $"global::{@namespace}.TraxOperations.{name}";
             if (subscription)
             {
                 sb.Append(
                     $"{Indent}/// <summary>Follows {Doc(operation.Name)} until the returned handle is disposed.</summary>\n"
                 );
                 sb.Append(
-                    $"{Indent}public static IDisposable {name}(\n"
-                        + $"{Indent}{Indent}this TraxClient client,\n"
+                    $"{Indent}public static global::System.IDisposable {method}(\n"
+                        + $"{Indent}{Indent}this {Client}TraxClient client,\n"
                         + (
                             parameter.Length == 0
                                 ? ""
                                 : $"{Indent}{Indent}{parameter.TrimEnd(' ', ',')},\n"
                         )
-                        + $"{Indent}{Indent}Action<TraxStreamEvent<{resultType}>> onEvent\n"
-                        + $"{Indent}) => client.Subscribe(TraxOperations.{name}, {value}, onEvent);\n"
+                        + $"{Indent}{Indent}global::System.Action<{Client}TraxStreamEvent<{resultType}>> onEvent\n"
+                        + $"{Indent}) => client.Subscribe({document}, {value}, onEvent);\n"
                 );
             }
             else
@@ -325,15 +351,15 @@ internal sealed partial class ClientGenerator
                     $"{Indent}/// <summary>Sends {Doc(operation.Name)}; a refusal or a transport failure is in the answer.</summary>\n"
                 );
                 sb.Append(
-                    $"{Indent}public static Task<TraxAnswer<{resultType}>> {name}Async(\n"
-                        + $"{Indent}{Indent}this TraxClient client,\n"
+                    $"{Indent}public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<{resultType}>> {method}(\n"
+                        + $"{Indent}{Indent}this {Client}TraxClient client,\n"
                         + (
                             parameter.Length == 0
                                 ? ""
                                 : $"{Indent}{Indent}{parameter.TrimEnd(' ', ',')},\n"
                         )
-                        + $"{Indent}{Indent}CancellationToken cancellationToken = default\n"
-                        + $"{Indent}) => client.SendAsync(TraxOperations.{name}, {value}, cancellationToken);\n"
+                        + $"{Indent}{Indent}global::System.Threading.CancellationToken cancellationToken = default\n"
+                        + $"{Indent}) => client.SendAsync({document}, {value}, cancellationToken);\n"
                 );
             }
             sb.Append("}\n");
@@ -356,7 +382,7 @@ internal sealed partial class ClientGenerator
             SelectionTypes.Collect(types, fragments, selection, typeName, fields);
             var at = records.Count;
             records.Add((name, summary, ""));
-            var members = new Names();
+            var members = new Names(rename: Rename);
             members.Claim(name, "the record itself");
             var body = new StringBuilder();
             var below = new List<Action>();
@@ -371,7 +397,7 @@ internal sealed partial class ClientGenerator
                 if (field.Name.StringValue == "__typename")
                 {
                     body.Append($"{Indent}/// <summary>The value's type, {typeName}.</summary>\n");
-                    body.Append($"{Indent}[JsonPropertyName({Literal(key)})]\n");
+                    body.Append($"{Indent}[{Serialization}JsonPropertyName({Literal(key)})]\n");
                     body.Append($"{Indent}public required string {property} {{ get; init; }}\n");
                     continue;
                 }
@@ -402,7 +428,7 @@ internal sealed partial class ClientGenerator
                     owner
                 );
                 body.Append(Summary(definition.Description?.Value.ToString(), Indent));
-                body.Append($"{Indent}[JsonPropertyName({Literal(key)})]\n");
+                body.Append($"{Indent}[{Serialization}JsonPropertyName({Literal(key)})]\n");
                 body.Append(
                     definition.Type is GraphQLNonNullType
                         ? $"{Indent}public required {type} {property} {{ get; init; }}\n"
@@ -422,9 +448,9 @@ internal sealed partial class ClientGenerator
                 t switch
                 {
                     GraphQLNonNullType nonNull => Bare(nonNull.Type),
-                    GraphQLListType list => $"IReadOnlyList<{Of(list.Type)}>",
+                    GraphQLListType list => $"{ReadOnlyList}<{Of(list.Type)}>",
                     GraphQLNamedType named => Leaf(named.Name.StringValue),
-                    _ => "JsonElement",
+                    _ => CSharp.JsonElement,
                 };
             string Of(GraphQLType t) => t is GraphQLNonNullType ? Bare(t) : Nullable(Bare(t), t);
             string Leaf(string name)
@@ -452,9 +478,9 @@ internal sealed partial class ClientGenerator
                 t switch
                 {
                     GraphQLNonNullType nonNull => Bare(nonNull.Type),
-                    GraphQLListType list => $"IReadOnlyList<{InputType(list.Type)}>",
+                    GraphQLListType list => $"{ReadOnlyList}<{InputType(list.Type)}>",
                     GraphQLNamedType named => InputLeaf(named.Name.StringValue),
-                    _ => "JsonElement",
+                    _ => CSharp.JsonElement,
                 };
             return type is GraphQLNonNullType ? Bare(type) : Nullable(Bare(type), type);
         }
@@ -462,7 +488,9 @@ internal sealed partial class ClientGenerator
         private string InputLeaf(string name) =>
             declared.TryGetValue(name, out var declaredName) ? declaredName
             : CSharp.Scalars.TryGetValue(name, out var scalar) ? scalar
-            : "JsonElement";
+            : CSharp.JsonElement;
+
+        private const string ReadOnlyList = "global::System.Collections.Generic.IReadOnlyList";
 
         private static string Nullable(string type, GraphQLType graphQLType) =>
             graphQLType is GraphQLNonNullType || type.EndsWith('?') ? type : type + "?";
@@ -480,13 +508,6 @@ internal sealed partial class ClientGenerator
             new StringBuilder(OperationsHeader)
                 .Append("// <auto-generated/>\n")
                 .Append("#nullable enable\n\n")
-                .Append("using System;\n")
-                .Append("using System.Collections.Generic;\n")
-                .Append("using System.Text.Json;\n")
-                .Append("using System.Text.Json.Serialization;\n")
-                .Append("using System.Threading;\n")
-                .Append("using System.Threading.Tasks;\n")
-                .Append("using Trax.Client;\n\n")
                 .Append($"namespace {@namespace};\n");
 
         private static string Summary(string? description, string indent) =>
@@ -504,6 +525,8 @@ internal sealed partial class ClientGenerator
     // C# names for GraphQL ones.
     private static class CSharp
     {
+        public const string JsonElement = "global::System.Text.Json.JsonElement";
+
         public static readonly IReadOnlyDictionary<string, string> Scalars = new Dictionary<
             string,
             string
@@ -511,8 +534,8 @@ internal sealed partial class ClientGenerator
         {
             ["String"] = "string",
             ["ID"] = "string",
-            ["UUID"] = "Guid",
-            ["DateTime"] = "DateTimeOffset",
+            ["UUID"] = "global::System.Guid",
+            ["DateTime"] = "global::System.DateTimeOffset",
             // Formats a host writes that no BCL type reads as they are: kept as the text that arrives.
             ["Date"] = "string",
             ["LocalDate"] = "string",
@@ -531,8 +554,8 @@ internal sealed partial class ClientGenerator
             ["Float"] = "double",
             ["Decimal"] = "decimal",
             ["Boolean"] = "bool",
-            ["Any"] = "JsonElement",
-            ["JSON"] = "JsonElement",
+            ["Any"] = JsonElement,
+            ["JSON"] = JsonElement,
         };
 
         private static readonly HashSet<string> Keywords = new(StringComparer.Ordinal)
