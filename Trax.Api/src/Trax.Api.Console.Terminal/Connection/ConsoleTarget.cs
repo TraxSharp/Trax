@@ -1,4 +1,5 @@
 using System.Net;
+using Trax.Api.Console.Terminal.Lists;
 
 namespace Trax.Api.Console.Terminal.Connection;
 
@@ -53,19 +54,38 @@ internal sealed record ConsoleTarget(
             throw new InvalidOperationException(
                 $"Name the host with --host https://ops.example.com, or set {HostVariable}."
             );
+        // A user name or password in the URL is never printed back, nor sent.
         if (
-            !Uri.TryCreate(host, UriKind.Absolute, out var root)
-            || root.Scheme is not ("http" or "https")
+            Uri.TryCreate(host, UriKind.Absolute, out var root)
+                ? root.UserInfo.Length > 0
+                : host.Contains('@')
         )
             throw new InvalidOperationException(
-                $"--host '{host}' is not an http or https URL, such as https://ops.example.com."
+                "--host carries a user name or password. Give the URL alone, and the credential with "
+                    + $"--api-key-file, --token-file, {ApiKeyVariable} or {TokenVariable}."
             );
-        if (!graphQLPath.StartsWith('/'))
+        if (root is null || root.Scheme is not ("http" or "https"))
             throw new InvalidOperationException(
-                $"--graphql-path '{graphQLPath}' is not a path on the host, such as {DefaultGraphQLPath}."
+                $"--host '{TerminalText.Line(host)}' is not an http or https URL, such as https://ops.example.com."
+            );
+        // The endpoint must be on the host named: a path such as //other.example.com/x is another host's.
+        if (
+            !graphQLPath.StartsWith('/')
+            || !Uri.TryCreate(root, graphQLPath, out var endpoint)
+            || endpoint.UserInfo.Length > 0
+            || Uri.Compare(
+                endpoint,
+                root,
+                UriComponents.SchemeAndServer,
+                UriFormat.UriEscaped,
+                StringComparison.OrdinalIgnoreCase
+            ) != 0
+        )
+            throw new InvalidOperationException(
+                $"--graphql-path '{TerminalText.Line(graphQLPath)}' is not a path on the host, such as "
+                    + $"{DefaultGraphQLPath}."
             );
 
-        var endpoint = new Uri(root, graphQLPath);
         var socket = new UriBuilder(endpoint)
         {
             Scheme = endpoint.Scheme == "https" ? "wss" : "ws",

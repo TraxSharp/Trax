@@ -106,6 +106,51 @@ public class ConsoleTargetTests
             .Throw<InvalidOperationException>()
             .WithMessage("*is not an http or https URL*");
 
+    [TestCase("//evil.example.com/trax/graphql")]
+    [TestCase("//user@evil.example.com/x")]
+    [TestCase("trax/graphql")]
+    public void A_graphql_path_that_leaves_the_host_is_refused(string path) =>
+        FluentActions
+            .Invoking(() =>
+                ConsoleTarget.Resolve(
+                    "https://ops.example.com",
+                    path,
+                    apiKeyFile: null,
+                    tokenFile: null,
+                    sendText: false,
+                    n => n == ConsoleTarget.ApiKeyVariable ? "k" : null
+                )
+            )
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*is not a path on the host*");
+
+    [Test]
+    public void A_graphql_path_on_the_host_keeps_its_port() =>
+        ConsoleTarget
+            .Resolve(
+                "https://ops.example.com:8443",
+                "/ops/graphql",
+                apiKeyFile: null,
+                tokenFile: null,
+                sendText: false,
+                _ => null
+            )
+            .Endpoint.Should()
+            .Be(new Uri("https://ops.example.com:8443/ops/graphql"));
+
+    [TestCase("https://admin:hunter2@ops.example.com")]
+    [TestCase("https://hunter2@ops.example.com")]
+    [TestCase("hunter2@ops.example.com")]
+    public void A_host_with_a_user_name_or_password_is_refused_without_printing_it(string host) =>
+        FluentActions
+            .Invoking(() => Resolve(host, env: []))
+            .Should()
+            .Throw<InvalidOperationException>()
+            .Where(e =>
+                e.Message.Contains("user name or password") && !e.Message.Contains("hunter2")
+            );
+
     private static ConsoleTarget Resolve(string? host, Dictionary<string, string> env) =>
         ConsoleTarget.Resolve(
             host,
