@@ -58,7 +58,10 @@ pub struct GraphQLMachineServerOptions {
     pub machine: String,
     /// The machine's persisted documents, from the host's manifest, the push (`changed`) included.
     pub documents: Vec<ManifestDocument>,
-    /// The client requests go through. A plain one when `None`.
+    /// The client requests go through. When `None`, one that follows no redirect and, for an `https` endpoint, sends
+    /// nothing but `https`. Build a client of your own with `redirect(Policy::none())` too: a redirect would carry the
+    /// request's headers to whatever host it names. An answer from another origin than the endpoint's, or a redirect,
+    /// fails the request as a [`TransportError`] whichever client sent it.
     pub http: Option<reqwest::Client>,
     /// Headers for each request and each socket's upgrade, asked for every time: how a host authenticates a request.
     pub headers: Option<RequestHeaders>,
@@ -150,6 +153,7 @@ pub struct GraphQLMachineServer {
 struct Inner {
     http: reqwest::Client,
     endpoint: String,
+    endpoint_url: reqwest::Url,
     socket: String,
     machine: String,
     field: String,
@@ -199,14 +203,25 @@ impl GraphQLMachineServer {
             ))
         })?;
         let field = machine_field(&options.machine);
+        let endpoint_url = reqwest::Url::parse(&options.endpoint)
+            .map_err(|e| ConfigError(format!("The endpoint is not an absolute URL: {e}.")))?;
+        let http = match options.http {
+            Some(http) => http,
+            None => reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .https_only(!options.allow_insecure_transport && endpoint_url.scheme() == "https")
+                .build()
+                .map_err(|e| ConfigError(format!("The HTTP client could not be built: {}", e.without_url())))?,
+        };
         let delays = match options.resubscribe_delays {
             Some(delays) if !delays.is_empty() => delays,
             _ => DEFAULT_RESUBSCRIBE_DELAYS.to_vec(),
         };
         Ok(GraphQLMachineServer {
             inner: Arc::new(Inner {
-                http: options.http.unwrap_or_default(),
+                http,
                 endpoint: options.endpoint,
+                endpoint_url,
                 socket: options.socket,
                 push_field: format!("{field}Changed"),
                 field,
@@ -286,6 +301,19 @@ impl Inner {
         let exchange = async {
             let mut response = request.send().await.map_err(transport_error)?;
             let status = response.status();
+            // A redirect is not followed, and an answer a client reached by following one is not the endpoint's.
+            if status.is_redirection() {
+                return Err(TransportError(format!(
+                    "The server answered with a redirect ({}), which is not followed.",
+                    status.as_u16()
+                )));
+            }
+            if response.url().origin() != self.endpoint_url.origin() {
+                return Err(TransportError(
+                    "The request was redirected to another origin than the endpoint's, so its answer is not read."
+                        .to_owned(),
+                ));
+            }
             // Read up to the limit, whether or not the host said the length up front.
             let too_large = || {
                 TransportError(format!(
@@ -902,6 +930,119 @@ mod tests {
 
         assert!(!error.0.contains("SECRET123"), "{}", error.0);
         assert!(!error.0.contains("127.0.0.1"), "{}", error.0);
+    }
+
+    // A loopback HTTP host that answers every request with `answer` and counts the requests it received.
+    async fn http_host(answer: String) -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::Ordering;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let received = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = received.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut tcp, _)) = listener.accept().await else {
+                    return;
+                };
+                let counted = counted.clone();
+                let answer = answer.clone();
+                tokio::spawn(async move {
+                    let mut read = Vec::new();
+                    let mut buffer = [0u8; 4096];
+                    let head = loop {
+                        if let Some(at) = read.windows(4).position(|w| w == b"\r\n\r\n") {
+                            break at;
+                        }
+                        match tcp.read(&mut buffer).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => read.extend_from_slice(&buffer[..n]),
+                        }
+                    };
+                    let length = String::from_utf8_lossy(&read[..head])
+                        .lines()
+                        .filter_map(|line| line.split_once(':'))
+                        .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
+                        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    while read.len() < head + 4 + length {
+                        match tcp.read(&mut buffer).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => read.extend_from_slice(&buffer[..n]),
+                        }
+                    }
+                    counted.fetch_add(1, Ordering::SeqCst);
+                    let _ = tcp.write_all(answer.as_bytes()).await;
+                    let _ = tcp.shutdown().await;
+                });
+            }
+        });
+        (port, received)
+    }
+
+    fn json_answer(body: &str) -> String {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    fn redirect_to(port: u16) -> String {
+        format!(
+            "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/graphql\r\nContent-Length: 0\r\n\
+             Connection: close\r\n\r\n"
+        )
+    }
+
+    fn at(endpoint: String) -> GraphQLMachineServerOptions {
+        with_get(options(&endpoint, "ws://127.0.0.1:9/graphql"))
+    }
+
+    const NOT_FOUND: &str =
+        r#"{"data":{"machines":{"turnstile":{"get":{"problem":{"code":"NOT_FOUND","message":"m"}}}}}}"#;
+
+    #[tokio::test]
+    async fn a_redirect_is_not_followed_and_the_other_host_receives_nothing() {
+        use std::sync::atomic::Ordering;
+
+        let (other, other_received) = http_host(json_answer(NOT_FOUND)).await;
+        let (endpoint, endpoint_received) = http_host(redirect_to(other)).await;
+        let server = GraphQLMachineServer::new(at(format!("http://127.0.0.1:{endpoint}/graphql"))).unwrap();
+
+        let Err(error) = server.get("i-1".into()).await else {
+            panic!("the redirect was answered");
+        };
+
+        assert!(error.0.contains("redirect"), "{}", error.0);
+        assert_eq!(endpoint_received.load(Ordering::SeqCst), 1);
+        assert_eq!(other_received.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn an_answer_a_client_reached_through_a_redirect_is_a_failure() {
+        let (other, _) = http_host(json_answer(NOT_FOUND)).await;
+        let (endpoint, _) = http_host(redirect_to(other)).await;
+        let mut given = at(format!("http://127.0.0.1:{endpoint}/graphql"));
+        // A client of the caller's own that follows redirects.
+        given.http = Some(reqwest::Client::new());
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let Err(error) = server.get("i-1".into()).await else {
+            panic!("the answer from another origin was read");
+        };
+
+        assert!(error.0.contains("another origin"), "{}", error.0);
+    }
+
+    #[tokio::test]
+    async fn an_answer_from_the_endpoint_itself_is_read() {
+        let (endpoint, _) = http_host(json_answer(NOT_FOUND)).await;
+        let server = GraphQLMachineServer::new(at(format!("http://127.0.0.1:{endpoint}/graphql"))).unwrap();
+
+        let answer = server.get("i-1".into()).await.unwrap();
+
+        assert!(matches!(answer, ServerAnswer::Refused(ServerProblem { code, .. }) if code == "NOT_FOUND"));
     }
 
     // How the host answers one connection's connection_init.

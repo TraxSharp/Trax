@@ -169,6 +169,16 @@ export interface HttpExecutorOptions {
 }
 
 /**
+ * Throws unless `response` is the endpoint's own answer: a redirect is never followed (the request is sent with
+ * `redirect: 'error'`), and a `fetch` that followed one anyway, or handed back the redirect itself, fails the request
+ * rather than reading an answer from another host.
+ */
+export function requireNoRedirect(response: Response): void {
+  if (response.redirected || response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400))
+    throw new Error(`The server answered with a redirect (${response.status}), which is not followed.`);
+}
+
+/**
  * Throws unless `endpoint` may carry credentials: an absolute one must be https unless its host is this machine
  * (localhost, 127.0.0.0/8, ::1) or `allowInsecure` is set. A relative one goes to the page's own origin, whatever its
  * scheme. Every machine executor and server runs it; the generated client runs it before each train request too.

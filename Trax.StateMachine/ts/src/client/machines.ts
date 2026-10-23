@@ -21,7 +21,13 @@
  */
 import { RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
-import { requireSecureEndpoint, type HttpExecutorOptions, type SnapshotExecutor, type SnapshotOutput } from './transport';
+import {
+  requireNoRedirect,
+  requireSecureEndpoint,
+  type HttpExecutorOptions,
+  type SnapshotExecutor,
+  type SnapshotOutput,
+} from './transport';
 
 /**
  * One machine document from the host's exported client manifest (`--trax-export-client`): the persisted document of
@@ -160,7 +166,8 @@ type Answered = { answer: TypedAnswer | null | undefined } | { refused: Snapshot
  * sessions above it are unchanged. A GraphQL error (an unauthenticated caller, a document the schema refuses) throws,
  * which the session reports as a transport error; a refusal is a problem, as data, and so is `CLIENT_OUTDATED` or
  * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine. An absolute
- * `http:` endpoint on a host that is not loopback throws unless `allowInsecureTransport` is set.
+ * `http:` endpoint on a host that is not loopback throws unless `allowInsecureTransport` is set. A redirect is not
+ * followed: it fails the request.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineExecutor(
@@ -176,7 +183,10 @@ export function createMachineExecutor(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...options.headers?.() },
       body: JSON.stringify(body),
+      // A redirect would carry the request, and whatever authenticates it, to another host.
+      redirect: 'error',
     });
+    requireNoRedirect(response);
     type Body = {
       data?: { machines?: Record<string, Record<string, unknown>> } | null;
       errors?: { message: string; extensions?: { code?: string } }[];

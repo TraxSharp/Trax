@@ -10,7 +10,9 @@ public sealed record GraphQLMachineServerOptions
 {
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header or a delegating handler, as
-    /// for any other <see cref="System.Net.Http.HttpClient"/>.
+    /// for any other <see cref="System.Net.Http.HttpClient"/>. Build it on a handler with automatic redirects off: a
+    /// redirect drops only <c>Authorization</c>, so any other header would follow it to the new host. An answer from
+    /// another host than <see cref="Endpoint"/>'s fails the request.
     /// </summary>
     public required HttpClient Http { get; init; }
 

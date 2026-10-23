@@ -39,6 +39,7 @@ public sealed record TraxHttpTransportOptions
     /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
     /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. Build it on a handler with automatic
     /// redirects off: a redirect drops only <c>Authorization</c>, so any other header would follow it to the new host.
+    /// An answer from another host than <see cref="Endpoint"/>'s is a <see cref="TraxAnswer.Failure"/>.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -153,7 +154,8 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// host answers a coded refusal with the status it chose; a success with <c>data</c> is one too. Anything else is a
     /// failure (a status that is not success with no errors among them, whatever data came with it), and so is a
     /// body larger than <paramref name="maxResponseSize"/>, which is refused as it arrives rather than read whole, a
-    /// body that breaks off, and a request that outlasts <see cref="HttpClient.Timeout"/>, body included. Throws only
+    /// body that breaks off, an answer from another scheme, host or port than <paramref name="endpoint"/>'s (a
+    /// redirect the client followed), and a request that outlasts <see cref="HttpClient.Timeout"/>, body included. Throws only
     /// when <paramref name="cancellationToken"/> is cancelled. Internal: the endpoint is checked for TLS by whoever
     /// built it, a transport or the machine server.
     /// </summary>
@@ -176,6 +178,10 @@ public sealed class TraxHttpTransport : ITraxTransport
             new MediaTypeWithQualityHeaderValue("application/graphql-response+json")
         );
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        var asked =
+            endpoint.IsAbsoluteUri ? endpoint
+            : http.BaseAddress is { } baseAddress ? new Uri(baseAddress, endpoint)
+            : null;
 
         // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body.
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -189,6 +195,23 @@ public sealed class TraxHttpTransport : ITraxTransport
                     timeout.Token
                 )
                 .ConfigureAwait(false);
+            // A client that follows redirects has already sent the request on; its answer is not the endpoint's.
+            if (
+                asked is not null
+                && response.RequestMessage?.RequestUri is { IsAbsoluteUri: true } answeredBy
+                && Uri.Compare(
+                    asked,
+                    answeredBy,
+                    UriComponents.SchemeAndServer,
+                    UriFormat.Unescaped,
+                    StringComparison.OrdinalIgnoreCase
+                ) != 0
+            )
+                return TraxAnswer.Failed(
+                    $"The request was redirected to {answeredBy.GetLeftPart(UriPartial.Authority)}, which is not "
+                        + "the endpoint's host. Build the HttpClient on a handler with automatic redirects off.",
+                    (int)response.StatusCode
+                );
             var text = await ReadBoundedAsync(response.Content, maxResponseSize, timeout.Token)
                 .ConfigureAwait(false);
             return AnswerOf(response, text, maxResponseSize);
