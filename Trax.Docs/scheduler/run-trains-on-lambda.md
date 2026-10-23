@@ -152,8 +152,10 @@ builder.Services.AddTrax(trax => trax
         })));
 ```
 
-A runner with `AllowUnsignedRequests()` accepts local requests only from the loopback address, so
-a scheduler in a container needs the signing key.
+A runner with `AllowUnsignedRequests()` accepts local requests only in the `Development`
+environment and only from the loopback address, so a scheduler in a container, or a runner under
+any other environment name, needs the signing key. The local routes are for development; a
+deployed function is invoked through Lambda.
 
 ## 5. Test it end to end
 

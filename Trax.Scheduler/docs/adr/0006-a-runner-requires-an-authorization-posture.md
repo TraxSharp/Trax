@@ -41,10 +41,12 @@ endpoint afterwards fails at startup with a message naming the three choices.
 function over HTTP for development, on whatever address the host listens on. A signing key
 applies there as everywhere. `AllowUnsignedRequests()` is a posture for the Lambda invocation
 entry point, which only callers the function's IAM policy admits can reach, so over HTTP it is
-honoured only for a caller on the loopback address; a request from any other address is refused
-with 401. The smaller of the two ways considered: the other was a separate opt-in for unsigned
-local routes, which adds an option whose only safe value is off. A developer who calls the local
-routes from another machine or a container gives the function a signing key.
+honoured only in the `Development` environment, and there only for a caller on the loopback
+address; any other request is refused with 401. Loopback alone was the first answer; the environment
+check keeps a deployed build from serving the routes unsigned at all. A function that serves the local routes unsigned under another environment
+name says so in code, by overriding `AllowUnsignedLocalDevelopmentRequests`, which lifts the
+environment check and not the loopback one. A developer who calls the local routes from another
+machine or a container gives the function a signing key.
 
 **`ITraxRequestHandler` verifies nothing.** It is the step behind the entry points, and trusts the
 authorization of what it is handed. It stays public, because the separately shipped
@@ -178,7 +180,8 @@ request as stale.
 - `SqsJobRunnerHandlerTests` and `TraxLambdaFunctionTests` cover the same posture on the SQS and
   Lambda paths, including a redelivered `Execute` running again and a repeated `Run` refused.
   `TraxLambdaFunctionTests` also pins the local routes: unsigned from another address refused,
-  from loopback served, a signed request served from anywhere, the header checked before the body
+  unsigned outside `Development` refused unless the function opts in, from loopback in
+  `Development` served, a signed request served from anywhere, the header checked before the body
   and the size limit.
 - [Remote Execution](/docs/scheduler/remote-execution) is the rule this produces.
 
@@ -188,6 +191,9 @@ of its own. Sharing nonces across runner instances is
 
 ## Changelog
 
+- **2026-10-23**: The local Lambda routes honour an unsigned posture only in the `Development`
+  environment, or when the function overrides `AllowUnsignedLocalDevelopmentRequests`, and still
+  only for loopback callers. The separate opt-in this record had turned down is the override.
 - **2026-10-23**: The run path's trusted scope covers only the authorization of the train the
   request names; the train runs outside it, so a gated train it queues or runs is checked, and a
   junction reading `IsTrusted` sees false. It used to cover the whole run.

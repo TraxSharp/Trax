@@ -25,7 +25,7 @@ trusted is in [Choosing where trains run](/docs/scheduler/remote-execution#autho
 |---------|-----------|----------------------|
 | `runner.SigningKey = key` | every entry point | Verifies a `Trax-Signature` over the exact request body before reading it |
 | `runner.AuthorizationPolicy = "name"` | `UseTraxJobRunner`, `UseTraxRunEndpoint` | Applies the named ASP.NET Core authorization policy. The policy must admit only the scheduler: one that admits end users lets them run any registered train, gated or not |
-| `runner.AllowUnsignedRequests()` | every entry point | Accepts every request, and logs a warning naming the entry point at startup. `TraxLambdaFunction.RunLocalAsync`'s local routes honour it only for callers on the loopback address |
+| `runner.AllowUnsignedRequests()` | every entry point | Accepts every request, and logs a warning naming the entry point at startup. `TraxLambdaFunction.RunLocalAsync`'s local routes, which are for development, honour it only in the `Development` environment and only for callers on the loopback address |
 
 A signing key and a policy can be combined; the runner then requires both. With neither and no
 `AllowUnsignedRequests()`, mapping an endpoint throws
