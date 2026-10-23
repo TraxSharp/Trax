@@ -246,8 +246,9 @@ endpoint, with the same `SigningKey`. See
 
 Anyone may submit content (`reviewContent`) and look up a result. `sendViolationNotice` and
 `generateModerationReport` carry `[TraxAuthorize(Roles = "Moderator")]`; the only key with that role
-is a demo key registered in Development. The runner needs no authorization service for them: a remote
-run executes inside a trusted scope, because the API already checked the caller. The `operations`
+is a demo key registered in Development. The runner needs no authorization service for them: it
+treats the train a remote run names as already authorized, because the API checked the caller; any
+other train that run starts is checked as usual. The `operations`
 namespace is exposed for the operations console and gated to a separate Operator role, held by a
 second demo key (`contentshield-operator-key-do-not-use-in-production`). It is not the Moderator
 role, because a subscriber the operations gate admits receives every train's events, the anonymous
