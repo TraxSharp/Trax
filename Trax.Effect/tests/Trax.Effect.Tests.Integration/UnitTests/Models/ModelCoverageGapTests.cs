@@ -54,7 +54,7 @@ public class ModelCoverageGapTests
     #region Metadata.AddException
 
     [Test]
-    public void Metadata_AddException_MessageDeserializableAsTrainExceptionData_PopulatesFromJson()
+    public void Metadata_AddException_TrainExceptionMessageDeserializableAsTrainExceptionData_PopulatesFromJson()
     {
         var meta = NewMetadata();
         var data = new TrainExceptionData
@@ -68,7 +68,7 @@ public class ModelCoverageGapTests
         };
         var json = JsonSerializer.Serialize(data);
 
-        meta.AddException(new Exception(json));
+        meta.AddException(new TrainException(json));
 
         meta.FailureException.Should().Be("InvalidOperationException");
         meta.FailureReason.Should().Be("boom");
@@ -94,7 +94,7 @@ public class ModelCoverageGapTests
         Exception ex;
         try
         {
-            throw new Exception(json);
+            throw new TrainException(json);
         }
         catch (Exception e)
         {
@@ -136,6 +136,39 @@ public class ModelCoverageGapTests
         meta.AddException(new InvalidOperationException(RecordJson((int)FailureClass.Permanent)));
 
         meta.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    [Test]
+    public void Metadata_AddException_OtherExceptionWithARecordShapedMessage_KeepsItsOwnTypeAndStack()
+    {
+        var meta = NewMetadata();
+        var json = JsonSerializer.Serialize(
+            new TrainExceptionData
+            {
+                TrainName = "TName",
+                TrainExternalId = "ext",
+                Type = "SomethingElse",
+                Junction = "OtherJunction",
+                Message = "other",
+                StackTrace = "other stack",
+            }
+        );
+        Exception ex;
+        try
+        {
+            throw new InvalidOperationException(json);
+        }
+        catch (Exception e)
+        {
+            ex = e;
+        }
+
+        meta.AddException(ex);
+
+        meta.FailureException.Should().Be(nameof(InvalidOperationException));
+        meta.FailureReason.Should().Be(json);
+        meta.FailureJunction.Should().Be("TrainException");
+        meta.StackTrace.Should().Be(ex.StackTrace).And.NotContain("other stack");
     }
 
     [Test]
