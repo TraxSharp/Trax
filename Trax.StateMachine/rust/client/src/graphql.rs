@@ -3,14 +3,19 @@
 //! `<machine>Changed` subscription, subscribed by its id over graphql-transport-ws.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
+use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use trax_state_machine::{Map, Value};
 
 use crate::controller::{codes, without_nulls};
@@ -30,23 +35,87 @@ pub struct ManifestDocument {
     pub document: String,
 }
 
+/// What a provider answers with: a future, run once each time the value is needed.
+pub type Provided<T> = Pin<Box<dyn Future<Output = Result<T, TransportError>> + Send>>;
+
+/// The `connection_init` payload, asked for on every connection so a rotating token stays fresh; `None` sends none.
+/// An error fails that connection, which is tried again after the resubscribe delays.
+pub type ConnectionParams = Arc<dyn Fn() -> Provided<Option<Value>> + Send + Sync>;
+
+/// Headers asked for on every request and every socket's upgrade, so a rotating token stays fresh. An error fails
+/// that request as a [`TransportError`].
+pub type RequestHeaders = Arc<dyn Fn() -> Provided<HeaderMap> + Send + Sync>;
+
 /// How a [`GraphQLMachineServer`] reaches its host.
 pub struct GraphQLMachineServerOptions {
-    /// The host's GraphQL endpoint (`https://host/trax/graphql`).
+    /// The host's GraphQL endpoint (`https://host/trax/graphql`). It must be `https` unless its host is loopback or
+    /// `allow_insecure_transport` is set.
     pub endpoint: String,
-    /// The host's socket endpoint (`wss://host/trax/graphql`).
+    /// The host's socket endpoint (`wss://host/trax/graphql`). It must be `wss` unless its host is loopback or
+    /// `allow_insecure_transport` is set.
     pub socket: String,
     /// The machine's id (`checkout`).
     pub machine: String,
     /// The machine's persisted documents, from the host's manifest, the push (`changed`) included.
     pub documents: Vec<ManifestDocument>,
-    /// The client requests go through. Set default headers on it for authentication. A plain one when `None`.
+    /// The client requests go through. A plain one when `None`.
     pub http: Option<reqwest::Client>,
-    /// The `connection_init` payload, how a host authenticates a socket. None sends none.
-    pub connection_params: Option<Value>,
+    /// Headers for each request and each socket's upgrade, asked for every time: how a host authenticates a request.
+    pub headers: Option<RequestHeaders>,
+    /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
+    pub connection_params: Option<ConnectionParams>,
     /// Delays before subscribing again after a stream that ended without saying why. The last repeats.
     pub resubscribe_delays: Option<Vec<Duration>>,
+    /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
+    /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
+    pub connect_timeout: Duration,
+    /// How long one request may take, from sending it to reading the last byte of its answer, before it fails as a
+    /// [`TransportError`]. [`DEFAULT_REQUEST_TIMEOUT`] (30 seconds) by default.
+    pub request_timeout: Duration,
+    /// The largest response body, and the largest socket message or frame, the host may send, in bytes. A larger
+    /// response fails its request as a [`TransportError`]; a larger message ends the stream, which is subscribed again.
+    /// [`DEFAULT_MAX_MESSAGE_SIZE`] (16 MiB) by default.
+    pub max_message_size: usize,
+    /// Accepts an `http` endpoint or a `ws` socket on a host that is not loopback. Off by default: whatever
+    /// authenticates the client would travel in cleartext.
+    pub allow_insecure_transport: bool,
 }
+
+impl GraphQLMachineServerOptions {
+    /// Options for one machine's documents at `endpoint` and `socket`, with every other choice left to its default.
+    pub fn new(
+        endpoint: impl Into<String>,
+        socket: impl Into<String>,
+        machine: impl Into<String>,
+        documents: Vec<ManifestDocument>,
+    ) -> Self {
+        GraphQLMachineServerOptions {
+            endpoint: endpoint.into(),
+            socket: socket.into(),
+            machine: machine.into(),
+            documents,
+            http: None,
+            headers: None,
+            connection_params: None,
+            resubscribe_delays: None,
+            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
+            allow_insecure_transport: false,
+        }
+    }
+}
+
+type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// The largest response body or socket message a host may send, in bytes, by default: 16 MiB.
+pub const DEFAULT_MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+
+/// How long a socket may take to connect and be acknowledged before the attempt counts as failed, by default.
+pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long one request may take before it fails, by default.
+pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The default delays before subscribing again after a stream ended without a reason.
 pub const DEFAULT_RESUBSCRIBE_DELAYS: [Duration; 3] =
@@ -85,15 +154,22 @@ struct Inner {
     push_field: String,
     documents: HashMap<String, Document>,
     changed: String,
-    connection_params: Option<Value>,
+    headers: Option<RequestHeaders>,
+    connection_params: Option<ConnectionParams>,
     resubscribe_delays: Vec<Duration>,
+    connect_timeout: Duration,
+    request_timeout: Duration,
+    max_message_size: usize,
 }
 
 impl GraphQLMachineServer {
-    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`.
+    /// Builds the server for one machine. Refuses a machine with no documents, or none for `changed`, and an endpoint
+    /// or socket that is not over TLS on a host that is not loopback unless `allow_insecure_transport` is set.
     pub fn new(options: GraphQLMachineServerOptions) -> Result<Self, ConfigError> {
         // The socket's TLS needs a process-wide crypto provider; another one already installed is kept.
         let _ = rustls::crypto::ring::default_provider().install_default();
+        require_secure(&options.endpoint, "https", options.allow_insecure_transport)?;
+        require_secure(&options.socket, "wss", options.allow_insecure_transport)?;
         if options.documents.is_empty() {
             return Err(ConfigError(format!(
                 "The machine '{}' has no persisted documents. Export the host's client manifest and pass its \
@@ -135,8 +211,12 @@ impl GraphQLMachineServer {
                 machine: options.machine,
                 documents,
                 changed,
+                headers: options.headers,
                 connection_params: options.connection_params,
                 resubscribe_delays: delays,
+                connect_timeout: options.connect_timeout,
+                request_timeout: options.request_timeout,
+                max_message_size: options.max_message_size,
             }),
         })
     }
@@ -190,17 +270,51 @@ impl Inner {
         body.insert("id".into(), Value::from(document.id.as_str()));
         body.insert("variables".into(), Value::Object(variables));
 
-        let response = self
+        let mut request = self
             .http
             .post(&self.endpoint)
             .header("content-type", "application/json")
-            .header("accept", "application/json")
-            .body(Value::Object(body).to_json())
-            .send()
+            .header("accept", "application/json");
+        if let Some(headers) = &self.headers {
+            request = request.headers(headers().await?);
+        }
+        let request = request.body(Value::Object(body).to_json());
+        // The whole exchange, sending and reading the answer, within the request timeout: a host that never answers
+        // fails the request rather than holding it forever.
+        let exchange = async {
+            let mut response = request.send().await.map_err(transport_error)?;
+            let status = response.status();
+            // Read up to the limit, whether or not the host said the length up front.
+            let too_large = || {
+                TransportError(format!(
+                    "The server answered with a body larger than {} bytes.",
+                    self.max_message_size
+                ))
+            };
+            if response
+                .content_length()
+                .is_some_and(|n| n > self.max_message_size as u64)
+            {
+                return Err(too_large());
+            }
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(transport_error)? {
+                if bytes.len() + chunk.len() > self.max_message_size {
+                    return Err(too_large());
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok::<_, TransportError>((status, bytes))
+        };
+        let (status, bytes) = tokio::time::timeout(self.request_timeout, exchange)
             .await
-            .map_err(|e| TransportError(e.to_string()))?;
-        let status = response.status();
-        let text = response.text().await.map_err(|e| TransportError(e.to_string()))?;
+            .map_err(|_| {
+                TransportError(format!(
+                    "The server did not answer within {} ms.",
+                    self.request_timeout.as_millis()
+                ))
+            })??;
+        let text = String::from_utf8_lossy(&bytes);
         let answered = Value::parse(&text).ok();
 
         // A GraphQL error with a code is the host's to answer with whatever status it chose.
@@ -251,12 +365,17 @@ impl Inner {
     }
 }
 
+// A request that failed, said without its URL: a query can carry a token.
+fn transport_error(error: reqwest::Error) -> TransportError {
+    TransportError(error.without_url().to_string())
+}
+
 fn answer_of(answer: &Value) -> Result<ServerAnswer, TransportError> {
     if let Some(problem) = answer.get("problem").and_then(problem_of) {
         return Ok(ServerAnswer::Refused(problem));
     }
     let snapshot = snapshot_of(answer)
-        .ok_or_else(|| TransportError("The server answered a snapshot without a state or a revision.".to_owned()))?;
+        .ok_or_else(|| TransportError("The server answered a snapshot without a state.".to_owned()))?;
     Ok(ServerAnswer::Stored {
         id: answer.get("id").and_then(|i| i.as_str()).map(str::to_owned),
         snapshot,
@@ -265,7 +384,12 @@ fn answer_of(answer: &Value) -> Result<ServerAnswer, TransportError> {
 
 fn snapshot_of(value: &Value) -> Option<ServerSnapshot> {
     let state = value.get("state")?.as_str()?.to_owned();
-    let revision = value.get("revision")?.as_f64()? as i64;
+    // A revision the store does not record stays `None`: it is not revision 0, which would order every later answer
+    // below it.
+    let revision = match value.get("revision") {
+        None | Some(Value::Null) => None,
+        Some(revision) => Some(revision.as_f64()? as i64),
+    };
     let context = value
         .get("context")
         .and_then(|c| c.as_object())
@@ -378,25 +502,46 @@ impl Inner {
         }
     }
 
-    async fn subscribe_once(&self, id: &str, sink: &StreamSink, attempt: &mut usize) -> Ended {
+    // Opens a socket and has it acknowledged; `None` when it could not be, the host's refusal included.
+    async fn connect(&self) -> Option<Socket> {
         let Ok(mut request) = self.socket.as_str().into_client_request() else {
-            return Ended::Again;
+            return None;
         };
+        if let Some(headers) = &self.headers {
+            let Ok(headers) = headers().await else {
+                return None;
+            };
+            request.headers_mut().extend(headers);
+        }
         request.headers_mut().insert(
             "Sec-WebSocket-Protocol",
             HeaderValue::from_static("graphql-transport-ws"),
         );
-        let Ok((mut socket, _)) = tokio_tungstenite::connect_async(request).await else {
-            return Ended::Again;
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(self.max_message_size))
+            .max_frame_size(Some(self.max_message_size));
+        let Ok((mut socket, _)) = tokio_tungstenite::connect_async_with_config(request, Some(config), false).await
+        else {
+            return None;
         };
 
+        // Asked for on every connection, so a token that expired since the last one is not sent again.
         let mut init = Map::new();
         init.insert("type".into(), Value::from("connection_init"));
         if let Some(params) = &self.connection_params {
-            init.insert("payload".into(), params.clone());
+            match params().await {
+                Ok(Some(payload)) => {
+                    init.insert("payload".into(), payload);
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    let _ = socket.close(None).await;
+                    return None;
+                }
+            }
         }
         if socket.send(Message::text(Value::Object(init).to_json())).await.is_err() {
-            return Ended::Again;
+            return None;
         }
         // Acknowledged, or closed before: a host that turns the caller away closes here.
         loop {
@@ -414,9 +559,17 @@ impl Inner {
                     _ => {}
                 },
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => {}
-                _ => return Ended::Again,
+                _ => return None,
             }
         }
+        Some(socket)
+    }
+
+    async fn subscribe_once(&self, id: &str, sink: &StreamSink, attempt: &mut usize) -> Ended {
+        // A host that accepts the connection but never acknowledges it counts as one that refused it.
+        let Ok(Some(mut socket)) = tokio::time::timeout(self.connect_timeout, self.connect()).await else {
+            return Ended::Again;
+        };
 
         let mut variables = Map::new();
         variables.insert("id".into(), Value::from(id));
@@ -498,11 +651,39 @@ impl Inner {
             sink(StreamMessage::Reload);
             return None;
         }
-        let snapshot = snapshot_of(change)?;
+        let snapshot = snapshot_of(change).filter(|s| s.revision.is_some())?;
         *attempt = 0;
         sink(StreamMessage::Changed(snapshot));
         None
     }
+}
+
+// An endpoint must be over TLS unless its host is this machine (localhost, 127.0.0.0/8, ::1) or the caller accepts
+// cleartext. The error names the scheme and host only, never the path or the query.
+fn require_secure(endpoint: &str, secure_scheme: &str, allow_insecure: bool) -> Result<(), ConfigError> {
+    let url =
+        reqwest::Url::parse(endpoint).map_err(|e| ConfigError(format!("The endpoint is not an absolute URL: {e}.")))?;
+    if allow_insecure || url.scheme() == secure_scheme {
+        return Ok(());
+    }
+    let host = url.host_str().unwrap_or("");
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host.parse::<std::net::Ipv4Addr>().is_ok_and(|ip| ip.is_loopback())
+        || host
+            .strip_prefix('[')
+            .and_then(|h| h.strip_suffix(']'))
+            .and_then(|h| h.parse::<std::net::Ipv6Addr>().ok())
+            .is_some_and(|ip| ip.is_loopback());
+    if loopback {
+        return Ok(());
+    }
+    let port = url.port().map(|p| format!(":{p}")).unwrap_or_default();
+    Err(ConfigError(format!(
+        "The endpoint {}://{host}{port} is not over TLS, so whatever authenticates the client would travel in \
+         cleartext. Use {secure_scheme}://, a loopback host, or set allow_insecure_transport when the network is \
+         trusted.",
+        url.scheme()
+    )))
 }
 
 /// The variables a document declares (`$id: UUID!` declares `id`).
@@ -564,6 +745,15 @@ mod tests {
     }
 
     #[test]
+    fn an_answer_without_a_revision_has_none() {
+        let answer = Value::parse(r#"{"id":"i-1","revision":null,"state":"Locked","context":{}}"#).unwrap();
+        let ServerAnswer::Stored { snapshot, .. } = answer_of(&answer).unwrap() else {
+            panic!("expected a snapshot");
+        };
+        assert_eq!(snapshot.revision, None);
+    }
+
+    #[test]
     fn a_document_declares_its_variables() {
         let declared =
             declared_variables("mutation Op($id: UUID!, $input: CoinInput!, $requestId: String!) { x(id: $id) }");
@@ -571,5 +761,391 @@ mod tests {
             declared,
             ["id", "input", "requestId"].iter().map(|s| s.to_string()).collect()
         );
+    }
+
+    fn options(endpoint: &str, socket: &str) -> GraphQLMachineServerOptions {
+        GraphQLMachineServerOptions::new(
+            endpoint,
+            socket,
+            "turnstile",
+            vec![ManifestDocument {
+                id: "changed-1".into(),
+                operation: "changed".into(),
+                document: "subscription Changed($id: UUID!) { x }".into(),
+            }],
+        )
+    }
+
+    #[test]
+    fn a_cleartext_endpoint_on_another_host_is_refused() {
+        for (endpoint, socket) in [
+            ("http://api.example.com/graphql", "wss://api.example.com/graphql"),
+            ("https://api.example.com/graphql", "ws://api.example.com/graphql"),
+            ("http://10.0.0.5/graphql", "wss://10.0.0.5/graphql"),
+            ("https://[2001:db8::1]/graphql", "ws://[2001:db8::1]/graphql"),
+        ] {
+            let Err(error) = GraphQLMachineServer::new(options(endpoint, socket)) else {
+                panic!("{endpoint} {socket} was accepted");
+            };
+            assert!(error.0.contains("not over TLS"), "{}", error.0);
+        }
+    }
+
+    #[test]
+    fn the_refusal_names_the_host_but_not_the_query() {
+        let Err(error) = GraphQLMachineServer::new(options(
+            "http://api.example.com:8080/graphql?access_token=SECRET",
+            "wss://api.example.com/graphql",
+        )) else {
+            panic!("accepted");
+        };
+        assert!(error.0.contains("http://api.example.com:8080"), "{}", error.0);
+        assert!(!error.0.contains("SECRET"), "{}", error.0);
+    }
+
+    #[test]
+    fn tls_or_a_loopback_host_is_accepted() {
+        for (endpoint, socket) in [
+            ("https://api.example.com/graphql", "wss://api.example.com/graphql"),
+            ("http://localhost:5000/graphql", "ws://localhost:5000/graphql"),
+            ("http://127.0.0.1:5000/graphql", "ws://127.0.0.1:5000/graphql"),
+            ("http://127.4.5.6/graphql", "ws://127.4.5.6/graphql"),
+            ("http://[::1]:5000/graphql", "ws://[::1]:5000/graphql"),
+        ] {
+            assert!(
+                GraphQLMachineServer::new(options(endpoint, socket)).is_ok(),
+                "{endpoint} {socket}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_caller_may_accept_cleartext_explicitly() {
+        let mut given = options("http://api.example.com/graphql", "ws://api.example.com/graphql");
+        given.allow_insecure_transport = true;
+        assert!(GraphQLMachineServer::new(given).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_failed_request_never_says_its_url() {
+        let mut given = options(
+            "http://127.0.0.1:9/graphql?access_token=SECRET123",
+            "ws://127.0.0.1:9/graphql",
+        );
+        given.documents.push(ManifestDocument {
+            id: "get-1".into(),
+            operation: "get".into(),
+            document: "query Get($id: UUID!) { x }".into(),
+        });
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let Err(error) = server.get("i-1".into()).await else {
+            panic!("nothing listens on port 9");
+        };
+
+        assert!(!error.0.contains("SECRET123"), "{}", error.0);
+        assert!(!error.0.contains("127.0.0.1"), "{}", error.0);
+    }
+
+    // How the host answers one connection's connection_init.
+    #[derive(Clone, Copy)]
+    enum Reply {
+        // Closes it with 4403, as a host refuses an expired token.
+        Refuse,
+        Acknowledge,
+        // Says nothing and holds the connection open.
+        Silent,
+        // Acknowledges it, then sends a 64 KiB message.
+        Flood,
+    }
+
+    type Heard = tokio::sync::mpsc::UnboundedReceiver<(Option<String>, Option<String>)>;
+
+    // A host on a loopback port that records each connection's authorization header and connection_init payload and
+    // answers connection n (from 0) as `reply(n)` says.
+    async fn recording_host(reply: fn(usize) -> Reply) -> (u16, Heard) {
+        use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
+        use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+        use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (seen, heard) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            for n in 0.. {
+                let (tcp, _) = listener.accept().await.unwrap();
+                let seen = seen.clone();
+                tokio::spawn(async move {
+                    let mut authorization = None;
+                    let mut socket =
+                        tokio_tungstenite::accept_hdr_async(tcp, |request: &Request, mut response: Response| {
+                            authorization = request
+                                .headers()
+                                .get("authorization")
+                                .map(|v| v.to_str().unwrap().to_owned());
+                            response.headers_mut().insert(
+                                "Sec-WebSocket-Protocol",
+                                HeaderValue::from_static("graphql-transport-ws"),
+                            );
+                            Ok(response)
+                        })
+                        .await
+                        .unwrap();
+                    let Some(Ok(Message::Text(init))) = socket.next().await else {
+                        return;
+                    };
+                    let token = Value::parse(init.as_str())
+                        .unwrap()
+                        .get("payload")
+                        .and_then(|p| p.get("token"))
+                        .and_then(|t| t.as_str())
+                        .map(str::to_owned);
+                    let _ = seen.send((authorization, token));
+                    match reply(n) {
+                        Reply::Acknowledge => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                        }
+                        Reply::Silent => {}
+                        Reply::Flood => {
+                            let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
+                            let large = format!(r#"{{"type":"ping","payload":"{}"}}"#, "x".repeat(64 * 1024));
+                            let _ = socket.send(Message::text(large)).await;
+                        }
+                        Reply::Refuse => {
+                            let _ = socket
+                                .close(Some(CloseFrame {
+                                    code: CloseCode::Library(4403),
+                                    reason: "Forbidden".into(),
+                                }))
+                                .await;
+                            return;
+                        }
+                    }
+                    while let Some(Ok(_)) = socket.next().await {}
+                });
+            }
+        });
+        (port, heard)
+    }
+
+    #[tokio::test]
+    async fn every_connection_asks_for_its_headers_and_params_again() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let (port, mut heard) = recording_host(|n| if n == 0 { Reply::Refuse } else { Reply::Acknowledge }).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        let headers_asked = Arc::new(AtomicU32::new(0));
+        let params_asked = Arc::new(AtomicU32::new(0));
+        let asked = headers_asked.clone();
+        given.headers = Some(Arc::new(move || {
+            let n = asked.fetch_add(1, Ordering::SeqCst) + 1;
+            Box::pin(async move {
+                let mut headers = HeaderMap::new();
+                headers.insert("authorization", HeaderValue::from_str(&format!("Bearer {n}")).unwrap());
+                Ok(headers)
+            })
+        }));
+        let asked = params_asked.clone();
+        given.connection_params = Some(Arc::new(move || {
+            let n = asked.fetch_add(1, Ordering::SeqCst) + 1;
+            Box::pin(async move {
+                let mut payload = Map::new();
+                payload.insert("token".into(), Value::from(format!("t{n}")));
+                Ok(Some(Value::Object(payload)))
+            })
+        }));
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        let first = tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let second = tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+
+        assert_eq!(first, (Some("Bearer 1".into()), Some("t1".into())));
+        assert_eq!(second, (Some("Bearer 2".into()), Some("t2".into())));
+    }
+
+    #[tokio::test]
+    async fn a_connection_never_acknowledged_is_given_up_after_the_connect_timeout() {
+        let (port, mut heard) = recording_host(|_| Reply::Silent).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.connect_timeout = Duration::from_millis(100);
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert!(again.is_ok(), "the first connection was never given up");
+    }
+
+    #[test]
+    fn the_connect_timeout_is_ten_seconds_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.connect_timeout, Duration::from_secs(10));
+    }
+
+    // A host on a loopback port that answers every request with a body of `size` bytes, with or without its length.
+    async fn large_answer_host(size: usize, say_length: bool) -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let (mut tcp, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut request = Vec::new();
+                    let mut buffer = [0u8; 4096];
+                    while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                        let Ok(n) = tcp.read(&mut buffer).await else { return };
+                        if n == 0 {
+                            return;
+                        }
+                        request.extend_from_slice(&buffer[..n]);
+                    }
+                    let body = format!(r#"{{"data":{{"pad":"{}"}}}}"#, "x".repeat(size));
+                    let head = if say_length {
+                        format!(
+                            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                            body.len()
+                        )
+                    } else {
+                        "HTTP/1.1 200 OK\r\nconnection: close\r\n\r\n".to_owned()
+                    };
+                    let _ = tcp.write_all(head.as_bytes()).await;
+                    let _ = tcp.write_all(body.as_bytes()).await;
+                    let _ = tcp.shutdown().await;
+                });
+            }
+        });
+        port
+    }
+
+    fn with_get(mut given: GraphQLMachineServerOptions) -> GraphQLMachineServerOptions {
+        given.documents.push(ManifestDocument {
+            id: "get-1".into(),
+            operation: "get".into(),
+            document: "query Get($id: UUID!) { x }".into(),
+        });
+        given
+    }
+
+    #[tokio::test]
+    async fn a_response_larger_than_the_limit_fails_the_request() {
+        for say_length in [true, false] {
+            let port = large_answer_host(64 * 1024, say_length).await;
+            let mut given = with_get(options(
+                &format!("http://127.0.0.1:{port}/graphql"),
+                &format!("ws://127.0.0.1:{port}/graphql"),
+            ));
+            given.max_message_size = 1024;
+            let server = GraphQLMachineServer::new(given).unwrap();
+
+            let Err(error) = server.get("i-1".into()).await else {
+                panic!("a body over the limit was read");
+            };
+
+            assert!(error.0.contains("larger than 1024"), "{}", error.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_response_within_the_limit_is_read() {
+        let port = large_answer_host(512, false).await;
+        let mut given = with_get(options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        ));
+        given.max_message_size = 1024;
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let answer = server.get("i-1".into()).await.unwrap();
+
+        assert!(matches!(answer, ServerAnswer::Refused(p) if p.code == codes::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn a_socket_message_larger_than_the_limit_ends_the_stream() {
+        let (port, mut heard) = recording_host(|n| if n == 0 { Reply::Flood } else { Reply::Silent }).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.max_message_size = 1024;
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+
+        let _stream = server.subscribe("i-1".into(), Arc::new(|_| {}));
+        let wait = Duration::from_secs(10);
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert!(again.is_ok(), "the stream outlived a message over the limit");
+    }
+
+    // A host on a loopback port that reads each request and never finishes answering it: with `send_head`, it sends
+    // the status line and headers of a long body and then nothing more.
+    async fn stalled_host(send_head: bool) -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let (mut tcp, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut buffer = [0u8; 4096];
+                    let _ = tcp.read(&mut buffer).await;
+                    if send_head {
+                        let _ = tcp.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 1000\r\n\r\n{").await;
+                    }
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    drop(tcp);
+                });
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn a_request_the_host_never_answers_fails_after_the_request_timeout() {
+        for send_head in [false, true] {
+            let port = stalled_host(send_head).await;
+            let mut given = with_get(options(
+                &format!("http://127.0.0.1:{port}/graphql"),
+                &format!("ws://127.0.0.1:{port}/graphql"),
+            ));
+            given.request_timeout = Duration::from_millis(200);
+            let server = GraphQLMachineServer::new(given).unwrap();
+
+            let answered = tokio::time::timeout(Duration::from_secs(10), server.get("i-1".into())).await;
+
+            let Ok(Err(error)) = answered else {
+                panic!("the request was not given up (head sent: {send_head})");
+            };
+            assert!(error.0.contains("did not answer within 200 ms"), "{}", error.0);
+        }
+    }
+
+    #[test]
+    fn the_request_timeout_is_thirty_seconds_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.request_timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn the_limit_is_sixteen_mebibytes_by_default() {
+        let given = options("https://api.example.com/graphql", "wss://api.example.com/graphql");
+        assert_eq!(given.max_message_size, 16 * 1024 * 1024);
     }
 }

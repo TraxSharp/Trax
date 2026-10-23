@@ -11,6 +11,7 @@ use crate::formats::duration_ticks;
 use crate::ir::{self, FieldType, IrError, Reduction, Rule, Schema};
 use crate::refusal::{Refusal, RefusalCode};
 use crate::rules::{self, Unhandled};
+use crate::stored::{stored_text_problems, unstorable};
 use crate::value::{json_copy_map, quote, write_object, JsString, Map, Value};
 
 /// A handler for a custom guard: reads the context and the input, says whether the edge may be taken.
@@ -570,11 +571,16 @@ impl Machine {
         let Ok(node) = Value::parse(text) else {
             return refuse(RefusalCode::Malformed, "Input is not valid JSON.");
         };
+        // What the C# reader refuses although the parser reads it (stored.rs): too deep, a key twice, a lone surrogate
+        // in what it reads first.
+        let unreadable = stored_text_problems(text);
+        if unreadable.root || unreadable.members.contains("machine") || unreadable.members.contains("state") {
+            return refuse(RefusalCode::Malformed, "The snapshot could not be read.");
+        }
         let Value::Object(obj) = &node else {
             return refuse(RefusalCode::Malformed, "Snapshot must be a JSON object.");
         };
         let member = |key: &str| obj.get(&JsString::from(key));
-        // A string with a lone surrogate is still a string here, as in JSON.parse: it names no machine and no state.
         let string = |key: &str| match member(key) {
             Some(Value::String(s)) => Some(s),
             _ => None,
@@ -615,7 +621,10 @@ impl Machine {
             );
         };
         let mut state = state.to_owned();
+        // Read before the copy, which turns a number outside the range of a double into null.
+        let stored_problem = (version == self.version).then(|| unstorable(context)).flatten();
         let mut context = json_copy_map(context);
+        let migrated = version != self.version;
         let mut version = version;
         while version < self.version {
             let Some(migrate) = self.migrations.get(&version) else {
@@ -629,6 +638,14 @@ impl Machine {
         }
         if !self.state_set.contains(&state) {
             return refuse(RefusalCode::UnknownState, format!("Unknown state '{state}'."));
+        }
+        // A context the C# reader cannot read, or holding a value no store can hold, is malformed, as there.
+        if unreadable.members.contains("context") {
+            return refuse(RefusalCode::Malformed, "The snapshot could not be read.");
+        }
+        let stored_problem = if migrated { unstorable(&context) } else { stored_problem };
+        if let Some(problem) = stored_problem {
+            return refuse(RefusalCode::Malformed, problem);
         }
         if let Some(problem) = self.context_problem(&state, &context, from_server) {
             return refuse(RefusalCode::InvalidContext, problem);

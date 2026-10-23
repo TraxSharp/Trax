@@ -1,0 +1,22 @@
+{
+  "about": "A due time the host writes with an offset other than UTC is the instant it names: the view holds that instant, not the wall clock read as UTC or as local time.",
+  "machine": "reminder",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "open": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "approve": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "extend": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 2, "state": "Review", "context": {}, "dueAt": "2026-10-22T12:10:00.000+02:00" } },
+    { "view": { "status": "ready", "state": "Review", "dueAt": "2026-10-22T10:10:00Z" } },
+    { "push": { "revision": 3, "state": "Review", "context": {}, "dueAt": "2026-10-22T05:20:00-05:00" } },
+    { "view": { "revision": 3, "dueAt": "2026-10-22T10:20:00Z" } }
+  ]
+}

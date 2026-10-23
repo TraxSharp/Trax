@@ -470,6 +470,26 @@ describe('ServerMachineController', () => {
     expect(controller.get().snapshot).toEqual(controller.get().confirmed);
   });
 
+  it('takes an answer without a revision, and whatever comes after it', async () => {
+    const { server, controller } = await ready();
+    const stream = server.stream('i-1');
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ revision: 5 }) });
+    await flushMicrotasks();
+
+    void controller.send('Coin', { coin: 'quarter' });
+    await flushMicrotasks();
+    server.events[0].resolve({ kind: 'ok', snapshot: serverSnapshot({ revision: null, ...unlocked('quarter') }) });
+    await flushMicrotasks();
+    expect(controller.get().revision).toBeNull();
+    expect(controller.get().confirmed).toEqual(turnstile.snapshotAt('Unlocked', { paidWith: 'quarter' }));
+
+    stream.push({ type: 'snapshot', snapshot: serverSnapshot({ revision: 2 }) });
+    await flushMicrotasks();
+
+    expect(controller.get().revision).toBe(2);
+    expect(controller.get().confirmed).toEqual(turnstile.snapshotAt('Locked', {}));
+  });
+
   it('a skipped revision just renders the newer snapshot', async () => {
     const { server, controller } = await ready();
     const stream = server.stream('i-1');
@@ -839,6 +859,19 @@ describe('ServerMachineController', () => {
 
       expect(controller.get().status).toBe('stopped');
       expect(controller.get().error?.code).toBe('CLIENT_OUTDATED');
+    });
+
+    it('sends an event through a custom reduction with no prediction, and predicts nothing after it', async () => {
+      const { server, controller } = await open({ kind: 'ok', snapshot: serverSnapshot({ state: 'Cart', context: cart }) });
+
+      void controller.send('AddItem', { item: 'pear' });
+      void controller.send('Pay');
+      await flushMicrotasks();
+
+      expect(server.events).toHaveLength(1);
+      expect(server.events[0].request.clientResult).toBeUndefined();
+      expect(controller.get().snapshot).toEqual(priced.snapshotAt('Cart', cart));
+      expect(controller.can('AddItem', { item: 'pear' })).toBe(true);
     });
 
     it('does not predict a transition into a state whose custom rule it cannot check', async () => {

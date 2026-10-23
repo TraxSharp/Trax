@@ -96,11 +96,13 @@ public static class MachinePredictor
 
 | Member | What it is |
 | --- | --- |
-| `MachinePredictor.FromIr(machine)` | The predictor built from the machine's IR as the manifest lists it, with an [`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine): no reference to the host's assembly, the way every language's client builds its machine. A snapshot the server sends is read trusting the custom state requirements it has no handler for; an event into such a state is not predicted. |
+| `MachinePredictor.FromIr(machine)` | The predictor built from the machine's IR as the manifest lists it, with an [`IrMachine`](/docs/sdk-reference/statemachine-api/ir-machine): no reference to the host's assembly, the way every language's client builds its machine. A snapshot the server sends is read trusting the custom state requirements it has no handler for. It holds no handler for any custom rule, so an event with an edge whose guard or reduction is custom, or that enters a state with a custom requirement, is sent with no prediction, and `CanSend` says only whether the state has an edge for it. |
 | `MachinePredictor.For(machine)` | The predictor over a compiled machine's engine (`BuiltMachine`, what `MachineBuilder.Build` answers). Its `IrHash` is the SHA-256 of the machine's exported IR; the controller refuses one whose hash is not the manifest's, since the server would answer every request `CLIENT_OUTDATED`. |
 | `IMachinePredictor` | What the controller predicts with: `IrHash`, `Advance`, `Rehydrate`, `Serialize`, `CanFire` and `AvailableTriggers`, each the engine's own. |
 
-`FromIr` is the usual choice: the app needs only the manifest. `For` suits an app that already compiles the host's
+`FromIr` is the usual choice: the app needs only the manifest. It has no handler for a custom rule, so an event whose
+prediction depends on a custom guard, custom state requirement or custom reduction goes with no `clientResult`, and the
+view shows the server's answer when it comes rather than a guess. `For` suits an app that already compiles the host's
 machine, and custom rules then predict with their C# handlers. Without a predictor the app shows each event once the
 server answers it.
 
@@ -110,12 +112,12 @@ server answers it.
 | --- | --- |
 | `IMachineServer` | The seam the controller drives: `StartAsync`, `EventAsync`, `GetAsync` and `Subscribe`. A refusal is an answer; a failed request throws, and the controller reports it as `TRANSPORT_ERROR`. |
 | `GraphQLMachineServer` | The `IMachineServer` over a host's typed `machines` root. It POSTs `{ id, variables }` for each operation, keeping only the variables its document declares, and subscribes to `<machine>Changed` by id. `CLIENT_OUTDATED` and `SERVER_OUTDATED` are answers; any other GraphQL error or a status that is not success throws. A stream that ends without saying why is subscribed again after `ResubscribeDelays` (`DefaultResubscribeDelays`: 1, 2, then 5 seconds). `DiscardAsync` deletes one of the caller's instances, and answers null when it is gone. |
-| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`; and `ResubscribeDelays`. |
+| `GraphQLMachineServerOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, as for any other); the GraphQL `Endpoint`; the `Machine` from the manifest, with its documents, `changed` among them; the `Socket`; `ResubscribeDelays`; `MaxResponseSize`, the largest body read from an answer (16 MiB); and `AllowInsecureTransport`. |
 | `GraphQLSubscriptionSocket` | A graphql-transport-ws socket that subscribes by persisted id. It connects on the first subscription and closes after the last. It does not reconnect by itself: a closed socket fails every open subscription with its `Error`, and the server subscribes again. |
-| `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers or a proxy on each `ClientWebSocket`; and `ConnectTimeout`. |
+| `GraphQLSubscriptionSocketOptions` | The socket `Endpoint`; `ConnectionParams`, the `connection_init` payload, read on every connection so a rotating token stays fresh; `ConfigureSocket`, to set headers or a proxy on each `ClientWebSocket`; `ConnectTimeout` (10 seconds); `MaxMessageSize`, the largest message read (16 MiB); and `AllowInsecureTransport`. |
 | `ISubscriptionSocket`, `ISubscriptionSink` | The socket seam: `Subscribe(documentId, variables, sink)`, and the sink's `Next`, `Error` and `Complete`. |
 | `SubscriptionErrorException` | The error a sink gets when the server ends a subscription with GraphQL errors, which it carries as `Errors`. |
-| `ServerAnswer`, `ServerSnapshot`, `ServerProblem` | An answer: the instance `Id` on a start, the `Snapshot` the server stored or the `Problem` it refused with (`Of` and `Refused` build one). A `ServerSnapshot` is the `State`, its `Context` with no null member, the `Revision`, the incarnation `RowId`, and `DueAt`, which counts only when `DueAtKnown`. |
+| `ServerAnswer`, `ServerSnapshot`, `ServerProblem` | An answer: the instance `Id` on a start, the `Snapshot` the server stored or the `Problem` it refused with (`Of` and `Refused` build one). A `ServerSnapshot` is the `State`, its `Context` with no null member, the `Revision` (null when the store records none, which the controller takes and cannot order), the incarnation `RowId`, and `DueAt`, which counts only when `DueAtKnown`. |
 | `StreamMessage` | What a change stream delivers: `Changed` with the `Snapshot`, `Gone` (with `NotFound` when the server answered `NOT_FOUND`), `Reload`, or `ClientOutdated`. |
 
 ## Behavior
@@ -124,14 +126,21 @@ The controller behaves as the TypeScript `ServerMachineController` does, and the
 (`Trax.StateMachine/conformance/client/`) holds both to the same transcripts.
 
 - **Ordering.** Every snapshot, pushed or answered, carries its revision; one at or below the revision held is dropped.
+  An answer with no revision is applied and not ordered.
   A push of another incarnation (the instance was deleted and created again) makes the controller read the instance
   again rather than compare revisions across incarnations.
 - **Effects.** An event bound to the machine's effect is sent with no prediction, and nothing queued after it is
-  predicted until it answers.
+  predicted until it answers. So is an event with an edge that rests on a custom rule the predictor has no handler
+  for.
 - **Timers** are the server's: `DueAt` is shown and never fired. An answer that does not know it keeps the one held
   while the state stays; entering a timed state without one reads the instance once for it.
 - **Stopping.** A gone instance and `CLIENT_OUTDATED` stop the controller for good, and every queued send settles
   `Stopped`. A snapshot the predictor cannot read stops it as `CLIENT_OUTDATED` too.
+- **Transport.** An endpoint must be `https` (`wss` for the socket) unless its host is loopback (`localhost`,
+  `127.0.0.0/8`, `::1`). Any other `http` or `ws` endpoint throws when the server or socket is built, since whatever
+  authenticates the client would travel in cleartext; `AllowInsecureTransport` accepts it on a network you trust.
+  An answer larger than `MaxResponseSize` fails its request as a transport failure, and a socket message larger than
+  `MaxMessageSize` fails the connection, which is subscribed again; neither is read into memory first.
 - **Threads.** The controller works on one exclusive scheduler, so it handles one thing at a time whichever thread calls
   it. `Changed` is raised there: read `View` and marshal to the UI thread in the handler, and do not block on the
   controller from it.

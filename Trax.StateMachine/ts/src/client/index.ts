@@ -32,6 +32,7 @@ export {
   type SnapshotOperation,
   type SnapshotOutput,
   type SnapshotProblem,
+  requireSecureEndpoint,
 } from './transport';
 
 export {

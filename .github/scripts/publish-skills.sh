@@ -11,8 +11,9 @@
 # is a fast-forward. Prints what changes, and writes `commit=<sha>` to $GITHUB_OUTPUT: the new
 # commit, or the live head when the tree is already live.
 #
-# GH_TOKEN must be able to write the staging branch. It cannot write the live branch, whose ruleset
-# refuses it; the publish job does that with a deploy key once approved.
+# GH_TOKEN must be able to write the staging branch. The live branch's ruleset must refuse it
+# (Trax.Docs/contributing/writing-docs.md); the publish job moves that branch with a deploy key once
+# approved.
 set -euo pipefail
 
 dir=$1
@@ -25,7 +26,7 @@ out=${GITHUB_OUTPUT:-/dev/null}
 summary=${GITHUB_STEP_SUMMARY:-/dev/null}
 
 if ! head=$(gh api "repos/$repo/git/ref/heads/$live" --jq .object.sha 2>/dev/null); then
-  echo "::error::$repo has no $live branch. Create it once with a signed commit (see the ADR) and re-run."
+  echo "::error::$repo has no $live branch. Set it up as Trax.Docs/contributing/writing-docs.md 'Setting up the skills branch' says, then re-run."
   exit 1
 fi
 tree=$(gh api "repos/$repo/git/commits/$head" --jq .tree.sha)

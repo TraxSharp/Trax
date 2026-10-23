@@ -20,9 +20,11 @@ namespace Trax.StateMachine.Client
     public sealed class GraphQLMachineServerOptions : System.IEquatable<Trax.StateMachine.Client.GraphQLMachineServerOptions>
     {
         public GraphQLMachineServerOptions() { }
+        public bool AllowInsecureTransport { get; init; }
         public required System.Uri Endpoint { get; init; }
         public required System.Net.Http.HttpClient Http { get; init; }
         public required Trax.StateMachine.ClientManifestMachine Machine { get; init; }
+        public long MaxResponseSize { get; init; }
         public System.Collections.Generic.IReadOnlyList<System.TimeSpan>? ResubscribeDelays { get; init; }
         public required Trax.StateMachine.Client.ISubscriptionSocket Socket { get; init; }
     }
@@ -35,10 +37,12 @@ namespace Trax.StateMachine.Client
     public sealed class GraphQLSubscriptionSocketOptions : System.IEquatable<Trax.StateMachine.Client.GraphQLSubscriptionSocketOptions>
     {
         public GraphQLSubscriptionSocketOptions() { }
+        public bool AllowInsecureTransport { get; init; }
         public System.Action<System.Net.WebSockets.ClientWebSocketOptions>? ConfigureSocket { get; init; }
         public System.TimeSpan ConnectTimeout { get; init; }
         public System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Text.Json.Nodes.JsonObject?>>? ConnectionParams { get; init; }
         public required System.Uri Endpoint { get; init; }
+        public int MaxMessageSize { get; init; }
     }
     public interface IMachinePredictor
     {
@@ -181,7 +185,7 @@ namespace Trax.StateMachine.Client
         public required System.Text.Json.Nodes.JsonObject Context { get; init; }
         public System.DateTimeOffset? DueAt { get; init; }
         public bool DueAtKnown { get; init; }
-        public required long Revision { get; init; }
+        public required long? Revision { get; init; }
         public string? RowId { get; init; }
         public required string State { get; init; }
     }

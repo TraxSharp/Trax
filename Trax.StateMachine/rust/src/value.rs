@@ -551,11 +551,7 @@ pub fn number_text(n: f64) -> String {
     if n == 0.0 {
         return "0".to_owned();
     }
-    // Rust's `{:e}` writes the shortest round-trip digits, the nearest when several are as short, as ECMAScript asks.
-    let scientific = format!("{:e}", n.abs());
-    let (mantissa, exponent) = scientific.split_once('e').unwrap_or((&scientific, "0"));
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
-    let exponent: i32 = exponent.parse().unwrap_or(0);
+    let (digits, exponent) = shortest_digits(n.abs());
     let k = digits.len() as i32;
     let point = exponent + 1;
 
@@ -587,6 +583,53 @@ pub fn number_text(n: f64) -> String {
         out.push_str(&(point - 1).abs().to_string());
     }
     out
+}
+
+// The shortest digits that read back as `x` (positive and finite), and the exponent of the first, as ECMAScript's
+// Number::toString picks them: when two digit strings of that length are equally close to `x`, the even one. Rust's
+// `{:e}` writes the shortest digits too but rounds such a tie up (1125899906842624.25 comes out as ...624.3, where
+// ECMAScript writes ...624.2), so a tie is found from the exact expansion and settled here.
+fn shortest_digits(x: f64) -> (String, i32) {
+    let split = |text: &str| -> (String, i32) {
+        let (mantissa, exponent) = text.split_once('e').unwrap_or((text, "0"));
+        let digits = mantissa.chars().filter(|c| *c != '.').collect();
+        (digits, exponent.parse().unwrap_or(0))
+    };
+    let (digits, exponent) = split(&format!("{x:e}"));
+    let last = digits.as_bytes()[digits.len() - 1] - b'0';
+    if last % 2 == 0 {
+        return (digits, exponent);
+    }
+    // A tie means `x` is exactly the shortest length's digits plus a half in the last place: its exact expansion,
+    // which a double always has in at most 767 significant digits, is those digits and a 5, then nothing.
+    let (exact, exact_exponent) = split(&format!("{x:.800e}"));
+    let k = digits.len();
+    let tail = exact[k..].trim_end_matches('0');
+    if exact_exponent != exponent || tail != "5" {
+        return (digits, exponent);
+    }
+    let truncated = &exact[..k];
+    let other = if truncated == digits {
+        // Rounded down to an odd digit; one up is even. Past a 9 it would carry into a shorter string, which would
+        // have been found first.
+        if last == 9 {
+            return (digits, exponent);
+        }
+        let mut bytes = digits.clone().into_bytes();
+        bytes[k - 1] += 1;
+        String::from_utf8(bytes).unwrap_or_default()
+    } else {
+        // Rounded up to an odd digit; one down is even and is the truncation.
+        truncated.to_owned()
+    };
+    let reads_back = format!("{other}e{}", exponent - (k as i32 - 1))
+        .parse::<f64>()
+        .is_ok_and(|y| y == x);
+    if reads_back && !other.ends_with('0') {
+        (other, exponent)
+    } else {
+        (digits, exponent)
+    }
 }
 
 /// The value as `JSON.parse(JSON.stringify(value))` returns it: a number that is not finite becomes null. The engine
@@ -622,6 +665,9 @@ mod tests {
             (123.456, "123.456"),
             (-0.0, "0"),
             (2f64.powi(53) + 2.0, "9007199254740994"),
+            (2f64.powi(50) + 0.25, "1125899906842624.2"),
+            (2f64.powi(50) + 0.75, "1125899906842624.8"),
+            (2f64.powi(51) - 0.75, "2251799813685247.2"),
             (1.5e300, "1.5e+300"),
             (f64::INFINITY, "null"),
         ] {

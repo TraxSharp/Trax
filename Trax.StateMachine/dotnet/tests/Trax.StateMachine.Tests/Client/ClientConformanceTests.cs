@@ -74,6 +74,6 @@ public class ClientConformanceTests
         var report = await stderr;
 
         process.ExitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"(\d+) of \1 transcripts passed\.");
+        report.Should().MatchRegex(@"([1-9]\d*) of \1 transcripts passed\.");
     }
 }

@@ -1,0 +1,19 @@
+{
+  "name": "A null duration cannot arm the timer",
+  "given": {
+    "machine": "wait",
+    "version": 1,
+    "state": "Idle",
+    "context": {
+      "source": "s3://bucket/a",
+      "patience": null
+    }
+  },
+  "when": {
+    "trigger": "Start"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "INVALID_INPUT"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "A member written twice is malformed, not read as its last value",
+  "raw": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}",
+  "expect": {
+    "result": "error",
+    "code": "MALFORMED"
+  }
+}

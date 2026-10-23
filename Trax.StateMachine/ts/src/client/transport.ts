@@ -161,5 +161,32 @@ export interface HttpExecutorOptions {
   headers?: () => Record<string, string>;
   /** Defaults to the global `fetch`. */
   fetch?: typeof globalThis.fetch;
+  /**
+   * Accepts an absolute `http:` endpoint on a host that is not loopback. Off by default: the headers that authenticate
+   * each request would travel in cleartext. A relative endpoint is the page's own origin and is always accepted.
+   */
+  allowInsecureTransport?: boolean;
 }
+
+/**
+ * Throws unless `endpoint` may carry credentials: an absolute one must be https unless its host is this machine
+ * (localhost, 127.0.0.0/8, ::1) or `allowInsecure` is set. A relative one goes to the page's own origin, whatever its
+ * scheme. Every machine executor and server runs it; the generated client runs it before each train request too.
+ */
+export function requireSecureEndpoint(endpoint: string, allowInsecure: boolean | undefined): void {
+  if (allowInsecure) return;
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return;
+  }
+  if (url.protocol === 'https:' || isLoopback(url.hostname)) return;
+  throw new Error(
+    `The endpoint ${url.protocol}//${url.host} is not over TLS, so whatever authenticates the client would travel in cleartext. Use https://, a loopback host, or set allowInsecureTransport when the network is trusted.`,
+  );
+}
+
+const isLoopback = (hostname: string): boolean =>
+  hostname === 'localhost' || hostname === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
 

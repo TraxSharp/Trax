@@ -28,8 +28,17 @@ public interface ISubscriptionSocket
 /// <summary>How a <see cref="GraphQLSubscriptionSocket"/> connects.</summary>
 public sealed record GraphQLSubscriptionSocketOptions
 {
-    /// <summary>The host's socket endpoint (<c>wss://host/trax/graphql</c>).</summary>
+    /// <summary>
+    /// The host's socket endpoint (<c>wss://host/trax/graphql</c>). It must be <c>wss</c> unless its host is loopback
+    /// or <see cref="AllowInsecureTransport"/> is set.
+    /// </summary>
     public required Uri Endpoint { get; init; }
+
+    /// <summary>
+    /// Accepts a <c>ws</c> endpoint on a host that is not loopback. Off by default: the <c>connection_init</c> payload,
+    /// and any header set in <see cref="ConfigureSocket"/>, would travel in cleartext.
+    /// </summary>
+    public bool AllowInsecureTransport { get; init; }
 
     /// <summary>
     /// The payload of <c>connection_init</c>, read on every connection so a rotating token stays fresh; how a host
@@ -42,6 +51,12 @@ public sealed record GraphQLSubscriptionSocketOptions
 
     /// <summary>How long a connection may take to be acknowledged before it counts as failed.</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The largest message the server may send, in bytes; 16 MiB by default. A larger one fails the connection, and
+    /// every subscription over it, rather than being read into memory.
+    /// </summary>
+    public int MaxMessageSize { get; init; } = 16 * 1024 * 1024;
 }
 
 /// <summary>
@@ -63,9 +78,19 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private bool _disposed;
 
     /// <summary>Builds the socket. It connects on the first subscription.</summary>
+    /// <exception cref="ArgumentException">
+    /// The endpoint is not <c>wss</c> on a host that is not loopback, and
+    /// <see cref="GraphQLSubscriptionSocketOptions.AllowInsecureTransport"/> is not set.
+    /// </exception>
     public GraphQLSubscriptionSocket(GraphQLSubscriptionSocketOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TransportSecurity.RequireSecure(
+            options.Endpoint,
+            options.AllowInsecureTransport,
+            "wss",
+            nameof(options)
+        );
         _options = options;
     }
 
@@ -77,6 +102,9 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public Dictionary<string, ISubscriptionSink> Sinks { get; } = new(StringComparer.Ordinal);
         public CancellationTokenSource Stop { get; } = new();
         public bool Closed { get; set; }
+
+        /// <summary>The host sent a message over the limit, whose rest is never read.</summary>
+        public bool Overflowed { get; set; }
     }
 
     /// <inheritdoc/>
@@ -219,8 +247,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 if (_options.ConnectionParams is { } parameters)
                     init["payload"] = await parameters(timeout.Token).ConfigureAwait(false);
                 await SendAsync(connection, init).ConfigureAwait(false);
-                var first = await ReceiveAsync(connection.Socket, timeout.Token)
-                    .ConfigureAwait(false);
+                var first = await ReceiveAsync(connection, timeout.Token).ConfigureAwait(false);
                 if (first?["type"]?.GetValue<string>() != "connection_ack")
                     throw new WebSocketException(
                         CloseMessage(connection.Socket, "before it was acknowledged")
@@ -230,7 +257,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
             for (; ; )
             {
-                var message = await ReceiveAsync(connection.Socket, connection.Stop.Token)
+                var message = await ReceiveAsync(connection, connection.Stop.Token)
                     .ConfigureAwait(false);
                 if (message is null)
                     throw new WebSocketException(
@@ -243,6 +270,10 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             acknowledged.TrySetException(ex);
             Fail(connection, ex);
+            // The rest of a message over the limit is never read. The connection fails first, so a send
+            // racing the abort cannot fail the subscriptions with the aborted socket's error instead.
+            if (connection.Overflowed)
+                connection.Socket.Abort();
         }
     }
 
@@ -318,18 +349,22 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
     }
 
-    private static async Task<JsonObject?> ReceiveAsync(
-        ClientWebSocket socket,
-        CancellationToken token
-    )
+    private async Task<JsonObject?> ReceiveAsync(Connection connection, CancellationToken token)
     {
         var buffer = new byte[8192];
         using var text = new MemoryStream();
         for (; ; )
         {
-            var result = await socket.ReceiveAsync(buffer, token).ConfigureAwait(false);
+            var result = await connection.Socket.ReceiveAsync(buffer, token).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 return null;
+            if (text.Length + result.Count > _options.MaxMessageSize)
+            {
+                connection.Overflowed = true;
+                throw new WebSocketException(
+                    $"The server sent a message larger than {_options.MaxMessageSize} bytes."
+                );
+            }
             text.Write(buffer, 0, result.Count);
             if (result.EndOfMessage)
                 break;

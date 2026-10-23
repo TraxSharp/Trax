@@ -2,7 +2,8 @@
 //!
 //! Every event goes to the server under its own request id, the server's answer (or a pushed snapshot) replaces the
 //! prediction, and snapshots are ordered by revision within one incarnation: anything at or below the revision held is
-//! dropped, the controller's own answers included. The same rules as the TypeScript `ServerMachineController` and the
+//! dropped, the controller's own answers included. An answer with no revision cannot be ordered: it is taken, and so is
+//! whatever comes after it. The same rules as the TypeScript `ServerMachineController` and the
 //! C# one, held to the same transcripts by the client conformance kit.
 //!
 //! All of the controller's state is owned by one task, which handles one message at a time: a call from the
@@ -10,6 +11,7 @@
 //! languages, without locks.
 
 use std::collections::hash_map::RandomState;
+use std::collections::HashSet;
 use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -22,6 +24,7 @@ use crate::server::{
     DueAt, EventRequest, MachineServer, ServerAnswer, ServerProblem, ServerSnapshot, StreamMessage, Subscription,
     TransportError,
 };
+use crate::unhandled::unpredictable_edges;
 
 /// The codes the client reports of its own, beside the server's refusal codes.
 pub mod codes {
@@ -109,6 +112,10 @@ pub enum SendOutcome {
 pub struct ServerMachineOptions<S> {
     /// The machine's IR, as the host's client manifest lists it. The client predicts with the machine built from it.
     pub ir: Value,
+    /// The IR's hash as the manifest lists it beside the IR (`irHash`): the lowercase hex SHA-256 of the IR's canonical
+    /// JSON. The controller refuses an IR that does not hash to it, since the host would answer every request
+    /// `CLIENT_OUTDATED`.
+    pub ir_hash: String,
     /// The server's operations and change stream for that machine.
     pub server: S,
     /// An existing instance to open; without one, `start` creates one.
@@ -124,10 +131,12 @@ pub struct ServerMachineOptions<S> {
 }
 
 impl<S> ServerMachineOptions<S> {
-    /// Options for the machine `ir` served by `server`, with every other choice left to its default.
-    pub fn new(ir: Value, server: S) -> Self {
+    /// Options for the machine `ir`, whose manifest hash is `ir_hash`, served by `server`, with every other choice left
+    /// to its default.
+    pub fn new(ir: Value, ir_hash: impl Into<String>, server: S) -> Self {
         ServerMachineOptions {
             ir,
+            ir_hash: ir_hash.into(),
             server,
             id: None,
             start_input: None,
@@ -156,12 +165,27 @@ pub struct ServerMachineController {
     commands: mpsc::UnboundedSender<Msg>,
     view: watch::Receiver<Arc<MachineView>>,
     machine: Arc<Machine>,
+    unpredictable: Arc<HashSet<(String, String)>>,
 }
 
 impl ServerMachineController {
-    /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start).
+    /// Builds the controller and starts its task. It sends nothing until [`start`](Self::start). Refuses an IR the
+    /// machine cannot be built from, and one that does not hash to `ir_hash`.
     pub fn new<S: MachineServer>(options: ServerMachineOptions<S>) -> Result<Self, IrError> {
         let machine = Arc::new(Machine::from_ir(&options.ir)?);
+        let hash = ir_hash(&options.ir);
+        if !hash.eq_ignore_ascii_case(options.ir_hash.trim()) {
+            return Err(IrError {
+                message: format!(
+                    "The IR of '{}' hashes to {hash}, not to the manifest's irHash {}: they are of different versions \
+                     of the machine. Pass the IR and the irHash of one manifest entry, exported again from a host that \
+                     runs this version.",
+                    machine.id(),
+                    options.ir_hash
+                ),
+            });
+        }
+        let unpredictable = Arc::new(unpredictable_edges(&options.ir));
         let (commands, inbox) = mpsc::unbounded_channel();
         let initial = Arc::new(MachineView {
             status: MachineStatus::Loading,
@@ -178,6 +202,7 @@ impl ServerMachineController {
         let (publish, view) = watch::channel(initial);
         let actor = Actor {
             machine: machine.clone(),
+            unpredictable: unpredictable.clone(),
             server: Arc::new(options.server),
             commands: commands.clone(),
             publish,
@@ -216,6 +241,7 @@ impl ServerMachineController {
             commands,
             view,
             machine,
+            unpredictable,
         })
     }
 
@@ -264,12 +290,15 @@ impl ServerMachineController {
     }
 
     /// Whether `trigger` fires from what is shown. False before the first snapshot and once stopped. An event bound to
-    /// the effect is judged by its edge alone, since its guard reads an input only the server's effect has.
+    /// the effect is judged by its edge alone, since its guard reads an input only the server's effect has, and so is
+    /// one whose edge rests on a custom rule the client holds no handler for: the server decides.
     pub fn can_send(&self, trigger: &str, input: Option<&Value>) -> bool {
         let view = self.view();
         match (&view.snapshot, view.status) {
             (Some(shown), status) if status != MachineStatus::Stopped => {
-                if self.machine.effect_triggers().iter().any(|t| t == trigger) {
+                if self.machine.effect_triggers().iter().any(|t| t == trigger)
+                    || self.unpredictable.contains(&(shown.state.clone(), trigger.to_owned()))
+                {
                     self.machine.available_triggers(shown).iter().any(|t| t == trigger)
                 } else {
                     self.machine.can_fire(shown, trigger, input)
@@ -325,6 +354,15 @@ fn transport_failure(error: &TransportError) -> MachineProblem {
             error.0.clone()
         },
     }
+}
+
+/// The hash a host's manifest gives an IR: the lowercase hex SHA-256 of its canonical JSON.
+pub fn ir_hash(ir: &Value) -> String {
+    ring::digest::digest(&ring::digest::SHA256, ir.to_json().as_bytes())
+        .as_ref()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -401,6 +439,8 @@ enum Source {
 
 struct Actor<S> {
     machine: Arc<Machine>,
+    // The (state, trigger) pairs whose edge rests on a custom rule the machine holds no handler for.
+    unpredictable: Arc<HashSet<(String, String)>>,
     server: Arc<S>,
     commands: mpsc::UnboundedSender<Msg>,
     publish: watch::Sender<Arc<MachineView>>,
@@ -443,11 +483,14 @@ struct Actor<S> {
 
 impl<S: MachineServer> Actor<S> {
     async fn run(mut self, mut inbox: mpsc::UnboundedReceiver<Msg>) {
+        // The task holds a sender of its own for the answers and timers it starts, so the inbox never closes by itself:
+        // it ends on dispose, which dropping the controller sends. Every waiter is settled by then; a late answer finds
+        // the inbox gone, and a call made after it settles as disposed.
         while let Some(message) = inbox.recv().await {
             self.handle(message);
-            if self.disposed && self.queue.is_empty() && self.start_waiters.is_empty() {
-                // Late answers are dropped; nothing more is owed to anyone.
+            if self.disposed {
                 self.settle_open();
+                return;
             }
         }
     }
@@ -833,7 +876,7 @@ impl<S: MachineServer> Actor<S> {
                 self.reload_again = true;
             }
             let newer = match &self.buffered {
-                Some(b) => b.row_id != incoming.row_id || incoming.revision > b.revision,
+                Some(b) => b.row_id != incoming.row_id || !older_or_same(incoming.revision, b.revision),
                 None => true,
             };
             if newer {
@@ -842,10 +885,10 @@ impl<S: MachineServer> Actor<S> {
             return false;
         }
         if let Some(held) = self.revision {
-            if !other_incarnation && incoming.revision <= held {
+            if !other_incarnation && older_or_same(incoming.revision, Some(held)) {
                 // A read of the revision held, asked for because an answer did not know the due time of its timed
                 // state, brings the due time and nothing else.
-                if source == Source::Load && incoming.revision == held && self.due_at.is_none() {
+                if source == Source::Load && incoming.revision == Some(held) && self.due_at.is_none() {
                     if let DueAt::At(due) = &incoming.due_at {
                         if self.confirmed.as_ref().map(|c| c.state.as_str()) == Some(incoming.state.as_str()) {
                             self.due_at = Some(due.clone());
@@ -908,7 +951,7 @@ impl<S: MachineServer> Actor<S> {
         if incoming.row_id.is_some() {
             self.row_id = incoming.row_id;
         }
-        self.revision = Some(incoming.revision);
+        self.revision = incoming.revision;
         if self.status == MachineStatus::Loading {
             self.status = MachineStatus::Ready;
         }
@@ -971,6 +1014,12 @@ impl<S: MachineServer> Actor<S> {
         self.machine.effect_triggers().iter().any(|t| t == trigger)
     }
 
+    // Whether the event's outcome from `state` is one the client can tell: not bound to the effect, and with no edge
+    // that rests on a custom rule it holds no handler for (unhandled.rs).
+    fn predicts(&self, state: &str, trigger: &str) -> bool {
+        !self.is_effect(trigger) && !self.unpredictable.contains(&(state.to_owned(), trigger.to_owned()))
+    }
+
     fn pump(&mut self) {
         if self.sending || self.disposed || self.error.is_some() {
             return;
@@ -985,8 +1034,9 @@ impl<S: MachineServer> Actor<S> {
         let request = match &next.request {
             Some(request) => request.clone(),
             None => {
-                // An event bound to the effect is sent without a prediction: what it leads to depends on the effect.
-                let predicted = if self.is_effect(&next.trigger) {
+                // An event bound to the effect is sent without a prediction: what it leads to depends on the effect. So is
+                // one that rests on a custom rule the client cannot evaluate, rather than a guess the server would refuse.
+                let predicted = if !self.predicts(&confirmed.state, &next.trigger) {
                     None
                 } else {
                     self.machine
@@ -1145,7 +1195,7 @@ impl<S: MachineServer> Actor<S> {
     }
 
     // The confirmed snapshot with every pending event the machine allows applied in order, up to the first one bound
-    // to the effect: what the page will show if the server agrees.
+    // to the effect or resting on a custom rule it cannot evaluate: what the page will show if the server agrees.
     fn predicted(&self) -> Option<Snapshot> {
         let confirmed = self.confirmed.clone()?;
         if self.status == MachineStatus::Stopped {
@@ -1153,7 +1203,7 @@ impl<S: MachineServer> Actor<S> {
         }
         let mut shown = confirmed;
         for queued in &self.queue {
-            if self.is_effect(&queued.trigger) {
+            if !self.predicts(&shown.state, &queued.trigger) {
                 break;
             }
             if let Ok(next) = self.machine.advance(&shown, &queued.trigger, queued.input.as_ref()) {
@@ -1162,6 +1212,12 @@ impl<S: MachineServer> Actor<S> {
         }
         Some(shown)
     }
+}
+
+// Whether a snapshot at `incoming` is at or below one at `held`. A missing revision on either side cannot be ordered, so
+// it is never older.
+fn older_or_same(incoming: Option<i64>, held: Option<i64>) -> bool {
+    matches!((incoming, held), (Some(i), Some(h)) if i <= h)
 }
 
 /// The context with every null member left out, at every depth: a typed answer cannot tell a member stored as null

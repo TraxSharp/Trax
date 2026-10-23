@@ -14,10 +14,12 @@ name: Skills
 #   publish  waits for approval on the `skills-deploy` environment, then fast-forwards `skills` to
 #            exactly the commit prepare made and tags it skills-v<version>, with the deploy key.
 #
-# `skills` and `skills-v*` are locked by rulesets whose only bypass is deploy keys, and the key is a
-# `skills-deploy` environment secret, so an approved run of this workflow is the only way to change
-# what consumers install. Before approving, read the diff prepare prints between `skills` and the
-# commit it made.
+# The workflow relies on repository settings it cannot check, set up once as
+# Trax.Docs/contributing/writing-docs.md "Setting up the skills branch" says: rulesets on `skills`
+# and `skills-v*` whose only bypass is deploy keys, and the key held as a `skills-deploy`
+# environment secret behind required reviewers. With those, an approved run of this workflow is
+# the only way to change what consumers install. Before approving, read the diff prepare prints
+# between `skills` and the commit it made.
 on:
   workflow_dispatch:
     inputs:
@@ -104,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write       # skills-next only; skills itself refuses this token
+      contents: write       # for skills-next; the skills ruleset must refuse this token
     outputs:
       commit: ${{ steps.commit.outputs.commit }}
     steps:

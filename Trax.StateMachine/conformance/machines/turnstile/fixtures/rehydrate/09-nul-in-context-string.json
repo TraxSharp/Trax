@@ -1,0 +1,8 @@
+{
+  "name": "A NUL in a context string is malformed: no store can hold it",
+  "raw": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quar\\u0000ter\"}}",
+  "expect": {
+    "result": "error",
+    "code": "MALFORMED"
+  }
+}

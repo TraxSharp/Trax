@@ -15,8 +15,11 @@ public sealed record ServerSnapshot
     /// </summary>
     public string? RowId { get; init; }
 
-    /// <summary>Bumped by the database on every write of the instance.</summary>
-    public required long Revision { get; init; }
+    /// <summary>
+    /// Bumped by the database on every write of the instance. Null when the store records none: the snapshot cannot be
+    /// ordered, so it is never dropped as stale, and whatever comes after it is taken.
+    /// </summary>
+    public required long? Revision { get; init; }
 
     /// <summary>The state the instance is in.</summary>
     public required string State { get; init; }

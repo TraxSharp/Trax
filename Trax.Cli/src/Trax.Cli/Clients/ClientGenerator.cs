@@ -42,7 +42,7 @@ internal sealed partial class ClientGenerator
     /// The client format this generator writes, held equal to the runtime's <c>clientFormat</c>
     /// (<c>Trax.StateMachine/ts/src/clientFormat.ts</c>) by <c>ClientFormatParityTests</c>.
     /// </summary>
-    public const int ClientFormat = 2;
+    public const int ClientFormat = 3;
 
     /// <summary>The module generated code imports the runtime from when none is named.</summary>
     public const string DefaultSpecifier = "@traxsharp/state-machine";
@@ -661,7 +661,7 @@ internal sealed partial class ClientGenerator
         Header
         + "import \"./format.g\";\n"
         + "import { createClient, type Client } from \"graphql-ws\";\n"
-        + $"import {{ persistedMessageReplacer }} from {TypeScript.Literal(spec + "/client")};\n"
+        + $"import {{ persistedMessageReplacer, requireSecureEndpoint }} from {TypeScript.Literal(spec + "/client")};\n"
         + """
 
             /** Where the host is, and what each request carries. Nothing here is generated: the app gives it at run time. */
@@ -680,6 +680,12 @@ internal sealed partial class ClientGenerator
                * with the headers, so the two cannot disagree for a render.
                */
               user?: string;
+              /**
+               * Lets the client send to an absolute `http:` url on a host that is not loopback. Only for a trusted network:
+               * the headers would travel in cleartext. Off by default, and every train function and machine server refuses
+               * such a url.
+               */
+              allowInsecureTransport?: boolean;
             }
 
             let connection: TraxConnection | null = null;
@@ -746,7 +752,8 @@ internal sealed partial class ClientGenerator
 
             /** Sends a persisted document by its id, never its text, and returns the field at `path` of its answer. */
             export async function sendDocument<T>(id: string, variables: Record<string, unknown>, path: readonly string[]): Promise<T> {
-              const { url, headers } = traxConnection();
+              const { url, headers, allowInsecureTransport } = traxConnection();
+              requireSecureEndpoint(url, allowInsecureTransport);
               const response = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...headers?.() },
@@ -885,6 +892,7 @@ internal sealed partial class ClientGenerator
         sb.Append("        if (generation !== traxGeneration()) throw changed();\n");
         sb.Append("        return connection.headers?.() ?? {};\n");
         sb.Append("      },\n");
+        sb.Append("      allowInsecureTransport: connection.allowInsecureTransport,\n");
         sb.Append($"      machine: {camel},\n");
         sb.Append($"      documents: {camel}Documents,\n");
         sb.Append(

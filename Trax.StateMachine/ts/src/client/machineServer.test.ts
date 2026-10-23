@@ -47,7 +47,7 @@ const http = (...bodies: unknown[]) => {
   const sent: Sent[] = [];
   const fetch = (async (_url: string, init: { body: string }) => {
     sent.push(JSON.parse(init.body) as Sent);
-    return { json: async () => bodies.shift() };
+    return { ok: true, status: 200, statusText: 'OK', json: async () => bodies.shift() };
   }) as unknown as typeof globalThis.fetch;
   return { sent, fetch };
 };
@@ -213,6 +213,20 @@ describe('createMachineServer operations', () => {
         socket: new FakeSocket(),
       }),
     ).toThrow(/changed/);
+  });
+
+  it('refuses a cleartext endpoint on another host unless the caller allows it', () => {
+    const build = (allowInsecureTransport?: boolean) => () =>
+      createMachineServer('http://api.example.com/graphql', {
+        fetch: http().fetch,
+        machine: turnstile,
+        documents: DOCUMENTS,
+        socket: new FakeSocket(),
+        allowInsecureTransport,
+      });
+
+    expect(build()).toThrow(/not over TLS/);
+    expect(build(true)).not.toThrow();
   });
 });
 

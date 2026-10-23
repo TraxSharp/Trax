@@ -101,6 +101,50 @@ public class SkillRulesTests
     }
 
     [Test]
+    public void ALinkedFileInASkill_IsRefused()
+    {
+        using var skills = new TempSkills().Skill("trax");
+        skills.Link("trax/extra.md", skills.Outside().File);
+
+        Problems(skills)
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(
+                "trax: 'extra.md' is a symbolic link. A published skill ships its own files, never what a link points at"
+            );
+    }
+
+    [Test]
+    public void ALinkedFolderInASkill_IsRefused_AndNotEntered()
+    {
+        using var skills = new TempSkills().Skill("trax");
+        var outside = skills.Outside().Folder;
+        File.WriteAllText(Path.Combine(outside, "run.sh"), "echo");
+        skills.Link("trax/more", outside, folder: true);
+
+        Problems(skills)
+            .Should()
+            .ContainSingle("the folder is reported once and never entered, so run.sh is not")
+            .Which.Should()
+            .Contain("'more' is a symbolic link");
+    }
+
+    [Test]
+    public void ALinkedSkillFolder_IsRefused()
+    {
+        using var source = new TempSkills().Skill("trax");
+        using var skills = new TempSkills();
+        skills.Link("trax", Path.Combine(source.Skills, "trax"), folder: true);
+
+        Problems(skills)
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("trax: the skill's folder is a symbolic link");
+    }
+
+    [Test]
     public void AFileOutsideAnySkill_IsRefused()
     {
         using var skills = new TempSkills().Skill("trax").File_("notes.md");

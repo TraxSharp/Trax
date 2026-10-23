@@ -103,6 +103,28 @@ public class PackagesPageTests
             );
     }
 
+    private static readonly Regex StatedCount = new(
+        @"Trax ships as (?<count>\d+) NuGet packages",
+        RegexOptions.Compiled
+    );
+
+    [Test]
+    public void PackagesPage_StatesTheNumberOfPackagesItLists()
+    {
+        var page = File.ReadAllText(RepoRoot.Combine("reference", "packages.md"));
+        var stated = StatedCount.Match(page);
+
+        stated
+            .Success.Should()
+            .BeTrue("reference/packages.md opens by saying how many NuGet packages Trax ships");
+        int.Parse(stated.Groups["count"].Value, System.Globalization.CultureInfo.InvariantCulture)
+            .Should()
+            .Be(
+                LinkedPackages().Count,
+                "the count in the page's opening must match the packages it lists. See " + Adr + "."
+            );
+    }
+
     [Test]
     public void PackagesPage_Links_OnlyKnownPackages()
     {

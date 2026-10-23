@@ -1,6 +1,6 @@
 ---
 name: trax
-description: Use before writing or changing code in a .NET app that references Trax packages (Trax.Core, Trax.Effect, Trax.Mediator, Trax.Scheduler, Trax.Api, Trax.StateMachine) or the @traxsharp/state-machine npm package. Says what Trax is, which packages and template to use, the rules that hold everywhere, how to check these skills match the installed release, and which Trax skill to load for the task.
+description: Use before writing or changing code in a .NET app that references Trax packages (Trax.Core, Trax.Effect, Trax.Mediator, Trax.Scheduler, Trax.Api, Trax.StateMachine, Trax.StateMachine.Client) or the @traxsharp/state-machine npm package. Says what Trax is, which packages and template to use, the rules that hold everywhere, how to check these skills match the installed release, and which Trax skill to load for the task.
 metadata:
   internal: true
 ---
@@ -27,7 +27,11 @@ package is at one version.
 - **The app is older:** the skills may describe APIs it does not have. Tell the user, and suggest installing the
   skills from the app's release:
   `npx skills add https://github.com/TraxSharp/Trax/tree/skills-v<version>` (add `-a claude-code` for Claude Code,
-  whose plugin always follows the latest release).
+  whose plugin always follows the latest release). A `skills-v<version>` tag exists only for a release that
+  published skills, from the first one that did; an app on an earlier release has none. For such an app, keep
+  the skills from the `skills` branch and check each API they describe against the app's version: the
+  [migration guides](https://traxsharp.net/docs/migration-guides) say what changed in each release, and
+  `trax-upgrade` moves the app forward if the user wants that.
 - **The app is newer:** update the skills (`npx skills update`, or `/plugin update trax@traxsharp` in Claude Code).
 - **The user wants to move the app to a newer Trax:** load `trax-upgrade`.
 
@@ -62,7 +66,7 @@ Pick the highest layer you need, then one data provider. Each package brings the
 | Schedules, a work queue, retries, dead letters | add `Trax.Scheduler` |
 | A GraphQL API over the trains | add `Trax.Api.GraphQL` and an auth package (`Trax.Api.Auth.ApiKey`, `.Jwt`, `.Oidc`) |
 | The operations console | add `Trax.Api.Dashboard` |
-| State machines | `Trax.StateMachine.Persistence` (server), `@traxsharp/state-machine` (TypeScript client) |
+| State machines | `Trax.StateMachine.Persistence` (server), `@traxsharp/state-machine` (TypeScript client), `Trax.StateMachine.Client` (.NET client) |
 
 ## Before writing code
 

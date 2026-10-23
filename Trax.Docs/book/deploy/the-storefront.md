@@ -20,6 +20,9 @@ cd web
 VITE_HUB_URL=https://api.shop.example.com npm run build
 ```
 
+The address is `https`. The client refuses to send a machine's requests to an `http` address on any
+host but this one, since the customer's token would cross the network in cleartext.
+
 `web/src/connection.ts`:
 
 ```ts file=web/src/connection.ts

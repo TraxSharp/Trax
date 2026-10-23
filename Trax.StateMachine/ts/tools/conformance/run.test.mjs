@@ -20,14 +20,16 @@ beforeAll(async () => {
 
 describe("the conformance kit", () => {
   it("draws on every source", () => {
-    for (const source of ["/differential/", "/advance/", "/rehydrate/", "/wire-handoff/", "strict-input/", "canonical-wire/"])
+    for (const source of ["/differential/", "/advance/", "/rehydrate/", "/wire-handoff/", "strict-input/", "unreadable-ir/", "canonical-wire/"])
       expect(cases.some((c) => c.name.includes(source)), source).toBe(true);
-    expect(cases.filter((c) => c.request.op === "load").map((c) => c.request.machine)).toEqual([
+    expect(cases.filter((c) => c.expect.loaded).map((c) => c.request.machine)).toEqual([
       "checkout",
       "gauge",
       "ingest",
       "reminder",
       "turnstile",
+      "vault",
+      "wait",
       "strict",
     ]);
     for (const op of ["advance", "outcome", "timer"])
@@ -64,5 +66,15 @@ describe("the conformance kit", () => {
     );
     expect(run.stderr).toContain(`${cases.length} of ${cases.length} cases passed.`);
     expect(run.status).toBe(0);
+  }, 120_000);
+
+  it("refuses a selection of no case rather than pass it", () => {
+    const run = spawnSync(
+      process.execPath,
+      [runner, "--only", "no-case-is-named-this", "--testee", process.execPath, here("testee-ts.mjs")],
+      { encoding: "utf8", timeout: 120_000 },
+    );
+    expect(run.stderr).toContain("No case of the kit");
+    expect(run.status).toBe(2);
   }, 120_000);
 });

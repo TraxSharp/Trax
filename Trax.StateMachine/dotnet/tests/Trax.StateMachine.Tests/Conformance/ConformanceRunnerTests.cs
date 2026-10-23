@@ -19,7 +19,7 @@ public class ConformanceRunnerTests
         var (exitCode, report) = TwinEngine.RunConformance(testee.Answer);
 
         exitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"(\d+) of \1 cases passed\.");
+        report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed\.");
     }
 
     [Test]
@@ -30,6 +30,6 @@ public class ConformanceRunnerTests
         var (exitCode, report) = TwinEngine.RunConformance(testee.Answer);
 
         exitCode.Should().Be(0, report);
-        report.Should().MatchRegex(@"(\d+) of \1 cases passed\.");
+        report.Should().MatchRegex(@"([1-9]\d*) of \1 cases passed\.");
     }
 }

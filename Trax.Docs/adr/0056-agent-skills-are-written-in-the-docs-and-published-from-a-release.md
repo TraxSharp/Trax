@@ -39,9 +39,11 @@ branch of this repository, stamped with the release's version. Nothing serves th
   skills CLI does not follow a marketplace to another ref (measured). An install from a `skills-v<version>` tree URL
   records the ref in `skills-lock.json` and stays on it, which is how an app on an older Trax keeps matching skills.
 - **Only an approved run moves the branch.** A skill is instructions an agent follows in a consumer's repository, so
-  write access to `skills` is a way to instruct every consumer's agent. Its ruleset refuses updates, deletion and
-  force pushes to all but deploy keys, and `skills-v*` tags the same (creation included); the key is a `skills-deploy`
-  environment secret, released only by a maintainer's approval. The commit itself is made through the API, so GitHub
+  write access to `skills` is a way to instruct every consumer's agent. This rests on repository settings the workflow
+  cannot check, set up as `Trax.Docs/contributing/writing-docs.md` describes: a ruleset on `skills` that refuses
+  updates, deletion and force pushes to all but deploy keys, one on `skills-v*` tags that does the same with creation
+  included, and the key held as a `skills-deploy` environment secret, released only by a maintainer's approval. The
+  commit itself is made through the API, so GitHub
   signs it; a deploy key cannot push a commit GitHub would verify, which is why the work is split: the workflow token
   writes the signed commit to `skills-next`, which nobody installs from, and the key only moves `skills` to it. A
   ruleset cannot name the workflow token as its bypass, so a single job could not be both the writer and the only
@@ -85,4 +87,6 @@ environment.
 
 ## Changelog
 
+- **2026-10-22**: The branch's protections are stated as settings the decision requires, not as facts, and point at
+  where they are set up.
 - **2026-10-20**: Recorded.

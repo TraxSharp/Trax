@@ -1,6 +1,6 @@
 ---
 name: trax-generate-a-client
-description: Use when a frontend or a Node script calls a Trax API, or when working with trax client, the client manifest (--trax-export-client, RunTraxAsync, TraxClientExport), trax.documents.json, .graphql documents, generated .g.ts files, configureTrax, the generated machine hooks (useCheckout, useRememberedCheckout and the like), useServerMachine, createMachineExecutor, createFormView or @traxsharp/state-machine. Covers exporting the manifest, generating and checking the client, writing the documents a train needs, driving a machine from React or TypeScript, forms from a machine, persisted ids, and why a socket works from Node but gets 403 in the browser.
+description: Use when a frontend or a Node script calls a Trax API, or when working with trax client, the client manifest (--trax-export-client, RunTraxAsync, TraxClientExport), trax.documents.json, .graphql documents, generated .g.ts files, configureTrax, the generated machine hooks (useCheckout, useRememberedCheckout and the like), useServerMachine, createMachineExecutor, createFormView, @traxsharp/state-machine, or a .NET frontend on Trax.StateMachine.Client (MachinePredictor, ServerMachineController, trax machine generate --lang csharp). Covers exporting the manifest, generating and checking the client, writing the documents a train needs, driving a machine from React, TypeScript or .NET, forms from a machine, persisted ids, and why a socket works from Node but gets 403 in the browser.
 metadata:
   internal: true
 ---
@@ -8,7 +8,8 @@ metadata:
 # Generate and use a Trax client
 
 A frontend never writes a GraphQL request by hand. The host exports a **client manifest**, `trax client` turns it
-into typed TypeScript, and every request goes out by a persisted id the host registered. A host with persisted
+into typed TypeScript (a .NET frontend uses `trax machine generate --lang csharp` instead, see
+[A .NET frontend](#a-net-frontend)), and every request goes out by a persisted id the host registered. A host with persisted
 operations required (the default) refuses a document sent as text, so a hand-written `fetch` with a `query` string
 fails however right it looks.
 
@@ -75,15 +76,16 @@ in [Fetch only what a component needs](https://traxsharp.net/docs/api/fetch-only
 dotnet tool run trax client --manifest src/trax/manifest.json --out src/trax --documents 'src/graphql/*.graphql'
 ```
 
-- Install the tool as a local tool so CI runs the pinned version (`dotnet new tool-manifest`,
-  `dotnet tool install Trax.Cli`). It needs `node` 22 or later. The app installs
+- Install the tool as a local tool so CI runs the pinned version: `dotnet new tool-manifest` once at the repository
+  root, then `dotnet tool install Trax.Cli --version <the Trax version>`, and commit the `dotnet-tools.json` it
+  writes. A fresh checkout runs `dotnet tool restore` first. It needs `node` 22 or later. The app installs
   `@traxsharp/state-machine` and `graphql-ws`, at the version of its `Trax.*` packages.
 - Commit everything under `--out`, the manifest included. Never edit a `.g.ts` file.
 - In CI, export the manifest again and run the same command with `--check`; it fails naming each stale file.
 - After any change to a train, a query model, a machine or a document: export, generate, then build the host again
   so it picks up the new `trax.documents.json`. **Deploy the host before the frontend.**
 - `trax client` writes each machine's twin itself (`<id>/<id>.machine.g.ts`). `trax machine generate` is for the IR
-  and corpus on the .NET side; do not point its `--twin-out` into the same folder.
+  and corpus on the host, and for the C# view of a .NET frontend; do not point its `--twin-out` into the same folder.
 
 Every option and every file it writes: [trax client](https://traxsharp.net/docs/reference/cli#frontend-clients-trax-client).
 
@@ -106,7 +108,9 @@ export async function signIn(user: string): Promise<void> {
 }
 ```
 
-`socketUrl` is an absolute `ws://` or `wss://` URL. Each document is then a function named after its operation,
+`socketUrl` is an absolute `ws://` or `wss://` URL. An absolute `http:` `url` to a host that is not loopback is
+refused by every train function and machine server, since the headers would travel in cleartext: use `https:` or a
+relative url, or set `allowInsecureTransport: true` on a network you trust. Each document is then a function named after its operation,
 exported from `src/trax/index.g`, taking the operation's variables and answering exactly the fields it selected
 (`placeOrder(input)` for `mutation PlaceOrder($input: PlaceOrderInput!)`). Its doc comment says what a caller needs.
 
@@ -142,6 +146,30 @@ from `@traxsharp/state-machine`, then `can`, `advance`, `serialize` and `resume`
 stored or compared is the [canonical wire](https://traxsharp.net/docs/statemachine/canonical-wire) that `serialize`
 writes; never build one by hand.
 
+## A .NET frontend
+
+A .NET app (a desktop or mobile client, a worker) drives a served machine with `Trax.StateMachine.Client`, at the
+version of the host's `Trax.*` packages. It needs the same manifest, and no reference to the host's assembly.
+
+```bash
+trax machine generate --manifest ./manifest.json --machine <id> --twin-out ./Machines --lang csharp --namespace MyApp.Machines
+```
+
+- One run per machine: `--machine` takes the machine's id with `--manifest`, and is required once the manifest
+  serves two or more. It writes `<Machine>.g.cs`: the states and triggers as enums, a record per context and input,
+  the IR with its hash, and `<Machine>Client`, a typed client over `ServerMachineController`. Commit it and run
+  `trax machine check` with the same arguments in CI.
+- The controller predicts with `MachinePredictor.FromIr(machine)`, the machine built from the IR
+  ([`IrMachine`](https://traxsharp.net/docs/sdk-reference/statemachine-api/ir-machine)). The same rule as the twin
+  holds: the server decides. It has no handler for a custom guard, custom state requirement or custom reduction,
+  so an event whose prediction depends on one is sent unpredicted and the view shows the server's answer.
+  `MachinePredictor.For(machine)` predicts with the C# handlers, for an app that compiles the host's machine.
+- A refusal or a failed request is a `SendOutcome`, never an exception. `Changed` is raised on the controller's own
+  scheduler: marshal to the UI thread there.
+
+Every type, option and behaviour: [.NET client](https://traxsharp.net/docs/sdk-reference/statemachine-api/dotnet-client),
+and the C# view in [the codegen pipeline](https://traxsharp.net/docs/statemachine/codegen-pipeline#other-languages).
+
 ## Known mistakes
 
 - **Copying a `documents.json` import from an older page.** The documents of a machine are the generated
@@ -165,5 +193,6 @@ writes; never build one by hand.
 - [Drive a machine instance from React](https://traxsharp.net/docs/statemachine/drive-a-machine-instance-from-react),
   [Call a machine from TypeScript](https://traxsharp.net/docs/statemachine/call-a-machine-from-typescript),
   [Client manifest](https://traxsharp.net/docs/sdk-reference/statemachine-api/client-manifest),
-  [TypeScript package](https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package), and the
+  [TypeScript package](https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package),
+  [.NET client](https://traxsharp.net/docs/sdk-reference/statemachine-api/dotnet-client), and the
   book's [A generated client](https://traxsharp.net/docs/book/a-generated-client).

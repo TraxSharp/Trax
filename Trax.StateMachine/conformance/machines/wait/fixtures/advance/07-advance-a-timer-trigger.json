@@ -1,0 +1,20 @@
+{
+  "name": "A timer's trigger sent through advance is timer-bound",
+  "op": "advance",
+  "given": {
+    "machine": "wait",
+    "version": 1,
+    "state": "Fetching",
+    "context": {
+      "source": "s3://bucket/a",
+      "patience": "PT5M"
+    }
+  },
+  "when": {
+    "trigger": "Fetching.after"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "TIMER_BOUND"
+  }
+}

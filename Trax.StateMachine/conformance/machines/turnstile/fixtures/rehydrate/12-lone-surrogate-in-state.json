@@ -1,0 +1,8 @@
+{
+  "name": "A lone surrogate in the state is malformed",
+  "raw": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"\\udc00\",\"context\":{}}",
+  "expect": {
+    "result": "error",
+    "code": "MALFORMED"
+  }
+}

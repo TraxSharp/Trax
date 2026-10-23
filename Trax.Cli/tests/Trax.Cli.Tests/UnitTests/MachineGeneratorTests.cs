@@ -253,6 +253,23 @@ public class MachineGeneratorTests
             .WithMessage("*hashes to*documents were registered*");
     }
 
+    [TestCase("checkout")]
+    [TestCase(null)]
+    public void A_manifest_that_lists_a_machine_twice_is_refused(string? machine)
+    {
+        var sample = ClientManifests.Sample();
+        var checkout = sample.Machines.Single(m => m.Id == "checkout");
+        var twice = sample with { Machines = [checkout, checkout] };
+        var path = Path.Combine(_root, "trax-client-manifest.json");
+        File.WriteAllText(path, ClientManifest.Write(twice));
+
+        var act = () => MachineCommand.Source(null, path, machine);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*malformed at $.machines: 'checkout' is listed more than once*");
+    }
+
     [TestCase("rust", null, null, "*--lang must be*")]
     [TestCase("csharp", "specifier", null, "*a C# view imports*")]
     [TestCase(null, null, "Shop.Machines", "*--namespace*needs --lang csharp*")]

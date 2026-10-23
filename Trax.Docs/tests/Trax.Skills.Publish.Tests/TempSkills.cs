@@ -48,6 +48,30 @@ internal sealed class TempSkills : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// A file and a folder outside <see cref="Skills"/>, holding what a link into a skill must not publish.
+    /// </summary>
+    public (string File, string Folder) Outside()
+    {
+        var folder = Path.Combine(Root, "outside");
+        Directory.CreateDirectory(folder);
+        var file = Path.Combine(folder, "secret.md");
+        File.WriteAllText(file, "secret");
+        return (file, folder);
+    }
+
+    /// <summary>A symbolic link at <paramref name="relative"/> under <see cref="Skills"/>.</summary>
+    public TempSkills Link(string relative, string target, bool folder = false)
+    {
+        var path = Path.Combine(Skills, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        if (folder)
+            Directory.CreateSymbolicLink(path, target);
+        else
+            File.CreateSymbolicLink(path, target);
+        return this;
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(Root))

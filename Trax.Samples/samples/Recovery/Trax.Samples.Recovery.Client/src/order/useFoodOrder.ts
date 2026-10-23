@@ -156,10 +156,12 @@ export function useFoodOrder() {
             server.subscribe(start.id, (message) => {
               if (!live() || message.type !== "snapshot") return;
               const change = message.snapshot;
-              if (change.revision <= latest[screen]) return;
-              latest[screen] = change.revision;
+              // This host records a revision with every snapshot; a push without one cannot be placed in order.
+              const revision = change.revision;
+              if (revision === null || revision <= latest[screen]) return;
+              latest[screen] = revision;
               if (screen === "laptop") laptopState.current = change.state;
-              add({ t: at(), kind: "push", screen, revision: change.revision, state: change.state });
+              add({ t: at(), kind: "push", screen, revision, state: change.state });
             }),
           );
         for (let i = 0; i < 50 && live() && (latest.laptop < 1 || latest.phone < 1); i++) await sleep(100);

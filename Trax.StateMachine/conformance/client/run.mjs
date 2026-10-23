@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { canonical } from "../kit.mjs";
 import { startHost } from "./host.mjs";
@@ -13,6 +12,8 @@ const USAGE =
 
 const clientDir = fileURLToPath(new URL(".", import.meta.url));
 const machinesDir = join(clientDir, "..", "machines");
+// Machines only the client kit drives, beside the engine kit's: one IR file each, as the C# machine would export it.
+const clientMachinesDir = join(clientDir, "machines");
 const transcriptsDir = join(clientDir, "transcripts");
 
 // How long a step waits for the client before the transcript fails. Every delay a transcript configures is far
@@ -31,10 +32,13 @@ export const machineField = (id) =>
 
 /**
  * A machine of the kit as a client gets it: its IR as committed, which is the text the C# machine exports, and that
- * text's SHA-256, the hash a host stamps its documents with and a generated twin carries.
+ * text's SHA-256, the hash a host stamps its documents with and a generated twin carries. The client kit's own machines
+ * come first, then the engine kit's.
  */
 export function machineOf(id) {
-  const text = readFileSync(join(machinesDir, id, `${id}.ir.json`), "utf8").replace(/\n+$/, "");
+  const own = join(clientMachinesDir, `${id}.ir.json`);
+  const path = existsSync(own) ? own : join(machinesDir, id, `${id}.ir.json`);
+  const text = readFileSync(path, "utf8").replace(/\n+$/, "");
   const irHash = createHash("sha256").update(text, "utf8").digest("hex");
   return { ir: JSON.parse(text), irHash };
 }
@@ -80,11 +84,20 @@ function answerOf(value) {
   return value.problem ? { ...PROBLEM_DEFAULTS, ...value } : { ...ANSWER_DEFAULTS, ...value };
 }
 
-// Whether every key `expected` names holds the same value in `got`.
+// Whether every key `expected` names holds the same value in `got`. A due time is compared as the instant it names: a
+// client may hold it in another offset than the host wrote, or with more digits.
 const matches = (expected, got) =>
   got !== null &&
   typeof got === "object" &&
-  Object.entries(expected).every(([k, v]) => canonical(v) === canonical(got[k] ?? null));
+  Object.entries(expected).every(([k, v]) =>
+    k === "dueAt" ? sameInstant(v, got[k] ?? null) : canonical(v) === canonical(got[k] ?? null),
+  );
+
+function sameInstant(expected, got) {
+  if (typeof expected !== "string" || typeof got !== "string") return canonical(expected) === canonical(got);
+  const [a, b] = [Date.parse(expected), Date.parse(got)];
+  return !Number.isNaN(a) && a === b;
+}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -93,8 +106,9 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * that failed; returns when every step passed and nothing arrived that no step took.
  */
 export async function runTranscript(transcript, host, askTestee) {
-  // Every answer comes within the step timeout, or the transcript fails naming the request it waited on.
-  const ask = (request) => withTimeout(askTestee(request), `the testee's answer to ${request.op}`);
+  // Every answer comes within the step timeout, or the transcript fails naming the request it waited on, and no answer
+  // may be an `error` or `unsupported`, the ones no step compares included.
+  const ask = (request) => withTimeout(askTestee(request), `the testee's answer to ${request.op}`).then(checked(request));
   const { ir, irHash } = machineOf(transcript.machine);
   const documents = documentsOf(transcript.machine, irHash, transcript.documents);
   const field = machineField(transcript.machine);
@@ -180,6 +194,8 @@ export async function runTranscript(transcript, host, askTestee) {
         if (Date.now() > deadline) fail(`expected the view to hold ${canonical(step.view)}, it holds ${canonical(got)}`);
         await delay(5);
       }
+    } else if (step.wait !== undefined) {
+      await delay(step.wait);
     } else if (step.quiet !== undefined) {
       await delay(step.quiet);
       const extra = host.leftovers();
@@ -191,9 +207,27 @@ export async function runTranscript(transcript, host, askTestee) {
   await Promise.all(background);
   await delay(30);
   const extra = host.leftovers();
-  await ask({ op: "dispose" });
+  const disposed = await ask({ op: "dispose" });
+  if (disposed.disposed !== true) throw new Error(`dispose: expected { "disposed": true }, got ${canonical(disposed)}`);
   if (extra.length > 0) throw new Error(`after the last step: nothing should have arrived, got ${canonical(extra)}`);
 }
+
+/**
+ * Fails an answer that says the testee went wrong rather than its client: `unsupported`, or an `error` text. A view's
+ * `error` is the code that stopped the client, beside its `status`, and is not one.
+ */
+export function testeeFailure(answer) {
+  if (answer === null || typeof answer !== "object") return "not an object";
+  if (answer.unsupported === true) return "unsupported";
+  if (typeof answer.error === "string" && answer.status === undefined) return `error: ${answer.error}`;
+  return null;
+}
+
+const checked = (request) => (answer) => {
+  const failure = testeeFailure(answer);
+  if (failure !== null) throw new Error(`the testee's answer to ${request.op}: ${failure}`);
+  return answer;
+};
 
 function withTimeout(promise, what) {
   let timer;
@@ -230,23 +264,49 @@ export async function runTranscripts(list, host, ask, onResult = () => {}) {
 // TRAX_CLIENT_KIT_TRACE=1 writes every request and answer on stderr.
 const trace = process.env.TRAX_CLIENT_KIT_TRACE ? (line) => console.error(line.slice(0, 300)) : () => {};
 
+/**
+ * Calls `onLine` with every line of `input`, split on "\n" only: readline would also split on U+2028 and U+2029, which
+ * JSON writes raw inside a string. Calls `onClose` once the input ends.
+ */
+export function readLines(input, onLine, onClose) {
+  let rest = "";
+  input.setEncoding("utf8");
+  input.on("data", (chunk) => {
+    const lines = (rest + chunk).split("\n");
+    rest = lines.pop();
+    for (const line of lines) if (line.trim() !== "") onLine(line);
+  });
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    if (rest.trim() !== "") onLine(rest);
+    rest = "";
+    onClose();
+  };
+  input.on("end", end);
+  input.on("close", end);
+}
+
 function lineAsker(input, output) {
   const waiting = new Map();
   let next = 0;
   let closed = false;
-  createInterface({ input })
-    .on("line", (line) => {
+  readLines(
+    input,
+    (line) => {
       trace(`<- ${line}`);
       const answer = JSON.parse(line);
       const resolve = waiting.get(answer.id);
       waiting.delete(answer.id);
       resolve?.(answer);
-    })
-    .on("close", () => {
+    },
+    () => {
       closed = true;
       for (const resolve of waiting.values()) resolve({ error: "the testee closed" });
       waiting.clear();
-    });
+    },
+  );
   return (request) => {
     if (closed) return Promise.resolve({ error: "the testee closed" });
     next += 1;
@@ -277,6 +337,9 @@ async function main(argv) {
     } else throw new Error(`${USAGE}\nUnknown argument ${argv[i]}.`);
   }
   if (!mode || (mode === "spawn" && command.length === 0)) throw new Error(USAGE);
+  const list = transcripts().filter((t) => t.name.startsWith(only));
+  // A selection that runs nothing passes nothing: it is a mistake, not a pass.
+  if (list.length === 0) throw new Error(`No transcript's name starts with "${only}".`);
 
   let ask;
   let child;
@@ -286,17 +349,18 @@ async function main(argv) {
   } else ask = lineAsker(process.stdin, process.stdout);
 
   const host = await startHost();
-  const list = transcripts().filter((t) => t.name.startsWith(only));
   // Each transcript is reported as it ends, so a testee that hangs still shows how far it got.
   const failures = await runTranscripts(list, host, ask, (r) =>
     console.error(r.error === undefined ? `ok   ${r.name}` : `FAIL ${r.name}\n  ${r.error}`),
   );
-  await ask({ op: "end" });
+  const ended = await withTimeout(ask({ op: "end" }), "the testee's answer to end").catch((e) => ({ error: e.message }));
   if (child) child.stdin.end();
   await host.close();
 
+  const endFailure = testeeFailure(ended);
+  if (endFailure !== null) console.error(`FAIL end\n  the testee's answer to end: ${endFailure}`);
   console.error(`${list.length - failures.length} of ${list.length} transcripts passed.`);
-  return failures.length === 0 ? 0 : 1;
+  return failures.length === 0 && endFailure === null ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url))

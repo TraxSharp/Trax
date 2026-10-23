@@ -1096,6 +1096,7 @@ version = "0.0.0"
 dependencies = [
  "futures-util",
  "reqwest",
+ "ring",
  "rustls",
  "tokio",
  "tokio-tungstenite",

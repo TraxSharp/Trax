@@ -169,10 +169,8 @@ public sealed class ClientTestee : IAsyncDisposable
                 : null,
             ["rowId"] = view.RowId,
             ["revision"] = view.Revision,
-            ["dueAt"] = view.DueAt?.UtcDateTime.ToString(
-                "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'",
-                CultureInfo.InvariantCulture
-            ),
+            // In the offset the client holds it in: the runner compares it as the instant it names.
+            ["dueAt"] = view.DueAt?.ToString("o", CultureInfo.InvariantCulture),
             ["pending"] = view.Pending,
             ["problem"] = view.Problem?.Code,
             ["error"] = view.Error?.Code,

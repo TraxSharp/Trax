@@ -304,6 +304,26 @@ public partial class ClientGeneratorTests
     }
 
     [Test]
+    public void A_machine_server_takes_the_connections_consent_to_cleartext()
+    {
+        var files = Render();
+
+        Text(files, "client.g.ts")
+            .Should()
+            .Contain("allowInsecureTransport?: boolean;")
+            .And.Contain(
+                "requireSecureEndpoint(url, allowInsecureTransport);",
+                "a train function refuses a cleartext url to another host as a machine's server does"
+            );
+        Text(files, "checkout/checkout.client.g.ts")
+            .Should()
+            .Contain(
+                "allowInsecureTransport: connection.allowInsecureTransport,",
+                "a machine's server refuses a cleartext url to another host unless the app said the network is trusted"
+            );
+    }
+
+    [Test]
     public void A_host_whose_trains_can_be_followed_gets_a_progress_module()
     {
         var files = Render();

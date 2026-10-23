@@ -1,9 +1,11 @@
 # Trax.StateMachine
 
-The state machines, in every language they ship in: the C# engine and its persistence
-(`Trax.StateMachine`, `.Persistence`, `.Testing` on NuGet), the TypeScript engine and client
-(`@traxsharp/state-machine` on npm), and the conformance kit that holds the two to the same
-answers. It sits between `Trax.Effect`, whose trains a machine invokes and whose tables it is
+The state machines, in every language they ship in: the C# engine, its persistence and the .NET
+client (`Trax.StateMachine`, `.Persistence`, `.Testing`, `.Client` on NuGet), the TypeScript engine
+and client (`@traxsharp/state-machine` on npm), the Rust engine and client (`trax-state-machine`,
+`trax-state-machine-client`, not published yet), and the conformance kits that hold them to the same
+answers: the engine kit holds the three engines and the C# `IrMachine`, the client kit the three
+clients. It sits between `Trax.Effect`, whose trains a machine invokes and whose tables it is
 stored in, and `Trax.Mediator`, which launches those trains, so a change here reaches Trax.Mediator,
 Trax.Scheduler, Trax.Api, Trax.Cli and Trax.Samples. Trax.Effect is upstream and never sees it.
 
@@ -19,11 +21,12 @@ The folder is laid out by language, with what spans the languages at its root.
 | `ts/` | `@traxsharp/state-machine`: the engine (`src/`), the model every typed view is written from and an emitter per language (`src/codegen/`, TypeScript's in `src/rules/generateTypes.ts`), the client a page drives a served machine through (`src/client/`, `src/server/`, `src/react.ts`), and the node entrypoints `trax machine` shells out to (`tools/`), which `tools/bundle-cli.mjs` bundles into Trax.Cli's package. |
 | `rust/` | `trax-state-machine`, the engine in Rust that the bindings for other languages are built on (not published yet): the engine (`src/`, no dependencies, no I/O) and its conformance testee (`src/bin/testee.rs`), and `trax-state-machine-client` (`client/`), the client that drives a served machine from Rust over tokio, with its client-kit testee (`client/src/bin/client_testee.rs`). A Cargo workspace with a committed `Cargo.lock`; its toolchain is pinned in `rust-toolchain.toml`. |
 | `conformance/` | Engine-neutral data any engine replays: the shared machines (`machines/<m>/`, each machine's IR, fixtures, differential corpus and migration golden), the IR's JSON Schema (`ir.schema.json`, normative), the canonical-wire vectors, the refusal-code registry, the strict-input cases, and the runner (`run.mjs`, `kit.mjs`) that sends all of it to one engine over the protocol in `PROTOCOL.md`. A vector goes here, not in one engine's tests. |
-| `conformance/client/` | The client kit: transcripts of a host, request by request and push by push (`transcripts/`), the fake host that plays them (`host.mjs`) and the runner (`run.mjs`) that drives one client's testee through them over the protocol in its `PROTOCOL.md`. The TypeScript client (`ts/tools/conformance/client-testee-ts.mjs`), the C# one (`ClientConformanceTests`) and the Rust one (`rust/client`) pass it. |
+| `conformance/client/` | The client kit: transcripts of a host, request by request and push by push (`transcripts/`), the machines only it drives (`machines/`), the fake host that plays them (`host.mjs`) and the runner (`run.mjs`) that drives one client's testee through them over the protocol in its `PROTOCOL.md`. The TypeScript client (`ts/tools/conformance/client-testee-ts.mjs`), the C# one (`ClientConformanceTests`) and the Rust one (`rust/client`) pass it. |
 | `docs/adr/` | This folder's decisions, for every language. |
 
-Another language's engine gets a directory of its own beside `dotnet/` and `ts/`, and joins the kit by
-implementing a testee for `conformance/run.mjs`.
+Another language's engine gets a directory of its own beside `dotnet/`, `ts/` and `rust/`, and joins the
+kit by implementing a testee for `conformance/run.mjs`; its client joins the client kit with a testee for
+`conformance/client/run.mjs`.
 
 ## Architecture decisions
 
@@ -119,14 +122,16 @@ node conformance/client/run.mjs --testee rust/target/release/trax-state-machine-
 ## CI
 
 This folder has no folder job. `.github/ci/packages.json` gives it four suites, each with its own
-paths, so a change to one language does not rebuild the other:
+paths:
 
 | Suite | Runs for | Does |
 | --- | --- | --- |
 | `state-machine-dotnet` | `dotnet/`, `conformance/`, or Trax.Effect | the folder job's checks over `dotnet/Trax.StateMachine.slnx` (format, locks, deprecations, pack with package validation, coverage) and its tests, without the CrossEngine ones |
 | `state-machine-ts` | `ts/`, `conformance/` | typecheck, vitest, build, `npm pack --dry-run`, audit |
 | `state-machine-rust` | `rust/`, `conformance/` | `cargo fmt --check`, clippy with warnings as errors, `cargo test`, then the engine kit and the client kit through the Rust testees |
-| `state-machine-conformance` | anything in the folder, or Trax.Effect | the CrossEngine tests, then the kit through the TypeScript engine |
+| `state-machine-conformance` | anything in the folder, or Trax.Effect | the CrossEngine tests (among them the engine kit through the C# engine and the client kit through the C# client, `ClientConformanceTests`), then the engine kit through the TypeScript engine and the client kit through the TypeScript client |
 
-Trax.Mediator and Trax.Cli list this folder upstream, so a change here also runs them and the
-folders below them.
+The three language suites leave each other alone, but the folder is still one unit to the change
+detector: any change in it runs `state-machine-conformance`, which builds and runs the C# tests, and
+selects the folder itself. Trax.Mediator and Trax.Cli list this folder upstream, so a change anywhere
+in it, a `rust/`-only one included, also runs them and the folders below them.

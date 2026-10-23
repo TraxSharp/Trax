@@ -1,0 +1,27 @@
+{
+  "name": "A duration on the timer's maximum arms it",
+  "given": {
+    "machine": "wait",
+    "version": 1,
+    "state": "Idle",
+    "context": {
+      "source": "s3://bucket/a",
+      "patience": "PT1H"
+    }
+  },
+  "when": {
+    "trigger": "Start"
+  },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": {
+      "machine": "wait",
+      "version": 1,
+      "state": "Fetching",
+      "context": {
+        "source": "s3://bucket/a",
+        "patience": "PT1H"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "An outcome's trigger sent through advance is outcome-bound",
+  "op": "advance",
+  "given": {
+    "machine": "wait",
+    "version": 1,
+    "state": "Fetching",
+    "context": {
+      "source": "s3://bucket/a",
+      "patience": "PT5M"
+    }
+  },
+  "when": {
+    "trigger": "Fetching.failed"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "OUTCOME_BOUND"
+  }
+}

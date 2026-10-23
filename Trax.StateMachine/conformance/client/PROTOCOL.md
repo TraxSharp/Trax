@@ -22,17 +22,23 @@ node conformance/client/run.mjs --stdio                                         
 `--stdio` reverses the pipes as the engine runner's does: the runner writes requests on its stdout and reads answers on
 its stdin, so a test in another language (the C# `ClientConformanceTests`) starts the runner and answers in process. The Rust
 client's testee is a binary, `rust/client/src/bin/client_testee.rs`, which the runner spawns.
-The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed. `--only <prefix>`
-runs the transcripts whose name starts with the prefix. The runner and the host use node's own modules only.
+The runner writes its report on stderr and exits 0 when every transcript passed, 1 when any failed or the testee's
+answer to `end` was an `error`, and 2 on a usage error, a `--only <prefix>` that selects no transcript, or anything
+else it could not run. `--only <prefix>` runs the transcripts whose name starts with the prefix. The TypeScript
+client's testee exits 3 when esbuild, which it bundles the client with, is not installed. The runner and the host use
+node's own modules only.
 
 ## The protocol
 
-One JSON object per line, UTF-8, both ways. Every request has an `id` and an `op`, and its answer carries the same
+One JSON object per line, UTF-8, both ways. A line ends at `\n` only: JSON writes U+2028 and U+2029 raw inside a
+string, so a reader that also ends a line there splits an answer. Every request has an `id` and an `op`, and its answer carries the same
 `id`. Unlike the engine kit, **answers come when they settle, not in order**: a `send` is answered once the host
 answers it, and the runner goes on sending requests meanwhile. A testee hands each request to its client in the order
 it arrives, so two sends reach the client in the order the runner sent them. A testee answers an `op` it does not implement with
 `{ "id", "unsupported": true }`, and anything that went wrong outside the client (a throw it caught) with
-`{ "id", "error": "..." }`. Either fails the transcript.
+`{ "id", "error": "..." }`. Either fails the transcript, whichever request it answers: one a step compares, one no
+step looks at, and `dispose`. (A `view`'s `error` is the code that stopped the client, beside its `status`; it is not
+one.)
 
 **`open`** builds a client for one instance and holds it until the next `open`, `dispose` or `end`. It sends nothing.
 
@@ -43,7 +49,8 @@ it arrives, so two sends reach the client in the order the runner sent them. A t
 { "id": 1, "opened": true }
 ```
 
-- `ir` is the machine's IR as committed in `../machines/<m>/`, which is the text the C# machine exports, and
+- `ir` is the machine's IR as committed in `../machines/<m>/`, or in `machines/<m>.ir.json` here for a machine only
+  this kit drives (one whose custom rules no client holds a handler for), which is the text the C# machine exports, and
   `irHash` the lowercase hex SHA-256 of that text: the hash a host's documents carry and a generated twin holds. A
   client that predicts with an engine of its own (C#) checks its machine against it.
 - `documents` are the machine's persisted documents as a host's client manifest lists them (`id`, `machine`,
@@ -60,7 +67,11 @@ instance under a fresh request id and subscribes to the id the host answers with
 once the start or the first read has settled, whatever its result.
 
 **`send`** sends one event, after every earlier one has settled. `trigger` is the trigger's name; `input` is its
-input, or absent. **`retry`** resends what last failed under the same request id. Both are answered with what the send
+input, or absent. The client sends its prediction as `clientResult`, except for an event bound to the machine's
+effect or one with an edge out of the state it fires from that rests on a custom rule it holds no handler for (a custom
+guard, a custom reduction, or a custom requirement of the state it enters): it sends those with none, predicts nothing
+after them until they answer, and sends one even when its own engine would refuse it. **`retry`** resends what last
+failed under the same request id. Both are answered with what the send
 came to:
 
 ```json
@@ -78,7 +89,9 @@ came to:
   "pending": true, "problem": null, "error": null, "deleted": null }
 ```
 
-`status` is `loading`, `ready` or `stopped`. `state` and `context` are what to show (the prediction while one is
+`status` is `loading`, `ready` or `stopped`. `dueAt` is the due time as an ISO-8601 instant with its offset, in
+whatever offset and precision the client holds it; the runner compares it as the instant it names, so
+`2026-10-22T12:10:00.000+02:00` and `2026-10-22T10:10:00Z` are one value, and one read without its offset is not. `state` and `context` are what to show (the prediction while one is
 pending), `confirmed` what the host last confirmed. `problem` is the code of the last refusal or transport failure,
 `error` the code that stopped the client (`GONE`, `CLIENT_OUTDATED`), and `deleted` whether a `GONE` came from a
 deletion (true) or a host that holds no such instance for the caller (false). A context holds no member whose value
@@ -121,12 +134,13 @@ documents from it. The steps run in order:
 | --- | --- |
 | `{ "client": "<op>", ...args }` | Sends the request. With `"expect"`, waits for its answer and compares; with `"as": "<name>"`, goes on and a later `await` compares; with neither, goes on, and the answer must still come before the transcript ends. |
 | `{ "await": "<name>", "expect": { ... } }` | Waits for the answer sent under that name and compares. |
-| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503`, or `"drop": true` (the connection is closed with no answer). |
+| `{ "request": "<operation>", "variables": { ... }, <answer> }` | Waits for the next HTTP request, which must be that operation with exactly those variables (when given), and answers it with `"answer": {...}` (or `null`, no instance), `"errors": [...]`, `"status": 503` (with `"body": {...}`, the JSON it answers with, or none), or `"drop": true` (the connection is closed with no answer). |
 | `{ "subscribe": { ...variables } }` | Waits for the next subscription, which must be the `changed` document by its id with those variables and no text. |
 | `{ "push": { ... } }`, `{ "pushErrors": [...] }` | Sends one event, or an event of errors, on the last subscription. |
 | `{ "complete": true }`, `{ "dropSocket": true }` | Completes the last subscription, or closes its socket. |
 | `{ "view": { ... } }` | Asks for the view until it holds every member given, for up to three seconds. |
 | `{ "quiet": 50 }` | Waits that many milliseconds; nothing may arrive meanwhile. |
+| `{ "wait": 50 }` | Waits that many milliseconds, so the client has taken every request sent before it; what arrives meanwhile waits for a later step. |
 
 A comparison holds when every member the step gives equals the answer's, canonically; members it does not give are
 not compared. After the last step the runner waits briefly, and anything that arrived that no step took fails the

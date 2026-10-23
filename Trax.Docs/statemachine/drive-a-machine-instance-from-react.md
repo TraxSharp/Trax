@@ -84,8 +84,8 @@ function Wizard({ id }: { id?: string }) {
 - **Trusts the server on custom rules.** A snapshot the server sends is checked for its shape and every built-in
   rule; a custom rule the twin has no handler for counts as passed, because the server evaluated it. A snapshot that
   fails a check it can make stops the hook with `CLIENT_OUTDATED`.
-- **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included; it
-  reads the instance again only after `reload`, an incarnation change or a `CLIENT_DIVERGENCE`.
+- **Orders by revision.** Anything at or below the revision held is dropped, the hook's own answers included. An
+  answer with no revision is applied and not ordered. It reads the instance again only after `reload`, an incarnation change or a `CLIENT_DIVERGENCE`.
 - **Stops for good** on `gone`, `CLIENT_OUTDATED`, `ended`, or a request the server's `endedBy` names: `status` is
   `stopped`, `error.code` says which (with `ended` or `endedBy`, the code given, such as `CONNECTION_CHANGED`), nothing
   more is sent, `retry()` answers `stopped`, and a start request id the hook kept is forgotten. With `GONE`, `error.deleted` is true when the stream said the instance was deleted or expired, and false

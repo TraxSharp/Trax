@@ -98,6 +98,13 @@ export interface MachineDefinition<S extends string, T extends string> {
    */
   effectTriggers?: readonly string[];
   /**
+   * Per state, the triggers with an edge out of it that rests on a custom rule this machine holds no handler for: its
+   * guard names one, its reduction is one, or its destination's requirement names one. Here such a guard fails and such
+   * a reduction keeps the context, which is not what the server does, so a server-authoritative client sends the event
+   * with no prediction and predicts nothing after it until it answers. `machineFromIr` fills it in.
+   */
+  unpredictable?: Readonly<Record<string, readonly string[]>>;
+  /**
    * The timers of timed states, keyed by the timed state. Only the server fires one, through `applyTimer` here as
    * there: `advance` refuses a timer trigger as `TIMER_BOUND`, `canFire` is false for it and `availableTriggers`
    * never offers it. A transition into a state whose timer reads its duration from the context refuses a duration

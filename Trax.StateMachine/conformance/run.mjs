@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { canonical, kitCases } from "./kit.mjs";
+import { answers, canonical, kitCases } from "./kit.mjs";
 
 const USAGE =
   "Usage: node conformance/run.mjs [--only <prefix>] (--testee <command> [args...] | --stdio)\n" +
@@ -9,7 +8,7 @@ const USAGE =
 
 /**
  * Sends each case's request through `exchange` (request → Promise<answer>) and compares the answer, without its id,
- * with what the case expects. A machine whose load failed fails its remaining cases without sending them. Returns
+ * with what the case expects (`answers` in kit.mjs). A machine whose load failed fails its remaining cases without sending them. Returns
  * the failures, each `{ name, request, expect, got }`; an empty list means the testee passed.
  */
 export async function runCases(cases, exchange) {
@@ -24,7 +23,7 @@ export async function runCases(cases, exchange) {
     id += 1;
     const { id: answered, ...got } = await exchange({ id, ...c.request });
     if (answered !== id) throw new Error(`the testee answered request ${id} with id ${answered}`);
-    if (canonical(got) !== canonical(c.expect)) {
+    if (!answers(got, c.expect)) {
       failures.push({ ...c, got });
       if (c.request.op === "load") unloaded.add(c.request.machine);
     }
@@ -41,9 +40,27 @@ export function report(failures, total) {
   return lines.join("\n");
 }
 
+/**
+ * The lines of a stream, split on "\n" only. node's readline also splits on U+2028 and U+2029, which JSON.stringify
+ * leaves literal inside a string, so a case holding one would arrive cut in two.
+ */
+export async function* readLines(stream) {
+  stream.setEncoding("utf8");
+  let buffer = "";
+  for await (const chunk of stream) {
+    buffer += chunk;
+    let end;
+    while ((end = buffer.indexOf("\n")) >= 0) {
+      yield buffer.slice(0, end).replace(/\r$/, "");
+      buffer = buffer.slice(end + 1);
+    }
+  }
+  if (buffer !== "") yield buffer;
+}
+
 // Requests go out as lines on `output`; answers come back as lines on `input`, one per request, in order.
 function lineExchange(input, output) {
-  const lines = createInterface({ input })[Symbol.asyncIterator]();
+  const lines = readLines(input);
   return async (request) => {
     output.write(`${JSON.stringify(request)}\n`);
     const { value, done } = await lines.next();
@@ -68,6 +85,9 @@ async function main(argv) {
   if (!mode || (mode === "spawn" && command.length === 0)) throw new Error(USAGE);
 
   const cases = kitCases().filter((c) => c.name.startsWith(only) || c.request.op === "load");
+  // A selection of nothing passes nothing: say so rather than report every case passed.
+  if (!cases.some((c) => c.name.startsWith(only)))
+    throw new Error(`No case of the kit is named with the prefix "${only}".`);
   let exchange;
   let child;
   if (mode === "spawn") {

@@ -18,6 +18,8 @@ on:
       - '**/.config/dotnet-tools.json'
       - '**/package.json'
       - '**/package-lock.json'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
       - '**/Dockerfile'
       - '**/docker-compose*.yml'
       - 'global.json'

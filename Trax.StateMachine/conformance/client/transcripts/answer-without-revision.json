@@ -1,0 +1,29 @@
+{
+  "about": "An answer with no revision, from a store that records none, is taken and cannot be ordered: it is never dropped as stale, and the next snapshot, with a revision or without, is taken after it.",
+  "machine": "turnstile",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "coin": "$id: UUID!, $input: CoinInput!, $requestId: String!, $clientResult: String",
+    "push": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    { "client": "start" },
+    { "subscribe": { "id": "i-1" } },
+    { "request": "get", "answer": { "id": "i-1", "revision": 5, "state": "Unlocked", "context": { "paidWith": "dollar" } } },
+    { "view": { "status": "ready", "revision": 5 } },
+    { "client": "send", "trigger": "Push", "as": "push" },
+    { "request": "push", "answer": { "id": "i-1", "revision": null, "state": "Locked", "context": {} } },
+    { "await": "push", "expect": { "outcome": "confirmed", "state": "Locked", "revision": null } },
+    { "view": { "state": "Locked", "revision": null, "pending": false, "problem": null } },
+    { "client": "send", "trigger": "Coin", "input": { "coin": "quarter" }, "as": "coin" },
+    { "request": "coin", "answer": { "id": "i-1", "revision": null, "state": "Unlocked", "context": { "paidWith": "quarter" } } },
+    { "await": "coin", "expect": { "outcome": "confirmed", "state": "Unlocked", "revision": null } },
+    { "view": { "state": "Unlocked", "context": { "paidWith": "quarter" }, "revision": null } },
+    { "push": { "revision": 2, "state": "Locked", "context": {} } },
+    { "view": { "state": "Locked", "revision": 2, "pending": false } }
+  ]
+}

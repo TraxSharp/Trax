@@ -21,7 +21,7 @@
  */
 import { RefusalCode, type ProblemCode } from '../results';
 import type { MachineSpec, TypedMachine } from '../typed';
-import type { HttpExecutorOptions, SnapshotExecutor, SnapshotOutput } from './transport';
+import { requireSecureEndpoint, type HttpExecutorOptions, type SnapshotExecutor, type SnapshotOutput } from './transport';
 
 /**
  * One machine document from the host's exported client manifest (`--trax-export-client`): the persisted document of
@@ -159,13 +159,15 @@ type Answered = { answer: TypedAnswer | null | undefined } | { refused: Snapshot
  * An executor over plain `fetch` for the typed `machines` root. Pass it to {@link createSnapshotClient}; the
  * sessions above it are unchanged. A GraphQL error (an unauthenticated caller, a document the schema refuses) throws,
  * which the session reports as a transport error; a refusal is a problem, as data, and so is `CLIENT_OUTDATED` or
- * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine.
+ * `SERVER_OUTDATED`, the host's answer to a persisted document of another version of the machine. An absolute
+ * `http:` endpoint on a host that is not loopback throws unless `allowInsecureTransport` is set.
  * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineExecutor(
   endpoint: string,
   options: MachineExecutorOptions,
 ): SnapshotExecutor {
+  requireSecureEndpoint(endpoint, options.allowInsecureTransport);
   const doFetch = options.fetch ?? globalThis.fetch;
   const machines = new Map(options.machines.map((m) => [m.machine.id, { ...m, byOperation: documentsOf(m) }]));
 
@@ -175,16 +177,28 @@ export function createMachineExecutor(
       headers: { 'Content-Type': 'application/json', ...options.headers?.() },
       body: JSON.stringify(body),
     });
-    const answered = (await response.json()) as {
+    type Body = {
       data?: { machines?: Record<string, Record<string, unknown>> } | null;
       errors?: { message: string; extensions?: { code?: string } }[];
     };
-    const error = answered.errors?.[0];
+    let answered: Body | null;
+    try {
+      answered = (await response.json()) as Body;
+    } catch (error) {
+      if (response.ok) throw error;
+      answered = null;
+    }
+    // A GraphQL error with a code is the host's to answer with whatever status it chose; anything else not 2xx failed,
+    // whatever its body holds.
+    const error = answered?.errors?.[0];
     if (error) {
       const code = error.extensions?.code;
       if (isOutdated(code)) return { refused: problem(code, error.message) };
       throw new Error(error.message);
     }
+    if (!response.ok)
+      throw new Error(`The server answered ${[response.status, response.statusText].filter(Boolean).join(' ')}.`);
+    if (answered === null || typeof answered !== 'object') throw new Error("The server's answer is not JSON.");
     return { answer: Object.values(answered.data?.machines ?? {})[0]?.[name] as TypedAnswer | null | undefined };
   };
 

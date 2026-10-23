@@ -110,6 +110,7 @@ export function assignmentServer(): ReturnType<typeof createMachineServer> {
         if (generation !== traxGeneration()) throw changed();
         return connection.headers?.() ?? {};
       },
+      allowInsecureTransport: connection.allowInsecureTransport,
       machine: assignment,
       documents: assignmentDocuments,
       // A stream refused below ends for good: the controller stops with it instead of subscribing again.

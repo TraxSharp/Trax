@@ -1,0 +1,8 @@
+{
+  "name": "A number outside the range of a double is malformed, even where null is allowed",
+  "raw": "{\"machine\":\"checkout\",\"version\":1,\"state\":\"Cart\",\"context\":{\"currency\":\"USD\",\"items\":[],\"receipt\":1e400,\"total\":0}}",
+  "expect": {
+    "result": "error",
+    "code": "MALFORMED"
+  }
+}

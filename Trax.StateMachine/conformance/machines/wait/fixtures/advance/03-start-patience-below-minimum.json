@@ -1,0 +1,19 @@
+{
+  "name": "A duration below the timer's minimum cannot arm it",
+  "given": {
+    "machine": "wait",
+    "version": 1,
+    "state": "Idle",
+    "context": {
+      "source": "s3://bucket/a",
+      "patience": "PT30S"
+    }
+  },
+  "when": {
+    "trigger": "Start"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "INVALID_INPUT"
+  }
+}

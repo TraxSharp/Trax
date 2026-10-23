@@ -1,0 +1,13 @@
+{
+  "name": "A key written twice inside a member the engine never reads is not looked at",
+  "raw": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{},\"note\":{\"a\":1,\"a\":2}}",
+  "expect": {
+    "result": "ok",
+    "snapshot": {
+      "machine": "turnstile",
+      "version": 1,
+      "state": "Locked",
+      "context": {}
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "A client's trigger sent through the timer path fires nothing",
+  "op": "timer",
+  "given": {
+    "machine": "wait",
+    "version": 1,
+    "state": "Idle",
+    "context": {
+      "source": "s3://bucket/a",
+      "patience": "PT5M"
+    }
+  },
+  "when": {
+    "trigger": "Start"
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "NO_TRANSITION"
+  }
+}

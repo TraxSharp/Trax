@@ -54,16 +54,61 @@ public static class MachinePredictor
         ArgumentNullException.ThrowIfNull(machine);
         return new IrPredictor(
             new IrMachine((JsonObject)machine.Ir.DeepClone()),
-            Hash(machine.IrText())
+            Hash(machine.IrText()),
+            UnpredictableEdges(machine.Ir)
         );
     }
+
+    // The (state, trigger) pairs with an edge whose guard names a custom rule, whose reduction is custom, or whose
+    // destination's requirement names a custom rule. A machine built from the IR binds no handler to any, so without one
+    // its guard fails and its reduction keeps the context, which is not what the server does. The TypeScript and Rust
+    // clients read the same edges the same way.
+    internal static IReadOnlySet<(string State, string Trigger)> UnpredictableEdges(JsonObject ir)
+    {
+        var invariants = ir["invariants"] as JsonObject;
+        return (ir["transitions"] as JsonArray ?? [])
+            .OfType<JsonObject>()
+            .Where(t =>
+                NamesCustom(t["guard"])
+                || (
+                    t["reduce"]?["reduce"] is JsonValue r
+                    && r.TryGetValue<string>(out var kind)
+                    && kind == "custom"
+                )
+                || (
+                    t["to"] is JsonValue to
+                    && to.TryGetValue<string>(out var target)
+                    && NamesCustom(invariants?[target])
+                )
+            )
+            .Select(t =>
+                (t["from"]?.GetValue<string>() ?? "", t["trigger"]?.GetValue<string>() ?? "")
+            )
+            .ToHashSet();
+    }
+
+    private static bool NamesCustom(JsonNode? rule) =>
+        rule is JsonObject r
+        && (r["rule"] as JsonValue)?.GetValue<string>() switch
+        {
+            "custom" => true,
+            "all" or "any" => (r["rules"] as JsonArray ?? []).Any(NamesCustom),
+            _ => false,
+        };
 
     private static string Hash(string ir) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ir)));
 
-    private sealed class IrPredictor(IrMachine machine, string irHash) : IMachinePredictor
+    private sealed class IrPredictor(
+        IrMachine machine,
+        string irHash,
+        IReadOnlySet<(string, string)> unpredictable
+    ) : IMachinePredictor, IPartialPredictor
     {
         public string IrHash { get; } = irHash;
+
+        public bool Predicts(string state, string trigger) =>
+            !unpredictable.Contains((state, trigger));
 
         public AdvanceResult Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
             machine.Advance(snapshot, trigger, input);
@@ -102,6 +147,13 @@ public static class MachinePredictor
         public IReadOnlyList<string> AvailableTriggers(Snapshot snapshot) =>
             _engine.AvailableTriggers(snapshot);
     }
+}
+
+// A predictor that cannot tell what every event leads to: one built from the IR, which holds no handler for a custom
+// rule. The controller sends such an event with no prediction.
+internal interface IPartialPredictor
+{
+    bool Predicts(string state, string trigger);
 }
 
 // What the controller and the server read from a machine's IR: its id and version, the states with a timer, the

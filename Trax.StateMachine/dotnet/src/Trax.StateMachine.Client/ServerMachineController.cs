@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 
 namespace Trax.StateMachine.Client;
@@ -156,9 +157,12 @@ public sealed record ServerMachineOptions
 /// pending the view shows the prediction, which is sent beside it; the server's answer replaces it, and a refusal or a
 /// transport failure goes back to what the server confirmed. An event the predictor refuses is still sent, without a
 /// prediction. An event bound to the machine's effect is sent with no prediction, and nothing after it is predicted
-/// until it answers.</para>
+/// until it answers; so is an event with an edge that rests on a custom rule the predictor holds no handler for (a
+/// predictor built from the IR holds none).</para>
 /// <para><b>Ordering.</b> Every snapshot, pushed or answered, carries its revision, and one at or below the revision held
-/// is dropped. The instance is read again only after a reload push, a new incarnation or a <c>CLIENT_DIVERGENCE</c>.</para>
+/// is dropped. An answer without one (a store that records none) is taken and cannot be ordered: the next snapshot, with a
+/// revision or without, is taken after it. The instance is read again only after a reload push, a new incarnation or a
+/// <c>CLIENT_DIVERGENCE</c>.</para>
 /// <para><b>Retries.</b> <c>SERVER_OUTDATED</c> is retried under the same request id after each of the retry delays. A
 /// transport failure ends the event as failed; <see cref="RetryAsync"/> resends it under the same request id, so the
 /// server replays it rather than applying it twice.</para>
@@ -316,14 +320,15 @@ public sealed class ServerMachineController : IDisposable
     /// <summary>Whether the predictor allows <paramref name="trigger"/> from what is shown. False before the first snapshot and once stopped.</summary>
     /// <remarks>
     /// Without a predictor, true for any trigger with an edge out of the shown state: the server decides. An event bound to
-    /// the effect is judged by its edge alone, since its guard reads an input only the server's effect has.
+    /// the effect is judged by its edge alone, since its guard reads an input only the server's effect has, and so is one
+    /// whose edge rests on a custom rule the predictor holds no handler for.
     /// </remarks>
     public bool CanSend(string trigger, JsonNode? input = null)
     {
         var view = View;
         if (view.Snapshot is not { } shown || view.Status == MachineStatus.Stopped)
             return false;
-        if (_predictor is null || _shape.EffectTriggers.Contains(trigger))
+        if (!Predicts(shown.State, trigger))
             return Available(shown).Contains(trigger);
         return _predictor.CanFire(shown, trigger, input);
     }
@@ -657,6 +662,11 @@ public sealed class ServerMachineController : IDisposable
         Load,
     }
 
+    // Whether a snapshot at `incoming` is at or below one at `held`. A missing revision on either side cannot be ordered,
+    // so it is never older.
+    private static bool OlderOrSame(long? incoming, long? held) =>
+        incoming is { } i && held is { } h && i <= h;
+
     // Takes a server snapshot if it is newer than the one held; returns whether the view changed. A push of another
     // incarnation than the one held starts one read instead, and is kept until that read answers.
     private bool Accept(ServerSnapshot incoming, Source source)
@@ -674,18 +684,18 @@ public sealed class ServerMachineController : IDisposable
             if (
                 _buffered is null
                 || _buffered.RowId != rowId
-                || incoming.Revision > _buffered.Revision
+                || !OlderOrSame(incoming.Revision, _buffered.Revision)
             )
                 _buffered = incoming;
             return false;
         }
-        if (!otherIncarnation && _revision is { } held && incoming.Revision <= held)
+        if (!otherIncarnation && OlderOrSame(incoming.Revision, _revision))
         {
             // A read of the revision held, asked for because an answer did not know the due time of its timed state,
             // brings the due time and nothing else.
             if (
                 source == Source.Load
-                && incoming.Revision == held
+                && incoming.Revision == _revision
                 && _dueAt is null
                 && incoming.DueAtKnown
                 && incoming.DueAt is not null
@@ -788,11 +798,11 @@ public sealed class ServerMachineController : IDisposable
 
         if (next.Request is null)
         {
-            // An event bound to the effect is sent without a prediction: what it leads to depends on the effect's result.
-            var predicted =
-                _predictor is null || _shape.EffectTriggers.Contains(next.Trigger)
-                    ? null
-                    : _predictor.Advance(_confirmed, next.Trigger, next.Input?.DeepClone());
+            // An event bound to the effect is sent without a prediction: what it leads to depends on the effect's result. So
+            // is one that rests on a custom rule the predictor cannot evaluate, rather than a guess the server would refuse.
+            var predicted = !Predicts(_confirmed.State, next.Trigger)
+                ? null
+                : _predictor.Advance(_confirmed, next.Trigger, next.Input?.DeepClone());
             next.Request = new EventRequest(
                 _id,
                 next.Trigger,
@@ -973,8 +983,16 @@ public sealed class ServerMachineController : IDisposable
             Error = _error,
         };
 
+    // Whether the predictor can tell what `trigger` leads to from `state`: there is one, the trigger is not bound to the
+    // effect, and no edge it could take rests on a custom rule the predictor holds no handler for.
+    [MemberNotNullWhen(true, nameof(_predictor))]
+    private bool Predicts(string state, string trigger) =>
+        _predictor is not null
+        && !_shape.EffectTriggers.Contains(trigger)
+        && (_predictor is not IPartialPredictor partial || partial.Predicts(state, trigger));
+
     // The confirmed snapshot with every pending event the predictor allows applied in order, up to the first one bound to
-    // the effect: what the page will show if the server agrees.
+    // the effect or resting on a custom rule it cannot evaluate: what the page will show if the server agrees.
     private Snapshot? Predicted()
     {
         if (_confirmed is null || _status == MachineStatus.Stopped || _predictor is null)
@@ -982,7 +1000,7 @@ public sealed class ServerMachineController : IDisposable
         var shown = _confirmed;
         foreach (var queued in _queue)
         {
-            if (_shape.EffectTriggers.Contains(queued.Trigger))
+            if (!Predicts(shown.State, queued.Trigger))
                 break;
             if (
                 _predictor.Advance(shown, queued.Trigger, queued.Input?.DeepClone())

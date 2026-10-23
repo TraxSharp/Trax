@@ -23,6 +23,18 @@ public sealed class ConformanceTestee(bool fromIr = false)
         ["reminder"] = Served.Of(ReminderMachine.Built),
         ["turnstile"] = Served.Of(DeclarativeTurnstile.Built),
         ["strict"] = Served.Of(StrictInputMachine.Built),
+        ["vault"] = Served.Of(VaultMachine.Built),
+        ["wait"] = Served.Of(WaitMachine.Built),
+    };
+
+    // The machines the kit serves without the handlers of their custom rules (PROTOCOL.md): a compiled machine has
+    // every handler bound, so this testee checks the IR against the compiled machine and then serves it from the IR.
+    private static readonly HashSet<string> ServedWithoutHandlers = ["vault"];
+
+    // The one handler every testee binds: a custom guard named `throws`, which throws.
+    private static readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> KitGuards = new()
+    {
+        ["throws"] = (_, _) => throw new InvalidOperationException("throws"),
     };
 
     private readonly Dictionary<string, Served> _loaded = new();
@@ -55,7 +67,10 @@ public sealed class ConformanceTestee(bool fromIr = false)
             "advance" => machine.Step(op, SnapshotOf(request), Trigger(request), request["input"]),
             "outcome" => machine.Step(op, SnapshotOf(request), Trigger(request), request["input"]),
             "timer" => machine.Step(op, SnapshotOf(request), Trigger(request), null),
-            "rehydrate" => machine.Rehydrate(request["text"]!.GetValue<string>()),
+            "rehydrate" => machine.Rehydrate(
+                request["text"]!.GetValue<string>(),
+                request["fromServer"]?.GetValue<bool>() == true
+            ),
             "serialize" => new JsonObject { ["wire"] = machine.Serialize(SnapshotOf(request)) },
             _ => new JsonObject { ["unsupported"] = true },
         };
@@ -66,7 +81,14 @@ public sealed class ConformanceTestee(bool fromIr = false)
         var name = request["machine"]!.GetValue<string>();
         if (fromIr)
         {
-            _loaded[name] = Served.Of(new IrMachine((JsonObject)request["ir"]!.DeepClone()));
+            try
+            {
+                _loaded[name] = FromIr(request);
+            }
+            catch (ArgumentException ex)
+            {
+                return new JsonObject { ["error"] = ex.Message };
+            }
             return new JsonObject { ["loaded"] = true };
         }
         if (!Known.TryGetValue(name, out var machine))
@@ -77,9 +99,12 @@ public sealed class ConformanceTestee(bool fromIr = false)
                 ["error"] =
                     $"the {name} IR differs from what this engine's {name} exports: {machine.Ir}",
             };
-        _loaded[name] = machine;
+        _loaded[name] = ServedWithoutHandlers.Contains(name) ? FromIr(request) : machine;
         return new JsonObject { ["loaded"] = true };
     }
+
+    private static Served FromIr(JsonObject request) =>
+        Served.Of(new IrMachine((JsonObject)request["ir"]!.DeepClone(), KitGuards));
 
     // The IR without its differential block, which is test-only fuzzing input, stripped from a runtime machine: two
     // IRs that differ only there describe the same machine.
@@ -131,7 +156,7 @@ public sealed class ConformanceTestee(bool fromIr = false)
     private sealed record Served(
         string Ir,
         Func<string, Snapshot, string, JsonNode?, AdvanceResult> Apply,
-        Func<string, RehydrationResult> Read,
+        Func<string, bool, RehydrationResult> Read,
         Func<Snapshot, string> Write
     )
     {
@@ -149,7 +174,8 @@ public sealed class ConformanceTestee(bool fromIr = false)
                         "timer" => engine.AdvanceTimer(snapshot, trigger),
                         _ => engine.Advance(snapshot, trigger, input?.DeepClone()),
                     },
-                engine.Rehydrate,
+                // Every custom rule of a compiled machine has its handler, so a snapshot from the server reads the same.
+                (text, _) => engine.Rehydrate(text),
                 engine.Serialize
             );
         }
@@ -184,8 +210,8 @@ public sealed class ConformanceTestee(bool fromIr = false)
                 var other => new JsonObject { ["error"] = $"unexpected result {other}" },
             };
 
-        public JsonObject Rehydrate(string text) =>
-            Read(text) switch
+        public JsonObject Rehydrate(string text, bool fromServer) =>
+            Read(text, fromServer) switch
             {
                 RehydrationResult.Ok ok => new JsonObject
                 {

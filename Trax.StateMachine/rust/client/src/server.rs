@@ -12,8 +12,9 @@ pub struct ServerSnapshot {
     /// The row's incarnation: deleting the instance and creating it again gives a new one, which restarts the
     /// revision. `None` when the answer does not carry it (an event's or a read's answer).
     pub row_id: Option<String>,
-    /// Bumped by the database on every write of the instance.
-    pub revision: i64,
+    /// Bumped by the database on every write of the instance. `None` when the store records none: the snapshot cannot
+    /// be ordered, so it is never dropped as stale, and whatever comes after it is taken.
+    pub revision: Option<i64>,
     /// The state the instance is in.
     pub state: String,
     /// The state's context, with no member whose value is null.

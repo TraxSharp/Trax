@@ -1,0 +1,28 @@
+{
+  "about": "An event whose edge runs a custom reduction the client holds no handler for is sent with no prediction: the client cannot tell the context it leads to, and a guess would be refused as CLIENT_DIVERGENCE.",
+  "machine": "review",
+  "instance": "i-1",
+  "documents": {
+    "start": "$requestId: String!",
+    "approve": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "close": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "edit": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "hold": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "reject": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "reopen": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "touch": "$id: UUID!, $requestId: String!, $clientResult: String",
+    "get": "$id: UUID!",
+    "discard": "$id: UUID!, $requestId: String!",
+    "changed": "$id: UUID!"
+  },
+  "steps": [
+    {"client": "start"},
+    {"subscribe": {"id": "i-1"}},
+    {"request": "get", "answer": {"id": "i-1", "revision": 1, "state": "Draft", "context": {"edits": 0}}},
+    {"view": {"status": "ready", "state": "Draft"}},
+    {"client": "send", "trigger": "Edit", "as": "edit"},
+    {"request": "edit", "variables": {"id": "i-1", "requestId": "r1"}, "answer": {"id": "i-1", "revision": 2, "state": "Draft", "context": {"edits": 1}}},
+    {"await": "edit", "expect": {"outcome": "confirmed", "state": "Draft", "revision": 2}},
+    {"view": {"state": "Draft", "context": {"edits": 1}, "revision": 2, "pending": false, "problem": null}}
+  ]
+}

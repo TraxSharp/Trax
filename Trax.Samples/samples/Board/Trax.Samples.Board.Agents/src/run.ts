@@ -5,7 +5,7 @@
 //   npm run scenario -- --suffix -2          again on a database that has them (ticket ids T-12-2, ...)
 //   npm run scenario -- --out run.json       also write every scenario's events, for the recorder
 //
-// BOARD_HOST (default localhost:5290) names the host.
+// BOARD_HOST (default localhost:5290) names the host. A host that is not this machine is reached over https.
 
 import { writeFileSync } from "node:fs";
 import { SCENARIOS, record, type RecordedScenario } from "./scenarios";

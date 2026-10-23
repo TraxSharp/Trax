@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { readLines } from "../../../conformance/run.mjs";
 import { bundleModule } from "../lib/engine-loader.mjs";
 
 // The TypeScript engine as a conformance testee (conformance/PROTOCOL.md): it builds each machine from the IR it is
@@ -23,6 +23,13 @@ const vectorIr = {
   transitions: [],
 };
 
+// The one handler every testee binds (conformance/PROTOCOL.md): a custom guard named `throws`, which throws.
+const kitGuards = {
+  throws: () => {
+    throw new Error("throws");
+  },
+};
+
 /** A handler from one request to its answer, over `engine`, the package's exports. */
 export function createTestee(engine) {
   const { SnapshotMachine, machineFromIr } = engine;
@@ -36,14 +43,14 @@ export function createTestee(engine) {
 
   const handlers = {
     load: (r) => {
-      machines.set(r.machine, new SnapshotMachine(machineFromIr(r.ir)));
+      machines.set(r.machine, new SnapshotMachine(machineFromIr(r.ir, kitGuards)));
       return { loaded: true };
     },
     advance: (r, core) => step(core, core.advance(r.snapshot, r.trigger, r.input ?? undefined)),
     outcome: (r, core) => step(core, core.applyOutcome(r.snapshot, r.trigger, r.input ?? undefined)),
     timer: (r, core) => step(core, core.applyTimer(r.snapshot, r.trigger)),
     rehydrate: (r, core) => {
-      const result = core.rehydrate(r.text);
+      const result = core.rehydrate(r.text, r.fromServer === true ? { fromServer: true } : undefined);
       return result.result === "ok"
         ? { result: "ok", wire: core.serialize(result.snapshot) }
         : { result: "error", code: result.code };
@@ -86,7 +93,7 @@ async function main() {
     process.exit(/Could not load esbuild/.test(err.message) ? MISSING_DEPENDENCIES : 1);
   }
   const handle = createTestee(engine);
-  for await (const line of createInterface({ input: process.stdin })) {
+  for await (const line of readLines(process.stdin)) {
     const request = JSON.parse(line);
     process.stdout.write(`${JSON.stringify(handle(request))}\n`);
     if (request.op === "end") break;

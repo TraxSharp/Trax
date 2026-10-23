@@ -10,13 +10,15 @@
 mod controller;
 mod graphql;
 mod server;
+mod unhandled;
 
 pub use controller::{
-    codes, without_nulls, MachineError, MachineProblem, MachineStatus, MachineView, ProblemKind, SendOutcome,
+    codes, ir_hash, without_nulls, MachineError, MachineProblem, MachineStatus, MachineView, ProblemKind, SendOutcome,
     ServerMachineController, ServerMachineOptions, DEFAULT_RETRY_DELAYS,
 };
 pub use graphql::{
-    event_field, machine_field, ConfigError, GraphQLMachineServer, GraphQLMachineServerOptions, ManifestDocument,
+    event_field, machine_field, ConfigError, ConnectionParams, GraphQLMachineServer, GraphQLMachineServerOptions,
+    ManifestDocument, Provided, RequestHeaders, DEFAULT_CONNECT_TIMEOUT, DEFAULT_MAX_MESSAGE_SIZE,
     DEFAULT_RESUBSCRIBE_DELAYS,
 };
 pub use server::{

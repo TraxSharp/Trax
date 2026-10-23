@@ -16,8 +16,17 @@ public sealed record GraphQLMachineServerOptions
     /// </summary>
     public required HttpClient Http { get; init; }
 
-    /// <summary>The host's GraphQL endpoint (<c>https://host/trax/graphql</c>).</summary>
+    /// <summary>
+    /// The host's GraphQL endpoint (<c>https://host/trax/graphql</c>), or one relative to <see cref="Http"/>'s base
+    /// address. It must be <c>https</c> unless its host is loopback or <see cref="AllowInsecureTransport"/> is set.
+    /// </summary>
     public required Uri Endpoint { get; init; }
+
+    /// <summary>
+    /// Accepts an <c>http</c> endpoint on a host that is not loopback. Off by default: whatever authenticates the
+    /// requests would travel in cleartext.
+    /// </summary>
+    public bool AllowInsecureTransport { get; init; }
 
     /// <summary>
     /// The machine as the host's client manifest lists it, with its persisted documents, the push (<c>changed</c>)
@@ -33,6 +42,12 @@ public sealed record GraphQLMachineServerOptions
     /// closed). The last repeats for as long as the stream is wanted.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
+
+    /// <summary>
+    /// The largest response body the host may answer with, in bytes; 16 MiB by default. A larger one fails the request,
+    /// which the controller reports as a transport failure, rather than being read into memory.
+    /// </summary>
+    public long MaxResponseSize { get; init; } = 16 * 1024 * 1024;
 }
 
 /// <summary>
@@ -71,10 +86,21 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     private sealed record Document(string Id, IReadOnlySet<string> Variables);
 
     /// <summary>Builds the server for one machine.</summary>
-    /// <exception cref="ArgumentException">The machine lists no documents, or no <c>changed</c> document.</exception>
+    /// <exception cref="ArgumentException">
+    /// The machine lists no documents, or no <c>changed</c> document, or the endpoint is not <c>https</c> on a host that
+    /// is not loopback and <see cref="GraphQLMachineServerOptions.AllowInsecureTransport"/> is not set.
+    /// </exception>
     public GraphQLMachineServer(GraphQLMachineServerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        TransportSecurity.RequireSecure(
+            options.Endpoint.IsAbsoluteUri || options.Http?.BaseAddress is null
+                ? options.Endpoint
+                : new Uri(options.Http!.BaseAddress, options.Endpoint),
+            options.AllowInsecureTransport,
+            Uri.UriSchemeHttps,
+            nameof(options)
+        );
         _options = options;
         _shape = MachineShape.Of(options.Machine);
         _field = MachineField(_shape.Id);
@@ -213,10 +239,9 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         using var response = await _options
-            .Http.SendAsync(request, cancellationToken)
+            .Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
-        var text = await response
-            .Content.ReadAsStringAsync(cancellationToken)
+        var text = await ReadBoundedAsync(response.Content, cancellationToken)
             .ConfigureAwait(false);
 
         JsonObject? answered;
@@ -256,6 +281,31 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         return (answered["data"]?["machines"]?[_field]?[operation] as JsonObject, null);
     }
 
+    // The body as text, refused once it passes MaxResponseSize, whether or not the host said its length up front.
+    private async Task<string> ReadBoundedAsync(
+        HttpContent content,
+        CancellationToken cancellationToken
+    )
+    {
+        var max = _options.MaxResponseSize;
+        if (content.Headers.ContentLength > max)
+            throw TooLarge(max);
+        using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var body = new MemoryStream();
+        var buffer = new byte[8192];
+        int read;
+        while ((read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            if (body.Length + read > max)
+                throw TooLarge(max);
+            body.Write(buffer, 0, read);
+        }
+        return Encoding.UTF8.GetString(body.GetBuffer(), 0, (int)body.Length);
+    }
+
+    private static HttpRequestException TooLarge(long max) =>
+        new($"The server answered with a body larger than {max} bytes.");
+
     private ServerAnswer AnswerOf(JsonObject? answer)
     {
         if (answer is null)
@@ -266,7 +316,11 @@ public sealed partial class GraphQLMachineServer : IMachineServer
         return ServerAnswer.Of(
             new ServerSnapshot
             {
-                Revision = answer["revision"]?.GetValue<long>() ?? 0,
+                // A revision the store does not record stays null: it is not revision 0, which would order every
+                // later answer below it.
+                Revision = answer["revision"] is JsonValue revision
+                    ? revision.GetValue<long>()
+                    : null,
                 State =
                     Text(answer["state"])
                     ?? throw new HttpRequestException(

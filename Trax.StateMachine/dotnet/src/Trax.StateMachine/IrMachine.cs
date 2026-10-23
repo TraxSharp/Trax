@@ -14,7 +14,7 @@ namespace Trax.StateMachine;
 /// Guards, reducers and validators are the IR's declarative rules, run by <see cref="RuleEvaluator"/>,
 /// <see cref="ReductionEvaluator"/> and the schema validator.</para>
 /// <para>A custom rule or reduction is bound by name only. Without a handler a custom guard does not hold and a custom
-/// reduction keeps the context, so the machine does not predict past them; <see cref="Rehydrate(string, bool)"/> with
+/// reduction keeps the context, which need not be the server's answer; <see cref="Rehydrate(string, bool)"/> with
 /// <c>fromServer</c> counts a custom state requirement it has no handler for as passed, since the server checked it.</para>
 /// <para>Every operation is total, as on the generic engine. Building one from an IR that is not one throws.</para>
 /// </remarks>
@@ -182,7 +182,7 @@ public sealed class IrMachine
     /// <summary>The state a new instance starts in.</summary>
     public string InitialState { get; }
 
-    /// <summary>The states only the server's effect or train puts an instance in, and that it never leaves by a client event.</summary>
+    /// <summary>The states marked <c>Committed()</c>: a soft autosave may not move a draft out of them.</summary>
     public IReadOnlySet<string> CommittedStates { get; }
 
     /// <summary>The triggers whose edge runs the machine's effect: a client sends them with no input and no prediction.</summary>

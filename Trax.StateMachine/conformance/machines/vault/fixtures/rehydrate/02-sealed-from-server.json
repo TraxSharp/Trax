@@ -1,0 +1,23 @@
+{
+  "name": "The same snapshot sent by the server reads: the server checked the requirement",
+  "fromServer": true,
+  "json": {
+    "machine": "vault",
+    "version": 1,
+    "state": "Sealed",
+    "context": {
+      "title": "memo"
+    }
+  },
+  "expect": {
+    "result": "ok",
+    "snapshot": {
+      "machine": "vault",
+      "version": 1,
+      "state": "Sealed",
+      "context": {
+        "title": "memo"
+      }
+    }
+  }
+}
