@@ -6,7 +6,11 @@ namespace Trax.Client;
 /// <summary>How a <see cref="TraxClient"/> reads answers and follows streams.</summary>
 public sealed record TraxClientOptions
 {
-    /// <summary>The options variables are written and data read with; <see cref="TraxJson.Options"/> when null.</summary>
+    /// <summary>
+    /// The options variables are written and data read with; <see cref="TraxJson.Options"/> when null. The client
+    /// reads them with a copy that leaves every unset <see cref="Optional{T}"/> out of the JSON, whatever their
+    /// resolver, a source-generated <see cref="System.Text.Json.Serialization.JsonSerializerContext"/> included.
+    /// </summary>
     public JsonSerializerOptions? Json { get; init; }
 
     /// <summary>
@@ -72,7 +76,7 @@ public sealed class TraxClient
     {
         ArgumentNullException.ThrowIfNull(transport);
         _transport = transport;
-        _json = options?.Json ?? TraxJson.Options;
+        _json = TraxJson.LeavingOutUnset(options?.Json);
         _delays = options?.ResubscribeDelays is { Count: > 0 } delays
             ? delays
             : DefaultResubscribeDelays;

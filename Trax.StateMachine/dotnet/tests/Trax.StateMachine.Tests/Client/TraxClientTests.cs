@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
@@ -646,6 +647,73 @@ public class TraxClientTests
         host.Bodies[0]["query"]!.GetValue<string>().Should().Be(Runs.Text);
     }
 
+    // ── Optional<T> with options of the caller's own ─────────────────────────────────────────────
+
+    public sealed record JobVariables
+    {
+        [JsonPropertyName("maxActiveJobs")]
+        public Optional<int> MaxActiveJobs { get; init; }
+
+        [JsonPropertyName("note")]
+        public Optional<string?> Note { get; init; }
+    }
+
+    public sealed record JobResult
+    {
+        [JsonPropertyName("maxActiveJobs")]
+        public Optional<int?> MaxActiveJobs { get; init; }
+
+        [JsonPropertyName("note")]
+        public Optional<string?> Note { get; init; }
+    }
+
+    private static readonly TraxDocument<JobVariables, JobResult> Job = new(
+        "Job",
+        TraxOperationKind.Mutation,
+        null,
+        "mutation Job($maxActiveJobs: Int, $note: String) { x }"
+    );
+
+    private static IEnumerable<TestCaseData> CallersOptions()
+    {
+        yield return new TestCaseData(
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                Converters = { new JsonStringEnumConverter() },
+            }
+        ).SetName("Optional_with_options_of_the_callers_own");
+        yield return new TestCaseData(
+            new JsonSerializerOptions { TypeInfoResolver = OptionalTestJson.Default }
+        ).SetName("Optional_with_a_source_generated_context");
+    }
+
+    [TestCaseSource(nameof(CallersOptions))]
+    public async Task An_unset_optional_is_left_out_with_any_options(JsonSerializerOptions json)
+    {
+        var host = new Host("""{"data":{"note":null}}""");
+        var client = new TraxClient(
+            new TraxHttpTransport(
+                new TraxHttpTransportOptions
+                {
+                    Http = new HttpClient(host),
+                    Endpoint = new Uri("https://host/trax/graphql"),
+                }
+            ),
+            new TraxClientOptions { Json = json }
+        );
+
+        await client.SendAsync(Job, new JobVariables());
+        await client.SendAsync(Job, new JobVariables { MaxActiveJobs = 0, Note = null });
+        var answer = await client.SendAsync(Job, new JobVariables { MaxActiveJobs = 3 });
+
+        host.Bodies.Select(b => b["variables"]!.ToJsonString())
+            .Should()
+            .Equal("""{}""", """{"maxActiveJobs":0,"note":null}""", """{"maxActiveJobs":3}""");
+        answer.Data!.MaxActiveJobs.HasValue.Should().BeFalse("it was absent");
+        answer.Data.Note.HasValue.Should().BeTrue("it was null, which is a value");
+        answer.Data.Note.Value.Should().BeNull();
+    }
+
     private static JsonObject Frame(string domain) =>
         new()
         {
@@ -777,3 +845,12 @@ public class TraxClientTests
         }
     }
 }
+
+// A source-generated context over the Optional records, as a trimmed or AOT app passes one. Each T an Optional<T> wraps
+// is listed too: the context cannot see through Optional's converter.
+[JsonSerializable(typeof(TraxClientTests.JobVariables))]
+[JsonSerializable(typeof(TraxClientTests.JobResult))]
+[JsonSerializable(typeof(int))]
+[JsonSerializable(typeof(int?))]
+[JsonSerializable(typeof(string))]
+internal sealed partial class OptionalTestJson : JsonSerializerContext;

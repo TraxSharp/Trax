@@ -34,6 +34,12 @@ namespace Trax.Client
         System.Threading.Tasks.Task<Trax.Client.TraxAnswer> ExecuteAsync(Trax.Client.TraxRequest request, System.Threading.CancellationToken cancellationToken = default);
         System.IDisposable Subscribe(Trax.Client.TraxRequest request, Trax.Client.ISubscriptionSink sink);
     }
+    public sealed class OptionalJsonConverterFactory : System.Text.Json.Serialization.JsonConverterFactory
+    {
+        public OptionalJsonConverterFactory() { }
+        public override bool CanConvert(System.Type typeToConvert) { }
+        public override System.Text.Json.Serialization.JsonConverter CreateConverter(System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
+    }
     [System.Text.Json.Serialization.JsonConverter(typeof(Trax.Client.OptionalJsonConverterFactory))]
     public readonly struct Optional<T> : System.IEquatable<Trax.Client.Optional<T>>
     {

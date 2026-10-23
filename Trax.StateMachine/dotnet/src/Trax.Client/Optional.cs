@@ -9,8 +9,10 @@ namespace Trax.Client;
 /// included, converts to one that is sent (<c>MaxActiveJobs = null</c> sends <c>"maxActiveJobs": null</c>).
 /// </summary>
 /// <remarks>
-/// <see cref="TraxJson.Options"/> leaves a left-out property out of the JSON. With other options it is written as its
-/// value, or null when left out.
+/// <see cref="TraxClient"/> leaves a left-out property out of the JSON, with <see cref="TraxJson.Options"/> or with
+/// any options given in <see cref="TraxClientOptions.Json"/>. Serialized some other way, with options the client never
+/// saw, it is written as <c>default(T)</c>; read, a property that is absent stays left out and one that is null is a
+/// null that was sent.
 /// </remarks>
 [JsonConverter(typeof(OptionalJsonConverterFactory))]
 public readonly record struct Optional<T> : IOptional
@@ -44,12 +46,18 @@ internal interface IOptional
     object? Boxed { get; }
 }
 
-internal sealed class OptionalJsonConverterFactory : JsonConverterFactory
+/// <summary>
+/// The converter <see cref="Optional{T}"/> names in its <c>[JsonConverter]</c>. Public so a source-generated
+/// <see cref="JsonSerializerContext"/> in another assembly can create it; nothing calls it directly.
+/// </summary>
+public sealed class OptionalJsonConverterFactory : JsonConverterFactory
 {
+    /// <inheritdoc/>
     public override bool CanConvert(Type typeToConvert) =>
         typeToConvert.IsGenericType
         && typeToConvert.GetGenericTypeDefinition() == typeof(Optional<>);
 
+    /// <inheritdoc/>
     public override JsonConverter CreateConverter(
         Type typeToConvert,
         JsonSerializerOptions options
