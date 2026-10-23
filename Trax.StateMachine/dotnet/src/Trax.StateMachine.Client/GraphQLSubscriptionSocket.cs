@@ -102,6 +102,9 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         public Dictionary<string, ISubscriptionSink> Sinks { get; } = new(StringComparer.Ordinal);
         public CancellationTokenSource Stop { get; } = new();
         public bool Closed { get; set; }
+
+        /// <summary>The host sent a message over the limit, whose rest is never read.</summary>
+        public bool Overflowed { get; set; }
     }
 
     /// <inheritdoc/>
@@ -244,8 +247,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
                 if (_options.ConnectionParams is { } parameters)
                     init["payload"] = await parameters(timeout.Token).ConfigureAwait(false);
                 await SendAsync(connection, init).ConfigureAwait(false);
-                var first = await ReceiveAsync(connection.Socket, timeout.Token)
-                    .ConfigureAwait(false);
+                var first = await ReceiveAsync(connection, timeout.Token).ConfigureAwait(false);
                 if (first?["type"]?.GetValue<string>() != "connection_ack")
                     throw new WebSocketException(
                         CloseMessage(connection.Socket, "before it was acknowledged")
@@ -255,7 +257,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
 
             for (; ; )
             {
-                var message = await ReceiveAsync(connection.Socket, connection.Stop.Token)
+                var message = await ReceiveAsync(connection, connection.Stop.Token)
                     .ConfigureAwait(false);
                 if (message is null)
                     throw new WebSocketException(
@@ -268,6 +270,10 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         {
             acknowledged.TrySetException(ex);
             Fail(connection, ex);
+            // The rest of a message over the limit is never read. The connection fails first, so a send
+            // racing the abort cannot fail the subscriptions with the aborted socket's error instead.
+            if (connection.Overflowed)
+                connection.Socket.Abort();
         }
     }
 
@@ -343,19 +349,18 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
     }
 
-    private async Task<JsonObject?> ReceiveAsync(ClientWebSocket socket, CancellationToken token)
+    private async Task<JsonObject?> ReceiveAsync(Connection connection, CancellationToken token)
     {
         var buffer = new byte[8192];
         using var text = new MemoryStream();
         for (; ; )
         {
-            var result = await socket.ReceiveAsync(buffer, token).ConfigureAwait(false);
+            var result = await connection.Socket.ReceiveAsync(buffer, token).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
                 return null;
             if (text.Length + result.Count > _options.MaxMessageSize)
             {
-                // Whatever is left of it is never read.
-                socket.Abort();
+                connection.Overflowed = true;
                 throw new WebSocketException(
                     $"The server sent a message larger than {_options.MaxMessageSize} bytes."
                 );
