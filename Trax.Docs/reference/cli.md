@@ -27,6 +27,10 @@ dotnet new install Trax.Samples.Templates
 
 - `node` 22 or later on `PATH`, for `trax machine generate` and `trax client` (and `--check`), which generate twins
   with it. A CI image that runs them needs it too.
+- The .NET SDK, for `trax generate`, which runs `dotnet new trax-hub`. It runs the `dotnet` named by
+  `DOTNET_HOST_PATH` when that is an absolute path to a file (the .NET host sets it for a tool it runs), and
+  otherwise the first `dotnet` in an absolute `PATH` entry. The current directory is never searched, as with
+  `--node` below.
 
 ## Installation
 
