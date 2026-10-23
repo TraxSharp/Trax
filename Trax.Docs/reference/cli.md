@@ -224,6 +224,11 @@ MyProject/
   `Cannot read <path>: ...`.
   - **ManifestNames.cs**: centralized `const string` identifiers for each operation (kebab-case), matching the pattern used in the DistributedWorkers sample.
   - **Trains** are grouped into folders by noun (e.g., `createPlayer` and `getPlayer` both go under `Players/`).
+  - **Each train** carries `[TraxAuthorize(Roles = "User")]`, as the hub's own trains do, so a caller needs a
+    credential with the User role. In Development the hub registers a demo API key that holds it
+    (`X-Api-Key: demo-key-do-not-use-in-production`), so `dotnet run` works as generated; outside Development
+    every call is refused until you register real credentials. Change the roles, or set a `Policy`, per train;
+    use `[TraxAllowAnonymous]` only for a train anyone may call.
   - **Shared types** referenced by multiple operations are placed in `Models/`.
   - **Enums** are also placed in `Models/`.
   - **Junctions** contain a `throw new NotImplementedException()` with a TODO comment. This is where you add your business logic.
