@@ -300,8 +300,9 @@ policies exist (`IsPolicyRegistered(policy)`). Trax.Api registers one over the r
 `[TraxAuthorize]` is evaluated. Without one, a caller holds no role and satisfies no policy.
 
 **The generic save serves only machines with no server-side behaviour.** `Autosave` refuses a machine with a gated
-event or a gated `start` (a rule that names a role or a policy), a timer, an invoked train or an effect as
-`SAVE_NOT_ALLOWED`, and writes nothing; such a machine moves through its declared events.
+event or a gated `start` (a rule that names a role or a policy), a timer, an invoked train, an effect, a guard, a
+reducer other than `Keep`, a custom guard or reducer, or a start that reduces its input as `SAVE_NOT_ALLOWED`, and
+writes nothing; such a machine moves through its declared events.
 
 ### What each path may write
 

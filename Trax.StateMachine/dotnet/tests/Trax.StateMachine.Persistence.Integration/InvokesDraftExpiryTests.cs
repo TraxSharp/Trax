@@ -41,8 +41,7 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
         );
 
         // A user's idle draft under the same id, and the idle system row beside it.
-        using (var scope = host.Scope())
-            await host.Service(scope, "turnstile").Autosave("u1", instance.Id, UnlockedJson);
+        await host.SeedDraft("u1", instance.Id, UnlockedJson);
         await host.Backdate(instance.Id, SnapshotOwnerKind.User, LongAgo);
         await host.Backdate(instance.Id, SnapshotOwnerKind.System, LongAgo);
 
@@ -104,8 +103,7 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
         var cancellation = new RecordingCancellation();
         using var host = InstanceHost.Create(provider, Ttl, cancellation);
         var id = Guid.NewGuid();
-        using (var scope = host.Scope())
-            await host.Service(scope, "turnstile").Autosave("u1", id, UnlockedJson);
+        await host.SeedDraft("u1", id, UnlockedJson);
         await host.Backdate(id, SnapshotOwnerKind.User, LongAgo);
 
         await Sweeper(host).SweepOnce();
@@ -116,9 +114,9 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
 
     private static async Task SeedIdleDraftHolding(InstanceHost host, Guid id, string token)
     {
+        await host.SeedDraft("u1", id, UnlockedJson);
         using (var scope = host.Scope())
         {
-            await host.Service(scope, "turnstile").Autosave("u1", id, UnlockedJson);
             var store = host.Instances(scope);
             var stored = await store.Get(DraftOwner.User("u1"), "turnstile", id);
             (

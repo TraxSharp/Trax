@@ -160,7 +160,8 @@ The opt-in brings three conditions:
   `get`, the push and `discard`, as in step 3 above. System-owned machines are not reachable and need none.
 - **The generic save serves only machines with no server-side behaviour.** `saveSnapshot` answers
   `save-not-allowed`, and writes nothing, for a machine with an event or start whose rule restricts callers
-  (`Requires` or `RequiresPolicy`), a timer, an invoked train or an effect. Such a machine moves only through its
+  (`Requires` or `RequiresPolicy`), a timer, an invoked train, an effect, a guard, a reducer other than `Keep`, a
+  custom guard or reducer, or a start that reduces its input. Such a machine moves only through its
   declared events: `advanceSnapshot` and `sendSnapshot` still serve it, under each event's rule. A client that
   autosaved one must send events instead.
 

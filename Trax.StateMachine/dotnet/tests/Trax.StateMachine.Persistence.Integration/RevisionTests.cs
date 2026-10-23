@@ -65,7 +65,7 @@ public class RevisionTests(StoreProvider provider)
         Turnstile("Unlocked", new JsonObject { ["paidWith"] = "quarter" });
 
     // A user's draft of the machine, saved through the draft service; or, for a machine the soft save does not
-    // serve (one with an effect, an invoked train or a role-gated event), created through the store as host code
+    // serve (one with an effect, an invoked train, a role-gated event, a guard or a reducer), created through the store as host code
     // would. Either way it is one insert.
     private async Task<Guid> Saved(string machine, string json)
     {
@@ -172,11 +172,15 @@ public class RevisionTests(StoreProvider provider)
     [TestCase("update-with-request")]
     public async Task An_autosave_update_bumps_the_revision_by_one(string write)
     {
-        // The turnstile has nothing to protect, so its autosave is the blind upsert; the ledger's is guarded (it has
-        // a committed state), and overwrites through UpdateWithRequest.
+        // The hatch has nothing to protect, so its autosave is the blind upsert; the ledger's is guarded (it has a
+        // committed state), and overwrites through UpdateWithRequest.
         var (machine, first, second) =
             write == "upsert"
-                ? ("turnstile", TestTurnstile.InitialJson, TestTurnstile.UnlockedJson)
+                ? (
+                    PlainHatchMachine.Id,
+                    PlainHatchMachine.Json(HatchState.Shut),
+                    PlainHatchMachine.Json(HatchState.Open)
+                )
                 : (
                     LedgerMachine.Id,
                     LedgerMachine.Json(LedgerState.Counting, 1),
@@ -663,7 +667,7 @@ public class RevisionTests(StoreProvider provider)
             }
             case "refused-save":
             {
-                var id = await Saved("turnstile", TestTurnstile.InitialJson);
+                var id = await Saved(LedgerMachine.Id, LedgerMachine.Json(LedgerState.Open));
                 return (
                     id,
                     async () =>
@@ -671,17 +675,17 @@ public class RevisionTests(StoreProvider provider)
                         using var scope = _host.Scope();
                         (
                             await _host
-                                .Service(scope, "turnstile")
+                                .Service(scope, LedgerMachine.Id)
                                 .Autosave(
                                     User,
                                     id,
-                                    TestTurnstile.Machine.Serialize(
-                                        Turnstile("Locked", new JsonObject { ["x"] = 1 })
-                                    )
+                                    """{"machine":"ledger","version":1,"state":"Open","context":{}}"""
                                 )
                         )
                             .Should()
-                            .BeOfType<AutosaveResult.Rejected>();
+                            .BeOfType<AutosaveResult.Rejected>()
+                            .Which.Code.Should()
+                            .Be(RefusalCode.InvalidContext);
                     }
                 );
             }
@@ -704,10 +708,7 @@ public class RevisionTests(StoreProvider provider)
             await scope
                 .ServiceProvider.GetRequiredService<ISnapshotStore>()
                 .Delete(User, "turnstile", id);
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, "turnstile").Autosave(User, id, TestTurnstile.InitialJson))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
+        await _host.SeedDraft(User, id, TestTurnstile.InitialJson);
 
         (await _host.RowId(id))
             .Should()
@@ -1046,12 +1047,11 @@ public class RevisionTests(StoreProvider provider)
         await using (var scope = host.CreateAsyncScope())
             (
                 await scope
-                    .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                    .Service("turnstile")!
-                    .Autosave(User, id, TestTurnstile.InitialJson)
+                    .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                    .Upsert(User, id, Parse(TestTurnstile.InitialJson))
             )
                 .Should()
-                .BeOfType<AutosaveResult.Saved>();
+                .BeTrue();
         (await Stored())
             .Should()
             .Be(1, $"InMemory has no trigger, so the store bumps it. See {Adr}");

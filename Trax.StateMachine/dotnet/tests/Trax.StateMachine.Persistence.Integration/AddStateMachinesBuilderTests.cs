@@ -51,12 +51,11 @@ public class AddStateMachinesBuilderTests
         // back through IDataContext.SnapshotDrafts, with no DbContext of the subsystem's own.
         var id = Guid.NewGuid();
         (
-            await sp.GetRequiredService<ISnapshotMachineRegistry>()
-                .Service("turnstile")!
-                .Autosave("u1", id, TestTurnstile.InitialJson)
+            await sp.GetRequiredService<ISnapshotStore>()
+                .Upsert("u1", id, TestDb.Parse(TestTurnstile.InitialJson))
         )
             .Should()
-            .BeOfType<AutosaveResult.Saved>();
+            .BeTrue();
 
         var db = sp.GetRequiredService<IDataContext>();
         ((DbContext)db).Database.ProviderName.Should().Contain("Npgsql");

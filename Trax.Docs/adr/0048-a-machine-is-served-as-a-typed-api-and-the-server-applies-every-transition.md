@@ -76,7 +76,8 @@ event. The server mints the instance id.
 generic mutations (`startSnapshot` and `discardSnapshot` beside the four above) behind a policy gate, and the opt-in without a policy refuses startup. Registering the internal trains'
 routes is separated from exposing them in GraphQL, which is the same attribute today. On the opt-in path the generic
 save serves only machines with no server-side behaviour: a machine with a gated event or a gated `start`, a timer, an
-invoked train or an effect answers `save-not-allowed`. Reserving each state such a machine's server owns, one by one, was the
+invoked train, an effect, a guard, a reducer other than `Keep`, a custom guard or reducer bound by name, or a `start`
+that reduces its input answers `save-not-allowed`. Reserving each state such a machine's server owns, one by one, was the
 alternative; a machine like that has typed events to move it, and the save is the legacy path. This ships as `feat:`,
 not a major (sole consumer).
 
@@ -431,7 +432,7 @@ In `Trax.StateMachine.Persistence.Integration`:
 - `DiscardEffectTests`: `Discard_is_refused_while_an_effect_on_the_instance_is_running`
 - `DraftLifetimeTests`: `The_lifetime_keeps_an_instance_only_the_server_moved`, `The_lifetime_deletes_a_draft_waiting_on_its_run_and_cancels_the_run`, `A_row_without_a_creation_time_counts_its_age_from_its_last_write`, `The_sweep_keeps_a_draft_an_effect_is_running_on_until_the_effect_settles`, `The_sweep_releases_a_settled_claim_with_the_draft`, `A_ttl_longer_than_the_lifetime_refuses_to_start`
 - `DiscardTests`: `Discard_of_another_users_id_answers_as_a_missing_one`, `Discard_of_a_system_instance_is_refused`, `Discard_is_idempotent`, `Discard_of_a_draft_holding_a_live_token_cancels_its_run_first`
-- `DraftWriteRulesTests`: `The_generic_save_is_refused_for_a_machine_with_a_Requires_rule`, `The_generic_save_still_works_for_a_plain_machine` (a guard, green today)
+- `DraftWriteRulesTests`: `The_generic_save_is_refused_for_a_machine_with_a_Requires_rule`, `The_generic_save_still_works_for_a_plain_machine` (a guard, green today), `The_generic_save_is_refused_for_a_machine_with_a_guard`, `The_generic_save_is_refused_for_a_machine_with_a_reducer`
 - `EventAuthorizationTests`: `A_client_without_the_role_gets_forbidden_and_nothing_is_written`, `Event_rules_across_roles_and_surfaces`, `A_trusted_actor_is_not_held_to_event_rules_but_its_input_is_still_validated` (a guard, green today), `Host_code_on_a_users_draft_is_a_client_holding_no_roles`, `Forbidden_iff_the_rule_is_unsatisfied`, `A_replay_by_a_caller_who_lost_the_role_is_forbidden_not_replayed`, `Roles_are_read_per_event_not_cached_on_the_draft`, `Start_requires_its_start_rule`
 - `EventRuleStartupTests`: `An_undeclared_client_event_refuses_startup`, `Every_undeclared_event_is_listed_in_one_refusal`, `Two_edges_of_one_event_declaring_different_rules_refuse_to_build`, `A_rule_on_an_outcome_or_timer_trigger_refuses_to_build` (a guard, green today), `A_policy_rule_naming_an_unregistered_policy_refuses_startup`, `Anonymous_on_a_user_owned_machine_refuses_startup`, `An_undeclared_start_get_or_machineChanged_rule_refuses_startup`, `A_read_rule_looser_than_owner_only_refuses_startup`, `An_undeclared_discard_rule_refuses_startup`, `A_discard_rule_looser_than_owner_only_refuses_startup`, `A_gated_event_into_the_start_state_refuses_to_build`, `A_policy_gated_event_into_the_start_state_refuses_to_build`, `A_rule_naming_a_role_or_a_policy_is_gated_and_a_start_rule_counts`, `Exposing_a_raw_delegate_or_system_owned_machine_refuses_startup`, `An_unexposed_machine_with_the_generic_opt_in_off_needs_no_rules_and_has_no_surface`
 - `MarkedMachineTests`: `A_marked_machine_is_served`, `An_unmarked_machine_is_not_served`, `A_marked_machine_the_host_registers_itself_is_served_as_a_scanned_one_is`, `A_marked_machine_the_host_registers_itself_is_checked_as_a_scanned_one_is`, `A_marked_machine_missing_a_rule_refuses_startup_and_says_it_is_marked`, `The_attribute_on_an_abstract_machine_refuses_the_host_rather_than_serving_its_subclass`, `The_attribute_on_a_class_that_is_no_machine_refuses_the_host`, `The_attribute_on_an_open_generic_machine_refuses_the_host`, `An_unmarked_subclass_of_a_marked_machine_is_not_served_and_refuses_the_host`, `A_marked_system_owned_machine_refuses_the_host_and_says_to_remove_the_attribute`, `A_base_machine_registered_beside_its_marked_subclass_refuses_the_host_naming_both`, `Two_unrelated_machine_types_with_one_id_refuse_the_host_naming_both`, `The_same_machine_type_registered_twice_starts_and_is_served_once`
@@ -549,6 +550,11 @@ to trust it. The twin's prediction is checked against the server only where the 
 
 ## Changelog
 
+- **2026-10-23**: The generic save counts what an edge or the `start` decides or computes as server-side behaviour: a
+  guard, declarative or a delegate, a reducer other than `Keep`, a custom guard or reducer bound by name, and a
+  `start` that reduces its input. A saved snapshot stepped around each of them, storing a state a guard would have
+  refused or a context only the reducer produces. Checking a saved snapshot against the machine's edges was the
+  alternative; a snapshot does not say which edge it took, and a machine with any of these has events to move it.
 - **2026-10-15**: The grace period a registration gives other versions is counted from when its own version last
   became active, not from when that version was first stored. A version deployed, rolled back and deployed again
   restores rows created long ago, so its first registration collected the documents of a node that does not re-stamp.

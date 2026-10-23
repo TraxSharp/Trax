@@ -81,13 +81,7 @@ public class SqliteSnapshotChangePollTests
             await listening.Task.WaitAsync(HearWithin);
 
             var id = Guid.NewGuid();
-            using (var scope = host.Scope())
-                (
-                    await host.Service(scope, "turnstile")
-                        .Autosave(User, id, TestTurnstile.InitialJson)
-                )
-                    .Should()
-                    .BeOfType<AutosaveResult.Saved>();
+            await host.SeedDraft(User, id, TestTurnstile.InitialJson);
             var first = (await host.Rows(id)).Single().RowId;
             (await Hears(first)).Should().BeTrue($"the insert is revision 1. See {Adr}");
 
@@ -104,13 +98,7 @@ public class SqliteSnapshotChangePollTests
                 await scope.ServiceProvider.GetRequiredService<ISnapshotStore>().Delete(User, id);
             (await Hears(first)).Should().BeTrue("a delete is reported");
 
-            using (var scope = host.Scope())
-                (
-                    await host.Service(scope, "turnstile")
-                        .Autosave(User, id, TestTurnstile.InitialJson)
-                )
-                    .Should()
-                    .BeOfType<AutosaveResult.Saved>();
+            await host.SeedDraft(User, id, TestTurnstile.InitialJson);
             var second = (await host.Rows(id)).Single().RowId;
             second.Should().NotBe(first, "a re-created row is a new incarnation");
             (await Hears(second)).Should().BeTrue("the re-created row is reported");
@@ -135,13 +123,7 @@ public class SqliteSnapshotChangePollTests
         var watchedId = Guid.NewGuid();
         var otherId = Guid.NewGuid();
         foreach (var id in new[] { watchedId, otherId })
-            using (var scope = host.Scope())
-                (
-                    await host.Service(scope, "turnstile")
-                        .Autosave(User, id, TestTurnstile.InitialJson)
-                )
-                    .Should()
-                    .BeOfType<AutosaveResult.Saved>();
+            await host.SeedDraft(User, id, TestTurnstile.InitialJson);
         var watched = (await host.Rows(watchedId)).Single().RowId;
         var other = (await host.Rows(otherId)).Single().RowId;
 
@@ -260,10 +242,7 @@ public class SqliteSnapshotChangePollTests
         var hub = host.Services.GetRequiredService<SnapshotWatchHub>();
 
         var id = Guid.NewGuid();
-        using (var scope = host.Scope())
-            (await host.Service(scope, "turnstile").Autosave(User, id, TestTurnstile.InitialJson))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
+        await host.SeedDraft(User, id, TestTurnstile.InitialJson);
         var rowId = (await host.Rows(id)).Single().RowId;
 
         try
@@ -325,13 +304,7 @@ public class SqliteSnapshotChangePollTests
         async Task<(Guid Id, long RowId)> Saved()
         {
             var id = Guid.NewGuid();
-            using (var scope = host.Scope())
-                (
-                    await host.Service(scope, "turnstile")
-                        .Autosave(User, id, TestTurnstile.InitialJson)
-                )
-                    .Should()
-                    .BeOfType<AutosaveResult.Saved>();
+            await host.SeedDraft(User, id, TestTurnstile.InitialJson);
             return (id, (await host.Rows(id)).Single().RowId);
         }
 

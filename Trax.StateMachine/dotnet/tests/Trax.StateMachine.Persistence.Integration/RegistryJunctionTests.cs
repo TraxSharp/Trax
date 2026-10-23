@@ -26,6 +26,8 @@ public class RegistryJunctionTests
                 new TurnstileMachine(),
                 new OrderMachine(),
                 new DeclarativeTurnstileMachine(),
+                new PlainHatchMachine(),
+                new LedgerMachine(),
             },
             TestDb.NewStore(context),
             TestDb.NewClaims(context),
@@ -42,29 +44,28 @@ public class RegistryJunctionTests
         var save = await new SaveSnapshotJunction(NewRegistry(), User).Run(
             new SaveSnapshotInput
             {
-                Machine = "turnstile",
+                Machine = PlainHatchMachine.Id,
                 Id = id,
-                Snapshot = TestTurnstile.InitialJson,
+                Snapshot = PlainHatchMachine.Json(HatchState.Shut),
             }
         );
         save.Problem.Should().BeNull();
-        save.Snapshot.Should().Contain("\"state\":\"Locked\"");
+        save.Snapshot.Should().Contain("\"state\":\"Shut\"");
 
         var advance = await new AdvanceSnapshotJunction(NewRegistry(), User).Run(
             new AdvanceSnapshotInput
             {
-                Machine = "turnstile",
+                Machine = PlainHatchMachine.Id,
                 Id = id,
-                Trigger = "Coin",
-                Input = "{\"coin\":\"quarter\"}",
+                Trigger = nameof(HatchTrigger.Open),
             }
         );
-        advance.Snapshot.Should().Contain("\"state\":\"Unlocked\"");
+        advance.Snapshot.Should().Contain("\"state\":\"Open\"");
 
         var load = await new LoadSnapshotJunction(NewRegistry(), User).Run(
-            new LoadSnapshotInput { Machine = "turnstile", Id = id }
+            new LoadSnapshotInput { Machine = PlainHatchMachine.Id, Id = id }
         );
-        load.Snapshot.Should().Contain("\"state\":\"Unlocked\"");
+        load.Snapshot.Should().Contain("\"state\":\"Open\"");
     }
 
     [Test]
@@ -169,7 +170,8 @@ public class RegistryJunctionTests
             )
         ).Problem!.Code.Should().Be(RefusalCode.SchemaMismatch);
 
-        // The matching hash passes the guard, so the save then succeeds; and omitting it skips the check.
+        // The matching hash passes the check, and so does omitting it: the save is then refused for the machine's
+        // guard, not its hash.
         (
             await new SaveSnapshotJunction(NewRegistry(), User).Run(
                 new SaveSnapshotInput
@@ -181,8 +183,8 @@ public class RegistryJunctionTests
                 }
             )
         )
-            .Problem.Should()
-            .BeNull();
+            .Problem!.Code.Should()
+            .Be(RefusalCode.SaveNotAllowed);
         (
             await new SaveSnapshotJunction(NewRegistry(), User).Run(
                 new SaveSnapshotInput
@@ -192,7 +194,7 @@ public class RegistryJunctionTests
                     Snapshot = DeclarativeTurnstileLocked,
                 }
             )
-        ).Problem.Should().BeNull();
+        ).Problem!.Code.Should().Be(RefusalCode.SaveNotAllowed);
 
         // A raw-delegate machine has a null server hash, so the guard SKIPS even a stale client hash (it falls
         // through to the normal flow) rather than throwing — advance reaches RefusalCode.NotFound, NOT schema-mismatch.
@@ -215,15 +217,7 @@ public class RegistryJunctionTests
     [Test]
     public async Task Advance_refuses_a_divergent_client_result_and_accepts_a_matching_or_absent_one()
     {
-        async Task Save(Guid id) =>
-            await new SaveSnapshotJunction(NewRegistry(), User).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = "declarative-turnstile",
-                    Id = id,
-                    Snapshot = DeclarativeTurnstileLocked,
-                }
-            );
+        Task Save(Guid id) => TestDb.Seed("u", id, DeclarativeTurnstileLocked);
         Task<AdvanceSnapshotOutput> Advance(Guid id, string? clientResult) =>
             new AdvanceSnapshotJunction(NewRegistry(), User).Run(
                 new AdvanceSnapshotInput
@@ -304,13 +298,12 @@ public class RegistryJunctionTests
     [Test]
     public async Task Save_of_an_invalid_snapshot_is_a_typed_rejection()
     {
-        var invalid =
-            "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{}}";
+        var invalid = "{\"machine\":\"ledger\",\"version\":1,\"state\":\"Open\",\"context\":{}}";
 
         var output = await new SaveSnapshotJunction(NewRegistry(), User).Run(
             new SaveSnapshotInput
             {
-                Machine = "turnstile",
+                Machine = LedgerMachine.Id,
                 Id = Guid.NewGuid(),
                 Snapshot = invalid,
             }
@@ -348,14 +341,7 @@ public class RegistryJunctionTests
         ).Problem!.Code.Should().Be(RefusalCode.NotFound);
 
         var id = Guid.NewGuid();
-        await new SaveSnapshotJunction(NewRegistry(), User).Run(
-            new SaveSnapshotInput
-            {
-                Machine = "turnstile",
-                Id = id,
-                Snapshot = TestTurnstile.InitialJson,
-            }
-        );
+        await TestDb.Seed("u", id, TestTurnstile.InitialJson);
         (
             await advance(
                 new()

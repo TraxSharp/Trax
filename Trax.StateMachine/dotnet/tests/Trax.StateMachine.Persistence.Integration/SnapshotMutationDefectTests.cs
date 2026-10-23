@@ -45,7 +45,13 @@ public class SnapshotMutationDefectTests
             .AddSingleton<IOrderCharge>(effect ?? new CountingEffect())
             .BuildServiceProvider();
         return new SnapshotMachineRegistry(
-            new IMachine[] { new TurnstileMachine(), new OrderMachine(), new NoteMachine() },
+            new IMachine[]
+            {
+                new TurnstileMachine(),
+                new OrderMachine(),
+                new NoteMachine(),
+                new PlainHatchMachine(),
+            },
             TestDb.NewStore(context),
             TestDb.NewClaims(context),
             new IdempotentEffect(TestDb.NewClaims(context)),
@@ -72,7 +78,7 @@ public class SnapshotMutationDefectTests
     public async Task A_client_divergence_refusal_must_not_have_persisted_the_advance()
     {
         var id = Guid.NewGuid();
-        (await Save("turnstile", id, TestTurnstile.InitialJson)).Problem.Should().BeNull();
+        await TestDb.Seed("u", id, TestTurnstile.InitialJson);
 
         var advance = await new AdvanceSnapshotJunction(NewRegistry(), User).Run(
             new AdvanceSnapshotInput
@@ -97,15 +103,11 @@ public class SnapshotMutationDefectTests
     public async Task Advance_input_must_not_grow_a_draft_past_the_snapshot_limit()
     {
         var id = Guid.NewGuid();
-        (
-            await Save(
-                "note",
-                id,
-                "{\"machine\":\"note\",\"version\":1,\"state\":\"Draft\",\"context\":{}}"
-            )
-        )
-            .Problem.Should()
-            .BeNull();
+        await TestDb.Seed(
+            "u",
+            id,
+            "{\"machine\":\"note\",\"version\":1,\"state\":\"Draft\",\"context\":{}}"
+        );
 
         var text = new string('x', 1024 * 1024);
         var advance = await new AdvanceSnapshotJunction(NewRegistry(), User).Run(
@@ -133,9 +135,9 @@ public class SnapshotMutationDefectTests
     {
         var id = Guid.NewGuid();
         var snapshot =
-            "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"a\\u0000b\"}}";
+            "{\"machine\":\"plain-hatch\",\"version\":1,\"state\":\"Open\",\"context\":{\"paidWith\":\"a\\u0000b\"}}";
 
-        var save = async () => await Save("turnstile", id, snapshot);
+        var save = async () => await Save(PlainHatchMachine.Id, id, snapshot);
 
         (await save.Should().NotThrowAsync()).Subject.Problem.Should().NotBeNull();
     }
@@ -145,16 +147,16 @@ public class SnapshotMutationDefectTests
     {
         var id = Guid.NewGuid();
         var snapshot =
-            "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"q\",\"n\":1e400}}";
+            "{\"machine\":\"plain-hatch\",\"version\":1,\"state\":\"Open\",\"context\":{\"paidWith\":\"q\",\"n\":1e400}}";
 
         // The save stores the row, then throws while serializing the reply.
         try
         {
-            await Save("turnstile", id, snapshot);
+            await Save(PlainHatchMachine.Id, id, snapshot);
         }
         catch (ArgumentException) { }
 
-        var load = async () => await Load("turnstile", id);
+        var load = async () => await Load(PlainHatchMachine.Id, id);
         await load.Should()
             .NotThrowAsync("every later load of the draft must not fail on the stored value");
     }

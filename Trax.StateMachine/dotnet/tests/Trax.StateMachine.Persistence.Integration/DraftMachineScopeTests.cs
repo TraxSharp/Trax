@@ -24,11 +24,8 @@ public class DraftMachineScopeTests
     public async Task Two_machines_keep_separate_drafts_under_one_id()
     {
         var id = Guid.NewGuid();
-        (await Turnstiles().Autosave("u", id, TestTurnstile.UnlockedJson))
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
-
-        (await Notes().Autosave("u", id, Note)).Should().BeOfType<AutosaveResult.Saved>();
+        await TestDb.Seed("u", id, TestTurnstile.UnlockedJson);
+        await TestDb.Seed("u", id, Note);
 
         (await Turnstiles().Load("u", id))
             .Should()
@@ -46,7 +43,7 @@ public class DraftMachineScopeTests
     public async Task One_machine_does_not_see_another_machines_draft()
     {
         var id = Guid.NewGuid();
-        (await Notes().Autosave("u", id, Note)).Should().BeOfType<AutosaveResult.Saved>();
+        await TestDb.Seed("u", id, Note);
 
         (await Turnstiles().Load("u", id)).Should().BeOfType<LoadResult.NotFound>();
         (await Turnstiles().Advance("u", id, "Coin")).Should().BeOfType<AdvanceOutcome.NotFound>();
@@ -61,15 +58,8 @@ public class DraftMachineScopeTests
         );
         var user = $"u-{Guid.NewGuid():N}";
         var id = Guid.NewGuid();
-        using (var scope = host.Scope())
-        {
-            (await host.Service(scope, "turnstile").Autosave(user, id, TestTurnstile.UnlockedJson))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
-            (await host.Service(scope, "note").Autosave(user, id, Note))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
-        }
+        await host.SeedDraft(user, id, TestTurnstile.UnlockedJson);
+        await host.SeedDraft(user, id, Note);
         // Only the turnstile's draft is idle past the TTL.
         await host.Execute(
             $"UPDATE {host.DraftTable} SET updated_at = @p0 WHERE id = @p1 AND machine = 'turnstile'",

@@ -35,10 +35,7 @@ public class SnapshotDraftExpiryTests(StoreProvider provider)
     private static async Task<Guid> Saved(InstanceHost host, string user, string json)
     {
         var id = Guid.NewGuid();
-        using var scope = host.Scope();
-        (await host.Service(scope, "turnstile").Autosave(user, id, json))
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
+        await host.SeedDraft(user, id, json);
         return id;
     }
 

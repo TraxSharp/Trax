@@ -28,10 +28,7 @@ public class DiscardTests(StoreProvider provider)
     private static async Task<Guid> Draft(InstanceHost host, string user)
     {
         var id = Guid.NewGuid();
-        using var scope = host.Scope();
-        (await host.Service(scope, "turnstile").Autosave(user, id, UnlockedJson))
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
+        await host.SeedDraft(user, id, UnlockedJson);
         return id;
     }
 

@@ -121,17 +121,11 @@ public class MutationErrorMessageTests
     {
         var registry = Registry(new CountingEffect());
         var id = Guid.NewGuid();
-        (
-            await new SaveSnapshotJunction(registry, User).Run(
-                new SaveSnapshotInput
-                {
-                    Machine = "throwing-guard",
-                    Id = id,
-                    Snapshot =
-                        "{\"machine\":\"throwing-guard\",\"version\":1,\"state\":\"Open\",\"context\":{}}",
-                }
-            )
-        ).Problem.Should().BeNull();
+        await TestDb.Seed(
+            "u",
+            id,
+            "{\"machine\":\"throwing-guard\",\"version\":1,\"state\":\"Open\",\"context\":{}}"
+        );
         var logger = new CapturingLogger<AdvanceSnapshotJunction>();
 
         var advance = await new AdvanceSnapshotJunction(registry, User, logger).Run(

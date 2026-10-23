@@ -43,10 +43,7 @@ public class SnapshotWatchHubTests(StoreProvider provider)
     private async Task<(Guid Id, long RowId)> Saved()
     {
         var id = Guid.NewGuid();
-        using (var scope = _host.Scope())
-            (await _host.Service(scope, "turnstile").Autosave(User, id, TestTurnstile.InitialJson))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
+        await _host.SeedDraft(User, id, TestTurnstile.InitialJson);
         return (id, await _host.RowId(id));
     }
 

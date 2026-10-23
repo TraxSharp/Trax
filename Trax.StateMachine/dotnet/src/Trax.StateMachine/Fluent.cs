@@ -155,6 +155,39 @@ public sealed record BuiltMachine<TState, TTrigger>(
     internal StartDeclaration? Start { get; init; }
 
     /// <summary>
+    /// Whether the machine binds a custom guard or reducer by name (<c>CustomGuard</c>, <c>CustomReducer</c>), a
+    /// handler only the server has.
+    /// </summary>
+    internal bool BindsCustomHandlers { get; init; }
+
+    /// <summary>
+    /// Whether any edge decides or computes something on the server: a guard (declarative or a delegate), or a reducer
+    /// other than <see cref="Reduction.Keep"/>. A saved snapshot would step around either.
+    /// </summary>
+    internal bool HasEdgeLogic
+    {
+        get
+        {
+            var declared = Declarative?.Transitions;
+            var paired = declared is not null && declared.Count == Definition.Transitions.Count;
+            for (var i = 0; i < Definition.Transitions.Count; i++)
+            {
+                var edge = Definition.Transitions[i];
+                if (edge.Guard is not null)
+                    return true;
+                if (edge.Reduce is null)
+                    continue;
+                if (!paired || declared![i].Reduce is not Reduction.Keep)
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>Whether the declared start copies or computes anything from its input into the initial context.</summary>
+    internal bool StartReducesInput => Start is { } start && start.InputFields is not { Count: 0 };
+
+    /// <summary>
     /// The record each state declares its context with <c>Context&lt;TContext&gt;()</c>, by state. A state declared
     /// with <c>Context()</c>, or with no declarative context, is absent.
     /// </summary>
@@ -1159,6 +1192,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 .ToHashSet(),
             Start = _start,
             ServerWrites = serverWrites,
+            BindsCustomHandlers = _customGuards.Count > 0 || _customReducers.Count > 0,
         };
     }
 

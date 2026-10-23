@@ -106,6 +106,15 @@ public class TransitionHistoryTests(StoreProvider provider)
         return added[0];
     }
 
+    // A turnstile's draft, written through the store as host code does: the generic save does not serve a machine
+    // with a guard.
+    private async Task<Guid> Seeded(string json)
+    {
+        var id = Guid.NewGuid();
+        await _host.SeedDraft(User, id, json);
+        return id;
+    }
+
     private async Task<Guid> Saved(string machine, string json)
     {
         var id = Guid.NewGuid();
@@ -154,7 +163,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     [Test]
     public async Task Every_creation_starts_the_history_at_revision_one()
     {
-        var saved = await Saved("turnstile", TestTurnstile.InitialJson);
+        var saved = await Saved(PlainHatchMachine.Id, PlainHatchMachine.Json(HatchState.Shut));
         var system = (await _host.Start<SystemTurnstileMachine>(NewKey())).Id;
         StartOutcome started;
         using (var scope = _host.Scope())
@@ -195,7 +204,11 @@ public class TransitionHistoryTests(StoreProvider provider)
     {
         var (machine, first, second) =
             write == "upsert"
-                ? ("turnstile", TestTurnstile.InitialJson, TestTurnstile.UnlockedJson)
+                ? (
+                    PlainHatchMachine.Id,
+                    PlainHatchMachine.Json(HatchState.Shut),
+                    PlainHatchMachine.Json(HatchState.Open)
+                )
                 : (
                     LedgerMachine.Id,
                     LedgerMachine.Json(LedgerState.Open),
@@ -229,7 +242,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     [Test]
     public async Task An_advance_adds_its_command()
     {
-        var id = await Saved("turnstile", TestTurnstile.InitialJson);
+        var id = await Seeded(TestTurnstile.InitialJson);
 
         var row = await OneRowFor(
             id,
@@ -496,7 +509,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     [TestCase("Upsert")]
     public async Task A_public_ISnapshotStore_write_adds_one_row(string write)
     {
-        var id = await Saved("turnstile", TestTurnstile.InitialJson);
+        var id = await Seeded(TestTurnstile.InitialJson);
 
         var row = await OneRowFor(
             id,
@@ -574,7 +587,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     [Test]
     public async Task A_refused_advance_or_a_stale_write_adds_no_row()
     {
-        var id = await Saved("turnstile", TestTurnstile.InitialJson);
+        var id = await Seeded(TestTurnstile.InitialJson);
         var before = await History(id);
 
         (await Advance("turnstile", id, "Coin", new JsonObject { ["coin"] = "penny" }))
@@ -597,7 +610,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     [Test]
     public async Task Two_concurrent_writes_with_one_token_add_one_row()
     {
-        var id = await Saved("turnstile", TestTurnstile.InitialJson);
+        var id = await Seeded(TestTurnstile.InitialJson);
         Guid token;
         using (var scope = _host.Scope())
             token = (
@@ -635,7 +648,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     [Test]
     public async Task A_discard_removes_the_history()
     {
-        var id = await Saved("turnstile", TestTurnstile.InitialJson);
+        var id = await Seeded(TestTurnstile.InitialJson);
         (await Advance("turnstile", id, "Coin", Quarter))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -657,10 +670,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     {
         using var host = InstanceHost.Create(provider, draftTtl: TimeSpan.FromHours(1));
         var id = Guid.NewGuid();
-        using (var scope = host.Scope())
-            (await host.Service(scope, "turnstile").Autosave(User, id, TestTurnstile.UnlockedJson))
-                .Should()
-                .BeOfType<AutosaveResult.Saved>();
+        await host.SeedDraft(User, id, TestTurnstile.UnlockedJson);
         var rowId = await host.RowId(id);
         (await RowHistory(host, rowId)).Should().ContainSingle();
         await host.Backdate(id, SnapshotOwnerKind.User, DateTimeOffset.UtcNow.AddDays(-2));
@@ -676,7 +686,7 @@ public class TransitionHistoryTests(StoreProvider provider)
     [Test]
     public async Task A_delete_by_host_code_removes_the_history_and_a_recreate_starts_a_new_one()
     {
-        var id = await Saved("turnstile", TestTurnstile.InitialJson);
+        var id = await Seeded(TestTurnstile.InitialJson);
         (await Advance("turnstile", id, "Coin", Quarter))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
@@ -691,7 +701,7 @@ public class TransitionHistoryTests(StoreProvider provider)
                 $"the database deletes the history with its row, whoever deletes it. See {Adr}"
             );
 
-        var again = await Saved("turnstile", TestTurnstile.InitialJson);
+        var again = await Seeded(TestTurnstile.InitialJson);
         (await History(again))
             .Select(t => t.Revision)
             .Should()
@@ -745,9 +755,13 @@ public class TransitionHistoryInMemoryTests
             var turnstile = scope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
                 .Service("turnstile")!;
-            (await turnstile.Autosave(User, id, TestTurnstile.InitialJson))
+            (
+                await scope
+                    .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                    .Upsert(User, id, TestDb.Parse(TestTurnstile.InitialJson))
+            )
                 .Should()
-                .BeOfType<AutosaveResult.Saved>();
+                .BeTrue();
             (await turnstile.Advance(User, id, "Coin", quarter))
                 .Should()
                 .BeOfType<AdvanceOutcome.Advanced>();

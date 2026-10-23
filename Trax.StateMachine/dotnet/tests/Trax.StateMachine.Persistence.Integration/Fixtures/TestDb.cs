@@ -39,7 +39,7 @@ public static class TestDb
     /// <summary>
     /// Writes <paramref name="json"/> as <paramref name="userKey"/>'s draft straight through the store, as host code
     /// would. The generic save serves only machines with no server-side behaviour, so a draft of a machine with an
-    /// effect, an invoked train or a role-gated event is seeded this way.
+    /// effect, an invoked train, a role-gated event, a guard or a reducer is seeded this way.
     /// </summary>
     public static async Task Seed(
         string userKey,

@@ -32,6 +32,77 @@ public sealed class ShipMachine : Machine<ShipState, ShipTrigger>
     }
 }
 
+public enum HatchState
+{
+    Shut,
+    Open,
+}
+
+public enum HatchTrigger
+{
+    Open,
+    Shut,
+}
+
+/// <summary>
+/// A hatch with no rule, timer, invoked train, effect, guard or reducer: <c>Shut -Open-&gt; Open -Shut-&gt; Shut</c>.
+/// The soft save serves it.
+/// </summary>
+public sealed class PlainHatchMachine : Machine<HatchState, HatchTrigger>
+{
+    public const string Id = "plain-hatch";
+
+    protected override void Configure(IMachineBuilder<HatchState, HatchTrigger> m)
+    {
+        m.Id(Id).Version(1).StartsAt(HatchState.Shut, () => new JsonObject());
+        m.In(HatchState.Shut).On(HatchTrigger.Open).To(HatchState.Open);
+        m.In(HatchState.Open).On(HatchTrigger.Shut).To(HatchState.Shut);
+    }
+
+    public static string Json(HatchState state) =>
+        new JsonObject
+        {
+            ["machine"] = Id,
+            ["version"] = 1,
+            ["state"] = state.ToString(),
+            ["context"] = new JsonObject(),
+        }.ToJsonString();
+}
+
+/// <summary>The hatch with one guard on <c>Open</c> and nothing else the server does.</summary>
+public sealed class GuardedHatchMachine : Machine<HatchState, HatchTrigger>
+{
+    public const string Id = "guarded-hatch";
+
+    protected override void Configure(IMachineBuilder<HatchState, HatchTrigger> m)
+    {
+        m.Id(Id).Version(1).StartsAt(HatchState.Shut, () => new JsonObject());
+        m.In(HatchState.Shut)
+            .On(HatchTrigger.Open)
+            .When(
+                (_, input) => input?["key"]?.GetValueKind() == System.Text.Json.JsonValueKind.String
+            )
+            .To(HatchState.Open);
+        m.In(HatchState.Open).On(HatchTrigger.Shut).To(HatchState.Shut);
+    }
+}
+
+/// <summary>The hatch whose <c>Shut</c> edge writes the context, and which has no guard.</summary>
+public sealed class ReducingHatchMachine : Machine<HatchState, HatchTrigger>
+{
+    public const string Id = "reducing-hatch";
+
+    protected override void Configure(IMachineBuilder<HatchState, HatchTrigger> m)
+    {
+        m.Id(Id).Version(1).StartsAt(HatchState.Shut, () => new JsonObject());
+        m.In(HatchState.Shut).On(HatchTrigger.Open).To(HatchState.Open);
+        m.In(HatchState.Open)
+            .On(HatchTrigger.Shut)
+            .Reduce((_, _) => new JsonObject { ["shutBy"] = "server" })
+            .To(HatchState.Shut);
+    }
+}
+
 public enum LedgerState
 {
     Open,
@@ -47,8 +118,8 @@ public enum LedgerTrigger
 }
 
 /// <summary>
-/// A ledger whose <c>Closed</c> state is committed and which has no effect, invoked train or role-gated event, so
-/// the soft save still serves it: <c>Open -Count-&gt; Counting -Close-&gt; Closed -Reopen-&gt; Open</c>. A closed
+/// A ledger whose <c>Closed</c> state is committed and which has no effect, invoked train, role-gated event, guard
+/// or reducer, so the soft save still serves it: <c>Open -Count-&gt; Counting -Close-&gt; Closed -Reopen-&gt; Open</c>. A closed
 /// ledger holds at least one entry, so a stored one without any cannot be read back.
 /// </summary>
 public sealed class LedgerMachine : Machine<LedgerState, LedgerTrigger>
@@ -74,7 +145,6 @@ public sealed class LedgerMachine : Machine<LedgerState, LedgerTrigger>
                 ctx["entries"] is JsonArray { Count: > 0 } ? null : "Closed: at least one entry."
             )
             .On(LedgerTrigger.Reopen)
-            .Reduce((_, _) => Fresh())
             .To(LedgerState.Open);
     }
 
@@ -462,18 +532,69 @@ public class DraftWriteRulesTests
         var id = Guid.NewGuid();
 
         var output = await GenericSave(
-            new TurnstileMachine(),
+            new PlainHatchMachine(),
             user,
             id,
-            TestTurnstile.UnlockedJson
+            PlainHatchMachine.Json(HatchState.Open)
         );
 
         output
             .Problem.Should()
             .BeNull(
-                $"a machine with no rule, timer, invoke or effect keeps its save. See {MachinesAreTheApi}"
+                $"a machine with no rule, timer, invoke, effect, guard or reducer keeps its save. See {MachinesAreTheApi}"
             );
         (await TestDb.NewStore().Get(user, id)).Should().NotBeNull();
+    }
+
+    [Test]
+    [Property("adr", MachinesAreTheApi)]
+    public async Task The_generic_save_is_refused_for_a_machine_with_a_guard()
+    {
+        var user = $"u-{Guid.NewGuid():N}";
+        var id = Guid.NewGuid();
+        var open = new JsonObject
+        {
+            ["machine"] = GuardedHatchMachine.Id,
+            ["version"] = 1,
+            ["state"] = nameof(HatchState.Open),
+            ["context"] = new JsonObject(),
+        }.ToJsonString();
+
+        var output = await GenericSave(new GuardedHatchMachine(), user, id, open);
+
+        output.Problem.Should().NotBeNull("the save is refused");
+        output
+            .Problem!.Code.Should()
+            .Be(
+                RefusalCode.SaveNotAllowed,
+                $"only the guard decides whether the hatch opens. See {MachinesAreTheApi}"
+            );
+        (await TestDb.NewStore().Get(user, id)).Should().BeNull("a refused save writes nothing");
+    }
+
+    [Test]
+    [Property("adr", MachinesAreTheApi)]
+    public async Task The_generic_save_is_refused_for_a_machine_with_a_reducer()
+    {
+        var user = $"u-{Guid.NewGuid():N}";
+        var id = Guid.NewGuid();
+        var shut = new JsonObject
+        {
+            ["machine"] = ReducingHatchMachine.Id,
+            ["version"] = 1,
+            ["state"] = nameof(HatchState.Shut),
+            ["context"] = new JsonObject { ["shutBy"] = "client" },
+        }.ToJsonString();
+
+        var output = await GenericSave(new ReducingHatchMachine(), user, id, shut);
+
+        output
+            .Problem?.Code.Should()
+            .Be(
+                RefusalCode.SaveNotAllowed,
+                $"only the reducer writes the context it produces. See {MachinesAreTheApi}"
+            );
+        (await TestDb.NewStore().Get(user, id)).Should().BeNull("a refused save writes nothing");
     }
 
     private static Snapshot Snapshot(string json)
