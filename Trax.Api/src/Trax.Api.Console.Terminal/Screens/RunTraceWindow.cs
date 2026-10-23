@@ -10,14 +10,16 @@ namespace Trax.Api.Console.Terminal.Screens;
 /// <summary>
 /// One run as a timeline: its steps and decisions as they happened, then its log, with the steps followed live while
 /// the window is open. The steps are followed before the trace is read, and a step that arrives while it is read is
-/// kept if it is newer than what the read answers, so neither order loses a change. Esc closes it; o opens the source
-/// of the step under the cursor.
+/// kept if it is newer than what the read answers, so neither order loses a change. Each part is read up to
+/// <see cref="RunTrace.Take"/>; a part that filled it is named on a line under the header, since the run may hold
+/// more. Esc closes it; o opens the source of the step under the cursor.
 /// </summary>
 internal sealed class RunTraceWindow : Window
 {
     private readonly ConsoleContext _context;
     private readonly long _run;
     private readonly Label _header;
+    private readonly Label _cut;
     private readonly KeyedList _lines;
     private readonly ObservableCollection<string> _text = [];
     private readonly List<TraceEntry> _entries = [];
@@ -34,6 +36,12 @@ internal sealed class RunTraceWindow : Window
         _run = run;
         Title = $"Run {run}";
         _header = new Label { Width = Dim.Fill(), Text = "Reading..." };
+        _cut = new Label
+        {
+            Y = 1,
+            Width = Dim.Fill(),
+            Visible = false,
+        };
         _lines = new KeyedList
         {
             Y = 1,
@@ -42,7 +50,7 @@ internal sealed class RunTraceWindow : Window
             Source = new ListWrapper<string>(_text),
         };
         _lines.Keys = OnKey;
-        Add(_header, _lines);
+        Add(_header, _cut, _lines);
         // Read once the window runs, so every answer lands on the UI thread.
         IsRunningChanged += (_, e) =>
         {
@@ -69,6 +77,9 @@ internal sealed class RunTraceWindow : Window
     /// <summary>The lines shown, in order.</summary>
     public IReadOnlyList<TraceEntry> Entries => _entries;
 
+    /// <summary>The line naming the parts the last read cut at <see cref="RunTrace.Take"/>; null when none was.</summary>
+    public string? Cut => _cut.Visible ? _cut.Text : null;
+
     private void Load()
     {
         var load = Interlocked.Increment(ref _loading);
@@ -91,6 +102,7 @@ internal sealed class RunTraceWindow : Window
                 }
                 _entries.Clear();
                 _entries.AddRange(entries);
+                ShowCut(entries);
                 foreach (var step in arrived)
                     Place(step);
                 Render();
@@ -104,6 +116,30 @@ internal sealed class RunTraceWindow : Window
                 _header.Text = TerminalText.Line(message);
             }
         );
+    }
+
+    // The parts of the read that filled RunTrace.Take, named under the header; the steps that arrive live are not
+    // counted, since the read is what was cut.
+    private void ShowCut(IReadOnlyList<TraceEntry> read)
+    {
+        var cut = new[]
+        {
+            (TraceKind.Step, "steps"),
+            (TraceKind.Decision, "decisions"),
+            (TraceKind.Log, "log lines"),
+        }
+            .Where(part => read.Count(e => e.Kind == part.Item1) >= RunTrace.Take)
+            .Select(part => part.Item2)
+            .ToArray();
+        _cut.Visible = cut.Length > 0;
+        _cut.Text = cut switch
+        {
+            [] => "",
+            [var one] => $"Only the first {RunTrace.Take} {one} were read; the run may have more.",
+            _ =>
+                $"Only the first {RunTrace.Take} {string.Join(", ", cut[..^1])} and {cut[^1]} were read; the run may have more.",
+        };
+        _lines.Y = cut.Length > 0 ? 2 : 1;
     }
 
     private void Upsert(TraceEntry step)

@@ -171,6 +171,66 @@ public class RunTraceWindowTests
         window.Entries.Single(e => e.Key == "step:2").Text.Should().Contain("FAILED");
     }
 
+    [Test]
+    public async Task A_part_that_filled_the_limit_is_named_under_the_header()
+    {
+        var steps = new JsonArray(
+            Enumerable
+                .Range(1, RunTrace.Take)
+                .Select(i =>
+                    (JsonNode)
+                        new JsonObject
+                        {
+                            ["position"] = i,
+                            ["kind"] = "JUNCTION",
+                            ["name"] = $"Step{i}",
+                            ["state"] = "COMPLETED",
+                            ["startedAt"] = "2026-10-22T10:00:00Z",
+                            ["durationMs"] = 1,
+                            ["replayed"] = false,
+                            ["answerWithheld"] = false,
+                            ["nameWithheld"] = false,
+                        }
+                )
+                .ToArray()
+        );
+        var host = new FakeHost()
+            .Answer(
+                "JunctionRuns",
+                _ => new JsonObject
+                {
+                    ["operations"] = new JsonObject { ["junctionRuns"] = steps.DeepClone() },
+                }
+            )
+            .Answer("Decisions", Decisions)
+            .Answer("Logs", Logs);
+        var (terminal, window) = await Open(host);
+        await using var _ = terminal;
+
+        await terminal.Until(() => window.Entries.Count == RunTrace.Take + 2, "the trace is read");
+
+        window
+            .Cut.Should()
+            .Be($"Only the first {RunTrace.Take} steps were read; the run may have more.");
+        await terminal.UntilShown($"Only the first {RunTrace.Take} steps were read");
+    }
+
+    [Test]
+    public async Task A_trace_under_the_limit_names_no_cut()
+    {
+        var host = new FakeHost()
+            .Answer("JunctionRuns", Steps)
+            .Answer("Decisions", Decisions)
+            .Answer("Logs", Logs);
+        var (terminal, window) = await Open(host);
+        await using var _ = terminal;
+
+        await terminal.Until(() => window.Entries.Count == 4, "the trace is read");
+
+        window.Cut.Should().BeNull();
+        (await terminal.Screen()).Should().NotContain("Only the first");
+    }
+
     private static string Failed(int sequence) =>
         """{"onJunctionEvent":{"metadataId":4812,"eventType":"JUNCTION_FAILED","timestamp":"2026-10-22T10:00:03Z","sequence":SEQ,"junction":{"position":2,"kind":"JUNCTION","name":"ChargeCard","state":"FAILED","startedAt":"2026-10-22T10:00:02Z","durationMs":1200,"failureException":"card_declined","replayed":false,"answerWithheld":false,"nameWithheld":false}}}""".Replace(
             "SEQ",
