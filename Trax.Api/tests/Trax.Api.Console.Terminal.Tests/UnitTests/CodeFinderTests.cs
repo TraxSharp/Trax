@@ -33,9 +33,9 @@ public class CodeFinderTests
     public void Remove() => _root.Delete(recursive: true);
 
     [Test]
-    public void A_train_named_by_its_interface_opens_at_its_class()
+    public async Task A_train_named_by_its_interface_opens_at_its_class()
     {
-        var found = CodeFinder.Find(_root.FullName, "Shop.Trains.IShipOrderTrain");
+        var found = await CodeFinder.FindAsync(_root.FullName, "Shop.Trains.IShipOrderTrain");
 
         found.Should().NotBeNull();
         Path.GetFileName(found!.Path).Should().Be("ShipOrderTrain.cs");
@@ -43,21 +43,68 @@ public class CodeFinderTests
     }
 
     [Test]
-    public void A_junction_is_found_by_its_name_and_build_output_is_not_searched()
+    public async Task A_junction_is_found_by_its_name_and_build_output_is_not_searched()
     {
-        var found = CodeFinder.Find(_root.FullName, "ChargeCard");
+        var found = await CodeFinder.FindAsync(_root.FullName, "ChargeCard");
 
         found!.Path.Should().EndWith(Path.Combine("Junctions", "ChargeCard.cs"));
     }
 
     [TestCase("Missing")]
     [TestCase("not a name; rm -rf")]
-    public void A_name_with_no_declaration_finds_nothing(string name) =>
-        CodeFinder.Find(_root.FullName, name).Should().BeNull();
+    public async Task A_name_with_no_declaration_finds_nothing(string name) =>
+        (await CodeFinder.FindAsync(_root.FullName, name)).Should().BeNull();
+
+    [Test]
+    public async Task A_link_to_a_file_or_a_directory_is_not_followed()
+    {
+        var outside = Directory.CreateTempSubdirectory("trax-console-outside-");
+        try
+        {
+            File.WriteAllText(Path.Combine(outside.FullName, "Secret.cs"), "class Leaked { }\n");
+            File.CreateSymbolicLink(
+                Path.Combine(_root.FullName, "src", "Linked.cs"),
+                Path.Combine(outside.FullName, "Secret.cs")
+            );
+            Directory.CreateSymbolicLink(
+                Path.Combine(_root.FullName, "src", "away"),
+                outside.FullName
+            );
+
+            (await CodeFinder.FindAsync(_root.FullName, "Leaked")).Should().BeNull();
+        }
+        finally
+        {
+            outside.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task A_search_that_is_cancelled_stops() =>
+        await FluentActions
+            .Awaiting(() =>
+                CodeFinder.FindAsync(_root.FullName, "Missing", new CancellationToken(true))
+            )
+            .Should()
+            .ThrowAsync<OperationCanceledException>();
+
+    [Test]
+    public void The_search_starts_at_the_checkout_the_console_runs_in()
+    {
+        Directory.CreateDirectory(Path.Combine(_root.FullName, ".git"));
+
+        CodeFinder.Root(Path.Combine(_root.FullName, "src", "Shop")).Should().Be(_root.FullName);
+    }
 
     [TestCase("nvim", new[] { "+4", "/x/A.cs" })]
     [TestCase("code --wait", new[] { "--wait", "--goto", "/x/A.cs:4" })]
     [TestCase("gedit", new[] { "/x/A.cs" })]
+    [TestCase("  nvim   -u NONE ", new[] { "-u", "NONE", "+4", "/x/A.cs" })]
+    [TestCase("'/opt/My Editor/bin/vim' --clean", new[] { "--clean", "+4", "/x/A.cs" })]
+    [TestCase(
+        "emacs -nw --eval \"(setq a \\\"b\\\")\"",
+        new[] { "-nw", "--eval", "(setq a \"b\")", "+4", "/x/A.cs" }
+    )]
     public void The_editor_gets_the_line_when_it_takes_one(string editor, string[] arguments) =>
         CodeFinder
             .Open(editor, new SourceLocation("/x/A.cs", 4))
@@ -90,11 +137,63 @@ public class CodeFinderTests
     }
 
     [Test]
+    public void A_quoted_editor_path_is_one_word() =>
+        CodeFinder
+            .Open("'/opt/My Editor/bin/vim' --clean", new SourceLocation("/x/A.cs", 4))
+            .FileName.Should()
+            .Be("/opt/My Editor/bin/vim");
+
+    [Test]
     public void The_editor_is_VISUAL_then_EDITOR_then_vi()
     {
         CodeFinder.Editor(n => n == "VISUAL" ? "code" : "nano").Should().Be("code");
         CodeFinder.Editor(n => n == "EDITOR" ? "nano" : null).Should().Be("nano");
         CodeFinder.Editor(_ => null).Should().Be("vi");
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("\t\n")]
+    public void A_blank_editor_is_not_set(string blank)
+    {
+        CodeFinder.Editor(n => n == "VISUAL" ? blank : "nano").Should().Be("nano");
+        CodeFinder.Editor(_ => blank).Should().Be("vi");
+    }
+
+    [Test]
+    public void On_Windows_a_bare_name_is_found_on_the_path_with_its_extension()
+    {
+        var env = new Dictionary<string, string>
+        {
+            ["PATH"] = @"C:\Windows;C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin",
+            ["PATHEXT"] = ".COM;.EXE;.BAT;.CMD",
+        };
+        var there = Path.Join(
+            @"C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin",
+            "code.cmd"
+        );
+
+        CodeFinder
+            .Command("code", n => env.GetValueOrDefault(n), windows: true, exists: p => p == there)
+            .Should()
+            .Be(there);
+        CodeFinder
+            .Command("code", n => env.GetValueOrDefault(n), windows: true, exists: _ => false)
+            .Should()
+            .Be("code");
+        CodeFinder
+            .Command(
+                @"C:\vim\vim.exe",
+                n => env.GetValueOrDefault(n),
+                windows: true,
+                exists: _ => true
+            )
+            .Should()
+            .Be(@"C:\vim\vim.exe");
+        CodeFinder
+            .Command("code", n => env.GetValueOrDefault(n), windows: false)
+            .Should()
+            .Be("code");
     }
 
     private void Write(string path, string text)

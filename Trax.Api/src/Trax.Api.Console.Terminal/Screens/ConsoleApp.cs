@@ -35,27 +35,48 @@ internal static class ConsoleApp
             {
                 app.Init();
                 using var stop = cancellationToken.Register(() => app.Invoke(app.RequestStop));
+                // Ends a search for source when the window stops before it is done.
+                using var searching = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken
+                );
                 var context = new ConsoleContext(app, session.Client, session.Target.Endpoint)
                 {
                     VerticalGraphs = verticalGraphs,
                 };
                 var window = new MainWindow(context, state, banner);
+                var search = false;
                 context.OpenCode = name =>
                 {
-                    var found = CodeFinder.Find(Directory.GetCurrentDirectory(), name);
-                    if (found is null)
-                    {
-                        context.Status(
-                            $"No declaration of {TerminalText.Line(name)} under {Directory.GetCurrentDirectory()}: run trax-console in the checkout."
-                        );
+                    if (search)
                         return;
-                    }
-                    open = found;
-                    state = window.State;
-                    verticalGraphs = context.VerticalGraphs;
-                    app.RequestStop(window);
+                    search = true;
+                    var root = CodeFinder.Root(Directory.GetCurrentDirectory());
+                    context.Status($"Looking for {TerminalText.Line(name)} under {root}...");
+                    Ui.Start(
+                        app,
+                        () => CodeFinder.FindAsync(root, name, searching.Token),
+                        found =>
+                        {
+                            search = false;
+                            if (searching.IsCancellationRequested)
+                                return;
+                            if (found is null)
+                            {
+                                context.Status(
+                                    $"No declaration of {TerminalText.Line(name)} under {root}: run trax-console in the checkout."
+                                );
+                                return;
+                            }
+                            open = found;
+                            state = window.State;
+                            verticalGraphs = context.VerticalGraphs;
+                            app.RequestStop(window);
+                        },
+                        _ => search = false
+                    );
                 };
                 app.Run(window);
+                searching.Cancel();
                 state ??= window.State;
                 window.Dispose();
             }
@@ -68,7 +89,8 @@ internal static class ConsoleApp
                 using var process = Process.Start(CodeFinder.Open(editor, open));
                 process?.WaitForExit();
             }
-            catch (System.ComponentModel.Win32Exception ex)
+            catch (Exception ex)
+                when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
             {
                 banner = $"Could not start {editor} ({ex.Message}). Set VISUAL or EDITOR.";
                 continue;
