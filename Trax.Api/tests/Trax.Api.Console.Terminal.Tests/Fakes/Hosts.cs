@@ -138,6 +138,7 @@ internal sealed class StreamingHost(ITraxTransport inner) : ITraxTransport
                     return sink;
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException($"Nothing follows {operation}.");
+            // allowed-delay: the polling interval of a wait with a deadline.
             await Task.Delay(10);
         }
     }
@@ -156,6 +157,7 @@ internal sealed class SilentHost : ITraxTransport
         CancellationToken cancellationToken = default
     )
     {
+        // allowed-delay: answers only by being cancelled.
         await Task.Delay(Timeout.Infinite, cancellationToken);
         return new TraxAnswer();
     }

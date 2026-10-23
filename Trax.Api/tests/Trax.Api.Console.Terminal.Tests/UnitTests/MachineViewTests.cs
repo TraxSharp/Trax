@@ -270,6 +270,7 @@ public class MachineViewTests
             () => host.Sent("MachineInstanceTransitions").Count == 3,
             "the overtaken read finishes"
         );
+        // negative-wait: a fourth read, if one were sent, would be sent within this window.
         await Task.Delay(200);
         await terminal.OnUi(() => { });
 

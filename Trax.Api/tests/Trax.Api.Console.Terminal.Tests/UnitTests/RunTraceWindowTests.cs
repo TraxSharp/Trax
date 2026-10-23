@@ -163,6 +163,7 @@ public class RunTraceWindowTests
         await terminal.Until(() => host.Sent("JunctionRuns").Count == 2, "the trace is read again");
         held.SetResult(Parse(Steps));
         await terminal.Until(() => host.Sent("Logs").Count == 2, "the second read answers");
+        // negative-wait: the overtaken read, were it applied, would land within this window.
         await Task.Delay(200);
         await terminal.OnUi(() => { });
 

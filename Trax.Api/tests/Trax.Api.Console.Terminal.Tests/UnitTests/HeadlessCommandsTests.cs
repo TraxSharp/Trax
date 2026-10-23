@@ -344,6 +344,7 @@ public class HeadlessCommandsTests
         {
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException("The condition never held.");
+            // allowed-delay: the polling interval of a wait with a deadline.
             await Task.Delay(10);
         }
     }
