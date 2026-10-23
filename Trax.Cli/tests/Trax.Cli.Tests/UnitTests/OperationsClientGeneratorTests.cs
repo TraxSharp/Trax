@@ -446,7 +446,10 @@ public class OperationsClientGeneratorTests
             .And.Contain(
                 $"    public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<RunsResult>> RunsAsync("
             )
-            .And.Contain("        RunsVariables? variables,")
+            .And.Contain(
+                "        RunsVariables? variables = null,",
+                "variables that may all be left out may be left out together"
+            )
             .And.Contain(
                 "client.SendAsync(global::Trax.Operations.TraxOperations.Runs, variables ?? new(), cancellationToken)"
             );
@@ -493,8 +496,22 @@ public class OperationsClientGeneratorTests
             ("src/graphql/Cancel.graphql", Cancel),
             ("src/graphql/OnDataChanged.graphql", OnDataChanged)
         );
+        const string caller = """
+            namespace Trax.Operations;
 
-        CompileCSharp(files, out _)
+            internal static class Caller
+            {
+                public static void Call(global::Trax.Client.TraxClient client)
+                {
+                    _ = client.RunsAsync();
+                    _ = client.RunsAsync(new RunsVariables { Take = 5 });
+                    _ = client.CancelAsync(new CancelVariables { Id = 1, Note = null });
+                    client.OnDataChanged(_ => { }).Dispose();
+                }
+            }
+            """;
+
+        CompileCSharp(files, out _, caller)
             .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
             .Select(d => d.ToString())
             .Should()
@@ -935,7 +952,8 @@ public class OperationsClientGeneratorTests
     // Compiles a C# client against Trax.Client and everything deployed with the tests, and loads it when it builds.
     private static IEnumerable<Microsoft.CodeAnalysis.Diagnostic> CompileCSharp(
         IReadOnlyList<ClientFile> files,
-        out System.Reflection.Assembly? assembly
+        out System.Reflection.Assembly? assembly,
+        params string[] callers
     )
     {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
@@ -943,9 +961,18 @@ public class OperationsClientGeneratorTests
             .Select(path => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path));
         var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
             "OperationsClient" + Guid.NewGuid().ToString("N"),
-            files.Select(f =>
-                Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(f.Text, path: f.Path)
-            ),
+            files
+                .Select(f => (f.Text, f.Path))
+                .Concat(callers.Select((text, i) => (text, $"Caller{i}.cs")))
+                .Select(f =>
+                    Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
+                        f.Item1,
+                        Microsoft.CodeAnalysis.CSharp.CSharpParseOptions.Default.WithDocumentationMode(
+                            Microsoft.CodeAnalysis.DocumentationMode.Diagnose
+                        ),
+                        path: f.Item2
+                    )
+                ),
             references,
             new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(
                 Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary,

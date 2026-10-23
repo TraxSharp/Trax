@@ -86,7 +86,7 @@ internal static partial class TraxOperationsClient
     /// <summary>Sends RequeueAllDeadLetters; a refusal or a transport failure is in the answer.</summary>
     public static global::System.Threading.Tasks.Task<global::Trax.Client.TraxAnswer<RequeueAllDeadLettersResult>> RequeueAllDeadLettersAsync(
         this global::Trax.Client.TraxClient client,
-        RequeueAllDeadLettersVariables? variables,
+        RequeueAllDeadLettersVariables? variables = null,
         global::System.Threading.CancellationToken cancellationToken = default
     ) => client.SendAsync(global::Trax.Api.Console.Terminal.Operations.TraxOperations.RequeueAllDeadLetters, variables ?? new(), cancellationToken);
 }

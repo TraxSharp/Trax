@@ -66,7 +66,7 @@ internal static partial class TraxOperationsClient
     /// <summary>Sends MachineInstanceStuckCounts; a refusal or a transport failure is in the answer.</summary>
     public static global::System.Threading.Tasks.Task<global::Trax.Client.TraxAnswer<MachineInstanceStuckCountsResult>> MachineInstanceStuckCountsAsync(
         this global::Trax.Client.TraxClient client,
-        MachineInstanceStuckCountsVariables? variables,
+        MachineInstanceStuckCountsVariables? variables = null,
         global::System.Threading.CancellationToken cancellationToken = default
     ) => client.SendAsync(global::Trax.Api.Console.Terminal.Operations.TraxOperations.MachineInstanceStuckCounts, variables ?? new(), cancellationToken);
 }

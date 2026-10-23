@@ -319,10 +319,13 @@ internal sealed partial class ClientGenerator
             sb.Append("}\n\n");
 
             sb.Append("internal static partial class TraxOperationsClient\n{\n");
+            // Variables that may all be left out may be left out together; a subscription's handler comes after
+            // them, so it names them.
             var parameter =
                 variables.Count == 0 ? ""
-                : required ? $"{variablesType} variables, "
-                : $"{variablesType}? variables, ";
+                : required ? $"{variablesType} variables"
+                : subscription ? $"{variablesType}? variables"
+                : $"{variablesType}? variables = null";
             var value =
                 variables.Count == 0 ? $"{Client}TraxNoVariables.Instance"
                 : required ? "variables"
@@ -336,11 +339,7 @@ internal sealed partial class ClientGenerator
                 sb.Append(
                     $"{Indent}public static global::System.IDisposable {method}(\n"
                         + $"{Indent}{Indent}this {Client}TraxClient client,\n"
-                        + (
-                            parameter.Length == 0
-                                ? ""
-                                : $"{Indent}{Indent}{parameter.TrimEnd(' ', ',')},\n"
-                        )
+                        + (parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
                         + $"{Indent}{Indent}global::System.Action<{Client}TraxStreamEvent<{resultType}>> onEvent\n"
                         + $"{Indent}) => client.Subscribe({document}, {value}, onEvent);\n"
                 );
@@ -353,11 +352,7 @@ internal sealed partial class ClientGenerator
                 sb.Append(
                     $"{Indent}public static global::System.Threading.Tasks.Task<{Client}TraxAnswer<{resultType}>> {method}(\n"
                         + $"{Indent}{Indent}this {Client}TraxClient client,\n"
-                        + (
-                            parameter.Length == 0
-                                ? ""
-                                : $"{Indent}{Indent}{parameter.TrimEnd(' ', ',')},\n"
-                        )
+                        + (parameter.Length == 0 ? "" : $"{Indent}{Indent}{parameter},\n")
                         + $"{Indent}{Indent}global::System.Threading.CancellationToken cancellationToken = default\n"
                         + $"{Indent}) => client.SendAsync({document}, {value}, cancellationToken);\n"
                 );
