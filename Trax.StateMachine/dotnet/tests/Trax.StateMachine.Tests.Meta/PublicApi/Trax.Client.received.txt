@@ -139,6 +139,10 @@ namespace Trax.Client
     }
     public static class TraxJson
     {
+        [get: System.Diagnostics.CodeAnalysis.RequiresDynamicCode("TraxJson.Options reads types by reflection. A trimmed or native AOT app passes Tr" +
+            "axClientOptions.Json with a source-generated JsonSerializerContext instead.")]
+        [get: System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("TraxJson.Options reads types by reflection. A trimmed or native AOT app passes Tr" +
+            "axClientOptions.Json with a source-generated JsonSerializerContext instead.")]
         public static System.Text.Json.JsonSerializerOptions Options { get; }
     }
     public sealed class TraxNoVariables : System.IEquatable<Trax.Client.TraxNoVariables>

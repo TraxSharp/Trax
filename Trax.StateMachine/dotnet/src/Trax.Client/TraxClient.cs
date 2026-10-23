@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Trax.Client;
 
@@ -9,7 +10,8 @@ public sealed record TraxClientOptions
     /// <summary>
     /// The options variables are written and data read with; <see cref="TraxJson.Options"/> when null. The client
     /// reads them with a copy that leaves every unset <see cref="Optional{T}"/> out of the JSON, whatever their
-    /// resolver, a source-generated <see cref="System.Text.Json.Serialization.JsonSerializerContext"/> included.
+    /// resolver: a source-generated <see cref="System.Text.Json.Serialization.JsonSerializerContext"/> included, which
+    /// is what a trimmed or native AOT app passes here.
     /// </summary>
     public JsonSerializerOptions? Json { get; init; }
 
@@ -72,6 +74,9 @@ public sealed class TraxClient
     private readonly TimeProvider _time;
 
     /// <summary>Builds the client over <paramref name="transport"/>.</summary>
+    /// <exception cref="ArgumentException">
+    /// The app turned reflection-based serialization off, and <see cref="TraxClientOptions.Json"/> names no resolver.
+    /// </exception>
     public TraxClient(ITraxTransport transport, TraxClientOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
@@ -140,11 +145,14 @@ public sealed class TraxClient
     private JsonObject VariablesOf<TVariables>(TVariables variables) =>
         variables is null or TraxNoVariables
             ? new JsonObject()
-            : JsonSerializer.SerializeToNode(variables, _json) as JsonObject
+            : JsonSerializer.SerializeToNode(variables, TypeInfo<TVariables>()) as JsonObject
                 ?? throw new ArgumentException(
                     "The variables must serialize to a JSON object.",
                     nameof(variables)
                 );
+
+    // The contract for T from the client's options: no reflection of its own, so a source-generated context is enough.
+    private JsonTypeInfo<T> TypeInfo<T>() => (JsonTypeInfo<T>)_json.GetTypeInfo(typeof(T));
 
     private TraxAnswer<TResult> Read<TResult>(TraxAnswer answer)
     {
@@ -154,7 +162,7 @@ public sealed class TraxClient
         {
             return new TraxAnswer<TResult>
             {
-                Data = answer.Data is null ? default : answer.Data.Deserialize<TResult>(_json),
+                Data = answer.Data is null ? default : answer.Data.Deserialize(TypeInfo<TResult>()),
                 Errors = answer.Errors,
             };
         }

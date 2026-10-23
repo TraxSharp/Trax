@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Trax.Client;
 
@@ -32,6 +34,8 @@ public readonly record struct Optional<T> : IOptional
 
     object? IOptional.Boxed => Value;
 
+    JsonConverter IOptional.Converter() => new OptionalJsonConverter<T>();
+
     /// <summary>A value that is sent.</summary>
     public static implicit operator Optional<T>(T value) => new(value);
 
@@ -44,6 +48,9 @@ internal interface IOptional
 {
     bool HasValue { get; }
     object? Boxed { get; }
+
+    /// <summary>The converter for this Optional's type, so the factory needs no MakeGenericType.</summary>
+    JsonConverter Converter();
 }
 
 /// <summary>
@@ -61,13 +68,16 @@ public sealed class OptionalJsonConverterFactory : JsonConverterFactory
     public override JsonConverter CreateConverter(
         Type typeToConvert,
         JsonSerializerOptions options
-    ) =>
-        (JsonConverter)
-            Activator.CreateInstance(
-                typeof(OptionalJsonConverter<>).MakeGenericType(
-                    typeToConvert.GetGenericArguments()[0]
-                )
-            )!;
+    ) => DefaultOf(typeToConvert).Converter();
+
+    // A default Optional<T> asks for its own converter, so no generic type is built at run time.
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2067",
+        Justification = "Optional<T> is a struct, whose default value needs no constructor the trimmer could remove."
+    )]
+    private static IOptional DefaultOf(Type optional) =>
+        (IOptional)Activator.CreateInstance(optional)!;
 }
 
 internal sealed class OptionalJsonConverter<T> : JsonConverter<Optional<T>>
@@ -79,11 +89,14 @@ internal sealed class OptionalJsonConverter<T> : JsonConverter<Optional<T>>
         ref Utf8JsonReader reader,
         Type typeToConvert,
         JsonSerializerOptions options
-    ) => new(JsonSerializer.Deserialize<T>(ref reader, options)!);
+    ) => new(JsonSerializer.Deserialize(ref reader, TypeInfo(options))!);
 
     public override void Write(
         Utf8JsonWriter writer,
         Optional<T> value,
         JsonSerializerOptions options
-    ) => JsonSerializer.Serialize(writer, value.Value, options);
+    ) => JsonSerializer.Serialize(writer, value.Value, TypeInfo(options));
+
+    private static JsonTypeInfo<T> TypeInfo(JsonSerializerOptions options) =>
+        (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
 }

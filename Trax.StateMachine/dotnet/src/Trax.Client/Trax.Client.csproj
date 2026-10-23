@@ -9,6 +9,9 @@
     <!-- A new package id, so nuget.org has no release to validate against yet. Remove after the first release that
          ships it (Directory.Build.props). -->
     <EnablePackageValidation>false</EnablePackageValidation>
+    <!-- A MAUI or Blazor WebAssembly app trims, and may publish native AOT: the analyzers hold the package to both. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <!-- No references: the base class library only, so a MAUI or Blazor WebAssembly app, or a terminal tool, can take it

@@ -30,7 +30,9 @@ dotnet add package Trax.Client
 ```
 
 It references the base class library and nothing else, so a terminal tool, a MAUI app or a Blazor WebAssembly app can
-take it. The typed documents it sends are generated: `trax client --operations --lang csharp` writes a
+take it. It is marked trimmable and AOT-compatible, and builds with the trim and AOT analyzers reporting nothing; see
+[Trimming and native AOT](#trimming-and-native-aot) for what a trimmed app passes it.
+The typed documents it sends are generated: `trax client --operations --lang csharp` writes a
 `TraxDocument<TVariables, TResult>` per document with its variables and result records, in the namespace `--namespace`
 names. [`Trax.StateMachine.Client`](/docs/sdk-reference/statemachine-api/dotnet-client) posts and subscribes through
 this package too.
@@ -86,7 +88,7 @@ public readonly record struct Optional<T>
 
 | Member | What it is |
 | --- | --- |
-| `TraxClient` | Sends documents through an `ITraxTransport`, writing variables and reading data with `TraxJson.Options` unless `TraxClientOptions.Json` says otherwise. It never talks to the network itself. |
+| `TraxClient` | Sends documents through an `ITraxTransport`, writing variables and reading data with `TraxJson.Options` unless `TraxClientOptions.Json` says otherwise. It never talks to the network itself. Built in an app that turned reflection-based serialization off, it throws `ArgumentException` unless `TraxClientOptions.Json` names a resolver. |
 | `SendAsync(document, variables, cancellationToken)` | Sends a query or mutation and reads the answer into a `TraxAnswer<TResult>`. It throws only when `cancellationToken` is cancelled, or for a subscription document, which `Subscribe` follows. Data that does not fit `TResult`, or that the options cannot read at all, is a `Failure`, not a throw. |
 | `Subscribe(document, variables, onEvent)` | Follows a subscription until the returned handle is disposed, and calls `onEvent` with each `TraxStreamEvent<TResult>`, one call at a time. Throws `ArgumentException` for a document that is not a subscription. An `onEvent` that throws ends its stream: the last call it gets is `Ended`, whose `Failure` names the exception. Other streams go on. |
 | `Transport` | The transport the client sends through. |
@@ -103,7 +105,7 @@ public readonly record struct Optional<T>
 | `TraxNoVariables` | The variables of a document that declares none, sent as `{}`. `TraxNoVariables.Instance` is its one value. |
 | `TraxRequest` | A `Document` and its `Variables` as a `JsonObject`: what a transport is handed. |
 | `Optional<T>` | A variable or input field that may be left out, which GraphQL tells apart from null. `default` is left out, and the host uses the argument's default or leaves the value as it is; any value converts to one that is sent, null included, which clears it. `HasValue` says whether it is sent and `Value` holds it. |
-| `TraxJson.Options` | The web defaults (camelCase, case-insensitive reads), with every `Optional<T>` property that holds no value left out of the JSON. A `TraxClient` leaves an unset `Optional<T>` out with any options given in `TraxClientOptions.Json` too, a source-generated context included; only JSON written outside the client, with options it never saw, carries an unset one as `default(T)`. |
+| `TraxJson.Options` | The web defaults (camelCase, case-insensitive reads), with every `Optional<T>` property that holds no value left out of the JSON. It reads types by reflection. A `TraxClient` leaves an unset `Optional<T>` out with any options given in `TraxClientOptions.Json` too, a source-generated context included; only JSON written outside the client, with options it never saw, carries an unset one as `default(T)`. |
 | `OptionalJsonConverterFactory` | The converter `Optional<T>` names in its `[JsonConverter]`, public so a source-generated context in another assembly can create it. Nothing calls it directly. |
 
 ### Answers
@@ -158,6 +160,26 @@ public readonly record struct Optional<T>
   `Optional<T>`, so `MaxActiveJobs = null` sends `"maxActiveJobs": null` and leaving it unset sends nothing, with
   `TraxJson.Options` or any options in `TraxClientOptions.Json`. Read back, a member that is absent is unset and one
   that is null is a null that was sent.
+
+## Trimming and native AOT
+
+`TraxJson.Options` reads types by reflection, which a trimmed or native AOT app turns off by default, and is annotated
+so. Such an app passes `TraxClientOptions.Json` with a source-generated `JsonSerializerContext` as its resolver; the
+client adds what leaves unset `Optional<T>` fields out. The context lists the generated records and every `T` an
+`Optional<T>` wraps, since it cannot see through `Optional<T>`'s converter. Without one, and with reflection off, the
+`TraxClient` constructor throws `ArgumentException` rather than failing on the first request.
+
+```csharp fragment
+[JsonSerializable(typeof(DisableManifestVariables))]
+[JsonSerializable(typeof(DisableManifestResult))]
+[JsonSerializable(typeof(string))] // each T an Optional<T> wraps
+internal sealed partial class ShopJson : JsonSerializerContext;
+
+var client = new TraxClient(
+    transport,
+    new TraxClientOptions { Json = new JsonSerializerOptions(JsonSerializerDefaults.Web) { TypeInfoResolver = ShopJson.Default } }
+);
+```
 
 ## Example
 
