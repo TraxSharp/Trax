@@ -21,4 +21,33 @@ public partial class TraxGraphQLBuilder
         JunctionAnswersForBroadcastAllowed = true;
         return this;
     }
+
+    internal HashSet<Type> BroadcastOutputTrains { get; } = [];
+
+    /// <summary>
+    /// Lets subscribers outside the operations view see <c>output</c> on the lifecycle events of
+    /// the <c>[TraxBroadcast]</c> train <typeparamref name="TTrain"/>. Off by default: a broadcast
+    /// subscriber sees that a run completed, not what it returned.
+    /// </summary>
+    /// <remarks>
+    /// A train's posture admits a subscriber to every run of it, not only the runs that subscriber
+    /// started, so an output reaches every caller the train admits. Opt a train in only when its
+    /// output is meant for all of them. The operations view always sees output.
+    /// </remarks>
+    /// <typeparam name="TTrain">The train's interface or class, as registered with the mediator.</typeparam>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown while <c>AddTraxGraphQL</c> runs when <typeparamref name="TTrain"/> is not a
+    /// registered train, or does not carry <c>[TraxBroadcast]</c>.
+    /// </exception>
+    public TraxGraphQLBuilder AllowOutputForBroadcastSubscribers<TTrain>() =>
+        AllowOutputForBroadcastSubscribers(typeof(TTrain));
+
+    /// <inheritdoc cref="AllowOutputForBroadcastSubscribers{TTrain}"/>
+    /// <param name="trainType">The train's interface or class, as registered with the mediator.</param>
+    public TraxGraphQLBuilder AllowOutputForBroadcastSubscribers(Type trainType)
+    {
+        ArgumentNullException.ThrowIfNull(trainType);
+        BroadcastOutputTrains.Add(trainType);
+        return this;
+    }
 }

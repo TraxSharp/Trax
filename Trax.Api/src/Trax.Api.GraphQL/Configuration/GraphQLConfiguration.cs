@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Trax.Api.GraphQL.Filtering;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Attributes;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.Configuration;
 
@@ -147,13 +148,13 @@ public class GraphQLConfiguration
     internal IReadOnlyList<TraxAuthorizeAttribute> OperationsAuthorizeAttributes { get; }
 
     /// <summary>
-    /// <summary>
     /// True when the host called <c>TraxGraphQLBuilder.AllowAnonymousOperations()</c>: the
     /// operations namespace has no gate and any caller satisfies it. Nothing else grants the
     /// operations view without a declared gate.
     /// </summary>
     internal bool AnonymousOperationsAllowed { get; init; }
 
+    /// <summary>
     /// Opt-in filter convention modules registered via
     /// <c>TraxGraphQLBuilder.ConfigureFiltering()</c>. Empty by default, in which case
     /// HotChocolate's stock filtering convention is used unchanged. When non-empty, each
@@ -182,6 +183,51 @@ public class GraphQLConfiguration
     /// <c>TraxGraphQLBuilder.AllowJunctionAnswersForBroadcastSubscribers()</c>. Off by default.
     /// </summary>
     internal bool JunctionAnswersForBroadcastAllowed { get; init; }
+
+    /// <summary>
+    /// The trains <c>TraxGraphQLBuilder.AllowOutputForBroadcastSubscribers()</c> named, as the
+    /// host wrote them. Outside the operations view a lifecycle event carries <c>output</c> only
+    /// for these. <see cref="BroadcastOutputTrains"/> holds their canonical names.
+    /// </summary>
+    internal IReadOnlyList<Type> BroadcastOutputTrainTypes { get; init; } = [];
+
+    /// <summary>
+    /// The canonical names of <see cref="BroadcastOutputTrainTypes"/>, resolved against the
+    /// registered trains while <c>AddTraxGraphQL</c> runs.
+    /// </summary>
+    internal IReadOnlySet<string> BroadcastOutputTrains { get; private set; } =
+        new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Resolves <see cref="BroadcastOutputTrainTypes"/> to canonical train names, refusing a type
+    /// that is not a registered <c>[TraxBroadcast]</c> train: the opt-in would otherwise do nothing
+    /// and nobody would notice.
+    /// </summary>
+    internal void ResolveBroadcastOutputTrains(IReadOnlyList<TrainRegistration> registrations)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var type in BroadcastOutputTrainTypes)
+        {
+            var registration =
+                registrations.FirstOrDefault(r =>
+                    r.ServiceType == type || r.ImplementationType == type
+                )
+                ?? throw new InvalidOperationException(
+                    $"AllowOutputForBroadcastSubscribers({type.FullName}) names a type that is not a "
+                        + "registered train. Name the train's interface or class, and register it "
+                        + "in AddTrax(...) before AddTraxGraphQL()."
+                );
+            if (!registration.IsBroadcastEnabled)
+                throw new InvalidOperationException(
+                    $"AllowOutputForBroadcastSubscribers({type.FullName}) names a train without "
+                        + "[TraxBroadcast], so no subscriber outside the operations view receives "
+                        + "its events and the call does nothing. Add [TraxBroadcast] to the train, "
+                        + "or remove the call."
+                );
+            names.Add(registration.ServiceType.FullName!);
+        }
+        BroadcastOutputTrains = names;
+    }
 
     /// <summary>
     /// The classes the query models reach through their properties that are not query models

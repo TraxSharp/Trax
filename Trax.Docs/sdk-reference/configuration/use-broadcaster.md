@@ -157,7 +157,7 @@ on the run's path. See [Implement a broadcast transport](/docs/effect/implement-
 
 ### What crosses the wire
 
-The database remains the **single source of truth** for all train data. The broadcaster carries lifecycle events, and a completion (`Completed`, and the `StateChanged` after it) carries the train's output (see `Output` above), so it reaches every consumer of the exchange and every SignalR and GraphQL subscriber the events are forwarded to. Keep an output you do not want broadcast out with `ExcludeOutput` or `[TraxSensitive]`. All metadata, logs, manifests, and train state are always persisted to and queried from PostgreSQL.
+The database remains the **single source of truth** for all train data. The broadcaster carries lifecycle events, and a completion (`Completed`, and the `StateChanged` after it) carries the train's output (see `Output` above), so it reaches every consumer of the exchange and every SignalR subscriber the events are forwarded to. A GraphQL subscriber outside the operations view receives it only for a train the host named with [`AllowOutputForBroadcastSubscribers<TTrain>()`](/docs/sdk-reference/graphql-api/add-trax-graphql#builder-methods). Keep an output you do not want broadcast out with `ExcludeOutput` or `[TraxSensitive]`. All metadata, logs, manifests, and train state are always persisted to and queried from PostgreSQL.
 
 
 ## Example

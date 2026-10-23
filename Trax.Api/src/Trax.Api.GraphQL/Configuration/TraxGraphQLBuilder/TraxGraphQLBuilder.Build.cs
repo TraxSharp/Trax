@@ -91,6 +91,7 @@ public partial class TraxGraphQLBuilder
             GetRequestsAllowed = GetRequestsAllowed,
             FeatureRootFields = FeatureRootFields.ToHashSet(StringComparer.Ordinal),
             JunctionAnswersForBroadcastAllowed = JunctionAnswersForBroadcastAllowed,
+            BroadcastOutputTrainTypes = BroadcastOutputTrains.ToArray(),
             SocketAllowedOrigins = SocketAllowedOrigins,
             MachineSpelledEnums = MachineSpelledEnums,
             MaxOperationsPerConnection = MaxOperationsPerConnectionValue,

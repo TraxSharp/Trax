@@ -24,7 +24,8 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// they satisfy: <c>[TraxAllowAnonymous]</c> admits every subscriber, <c>[TraxAuthorize]</c> an
 /// authenticated one that meets its policies and roles, and a train that declares neither is
 /// admitted only behind an endpoint policy, which startup requires of it. A failure reason is shown only when the train raised it as a <c>TrainException</c>,
-/// whose message is written for clients; host detail is withheld.
+/// whose message is written for clients; host detail is withheld, and so is a run's output unless
+/// the host named the train with <c>AllowOutputForBroadcastSubscribers()</c>.
 /// </para>
 /// <para>
 /// A subscriber who could receive nothing is refused when subscribing.
@@ -62,6 +63,7 @@ internal sealed class LifecycleSubscriptionAccess(
         return new LifecycleVisibility(All: false, trains)
         {
             JunctionAnswers = streamOptions.IncludeJunctionAnswersForBroadcastSubscribers,
+            OutputTrains = configuration.BroadcastOutputTrains,
         };
     }
 
@@ -158,6 +160,14 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
     public bool JunctionAnswers { get; init; }
 
     /// <summary>
+    /// Outside the operations view, the trains whose events keep <c>output</c>: the ones the host
+    /// named with <c>AllowOutputForBroadcastSubscribers()</c>. Every other train's output is
+    /// withheld.
+    /// </summary>
+    public IReadOnlySet<string> OutputTrains { get; init; } =
+        new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
     /// The event as this subscriber should see it, or <c>null</c> when it should not see it.
     /// </summary>
     public TrainLifecycleEvent? Present(TrainLifecycleEvent e)
@@ -175,6 +185,7 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
                 : string.Equals(e.FailureException, "TrainException", StringComparison.Ordinal)
                     ? e.FailureReason
                 : LifecycleSubscriptionAccess.MaskedFailureReason,
+            Output = OutputTrains.Contains(e.TrainName) ? e.Output : null,
             HostName = null,
             HostEnvironment = null,
         };
