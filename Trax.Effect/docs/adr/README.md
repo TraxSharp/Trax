@@ -73,3 +73,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0019](./0019-junction-events-are-opt-in-and-carry-no-run-data.md) | Junction events are opt-in, carry no run data, and are kept as long as their run | platform, data-model |
 | [0020](./0020-a-recorded-answer-replays-only-while-it-is-fresh.md) | A recorded answer replays only into the same state, and only while it is fresh | platform, data-model |
 | [0021](./0021-a-runs-tracked-writes-commit-once-when-it-finishes.md) | A run's tracked writes commit once, when it finishes | platform, data-model |
+| [0022](./0022-a-broadcast-message-is-signed-with-a-key-every-process-shares.md) | A broadcast message is signed with a key every process shares | auth, platform |

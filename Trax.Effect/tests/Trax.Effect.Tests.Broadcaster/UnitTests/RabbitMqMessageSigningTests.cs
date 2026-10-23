@@ -20,10 +20,15 @@ namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 /// Every message on the exchange is signed with the shared key, and a receiver passes on only a
 /// message whose signature matches and is fresh. Without a key the host has to say so, and a
 /// broker on another host has to be reached over TLS unless the host says otherwise.
+/// <para>Enforces <c>docs/adr/0022-a-broadcast-message-is-signed-with-a-key-every-process-shares.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0022-a-broadcast-message-is-signed-with-a-key-every-process-shares.md")]
 [TestFixture]
 public class RabbitMqMessageSigningTests
 {
+    private const string Adr =
+        "(docs/adr/0022-a-broadcast-message-is-signed-with-a-key-every-process-shares.md)";
+
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
     private static readonly string AmqpUri =
@@ -199,7 +204,9 @@ public class RabbitMqMessageSigningTests
     {
         var act = () => Register("amqp://localhost", _ => { });
 
-        act.Should().Throw<ArgumentException>().WithMessage("*SigningKey*AllowUnsignedMessages()*");
+        act.Should()
+            .Throw<ArgumentException>(Adr)
+            .WithMessage("*SigningKey*AllowUnsignedMessages()*");
     }
 
     [Test]
@@ -223,7 +230,7 @@ public class RabbitMqMessageSigningTests
     {
         var act = () => Register(uri, o => o.SigningKey = TestBroadcastKey.Value);
 
-        act.Should().Throw<ArgumentException>().WithMessage("*amqps://*AllowInsecureTransport*");
+        act.Should().Throw<ArgumentException>(Adr).WithMessage("*amqps://*AllowInsecureTransport*");
     }
 
     [TestCase("amqps://trax:trax123@rabbitmq.internal:5671/")]
