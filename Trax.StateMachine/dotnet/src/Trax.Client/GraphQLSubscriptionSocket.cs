@@ -60,8 +60,24 @@ public sealed record GraphQLSubscriptionSocketOptions
     /// </summary>
     public Func<CancellationToken, ValueTask<JsonObject?>>? ConnectionParams { get; init; }
 
-    /// <summary>Sets up each socket before it connects: headers, a proxy, client certificates.</summary>
+    /// <summary>
+    /// Sets up each socket before it connects: headers, a proxy, client certificates. It runs after the keep-alive is
+    /// set, so it may change that too.
+    /// </summary>
     public Action<ClientWebSocketOptions>? ConfigureSocket { get; init; }
+
+    /// <summary>
+    /// How often the socket pings the host; 15 seconds by default. <see cref="Timeout.InfiniteTimeSpan"/> or zero sends
+    /// no pings. Not set in a browser, which keeps its sockets alive itself.
+    /// </summary>
+    public TimeSpan KeepAliveInterval { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// How long a ping may go unanswered before the connection counts as broken, and every subscription over it is
+    /// failed so its subscriber can subscribe again; 15 seconds by default. A host that drops off the network without
+    /// closing the socket is found this way. <see cref="Timeout.InfiniteTimeSpan"/> waits forever.
+    /// </summary>
+    public TimeSpan KeepAliveTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
     /// <summary>How long a connection may take to be acknowledged before it counts as failed.</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
@@ -267,6 +283,11 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     {
         var socket = new ClientWebSocket();
         socket.Options.AddSubProtocol(Protocol);
+        if (!OperatingSystem.IsBrowser())
+        {
+            socket.Options.KeepAliveInterval = _options.KeepAliveInterval;
+            socket.Options.KeepAliveTimeout = _options.KeepAliveTimeout;
+        }
         _options.ConfigureSocket?.Invoke(socket.Options);
         var acknowledged = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously

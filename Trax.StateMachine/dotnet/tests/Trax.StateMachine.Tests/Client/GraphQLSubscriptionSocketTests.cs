@@ -119,6 +119,41 @@ public class GraphQLSubscriptionSocketTests
         }
     }
 
+    [Test]
+    public async Task A_host_that_stops_answering_pings_fails_the_connection()
+    {
+        await using var host = new WireHost(async peer =>
+        {
+            await peer.AckAsync();
+            await peer.StallAsync();
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = host.Endpoint,
+                KeepAliveInterval = TimeSpan.FromMilliseconds(100),
+                KeepAliveTimeout = TimeSpan.FromMilliseconds(300),
+            }
+        );
+        var sink = new Sink();
+
+        using var subscription = socket.Subscribe(Payload, sink);
+
+        (await sink.Failed.Task.WaitAsync(Wait)).Should().NotBeOfType<SocketClosedException>();
+    }
+
+    [Test]
+    public void The_keep_alive_is_fifteen_seconds_each_way_by_default()
+    {
+        var options = new GraphQLSubscriptionSocketOptions
+        {
+            Endpoint = new Uri("wss://h/graphql"),
+        };
+
+        options.KeepAliveInterval.Should().Be(TimeSpan.FromSeconds(15));
+        options.KeepAliveTimeout.Should().Be(TimeSpan.FromSeconds(15));
+    }
+
     [TestCase("""{"type":5}""")]
     [TestCase("""{"type":"next","id":7,"payload":{}}""")]
     [TestCase("""{"id":"1"}""")]

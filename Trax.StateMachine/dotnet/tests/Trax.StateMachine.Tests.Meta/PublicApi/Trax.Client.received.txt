@@ -14,6 +14,8 @@ namespace Trax.Client
         public System.TimeSpan ConnectTimeout { get; init; }
         public System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Text.Json.Nodes.JsonObject?>>? ConnectionParams { get; init; }
         public required System.Uri Endpoint { get; init; }
+        public System.TimeSpan KeepAliveInterval { get; init; }
+        public System.TimeSpan KeepAliveTimeout { get; init; }
         public int MaxMessageSize { get; init; }
     }
     public interface ISubscriptionSink
