@@ -930,6 +930,471 @@ public class OperationsClientGeneratorTests
 
     #endregion
 
+    #region The C# client's shapes and wire
+
+    private const string Shapes = """
+        schema {
+          query: RootQuery
+          mutation: RootMutation
+          subscription: Streams
+        }
+
+        scalar Long
+        scalar UUID
+        scalar DateTime
+        scalar JSON
+
+        type RootQuery {
+          operations: OperationsQueries
+        }
+
+        type RootMutation {
+          operations: OperationsMutations
+        }
+
+        type Streams {
+          onDataChanged: DataChanged!
+        }
+
+        type DataChanged {
+          window: Window!
+        }
+
+        type OperationsQueries {
+          thing(key: UUID!, window: Window = LAST24_HOURS, filter: ThingFilter): Thing!
+          grid: [[Int!]]!
+          maybe: [Thing]
+          item: Item
+          node: Node
+        }
+
+        type OperationsMutations {
+          touch(take: Int! = 25): Boolean!
+        }
+
+        interface Node {
+          id: Long!
+        }
+
+        type Thing implements Node {
+          id: Long!
+          key: UUID!
+          at: DateTime!
+          data: JSON!
+          note: String
+          window: Window!
+        }
+
+        union Item = Thing
+
+        enum Window {
+          LAST24_HOURS
+          ALL_TIME
+          lastWeek
+        }
+
+        input ThingFilter {
+          take: Int! = 10
+          note: String
+          window: Window
+        }
+        """;
+
+    private const string ShapesQuery = """
+        query Shapes($key: UUID!, $window: Window = LAST24_HOURS, $filter: ThingFilter) {
+          operations {
+            thing(key: $key, window: $window, filter: $filter) {
+              __typename
+              ...ThingFields
+              ... on Thing {
+                at
+              }
+              when: at
+              data
+              note
+              window
+            }
+            grid
+            maybe {
+              id
+            }
+          }
+        }
+
+        fragment ThingFields on Thing {
+          id
+          key
+        }
+        """;
+
+    private const string Touch =
+        "mutation Touch($take: Int! = 25) { operations { touch(take: $take) } }";
+
+    private static IReadOnlyList<ClientFile> RenderShapes(
+        params (string Source, string Text)[] documents
+    ) =>
+        ClientGenerator.RenderCSharp(
+            new OperationsGenerateOptions(
+                Shapes,
+                documents.Select(d => new ClientDocumentFile(d.Source, d.Text)).ToList()
+            ),
+            ClientGenerator.DefaultOperationsNamespace
+        );
+
+    [Test]
+    public void The_csharp_client_types_lists_fragments_aliases_and_defaults_as_the_schema_says()
+    {
+        var files = RenderShapes(
+            ("src/graphql/Shapes.graphql", ShapesQuery),
+            ("src/graphql/Touch.graphql", Touch)
+        );
+        var shapes = Text(files, "Documents/Shapes.g.cs");
+
+        shapes
+            .Should()
+            .Contain($"    public required global::System.Guid Key {{ get; init; }}")
+            .And.Contain(
+                $"    public {Client}Optional<Window?> Window {{ get; init; }}",
+                "a nullable variable with a default may be left out or sent as null"
+            )
+            .And.Contain($"    public {Client}Optional<ThingFilter?> Filter {{ get; init; }}")
+            .And.Contain(
+                $"    [{Json}JsonPropertyName(\"__typename\")]\n    public required string Typename {{ get; init; }}"
+            )
+            .And.Contain("    public required long Id { get; init; }")
+            .And.Contain("    public required global::System.Guid Key { get; init; }")
+            .And.Contain(
+                "    public required global::System.DateTimeOffset At { get; init; }",
+                "a field an inline fragment selects is the record's own"
+            )
+            .And.Contain(
+                $"    [{Json}JsonPropertyName(\"when\")]\n    public required global::System.DateTimeOffset When {{ get; init; }}",
+                "an alias names its key"
+            )
+            .And.Contain(
+                "    public required global::System.Text.Json.JsonElement Data { get; init; }"
+            )
+            .And.Contain("    public string? Note { get; init; }")
+            .And.Contain("    public required Window Window { get; init; }")
+            .And.Contain(
+                $"    public required {List}<{List}<int>?> Grid {{ get; init; }}",
+                "a list of nullable lists of ints"
+            )
+            .And.Contain(
+                $"    public {List}<ShapesResultOperationsMaybe?>? Maybe {{ get; init; }}",
+                "a nullable list of nullable objects"
+            );
+        Text(files, "Documents/Touch.g.cs")
+            .Should()
+            .Contain(
+                $"    public {Client}Optional<int> Take {{ get; init; }}",
+                "a non-null variable with a default may be left out, never sent as null"
+            );
+        Text(files, "Types.g.cs")
+            .Should()
+            .Contain($"    public {Client}Optional<int> Take {{ get; init; }}")
+            .And.Contain(
+                $"    [{Json}JsonStringEnumMemberName(\"LAST24_HOURS\")]\n    Last24Hours,",
+                "SCREAMING_CASE is PascalCase, sent as written"
+            )
+            .And.Contain($"    [{Json}JsonStringEnumMemberName(\"ALL_TIME\")]\n    AllTime,")
+            .And.Contain($"    [{Json}JsonStringEnumMemberName(\"lastWeek\")]\n    LastWeek,");
+        CompileCSharp(files, out _)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty();
+    }
+
+    [Test]
+    public void The_csharp_records_read_and_write_the_wire_through_TraxJson()
+    {
+        const string probe = """
+            namespace Trax.Operations;
+
+            internal static class Probe
+            {
+                private static string Write<T>(T value) =>
+                    global::System.Text.Json.JsonSerializer.Serialize(value, global::Trax.Client.TraxJson.Options);
+
+                public static string LeftOut() => Write(new ShapesVariables { Key = global::System.Guid.Empty });
+
+                public static string Sent() =>
+                    Write(new ShapesVariables { Key = global::System.Guid.Empty, Window = Window.Last24Hours, Filter = null });
+
+                public static string Nested() =>
+                    Write(
+                        new ShapesVariables
+                        {
+                            Key = global::System.Guid.Empty,
+                            Filter = new ThingFilter { Note = null, Window = Window.AllTime },
+                        }
+                    );
+
+                public static string Read(string json)
+                {
+                    var operations = global::System.Text.Json.JsonSerializer
+                        .Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options)!
+                        .Operations!;
+                    var thing = operations.Thing;
+                    return string.Join(
+                        "|",
+                        thing.Typename,
+                        thing.Id,
+                        thing.Key,
+                        thing.At.ToString("O", global::System.Globalization.CultureInfo.InvariantCulture),
+                        thing.When.Offset,
+                        thing.Data.GetRawText(),
+                        thing.Note ?? "null",
+                        thing.Window,
+                        operations.Grid[0]![1],
+                        operations.Grid[1] is null,
+                        operations.Maybe![0] is null,
+                        operations.Maybe[1]!.Id
+                    );
+                }
+
+                public static string Refused(string json)
+                {
+                    try
+                    {
+                        global::System.Text.Json.JsonSerializer.Deserialize<ShapesResult>(json, global::Trax.Client.TraxJson.Options);
+                        return "read";
+                    }
+                    catch (global::System.Text.Json.JsonException)
+                    {
+                        return "refused";
+                    }
+                }
+            }
+            """;
+        const string answer = """
+            {"operations":{"thing":{"__typename":"Thing","id":9007199254740993,"key":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","at":"2026-10-23T10:00:00+02:00","when":"2026-10-23T08:00:00Z","data":{"a":[1,"x"]},"note":null,"window":"LAST24_HOURS"},"grid":[[1,2],null],"maybe":[null,{"id":3}]}}
+            """;
+        var files = RenderShapes(("src/graphql/Shapes.graphql", ShapesQuery));
+
+        CompileCSharp(files, out var assembly, probe)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty();
+        var type = assembly!.GetType("Trax.Operations.Probe")!;
+        string Call(string method, params object[] args) =>
+            (string)type.GetMethod(method)!.Invoke(null, args)!;
+
+        Call("LeftOut")
+            .Should()
+            .Be(
+                "{\"key\":\"00000000-0000-0000-0000-000000000000\"}",
+                "a variable left out is not in the request"
+            );
+        Call("Sent")
+            .Should()
+            .Be(
+                "{\"key\":\"00000000-0000-0000-0000-000000000000\",\"window\":\"LAST24_HOURS\",\"filter\":null}",
+                "a variable set to null is sent as null, and an enum by its GraphQL name"
+            );
+        Call("Nested")
+            .Should()
+            .Be(
+                "{\"key\":\"00000000-0000-0000-0000-000000000000\",\"filter\":{\"note\":null,\"window\":\"ALL_TIME\"}}"
+            );
+        Call("Read", answer)
+            .Should()
+            .Be(
+                "Thing|9007199254740993|3f2504e0-4f89-11d3-9a0c-0305e82c3301|2026-10-23T10:00:00.0000000+02:00|00:00:00|{\"a\":[1,\"x\"]}|null|Last24Hours|2|True|True|3"
+            );
+        Call("Refused", answer.Replace("\"id\":9007199254740993,", ""))
+            .Should()
+            .Be("refused", "a required field the answer lacks is an error, not a default");
+    }
+
+    [Test]
+    public void Two_enum_values_that_take_one_member_are_refused()
+    {
+        var act = () =>
+            ClientGenerator.RenderCSharp(
+                new OperationsGenerateOptions(
+                    Schema + "\nenum Clash {\n  FOO_BAR\n  fooBar\n}\n",
+                    [new("src/graphql/Runs.graphql", Runs)]
+                ),
+                ClientGenerator.DefaultOperationsNamespace
+            );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                "'the value FOO_BAR of Clash' and 'the value fooBar of Clash' both generate the name 'FooBar'. Rename one of them."
+            );
+    }
+
+    [TestCase(
+        "query Union { operations { item { ... on Thing { id } } } }",
+        "*selects the union Item, which the C# client does not type yet*"
+    )]
+    [TestCase(
+        "query Interface { operations { node { id } } }",
+        "*selects the interface Node, which the C# client does not type yet*"
+    )]
+    public void A_union_or_interface_selection_is_refused_by_the_csharp_client(
+        string document,
+        string message
+    )
+    {
+        var act = () => RenderShapes(("src/graphql/Doc.graphql", document));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+    }
+
+    [Test]
+    public void Hostile_descriptions_and_document_text_stay_inside_their_comment_and_their_literal()
+    {
+        const string hostile = "ends </summary> here & <b>\nnext\u2028line\u2029*/ \"q\" \\ end";
+        var schema =
+            Schema
+                .Replace("type Run {\n  id: Long!", $"type Run {{\n  {Block(hostile)}\n  id: Long!")
+                .Replace(
+                    "enum RunState {\n  RUNNING",
+                    $"enum RunState {{\n  {Block(hostile)}\n  RUNNING"
+                ) + $"\n{Block(hostile)}\ninput Odd {{\n  {Block(hostile)}\n  value: Int\n}}\n";
+        const string mutation =
+            "# ünïcode comment\nmutation Hostile { operations { cancel(id: 1, note: \"say \\\"hi\\\" \\\\ café ☃ \u2028 \\u00e9\") { success } } }";
+        var options = new OperationsGenerateOptions(
+            schema,
+            [new("src/graphql/Hostile.graphql", mutation), new("src/graphql/Runs.graphql", Runs)]
+        );
+        var files = ClientGenerator.RenderCSharp(
+            options,
+            ClientGenerator.DefaultOperationsNamespace
+        );
+        var registered = Documents(ClientGenerator.Render(options))
+            .ToDictionary(
+                d => d.GetProperty("name").GetString()!,
+                d => d.GetProperty("text").GetString()!
+            );
+
+        Text(files, "Types.g.cs")
+            .Should()
+            .Contain(
+                "/// <summary>ends &lt;/summary&gt; here &amp; &lt;b&gt; next line */ \"q\" \\ end</summary>\n",
+                "a description is one line of escaped XML"
+            );
+        CompileCSharp(files, out var assembly)
+            .Where(d => d.Severity >= Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
+            .Should()
+            .BeEmpty();
+        var document = (Trax.Client.TraxDocument)
+            assembly!
+                .GetType("Trax.Operations.TraxOperations")!
+                .GetField("Hostile")!
+                .GetValue(null)!;
+        registered["Hostile"].Should().Contain("café ☃ \u2028");
+        document.Text.Should().Be(registered["Hostile"], "the text is sent byte for byte");
+        document.Id.Should().Be(ClientDocumentSet.ConsoleIdOf("Hostile", document.Text));
+    }
+
+    // A GraphQL block string holding text exactly.
+    private static string Block(string text) =>
+        "\"\"\"" + text.Replace("\"\"\"", "\\\"\"\"") + "\"\"\"";
+
+    [TestCase("")]
+    [TestCase("1Abc")]
+    [TestCase("A..B")]
+    [TestCase(".A")]
+    [TestCase("A.")]
+    [TestCase("A.B-C")]
+    public void A_namespace_that_is_not_one_is_refused(string @namespace)
+    {
+        var act = () =>
+            ClientGenerator.RenderCSharp(Options(("src/graphql/Runs.graphql", Runs)), @namespace);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"--namespace '{@namespace}' is not a C# namespace*");
+    }
+
+    [Test]
+    public void The_command_checks_the_csharp_client_and_names_a_document_that_changed()
+    {
+        var dir = Directory.CreateTempSubdirectory("trax-ops-check-");
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var (before, beforeError) = (Console.Out, Console.Error);
+        var cwd = Directory.GetCurrentDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir.FullName, "operations.graphql"), Schema);
+            File.WriteAllText(Path.Combine(dir.FullName, "Runs.graphql"), Runs);
+            Console.SetOut(output);
+            Console.SetError(error);
+            Directory.SetCurrentDirectory(dir.FullName);
+            int Run(bool check) =>
+                ClientCommand.RunOperations(
+                    null,
+                    Path.Combine(dir.FullName, "operations.graphql"),
+                    Path.Combine(dir.FullName, "Operations"),
+                    check,
+                    ["Runs.graphql"],
+                    "csharp",
+                    "My.Operations"
+                );
+
+            var written = Run(check: false);
+            var clean = Run(check: true);
+            File.WriteAllText(
+                Path.Combine(dir.FullName, "Runs.graphql"),
+                Runs.Replace("name\n", "")
+            );
+            var stale = Run(check: true);
+
+            (written, clean, stale).Should().Be((0, 0, 1));
+            output.ToString().Should().Contain("DRIFT   Documents/Runs.g.cs");
+            error.ToString().Should().Contain("The client is stale");
+        }
+        finally
+        {
+            Console.SetOut(before);
+            Console.SetError(beforeError);
+            Directory.SetCurrentDirectory(cwd);
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [TestCase("--lang", "csharp")]
+    [TestCase("--namespace", "My.Operations")]
+    public void The_command_refuses_the_language_options_without_operations(
+        string option,
+        string value
+    )
+    {
+        var error = new StringWriter();
+        var before = Console.Error;
+        int exit;
+        try
+        {
+            Console.SetError(error);
+            exit = ClientCommand
+                .Create()
+                .Parse(["--manifest", "manifest.json", "--out", "out", option, value])
+                .Invoke();
+        }
+        finally
+        {
+            Console.SetError(before);
+        }
+
+        exit.Should().Be(1);
+        error
+            .ToString()
+            .Should()
+            .Contain(
+                "--lang and --namespace choose the operations client's language; give them with --operations."
+            );
+    }
+
+    #endregion
+
     private static OperationsGenerateOptions Options(
         params (string Source, string Text)[] documents
     ) => new(Schema, documents.Select(d => new ClientDocumentFile(d.Source, d.Text)).ToList());
@@ -1013,6 +1478,8 @@ public class OperationsClientGeneratorTests
                 .ToList();
             return (File.ReadAllText(Path.Combine(app, "operations.graphql")), documents);
         }
+        if (Environment.GetEnvironmentVariable("CI") is not null)
+            Assert.Fail("Trax.Api's operations console not found, and CI always checks it out.");
         Assert.Ignore("Trax.Api's operations console not found (isolated build).");
         return default;
     }
@@ -1063,6 +1530,10 @@ public class OperationsClientGeneratorTests
                 )
                 .ToList();
         }
+        if (Environment.GetEnvironmentVariable("CI") is not null)
+            Assert.Fail(
+                "Trax.Api's console-document-ids.json not found, and CI always checks it out."
+            );
         Assert.Ignore("Trax.Api's console-document-ids.json not found (isolated build).");
         return [];
     }
