@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using AwesomeAssertions;
 using Trax.Api.Console.Terminal.Connection;
 
@@ -59,6 +60,64 @@ public class ConsoleTargetTests
             file.Delete();
         }
     }
+
+    [Test]
+    [Platform(Exclude = "Win")]
+    [UnsupportedOSPlatform("windows")]
+    public void A_file_other_users_can_read_is_refused()
+    {
+        var file = new FileInfo(Path.GetTempFileName());
+        try
+        {
+            File.WriteAllText(file.FullName, "sk_live_1\n");
+            File.SetUnixFileMode(
+                file.FullName,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.OtherRead
+            );
+
+            FluentActions
+                .Invoking(() => FromFile(file))
+                .Should()
+                .Throw<InvalidOperationException>()
+                .WithMessage($"*other users can read*chmod 600 {file.FullName}*");
+
+            File.SetUnixFileMode(file.FullName, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            FromFile(file).Credential.Should().Be(new Credential.ApiKey("sk_live_1"));
+        }
+        finally
+        {
+            file.Delete();
+        }
+    }
+
+    [Test]
+    public void A_file_larger_than_a_credential_is_refused()
+    {
+        var file = new FileInfo(Path.GetTempFileName());
+        try
+        {
+            File.WriteAllText(file.FullName, new string('k', ConsoleTarget.MaxFileSize + 1));
+
+            FluentActions
+                .Invoking(() => FromFile(file))
+                .Should()
+                .Throw<InvalidOperationException>()
+                .WithMessage("*larger than 64 KiB*");
+        }
+        finally
+        {
+            file.Delete();
+        }
+    }
+
+    [Test]
+    [Platform(Include = "Linux")]
+    public void A_device_is_refused() =>
+        FluentActions
+            .Invoking(() => FromFile(new FileInfo("/dev/zero")))
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*not a regular file*");
 
     [Test]
     public void Two_credentials_are_refused() =>
@@ -150,6 +209,16 @@ public class ConsoleTargetTests
             .Where(e =>
                 e.Message.Contains("user name or password") && !e.Message.Contains("hunter2")
             );
+
+    private static ConsoleTarget FromFile(FileInfo file) =>
+        ConsoleTarget.Resolve(
+            "https://ops.example.com",
+            ConsoleTarget.DefaultGraphQLPath,
+            apiKeyFile: file,
+            tokenFile: null,
+            sendText: false,
+            _ => null
+        );
 
     private static ConsoleTarget Resolve(string? host, Dictionary<string, string> env) =>
         ConsoleTarget.Resolve(

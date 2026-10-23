@@ -119,22 +119,57 @@ internal sealed record ConsoleTarget(
         return new ConsoleTarget(endpoint, socket, credential, sendText);
     }
 
+    /// <summary>The largest credential file read; a key or a token is far smaller.</summary>
+    public const int MaxFileSize = 64 * 1024;
+
+    // Other users' access to the file is as good as the credential itself, so a file they can read or write is
+    // refused rather than warned of. A device, a pipe or anything longer than a credential is refused too.
     private static string Read(FileInfo file, string option)
     {
+        var path = file.FullName;
         string text;
         try
         {
-            text = File.ReadAllText(file.FullName);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read);
+            var length = stream.Length;
+            if (length > MaxFileSize)
+                throw new InvalidOperationException(
+                    $"{option}: {path} is larger than {MaxFileSize / 1024} KiB, which no credential is."
+                );
+            var buffer = new byte[MaxFileSize + 1];
+            var read = 0;
+            int got;
+            while (
+                read < buffer.Length && (got = stream.Read(buffer, read, buffer.Length - read)) > 0
+            )
+                read += got;
+            // A regular file holds as much as its length says; a device such as /dev/zero says 0 and holds more.
+            if (read > length)
+                throw new InvalidOperationException($"{option}: {path} is not a regular file.");
+            if (!OperatingSystem.IsWindows())
+            {
+                var mode = File.GetUnixFileMode(stream.SafeFileHandle);
+                const UnixFileMode others =
+                    UnixFileMode.GroupRead
+                    | UnixFileMode.GroupWrite
+                    | UnixFileMode.OtherRead
+                    | UnixFileMode.OtherWrite;
+                if ((mode & others) != 0)
+                    throw new InvalidOperationException(
+                        $"{option}: other users can read or change {path}. Make it yours alone with "
+                            + $"chmod 600 {path}."
+                    );
+            }
+            text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             throw new InvalidOperationException(
-                $"{option}: cannot read {file.FullName} ({ex.Message}).",
+                $"{option}: cannot read {path} ({ex.Message}).",
                 ex
             );
         }
-        return Value(text)
-            ?? throw new InvalidOperationException($"{option}: {file.FullName} is empty.");
+        return Value(text) ?? throw new InvalidOperationException($"{option}: {path} is empty.");
     }
 
     // The first line, trimmed, so a file written with a trailing newline holds the same credential.

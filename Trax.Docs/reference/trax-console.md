@@ -42,7 +42,7 @@ A host that runs no persisted operations takes the documents' text instead: give
 |---|---|
 | `--host` | The host, such as `https://ops.example.com`. Or `TRAX_CONSOLE_HOST`. |
 | `--graphql-path` | Where its Trax GraphQL endpoint is mapped (default `/trax/graphql`). The socket is the same path over `wss`. |
-| `--api-key-file`, `--token-file` | A file holding the API key (sent as `X-Api-Key`) or the bearer token. Or `TRAX_CONSOLE_API_KEY`, `TRAX_CONSOLE_TOKEN`. A file wins over the environment, and only one credential may be given. There is no option that takes the credential itself: it would be in the shell's history and the process list. |
+| `--api-key-file`, `--token-file` | A file holding the API key (sent as `X-Api-Key`) or the bearer token. Or `TRAX_CONSOLE_API_KEY`, `TRAX_CONSOLE_TOKEN`. A file wins over the environment, and only one credential may be given. The file must be a regular file of at most 64 KiB that no other user can read or change (`chmod 600`); any other is refused. There is no option that takes the credential itself: it would be in the shell's history and the process list. |
 | `--send-text` | Send each document's text rather than its id. |
 | `--any-version` | Talk to a host of another Trax release. |
 | `--vertical-graphs` | Draw machines top to bottom rather than left to right, in the console and in `graph`. |
