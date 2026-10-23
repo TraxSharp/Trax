@@ -67,7 +67,7 @@ browser console does; the filter `admin-trains=show` brings them back to a list.
 | `t`, `e`, `d` | Manifests: trigger, enable, disable. |
 | `b` | All matching: one of the list's actions on every row the filter matches, run by the host as a bulk operation. The count is the one the list shows, and the host refuses it when the filter now matches another. |
 | `v` | A run's trace: its steps and decisions in time order, then its log, the steps followed live. It reads at most 500 of each. |
-| `o` | Open the source of the train a row names, or of a step in a trace, in `$VISUAL` or `$EDITOR`, from the checkout `trax-console` runs in. The console comes back where it was when the editor exits. |
+| `o` | Open the source of the train a row names, or of a step in a trace, in `$VISUAL` or `$EDITOR`, from the checkout `trax-console` runs in. The console comes back where it was when the editor exits. A name is looked up in the absolute `PATH` entries only, never the current directory; a full path is run as given and a relative one such as `./vim` is refused. |
 | F5, F1, Ctrl+Q | Read everything again, list the keys, quit. |
 
 Everywhere, `j` and `k` move, `g` and `G` go to the top and the end, `Ctrl+d` and `Ctrl+u` move half a page, `h` and

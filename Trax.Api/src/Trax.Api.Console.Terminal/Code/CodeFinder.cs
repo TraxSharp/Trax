@@ -132,18 +132,21 @@ internal static partial class CodeFinder
     /// How to open <paramref name="location"/> in <paramref name="editor"/>: the line as an argument where the
     /// editor is one that takes it, otherwise the file alone.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The editor cannot be started as given.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The editor cannot be started as given, or is not found (see <see cref="Command"/>).
+    /// </exception>
     public static ProcessStartInfo Open(
         string editor,
         SourceLocation location,
-        Func<string, string?>? environment = null
+        Func<string, string?>? environment = null,
+        Func<string, bool>? runnable = null
     )
     {
         var parts = Words(editor);
         if (parts.Count == 0)
             parts = ["vi"];
         var info = new ProcessStartInfo(
-            Command(parts[0], environment ?? Environment.GetEnvironmentVariable)
+            Command(parts[0], environment ?? Environment.GetEnvironmentVariable, runnable: runnable)
         )
         {
             UseShellExecute = false,
@@ -248,41 +251,84 @@ internal static partial class CodeFinder
     }
 
     /// <summary>
-    /// The program <paramref name="command"/> names. Without a shell, Windows starts only a file that exists as named,
-    /// so a bare name (<c>code</c>) is looked up on <c>PATH</c> with each of <c>PATHEXT</c>'s extensions, as a shell
-    /// would. Elsewhere, and for a path or a name with its extension, it is <paramref name="command"/>.
+    /// The full path of the program <paramref name="command"/> names. Given a bare name, <see cref="Process"/> looks
+    /// in the console's own directory and the current directory before <c>PATH</c>, and the console runs inside a
+    /// checkout, so the name is looked up here instead, in absolute <c>PATH</c> entries only; an empty or relative
+    /// entry, which a shell reads as the current directory, is skipped. On Windows a name is tried with each of
+    /// <c>PATHEXT</c>'s extensions, as a shell would. An absolute path is used as given, and a relative path with a
+    /// directory (<c>./vim</c>, <c>bin/vim</c>) is refused, since it names whatever the current directory holds.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The command is a relative path, or no <c>PATH</c> entry holds it.
+    /// </exception>
     internal static string Command(
         string command,
         Func<string, string?> environment,
         bool? windows = null,
-        Func<string, bool>? exists = null
+        Func<string, bool>? runnable = null
     )
     {
-        if (
-            !(windows ?? OperatingSystem.IsWindows())
-            || Path.HasExtension(command)
-            || command.IndexOfAny(['/', '\\', ':']) >= 0
-        )
+        var onWindows = windows ?? OperatingSystem.IsWindows();
+        runnable ??= path => Runnable(path, onWindows);
+        if (FullyQualified(command, onWindows))
             return command;
-        exists ??= File.Exists;
-        var extensions = (environment("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(
-            ';',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-        );
-        foreach (
-            var dir in (environment("PATH") ?? "").Split(
-                ';',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-            )
-        )
-        foreach (var extension in extensions)
+        if (command.Contains('/') || (onWindows && command.IndexOfAny(['\\', ':']) >= 0))
+            throw new InvalidOperationException(
+                $"The editor '{command}' is a relative path, which runs whatever the current directory holds. "
+                    + "Set VISUAL or EDITOR to its full path or to a name on PATH."
+            );
+        // On Windows a name is tried as written when it has an extension, then with each PATHEXT one.
+        List<string> extensions = [""];
+        if (onWindows)
         {
-            var candidate = Path.Join(dir, command + extension.ToLowerInvariant());
-            if (exists(candidate))
-                return candidate;
+            var pathExt = (environment("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(e => e.ToLowerInvariant());
+            extensions = Path.HasExtension(command) ? [.. extensions, .. pathExt] : [.. pathExt];
         }
-        return command;
+        foreach (var entry in (environment("PATH") ?? "").Split(onWindows ? ';' : ':'))
+        {
+            var dir = onWindows ? entry.Trim().Trim('"') : entry;
+            // An empty or relative entry means the current directory to a shell: never search it.
+            if (dir.Length == 0 || !FullyQualified(dir, onWindows))
+                continue;
+            foreach (var extension in extensions)
+            {
+                var candidate = Join(dir, command + extension, onWindows);
+                if (runnable(candidate))
+                    return candidate;
+            }
+        }
+        throw new InvalidOperationException(
+            $"No '{command}' on PATH. Set VISUAL or EDITOR to the editor's full path."
+        );
+    }
+
+    private static bool FullyQualified(string path, bool windows) =>
+        windows
+            ? path.Length >= 3
+                && char.IsAsciiLetter(path[0])
+                && path[1] == ':'
+                && path[2] is '\\' or '/'
+                || path.StartsWith(@"\\", StringComparison.Ordinal)
+                || path.StartsWith("//", StringComparison.Ordinal)
+            : path.StartsWith('/');
+
+    private static string Join(string dir, string name, bool windows) =>
+        dir.EndsWith('/') || (windows && dir.EndsWith('\\'))
+            ? dir + name
+            : dir + (windows ? '\\' : '/') + name;
+
+    // A directory is not a match, and on Unix neither is a file nobody may execute, as with a shell's lookup.
+    private static bool Runnable(string path, bool windows)
+    {
+        if (!File.Exists(path))
+            return false;
+        if (windows || OperatingSystem.IsWindows())
+            return true;
+        const UnixFileMode anyExecute =
+            UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+        return (File.GetUnixFileMode(path) & anyExecute) != 0;
     }
 
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$")]

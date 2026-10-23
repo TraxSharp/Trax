@@ -107,7 +107,7 @@ public class CodeFinderTests
     )]
     public void The_editor_gets_the_line_when_it_takes_one(string editor, string[] arguments) =>
         CodeFinder
-            .Open(editor, new SourceLocation("/x/A.cs", 4))
+            .Open(editor, new SourceLocation("/x/A.cs", 4), UnixPath, AnyFile)
             .ArgumentList.Should()
             .Equal(arguments);
 
@@ -123,7 +123,7 @@ public class CodeFinderTests
             Environment.SetEnvironmentVariable(ConsoleTarget.ApiKeyVariable, "sk_live_1");
             Environment.SetEnvironmentVariable(ConsoleTarget.TokenVariable, "eyJ.token");
 
-            var info = CodeFinder.Open("nvim", new SourceLocation("/x/A.cs", 4));
+            var info = CodeFinder.Open("nvim", new SourceLocation("/x/A.cs", 4), UnixPath, AnyFile);
 
             info.Environment.Should().NotContainKey(ConsoleTarget.ApiKeyVariable);
             info.Environment.Should().NotContainKey(ConsoleTarget.TokenVariable);
@@ -161,40 +161,168 @@ public class CodeFinderTests
     }
 
     [Test]
+    public void A_bare_name_is_found_in_an_absolute_PATH_entry_only()
+    {
+        var tried = new List<string>();
+        var env = new Dictionary<string, string> { ["PATH"] = ":.:bin:/opt/a:/opt/b/" };
+
+        CodeFinder
+            .Command(
+                "vim",
+                n => env.GetValueOrDefault(n),
+                windows: false,
+                runnable: p =>
+                {
+                    tried.Add(p);
+                    return p == "/opt/b/vim";
+                }
+            )
+            .Should()
+            .Be("/opt/b/vim");
+        tried.Should().Equal("/opt/a/vim", "/opt/b/vim");
+    }
+
+    [Test]
+    public void An_editor_planted_in_the_current_directory_is_not_run()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Ignore("Unix file modes.");
+            return;
+        }
+        var planted = Path.Combine(_root.FullName, "vim");
+        File.WriteAllText(planted, "#!/bin/sh\n");
+        File.SetUnixFileMode(planted, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        var previous = Directory.GetCurrentDirectory();
+        try
+        {
+            Directory.SetCurrentDirectory(_root.FullName);
+
+            FluentActions
+                .Invoking(() =>
+                    CodeFinder.Command("vim", n => n == "PATH" ? ":." : null, windows: false)
+                )
+                .Should()
+                .Throw<InvalidOperationException>()
+                .WithMessage("*No 'vim' on PATH*");
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previous);
+        }
+    }
+
+    [Test]
+    public void A_file_nobody_may_execute_is_not_the_editor()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Ignore("Unix file modes.");
+            return;
+        }
+        var bin = Directory.CreateDirectory(Path.Combine(_root.FullName, "bin")).FullName;
+        var file = Path.Combine(bin, "vim");
+        File.WriteAllText(file, "");
+        File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+        FluentActions
+            .Invoking(() =>
+                CodeFinder.Command("vim", n => n == "PATH" ? bin : null, windows: false)
+            )
+            .Should()
+            .Throw<InvalidOperationException>();
+
+        File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        CodeFinder.Command("vim", n => n == "PATH" ? bin : null, windows: false).Should().Be(file);
+    }
+
+    [TestCase("./vim")]
+    [TestCase("bin/vim")]
+    [TestCase("../tools/code")]
+    public void A_relative_path_is_refused(string editor) =>
+        FluentActions
+            .Invoking(() =>
+                CodeFinder.Open(editor, new SourceLocation("/x/A.cs", 4), UnixPath, AnyFile)
+            )
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*relative path*");
+
+    [Test]
+    public void An_absolute_path_is_used_as_given() =>
+        CodeFinder
+            .Command("/opt/vim/bin/vim", _ => null, windows: false, runnable: _ => false)
+            .Should()
+            .Be("/opt/vim/bin/vim");
+
+    [Test]
+    public void An_editor_that_is_not_on_PATH_is_refused() =>
+        FluentActions
+            .Invoking(() =>
+                CodeFinder.Command("nvim", UnixPath, windows: false, runnable: _ => false)
+            )
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*No 'nvim' on PATH*");
+
+    [Test]
     public void On_Windows_a_bare_name_is_found_on_the_path_with_its_extension()
     {
         var env = new Dictionary<string, string>
         {
-            ["PATH"] = @"C:\Windows;C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin",
+            ["PATH"] =
+                @"bin;C:\Windows;""C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin""",
             ["PATHEXT"] = ".COM;.EXE;.BAT;.CMD",
         };
-        var there = Path.Join(
-            @"C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin",
-            "code.cmd"
-        );
+        var there = @"C:\Users\op\AppData\Local\Programs\Microsoft VS Code\bin\code.cmd";
+        var tried = new List<string>();
 
         CodeFinder
-            .Command("code", n => env.GetValueOrDefault(n), windows: true, exists: p => p == there)
+            .Command(
+                "code",
+                n => env.GetValueOrDefault(n),
+                windows: true,
+                runnable: p =>
+                {
+                    tried.Add(p);
+                    return p == there;
+                }
+            )
             .Should()
             .Be(there);
-        CodeFinder
-            .Command("code", n => env.GetValueOrDefault(n), windows: true, exists: _ => false)
+        tried.Should().NotContain(p => p.StartsWith("bin"), "a relative entry is never searched");
+        FluentActions
+            .Invoking(() =>
+                CodeFinder.Command(
+                    "code",
+                    n => env.GetValueOrDefault(n),
+                    windows: true,
+                    runnable: _ => false
+                )
+            )
             .Should()
-            .Be("code");
+            .Throw<InvalidOperationException>();
         CodeFinder
             .Command(
                 @"C:\vim\vim.exe",
                 n => env.GetValueOrDefault(n),
                 windows: true,
-                exists: _ => true
+                runnable: _ => false
             )
             .Should()
             .Be(@"C:\vim\vim.exe");
-        CodeFinder
-            .Command("code", n => env.GetValueOrDefault(n), windows: false)
+        FluentActions
+            .Invoking(() =>
+                CodeFinder.Command(@"tools\vim.exe", n => env.GetValueOrDefault(n), windows: true)
+            )
             .Should()
-            .Be("code");
+            .Throw<InvalidOperationException>()
+            .WithMessage("*relative path*");
     }
+
+    private static string? UnixPath(string name) => name == "PATH" ? "/usr/bin" : null;
+
+    private static bool AnyFile(string path) => true;
 
     private void Write(string path, string text)
     {
