@@ -117,7 +117,7 @@ internal sealed class MachinesScreen : View
     public void Refresh() =>
         Ui.Start(
             _context.App,
-            () => _context.Client.MachinesAsync(),
+            () => _context.Client.MachinesAsync(_context.Closed),
             answer =>
             {
                 if (answer.Data?.Operations?.Machines is not { } machines)
@@ -141,7 +141,8 @@ internal sealed class MachinesScreen : View
                 _machineList.SelectedItem = at;
                 ShowMachine();
             },
-            message => _instancesHeader.Text = TerminalText.Line(message)
+            message => _instancesHeader.Text = TerminalText.Line(message),
+            _context.Closed
         );
 
     private void ShowMachine()
@@ -199,7 +200,8 @@ internal sealed class MachinesScreen : View
                         Stuck = stuck ? true : default(Optional<bool?>),
                         Skip = 0,
                         Take = InstancesShown,
-                    }
+                    },
+                    _context.Closed
                 ),
             answer =>
             {
@@ -238,7 +240,8 @@ internal sealed class MachinesScreen : View
             {
                 if (load == Volatile.Read(ref _loading))
                     _instancesHeader.Text = TerminalText.Line(message);
-            }
+            },
+            _context.Closed
         );
     }
 

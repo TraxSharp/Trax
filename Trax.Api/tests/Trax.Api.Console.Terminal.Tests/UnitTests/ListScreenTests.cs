@@ -20,6 +20,7 @@ public class ListScreenTests
     private ScriptedPrompts _prompts = null!;
     private TerminalHarness _terminal = null!;
     private MainWindow _window = null!;
+    private ConsoleContext _context = null!;
 
     [SetUp]
     public async Task Open()
@@ -34,7 +35,7 @@ public class ListScreenTests
             .Answer("Manifests", Manifests(Manifest(9, "NightlyBilling")));
         _prompts = new ScriptedPrompts();
         (_terminal, _window) = await TerminalHarness.StartAsync(app => new MainWindow(
-            new ConsoleContext(
+            _context = new ConsoleContext(
                 app,
                 new TraxClient(_host),
                 new Uri("https://ops.example.com/trax/graphql"),
@@ -149,6 +150,26 @@ public class ListScreenTests
         (await _terminal.OnUi(() => _window.Lists[0].Rows.Select(r => r.Id).ToList()))
             .Should()
             .Equal(4799);
+    }
+
+    [Test]
+    public async Task Closing_the_console_cancels_a_read_still_out_and_reports_nothing()
+    {
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        _host.HoldUntilCancelled("Executions", cancelled);
+        var reads = _host.Sent("Executions").Count;
+
+        await _terminal.OnUi(() => _window.Lists[0].Refresh());
+        await _terminal.Until(() => _host.Sent("Executions").Count > reads, "the read is sent");
+        _context.Close();
+
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        // negative-wait: a report of the cancelled read, were one made, would be drawn within this window.
+        await Task.Delay(200);
+        await _terminal.OnUi(() => { });
+        (await _terminal.Screen()).Should().NotContain("canceled");
     }
 
     [Test]

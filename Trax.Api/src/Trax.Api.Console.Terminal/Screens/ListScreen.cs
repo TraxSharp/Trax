@@ -105,7 +105,7 @@ internal sealed class ListScreen : View
         var query = new ListQuery(PageSize, _after, new Dictionary<string, string>(_filters));
         Ui.Start(
             _context.App,
-            () => List.LoadAsync(_context.Client, query, CancellationToken.None),
+            () => List.LoadAsync(_context.Client, query, _context.Closed),
             answer =>
             {
                 // An answer to an older read, overtaken by a newer one, is dropped.
@@ -119,7 +119,8 @@ internal sealed class ListScreen : View
                 _pageFilters = query.Filters;
                 Show(page);
             },
-            message => _header.Text = TerminalText.Line(message)
+            message => _header.Text = TerminalText.Line(message),
+            _context.Closed
         );
     }
 
@@ -309,7 +310,7 @@ internal sealed class ListScreen : View
             return;
         Ui.Start(
             _context.App,
-            () => List.DetailAsync(_context.Client, row.Id, CancellationToken.None),
+            () => List.DetailAsync(_context.Client, row.Id, _context.Closed),
             answer =>
             {
                 if (answer.Data is not { } fields)
@@ -325,7 +326,8 @@ internal sealed class ListScreen : View
                     )
                 );
             },
-            message => _context.Status(message)
+            message => _context.Status(message),
+            _context.Closed
         );
     }
 
@@ -374,7 +376,7 @@ internal sealed class ListScreen : View
         _context.Status($"{Capital(action.Name)}: sending...");
         Ui.Start(
             _context.App,
-            () => List.RunAsync(_context.Client, action.Name, ids, options, CancellationToken.None),
+            () => List.RunAsync(_context.Client, action.Name, ids, options, _context.Closed),
             outcome =>
             {
                 _context.Status(
@@ -385,7 +387,8 @@ internal sealed class ListScreen : View
                 _marked.Clear();
                 Refresh();
             },
-            message => _context.Status(message)
+            message => _context.Status(message),
+            _context.Closed
         );
     }
 
@@ -457,7 +460,7 @@ internal sealed class ListScreen : View
                     filterSnapshot,
                     page.TotalCount,
                     options,
-                    CancellationToken.None
+                    _context.Closed
                 ),
             started =>
             {
@@ -469,7 +472,8 @@ internal sealed class ListScreen : View
                 if (started.Operation is { } operation)
                     BulkProgress.Follow(_context, operation, Refresh);
             },
-            message => _context.Status(message)
+            message => _context.Status(message),
+            _context.Closed
         );
     }
 

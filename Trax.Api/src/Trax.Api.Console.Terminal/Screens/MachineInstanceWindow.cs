@@ -26,6 +26,9 @@ internal sealed class MachineInstanceWindow : Window
     private readonly KeyedList _list;
     private readonly List<long?> _runs = [];
     private IDisposable? _stream;
+
+    // Cancelled when the window stops or the console closes, so a read still out is dropped with it.
+    private readonly CancellationTokenSource _open;
     private int _loading;
     private bool _pending;
 
@@ -36,6 +39,7 @@ internal sealed class MachineInstanceWindow : Window
     )
     {
         _context = context;
+        _open = CancellationTokenSource.CreateLinkedTokenSource(context.Closed);
         _machine = machine;
         _instance = instance;
         Title = TerminalText.Line($"{machine.Name} {instance.Id}");
@@ -52,7 +56,12 @@ internal sealed class MachineInstanceWindow : Window
         // Read once the window runs, so every answer lands on the UI thread.
         IsRunningChanged += (_, e) =>
         {
-            if (e.Value && _stream is null)
+            if (!e.Value)
+            {
+                if (!_open.IsCancellationRequested)
+                    _open.Cancel();
+            }
+            else if (_stream is null)
                 Start();
         };
     }
@@ -102,6 +111,10 @@ internal sealed class MachineInstanceWindow : Window
 
     private void Load()
     {
+        // A read a change asked for after the window stopped is not sent.
+        if (_open.IsCancellationRequested)
+            return;
+        var open = _open.Token;
         var load = Interlocked.Increment(ref _loading);
         var vertical = _context.VerticalGraphs;
         Ui.Start(
@@ -115,7 +128,8 @@ internal sealed class MachineInstanceWindow : Window
                         OwnerKind = _instance.OwnerKind,
                         Id = _instance.Id,
                         RowId = _instance.RowId,
-                    }
+                    },
+                    open
                 );
                 var history = await _context.Client.MachineInstanceTransitionsAsync(
                     new MachineInstanceTransitionsVariables
@@ -125,7 +139,8 @@ internal sealed class MachineInstanceWindow : Window
                         Id = _instance.Id,
                         RowId = _instance.RowId,
                         First = TransitionsShown,
-                    }
+                    },
+                    open
                 );
                 // Drawn here, off the UI thread; Show finds it drawn.
                 if (detail.Data?.Operations?.MachineInstance is { } now)
@@ -142,7 +157,8 @@ internal sealed class MachineInstanceWindow : Window
             {
                 if (load == Volatile.Read(ref _loading))
                     _header.Text = TerminalText.Line(message);
-            }
+            },
+            open
         );
     }
 
@@ -266,6 +282,8 @@ internal sealed class MachineInstanceWindow : Window
         {
             _stream?.Dispose();
             _stream = null;
+            _open.Cancel();
+            _open.Dispose();
         }
         base.Dispose(disposing);
     }

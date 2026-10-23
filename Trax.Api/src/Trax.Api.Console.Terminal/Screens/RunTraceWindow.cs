@@ -27,6 +27,9 @@ internal sealed class RunTraceWindow : Window
     // The steps that arrived since the oldest read still out began, merged into its answer.
     private readonly Dictionary<string, TraceEntry> _arrived = new(StringComparer.Ordinal);
     private IDisposable? _stream;
+
+    // Cancelled when the window stops or the console closes, so a read still out is dropped with it.
+    private readonly CancellationTokenSource _open;
     private int _loading;
     private bool _reading;
 
@@ -34,6 +37,7 @@ internal sealed class RunTraceWindow : Window
     {
         _context = context;
         _run = run;
+        _open = CancellationTokenSource.CreateLinkedTokenSource(context.Closed);
         Title = $"Run {run}";
         _header = new Label { Width = Dim.Fill(), Text = "Reading..." };
         _cut = new Label
@@ -54,6 +58,8 @@ internal sealed class RunTraceWindow : Window
         // Read once the window runs, so every answer lands on the UI thread.
         IsRunningChanged += (_, e) =>
         {
+            if (!e.Value && !_open.IsCancellationRequested)
+                _open.Cancel();
             if (!e.Value || _stream is not null)
                 return;
             _lines.SetFocus();
@@ -82,11 +88,15 @@ internal sealed class RunTraceWindow : Window
 
     private void Load()
     {
+        // A read the stream asked for after the window stopped is not sent.
+        if (_open.IsCancellationRequested)
+            return;
+        var open = _open.Token;
         var load = Interlocked.Increment(ref _loading);
         _reading = true;
         Ui.Start(
             _context.App,
-            () => RunTrace.LoadAsync(_context.Client, _run, CancellationToken.None),
+            () => RunTrace.LoadAsync(_context.Client, _run, open),
             answer =>
             {
                 // An answer to an older read, overtaken by a newer one, is dropped; the newer one's merge covers it.
@@ -114,7 +124,8 @@ internal sealed class RunTraceWindow : Window
                 _reading = false;
                 _arrived.Clear();
                 _header.Text = TerminalText.Line(message);
-            }
+            },
+            open
         );
     }
 
@@ -211,6 +222,8 @@ internal sealed class RunTraceWindow : Window
         {
             _stream?.Dispose();
             _stream = null;
+            _open.Cancel();
+            _open.Dispose();
         }
         base.Dispose(disposing);
     }

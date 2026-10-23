@@ -299,6 +299,34 @@ public class MachineViewTests
     private const string Changed =
         """{"onMachineInstanceChanged":{"rowId":5,"machine":"checkout","ownerKind":"USER","id":"3f2a1c4e-0000-4000-8000-000000000001","state":"Shipped","updatedAt":"2026-10-22T10:02:00Z","hasLiveInvokedRun":false,"deleted":false,"reload":false}}""";
 
+    [Test]
+    public async Task Closing_the_instance_window_cancels_a_read_still_out()
+    {
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var host = new FakeHost()
+            .HoldUntilCancelled("MachineInstance", cancelled)
+            .Answer("MachineInstanceTransitions", Transitions);
+        var (terminal, window) = await TerminalHarness.StartAsync(app => new MachineInstanceWindow(
+            new ConsoleContext(
+                app,
+                new TraxClient(host),
+                new Uri("https://ops.example.com/trax/graphql")
+            ),
+            Machine(),
+            Instance()
+        ));
+        await using var _ = terminal;
+        await terminal.Until(() => host.Sent("MachineInstance").Count == 1, "the instance is read");
+
+        await terminal.OnUi(() => window.RequestStop());
+
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        host.Sent("MachineInstanceTransitions").Should().BeEmpty();
+    }
+
     private const string Transitions = """
         {"operations":{"machineInstance":{"rowId":5,"transitions":{"items":[]}}}}
         """;

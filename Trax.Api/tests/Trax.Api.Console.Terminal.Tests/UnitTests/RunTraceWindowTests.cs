@@ -231,6 +231,27 @@ public class RunTraceWindowTests
         (await terminal.Screen()).Should().NotContain("Only the first");
     }
 
+    [Test]
+    public async Task Closing_the_window_cancels_a_read_still_out()
+    {
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var host = new FakeHost()
+            .HoldUntilCancelled("JunctionRuns", cancelled)
+            .Answer("Decisions", Decisions)
+            .Answer("Logs", Logs);
+        var (terminal, window) = await Open(host);
+        await using var _ = terminal;
+        await terminal.Until(() => host.Sent("JunctionRuns").Count == 1, "the trace is read");
+
+        await terminal.Press(Key.Q);
+
+        await terminal.Stopped.WaitAsync(TimeSpan.FromSeconds(15));
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        window.Entries.Should().BeEmpty();
+    }
+
     private static string Failed(int sequence) =>
         """{"onJunctionEvent":{"metadataId":4812,"eventType":"JUNCTION_FAILED","timestamp":"2026-10-22T10:00:03Z","sequence":SEQ,"junction":{"position":2,"kind":"JUNCTION","name":"ChargeCard","state":"FAILED","startedAt":"2026-10-22T10:00:02Z","durationMs":1200,"failureException":"card_declined","replayed":false,"answerWithheld":false,"nameWithheld":false}}}""".Replace(
             "SEQ",

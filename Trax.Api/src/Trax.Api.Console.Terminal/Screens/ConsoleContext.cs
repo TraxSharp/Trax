@@ -83,8 +83,10 @@ internal sealed class ConsoleContext(
     private readonly CancellationTokenSource _closed = new();
 
     /// <summary>
-    /// Cancelled when the window this context serves closes, at a quit or when the editor takes the terminal, so work
-    /// that outlives a request (following a bulk operation) stops with it.
+    /// Cancelled when the window this context serves closes, at a quit or when the editor takes the terminal, so a
+    /// request still out and work that outlives one (following a bulk operation) stop with it. A screen passes it to
+    /// <c>Ui.Start</c> as well, so the cancellation is not reported; a window it opens links its own lifetime to
+    /// it.
     /// </summary>
     public CancellationToken Closed => _closed.Token;
 

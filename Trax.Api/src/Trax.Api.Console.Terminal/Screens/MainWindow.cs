@@ -174,13 +174,14 @@ internal sealed class MainWindow : Window
     private void ReadAdminTrains(Action then) =>
         Ui.Start(
             _context.App,
-            () => _context.Client.AdminTrainNamesAsync(),
+            () => _context.Client.AdminTrainNamesAsync(_context.Closed),
             answer =>
             {
                 _adminTrains.UnionWith(answer.Data?.Operations?.AdminTrainNames ?? []);
                 then();
             },
-            _ => then()
+            _ => then(),
+            _context.Closed
         );
 
     // Reads a list again a moment after the host says it changed, once for a burst of changes.

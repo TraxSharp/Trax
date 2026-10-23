@@ -9,9 +9,10 @@ namespace Trax.Api.Console.Terminal.Tests.Fakes;
 /// </summary>
 internal sealed class FakeHost : ITraxTransport
 {
-    private readonly Dictionary<string, Func<JsonObject, Task<JsonObject>>> _answers = new(
-        StringComparer.Ordinal
-    );
+    private readonly Dictionary<
+        string,
+        Func<JsonObject, CancellationToken, Task<JsonObject>>
+    > _answers = new(StringComparer.Ordinal);
     private readonly List<TraxRequest> _requests = [];
     private readonly List<(TraxRequest Request, ISubscriptionSink Sink)> _streams = [];
 
@@ -27,12 +28,43 @@ internal sealed class FakeHost : ITraxTransport
     /// Answers <paramref name="operation"/> when the task <paramref name="answer"/> returns completes, so a test can
     /// hold one answer back and let a later request overtake it.
     /// </summary>
-    public FakeHost AnswerLater(string operation, Func<JsonObject, Task<JsonObject>> answer)
+    public FakeHost AnswerLater(string operation, Func<JsonObject, Task<JsonObject>> answer) =>
+        AnswerLater(operation, (v, _) => answer(v));
+
+    /// <summary>
+    /// Answers <paramref name="operation"/> when the task <paramref name="answer"/> returns completes, handing it the
+    /// request's cancellation token, so a test can see a request cancelled.
+    /// </summary>
+    public FakeHost AnswerLater(
+        string operation,
+        Func<JsonObject, CancellationToken, Task<JsonObject>> answer
+    )
     {
         lock (_answers)
             _answers[operation] = answer;
         return this;
     }
+
+    /// <summary>
+    /// Holds every request for <paramref name="operation"/> until it is cancelled, then completes
+    /// <paramref name="cancelled"/>.
+    /// </summary>
+    public FakeHost HoldUntilCancelled(string operation, TaskCompletionSource cancelled) =>
+        AnswerLater(
+            operation,
+            async (_, ct) =>
+            {
+                var held = new TaskCompletionSource<JsonObject>(
+                    TaskCreationOptions.RunContinuationsAsynchronously
+                );
+                using var registration = ct.Register(() =>
+                {
+                    held.TrySetCanceled(ct);
+                    cancelled.TrySetResult();
+                });
+                return await held.Task;
+            }
+        );
 
     /// <summary>Every request sent, in order.</summary>
     public IReadOnlyList<TraxRequest> Requests
@@ -55,7 +87,7 @@ internal sealed class FakeHost : ITraxTransport
     {
         lock (_requests)
             _requests.Add(request);
-        Func<JsonObject, Task<JsonObject>>? answer;
+        Func<JsonObject, CancellationToken, Task<JsonObject>>? answer;
         lock (_answers)
             _answers.TryGetValue(request.Document.Name, out answer);
         return answer is null
@@ -71,7 +103,7 @@ internal sealed class FakeHost : ITraxTransport
                     ),
                 ],
             }
-            : new TraxAnswer { Data = await answer(request.Variables) };
+            : new TraxAnswer { Data = await answer(request.Variables, cancellationToken) };
     }
 
     public IDisposable Subscribe(TraxRequest request, ISubscriptionSink sink)
