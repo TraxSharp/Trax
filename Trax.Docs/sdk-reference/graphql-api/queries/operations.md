@@ -277,7 +277,7 @@ query {
 | `hint` | `String!` | What to type, such as `yyyy-MM-dd HH:mm:ss (UTC)` |
 
 Settings can hold credentials. Like an execution's `input`, they are reachable only under the
-`operations` namespace, so the gate you put on it (`GateOperations` or `RequireAuthorization`)
+`operations` namespace, so the gate you put on it (`GateOperations` or `GateOperationsToAuthenticatedUsers`)
 decides who reads them. See [Train inputs and the operations gate](/docs/sdk-reference/graphql-api/queries#train-inputs-and-the-operations-gate).
 
 ## lookup

@@ -202,6 +202,7 @@ public class EndpointPolicyOnSocketsTests
                                 .ExposeOperationQueries()
                                 .ExposeOperationMutations()
                                 .RequireAuthorization(AdminPolicy)
+                                .GateOperations(policy: AdminPolicy)
                         );
                         AddOperationStubs(services, scheduler);
                     })
@@ -226,7 +227,10 @@ public class EndpointPolicyOnSocketsTests
                         services.AddAuthorization();
                         AddGraphQLBase(services);
                         services.AddTraxGraphQL(graphql =>
-                            graphql.ExposeOperationQueries().RequireAuthorization()
+                            graphql
+                                .ExposeOperationQueries()
+                                .RequireAuthorization()
+                                .GateOperationsToAuthenticatedUsers()
                         );
                         AddOperationStubs(services, Substitute.For<ITraxScheduler>());
                     })

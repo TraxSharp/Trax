@@ -29,7 +29,10 @@ path of the host (`/trax/dashboard` by default). It is an extension method on
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
 
-builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
+builder.Services.AddTraxGraphQL(graphql => graphql
+    .ExposeOperationQueries()
+    .ExposeOperationMutations()
+    .GateOperations(policy: "TraxAdmin"));
 builder.Services.AddAuthorization(o =>
     o.AddPolicy("TraxAdmin", p => p.RequireRole("Admin")));
 // A scheme the browser carries on a page load, such as a sign-in cookie, gates the app.
@@ -222,7 +225,7 @@ A host that called `AddTraxDashboard(...)` and `UseTraxDashboard()`:
 2. Deletes both calls, and any `IDashboardSettingsService` it registered: the console keeps its
    preferences in the browser.
 3. Calls `AddTraxGraphQL` with `ExposeOperationQueries()`, `ExposeOperationMutations()` and the
-   gate they require (`GateOperations(...)` or `RequireAuthorization(...)`), since every page reads
+   gate they require (`GateOperations(...)` or `GateOperationsToAuthenticatedUsers()`), since every page reads
    `operations`, and maps `UseTraxGraphQL()`.
 4. Maps `UseTraxApiDashboard(...)` with the posture the Blazor dashboard had: `RequirePolicy` and
    `RequireRoles` carry over, on a scheme the browser carries. `AllowAnonymousDashboard()` becomes

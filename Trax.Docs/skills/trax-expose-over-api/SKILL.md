@@ -200,8 +200,8 @@ exception details in the response to read it.
 - **Gating the whole endpoint on the route.** A convention passed to `UseTraxGraphQL(configure: ...)`
   is enforced, but the startup checks do not see it. Use the builder's `RequireAuthorization()`.
 - **Exposing `operations`.** `ExposeOperationQueries()` and `ExposeOperationMutations()` need a gate
-  with a role or policy, `GateOperations(roles: "Operator")`; they reveal execution inputs and drive
-  the scheduler. The host also needs `AddScheduler(...)` for them.
+  with a role or policy, `GateOperations(roles: "Operator")`, even on an endpoint gated with
+  `RequireAuthorization()`; they reveal execution inputs and drive the scheduler. The host also needs `AddScheduler(...)` for them.
 - **A text query refused with `PERSISTED_OPERATION_REQUIRED`.** The host is working. Register the
   document as a client document, or use the generated client; ask the user before anything else.
 - **A browser socket answered `403` through a dev proxy.** Vite's `changeOrigin: true` makes `Host`

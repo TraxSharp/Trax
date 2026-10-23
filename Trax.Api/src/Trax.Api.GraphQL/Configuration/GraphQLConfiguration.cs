@@ -142,12 +142,18 @@ public class GraphQLConfiguration
     /// Every <c>[TraxAuthorize]</c> shape passed to
     /// <c>TraxGraphQLBuilder.GateOperations(...)</c> or
     /// <c>GateOperationsToAuthenticatedUsers()</c>. Empty when the namespace carries no gate of
-    /// its own, in which case the endpoint gate (or
-    /// <c>AllowAnonymousOperations()</c>) is what governs it.
+    /// its own, which an exposed namespace may only when <see cref="AnonymousOperationsAllowed"/>.
     /// </summary>
     internal IReadOnlyList<TraxAuthorizeAttribute> OperationsAuthorizeAttributes { get; }
 
     /// <summary>
+    /// <summary>
+    /// True when the host called <c>TraxGraphQLBuilder.AllowAnonymousOperations()</c>: the
+    /// operations namespace has no gate and any caller satisfies it. Nothing else grants the
+    /// operations view without a declared gate.
+    /// </summary>
+    internal bool AnonymousOperationsAllowed { get; init; }
+
     /// Opt-in filter convention modules registered via
     /// <c>TraxGraphQLBuilder.ConfigureFiltering()</c>. Empty by default, in which case
     /// HotChocolate's stock filtering convention is used unchanged. When non-empty, each

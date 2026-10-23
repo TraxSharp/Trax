@@ -166,7 +166,7 @@ An execution's `input`, a manifest's `properties` and a work queue entry's `inpu
 [`workQueue.detail`](/docs/sdk-reference/graphql-api/queries/work-queue#detail) only, never on a
 list type, and an effect's settings are on
 [`effects`](/docs/sdk-reference/graphql-api/queries/operations#effects). All of them sit under the
-`operations` namespace, so whatever gates it (`RequireAuthorization()` or `GateOperations(...)`, see
+`operations` namespace, so the gate it carries (`GateOperations(...)` or `GateOperationsToAuthenticatedUsers()`, see
 [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)) decides who reads them. There is
 no separate field-level gate: a caller who can read one execution's input can read a manifest's
 properties too. [Authorization](/docs/security/authorization-rules#the-operations-surface) explains the choice.

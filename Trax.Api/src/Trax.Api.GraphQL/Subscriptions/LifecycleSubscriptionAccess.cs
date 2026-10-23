@@ -15,9 +15,9 @@ namespace Trax.Api.GraphQL.Subscriptions;
 /// <remarks>
 /// <para>
 /// <b>Operations view.</b> When the operations surface is exposed, a subscriber that satisfies the
-/// operations authorization (the <c>GateOperations(...)</c> gate, or none when the host chose
-/// <c>AllowAnonymousOperations()</c> or gated the whole endpoint) sees every train, with the same
-/// detail <c>operations.executions</c> shows.
+/// operations gate (<c>GateOperations(...)</c> or <c>GateOperationsToAuthenticatedUsers()</c>, or
+/// anyone when the host chose <c>AllowAnonymousOperations()</c>) sees every train, with the same
+/// detail <c>operations.executions</c> shows. With no gate declared, nobody does.
 /// </para>
 /// <para>
 /// <b>Broadcast view.</b> Anyone else sees only <c>[TraxBroadcast]</c> trains whose own posture
@@ -86,11 +86,11 @@ internal sealed class LifecycleSubscriptionAccess(
         if (!OperationsExposed)
             return false;
 
-        // No gate of its own: the host either published the namespace deliberately or gated the
-        // whole endpoint, which the request pipeline has already enforced for this subscriber.
+        // No gate of its own is a public namespace only when the host said so. The endpoint gate
+        // never stands in for it: it admits the application's users, not its operators.
         var gate = configuration.OperationsAuthorizeAttributes;
         if (gate.Count == 0)
-            return true;
+            return configuration.AnonymousOperationsAllowed;
 
         if (!IsAuthenticated(user))
             return false;

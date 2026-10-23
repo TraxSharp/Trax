@@ -33,7 +33,7 @@ public static class ApiDashboardEndpointExtensions
     /// </summary>
     /// <remarks>
     /// Registering a document changes which shapes may run, never who may run them: every request is still checked by
-    /// the operations gate (<c>GateOperations(...)</c> or <c>RequireAuthorization()</c>), or, for a stream
+    /// the operations gate (<c>GateOperations(...)</c> or <c>GateOperationsToAuthenticatedUsers()</c>), or, for a stream
     /// (<c>onTrainStateChanged</c>, <c>onDataChanged</c>, <c>onJunctionEvent</c>, <c>onMachineInstanceChanged</c>), by
     /// its per-subscriber authorization, which delivers each event only to a caller who may see it. The documents are
     /// registered only on a host that runs persisted operations (<c>UsePersistedOperations()</c>); on one that does
@@ -96,7 +96,8 @@ public static class ApiDashboardEndpointExtensions
                     + $"of the {what} reads, and AddTraxGraphQL() does not expose it. Call "
                     + "ExposeOperationQueries() on the GraphQL builder, and "
                     + $"ExposeOperationMutations() for the {what}'s actions, with the gate the "
-                    + "builder then asks for (RequireAuthorization() or GateOperations(...)). See "
+                    + "builder then asks for (GateOperations(...) or "
+                    + "GateOperationsToAuthenticatedUsers()). See "
                     + "https://traxsharp.net/docs/cross-cutting/troubleshooting#usetraxapidashboard-requires-the-graphql-operations-namespace"
             );
         return graphQL;

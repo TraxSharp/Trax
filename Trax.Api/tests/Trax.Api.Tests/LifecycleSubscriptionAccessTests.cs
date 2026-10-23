@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Attributes;
@@ -64,6 +65,38 @@ public class LifecycleSubscriptionAccessTests
             .BeFalse("an identity with no authentication type is not signed in");
     }
 
+    [Test]
+    public async Task AnonymousOperations_AdmitsEveryCaller()
+    {
+        var access = Access(b => b.ExposeOperationQueries().AllowAnonymousOperations());
+
+        (await access.LifecycleFor(null)).All.Should().BeTrue();
+        (await access.OperationsFor(null)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task OperationsExposedWithNoDeclaredGate_GrantsNothing()
+    {
+        // The builder refuses this shape at startup; the access check does not rely on that and
+        // treats the endpoint gate as no answer for the operations view.
+        var configuration = new GraphQLConfiguration(
+            [],
+            [],
+            [],
+            [],
+            authorizationRequired: true,
+            operationQueriesExposed: true,
+            operationMutationsExposed: true
+        );
+        var access = Access(configuration);
+
+        (await access.LifecycleFor(User(roles: "Admin")))
+            .All.Should()
+            .BeFalse("only a declared operations gate grants the operations view, per " + Adr);
+        (await access.OperationsFor(User(roles: "Admin"))).Should().BeFalse();
+        (await access.DataChangesFor(User(roles: "Admin"))).Should().BeFalse();
+    }
+
     #endregion
 
     #region A broadcast train's own posture
@@ -117,7 +150,14 @@ public class LifecycleSubscriptionAccessTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
         configure?.Invoke(builder);
+        return Access(builder.Build(), trains);
+    }
 
+    private static LifecycleSubscriptionAccess Access(
+        GraphQLConfiguration configuration,
+        params TrainRegistration[] trains
+    )
+    {
         var discovery = Substitute.For<ITrainDiscoveryService>();
         discovery.DiscoverTrains().Returns(trains);
 
@@ -130,7 +170,7 @@ public class LifecycleSubscriptionAccessTests
         });
 
         return new LifecycleSubscriptionAccess(
-            builder.Build(),
+            configuration,
             discovery,
             services.BuildServiceProvider().GetRequiredService<IAuthorizationService>(),
             new TrainLifecycleStreamOptions()

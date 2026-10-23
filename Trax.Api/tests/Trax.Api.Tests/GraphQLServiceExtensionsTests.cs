@@ -113,7 +113,10 @@ public class GraphQLServiceExtensionsTests
     {
         var services = NewMinimalServices();
         services.AddTraxGraphQL(graphql =>
-            graphql.ExposeOperationQueries().RequireAuthorization("AdminPolicy")
+            graphql
+                .ExposeOperationQueries()
+                .RequireAuthorization("AdminPolicy")
+                .GateOperations(policy: "AdminPolicy")
         );
 
         services

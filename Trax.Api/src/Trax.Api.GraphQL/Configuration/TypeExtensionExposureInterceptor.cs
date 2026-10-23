@@ -496,11 +496,10 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
             return TypeExtensionParentPosture.Anonymous;
 
         // The operations namespace always carries a declared posture before the schema exists:
-        // the builder refuses to expose it without GateOperations(), RequireAuthorization() or
-        // AllowAnonymousOperations() (api/0004). A field grafted onto it inherits that decision.
-        // Without a gate of its own the namespace is as reachable as the root it hangs off: under
-        // RequireAuthorization() the endpoint gate covers the field, and under
-        // AllowAnonymousOperations() nothing does, so the field declares, as on a root type.
+        // the builder refuses to expose it without GateOperations(),
+        // GateOperationsToAuthenticatedUsers() or AllowAnonymousOperations() (api/0004). A field
+        // grafted onto it inherits that decision. Without a gate of its own the namespace is
+        // public, so the field declares, as on a root type.
         if (OperationsTypes.Contains(runtimeType))
             return _configuration.OperationsAuthorizeAttributes.Count > 0
                 ? TypeExtensionParentPosture.Gated

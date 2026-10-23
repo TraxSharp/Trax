@@ -42,7 +42,7 @@ Most operations fields return [`OperationResponse`](/docs/sdk-reference/graphql-
 ## Operations mutations
 
 The whole `operations` namespace sits behind the operations gate (`GateOperations`,
-`RequireAuthorization` or `AllowAnonymousOperations`; see
+`GateOperationsToAuthenticatedUsers` or `AllowAnonymousOperations`; see
 [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)). The scheduler is reachable
 through it, so an open namespace lets any caller change scheduled work. Mutations that enqueue a
 train and input the caller chose (`requeueExecution`, `resumeExecution`, `workQueue.queueTrain`)

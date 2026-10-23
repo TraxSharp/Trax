@@ -271,7 +271,7 @@ public class AuditRefusedRequestTests
                                     o.FlushInterval = TimeSpan.FromMilliseconds(10)
                                 );
                             return gateOperationsToRole is null
-                                ? g
+                                ? g.GateOperationsToAuthenticatedUsers()
                                 : g.GateOperations(roles: gateOperationsToRole);
                         });
                     })

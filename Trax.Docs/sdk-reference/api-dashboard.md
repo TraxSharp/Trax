@@ -30,7 +30,10 @@ says what a host changes.
 using Trax.Api.Dashboard.Extensions;
 using Trax.Api.GraphQL.Extensions;
 
-builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
+builder.Services.AddTraxGraphQL(graphql => graphql
+    .ExposeOperationQueries()
+    .ExposeOperationMutations()
+    .GateOperations(policy: "TraxAdmin"));
 
 var app = builder.Build();
 app.UseTraxGraphQL();

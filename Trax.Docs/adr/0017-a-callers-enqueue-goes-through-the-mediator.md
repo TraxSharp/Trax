@@ -36,7 +36,8 @@ for now. Those paths let the caller choose which manifest, never the train or th
 they are reachable only through the admin surface. The admin surface is meant to carry admin
 privileges as a whole, and is expected to gain user-provided authorization (Microsoft Entra or
 another provider) rather than a per-train check bolted onto each admin action. Until then its
-posture is `GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations` (api/0004).
+posture is `GateOperations`, `GateOperationsToAuthenticatedUsers` or `AllowAnonymousOperations`
+(api/0004).
 
 **Applying per-train requirements to the dashboard.** Rejected. A Blazor Server circuit has no
 HTTP request behind a click, so the enforcer, which reads the user from the request, refused
@@ -92,6 +93,7 @@ gate; that posture is api/0004's.
 
 ## Changelog
 
+- **2026-10-23**: The admin surface's posture no longer includes `RequireAuthorization` (api/0004).
 - **2026-10-01**: The dashboard's Run dialog calls `IOperationsService.RunTrainAsync` inside the
   trusted scope instead of submitting to the job submitter itself.
 - **2026-09-24**: `WorkQueue.Create` is now the only way to build a row, so the guards' text

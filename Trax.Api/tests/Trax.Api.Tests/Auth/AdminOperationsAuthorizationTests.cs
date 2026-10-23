@@ -28,7 +28,8 @@ namespace Trax.Api.Tests.Auth;
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-/// <item><c>RequireAuthorization()</c> gates the whole endpoint, admin surface included.</item>
+/// <item><c>RequireAuthorization()</c> gates the whole endpoint, admin surface included, but does
+/// not answer for the namespace: it still needs a gate of its own.</item>
 /// <item><c>GateOperations(...)</c> gates the namespace alone, which is what a host with public
 /// pre-login surfaces needs: the sibling public field on the same endpoint stays reachable.</item>
 /// <item><c>AllowAnonymousOperations()</c> publishes the control plane deliberately.</item>
@@ -48,7 +49,10 @@ public class AdminOperationsAuthorizationTests
     /// <summary>How the host answers for the operations namespace.</summary>
     internal enum Posture
     {
-        /// <summary>RequireAuthorization(): the whole endpoint is gated.</summary>
+        /// <summary>
+        /// RequireAuthorization() with GateOperations(roles: "Admin"): the whole endpoint is gated
+        /// and the namespace needs a role on top.
+        /// </summary>
         EndpointGated,
 
         /// <summary>AllowAnonymousOperations(): the control plane is deliberately public.</summary>
@@ -101,7 +105,7 @@ public class AdminOperationsAuthorizationTests
                             switch (posture)
                             {
                                 case Posture.EndpointGated:
-                                    graphql.RequireAuthorization();
+                                    graphql.RequireAuthorization().GateOperations(roles: "Admin");
                                     break;
                                 case Posture.AnonymousAcknowledged:
                                     graphql.AllowAnonymousOperations();
@@ -206,6 +210,22 @@ public class AdminOperationsAuthorizationTests
             .GetString()
             .Should()
             .Be("Healthy");
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task Exposed_WithRequireAuthorization_SignedInCallerWithoutTheRole_IsRejected()
+    {
+        // The endpoint gate admits every user of the application; the namespace gate decides who
+        // operates it.
+        using var host = await StartHostAsync(Posture.EndpointGated);
+
+        var doc = await PostAsync(host, apiKey: ReaderApiKey);
+
+        HasErrorCode(doc, "TRAX_AUTHORIZATION")
+            .Should()
+            .BeTrue("passing the endpoint gate does not satisfy the operations gate");
 
         await host.StopAsync();
     }
