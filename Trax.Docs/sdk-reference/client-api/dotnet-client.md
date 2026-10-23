@@ -125,7 +125,7 @@ public readonly record struct Optional<T>
 | `ITraxTransport` | How a request reaches a host: `ExecuteAsync` for a query or mutation, which answers a refusal or an unreachable host as a `TraxAnswer` and throws only on cancellation, and `Subscribe` for a stream. An app can give `TraxClient` its own: a recording, a fake, a wrapper that counts what is in flight. |
 | `TraxHttpTransport` | The transport over HTTP POST and a socket. `Payload(request)` is the body or subscribe payload it sends: `id` or `query`, with `operationName` and `variables`. `Subscribe` sends it over the `Socket`, or fails the sink at once with a `SocketUnavailableException` when there is none. |
 | `ExecuteAsync(request, cancellationToken)` | POSTs the payload and reads the answer. A body with `errors` is an answer whatever its status, since a host answers a coded refusal with the status it chose, and a success with `data` is one too. Everything else is a `Failure`: a status that is not success with no errors (whatever data came with it), a host that could not be reached, a body that breaks off, a body larger than `MaxResponseSize` (refused as it arrives, never read whole), and a request, body included, that outlasts the `HttpClient`'s `Timeout`. It throws only when `cancellationToken` is cancelled. |
-| `TraxHttpTransportOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, a default header or a delegating handler; its `Timeout` bounds each request, body included); the GraphQL `Endpoint`; the `Socket` subscriptions go over; `ById`, which says whether a document goes by its id (by default every document with an id does; a host that registered only some of them, or none, names which); `MaxResponseSize`, the largest body read from an answer (`DefaultMaxResponseSize`, 16 MiB); and `AllowInsecureTransport`. Without it the transport refuses, when it is built, an `http` endpoint whose host is not this machine, since whatever authenticates the requests would cross the network in the clear. |
+| `TraxHttpTransportOptions` | `Http`, the `HttpClient` the requests go through (set its authentication on it, a default header or a delegating handler, and turn its automatic redirects off; its `Timeout` bounds each request, body included); the GraphQL `Endpoint`; the `Socket` subscriptions go over; `ById`, which says whether a document goes by its id (by default every document with an id does; a host that registered only some of them, or none, names which); `MaxResponseSize`, the largest body read from an answer (`DefaultMaxResponseSize`, 16 MiB); and `AllowInsecureTransport`. Without it the transport refuses, when it is built, an `http` endpoint whose host is not this machine, since whatever authenticates the requests would cross the network in the clear. |
 
 ### The socket
 
@@ -160,6 +160,9 @@ public readonly record struct Optional<T>
   `Optional<T>`, so `MaxActiveJobs = null` sends `"maxActiveJobs": null` and leaving it unset sends nothing, with
   `TraxJson.Options` or any options in `TraxClientOptions.Json`. Read back, a member that is absent is unset and one
   that is null is a null that was sent.
+- **Redirects.** An `HttpClient` follows redirects by default and drops only `Authorization` when it does, so a default
+  header such as `X-Api-Key` would follow a redirect to whatever host it names. Build the client on a handler with
+  `AllowAutoRedirect = false`, as the example does; a GraphQL endpoint has no reason to redirect a POST.
 
 ## Trimming and native AOT
 
@@ -187,7 +190,8 @@ var client = new TraxClient(
 using System.Text.Json.Nodes;
 using Trax.Client;
 
-using var http = new HttpClient();
+// No automatic redirects: a redirect would carry X-Api-Key to whatever host it names.
+using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false });
 http.DefaultRequestHeaders.Add("X-Api-Key", configuration["Trax:ApiKey"]);
 
 await using var socket = new GraphQLSubscriptionSocket(

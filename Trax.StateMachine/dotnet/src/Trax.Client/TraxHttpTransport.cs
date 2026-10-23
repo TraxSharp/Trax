@@ -37,7 +37,8 @@ public sealed record TraxHttpTransportOptions
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header (<c>X-Api-Key</c>,
     /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
-    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included.
+    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included. Build it on a handler with automatic
+    /// redirects off: a redirect drops only <c>Authorization</c>, so any other header would follow it to the new host.
     /// </summary>
     public required HttpClient Http { get; init; }
 
