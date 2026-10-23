@@ -36,7 +36,8 @@ public sealed record TraxHttpTransportOptions
 {
     /// <summary>
     /// The client the requests go through. Set its authentication on it, a default header (<c>X-Api-Key</c>,
-    /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>.
+    /// <c>Authorization</c>) or a delegating handler, as for any other <see cref="System.Net.Http.HttpClient"/>. Its
+    /// <see cref="HttpClient.Timeout"/> bounds each request, its body included.
     /// </summary>
     public required HttpClient Http { get; init; }
 
@@ -150,7 +151,9 @@ public sealed class TraxHttpTransport : ITraxTransport
     /// POSTs one GraphQL body and reads the answer. A body with <c>errors</c> is an answer whatever its status, since a
     /// host answers a coded refusal with the status it chose; a success with <c>data</c> is one too. Anything else is a
     /// failure (a status that is not success with no errors among them, whatever data came with it), and so is a
-    /// body larger than <paramref name="maxResponseSize"/>, which is refused as it arrives rather than read whole.
+    /// body larger than <paramref name="maxResponseSize"/>, which is refused as it arrives rather than read whole, a
+    /// body that breaks off, and a request that outlasts <see cref="HttpClient.Timeout"/>, body included. Throws only
+    /// when <paramref name="cancellationToken"/> is cancelled.
     /// </summary>
     public static async Task<TraxAnswer> PostAsync(
         HttpClient http,
@@ -172,58 +175,66 @@ public sealed class TraxHttpTransport : ITraxTransport
         );
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        HttpResponseMessage response;
-        string? text;
+        // With ResponseHeadersRead the client's timeout stops at the headers; this one runs on through the body.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (http.Timeout != Timeout.InfiniteTimeSpan)
+            timeout.CancelAfter(http.Timeout);
         try
         {
-            response = await http.SendAsync(
+            using var response = await http.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken
+                    timeout.Token
                 )
                 .ConfigureAwait(false);
-            text = await ReadBoundedAsync(response.Content, maxResponseSize, cancellationToken)
+            var text = await ReadBoundedAsync(response.Content, maxResponseSize, timeout.Token)
                 .ConfigureAwait(false);
+            return AnswerOf(response, text, maxResponseSize);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        catch (OperationCanceledException)
         {
             // A timeout surfaces as a cancellation the caller did not ask for.
-            return TraxAnswer.Failed($"The host could not be reached: {ex.Message}");
-        }
-
-        using (response)
-        {
-            if (text is null)
-                return TraxAnswer.Failed(
-                    $"The server answered with a body larger than {maxResponseSize} bytes.",
-                    (int)response.StatusCode
-                );
-            var status = (int)response.StatusCode;
-            JsonNode? parsed;
-            try
-            {
-                parsed = JsonNode.Parse(text);
-            }
-            catch (JsonException)
-            {
-                parsed = null;
-            }
-            // A refusal the host coded (errors) is an answer whatever status it chose; a status that is not success
-            // with no errors is a failure, whatever data came with it.
-            if (
-                TraxAnswer.Of(parsed) is { } answer
-                && (response.IsSuccessStatusCode || answer.Errors.Count > 0)
-            )
-                return answer;
             return TraxAnswer.Failed(
-                $"The host answered {$"{status} {response.ReasonPhrase}".TrimEnd()} with no GraphQL answer.",
-                status
+                $"The host did not answer within {http.Timeout.TotalSeconds:0.###} seconds."
             );
         }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            // IOException (HttpIOException among them) is a body that broke off while it was read.
+            return TraxAnswer.Failed($"The host could not be reached: {ex.Message}");
+        }
+    }
+
+    private static TraxAnswer AnswerOf(HttpResponseMessage response, string? text, long max)
+    {
+        var status = (int)response.StatusCode;
+        if (text is null)
+            return TraxAnswer.Failed(
+                $"The server answered with a body larger than {max} bytes.",
+                status
+            );
+        TraxAnswer? answer;
+        try
+        {
+            answer = TraxAnswer.Of(JsonNode.Parse(text));
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
+        {
+            // Not JSON, or an object with a member twice.
+            answer = null;
+        }
+        // A refusal the host coded (errors) is an answer whatever status it chose; a status that is not success
+        // with no errors is a failure, whatever data came with it.
+        if (answer is not null && (response.IsSuccessStatusCode || answer.Errors.Count > 0))
+            return answer;
+        return TraxAnswer.Failed(
+            $"The host answered {$"{status} {response.ReasonPhrase}".TrimEnd()} with no GraphQL answer.",
+            status
+        );
     }
 
     // The body as text, or null once it passes the limit, whether or not the host said its length up front.
