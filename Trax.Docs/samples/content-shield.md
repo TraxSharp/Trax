@@ -256,9 +256,21 @@ review's included. The console's page is served only in Development, with `Allow
 and asks for the operator key on every load.
 
 Only the Moderator trains, `sendViolationNotice` and `generateModerationReport`, are
-`[TraxBroadcast]`. A broadcast train's events carry every run's output to every subscriber the train
-admits, so the anonymous review and lookup are not broadcast, and a subscriber on the API sees only
-the Moderator trains.
+`[TraxBroadcast]`. A broadcast train's events reach every subscriber the train admits, so the
+anonymous review and lookup are not broadcast, and a subscriber on the API sees only the Moderator
+trains. Their events carry no `output` unless the host opts the train in: the API calls
+`AllowOutputForBroadcastSubscribers<ISendViolationNoticeTrain>()`, since a notice's id is meant for
+every moderator, and leaves the report out.
+
+```csharp from=Trax.Samples/samples/EphemeralWorkers/Trax.Samples.ContentShield.Api/Program.cs
+builder.Services.AddTraxGraphQL(graphql =>
+    graphql
+        .ExposeOperationQueries()
+        .ExposeOperationMutations()
+        .GateOperations(roles: ContentShieldRoles.Operator)
+        .AllowOutputForBroadcastSubscribers<ISendViolationNoticeTrain>()
+);
+```
 
 The API and the runner both publish on `contentshield.lifecycle` (`LifecycleEvents.ExchangeName`),
 an exchange of their own, so another Trax application on the same broker does not receive their
