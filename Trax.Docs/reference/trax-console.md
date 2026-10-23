@@ -44,7 +44,7 @@ A host that runs no persisted operations takes the documents' text instead: give
 | `--graphql-path` | Where its Trax GraphQL endpoint is mapped (default `/trax/graphql`). The socket is the same path over `wss`. |
 | `--api-key-file`, `--token-file` | A file holding the API key (sent as `X-Api-Key`) or the bearer token. Or `TRAX_CONSOLE_API_KEY`, `TRAX_CONSOLE_TOKEN`. A file wins over the environment, and only one credential may be given. The file must be a regular file of at most 64 KiB that no other user can read or change (`chmod 600`); any other is refused. There is no option that takes the credential itself: it would be in the shell's history and the process list. |
 | `--send-text` | Send each document's text rather than its id. |
-| `--any-version` | Talk to a host of another Trax release. |
+| `--any-version` | Talk to a host of another Trax release. It passes only a release that differs: a host that refuses the credential or cannot be reached is still refused. |
 | `--vertical-graphs` | Draw machines top to bottom rather than left to right, in the console and in `graph`. |
 
 A credential is sent over HTTPS only, or to this machine; `http://` to another host is refused.
@@ -98,8 +98,18 @@ operations surface sends a machine no command.
 
 ## JSON lines
 
-With a command, `trax-console` prints JSON, one value per line, and exits 1 when the host refuses or cannot be
-reached, saying why on standard error.
+With a command, `trax-console` prints JSON, one value per line, and says what went wrong on standard error. It exits
+with:
+
+| Code | When |
+|---|---|
+| 0 | The command did what it says. `watch` ends 0 on Ctrl+C, and 1 when the host ends the stream with an error. |
+| 1 | The host refused, could not be reached, or runs another Trax release; an action or bulk operation that did not take. |
+| 2 | The command line is wrong: no host, two credentials, an unknown list, filter or action, a missing `--note`, a `--take` out of range. |
+| 130 | Interrupted while waiting for the host's version. |
+
+A host that answers `CLIENT_OUTDATED` in the middle of a session, after a deploy, is refused like one of another
+release at connect: the refusal names the code and the install line, here and in the console.
 
 | Command | What it prints |
 |---|---|

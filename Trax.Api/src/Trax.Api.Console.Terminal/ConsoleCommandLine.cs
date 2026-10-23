@@ -66,7 +66,8 @@ internal static class ConsoleCommandLine
         var anyVersion = new Option<bool>("--any-version")
         {
             Description =
-                "Talk to a host of another Trax release anyway. Documents that differ between the two are refused.",
+                "Talk to a host of another Trax release anyway. Documents that differ between the two are refused. "
+                + "A host that refuses the credential or cannot be reached is still refused.",
             Recursive = true,
         };
 
@@ -101,7 +102,8 @@ internal static class ConsoleCommandLine
                     () => Target(p),
                     p.GetValue(anyVersion),
                     async (session, version) =>
-                        await ConsoleApp.RunAsync(session, version, p.GetValue(verticalGraphs), ct)
+                        await ConsoleApp.RunAsync(session, version, p.GetValue(verticalGraphs), ct),
+                    ct
                 )
         );
 
@@ -148,7 +150,8 @@ internal static class ConsoleCommandLine
                             stdout,
                             stderr,
                             ct
-                        )
+                        ),
+                    ct
                 )
         );
 
@@ -200,7 +203,8 @@ internal static class ConsoleCommandLine
                             p.GetValue(dryRun),
                             stdout,
                             ct
-                        )
+                        ),
+                    ct
                 )
         );
 
@@ -241,7 +245,8 @@ internal static class ConsoleCommandLine
                             p.GetValue(dryRun),
                             stdout,
                             ct
-                        )
+                        ),
+                    ct
                 )
         );
 
@@ -275,7 +280,8 @@ internal static class ConsoleCommandLine
                             stdout,
                             stderr,
                             ct
-                        )
+                        ),
+                    ct
                 )
         );
 
@@ -292,13 +298,8 @@ internal static class ConsoleCommandLine
                     () => Target(p),
                     p.GetValue(anyVersion),
                     (session, _) =>
-                        HeadlessCommands.TraceAsync(
-                            session,
-                            p.GetValue(run),
-                            stdout,
-                            stderr,
-                            ct
-                        )
+                        HeadlessCommands.TraceAsync(session, p.GetValue(run), stdout, stderr, ct),
+                    ct
                 )
         );
 
@@ -329,7 +330,8 @@ internal static class ConsoleCommandLine
                             stdout,
                             stderr,
                             ct
-                        )
+                        ),
+                    ct
                 )
         );
 
@@ -344,8 +346,9 @@ internal static class ConsoleCommandLine
                     stderr,
                     () => Target(p),
                     anyVersion: true,
-                    (session, version) =>
-                        HeadlessCommands.CheckAsync(session, version, stdout)
+                    (session, version) => HeadlessCommands.CheckAsync(session, version, stdout),
+                    ct,
+                    reports: true
                 )
         );
 
@@ -359,13 +362,26 @@ internal static class ConsoleCommandLine
         return root;
     }
 
-    // Connects, checks the host's release, and runs the command; a refusal is a message and exit code 1.
+    /// <summary>A refusal: the host refused, could not be reached, or runs another release.</summary>
+    public const int Refused = 1;
+
+    /// <summary>The command line is wrong: an unknown option, filter or action, or no host or credential to use.</summary>
+    public const int Usage = 2;
+
+    /// <summary>Interrupted (Ctrl+C) before the host answered the version check.</summary>
+    public const int Interrupted = 130;
+
+    // Connects, checks the host's release, and runs the command. --any-version passes a host of another release, and
+    // nothing else: a check that failed (a refused credential, a host that cannot be reached) refuses every command
+    // but check, which says why itself.
     private static async Task<int> Run(
         Func<ConsoleTarget, ConsoleSession> open,
         TextWriter error,
         Func<ConsoleTarget> target,
         bool anyVersion,
-        Func<ConsoleSession, VersionCheck, Task<int>> command
+        Func<ConsoleSession, VersionCheck, Task<int>> command,
+        CancellationToken ct,
+        bool reports = false
     )
     {
         ConsoleSession session;
@@ -376,14 +392,22 @@ internal static class ConsoleCommandLine
         catch (InvalidOperationException ex)
         {
             error.WriteLine(TerminalText.Block(ex.Message));
-            return 2;
+            return Usage;
         }
         await using (session)
         {
-            var version = await session.CheckVersionAsync();
+            VersionCheck version;
+            try
+            {
+                version = await session.CheckVersionAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return Interrupted;
+            }
             switch (version)
             {
-                case VersionCheck.Failed failed when !anyVersion:
+                case VersionCheck.Failed failed when !reports:
                     error.WriteLine(
                         TerminalText.Block(
                             failed.Code is null
@@ -391,10 +415,10 @@ internal static class ConsoleCommandLine
                                 : $"{failed.Code}: {failed.Message}"
                         )
                     );
-                    return 1;
-                case VersionCheck.Other other when !anyVersion:
+                    return Refused;
+                case VersionCheck.Other other when !anyVersion && !reports:
                     error.WriteLine(TerminalText.Line(other.Message));
-                    return 1;
+                    return Refused;
             }
             try
             {
@@ -402,8 +426,8 @@ internal static class ConsoleCommandLine
             }
             catch (InvalidOperationException ex)
             {
-                error.WriteLine(ex.Message);
-                return 2;
+                error.WriteLine(TerminalText.Block(ex.Message));
+                return Usage;
             }
         }
     }

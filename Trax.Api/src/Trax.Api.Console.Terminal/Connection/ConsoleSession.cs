@@ -16,11 +16,13 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
 {
     private readonly HttpClient? _http;
     private readonly GraphQLSubscriptionSocket? _socket;
+    private readonly OutdatedTransport _transport;
 
-    private ConsoleSession(ConsoleTarget target, TraxClient client)
+    private ConsoleSession(ConsoleTarget target, ITraxTransport transport)
     {
         Target = target;
-        Client = client;
+        _transport = new OutdatedTransport(transport);
+        Client = new TraxClient(_transport);
     }
 
     private ConsoleSession(ConsoleTarget target, HttpClient http, GraphQLSubscriptionSocket socket)
@@ -28,7 +30,7 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
         Target = target;
         _http = http;
         _socket = socket;
-        Client = new TraxClient(
+        _transport = new OutdatedTransport(
             new TraxHttpTransport(
                 new TraxHttpTransportOptions
                 {
@@ -42,6 +44,7 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
                 }
             )
         );
+        Client = new TraxClient(_transport);
     }
 
     /// <summary>What it talks to.</summary>
@@ -121,7 +124,7 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
 
     /// <summary>A session over <paramref name="transport"/>, for a test that scripts the host.</summary>
     internal static ConsoleSession Over(ConsoleTarget target, ITraxTransport transport) =>
-        new(target, new TraxClient(transport));
+        new(target, transport);
 
     /// <summary>
     /// Asks the host which Trax release it runs and refuses one of another: the console's documents are content
@@ -147,6 +150,7 @@ internal sealed partial class ConsoleSession : IAsyncDisposable
                 null,
                 "The host answered a version that is not a Trax release number."
             );
+        _transport.HostVersion = host;
         return host == ToolVersion ? new VersionCheck.Same(host) : new VersionCheck.Other(host);
     }
 
