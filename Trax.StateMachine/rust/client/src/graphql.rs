@@ -13,7 +13,7 @@ use reqwest::header::HeaderMap;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use trax_state_machine::{Map, Value};
@@ -64,7 +64,9 @@ pub struct GraphQLMachineServerOptions {
     pub headers: Option<RequestHeaders>,
     /// The `connection_init` payload, asked for on every connection: how a host authenticates a socket.
     pub connection_params: Option<ConnectionParams>,
-    /// Delays before subscribing again after a stream that ended without saying why. The last repeats.
+    /// Delays before subscribing again after a stream that ended without saying why. The last repeats. A socket the
+    /// host refused (closed with 4401 or 4403, or an upgrade answered 401 or 403) is not subscribed again: the stream
+    /// delivers [`StreamMessage::Refused`] and ends.
     pub resubscribe_delays: Option<Vec<Duration>>,
     /// How long a socket may take to connect and be acknowledged before the attempt counts as failed and is tried
     /// again after the resubscribe delays. [`DEFAULT_CONNECT_TIMEOUT`] (10 seconds) by default.
@@ -479,7 +481,8 @@ impl Drop for Stream {
 
 // How one subscription over one socket ended.
 enum Ended {
-    // For good: the instance is gone, or this client is outdated. Nothing is subscribed again.
+    // For good: the instance is gone, this client is outdated, or the host refused the socket. Nothing is subscribed
+    // again.
     ForGood,
     // Without saying why: subscribed again after the next delay.
     Again,
@@ -502,14 +505,15 @@ impl Inner {
         }
     }
 
-    // Opens a socket and has it acknowledged; `None` when it could not be, the host's refusal included.
-    async fn connect(&self) -> Option<Socket> {
+    // Opens a socket and has it acknowledged. `Err(Some)` when the host refused it (a 401 or 403 upgrade, or a close
+    // with 4401 or 4403 before the acknowledgement), `Err(None)` when it could not be opened for any other reason.
+    async fn connect(&self) -> Result<Socket, Option<ServerProblem>> {
         let Ok(mut request) = self.socket.as_str().into_client_request() else {
-            return None;
+            return Err(None);
         };
         if let Some(headers) = &self.headers {
             let Ok(headers) = headers().await else {
-                return None;
+                return Err(None);
             };
             request.headers_mut().extend(headers);
         }
@@ -520,9 +524,12 @@ impl Inner {
         let config = WebSocketConfig::default()
             .max_message_size(Some(self.max_message_size))
             .max_frame_size(Some(self.max_message_size));
-        let Ok((mut socket, _)) = tokio_tungstenite::connect_async_with_config(request, Some(config), false).await
-        else {
-            return None;
+        let mut socket = match tokio_tungstenite::connect_async_with_config(request, Some(config), false).await {
+            Ok((socket, _)) => socket,
+            Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+                return Err(refused_upgrade(response.status().as_u16()));
+            }
+            Err(_) => return Err(None),
         };
 
         // Asked for on every connection, so a token that expired since the last one is not sent again.
@@ -536,12 +543,12 @@ impl Inner {
                 Ok(None) => {}
                 Err(_) => {
                     let _ = socket.close(None).await;
-                    return None;
+                    return Err(None);
                 }
             }
         }
         if socket.send(Message::text(Value::Object(init).to_json())).await.is_err() {
-            return None;
+            return Err(None);
         }
         // Acknowledged, or closed before: a host that turns the caller away closes here.
         loop {
@@ -559,16 +566,22 @@ impl Inner {
                     _ => {}
                 },
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => {}
-                _ => return None,
+                Some(Ok(Message::Close(frame))) => return Err(refused_close(frame.as_ref())),
+                _ => return Err(None),
             }
         }
-        Some(socket)
+        Ok(socket)
     }
 
     async fn subscribe_once(&self, id: &str, sink: &StreamSink, attempt: &mut usize) -> Ended {
-        // A host that accepts the connection but never acknowledges it counts as one that refused it.
-        let Ok(Some(mut socket)) = tokio::time::timeout(self.connect_timeout, self.connect()).await else {
-            return Ended::Again;
+        // A host that accepts the connection but never acknowledges it is tried again; one that refused it is not.
+        let mut socket = match tokio::time::timeout(self.connect_timeout, self.connect()).await {
+            Ok(Ok(socket)) => socket,
+            Ok(Err(Some(refusal))) => {
+                sink(StreamMessage::Refused(refusal));
+                return Ended::ForGood;
+            }
+            Ok(Err(None)) | Err(_) => return Ended::Again,
         };
 
         let mut variables = Map::new();
@@ -592,6 +605,13 @@ impl Inner {
             let text = match socket.next().await {
                 Some(Ok(Message::Text(text))) => text,
                 Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_) | Message::Frame(_))) => continue,
+                Some(Ok(Message::Close(frame))) => match refused_close(frame.as_ref()) {
+                    Some(refusal) => {
+                        sink(StreamMessage::Refused(refusal));
+                        break Ended::ForGood;
+                    }
+                    None => break Ended::Again,
+                },
                 _ => break Ended::Again,
             };
             let Ok(message) = Value::parse(text.as_str()) else {
@@ -654,6 +674,43 @@ impl Inner {
         let snapshot = snapshot_of(change).filter(|s| s.revision.is_some())?;
         *attempt = 0;
         sink(StreamMessage::Changed(snapshot));
+        None
+    }
+}
+
+// The refusal a close frame is when the host turned the caller away with it: 4401 is `UNAUTHENTICATED`, 4403
+// `FORBIDDEN`. Subscribing again would get the same answer. Any other close, or none, is `None`.
+fn refused_close(frame: Option<&CloseFrame>) -> Option<ServerProblem> {
+    let frame = frame?;
+    let close = u16::from(frame.code);
+    let code = refusal_code(close, 4401, 4403)?;
+    let reason: &str = &frame.reason;
+    let message = if reason.is_empty() {
+        format!("The host refused the socket: {close}.")
+    } else {
+        format!("The host refused the socket: {close} {reason}.")
+    };
+    Some(ServerProblem {
+        code: code.to_owned(),
+        message,
+    })
+}
+
+// The refusal an upgrade's status is when the host turned the caller away with it: 401 or 403.
+fn refused_upgrade(status: u16) -> Option<ServerProblem> {
+    let code = refusal_code(status, 401, 403)?;
+    Some(ServerProblem {
+        code: code.to_owned(),
+        message: format!("The host refused the socket's upgrade: {status}."),
+    })
+}
+
+fn refusal_code(status: u16, unauthorized: u16, forbidden: u16) -> Option<&'static str> {
+    if status == unauthorized {
+        Some(codes::UNAUTHENTICATED)
+    } else if status == forbidden {
+        Some(codes::FORBIDDEN)
+    } else {
         None
     }
 }
@@ -852,6 +909,10 @@ mod tests {
     enum Reply {
         // Closes it with 4403, as a host refuses an expired token.
         Refuse,
+        // Closes it with 1011, as a host that goes away does.
+        Drop,
+        // Answers the upgrade 403, before any connection_init.
+        RejectUpgrade,
         Acknowledge,
         // Says nothing and holds the connection open.
         Silent,
@@ -864,7 +925,8 @@ mod tests {
     // A host on a loopback port that records each connection's authorization header and connection_init payload and
     // answers connection n (from 0) as `reply(n)` says.
     async fn recording_host(reply: fn(usize) -> Reply) -> (u16, Heard) {
-        use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
+        use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
+        use tokio_tungstenite::tungstenite::http::StatusCode;
         use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
         use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 
@@ -875,22 +937,31 @@ mod tests {
             for n in 0.. {
                 let (tcp, _) = listener.accept().await.unwrap();
                 let seen = seen.clone();
+                let reply = reply(n);
                 tokio::spawn(async move {
                     let mut authorization = None;
-                    let mut socket =
+                    let accepted =
                         tokio_tungstenite::accept_hdr_async(tcp, |request: &Request, mut response: Response| {
                             authorization = request
                                 .headers()
                                 .get("authorization")
                                 .map(|v| v.to_str().unwrap().to_owned());
+                            if let Reply::RejectUpgrade = reply {
+                                let mut rejected = ErrorResponse::new(Some("Forbidden".to_owned()));
+                                *rejected.status_mut() = StatusCode::FORBIDDEN;
+                                return Err(rejected);
+                            }
                             response.headers_mut().insert(
                                 "Sec-WebSocket-Protocol",
                                 HeaderValue::from_static("graphql-transport-ws"),
                             );
                             Ok(response)
                         })
-                        .await
-                        .unwrap();
+                        .await;
+                    let Ok(mut socket) = accepted else {
+                        let _ = seen.send((authorization, None));
+                        return;
+                    };
                     let Some(Ok(Message::Text(init))) = socket.next().await else {
                         return;
                     };
@@ -901,7 +972,17 @@ mod tests {
                         .and_then(|t| t.as_str())
                         .map(str::to_owned);
                     let _ = seen.send((authorization, token));
-                    match reply(n) {
+                    match reply {
+                        Reply::RejectUpgrade => unreachable!("the upgrade was answered 403"),
+                        Reply::Drop => {
+                            let _ = socket
+                                .close(Some(CloseFrame {
+                                    code: CloseCode::Error,
+                                    reason: "Going away".into(),
+                                }))
+                                .await;
+                            return;
+                        }
                         Reply::Acknowledge => {
                             let _ = socket.send(Message::text(r#"{"type":"connection_ack"}"#)).await;
                         }
@@ -932,7 +1013,7 @@ mod tests {
     async fn every_connection_asks_for_its_headers_and_params_again() {
         use std::sync::atomic::{AtomicU32, Ordering};
 
-        let (port, mut heard) = recording_host(|n| if n == 0 { Reply::Refuse } else { Reply::Acknowledge }).await;
+        let (port, mut heard) = recording_host(|n| if n == 0 { Reply::Drop } else { Reply::Acknowledge }).await;
         let mut given = options(
             &format!("http://127.0.0.1:{port}/graphql"),
             &format!("ws://127.0.0.1:{port}/graphql"),
@@ -967,6 +1048,108 @@ mod tests {
 
         assert_eq!(first, (Some("Bearer 1".into()), Some("t1".into())));
         assert_eq!(second, (Some("Bearer 2".into()), Some("t2".into())));
+    }
+
+    // Follows "i-1" on a host that answers each connection as `reply` says, and hands back what the stream delivers.
+    async fn follow_refused(
+        reply: fn(usize) -> Reply,
+    ) -> (
+        Heard,
+        tokio::sync::mpsc::UnboundedReceiver<StreamMessage>,
+        Box<dyn Subscription>,
+    ) {
+        let (port, heard) = recording_host(reply).await;
+        let mut given = options(
+            &format!("http://127.0.0.1:{port}/graphql"),
+            &format!("ws://127.0.0.1:{port}/graphql"),
+        );
+        given.resubscribe_delays = Some(vec![Duration::from_millis(10)]);
+        let server = GraphQLMachineServer::new(given).unwrap();
+        let (deliver, delivered) = tokio::sync::mpsc::unbounded_channel();
+        let stream = server.subscribe(
+            "i-1".into(),
+            Arc::new(move |message| {
+                let _ = deliver.send(message);
+            }),
+        );
+        (heard, delivered, stream)
+    }
+
+    #[tokio::test]
+    async fn a_socket_the_host_closes_with_4403_ends_the_stream_for_good() {
+        let (mut heard, mut delivered, _stream) = follow_refused(|_| Reply::Refuse).await;
+        let wait = Duration::from_secs(10);
+
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let message = tokio::time::timeout(wait, delivered.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(Duration::from_millis(200), heard.recv()).await;
+
+        assert_eq!(
+            message,
+            StreamMessage::Refused(ServerProblem {
+                code: "FORBIDDEN".into(),
+                message: "The host refused the socket: 4403 Forbidden.".into(),
+            })
+        );
+        assert!(again.is_err(), "the refused socket was opened again");
+    }
+
+    #[tokio::test]
+    async fn an_upgrade_the_host_answers_403_ends_the_stream_for_good() {
+        let (mut heard, mut delivered, _stream) = follow_refused(|_| Reply::RejectUpgrade).await;
+        let wait = Duration::from_secs(10);
+
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let message = tokio::time::timeout(wait, delivered.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(Duration::from_millis(200), heard.recv()).await;
+
+        assert_eq!(
+            message,
+            StreamMessage::Refused(ServerProblem {
+                code: "FORBIDDEN".into(),
+                message: "The host refused the socket's upgrade: 403.".into(),
+            })
+        );
+        assert!(again.is_err(), "the refused socket was opened again");
+    }
+
+    #[tokio::test]
+    async fn a_socket_the_host_closes_with_another_code_is_opened_again() {
+        let (mut heard, mut delivered, _stream) =
+            follow_refused(|n| if n == 0 { Reply::Drop } else { Reply::Silent }).await;
+        let wait = Duration::from_secs(10);
+
+        tokio::time::timeout(wait, heard.recv()).await.unwrap().unwrap();
+        let again = tokio::time::timeout(wait, heard.recv()).await;
+
+        assert!(again.is_ok(), "the dropped socket was never opened again");
+        assert!(delivered.try_recv().is_err(), "a dropped socket delivered a message");
+    }
+
+    #[test]
+    fn only_4401_and_4403_are_refusals() {
+        use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+        let frame = |code: u16| CloseFrame {
+            code: CloseCode::from(code),
+            reason: "".into(),
+        };
+
+        assert_eq!(
+            refused_close(Some(&frame(4401))).map(|p| p.code),
+            Some("UNAUTHENTICATED".to_owned())
+        );
+        assert_eq!(
+            refused_close(Some(&frame(4403))),
+            Some(ServerProblem {
+                code: "FORBIDDEN".into(),
+                message: "The host refused the socket: 4403.".into(),
+            })
+        );
+        assert_eq!(refused_close(Some(&frame(1011))), None);
+        assert_eq!(refused_close(Some(&frame(4500))), None);
+        assert_eq!(refused_close(None), None);
+        assert_eq!(refused_upgrade(401).map(|p| p.code), Some("UNAUTHENTICATED".to_owned()));
+        assert_eq!(refused_upgrade(502), None);
     }
 
     #[tokio::test]

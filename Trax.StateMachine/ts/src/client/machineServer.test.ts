@@ -345,6 +345,37 @@ describe('createMachineServer change stream', () => {
     expect(socket.subscriptions).toHaveLength(1);
   });
 
+  it('a socket the host closed with 4401 or 4403 is not subscribed again, and ends the stream naming the code', () => {
+    vi.useFakeTimers();
+    const unauthorized = follow([100]);
+    unauthorized.socket.last.sink.error({ code: 4401, reason: 'Unauthorized' });
+    const forbidden = follow([100]);
+    forbidden.socket.last.sink.error({ code: 4403, reason: '' });
+    vi.advanceTimersByTime(10_000);
+
+    expect(unauthorized.messages).toEqual([
+      { type: 'ended', code: 'UNAUTHENTICATED', message: 'The host refused the socket: 4401 Unauthorized.' },
+    ]);
+    expect(unauthorized.socket.subscriptions).toHaveLength(1);
+    expect(forbidden.messages).toEqual([
+      { type: 'ended', code: 'FORBIDDEN', message: 'The host refused the socket: 4403.' },
+    ]);
+    expect(forbidden.socket.subscriptions).toHaveLength(1);
+  });
+
+  it('subscribes again after a socket closed with any other code', () => {
+    vi.useFakeTimers();
+    const { socket, messages } = follow([100]);
+
+    socket.last.sink.error({ code: 1011, reason: 'Going away' });
+    vi.advanceTimersByTime(100);
+    socket.last.sink.error({ code: 4500, reason: 'Internal error' });
+    vi.advanceTimersByTime(100);
+
+    expect(messages).toEqual([]);
+    expect(socket.subscriptions).toHaveLength(3);
+  });
+
   it('subscribes again after an error whose code was not marked terminal', () => {
     vi.useFakeTimers();
     const { socket, messages } = follow([100], ['CONNECTION_CHANGED']);

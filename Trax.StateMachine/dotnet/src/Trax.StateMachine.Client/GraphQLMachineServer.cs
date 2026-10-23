@@ -37,7 +37,8 @@ public sealed record GraphQLMachineServerOptions
 
     /// <summary>
     /// Delays before subscribing again after a stream that ended without saying why (its host stopped, or the socket
-    /// closed). The last repeats for as long as the stream is wanted.
+    /// closed). The last repeats for as long as the stream is wanted. A socket the host refused (4401, 4403, or an
+    /// upgrade answered 401 or 403) is not subscribed again: it stops the controller.
     /// </summary>
     public IReadOnlyList<TimeSpan>? ResubscribeDelays { get; init; }
 
@@ -291,8 +292,10 @@ public sealed partial class GraphQLMachineServer : IMachineServer
     /// <remarks>
     /// Each push becomes a message: a snapshot (with its incarnation), <see cref="StreamMessage.Gone"/> for a deleted
     /// instance or one the server will not let the caller watch, <see cref="StreamMessage.ClientOutdated"/>, and
-    /// <see cref="StreamMessage.Reload"/> when the server asks for one. A stream that ends any other way is subscribed
-    /// again after the resubscribe delays; the new stream's first event is the instance as it is then.
+    /// <see cref="StreamMessage.Reload"/> when the server asks for one. A socket the host refused (closed with 4401 or
+    /// 4403, or an upgrade answered 401 or 403) is <see cref="StreamMessage.Refused"/>, and is not subscribed again. A
+    /// stream that ends any other way is subscribed again after the resubscribe delays; the new stream's first event
+    /// is the instance as it is then.
     /// </remarks>
     public IDisposable Subscribe(string id, Action<StreamMessage> onMessage)
     {
@@ -404,7 +407,25 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             );
         }
 
-        public void Error(Exception error) => Again();
+        public void Error(Exception error)
+        {
+            if (RefusedCode(error) is { } code)
+                Deliver(new StreamMessage.Refused(code, error.Message));
+            else
+                Again();
+        }
+
+        // The code a socket the host refused stops the controller with, or null for a close to subscribe again after.
+        private static string? RefusedCode(Exception error) =>
+            error switch
+            {
+                SocketClosedException { CloseStatus: 4401 }
+                or SocketClosedException { HttpStatus: 401 } =>
+                    RefusalCode.Unauthenticated.ToWire(),
+                SocketClosedException { CloseStatus: 4403 }
+                or SocketClosedException { HttpStatus: 403 } => RefusalCode.Forbidden.ToWire(),
+                _ => null,
+            };
 
         public void Complete() => Again();
 
@@ -414,7 +435,12 @@ public sealed partial class GraphQLMachineServer : IMachineServer
             {
                 if (!_wanted || _ended)
                     return;
-                if (message is StreamMessage.Gone or StreamMessage.ClientOutdated)
+                if (
+                    message
+                    is StreamMessage.Gone
+                        or StreamMessage.ClientOutdated
+                        or StreamMessage.Refused
+                )
                     _ended = true;
             }
             onMessage(message);

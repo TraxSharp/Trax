@@ -78,6 +78,10 @@ pub enum StreamMessage {
     Reload,
     /// The server no longer serves this client's version of the machine.
     ClientOutdated,
+    /// The host refused the socket: it closed it with 4401 or 4403, or answered its upgrade 401 or 403. Subscribing
+    /// again would get the same answer. The code is `UNAUTHENTICATED` for 4401 and 401, `FORBIDDEN` for 4403 and 403;
+    /// the message names the code the host closed or answered with.
+    Refused(ServerProblem),
 }
 
 /// One event, as the controller sends it.

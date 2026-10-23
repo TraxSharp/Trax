@@ -82,6 +82,13 @@ public abstract record StreamMessage
 
     /// <summary>The server no longer serves this client's version of the machine.</summary>
     public sealed record ClientOutdated : StreamMessage;
+
+    /// <summary>
+    /// The host refused the socket: it closed it with 4401 or 4403, or answered its upgrade 401 or 403. Subscribing
+    /// again would get the same answer. <see cref="Code"/> is <c>UNAUTHENTICATED</c> for 4401 and 401,
+    /// <c>FORBIDDEN</c> for 4403 and 403; <see cref="Message"/> names the code the host closed or answered with.
+    /// </summary>
+    public sealed record Refused(string Code, string Message) : StreamMessage;
 }
 
 /// <summary>

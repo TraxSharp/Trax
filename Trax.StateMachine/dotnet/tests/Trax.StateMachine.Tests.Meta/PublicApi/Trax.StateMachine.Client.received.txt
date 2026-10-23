@@ -179,6 +179,12 @@ namespace Trax.StateMachine.Client
             public Gone(bool NotFound) { }
             public bool NotFound { get; init; }
         }
+        public sealed class Refused : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Refused>
+        {
+            public Refused(string Code, string Message) { }
+            public string Code { get; init; }
+            public string Message { get; init; }
+        }
         public sealed class Reload : Trax.StateMachine.Client.StreamMessage, System.IEquatable<Trax.StateMachine.Client.StreamMessage.Reload>
         {
             public Reload() { }
