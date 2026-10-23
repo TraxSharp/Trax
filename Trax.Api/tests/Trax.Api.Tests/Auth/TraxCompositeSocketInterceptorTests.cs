@@ -30,7 +30,7 @@ public class TraxCompositeSocketInterceptorTests
     private const string Issuer = "https://composite-test";
     private const string OtherIssuer = "https://composite-test-other";
     private const string Audience = "composite";
-    internal const string ApiKey = "composite-api-key";
+    internal const string ApiKey = "composite-api-key-0123456789abcdefghijkl";
     private static readonly byte[] Key = Encoding.UTF8.GetBytes(new string('c', 32));
     private static readonly byte[] OtherKey = Encoding.UTF8.GetBytes(new string('o', 32));
 

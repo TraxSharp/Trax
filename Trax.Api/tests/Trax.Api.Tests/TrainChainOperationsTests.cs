@@ -34,7 +34,7 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class TrainChainOperationsTests
 {
-    private const string Key = "train-chain-admin-key";
+    private const string Key = "train-chain-admin-key-0123456789abcdefgh";
 
     private IHost _host = null!;
     private IDataContextProviderFactory _factory = null!;

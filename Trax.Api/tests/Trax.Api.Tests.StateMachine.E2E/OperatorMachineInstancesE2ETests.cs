@@ -35,8 +35,8 @@ namespace Trax.Api.StateMachine.E2E;
 public class OperatorMachineInstancesE2ETests
 {
     private const string Database = "trax_statemachine_operator_e2e";
-    private const string OperatorKey = "sm-operator-key";
-    private const string ShopperKey = "sm-shopper-key";
+    private const string OperatorKey = "sm-operator-key-0123456789abcdefghijklmn";
+    private const string ShopperKey = "sm-shopper-key-0123456789abcdefghijklmno";
 
     private IHost _host = null!;
     private Guid _draftId;

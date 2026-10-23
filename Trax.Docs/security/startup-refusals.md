@@ -91,6 +91,7 @@ Roles are never checked at startup: Trax has no list of the roles that can exist
 | Cause | Raised | Message begins | Answer |
 |---|---|---|---|
 | An API key containing `do-not-use-in-production` registered with `keys.Add(...)`, outside Development | Host start | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production', which marks a published demo key, ...` | Register demo keys only inside `IsDevelopment()`; elsewhere `AddHashed(...)` or a resolver |
+| An API key shorter than 32 characters registered with `keys.Add(...)`, outside Development | Host start | `AddTraxApiKeyAuth() registered a key shorter than 32 characters, and the environment is '<name>'. ...` | Keys of at least 32 random characters, from a secret store through `AddHashed(...)` or a resolver |
 | A JWT bearer scheme whose signing key contains `do-not-use-in-production`, outside Development, however the key was set | Host start | `The JWT bearer scheme '<scheme>' validates tokens with a signing key containing 'do-not-use-in-production', ...` | Load the key from a secret store, or `UseAuthority(...)` |
 
 A key fetched from an authority's JWKS, or produced by an `IssuerSigningKeyResolver`, does not exist

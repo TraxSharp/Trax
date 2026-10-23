@@ -33,8 +33,8 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class LookupOperationsTests
 {
-    private const string AdminKey = "lookup-admin-key";
-    private const string ReaderKey = "lookup-reader-key";
+    private const string AdminKey = "lookup-admin-key-0123456789abcdefghijklm";
+    private const string ReaderKey = "lookup-reader-key-0123456789abcdefghijkl";
 
     private IHost _host = null!;
     private IDataContextProviderFactory _factory = null!;

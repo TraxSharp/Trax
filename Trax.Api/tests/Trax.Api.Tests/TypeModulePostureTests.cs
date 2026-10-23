@@ -77,7 +77,9 @@ public class TypeModulePostureTests
                     {
                         s.AddLogging();
                         s.AddRouting();
-                        s.AddTraxApiKeyAuth(keys => keys.Add("module-key", id: "reader"));
+                        s.AddTraxApiKeyAuth(keys =>
+                            keys.Add("module-key-0123456789abcdefghijklmnopqrs", id: "reader")
+                        );
                         s.AddSingleton<TraxMarker>();
                         var discovery = Substitute.For<ITrainDiscoveryService>();
                         discovery.DiscoverTrains().Returns([]);

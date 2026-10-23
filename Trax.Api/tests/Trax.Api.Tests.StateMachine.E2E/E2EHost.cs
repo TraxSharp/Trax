@@ -42,19 +42,19 @@ namespace Trax.Api.StateMachine.E2E;
 /// </summary>
 public static class E2EHost
 {
-    public const string AdminApiKey = "sm-e2e-admin-key";
+    public const string AdminApiKey = "sm-e2e-admin-key-0123456789abcdefghijklm";
 
     /// <summary>A user who holds both roles the wizard's rules name.</summary>
-    public const string AliceKey = "sm-e2e-alice-key";
+    public const string AliceKey = "sm-e2e-alice-key-0123456789abcdefghijklm";
 
     /// <summary>A user with no roles.</summary>
-    public const string BobKey = "sm-e2e-bob-key";
+    public const string BobKey = "sm-e2e-bob-key-0123456789abcdefghijklmno";
 
     /// <summary>A user who may pay but not approve.</summary>
-    public const string CarolKey = "sm-e2e-carol-key";
+    public const string CarolKey = "sm-e2e-carol-key-0123456789abcdefghijklm";
 
     /// <summary>An operator (with Admin as well), who reaches the operations surface and no user's draft.</summary>
-    public const string OperatorKey = "sm-e2e-operator-key";
+    public const string OperatorKey = "sm-e2e-operator-key-0123456789abcdefghij";
 
     /// <summary>The role the operations surface is gated to when a host exposes it.</summary>
     public const string OperatorRole = "Operator";

@@ -95,7 +95,10 @@ app.Run();
 What each part does, and where it can differ:
 
 - **Credentials.** A key or signing key containing `do-not-use-in-production` refuses the host
-  outside Development, so a copied demo credential cannot go live. In production, register API keys
+  outside Development, so a copied demo credential cannot go live, and so does an API key added
+  with `keys.Add` shorter than 32 characters. Put the endpoint behind
+  [ASP.NET Core rate limiting](https://learn.microsoft.com/aspnet/core/performance/rate-limit) so
+  keys cannot be tried at the rate the server answers. In production, register API keys
   as a salt and SHA-256 hash from a secret store with `AddHashed`, or resolve them yourself with
   `AddTraxApiKeyAuth<TResolver>()`; take JWTs from your identity provider with
   `AddTraxJwtAuth(authority, audience)`. For tokens from several issuers use

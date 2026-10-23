@@ -58,9 +58,9 @@ public class JunctionEventsE2ETests
     private const string Database = "trax_api_junction_events";
     private const string WsUri = "ws://localhost/trax/graphql";
 
-    private const string AdminKey = "junction-admin-key";
-    private const string PlayerKey = "junction-player-key";
-    private const string GuestKey = "junction-guest-key";
+    private const string AdminKey = "junction-admin-key-0123456789abcdefghijk";
+    private const string PlayerKey = "junction-player-key-0123456789abcdefghij";
+    private const string GuestKey = "junction-guest-key-0123456789abcdefghijk";
 
     /// <summary>Carried by every input, output and failure message the trains handle.</summary>
     internal const string Marker = "S3CRET-MARKER-7f2c";

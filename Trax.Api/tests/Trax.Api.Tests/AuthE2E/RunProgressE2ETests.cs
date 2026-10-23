@@ -51,8 +51,8 @@ public class RunProgressE2ETests
 
     private const string Database = "trax_api_run_progress";
     private const string WsUri = "ws://localhost/trax/graphql";
-    private const string AliceKey = "progress-alice-key";
-    private const string BobKey = "progress-bob-key";
+    private const string AliceKey = "progress-alice-key-0123456789abcdefghijk";
+    private const string BobKey = "progress-bob-key-0123456789abcdefghijklm";
     internal const string Marker = "PROGRESS-MARKER-41d9";
 
     private const string Fields =

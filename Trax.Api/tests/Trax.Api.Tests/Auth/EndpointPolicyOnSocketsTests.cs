@@ -41,8 +41,8 @@ namespace Trax.Api.Tests.Auth;
 public class EndpointPolicyOnSocketsTests
 {
     private const string Adr = "docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md";
-    private const string AdminKey = "policy-admin-key";
-    private const string ReaderKey = "policy-reader-key";
+    private const string AdminKey = "policy-admin-key-0123456789abcdefghijklm";
+    private const string ReaderKey = "policy-reader-key-0123456789abcdefghijkl";
     private const string AdminPolicy = "EndpointPolicyOnSocketsAdmin";
     private const string TriggerMutation =
         """mutation { operations { disableManifest(externalId: "m-1") { success } } }""";

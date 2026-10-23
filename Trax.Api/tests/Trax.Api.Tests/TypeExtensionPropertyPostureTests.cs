@@ -77,7 +77,9 @@ public class TypeExtensionPropertyPostureTests
                     {
                         s.AddLogging();
                         s.AddRouting();
-                        s.AddTraxApiKeyAuth(keys => keys.Add("posture-key", id: "reader"));
+                        s.AddTraxApiKeyAuth(keys =>
+                            keys.Add("posture-key-0123456789abcdefghijklmnopqr", id: "reader")
+                        );
                         s.AddSingleton<TraxMarker>();
                         var discovery = Substitute.For<ITrainDiscoveryService>();
                         discovery.DiscoverTrains().Returns([]);

@@ -406,8 +406,8 @@ public class AskAfreshMutationsTests
 
     #region Over HTTP, behind the operations gate
 
-    private const string AdminKey = "ask-afresh-admin";
-    private const string ReaderKey = "ask-afresh-reader";
+    private const string AdminKey = "ask-afresh-admin-0123456789abcdefghijklm";
+    private const string ReaderKey = "ask-afresh-reader-0123456789abcdefghijkl";
 
     private static readonly string[] Documents =
     [

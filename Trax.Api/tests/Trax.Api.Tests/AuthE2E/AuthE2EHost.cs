@@ -101,8 +101,8 @@ public static class AuthE2EHost
     public const string JwtAudience = "trax-e2e";
     public static readonly byte[] JwtKey = Encoding.UTF8.GetBytes(new string('e', 32));
 
-    public const string AdminApiKey = "admin-e2e-key";
-    public const string PlayerApiKey = "player-e2e-key";
+    public const string AdminApiKey = "admin-e2e-key-0123456789abcdefghijklmnop";
+    public const string PlayerApiKey = "player-e2e-key-0123456789abcdefghijklmno";
 
     /// <summary>Flags controlling which auth schemes the host wires up.</summary>
     [Flags]

@@ -45,8 +45,8 @@ public class RunProgressInvokedRunE2ETests
         "Trax.Docs/adr/0051-only-the-caller-who-started-a-run-may-follow-its-progress.md";
 
     private const string Database = "trax_api_run_progress_invoked";
-    private const string AliceKey = "invoked-alice-key";
-    private const string BobKey = "invoked-bob-key";
+    private const string AliceKey = "invoked-alice-key-0123456789abcdefghijkl";
+    private const string BobKey = "invoked-bob-key-0123456789abcdefghijklmn";
 
     private const string EventFields = "sequence state problem { code }";
 

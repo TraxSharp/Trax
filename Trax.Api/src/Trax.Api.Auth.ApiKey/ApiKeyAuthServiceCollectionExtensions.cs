@@ -23,7 +23,8 @@ public static class ApiKeyAuthServiceCollectionExtensions
     /// Keys configured through the builder are salted and SHA-256 hashed at
     /// registration time and compared in constant time on every request. A key added with
     /// <see cref="ApiKeyBuilder.Add(string, string, string[])"/> that contains
-    /// <see cref="ApiKeyBuilder.DemoKeyMarker"/> makes the host refuse to start outside
+    /// <see cref="ApiKeyBuilder.DemoKeyMarker"/>, or is shorter than
+    /// <see cref="ApiKeyBuilder.MinimumKeyLength"/>, makes the host refuse to start outside
     /// Development.
     /// </summary>
     /// <param name="services">The service collection.</param>
@@ -48,6 +49,8 @@ public static class ApiKeyAuthServiceCollectionExtensions
         var resolver = builder.Build();
         if (builder.HasDemoKey)
             services.AddSingleton<IHostedService, DemoApiKeyEnvironmentValidator>();
+        if (builder.HasShortKey)
+            services.AddSingleton<IHostedService, ShortApiKeyEnvironmentValidator>();
 
         return AddTraxApiKeyAuthWithInstance(services, resolver, configureOptions);
     }

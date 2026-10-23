@@ -38,7 +38,7 @@ namespace Trax.Api.Tests;
 [TestFixture]
 public class RunGraphOverHttpTests
 {
-    private const string Key = "graph-admin-key";
+    private const string Key = "graph-admin-key-0123456789abcdefghijklmn";
     private const string Train = "Acme.IDeepTrain";
 
     // Six Parallel steps, each nested in a branch of the one before, with a junction at the bottom.

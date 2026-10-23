@@ -39,8 +39,8 @@ namespace Trax.Api.Tests.Auth;
 [TestFixture]
 public class AdminOperationsAuthorizationTests
 {
-    internal const string AdminApiKey = "admin-ops-key";
-    internal const string ReaderApiKey = "reader-ops-key";
+    internal const string AdminApiKey = "admin-ops-key-0123456789abcdefghijklmnop";
+    internal const string ReaderApiKey = "reader-ops-key-0123456789abcdefghijklmno";
     private const string OperationsHealthQuery = "{ operations { health { status } } }";
     internal const string PublicQuery = "{ publicPing }";
     internal const string GatedQuery = "{ gatedPing }";

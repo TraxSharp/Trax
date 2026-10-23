@@ -13,6 +13,7 @@ source:
   - Trax.Api/src/Trax.Api.Auth.ApiKey/ApiKeyBuilder.cs
   - Trax.Api/src/Trax.Api.Auth.ApiKey/ApiKeyAuthHandler.cs
   - Trax.Api/src/Trax.Api.Auth.ApiKey/DemoApiKeyEnvironmentValidator.cs
+  - Trax.Api/src/Trax.Api.Auth.ApiKey/ShortApiKeyEnvironmentValidator.cs
 ---
 
 # AddTraxApiKeyAuth
@@ -39,6 +40,7 @@ public static AuthenticationBuilder AddTraxApiKeyAuth<TResolver>(
 public sealed class ApiKeyBuilder
 {
     public const string DemoKeyMarker = "do-not-use-in-production";
+    public const int MinimumKeyLength = 32;
 
     public ApiKeyBuilder Add(string key, string id, params string[] roles);
     public ApiKeyBuilder Add(string key, Func<TraxPrincipal> principalFactory);
@@ -66,6 +68,7 @@ public sealed class ApiKeyBuilder
 | `AddHashed(byte[] salt, byte[] sha256, string id, params string[] roles)` | A pre-hashed key: cleartext never enters the process. Builds the same principal as `Add(key, id, roles)`. |
 | `AddHashed(byte[] salt, byte[] sha256, Func<TraxPrincipal> principalFactory)` | A pre-hashed key with a principal factory. |
 | `DemoKeyMarker` | `do-not-use-in-production`, the marker of a published demo key. |
+| `MinimumKeyLength` | `32`, the fewest characters a key added with `Add` may have outside Development. |
 
 `sha256` is `SHA-256(salt || UTF-8(key))`, the salt bytes followed by the key's UTF-8 bytes. `AddHashed` throws `ArgumentException` for an empty salt or a hash that is not 32 bytes. `Add` and `AddHashed` throw for a null or blank key or id.
 
@@ -104,6 +107,12 @@ AddTraxApiKeyAuth<TResolver>()) outside Development.
 
 Keys added with `AddHashed`, and keys a resolver accepts, are not inspected.
 
+### Keys are at least 32 characters outside Development
+
+A key is the whole credential, so its length is what stands between a caller and guessing it. A key added with `Add` that is shorter than `MinimumKeyLength` (32) characters makes the host refuse to start in any environment other than Development, the same way a demo key does, and the message never repeats the key. Generate keys from a cryptographic source, such as 32 random bytes base64-encoded (44 characters), and keep them in a secret store; `AddHashed` takes them without the cleartext entering the process. Keys added with `AddHashed`, and keys a resolver accepts, are not inspected, so a resolver enforces its own length.
+
+The scheme does not limit how often a caller may try a key. Put the GraphQL endpoint behind [ASP.NET Core rate limiting](https://learn.microsoft.com/aspnet/core/performance/rate-limit) (`AddRateLimiter` and `RequireRateLimiting` on the mapped route) so a caller cannot try keys at the rate the server answers.
+
 ### Policies and default scheme
 
 `AddTraxApiKeyAuth` registers the policy `ApiKeyDefaults.PolicyName`, satisfied only by a caller this scheme authenticated, and adds the scheme to the combined `TraxAuthClaimTypes.TraxAuthPolicy`. It does not set a default authentication scheme. The Trax GraphQL endpoint authenticates each request against every registered scheme in registration order and keeps the first that succeeds, so `[TraxAuthorize]`, `GateOperations(...)` and the builder's `RequireAuthorization()` see an API-key caller. On other routes ASP.NET Core runs only the schemes a policy names, and a plain `RequireAuthorization()` names none: name `ApiKeyDefaults.PolicyName` or `TraxAuthPolicy`.
@@ -117,6 +126,7 @@ Keys added with `AddHashed`, and keys a resolver accepts, are not inspected.
 | `ApiKeyPolicy`, and `TraxApiKey` in `TraxAuthPolicy` | |
 | [`TraxPrincipal` and `TraxCaller`](/docs/sdk-reference/api-auth/add-trax-principal-accessor), through `AddTraxPrincipalAccessor()`, and `IHttpContextAccessor` | Scoped |
 | The demo-key startup check, when a marked key was added | Hosted service |
+| The key-length startup check, when a key shorter than `MinimumKeyLength` was added | Hosted service |
 | The NO WARRANTY startup log, registered once | Hosted service |
 
 A host that calls `AddTraxApiKeyAuth` conditionally also calls `services.AddAuthentication()` and `services.AddTraxPrincipalAccessor()` unconditionally: without the first, `app.UseAuthentication()` throws when no scheme was registered, and without the second the mediator refuses to start a host whose junctions inject `TraxPrincipal`. Both are idempotent.

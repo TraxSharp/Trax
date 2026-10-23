@@ -41,7 +41,7 @@ namespace Trax.Api.Tests.Auth;
 public class SchemePolicyRequiresItsSchemeTests
 {
     private const string Adr = "docs/adr/0010-a-scheme-policy-requires-its-scheme.md";
-    private const string ApiKey = "scheme-policy-key";
+    private const string ApiKey = "scheme-policy-key-0123456789abcdefghijkl";
     private const string Issuer = "https://scheme-policy.example";
     private const string Audience = "scheme-policy";
     private static readonly byte[] JwtKey = Encoding.UTF8.GetBytes(new string('j', 32));
