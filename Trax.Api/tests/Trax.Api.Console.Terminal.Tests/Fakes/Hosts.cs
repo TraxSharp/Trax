@@ -106,8 +106,14 @@ internal sealed class StreamingHost(ITraxTransport inner) : ITraxTransport
         CancellationToken cancellationToken = default
     ) => inner.ExecuteAsync(request, cancellationToken);
 
+    private int _subscribed;
+
+    /// <summary>Whether a stream was followed again after it failed, which the client does after an interruption.</summary>
+    public bool Interrupted => Volatile.Read(ref _subscribed) > 1;
+
     public IDisposable Subscribe(TraxRequest request, ISubscriptionSink sink)
     {
+        Interlocked.Increment(ref _subscribed);
         lock (_streams)
             _streams.Add((request, sink));
         sink.Started();
