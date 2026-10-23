@@ -165,6 +165,10 @@ public readonly record struct Optional<T>
 - **Redirects.** An `HttpClient` follows redirects by default and drops only `Authorization` when it does, so a default
   header such as `X-Api-Key` would follow a redirect to whatever host it names. Build the client on a handler with
   `AllowAutoRedirect = false`, as the example does; a GraphQL endpoint has no reason to redirect a POST.
+  `GraphQLSubscriptionSocket` follows no redirect of its upgrade either, since `connection_init` carries the
+  credential: a redirected upgrade fails the connection. Outside a browser it upgrades through its own handler, so a
+  proxy, credentials, client certificates, a certificate callback or cookies set in `ConfigureSocket` are moved onto
+  that handler.
 
 ## Trimming and native AOT
 

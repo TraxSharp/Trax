@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.WebSockets;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -134,6 +135,9 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
     private sealed class Connection
     {
         public required ClientWebSocket Socket { get; init; }
+
+        /// <summary>The handler the upgrade goes through, which follows no redirect; null in a browser.</summary>
+        public HttpMessageInvoker? Invoker { get; init; }
         public required Task Ready { get; init; }
         public Dictionary<string, Subscription> Sinks { get; } = new(StringComparer.Ordinal);
         public CancellationTokenSource Stop { get; } = new();
@@ -278,6 +282,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
         }
         connection.Stop.Cancel();
         connection.Socket.Dispose();
+        connection.Invoker?.Dispose();
     }
 
     private Connection Connect()
@@ -292,10 +297,16 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             socket.Options.CollectHttpResponseDetails = true;
         }
         _options.ConfigureSocket?.Invoke(socket.Options);
+        var invoker = OperatingSystem.IsBrowser() ? null : Upgrader(socket.Options);
         var acknowledged = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
-        var connection = new Connection { Socket = socket, Ready = acknowledged.Task };
+        var connection = new Connection
+        {
+            Socket = socket,
+            Invoker = invoker,
+            Ready = acknowledged.Task,
+        };
         _ = RunAsync(connection, acknowledged);
         return connection;
     }
@@ -309,7 +320,7 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             )
             {
                 timeout.CancelAfter(_options.ConnectTimeout);
-                await ConnectAsync(connection.Socket, timeout.Token).ConfigureAwait(false);
+                await ConnectAsync(connection, timeout.Token).ConfigureAwait(false);
                 var init = new JsonObject { ["type"] = "connection_init" };
                 if (_options.ConnectionParams is { } parameters)
                     init["payload"] = await parameters(timeout.Token).ConfigureAwait(false);
@@ -342,15 +353,68 @@ public sealed class GraphQLSubscriptionSocket : ISubscriptionSocket, IAsyncDispo
             if (connection.Overflowed)
                 connection.Socket.Abort();
             connection.Socket.Dispose();
+            connection.Invoker?.Dispose();
         }
     }
 
-    // Connects, telling a host that refused the upgrade (401, 403) from one that could not be reached.
-    private async Task ConnectAsync(ClientWebSocket socket, CancellationToken token)
+    // A ClientWebSocket left to itself follows a redirect of its upgrade, and connection_init (the credential) would
+    // go to whatever host the redirect names. The upgrade goes through a handler that follows none instead; what
+    // ConfigureSocket set that such a handler takes over (a proxy, credentials, certificates, cookies) is moved onto it.
+    [UnsupportedOSPlatform("browser")]
+    private static HttpMessageInvoker Upgrader(ClientWebSocketOptions options)
     {
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            PooledConnectionLifetime = TimeSpan.Zero,
+        };
+        // What a fresh ClientWebSocketOptions.Proxy holds: the system proxy, which the handler uses by default too.
+        using var fresh = new ClientWebSocket();
+        if (options.Proxy is { } proxy && !ReferenceEquals(proxy, fresh.Options.Proxy))
+        {
+            handler.Proxy = proxy;
+            options.Proxy = null;
+        }
+        else if (options.Proxy is null)
+            handler.UseProxy = false;
+        if (options.UseDefaultCredentials)
+        {
+            handler.Credentials = CredentialCache.DefaultCredentials;
+            options.UseDefaultCredentials = false;
+        }
+        if (options.Credentials is { } credentials)
+        {
+            handler.Credentials = credentials;
+            options.Credentials = null;
+        }
+        if (options.Cookies is { } cookies)
+        {
+            handler.CookieContainer = cookies;
+            options.Cookies = null;
+        }
+        if (options.ClientCertificates.Count > 0)
+        {
+            handler.SslOptions.ClientCertificates = [.. options.ClientCertificates];
+            options.ClientCertificates.Clear();
+        }
+        if (options.RemoteCertificateValidationCallback is { } validate)
+        {
+            handler.SslOptions.RemoteCertificateValidationCallback = validate;
+            options.RemoteCertificateValidationCallback = null;
+        }
+        return new HttpMessageInvoker(handler);
+    }
+
+    // Connects, telling a host that refused the upgrade (401, 403) from one that could not be reached.
+    private async Task ConnectAsync(Connection connection, CancellationToken token)
+    {
+        var socket = connection.Socket;
         try
         {
-            await socket.ConnectAsync(_options.Endpoint, token).ConfigureAwait(false);
+            if (connection.Invoker is { } invoker)
+                await socket.ConnectAsync(_options.Endpoint, invoker, token).ConfigureAwait(false);
+            else
+                await socket.ConnectAsync(_options.Endpoint, token).ConfigureAwait(false);
         }
         catch (WebSocketException)
             when (socket.HttpStatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)

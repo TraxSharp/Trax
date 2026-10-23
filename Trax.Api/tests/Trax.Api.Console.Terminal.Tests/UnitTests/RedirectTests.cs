@@ -36,14 +36,13 @@ public class RedirectTests
             .Contain($"redirected to http://127.0.0.1:{elsewhere.Port}/trax/graphql")
             .And.Contain("follows no redirect");
         host.Requests.Should().ContainSingle().Which.Should().Contain("X-Api-Key: sk_live_1");
+        // negative-wait: a followed redirect would reach elsewhere within this window.
         await Task.Delay(200);
         elsewhere.Requests.Should().BeEmpty();
     }
 
-    // ClientWebSocket follows a redirect of the upgrade request, and GraphQLSubscriptionSocket connects through its
-    // own handler, so connection_init goes wherever the host points. The fix belongs in Trax.Client.
+    // connection_init carries the key, so the socket's upgrade follows no redirect either.
     [Test]
-    [Ignore("GraphQLSubscriptionSocket follows redirects; needs a Trax.Client change")]
     public async Task The_socket_follows_no_redirect_either()
     {
         using var elsewhere = new Listener(_ =>
@@ -68,6 +67,7 @@ public class RedirectTests
         await stopped.Task.WaitAsync(Deadline);
 
         host.Requests.Should().NotBeEmpty();
+        // negative-wait: a followed redirect would reach elsewhere within this window.
         await Task.Delay(200);
         elsewhere.Requests.Should().BeEmpty();
     }

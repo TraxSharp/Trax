@@ -1,4 +1,7 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Client;
@@ -94,6 +97,54 @@ public class GraphQLSubscriptionSocketTests
         (await throwing.Failed.Task).Message.Should().Be("handler bug");
         (await completed.Task.WaitAsync(Wait)).Should().Be("1");
         (await healthy.Take(3)).Should().Equal("started", "next", "next");
+    }
+
+    [Test]
+    public async Task A_redirected_upgrade_is_not_followed()
+    {
+        // connection_init carries the credential, so it must not go to whatever host a redirect names.
+        using var elsewhere = new TcpListener(IPAddress.Loopback, 0);
+        elsewhere.Start();
+        using var host = new TcpListener(IPAddress.Loopback, 0);
+        host.Start();
+        var redirected = Task.Run(async () =>
+        {
+            using var client = await host.AcceptTcpClientAsync();
+            var stream = client.GetStream();
+            var buffer = new byte[4096];
+            var head = new StringBuilder();
+            while (!head.ToString().Contains("\r\n\r\n"))
+            {
+                var read = await stream.ReadAsync(buffer);
+                if (read == 0)
+                    break;
+                head.Append(Encoding.ASCII.GetString(buffer, 0, read));
+            }
+            var port = ((IPEndPoint)elsewhere.LocalEndpoint).Port;
+            await stream.WriteAsync(
+                Encoding.ASCII.GetBytes(
+                    $"HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:{port}/graphql\r\n"
+                        + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+            );
+        });
+        await using var socket = new GraphQLSubscriptionSocket(
+            new GraphQLSubscriptionSocketOptions
+            {
+                Endpoint = new Uri(
+                    $"ws://127.0.0.1:{((IPEndPoint)host.LocalEndpoint).Port}/graphql"
+                ),
+            }
+        );
+        var sink = new Sink();
+
+        using var subscription = socket.Subscribe(Payload, sink);
+
+        (await sink.Failed.Task.WaitAsync(Wait)).Should().BeAssignableTo<WebSocketException>();
+        await redirected.WaitAsync(Wait);
+        // negative-wait: a followed redirect would connect to elsewhere within this window.
+        await Task.Delay(200);
+        elsewhere.Pending().Should().BeFalse();
     }
 
     [Test]
