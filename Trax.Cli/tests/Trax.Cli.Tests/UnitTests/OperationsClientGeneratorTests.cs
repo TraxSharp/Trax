@@ -838,6 +838,98 @@ public class OperationsClientGeneratorTests
         }
     }
 
+    [TestCase(false, true)]
+    [TestCase(false, false)]
+    [TestCase(true, true)]
+    [TestCase(true, false)]
+    public void Two_clients_of_one_language_one_inside_the_other_leave_each_others_files_alone(
+        bool csharp,
+        bool outerFirst
+    )
+    {
+        var dir = Directory.CreateTempSubdirectory("trax-ops-nested-");
+        try
+        {
+            var outer = Options(
+                ("src/graphql/Runs.graphql", Runs),
+                ("src/graphql/Cancel.graphql", Cancel)
+            );
+            var inner = Options(("src/graphql/Runs.graphql", Runs));
+            var nested = Path.Combine(dir.FullName, "Admin");
+            var ns = ClientGenerator.DefaultOperationsNamespace;
+            void Write(OperationsGenerateOptions options, string outDir)
+            {
+                if (csharp)
+                    ClientGenerator.WriteCSharp(options, ns, outDir);
+                else
+                    ClientGenerator.Write(options, outDir);
+            }
+            IReadOnlyList<ClientDrift> Check(OperationsGenerateOptions options, string outDir) =>
+                csharp
+                    ? ClientGenerator.CheckCSharp(options, ns, outDir)
+                    : ClientGenerator.Check(options, outDir);
+
+            for (var round = 0; round < 2; round++)
+                if (outerFirst)
+                {
+                    Write(outer, dir.FullName);
+                    Write(inner, nested);
+                }
+                else
+                {
+                    Write(inner, nested);
+                    Write(outer, dir.FullName);
+                }
+
+            Check(outer, dir.FullName).Should().BeEmpty();
+            Check(inner, nested).Should().BeEmpty();
+            File.Exists(Path.Combine(nested, csharp ? "Types.g.cs" : "index.g.ts"))
+                .Should()
+                .BeTrue();
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [TestCase(false, true)]
+    [TestCase(false, false)]
+    [TestCase(true, true)]
+    [TestCase(true, false)]
+    public void A_client_in_the_documents_folder_of_another_of_its_language_is_refused(
+        bool csharp,
+        bool outerFirst
+    )
+    {
+        var dir = Directory.CreateTempSubdirectory("trax-ops-overlap-");
+        try
+        {
+            var options = Options(("src/graphql/Runs.graphql", Runs));
+            var nested = Path.Combine(dir.FullName, csharp ? "Documents" : "documents");
+            var ns = ClientGenerator.DefaultOperationsNamespace;
+            void Write(string outDir)
+            {
+                if (csharp)
+                    ClientGenerator.WriteCSharp(options, ns, outDir);
+                else
+                    ClientGenerator.Write(options, outDir);
+            }
+            Write(outerFirst ? dir.FullName : nested);
+
+            var second = () => Write(outerFirst ? nested : dir.FullName);
+
+            second.Should().Throw<InvalidOperationException>().WithMessage("*move one of them*");
+            File.Exists(Path.Combine(nested, csharp ? "Types.g.cs" : "index.g.ts"))
+                .Should()
+                .Be(!outerFirst, "a refused client writes nothing");
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     [Test]
     public void A_csharp_folder_that_empties_is_removed_and_one_holding_an_apps_own_file_is_kept()
     {

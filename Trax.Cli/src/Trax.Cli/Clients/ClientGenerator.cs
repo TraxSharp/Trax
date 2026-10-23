@@ -243,6 +243,7 @@ internal sealed partial class ClientGenerator
     )
     {
         RefuseLinks(files, outDir);
+        RefuseOverlap(files, outDir, writer);
         foreach (var stale in Stale(files, outDir, writer))
         {
             var path = Path.Combine(outDir, stale);
@@ -320,6 +321,7 @@ internal sealed partial class ClientGenerator
     )
     {
         RefuseLinks(files, outDir);
+        RefuseOverlap(files, outDir, writer);
         var drift = new List<ClientDrift>();
         foreach (var file in files)
         {
@@ -339,7 +341,8 @@ internal sealed partial class ClientGenerator
     }
 
     // Which of trax client's clients is written: each removes only the files it would write, so two can share --out
-    // or sit one inside the other.
+    // or sit one inside the other. Two of the same writer may sit one inside the other too: neither enters the
+    // other's folder (see Stale), and one whose folder holds files the other writes is refused (see RefuseOverlap).
     private enum Writer
     {
         // The client of a host's manifest: *.g.ts, and the twins of the machines it served.
@@ -357,8 +360,9 @@ internal sealed partial class ClientGenerator
     // is the manifest client's when it sits where that client puts one, <id>/<id>.machine.g.ts or
     // <id>/<id>.contexts.g.ts, starts with the header the twin generator writes for that id, and <id> is a machine the
     // previous run served: trax machine generate writes the same header, so the header alone does not say which tool
-    // wrote it. Anything else, an app's own *.g.ts or *.g.cs or another writer's, is left alone. A linked folder is not
-    // entered, so nothing outside outDir is read or deleted through it.
+    // wrote it. Anything else, an app's own *.g.ts or *.g.cs or another writer's, is left alone. A folder below outDir
+    // that is the root of another client of this writer (IsRoot) is not entered, since its files carry the same
+    // header. A linked folder is not entered either, so nothing outside outDir is read or deleted through it.
     private static IReadOnlyList<string> Stale(
         IReadOnlyList<ClientFile> files,
         string outDir,
@@ -369,24 +373,95 @@ internal sealed partial class ClientGenerator
             return [];
         var expected = files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
         var served = writer == Writer.Manifest ? Served(outDir) : [];
-        var enumeration = new EnumerationOptions
-        {
-            RecurseSubdirectories = true,
-            AttributesToSkip = FileAttributes.ReparsePoint,
-            MatchCasing = MatchCasing.CaseSensitive,
-        };
         var header = writer == Writer.Manifest ? ClientHeaderLine : OperationsHeaderLine;
-        return Directory
-            .EnumerateFiles(
-                outDir,
-                writer == Writer.OperationsCSharp ? "*.g.cs" : "*.g.ts",
-                enumeration
-            )
-            .Select(p => (Full: p, Path: Path.GetRelativePath(outDir, p).Replace('\\', '/')))
-            .Where(f => !expected.Contains(f.Path) && Generated(f.Path, f.Full, header, served))
-            .Select(f => f.Path)
-            .Order(StringComparer.Ordinal)
-            .ToList();
+        var pattern = writer == Writer.OperationsCSharp ? "*.g.cs" : "*.g.ts";
+        var stale = new List<string>();
+        var folders = new Stack<string>([outDir]);
+        while (folders.TryPop(out var folder))
+        {
+            foreach (var file in Directory.EnumerateFiles(folder, pattern, Entries))
+            {
+                var path = Path.GetRelativePath(outDir, file).Replace('\\', '/');
+                if (!expected.Contains(path) && Generated(path, file, header, served))
+                    stale.Add(path);
+            }
+            foreach (var sub in Directory.EnumerateDirectories(folder, "*", Entries))
+                if (!IsRoot(sub, writer))
+                    folders.Push(sub);
+        }
+        return stale.Order(StringComparer.Ordinal).ToList();
+    }
+
+    // One folder's entries, in the case they are written, without following a link.
+    private static readonly EnumerationOptions Entries = new()
+    {
+        AttributesToSkip = FileAttributes.ReparsePoint,
+        MatchCasing = MatchCasing.CaseSensitive,
+    };
+
+    // Whether a folder is the root of a client this writer wrote: it holds the file the writer always writes at its
+    // root, starting with the writer's header. index.g.ts for the TypeScript clients, Types.g.cs for the C# one; no
+    // writer puts either in a folder below its root.
+    private static bool IsRoot(string folder, Writer writer) =>
+        writer switch
+        {
+            Writer.Manifest => FirstLine(Path.Combine(folder, "index.g.ts")) == ClientHeaderLine,
+            Writer.OperationsTypeScript => FirstLine(Path.Combine(folder, "index.g.ts"))
+                == OperationsHeaderLine,
+            _ => FirstLine(Path.Combine(folder, "Types.g.cs")) == OperationsHeaderLine,
+        };
+
+    // Refuses a client whose files would land in another client of the same writer, or that sits in a folder another
+    // one writes into: both carry the same header, so each run would take the other's files for its own stale ones.
+    // Nesting is fine as long as neither folder holds the other's files, so outDir inside another client's root is
+    // refused only when it is (or is inside) a folder that client writes: documents/ (Documents/ in C#), or a
+    // machine's folder.
+    private static void RefuseOverlap(IReadOnlyList<ClientFile> files, string outDir, Writer writer)
+    {
+        foreach (
+            var folder in files
+                .SelectMany(f => Folders(f.Path))
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+        )
+        {
+            var path = Path.Combine(outDir, folder);
+            if (IsRoot(path, writer))
+                throw new InvalidOperationException(
+                    $"{path} holds another client trax client wrote, and this one writes into it. Clients may sit "
+                        + "one inside the other, but not in a folder the other writes: move one of them."
+                );
+        }
+        var full = Path.GetFullPath(outDir).TrimEnd(Path.DirectorySeparatorChar);
+        for (
+            var parent = Path.GetDirectoryName(full);
+            !string.IsNullOrEmpty(parent);
+            parent = Path.GetDirectoryName(parent)
+        )
+        {
+            if (!IsRoot(parent, writer))
+                continue;
+            var first = Path.GetRelativePath(parent, full).Split(Path.DirectorySeparatorChar)[0];
+            var writes = writer switch
+            {
+                Writer.OperationsCSharp => first == "Documents",
+                Writer.OperationsTypeScript => first == "documents",
+                _ => first == "documents" || Served(parent).Contains(first),
+            };
+            if (writes)
+                throw new InvalidOperationException(
+                    $"{outDir} is inside {Path.Combine(parent, first)}, a folder the client at {parent} writes "
+                        + "into. Clients may sit one inside the other, but not in a folder the other writes: move "
+                        + "one of them."
+                );
+        }
+    }
+
+    // The folders on the way to a generated file, by their path under outDir: a/b/c.g.ts gives a and a/b.
+    private static IEnumerable<string> Folders(string file)
+    {
+        for (var end = file.IndexOf('/'); end >= 0; end = file.IndexOf('/', end + 1))
+            yield return file[..end];
     }
 
     // The machines the previous run served: the ids in the manifest.json it wrote under outDir, and each <id>/ that
