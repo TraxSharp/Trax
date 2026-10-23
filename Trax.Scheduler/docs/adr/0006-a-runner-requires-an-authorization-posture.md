@@ -8,7 +8,9 @@ status: accepted
 
 A runner (`UseTraxJobRunner`, `UseTraxRunEndpoint`, `SqsJobRunnerHandler`, `TraxLambdaFunction`)
 runs what it is sent as trusted infrastructure: the scheduler already authorized the work, so the
-runner opens a trusted execution scope and skips per-train authorization. Every runner entry point
+runner skips the authorization of the train it is sent, inside a trusted execution scope, and runs
+that train outside the scope, where what the train queues or runs in turn is checked as anywhere
+else. Every runner entry point
 therefore refuses to start until the host says who may send it work, and a runner only ever
 deserializes into the input type of a train it has registered.
 
@@ -44,8 +46,8 @@ with 401. The smaller of the two ways considered: the other was a separate opt-i
 local routes, which adds an option whose only safe value is off. A developer who calls the local
 routes from another machine or a container gives the function a signing key.
 
-**`ITraxRequestHandler` verifies nothing.** It is the step behind the entry points, and runs what
-it is handed in a trusted scope. It stays public, because the separately shipped
+**`ITraxRequestHandler` verifies nothing.** It is the step behind the entry points, and trusts the
+authorization of what it is handed. It stays public, because the separately shipped
 Trax.Runner.Lambda and Trax.Scheduler.Sqs call it and a test swaps it for a fake, but it is hidden
 from IntelliSense and its documentation says a caller must have verified the request first. The
 alternative, a verification result only the verifier can create and the handler requires, changes
@@ -163,6 +165,9 @@ request as stale.
 - `RunnerRefusesSchedulerTrainsTests` sends each scheduler train's full and short name to the run
   path and a `Pending` row of one to the job runner, and asserts nothing ran and the row stayed
   `Pending`; `TraxRequestHandlerTests` checks a host train sharing a short name still runs.
+- `RemoteRunTrustTests` runs a gated train through the run path, and a train whose junction queues
+  a gated train, and asserts the first runs, the second is refused with nothing queued, and a
+  junction sees no trusted scope.
 - `StoredInputTypeResolutionTests` gives the dispatcher and the local worker a stored input type
   that no train takes and asserts nothing is constructed from it; `RegisteredInputTypesTests`
   covers the name matching itself.
@@ -183,6 +188,9 @@ of its own. Sharing nonces across runner instances is
 
 ## Changelog
 
+- **2026-10-23**: The run path's trusted scope covers only the authorization of the train the
+  request names; the train runs outside it, so a gated train it queues or runs is checked, and a
+  junction reading `IsTrusted` sees false. It used to cover the whole run.
 - **2026-09-30**: The HTTP entry points check the signature header before reading the body, hold
   the body to `MaxRequestBodyBytes`, and log refusals as one warning a minute. The local Lambda
   routes honour an unsigned posture only for loopback callers. `ITraxRequestHandler` is hidden

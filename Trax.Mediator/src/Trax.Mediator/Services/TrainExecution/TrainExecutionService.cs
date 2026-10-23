@@ -449,6 +449,34 @@ public class TrainExecutionService(
         ArgumentNullException.ThrowIfNull(options);
         var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct);
 
+        return await ExecuteAsync(registration, input, options, ct);
+    }
+
+    /// <summary>
+    /// Runs a train <see cref="PrepareAsync"/> already found, authorized and read the input of, as
+    /// <see cref="RunAsync(string, string, RunTrainOptions, CancellationToken)"/> runs it after the
+    /// same steps. A remote runner authorizes the named train inside its trusted scope and runs it
+    /// here, outside the scope, so what the train itself queues or runs is checked as on any other
+    /// flow.
+    /// </summary>
+    internal Task<RunTrainResult> RunPreparedAsync(
+        PreparedTrain prepared,
+        RunTrainOptions options,
+        CancellationToken ct
+    )
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(options);
+        return ExecuteAsync(prepared.Registration, prepared.Input, options, ct);
+    }
+
+    private async Task<RunTrainResult> ExecuteAsync(
+        TrainRegistration registration,
+        object input,
+        RunTrainOptions options,
+        CancellationToken ct
+    )
+    {
         registration.ServiceType.FullName.AssertLoaded();
 
         using var permit = await concurrencyLimiter.AcquireAsync(
@@ -1004,8 +1032,9 @@ public class TrainExecutionService(
             return;
         }
 
-        // Trusted infrastructure (a scheduler pipeline, a remote job runner, the dashboard's
-        // admin surface) was authorized at its own gate, and an enforcer would skip it too.
+        // Trusted infrastructure (a remote runner authorizing the train a run names, a
+        // system-owned machine's launch) was authorized at its own gate, and an enforcer would
+        // skip it too.
         if (serviceProvider.GetService<ITrustedExecutionScope>() is { IsTrusted: true })
             return;
 

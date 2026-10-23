@@ -77,11 +77,7 @@ internal class TraxRequestHandler(
         {
             RefuseSchedulerTrain(request.TrainName);
 
-            // Remote job submissions were already authorized at the original API
-            // submission point. Mark this execution as trusted so the mediator's
-            // authorization service skips the per-train check.
-            using var _ = trustedScope.BeginTrusted("scheduler.remote-run");
-            var result = await executionService.RunAsync(request.TrainName, request.InputJson, ct);
+            var result = await RunAsync(request, ct);
 
             string? outputJson = null;
             string? outputType = null;
@@ -109,6 +105,25 @@ internal class TraxRequestHandler(
 
             return BuildErrorResponse(ex);
         }
+    }
+
+    /// <summary>
+    /// Runs the named train. It was authorized where it was submitted, so only its own
+    /// authorization runs inside the trusted scope; the run itself is outside it, and whatever
+    /// the train queues, runs or prepares is checked as it would be on the scheduler's own host.
+    /// An <see cref="ITrainExecutionService"/> that replaces the mediator's cannot be split that
+    /// way, so it runs the train with no trusted scope at all.
+    /// </summary>
+    private async Task<RunTrainResult> RunAsync(RemoteRunRequest request, CancellationToken ct)
+    {
+        if (executionService is not TrainExecutionService mediator)
+            return await executionService.RunAsync(request.TrainName, request.InputJson, ct);
+
+        PreparedTrain prepared;
+        using (trustedScope.BeginTrusted("scheduler.remote-run"))
+            prepared = await mediator.PrepareAsync(request.TrainName, request.InputJson, ct);
+
+        return await mediator.RunPreparedAsync(prepared, new RunTrainOptions(), ct);
     }
 
     /// <summary>

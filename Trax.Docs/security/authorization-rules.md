@@ -179,9 +179,10 @@ the same way. The train does not run.
 
 ### The scheduler and remote workers are trusted
 
-Work the scheduler dispatches and a remote worker runs goes through `ITrainBus` or a trusted scope
-and is not checked again, and so is a train a system-owned state machine instance starts. A train a
-user-owned instance starts is checked against that user. See
+Work the scheduler dispatches and a remote worker runs goes through `ITrainBus` or, for the train a
+remote run names, a trusted scope, and is not checked again, and so is a train a system-owned state
+machine instance starts. What those trains queue or run in turn is checked as on any other flow. A
+train a user-owned instance starts is checked against that user. See
 [Where Trax checks authorization](/docs/security/where-authorization-is-checked#checked-once-at-submission).
 
 ### Opting out for scheduler-only hosts
