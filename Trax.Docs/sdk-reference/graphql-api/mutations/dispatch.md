@@ -120,7 +120,7 @@ When no operations are specified (or both `GraphQLOperation.Run` and `GraphQLOpe
 |-----------|------|----------|---------|-------------|
 | `input` | `{TrainName}Input!` | Yes | N/A | Strongly-typed input matching the train's input record |
 | `mode` | `ExecutionMode` | No | `RUN` | Whether to run synchronously (`RUN`) or queue for async execution (`QUEUE`) |
-| `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first). Silently ignored for `RUN` mode. |
+| `priority` | `Int` | No | `0` | Dispatch priority (0-31, higher runs first). Silently ignored for `RUN` mode. A value other than `0` needs a caller who satisfies the operations gate (`GateOperations(...)`, `GateOperationsToAuthenticatedUsers()` or `AllowAnonymousOperations()`); anyone else is refused with `TRAX_AUTHORIZATION` and nothing is queued. On a host that does not expose the `operations` namespace, nobody can raise it. |
 
 The `ExecutionMode` enum is automatically registered in the GraphQL schema when any train uses both Run and Queue operations:
 
