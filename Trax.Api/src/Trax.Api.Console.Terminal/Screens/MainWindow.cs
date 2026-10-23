@@ -286,8 +286,11 @@ internal sealed class MainWindow : Window
     protected override void Dispose(bool disposing)
     {
         if (disposing)
+        {
+            _context.Close();
             foreach (var stream in _streams)
                 stream.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

@@ -79,4 +79,15 @@ internal sealed class ConsoleContext(
 
     /// <summary>Quits the console (q).</summary>
     public Action Quit { get; set; } = () => { };
+
+    private readonly CancellationTokenSource _closed = new();
+
+    /// <summary>
+    /// Cancelled when the window this context serves closes, at a quit or when the editor takes the terminal, so work
+    /// that outlives a request (following a bulk operation) stops with it.
+    /// </summary>
+    public CancellationToken Closed => _closed.Token;
+
+    /// <summary>Stops the work that follows <see cref="Closed"/>.</summary>
+    public void Close() => _closed.Cancel();
 }

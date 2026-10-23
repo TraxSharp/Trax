@@ -12,15 +12,17 @@ namespace Trax.Api.Console.Terminal.Screens;
 internal static class Ui
 {
     /// <summary>
-    /// Runs <paramref name="work"/> off the UI thread and hands its result to <paramref name="done"/> on it. An
-    /// exception the work throws (a filter the host cannot take, a cancelled request) goes to
-    /// <paramref name="failed"/>, also on the UI thread.
+    /// Runs <paramref name="work"/> off the UI thread and hands its result to <paramref name="done"/> on it. Any
+    /// exception the work throws (a filter the host cannot take, a cancelled request, an answer that does not parse)
+    /// goes to <paramref name="failed"/>, also on the UI thread, so a screen never waits on work that is gone. Only a
+    /// cancellation of <paramref name="cancellation"/>, which the caller asked for, is not reported.
     /// </summary>
     public static void Start<T>(
         IApplication app,
         Func<Task<T>> work,
         Action<T> done,
-        Action<string> failed
+        Action<string> failed,
+        CancellationToken cancellation = default
     ) =>
         _ = Task.Run(async () =>
         {
@@ -29,14 +31,16 @@ internal static class Ui
                 var result = await work();
                 app.Invoke(() => done(result));
             }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
             catch (Exception ex)
-                when (ex
-                        is InvalidOperationException
-                            or OperationCanceledException
-                            or HttpRequestException
-                )
             {
-                app.Invoke(() => failed(ex.Message));
+                var message = ex
+                    is InvalidOperationException
+                        or OperationCanceledException
+                        or HttpRequestException
+                    ? ex.Message
+                    : $"{ex.GetType().Name}: {ex.Message}";
+                app.Invoke(() => failed(message));
             }
         });
 
