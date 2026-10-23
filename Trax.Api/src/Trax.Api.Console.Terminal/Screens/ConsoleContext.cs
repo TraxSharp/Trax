@@ -74,6 +74,9 @@ internal sealed class ConsoleContext(
     /// <summary>Moves to the tab so many places on (h, l), or to the tab of a number (1 to 9).</summary>
     public Action<int?, int?> Tab { get; set; } = (_, _) => { };
 
+    /// <summary>Whether machines are drawn top to bottom rather than left to right (r turns them).</summary>
+    public bool VerticalGraphs { get; set; }
+
     /// <summary>Quits the console (q).</summary>
     public Action Quit { get; set; } = () => { };
 }

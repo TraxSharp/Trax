@@ -100,7 +100,7 @@ internal sealed class MachinesScreen : View
 
     /// <summary>The keys this screen takes, for the status line.</summary>
     public string Help =>
-        $"{VimKeys.Help}  tab machines/graph/instances  H/L scroll the graph  enter open  s stuck only";
+        $"{VimKeys.Help}  tab machines/graph/instances  H/L scroll the graph  r across/down  enter open  s stuck only";
 
     /// <summary>The machine selected now.</summary>
     public MachinesResultOperationsMachines? Selected =>
@@ -142,12 +142,17 @@ internal sealed class MachinesScreen : View
 
     private void ShowMachine()
     {
+        ShowGraph();
+        LoadInstances();
+    }
+
+    private void ShowGraph()
+    {
         if (Selected is not { } machine)
             return;
         _graph.Clear();
-        foreach (var line in MachineGraph.Lines(machine))
+        foreach (var line in MachineGraph.Lines(machine, vertical: _context.VerticalGraphs))
             _graph.Add(line);
-        LoadInstances();
     }
 
     private void LoadInstances()
@@ -214,6 +219,12 @@ internal sealed class MachinesScreen : View
     {
         if (VimKeys.Window(_context, key))
             return true;
+        if (Ui.Typed(key) == "r")
+        {
+            _context.VerticalGraphs = !_context.VerticalGraphs;
+            ShowGraph();
+            return true;
+        }
         if (Ui.Typed(key) == "s")
         {
             _stuckOnly = !_stuckOnly;

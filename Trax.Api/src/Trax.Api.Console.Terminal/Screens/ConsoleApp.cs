@@ -14,6 +14,7 @@ internal static class ConsoleApp
     public static Task<int> RunAsync(
         ConsoleSession session,
         VersionCheck version,
+        bool verticalGraphs,
         CancellationToken cancellationToken
     )
     {
@@ -33,7 +34,10 @@ internal static class ConsoleApp
             {
                 app.Init();
                 using var stop = cancellationToken.Register(() => app.Invoke(app.RequestStop));
-                var context = new ConsoleContext(app, session.Client, session.Target.Endpoint);
+                var context = new ConsoleContext(app, session.Client, session.Target.Endpoint)
+                {
+                    VerticalGraphs = verticalGraphs,
+                };
                 var window = new MainWindow(context, state, banner);
                 context.OpenCode = name =>
                 {
@@ -47,6 +51,7 @@ internal static class ConsoleApp
                     }
                     open = found;
                     state = window.State;
+                    verticalGraphs = context.VerticalGraphs;
                     app.RequestStop(window);
                 };
                 app.Run(window);

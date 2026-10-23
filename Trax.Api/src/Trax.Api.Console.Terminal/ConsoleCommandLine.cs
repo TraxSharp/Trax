@@ -45,6 +45,12 @@ internal static class ConsoleCommandLine
                 "Send each document's text instead of its id, for a host that runs no persisted operations.",
             Recursive = true,
         };
+        var verticalGraphs = new Option<bool>("--vertical-graphs")
+        {
+            Description =
+                "Draw machines top to bottom rather than left to right (r turns them in the console).",
+            Recursive = true,
+        };
         var anyVersion = new Option<bool>("--any-version")
         {
             Description =
@@ -73,13 +79,15 @@ internal static class ConsoleCommandLine
             tokenFile,
             sendText,
             anyVersion,
+            verticalGraphs,
         };
         root.SetAction(
             (p, ct) =>
                 Run(
                     () => Target(p),
                     p.GetValue(anyVersion),
-                    async (session, version) => await ConsoleApp.RunAsync(session, version, ct)
+                    async (session, version) =>
+                        await ConsoleApp.RunAsync(session, version, p.GetValue(verticalGraphs), ct)
                 )
         );
 
@@ -290,6 +298,7 @@ internal static class ConsoleCommandLine
                         HeadlessCommands.GraphAsync(
                             session,
                             p.GetValue(machineName),
+                            p.GetValue(verticalGraphs),
                             System.Console.Out,
                             ct
                         )

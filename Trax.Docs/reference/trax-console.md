@@ -45,6 +45,7 @@ A host that runs no persisted operations takes the documents' text instead: give
 | `--api-key-file`, `--token-file` | A file holding the API key (sent as `X-Api-Key`) or the bearer token. Or `TRAX_CONSOLE_API_KEY`, `TRAX_CONSOLE_TOKEN`. A file wins over the environment, and only one credential may be given. There is no option that takes the credential itself: it would be in the shell's history and the process list. |
 | `--send-text` | Send each document's text rather than its id. |
 | `--any-version` | Talk to a host of another Trax release. |
+| `--vertical-graphs` | Draw machines top to bottom rather than left to right, in the console and in `graph`. |
 
 A credential is sent over HTTPS only, or to this machine; `http://` to another host is refused.
 
@@ -76,7 +77,8 @@ The arrows work too.
 The machines tab draws each machine as boxes and arrows: states in columns by how far they are from the initial one,
 each transition a line labelled with its command (`on done` for the outcome of a train the state invokes, `after 30m`
 for a timer), the current state of an instance in a double border. A transition three or more states take the same
-way (`StartOver` from anywhere) is said once under the graph rather than drawn from each. `H` and `L` scroll a graph
+way (`StartOver` from anywhere) is said once under the graph rather than drawn from each. `r` turns the drawing
+between left to right and top to bottom (`--vertical-graphs` starts it top to bottom), and `H` and `L` scroll a graph
 wider than the screen. It also lists the machine's instances (`s` keeps the stuck ones), and opens one with its place
 on the graph, what it waits on, the runs it invoked and its history, read again when it changes. It is read only: the
 operations surface sends a machine no command.
@@ -106,7 +108,7 @@ reached, saying why on standard error.
 | `bulk <list> <action> --where ... --expect n [--note] [--ask-afresh] [--dry-run]` | The bulk operation it started, then its progress until it ends. |
 | `watch runs`, `watch changes`, `watch run <id>`, `watch machines [name]` | A stream, an event per line, until interrupted. |
 | `trace <run>` | A run's steps, decisions and log. |
-| `graph [machine]` | Each machine the host serves, or the one named, drawn as above. Plain text, not JSON. |
+| `graph [machine]` | Each machine the host serves, or the one named, drawn as above (top to bottom with `--vertical-graphs`). Plain text, not JSON. |
 | `check` | The host's release, and whether this console serves it. |
 
 ```bash

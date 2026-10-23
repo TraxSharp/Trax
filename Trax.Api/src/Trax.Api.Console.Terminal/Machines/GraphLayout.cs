@@ -18,7 +18,8 @@ internal sealed record GraphEdge(string From, string To, string Label);
 /// routed as box-drawing lines around the boxes, crossing where it must, with its label on its first straight run
 /// and an arrowhead where it enters its target. A transition back to an earlier column is routed the same way, so it
 /// runs around the boxes. A transition to the same state is written inside the box. The current state has a double
-/// border.
+/// border. Laid out vertically, the columns are rows instead, top to bottom, and lines leave downward and enter from
+/// above; a label with no horizontal stretch of line to sit on is written beside the line.
 /// </summary>
 internal static class GraphLayout
 {
@@ -40,7 +41,8 @@ internal static class GraphLayout
     public static IReadOnlyList<string> Render(
         IReadOnlyList<GraphState> states,
         IReadOnlyList<GraphEdge> edges,
-        string? current = null
+        string? current = null,
+        bool vertical = false
     )
     {
         if (states.Count == 0)
@@ -79,13 +81,17 @@ internal static class GraphLayout
 
         var layers = Layers(states, lines, index);
         var columns = Order(layers, lines, index, states.Count);
-        var boxes = Place(states, columns, lines, loops, index, out var width, out var height);
+        int width,
+            height;
+        var boxes = vertical
+            ? PlaceDown(states, columns, lines, loops, out width, out height)
+            : Place(states, columns, lines, loops, index, out width, out height);
 
-        var canvas = new Canvas(width, height);
+        var canvas = new Canvas(width, height, vertical);
         foreach (var box in boxes)
             canvas.Box(box, box.State.Name == current, loops.GetValueOrDefault(box.State.Name));
         var initial = boxes.FirstOrDefault(b => b.State.Initial);
-        if (initial is not null && initial.X >= 3)
+        if (initial is not null && (vertical ? initial.Y >= 2 : initial.X >= 3))
             canvas.Entry(initial);
 
         var unplaced = new List<string>();
@@ -275,7 +281,58 @@ internal static class GraphLayout
     private sealed record Placed(GraphState State, int Column, int X, int Y, int Width, int Height)
     {
         public int Mid => Y + 1;
+
+        public int MidX => X + Width / 2;
     }
+
+    private static int BoxWidth(GraphState s, Dictionary<string, List<string>> loops) =>
+        Math.Max(s.Name.Length, loops.TryGetValue(s.Name, out var l) ? l.Max(x => x.Length) + 2 : 0)
+        + 4;
+
+    private static int BoxHeight(GraphState s, Dictionary<string, List<string>> loops) =>
+        3 + (loops.TryGetValue(s.Name, out var l) ? l.Count : 0);
+
+    // Where each box goes laid out vertically: the columns become rows, top to bottom, each row centred on the widest,
+    // the boxes in a row far enough apart for a label written beside a line between them.
+    private static List<Placed> PlaceDown(
+        IReadOnlyList<GraphState> states,
+        List<List<int>> rows,
+        List<GraphEdge> lines,
+        Dictionary<string, List<string>> loops,
+        out int width,
+        out int height
+    )
+    {
+        var longest = lines.Select(e => e.Label.Length).DefaultIfEmpty(0).Max();
+        var gap = Math.Max(MinColumnGap, longest + 6);
+        // A line back up runs down a side, with its label beside it: the sides are as wide as the longest label.
+        var side = Math.Max(Lead, longest + 4);
+        var rowWidth = rows.Select(r =>
+                r.Sum(v => BoxWidth(states[v], loops)) + gap * Math.Max(0, r.Count - 1)
+            )
+            .ToList();
+        var widest = rowWidth.Count == 0 ? 0 : rowWidth.Max();
+        var placed = new Placed[states.Count];
+        var y = Margin;
+        for (var r = 0; r < rows.Count; r++)
+        {
+            var rowHeight = rows[r].Count == 0 ? 0 : rows[r].Max(v => BoxHeight(states[v], loops));
+            var x = side + (widest - rowWidth[r]) / 2;
+            foreach (var v in rows[r])
+            {
+                var w = BoxWidth(states[v], loops);
+                placed[v] = new Placed(states[v], r, x, y, w, BoxHeight(states[v], loops));
+                x += w + gap;
+            }
+            y += rowHeight + RowsApart;
+        }
+        width = side + widest + side;
+        height = y - RowsApart + Margin;
+        return [.. placed];
+    }
+
+    // Rows between rows of boxes laid out vertically: room for a line to turn twice between them.
+    private const int RowsApart = 4;
 
     // Where each box goes: columns left to right, a gap after each wide enough for the labels of the lines leaving
     // it, each column centred on the tallest.
@@ -289,12 +346,8 @@ internal static class GraphLayout
         out int height
     )
     {
-        int BoxWidth(GraphState s) =>
-            Math.Max(
-                s.Name.Length,
-                loops.TryGetValue(s.Name, out var l) ? l.Max(x => x.Length) + 2 : 0
-            ) + 4;
-        int BoxHeight(GraphState s) => 3 + (loops.TryGetValue(s.Name, out var l) ? l.Count : 0);
+        int BoxWidth(GraphState s) => GraphLayout.BoxWidth(s, loops);
+        int BoxHeight(GraphState s) => GraphLayout.BoxHeight(s, loops);
 
         var columnHeight = columns
             .Select(c => c.Sum(v => BoxHeight(states[v])) + RowGap * Math.Max(0, c.Count - 1))
@@ -335,7 +388,7 @@ internal static class GraphLayout
     }
 
     // A grid of cells: box text, and the line segments each cell joins, which make its glyph.
-    private sealed class Canvas(int width, int height)
+    private sealed class Canvas(int width, int height, bool vertical)
     {
         private readonly char?[,] _text = new char?[width, height];
         private readonly int[,] _mask = new int[width, height];
@@ -374,6 +427,13 @@ internal static class GraphLayout
         // The initial state's entry: a dot and an arrow into its left side.
         public void Entry(Placed box)
         {
+            if (vertical)
+            {
+                _text[box.MidX, box.Y - 2] = '●';
+                _text[box.MidX, box.Y - 1] = '▼';
+                _blocked[box.MidX, box.Y - 2] = _blocked[box.MidX, box.Y - 1] = true;
+                return;
+            }
             Write(box.X - 3, box.Mid, "●─▶");
             for (var x = box.X - 3; x < box.X; x++)
                 _blocked[x, box.Mid] = true;
@@ -463,7 +523,12 @@ internal static class GraphLayout
                     }
                     if (!Free(nx, ny))
                         continue;
-                    var next = cost + 1 + (d == at.D ? 0 : 4) + Penalty(nx, ny, d);
+                    // Laid out down, a step across costs more the further it is below the box the line leaves, so lines
+                    // leaving one box turn off sideways at once rather than running down side by side, and the one
+                    // that goes straight down keeps clear rows for its label.
+                    var step =
+                        vertical && d is 1 or 3 ? 1 + Math.Max(0, ny - (from.Y + from.Height)) : 1;
+                    var next = cost + step + (d == at.D ? 0 : 4) + Penalty(nx, ny, d);
                     if (next < dist[nx, ny, d])
                     {
                         dist[nx, ny, d] = next;
@@ -536,17 +601,33 @@ internal static class GraphLayout
             };
 
         // The cells just outside a box's sides a line may leave or enter by, with the way out and what it costs.
-        private static IEnumerable<(int X, int Y, int Out, int SideCost)> Ports(Placed box)
+        private IEnumerable<(int X, int Y, int Out, int SideCost)> Ports(Placed box)
         {
+            // Laid out across, a line leaves by the right and the middle row costs least; laid out down, it leaves by
+            // the bottom and the middle column costs least.
             for (var y = box.Y + 1; y < box.Y + box.Height - 1; y++)
             {
-                yield return (box.X + box.Width, y, 1, y == box.Mid ? 0 : 2);
-                yield return (box.X - 1, y, 3, y == box.Mid ? 6 : 8);
+                yield return (
+                    box.X + box.Width,
+                    y,
+                    1,
+                    vertical ? 4
+                    : y == box.Mid ? 0
+                    : 2
+                );
+                yield return (
+                    box.X - 1,
+                    y,
+                    3,
+                    vertical ? 4
+                    : y == box.Mid ? 6
+                    : 8
+                );
             }
             for (var x = box.X + 1; x < box.X + box.Width - 1; x++)
             {
-                yield return (x, box.Y - 1, 0, 4);
-                yield return (x, box.Y + box.Height, 2, 4);
+                yield return (x, box.Y - 1, 0, vertical ? (x == box.MidX ? 6 : 8) : 4);
+                yield return (x, box.Y + box.Height, 2, vertical ? (x == box.MidX ? 0 : 2) : 4);
             }
         }
 
@@ -564,14 +645,22 @@ internal static class GraphLayout
             };
         }
 
-        // Entering by the left side is cheapest; a line that leaves a side "out" enters it the other way.
-        private static int EndCost(int outward) =>
-            outward switch
-            {
-                3 => 0,
-                0 or 2 => 3,
-                _ => 6,
-            };
+        // Entering by the left side is cheapest, or the top laid out down; a line that leaves a side "out" enters it
+        // the other way.
+        private int EndCost(int outward) =>
+            vertical
+                ? outward switch
+                {
+                    0 => 0,
+                    1 or 3 => 3,
+                    _ => 6,
+                }
+                : outward switch
+                {
+                    3 => 0,
+                    0 or 2 => 3,
+                    _ => 6,
+                };
 
         private bool Free(int x, int y) => !_blocked[x, y] && !_fixed[x, y];
 
@@ -630,7 +719,74 @@ internal static class GraphLayout
                 }
             }
             Flush(run, ref placed);
-            return placed;
+            return placed || Beside(path, label) || Across(path, label);
+        }
+
+        // Writes the label beside the middle of a straight vertical stretch of the line, to its right if there is room,
+        // else to its left: a line laid out down often has no horizontal stretch long enough.
+        private bool Beside(List<(int X, int Y)> path, string label)
+        {
+            var upright = path.Where(p =>
+                    _mask[p.X, p.Y] == (N | S) && _uses[p.X, p.Y] == 1 && !_fixed[p.X, p.Y]
+                )
+                .ToList();
+            foreach (
+                var (x, y) in upright
+                    .Skip(upright.Count / 2)
+                    .Concat(upright.Take(upright.Count / 2))
+            )
+            foreach (var start in new[] { x + 2, x - 1 - label.Length })
+                if (Clear(start - 1, y, label.Length + 2))
+                {
+                    Write(start, y, label);
+                    for (var i = 0; i < label.Length; i++)
+                        _fixed[start + i, y] = _blocked[start + i, y] = true;
+                    return true;
+                }
+            return false;
+        }
+
+        // The last resort for a short vertical line hemmed in by others: the label is written across it, centred on it,
+        // where nothing else is on that row.
+        private bool Across(List<(int X, int Y)> path, string label)
+        {
+            var upright = path.Where(p =>
+                    _mask[p.X, p.Y] == (N | S) && _uses[p.X, p.Y] == 1 && !_fixed[p.X, p.Y]
+                )
+                .ToList();
+            foreach (
+                var (x, y) in upright
+                    .Skip(upright.Count / 2)
+                    .Concat(upright.Take(upright.Count / 2))
+            )
+            {
+                var start = x - label.Length / 2;
+                var clear =
+                    start >= 1
+                    && start + label.Length < width
+                    && Enumerable
+                        .Range(start - 1, label.Length + 2)
+                        .All(i =>
+                            i == x || (_mask[i, y] == 0 && _text[i, y] is null && !_blocked[i, y])
+                        );
+                if (!clear)
+                    continue;
+                Write(start, y, label);
+                for (var i = 0; i < label.Length; i++)
+                    _fixed[start + i, y] = _blocked[start + i, y] = true;
+                return true;
+            }
+            return false;
+        }
+
+        private bool Clear(int x, int y, int length)
+        {
+            if (x < 0 || x + length > width)
+                return false;
+            for (var i = x; i < x + length; i++)
+                if (_mask[i, y] != 0 || _text[i, y] is not null || _blocked[i, y])
+                    return false;
+            return true;
         }
 
         public IEnumerable<string> Lines()

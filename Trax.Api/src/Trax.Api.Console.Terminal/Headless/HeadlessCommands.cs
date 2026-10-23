@@ -277,6 +277,7 @@ internal static class HeadlessCommands
     public static async Task<int> GraphAsync(
         ConsoleSession session,
         string? machine,
+        bool vertical,
         TextWriter output,
         CancellationToken ct
     )
@@ -298,7 +299,7 @@ internal static class HeadlessCommands
         {
             await output.WriteLineAsync($"{m.Name} v{m.Version}");
             await output.WriteLineAsync();
-            foreach (var line in Machines.MachineGraph.Lines(m))
+            foreach (var line in Machines.MachineGraph.Lines(m, vertical: vertical))
                 await output.WriteLineAsync(line);
             await output.WriteLineAsync();
         }

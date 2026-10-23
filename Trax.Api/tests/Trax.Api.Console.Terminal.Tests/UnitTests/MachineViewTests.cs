@@ -73,6 +73,79 @@ public class MachineViewTests
     }
 
     [Test]
+    public void Drawn_down_the_states_go_in_rows_and_the_lines_enter_from_above()
+    {
+        var lines = MachineGraph.Lines(Machine(), current: "Paying", vertical: true).ToList();
+        var text = string.Join("\n", lines);
+        TestContext.Out.WriteLine(text);
+
+        lines[0].Trim().Should().Be("●", "the initial state is entered from above");
+        lines[1].Trim().Should().Be("▼");
+        text.Should().Contain("Checkout").And.Contain("on Paid").And.Contain("after 15m");
+        lines.Sum(l => l.Count(c => c is '▶' or '◀' or '▲' or '▼')).Should().Be(4);
+        var cart = lines.FindIndex(l => l.Contains("Cart"));
+        var paying = lines.FindIndex(l => l.Contains("Paying"));
+        var shipped = lines.FindIndex(l => l.Contains("Shipped"));
+        cart.Should().BeLessThan(paying, "each state sits below the one before it");
+        paying.Should().BeLessThan(shipped);
+    }
+
+    [Test]
+    public void Drawn_down_a_transition_back_is_routed_around()
+    {
+        var lines = GraphLayout.Render(
+            [
+                new GraphState("Idle", Initial: true, Final: false),
+                new GraphState("Busy", Initial: false, Final: false),
+                new GraphState("Done", Initial: false, Final: true),
+            ],
+            [
+                new GraphEdge("Idle", "Busy", "Start"),
+                new GraphEdge("Busy", "Idle", "Pause"),
+                new GraphEdge("Busy", "Busy", "Tick"),
+                new GraphEdge("Busy", "Done", "Finish"),
+            ],
+            vertical: true
+        );
+        TestContext.Out.WriteLine(string.Join("\n", lines));
+
+        lines.Should().NotContain(l => l.Contains("──▶"), "every label found room on the graph");
+        string.Join("\n", lines)
+            .Should()
+            .Contain("Pause")
+            .And.Contain("Start")
+            .And.Contain("Finish");
+        lines.Sum(l => l.Count(c => c is '▶' or '◀' or '▲' or '▼')).Should().Be(4);
+    }
+
+    [Test]
+    public void Drawn_down_lines_leaving_one_box_fan_out_so_each_label_has_room()
+    {
+        var lines = GraphLayout.Render(
+            [
+                new GraphState("Building", Initial: true, Final: false),
+                new GraphState("BuildCancelled", Initial: false, Final: true),
+                new GraphState("BuildFailed", Initial: false, Final: true),
+                new GraphState("Built", Initial: false, Final: true),
+            ],
+            [
+                new GraphEdge("Building", "BuildCancelled", "on cancelled"),
+                new GraphEdge("Building", "BuildFailed", "on failed"),
+                new GraphEdge("Building", "Built", "on done"),
+            ],
+            vertical: true
+        );
+        TestContext.Out.WriteLine(string.Join("\n", lines));
+
+        lines.Should().NotContain(l => l.Contains("──▶"), "every label found room on the graph");
+        string.Join("\n", lines)
+            .Should()
+            .Contain("on cancelled")
+            .And.Contain("on failed")
+            .And.Contain("on done");
+    }
+
+    [Test]
     public async Task An_instance_shows_where_it_is_and_how_it_got_there_and_follows_its_changes()
     {
         var state = "Paying";

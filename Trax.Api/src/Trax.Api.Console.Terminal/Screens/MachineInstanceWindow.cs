@@ -108,11 +108,17 @@ internal sealed class MachineInstanceWindow : Window
             message => _header.Text = message
         );
 
+    private (
+        TraxAnswer<MachineInstanceResult> Detail,
+        TraxAnswer<MachineInstanceTransitionsResult> History
+    )? _last;
+
     private void Show(
         TraxAnswer<MachineInstanceResult> detail,
         TraxAnswer<MachineInstanceTransitionsResult> history
     )
     {
+        _last = (detail, history);
         if (detail.Data?.Operations?.MachineInstance is not { } now)
         {
             _header.Text = detail.Succeeded
@@ -128,7 +134,7 @@ internal sealed class MachineInstanceWindow : Window
                 : now.Overdue ? "  ·  overdue"
                 : ""
             )
-            + "  ·  j/k move  H/L sideways  v trace a run  q close";
+            + "  ·  j/k move  H/L sideways  r across/down  v trace a run  q close";
         _lines.Clear();
         _runs.Clear();
         void Line(string text, long? run = null)
@@ -136,7 +142,7 @@ internal sealed class MachineInstanceWindow : Window
             _lines.Add(text);
             _runs.Add(run);
         }
-        foreach (var line in MachineGraph.Lines(_machine, now.State))
+        foreach (var line in MachineGraph.Lines(_machine, now.State, _context.VerticalGraphs))
             Line(line);
         if (now.WaitingOn is { } waiting)
         {
@@ -183,6 +189,12 @@ internal sealed class MachineInstanceWindow : Window
         if (Ui.Typed(key) == "q")
         {
             RequestStop();
+            return true;
+        }
+        if (Ui.Typed(key) == "r" && _last is { } last)
+        {
+            _context.VerticalGraphs = !_context.VerticalGraphs;
+            Show(last.Detail, last.History);
             return true;
         }
         if (

@@ -12,7 +12,8 @@ internal static class MachineGraph
 {
     public static IReadOnlyList<string> Lines(
         MachinesResultOperationsMachines machine,
-        string? current = null
+        string? current = null,
+        bool vertical = false
     )
     {
         if (machine.GraphUnavailableReason is { } reason)
@@ -53,7 +54,7 @@ internal static class MachineGraph
                         $"after {Delay(timer.After) ?? timer.Field ?? timer.Command}"
                     )
                 );
-        return GraphLayout.Render(states, edges, current);
+        return GraphLayout.Render(states, edges, current, vertical);
     }
 
     // An ISO 8601 duration as the console writes a delay: PT30M is 30m, P1DT2H is 1d2h.

@@ -146,6 +146,7 @@ internal sealed class MainWindow : Window
                 "Tabs           h / l, or 1 to 5",
                 "Move           j / k, g / G for top and end, Ctrl+d / Ctrl+u half a page (or the arrows)",
                 "Sideways       H / L, in a graph wider than the screen",
+                "Graphs         r draws a machine across or down",
                 "Pages          n next, p previous",
                 "Filter         f (empty fields clear it)",
                 "Mark           space; an action runs on the marked rows, or the current one",
