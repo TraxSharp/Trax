@@ -31,6 +31,8 @@ internal sealed class MachinesScreen : View
     private bool _stuckOnly;
     private IDisposable? _stream;
     private bool _pending;
+    private int _loading;
+    private string? _instancesOf;
 
     public MachinesScreen(ConsoleContext context)
     {
@@ -160,6 +162,14 @@ internal sealed class MachinesScreen : View
         if (Selected is not { } machine)
             return;
         var stuck = _stuckOnly;
+        var load = Interlocked.Increment(ref _loading);
+        if (_instancesOf != machine.Name)
+        {
+            _instancesOf = machine.Name;
+            _instances = [];
+            _instanceLines.Clear();
+            _instancesHeader.Text = "Reading...";
+        }
         Ui.Start(
             _context.App,
             () =>
@@ -174,6 +184,10 @@ internal sealed class MachinesScreen : View
                 ),
             answer =>
             {
+                // An answer to an older read (another machine, or before s) is dropped, so one machine's instances
+                // never show under another.
+                if (load != Volatile.Read(ref _loading))
+                    return;
                 if (answer.Data?.Operations?.MachineInstances is not { } page)
                 {
                     _instancesHeader.Text = $"Refused: {answer.Message}";
@@ -195,7 +209,11 @@ internal sealed class MachinesScreen : View
                     $"{page.TotalCount}{(page.IsCountCapped ? "+" : "")} instances{(stuck ? " stuck" : "")}"
                     + (page.TotalCount > InstancesShown ? $", the first {InstancesShown}" : "");
             },
-            message => _instancesHeader.Text = message
+            message =>
+            {
+                if (load == Volatile.Read(ref _loading))
+                    _instancesHeader.Text = message;
+            }
         );
     }
 
