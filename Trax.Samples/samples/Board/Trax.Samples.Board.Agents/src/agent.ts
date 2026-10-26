@@ -33,6 +33,8 @@ export interface BoardEvent {
   agent: string;
   ticketId: string;
   say?: string;
+  /** What the move means, in a sentence: written by the script, on the move's first event. */
+  caption?: string;
   claim?: { lane: string; problem: { code: string; message: string } | null };
   package?: { ticket: string; lane: string; instructions: string; tools: string[]; deadline: string };
   send?: { operation: string; input?: unknown };
@@ -90,6 +92,19 @@ const TICKET_MOVES: Record<string, string> = {
 /** The events a worker sends: its lane's evidence. The outcomes are the server's own. */
 export type Trigger = "Triage" | "SubmitRepro" | "Close" | "SubmitFix" | "SubmitChecks" | "Approve" | "SendBack";
 
+/**
+ * One move of a script: what the worker says, what the move means, and what the server is expected to answer. The
+ * answer is the assignment's state once the check is done (Accepted, Rejected, Closed) or the code of a refusal, and
+ * `ticket` the state the ticket is in afterwards. A host that answers anything else stops the run, so a caption
+ * never describes something the server did not do.
+ */
+export interface Step {
+  say?: string;
+  caption?: string;
+  expect: string;
+  ticket?: string;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class Worker {
@@ -116,10 +131,28 @@ export class Worker {
     });
   }
 
-  /** Asks for work in a lane (its own unless told otherwise), and starts an assignment on what it is given. */
-  async claim(ticketId: string, say: string, lane: Lane = this.spec.lane): Promise<ClaimWorkResult> {
-    this.signIn();
+  /** Claims the ticket in its lane and sends its evidence, as one move. */
+  async take(ticketId: string, trigger: Trigger, input: unknown, step: Step): Promise<void> {
     const move = this.log.next();
+    await this.claim(ticketId, { caption: step.caption, expect: "Claimed" }, move);
+    await this.send(ticketId, trigger, input, { ...step, caption: undefined }, move);
+  }
+
+  /** Starts an assignment for a ticket it never claimed and sends an event on it, as one move. */
+  async sendUnclaimed(ticketId: string, trigger: Trigger, input: unknown, step: Step): Promise<void> {
+    const move = this.log.next();
+    await this.startAssignment(ticketId, move, step.caption);
+    await this.send(ticketId, trigger, input, { ...step, caption: undefined }, move);
+    await this.discard(ticketId);
+  }
+
+  /**
+   * Asks for work in its lane, and starts an assignment on what it is given. `step.expect` is "Claimed", or the code
+   * the server refuses the claim with.
+   */
+  async claim(ticketId: string, step: Step, move = this.log.next()): Promise<ClaimWorkResult> {
+    this.signIn();
+    const lane = this.spec.lane;
     const answer = await claimWork({ lane, ticketId });
     const output = answer?.output ?? null;
     this.log.write({
@@ -127,10 +160,12 @@ export class Worker {
       kind: "claim",
       agent: this.name,
       ticketId,
-      say,
+      say: step.say,
+      caption: step.caption,
       claim: { lane, problem: output?.problem ?? null },
       ...(output?.problem ? {} : { line: "ticket:event:Claim" }),
     });
+    expected(this.name, ticketId, "claim", output?.problem?.code ?? (output?.ticket ? "Claimed" : null), step.expect);
     if (!output || output.problem || !output.ticket) return answer;
 
     this.log.write({
@@ -152,7 +187,7 @@ export class Worker {
   }
 
   /** Starts an assignment for a ticket without claiming it first: the server lets it start and judges what it sends. */
-  async startAssignment(ticketId: string, move = this.log.next(), say?: string): Promise<void> {
+  private async startAssignment(ticketId: string, move: number, caption?: string): Promise<void> {
     this.signIn();
     const controller = new ServerMachineController({
       machine: assignment,
@@ -168,7 +203,7 @@ export class Worker {
         kind: "start",
         agent: this.name,
         ticketId,
-        say,
+        caption,
         answer: {
           state: view.confirmed?.state ?? null,
           revision: view.revision,
@@ -182,11 +217,16 @@ export class Worker {
   }
 
   /** Sends one event on its assignment for a ticket, and waits for the server's check when the event starts one. */
-  async send(ticketId: string, trigger: Trigger, input: unknown, say: string): Promise<string | null> {
+  async send(ticketId: string, trigger: Trigger, input: unknown, step: Step, move = this.log.next()): Promise<void> {
+    const answered = await this.deliver(ticketId, trigger, input, step, move);
+    expected(this.name, ticketId, trigger, answered, step.expect);
+    if (step.ticket) expected(this.name, ticketId, `the ticket after ${trigger}`, this.log.ticketState.get(ticketId), step.ticket);
+  }
+
+  private async deliver(ticketId: string, trigger: Trigger, input: unknown, step: Step, move: number): Promise<string | null> {
     this.signIn();
     const id = this.assignments.get(ticketId);
     if (!id) throw new Error(`${this.name} holds no assignment for ${ticketId}.`);
-    const move = this.log.next();
     const controller = new ServerMachineController({ machine: assignment, server: assignmentServer(), id });
     try {
       await controller.start();
@@ -195,7 +235,8 @@ export class Worker {
         kind: "send",
         agent: this.name,
         ticketId,
-        say,
+        say: step.say,
+        caption: step.caption,
         send: { operation: lowerFirst(trigger), ...(input === undefined ? {} : { input }) },
         line: `assignment:event:${trigger}`,
       });
@@ -275,7 +316,7 @@ export class Worker {
   }
 
   /** Lets go of an assignment it started but cannot use. */
-  async discard(ticketId: string): Promise<void> {
+  private async discard(ticketId: string): Promise<void> {
     this.signIn();
     const id = this.assignments.get(ticketId);
     if (!id) return;
@@ -301,6 +342,11 @@ export class Worker {
       line,
     });
   }
+}
+
+function expected(worker: string, ticketId: string, what: string, got: string | null | undefined, wanted: string): void {
+  if (got !== wanted)
+    throw new Error(`${worker} on ${ticketId}, ${what}: the server answered ${got ?? "nothing"}, the script expects ${wanted}.`);
 }
 
 function lowerFirst(value: string): string {

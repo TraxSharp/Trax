@@ -44,18 +44,24 @@ cd samples/Board/Trax.Samples.Board.Client && npm ci && npm run dev
 ```
 
 The scenarios run against a fresh database. On one that already holds their tickets, pass `--suffix -2` to file them
-under new ids (`npm run scenario -- --suffix -2`). The four scenarios are:
+under new ids (`npm run scenario -- --suffix -2`), and name one to run only that (`npm run scenario -- skip-ahead`).
+Each scenario shows one thing:
 
-1. **Shipping boundary.** An order of exactly $50 pays shipping; the policy says it ships free. repro-bot's first
-   case, $49.99, does not show the bug, and the server says so. Its second, $50.00, does. fix-bot is refused twice:
-   once when it claims the ticket before it is in Fix (`NOTHING_TO_CLAIM`), and once when it tries to approve its own
-   fix (`FORBIDDEN`).
-2. **A fix that regresses.** fix-bot's first patch fixes the case and breaks an earlier one ($20.00 would ship
-   free). The server runs every earlier case on a patch and refuses it; the second patch passes.
-3. **QA catches an edge.** A patch that is too loose passes the repro case and every earlier one. qa-bot's sweep finds
-   $99.50, which the patched rules would ship free, and the ticket goes back to Fix.
-4. **Cannot reproduce.** The rules already match the policy. repro-bot may close the ticket only once the server has
-   run two of its cases: a close after one is refused (`GUARD_FAILED`).
+1. **A ticket goes through every lane** (`every-lane`). An order of exactly $50 pays shipping, and the policy says
+   it ships free. Each lane's client claims the ticket and sends its evidence, the server checks it, and the ticket
+   moves on. Nothing is refused.
+2. **An agent tries to skip ahead** (`skip-ahead`). fix-bot claims the ticket before it is in Fix
+   (`NOTHING_TO_CLAIM`), and later tries to approve its own fix (`FORBIDDEN`). The ticket carries on as normal.
+3. **A fix that breaks an earlier case** (`fix-regresses`). fix-bot's first patch says free from $6.00, a typo for
+   $60. It fixes the reported order, but a $20.00 case an earlier fix was checked against would now ship free, so the
+   server refuses it. The second patch passes.
+4. **QA finds what the fix missed** (`qa-catches-edge`). A patch of free above $99.00 passes the repro case and every
+   earlier one. qa-bot's sweep finds $99.50, which the patched rules would ship free, and the ticket goes back to Fix.
+5. **A bug that does not reproduce** (`cannot-reproduce`). The rules already match the policy. repro-bot may close
+   the ticket only once the server has run two of its cases: a close after one is refused (`GUARD_FAILED`).
+
+Each move in `src/scenarios.ts` names the answer it expects from the server, and a run stops at the first answer
+that differs, so the captions the website shows with the recording never describe something the server did not do.
 
 ## The two machines
 

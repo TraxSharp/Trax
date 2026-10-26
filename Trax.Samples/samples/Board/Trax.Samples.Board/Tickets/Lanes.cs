@@ -38,7 +38,7 @@ public static class Lanes
             "fix",
             TicketState.ReadyToFix,
             BoardRoles.Fixer,
-            "Send a patch to the free-shipping threshold. The repro case and every earlier case are run on it.",
+            "Send a patch to the free-shipping threshold. The server runs the repro case and the cases earlier fixes were checked against on it.",
             ["charge"],
             [nameof(AssignmentTrigger.SubmitFix)]
         ),

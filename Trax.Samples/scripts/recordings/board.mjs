@@ -2,6 +2,7 @@
 // and what the server answered, and the machine line that decided each move. Start the Board host on a fresh database
 // as shipped (persisted documents only: the agents send only their generated client's ids), then run
 //
+//   (cd ../Trax.Api/src/Trax.Api.Dashboard/ClientApp && npm ci --ignore-scripts)   # a source build embeds the console
 //   dotnet run --project samples/Board/Trax.Samples.Board.Api
 //   (cd samples/Board/Trax.Samples.Board.Agents && npm ci)
 //   node board.mjs [--copy-to <dir>]
@@ -12,9 +13,10 @@
 // arrived. Nothing is invented: every answer, refusal, check verdict and ticket note is the host's. BOARD_HOST
 // (default localhost:5290) names the host, as it does for the agents.
 //
-// Four scenarios, one ticket each: shipping-boundary (fix-bot is refused a claim in a lane the ticket is not in, and
-// refused an approval its role cannot make), fix-regresses (the server's earlier cases refuse a patch), qa-catches-edge
-// (QA's sweep sends a patch back to Fix) and cannot-reproduce (repro-bot may close the ticket only after two cases).
+// Five scenarios, one ticket each, each showing one thing: every-lane (a ticket through every lane, nothing refused),
+// skip-ahead (fix-bot is refused a claim in a lane the ticket is not in, and an approval its role cannot make),
+// fix-regresses (the server's earlier cases refuse a patch), qa-catches-edge (QA's sweep sends a patch back to Fix) and
+// cannot-reproduce (repro-bot may close the ticket only after two cases). Each move carries the script's caption.
 //
 // out/board/run.json holds the scenarios as the agents recorded them, and out/board-recordings.json the website's
 // copy (Trax.Website's src/data/board-recordings.json): both machines verbatim, the lines each move lights, the

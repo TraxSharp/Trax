@@ -17,6 +17,8 @@ export interface BoardEvent {
   agent?: string;
   ticketId?: string;
   say?: string;
+  /** What the move means, written by the scenario's script on the move's first event. */
+  caption?: string;
   claim?: { lane: string; problem: Problem | null };
   package?: { ticket: string; lane: string; instructions?: string; tools?: string[]; deadline?: string };
   send?: { operation: string; input?: Record<string, unknown> };
@@ -146,9 +148,17 @@ interface MoveSummary {
   caption: string;
 }
 
-// What one move came to, from its own events: its last refusal, check or ticket move decides how it is told.
-// `before` is each ticket's state before the move, so a ticket sent back to an earlier lane is told as that.
+// What one move came to, from its own events: its last refusal, check or ticket move decides how it is told. The
+// script's caption, when the move has one, is what the page shows; the one worked out here stands in for a recording
+// without them. `before` is each ticket's state before the move, so a ticket sent back to an earlier lane is told as
+// that.
 function summarize(recordings: BoardRecordings, events: BoardEvent[], before: Map<string, string>): MoveSummary {
+  const summary = told(recordings, events, before);
+  const caption = events.find((e) => e.caption)?.caption;
+  return caption ? { ...summary, caption } : summary;
+}
+
+function told(recordings: BoardRecordings, events: BoardEvent[], before: Map<string, string>): MoveSummary {
   const agent = events.find((e) => e.agent)?.agent ?? null;
   const say = events.find((e) => e.say)?.say ?? null;
   const refusal =

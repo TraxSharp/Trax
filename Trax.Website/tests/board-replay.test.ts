@@ -18,8 +18,8 @@ const problems = (key: string) =>
     .filter((p): p is { code: string; message: string } => !!p)
     .map((p) => p.code);
 
-test("the recording has the four scenarios, each in time and move order", () => {
-  assert.deepEqual(recordings.scenarios.map((s) => s.key).sort(), ["cannot-reproduce", "fix-regresses", "qa-catches-edge", "shipping-boundary"]);
+test("the recording has the five scenarios, each in time and move order", () => {
+  assert.deepEqual(recordings.scenarios.map((s) => s.key), ["every-lane", "skip-ahead", "fix-regresses", "qa-catches-edge", "cannot-reproduce"]);
   for (const s of recordings.scenarios) {
     assert.ok(s.title && s.caption, `${s.key} needs a title and a caption`);
     const ts = s.events.map((e) => e.t);
@@ -27,6 +27,26 @@ test("the recording has the four scenarios, each in time and move order", () => 
     const moves = s.events.map((e) => e.move);
     assert.deepEqual(moves, [...moves].sort((a, b) => a - b), `${s.key} is not sorted by move`);
   }
+});
+
+test("every move carries the script's caption, and the page shows it", () => {
+  for (const s of recordings.scenarios) {
+    for (let m = 1; m <= movesOf(s); m++) {
+      const written = eventsOf(s).find((e) => e.move === m && e.caption)?.caption;
+      assert.ok(written, `${s.key} move ${m} has no caption in the recording`);
+      assert.equal(viewAt(recordings, s, m).caption, written);
+    }
+  }
+});
+
+test("a lane worked without trouble is one move", () => {
+  const s = scenario("every-lane");
+  assert.equal(movesOf(s), 5);
+  assert.deepEqual(problems("every-lane"), []);
+  const view = end("every-lane");
+  assert.equal(view.tickets[0].state, "Done");
+  assert.equal(view.tickets[0].lane, "done");
+  assert.equal(view.tickets[0].holder, null);
 });
 
 test("every line an event lights is a line of the source it names", () => {
@@ -53,21 +73,15 @@ test("every move shows one acting client, and every ticket sits in a lane", () =
   }
 });
 
-test("the shipping boundary refuses fix-bot twice and ends Done", () => {
-  assert.deepEqual(problems("shipping-boundary"), ["NOTHING_TO_CLAIM", "FORBIDDEN"]);
-  const view = end("shipping-boundary");
-  assert.equal(view.tickets[0].state, "Done");
-  assert.equal(view.tickets[0].lane, "done");
-  assert.equal(view.tickets[0].holder, null);
-});
-
-test("a first repro case that does not reproduce leaves the ticket in Reproduce", () => {
-  const s = scenario("shipping-boundary");
-  const failed = eventsOf(s).find((e) => e.check?.train === "ReproduceTrain" && e.check.status === "failed");
-  assert.ok(failed, "no failed ReproduceTrain");
-  const view = viewAt(recordings, s, failed.move);
-  assert.equal(view.tickets[0].lane, "reproduce");
-  assert.equal(view.pods.find((p) => p.name === "repro-bot")?.assignment, "Rejected");
+test("skipping ahead is refused twice, and the ticket still ends Done", () => {
+  assert.deepEqual(problems("skip-ahead"), ["NOTHING_TO_CLAIM", "FORBIDDEN"]);
+  const s = scenario("skip-ahead");
+  const forbidden = eventsOf(s).find((e) => e.answer?.problem?.code === "FORBIDDEN");
+  assert.ok(forbidden, "no FORBIDDEN");
+  const view = viewAt(recordings, s, forbidden.move);
+  assert.equal(view.tickets[0].lane, "review");
+  assert.equal(view.pods.find((p) => p.current)?.name, "fix-bot");
+  assert.equal(end("skip-ahead").tickets[0].state, "Done");
 });
 
 test("a fix that regresses is rejected by VerifyFixTrain, and the second patch gets through", () => {
@@ -88,7 +102,13 @@ test("QA's sweep sends a too-loose fix back to Fix", () => {
 });
 
 test("a ticket that cannot be reproduced closes only after two cases", () => {
-  assert.ok(problems("cannot-reproduce").includes("GUARD_FAILED"));
+  const s = scenario("cannot-reproduce");
+  assert.deepEqual(problems("cannot-reproduce"), ["GUARD_FAILED"]);
+  const failed = eventsOf(s).find((e) => e.check?.train === "ReproduceTrain" && e.check.status === "failed");
+  assert.ok(failed, "no failed ReproduceTrain");
+  const after = viewAt(recordings, s, failed.move);
+  assert.equal(after.tickets[0].lane, "reproduce");
+  assert.equal(after.pods.find((p) => p.name === "repro-bot")?.assignment, "Rejected");
   const view = end("cannot-reproduce");
   assert.equal(view.tickets[0].state, "Closed");
   assert.equal(view.tickets[0].lane, "done");

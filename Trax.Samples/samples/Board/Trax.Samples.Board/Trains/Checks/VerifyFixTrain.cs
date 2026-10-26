@@ -13,7 +13,8 @@ namespace Trax.Samples.Board.Trains.Checks;
 public interface IVerifyFixTrain : IServiceTrain<FixCheck, CheckResult>;
 
 /// <summary>
-/// Applies a fixer's patch to the shop's rules and runs the ticket's repro case and every earlier case on the result.
+/// Applies a fixer's patch to the shop's rules and runs the ticket's repro case and the cases earlier fixes were
+/// checked against on the result.
 /// The patch is accepted only if each one now charges what the policy says, and the ticket goes to QA.
 /// </summary>
 [TraxAuthorize(Roles = BoardRoles.Fixer)]
@@ -59,7 +60,9 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
             return CheckResult.Refuse(why);
         }
 
-        var patch = $"free from {Money(check.FreeFrom)}{(check.Inclusive ? ", inclusive" : "")}";
+        var patch = check.Inclusive
+            ? $"free from {Money(check.FreeFrom)}"
+            : $"free above {Money(check.FreeFrom)}";
         var moved = await board.Fire(
             ticket.Id,
             TicketTrigger.Fixed,
@@ -73,7 +76,9 @@ public class RunFixCheck(InvokedRun run, TicketBoard board) : EffectJunction<Fix
             CancellationToken
         );
         return moved is AdvanceOutcome.Advanced
-            ? CheckResult.Accept($"{patch}: the repro case and {cases.Count - 1} earlier ones pass")
+            ? CheckResult.Accept(
+                $"{patch}: the repro case and {cases.Count - 1} cases from earlier fixes pass"
+            )
             : CheckResult.Refuse(TicketBoard.Why(moved));
     }
 }
