@@ -583,10 +583,11 @@ public class Metadata : IModel, IDisposable
     /// <remarks>
     /// This method extracts information from the provided exception and populates
     /// the failure-related properties of the metadata record. It reads structured data attached
-    /// to the exception first; failing that, and only for a <see cref="TrainException"/>, the type a
-    /// recorded failure is rebuilt as, it reads the message as a TrainExceptionData object. Any
-    /// other exception is recorded from its own type, message and stack trace, whatever its message
-    /// looks like.
+    /// to the exception first; failing that, and only for an exception whose type is exactly
+    /// <see cref="TrainException"/>, the type a recorded failure is rebuilt as, it reads the message
+    /// as a TrainExceptionData object. Any other exception, a type derived from
+    /// <see cref="TrainException"/> included, is recorded from its own type, message and stack
+    /// trace, whatever its message looks like.
     ///
     /// The method sets:
     /// 1. FailureException - The type of the exception
@@ -597,7 +598,7 @@ public class Metadata : IModel, IDisposable
     /// This information is valuable for diagnosing and analyzing train failures.
     ///
     /// <para>The failure class, like the rest of the record, is read from attached data, or from
-    /// the message of a <see cref="TrainException"/>. Any other exception's message is its own
+    /// the message of an exception whose type is exactly <see cref="TrainException"/>. Any other exception's message is its own
     /// text, so nothing in it is read as a record. A value outside
     /// <see cref="Trax.Core.Exceptions.FailureClass"/> is recorded as
     /// <see cref="Trax.Core.Exceptions.FailureClass.Unclassified"/>, as the remote wire already
@@ -617,11 +618,13 @@ public class Metadata : IModel, IDisposable
             return Unit.Default;
         }
 
-        // Priority 2: JSON-serialized TrainExceptionData in the message (remote execution / legacy).
-        // Read only from a TrainException, the type a recorded failure is rebuilt as: any other
-        // exception's message is its own text (often a remote system's response body), and reading
-        // it as a record would let that text name the failure's type, junction and stack trace.
-        if (trainException is TrainException)
+        // Priority 2: JSON-serialized TrainExceptionData in the message (legacy). Read only from an
+        // exception whose type is exactly TrainException, the type a recorded failure is rebuilt
+        // as; a remote failure arrives with its record attached instead. Any other exception's
+        // message, a subclass's included, is its own text (often a remote system's response body),
+        // and reading it as a record would let that text name the failure's type, junction and
+        // stack trace.
+        if (trainException.GetType() == typeof(TrainException))
         {
             try
             {

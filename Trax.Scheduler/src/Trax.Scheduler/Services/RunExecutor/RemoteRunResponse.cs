@@ -54,10 +54,11 @@ public record RemoteRunResponse(
     /// </summary>
     /// <remarks>
     /// When the worker sent structured error fields (<see cref="ExceptionType"/> and
-    /// <see cref="FailureJunction"/>), the exception's message is the <see cref="TrainExceptionData"/>
-    /// JSON, so <c>Metadata.AddException()</c> on the calling side parses it into its structured
-    /// fields (FailureException, FailureJunction, FailureReason) and keeps the worker's
-    /// <see cref="FailureClass"/>. Every executor that reads a remote response uses this, so the
+    /// <see cref="FailureJunction"/>), the exception carries them as <see cref="TrainExceptionData"/>
+    /// in <c>Data["TrainExceptionData"]</c>, which <c>Metadata.AddException()</c> on the calling
+    /// side reads into its structured fields (FailureException, FailureJunction, FailureReason),
+    /// keeping the worker's <see cref="FailureClass"/>. The message is the same record as JSON, for
+    /// readers of the message alone. Every executor that reads a remote response uses this, so the
     /// HTTP and Lambda paths record a remote failure the same way. The instance is a
     /// <see cref="RemoteRunException"/> carrying <see cref="PublicMessage"/>.
     /// </remarks>
@@ -78,7 +79,9 @@ public record RemoteRunResponse(
                 FailureClass = FailureClass,
             };
 
-            return new RemoteRunException(JsonSerializer.Serialize(data), PublicMessage);
+            var exception = new RemoteRunException(JsonSerializer.Serialize(data), PublicMessage);
+            exception.Data["TrainExceptionData"] = data;
+            return exception;
         }
 
         return new RemoteRunException(

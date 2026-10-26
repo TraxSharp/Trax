@@ -139,6 +139,32 @@ public class ModelCoverageGapTests
     }
 
     [Test]
+    public void Metadata_AddException_ATrainExceptionSubclassWithARecordShapedMessage_KeepsItsOwnType()
+    {
+        var meta = NewMetadata();
+        var json = JsonSerializer.Serialize(
+            new TrainExceptionData
+            {
+                TrainName = "TName",
+                TrainExternalId = "ext",
+                Type = "SomethingElse",
+                Junction = "OtherJunction",
+                Message = "other",
+                FailureClass = FailureClass.Transient,
+            }
+        );
+
+        meta.AddException(new DerivedTrainException(json));
+
+        meta.FailureException.Should().Be(nameof(DerivedTrainException));
+        meta.FailureReason.Should().Be(json);
+        meta.FailureJunction.Should().Be("TrainException");
+        meta.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    private sealed class DerivedTrainException(string message) : TrainException(message);
+
+    [Test]
     public void Metadata_AddException_OtherExceptionWithARecordShapedMessage_KeepsItsOwnTypeAndStack()
     {
         var meta = NewMetadata();
