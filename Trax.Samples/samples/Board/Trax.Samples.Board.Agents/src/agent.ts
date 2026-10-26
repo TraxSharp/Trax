@@ -35,6 +35,8 @@ export interface BoardEvent {
   say?: string;
   /** What the move means, in a sentence: written by the script, on the move's first event. */
   caption?: string;
+  /** Whether the move was a mistake or a finding, and the code that caught it: also on the move's first event. */
+  mark?: Mark;
   claim?: { lane: string; problem: { code: string; message: string } | null };
   package?: { ticket: string; lane: string; instructions: string; tools: string[]; deadline: string };
   send?: { operation: string; input?: unknown };
@@ -101,8 +103,22 @@ export type Trigger = "Triage" | "SubmitRepro" | "Close" | "SubmitFix" | "Submit
 export interface Step {
   say?: string;
   caption?: string;
+  mark?: Mark;
   expect: string;
   ticket?: string;
+}
+
+/**
+ * A move worth pointing at. `not-allowed`: the worker tried a move the server refuses outright (a claim out of its
+ * lane, an event its role may not send, a guard that does not hold). `bad-evidence`: the move was allowed, and the
+ * server's check found the evidence wrong. `finding`: the check came back negative and that is the right answer (a
+ * case that does not reproduce, QA finding a gap). `label` is a few words for the worker's badge, and `rule` names
+ * the code that decided it, as a key of the recording's rules (scripts/recordings/board.mjs).
+ */
+export interface Mark {
+  intent: "not-allowed" | "bad-evidence" | "finding";
+  label: string;
+  rule: string;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -134,15 +150,15 @@ export class Worker {
   /** Claims the ticket in its lane and sends its evidence, as one move. */
   async take(ticketId: string, trigger: Trigger, input: unknown, step: Step): Promise<void> {
     const move = this.log.next();
-    await this.claim(ticketId, { caption: step.caption, expect: "Claimed" }, move);
-    await this.send(ticketId, trigger, input, { ...step, caption: undefined }, move);
+    await this.claim(ticketId, { caption: step.caption, mark: step.mark, expect: "Claimed" }, move);
+    await this.send(ticketId, trigger, input, { ...step, caption: undefined, mark: undefined }, move);
   }
 
   /** Starts an assignment for a ticket it never claimed and sends an event on it, as one move. */
   async sendUnclaimed(ticketId: string, trigger: Trigger, input: unknown, step: Step): Promise<void> {
     const move = this.log.next();
-    await this.startAssignment(ticketId, move, step.caption);
-    await this.send(ticketId, trigger, input, { ...step, caption: undefined }, move);
+    await this.startAssignment(ticketId, move, step);
+    await this.send(ticketId, trigger, input, { ...step, caption: undefined, mark: undefined }, move);
     await this.discard(ticketId);
   }
 
@@ -162,6 +178,7 @@ export class Worker {
       ticketId,
       say: step.say,
       caption: step.caption,
+      mark: step.mark,
       claim: { lane, problem: output?.problem ?? null },
       ...(output?.problem ? {} : { line: "ticket:event:Claim" }),
     });
@@ -187,7 +204,7 @@ export class Worker {
   }
 
   /** Starts an assignment for a ticket without claiming it first: the server lets it start and judges what it sends. */
-  private async startAssignment(ticketId: string, move: number, caption?: string): Promise<void> {
+  private async startAssignment(ticketId: string, move: number, told?: Pick<Step, "caption" | "mark">): Promise<void> {
     this.signIn();
     const controller = new ServerMachineController({
       machine: assignment,
@@ -203,7 +220,8 @@ export class Worker {
         kind: "start",
         agent: this.name,
         ticketId,
-        caption,
+        caption: told?.caption,
+        mark: told?.mark,
         answer: {
           state: view.confirmed?.state ?? null,
           revision: view.revision,
@@ -237,6 +255,7 @@ export class Worker {
         ticketId,
         say: step.say,
         caption: step.caption,
+      mark: step.mark,
         send: { operation: lowerFirst(trigger), ...(input === undefined ? {} : { input }) },
         line: `assignment:event:${trigger}`,
       });

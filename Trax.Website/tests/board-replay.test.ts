@@ -114,6 +114,52 @@ test("a ticket that cannot be reproduced closes only after two cases", () => {
   assert.equal(view.tickets[0].lane, "done");
 });
 
+test("each wrong move is marked, lights the ticket, and shows the code that caught it", () => {
+  const marked = (key: string) =>
+    eventsOf(scenario(key))
+      .filter((e) => e.mark)
+      .map((e) => ({ move: e.move, ...e.mark! }));
+  assert.deepEqual(marked("every-lane"), []);
+  assert.deepEqual(
+    marked("skip-ahead").map((m) => m.intent),
+    ["not-allowed", "not-allowed"],
+  );
+  assert.deepEqual(marked("fix-regresses").map((m) => m.intent), ["bad-evidence"]);
+  assert.deepEqual(marked("cannot-reproduce").map((m) => m.intent), ["finding", "not-allowed", "finding"]);
+
+  const approval = marked("skip-ahead")[1];
+  const view = viewAt(recordings, scenario("skip-ahead"), approval.move);
+  assert.deepEqual(view.tickets[0].attempt, { by: "fix-bot", label: "approved its own fix", intent: "not-allowed" });
+  assert.equal(view.pods.find((p) => p.current)?.mark, "not-allowed");
+  assert.ok(view.rule, "no rule for the self-approval");
+  assert.match(view.rule.file, /AssignmentMachine\.cs$/);
+  assert.ok(view.rule.lines.some((l) => l.includes(".Requires(BoardRoles.Reviewer)")));
+  assert.match(view.rule.message, /^FORBIDDEN/);
+
+  const early = viewAt(recordings, scenario("skip-ahead"), marked("skip-ahead")[0].move);
+  assert.match(early.rule?.file ?? "", /ClaimWorkTrain\.cs$/);
+
+  // A finding is the right answer, so it lights no ticket as a mistake.
+  const finding = viewAt(recordings, scenario("cannot-reproduce"), marked("cannot-reproduce")[0].move);
+  assert.equal(finding.tickets[0].attempt, null);
+  assert.match(finding.rule?.message ?? "", /not reproduced/);
+});
+
+test("every mark points at code in the recording, and an unmarked move shows none", () => {
+  for (const s of recordings.scenarios) {
+    for (const e of s.events) {
+      if (!e.mark) continue;
+      const span = recordings.rules?.[e.mark.rule];
+      assert.ok(span && recordings.sources[span.source], `${s.key} points at ${e.mark.rule}, which the recording lacks`);
+      assert.ok(span.to - span.from < 6, `${e.mark.rule} is longer than the panel holds`);
+    }
+    for (let m = 1; m <= movesOf(s); m++) {
+      const view = viewAt(recordings, s, m);
+      assert.equal(!!view.rule, eventsOf(s).some((e) => e.move === m && e.mark), `${s.key} move ${m}`);
+    }
+  }
+});
+
 // BoardReplay keeps two lines for the caption at full width; a longer one would push the board down as it plays.
 test("every caption fits the two lines the page keeps for it", () => {
   for (const s of recordings.scenarios) {

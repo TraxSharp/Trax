@@ -92,6 +92,7 @@ export const SCENARIOS: Scenario[] = [
       await crew.fix.claim(t, {
         say: "claim: fix.",
         caption: "fix-bot asks for the ticket before anyone has reproduced the bug. The ticket is not in Fix, so the server has nothing to give it.",
+        mark: { intent: "not-allowed", label: "skipped ahead", rule: "claim:wrong-lane" },
         expect: "NOTHING_TO_CLAIM",
       });
       await crew.repro.take(t, "SubmitRepro", { subtotal: 40, expectedShipping: 0 }, {
@@ -115,6 +116,7 @@ export const SCENARIOS: Scenario[] = [
       await crew.fix.sendUnclaimed(t, "Approve", undefined, {
         say: "approve.",
         caption: "fix-bot tries to approve its own fix. Only a reviewer may send Approve, so the server refuses it, and the ticket stays in Review.",
+        mark: { intent: "not-allowed", label: "approved its own fix", rule: "assignment:rule:Approve" },
         expect: "FORBIDDEN",
         ticket: "InReview",
       });
@@ -139,6 +141,7 @@ export const SCENARIOS: Scenario[] = [
       await crew.fix.take(t, "SubmitFix", { freeFrom: 6, inclusive: true }, {
         say: "patch: free from $6.00.",
         caption: "fix-bot sends free from $6.00, a typo for $60. The $60.00 order passes, but an earlier fix's $20.00 case would now ship free. The server rejects the patch.",
+        mark: { intent: "bad-evidence", label: "broke an earlier case", rule: "verifyFix:broken" },
         expect: "Rejected",
         ticket: "ReadyToFix",
       });
@@ -181,6 +184,7 @@ export const SCENARIOS: Scenario[] = [
       await crew.qa.take(t, "SubmitChecks", { subtotals: [99.5, 100, 100.5] }, {
         say: "check: $99.50, $100.00, $100.50.",
         caption: "qa-bot tries $99.50. The patch ships it free, but the policy charges $7.50 below $100. QA did its job, and the server sends the ticket back to Fix.",
+        mark: { intent: "finding", label: "found a gap", rule: "qa:broken" },
         expect: "Accepted",
         ticket: "ReadyToFix",
       });
@@ -211,18 +215,21 @@ export const SCENARIOS: Scenario[] = [
       await crew.repro.take(t, "SubmitRepro", { subtotal: 75, expectedShipping: 0 }, {
         say: "repro: $75.00 order. policy: ships free.",
         caption: "repro-bot tries the reported order, $75.00. The rules ship it free, as the policy says. The bug does not reproduce, and the ticket stays in Reproduce.",
+        mark: { intent: "finding", label: "not reproduced", rule: "reproduce:matches" },
         expect: "Rejected",
         ticket: "Reproducing",
       });
       await crew.repro.send(t, "Close", undefined, {
         say: "close: cannot reproduce.",
         caption: "repro-bot asks to close the ticket. The server refuses: a close needs two cases that did not reproduce, and it has run one.",
+        mark: { intent: "not-allowed", label: "closed too early", rule: "assignment:guard:Close" },
         expect: "GUARD_FAILED",
         ticket: "Reproducing",
       });
       await crew.repro.send(t, "SubmitRepro", { subtotal: 50, expectedShipping: 0 }, {
         say: "repro: $50.00 order. policy: ships free.",
         caption: "repro-bot tries the edge of the policy, $50.00. It ships free too, as it should. That is two cases.",
+        mark: { intent: "finding", label: "not reproduced", rule: "reproduce:matches" },
         expect: "Rejected",
         ticket: "Reproducing",
       });

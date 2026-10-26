@@ -16,7 +16,8 @@
 // Five scenarios, one ticket each, each showing one thing: every-lane (a ticket through every lane, nothing refused),
 // skip-ahead (fix-bot is refused a claim in a lane the ticket is not in, and an approval its role cannot make),
 // fix-regresses (the server's earlier cases refuse a patch), qa-catches-edge (QA's sweep sends a patch back to Fix) and
-// cannot-reproduce (repro-bot may close the ticket only after two cases). Each move carries the script's caption.
+// cannot-reproduce (repro-bot may close the ticket only after two cases). Each move carries the script's caption, and
+// a move that was a mistake or a finding its mark: the code it points at is copied in as a span of lines (rulesOf).
 //
 // out/board/run.json holds the scenarios as the agents recorded them, and out/board-recordings.json the website's
 // copy (Trax.Website's src/data/board-recordings.json): both machines verbatim, the lines each move lights, the
@@ -34,6 +35,13 @@ const AGENTS = join(SAMPLE, "Trax.Samples.Board.Agents");
 const OUT = join(here, "out", "board");
 const ASSIGNMENT_FILE = "Trax.Samples.Board/Machines/AssignmentMachine.cs";
 const TICKET_FILE = "Trax.Samples.Board/Machines/TicketMachine.cs";
+// The trains whose code catches a move the machines do not: a claim out of its lane, and the checks' comparisons.
+const RULE_FILES = {
+  claim: "Trax.Samples.Board/Trains/Work/ClaimWorkTrain.cs",
+  reproduce: "Trax.Samples.Board/Trains/Checks/ReproduceTrain.cs",
+  verifyFix: "Trax.Samples.Board/Trains/Checks/VerifyFixTrain.cs",
+  qa: "Trax.Samples.Board/Trains/Checks/QaTrain.cs",
+};
 
 const LANES = [
   { key: "triage", name: "Triage", states: ["Triage"], worker: "triage-bot" },
@@ -95,21 +103,44 @@ function linesOf(assignment, ticket) {
   return out;
 }
 
+// The code a marked move points at (agent.ts `Mark.rule`), as a span of lines in one source: the page shows the span
+// under the board when the move it decided is on screen.
+function rulesOf(sources) {
+  const span = (source, name, test, count) => {
+    const lines = sources[source].split("\n");
+    const from = find(lines, test);
+    if (!from) throw new Error(`No line for ${name}: ${source} changed.`);
+    return { source, from, to: from + count - 1 };
+  };
+  return {
+    "assignment:rule:Approve": span("assignment", "Approve", (l) => l.includes(".On(AssignmentTrigger.Approve)"), 2),
+    "assignment:guard:Close": span("assignment", "Close", (l) => l.includes(".On(AssignmentTrigger.Close)"), 4),
+    "claim:wrong-lane": span("claim", "the lane check", (l) => l.includes("if (ticket.State != lane.State)"), 6),
+    "reproduce:matches": span("reproduce", "the policy match", (l) => l.includes("if (charged == policy)"), 1),
+    "verifyFix:broken": span("verifyFix", "the earlier cases", (l) => l.includes("var cases = report"), 5),
+    "qa:broken": span("qa", "the sweep", (l) => l.includes("var broken = check"), 3),
+  };
+}
+
 function websiteCopy() {
   const assignment = source(ASSIGNMENT_FILE);
   const ticket = source(TICKET_FILE);
   const run = JSON.parse(readFileSync(join(OUT, "run.json"), "utf8"));
   const lines = linesOf(assignment, ticket);
+  const code = { assignment, ticket };
+  for (const [key, file] of Object.entries(RULE_FILES)) code[key] = source(file);
+  const rules = rulesOf(code);
   for (const scenario of run.scenarios)
-    for (const event of scenario.events)
+    for (const event of scenario.events) {
       if (event.line && !(event.line in lines)) throw new Error(`${scenario.key} lights ${event.line}, which is not a known line.`);
+      if (event.mark && !(event.mark.rule in rules)) throw new Error(`${scenario.key} points at ${event.mark.rule}, which is not a known rule.`);
+    }
+  const files = { assignment: ASSIGNMENT_FILE, ticket: TICKET_FILE, ...RULE_FILES };
   return {
     recordedAt: run.recordedAt,
-    sources: {
-      assignment: { file: ASSIGNMENT_FILE, code: assignment },
-      ticket: { file: TICKET_FILE, code: ticket },
-    },
+    sources: Object.fromEntries(Object.entries(files).map(([key, file]) => [key, { file, code: code[key] }])),
     lines,
+    rules,
     lanes: LANES,
     agents: AGENT_LIST,
     scenarios: run.scenarios,
