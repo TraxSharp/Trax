@@ -53,7 +53,8 @@ public static class PersistedOperationChangeType
 ## Behavior
 
 - `UseRabbitMqInvalidation(...)` registers the RabbitMQ implementation, which publishes to a fanout
-  exchange every node subscribes to. `SingleNode()` registers a no-op.
+  exchange every node subscribes to, each message signed with the host's key. A node drops a
+  message not signed with it. `SingleNode()` registers a no-op.
 - When `PublishAsync` throws, the store has already saved the change and reports it as
   `PersistedOperationNotBroadcastException` (`CHANGE_NOT_BROADCAST`).
 - A node receiving a message empties its document, prepared-operation and lookup caches.

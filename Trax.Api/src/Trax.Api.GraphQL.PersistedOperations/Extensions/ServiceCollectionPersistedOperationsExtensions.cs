@@ -30,7 +30,8 @@ public static class ServiceCollectionPersistedOperationsExtensions
     /// </remarks>
     /// <example>
     /// <code>
-    /// services.AddPersistedOperationStore(store =&gt; store.UseRabbitMqInvalidation(rabbitMq));
+    /// services.AddPersistedOperationStore(store =&gt;
+    ///     store.UseRabbitMqInvalidation(rabbitMq, o =&gt; o.SigningKey = invalidationKey));
     /// </code>
     /// </example>
     public static IServiceCollection AddPersistedOperationStore(
@@ -43,7 +44,8 @@ public static class ServiceCollectionPersistedOperationsExtensions
 
         var storeBuilder = new PersistedOperationStoreBuilder();
         configure(storeBuilder);
-        return AddStore(services, storeBuilder.Build(), storeBuilder.ManagementGate);
+        var (connectionString, invalidation) = storeBuilder.Build();
+        return AddStore(services, connectionString, invalidation, storeBuilder.ManagementGate);
     }
 
     /// <summary>
@@ -84,6 +86,7 @@ public static class ServiceCollectionPersistedOperationsExtensions
     private static IServiceCollection AddStore(
         IServiceCollection services,
         string? rabbitMqInvalidationConnectionString,
+        RabbitMqInvalidationOptions invalidation,
         IReadOnlyList<Trax.Effect.Attributes.TraxAuthorizeAttribute> managementGate
     )
     {
@@ -91,7 +94,10 @@ public static class ServiceCollectionPersistedOperationsExtensions
         if (rabbitMqInvalidationConnectionString is null)
             builder.SingleNode();
         else
-            builder.UseRabbitMqInvalidation(rabbitMqInvalidationConnectionString);
+            builder.UseStoreRabbitMqInvalidation(
+                rabbitMqInvalidationConnectionString,
+                invalidation
+            );
 
         // One set of options per process. Without UsePersistedOperations they are the last store
         // call's; with it they are UsePersistedOperations', whichever comes first: it replaces

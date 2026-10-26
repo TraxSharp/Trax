@@ -18,6 +18,7 @@ public sealed class PersistedOperationStoreBuilder
     internal PersistedOperationStoreBuilder() { }
 
     private string? _rabbitMqConnectionString;
+    private readonly RabbitMqInvalidationOptions _rabbitMqInvalidation = new();
     private bool _singleNode;
 
     // Validated and accumulated as UsePersistedOperations does, so the two gates read the same.
@@ -62,6 +63,29 @@ public sealed class PersistedOperationStoreBuilder
     /// <summary>
     /// Broadcast every change over RabbitMQ to the GraphQL nodes that call
     /// <c>UseRabbitMqInvalidation</c> with the same broker, so each of them empties its caches.
+    /// Each change is signed with the key <paramref name="configure"/> sets, the one the nodes
+    /// share; the store refuses to start without it unless
+    /// <see cref="RabbitMqInvalidationOptions.AllowUnsignedMessages"/> is called, and refuses plain
+    /// <c>amqp://</c> to a host that is not loopback unless
+    /// <see cref="RabbitMqInvalidationOptions.AllowInsecureTransport"/> is set.
+    /// </summary>
+    /// <param name="connectionString">The broker the GraphQL nodes use.</param>
+    /// <param name="configure">Sets the signing key, and any opt-out.</param>
+    public PersistedOperationStoreBuilder UseRabbitMqInvalidation(
+        string connectionString,
+        Action<RabbitMqInvalidationOptions> configure
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        UseRabbitMqInvalidation(connectionString);
+        configure(_rabbitMqInvalidation);
+        return this;
+    }
+
+    /// <summary>
+    /// Broadcast every change over RabbitMQ, with no signing key yet. The store refuses to start
+    /// until one is set through
+    /// <see cref="UseRabbitMqInvalidation(string, Action{RabbitMqInvalidationOptions})"/>.
     /// </summary>
     public PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString)
     {
@@ -89,8 +113,11 @@ public sealed class PersistedOperationStoreBuilder
         return this;
     }
 
-    /// <summary>The broker connection string, or null when the host declared a single node.</summary>
-    internal string? Build()
+    /// <summary>
+    /// The broker connection string and its signing options, or a null connection string when the
+    /// host declared a single node.
+    /// </summary>
+    internal (string? ConnectionString, RabbitMqInvalidationOptions Invalidation) Build()
     {
         if (_rabbitMqConnectionString is null && !_singleNode)
             throw new InvalidOperationException(
@@ -108,6 +135,12 @@ public sealed class PersistedOperationStoreBuilder
                     + "operations, or SingleNode() when none does."
             );
 
-        return _rabbitMqConnectionString;
+        if (
+            _rabbitMqConnectionString is not null
+            && _rabbitMqInvalidation.Problem(_rabbitMqConnectionString) is { } problem
+        )
+            throw new InvalidOperationException(problem);
+
+        return (_rabbitMqConnectionString, _rabbitMqInvalidation);
     }
 }

@@ -144,7 +144,9 @@ public class PersistedOperationCrossNodeTests
 
     private async Task<ServiceProvider> StartNodeAsync()
     {
-        var node = await GraphQLFixture.BuildAsync(po => po.UseRabbitMqInvalidation(AmqpUri));
+        var node = await GraphQLFixture.BuildAsync(po =>
+            po.UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
+        );
         node.GetRequiredService<PersistedOperationsOptions>().RabbitMqExchange = _exchange;
         await node.GetRequiredService<PersistedOperationReceiverService>()
             .StartAsync(CancellationToken.None);

@@ -37,6 +37,22 @@ public class RabbitMqBroadcasterTests
         return options;
     }
 
+    /// <summary>Properties for a message published by hand, signed with the test key.</summary>
+    private BasicProperties Signed(byte[] body) =>
+        new()
+        {
+            ContentType = "application/json",
+            Headers = new Dictionary<string, object?>
+            {
+                [InvalidationMessageSignature.Header] = InvalidationMessageSignature.Create(
+                    TestInvalidationKey.Value,
+                    _exchange,
+                    body,
+                    DateTimeOffset.UtcNow
+                ),
+            },
+        };
+
     private static bool IsRabbitMqReachable()
     {
         try
@@ -64,7 +80,7 @@ public class RabbitMqBroadcasterTests
         var options = OnRunExchange(
             new PersistedOperationsBuilder()
                 .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri)
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
                 .Build()
         );
 
@@ -115,7 +131,9 @@ public class RabbitMqBroadcasterTests
     public async Task PublishAsync_CompletesOnlyOnceTheBrokerHasConfirmedIt()
     {
         var options = OnRunExchange(
-            new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build()
+            new PersistedOperationsBuilder()
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
+                .Build()
         );
         await using var publisher = new RabbitMqPersistedOperationBroadcaster(
             options,
@@ -142,7 +160,9 @@ public class RabbitMqBroadcasterTests
     public async Task PublishAsync_AfterItsChannelClosed_OpensAnotherOnTheSameConnection()
     {
         var options = OnRunExchange(
-            new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build()
+            new PersistedOperationsBuilder()
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
+                .Build()
         );
         await using var publisher = new RabbitMqPersistedOperationBroadcaster(
             options,
@@ -168,7 +188,7 @@ public class RabbitMqBroadcasterTests
     public async Task PublishAsync_WhenTheBrokerCannotBeReached_Throws()
     {
         var options = new PersistedOperationsBuilder()
-            .UseRabbitMqInvalidation("amqp://trax:trax123@localhost:1/")
+            .UseRabbitMqInvalidation("amqp://trax:trax123@localhost:1/", TestInvalidationKey.Sign)
             .Build();
         await using var publisher = new RabbitMqPersistedOperationBroadcaster(
             options,
@@ -195,7 +215,7 @@ public class RabbitMqBroadcasterTests
         var options = OnRunExchange(
             new PersistedOperationsBuilder()
                 .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri)
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
                 .Build()
         );
 
@@ -255,6 +275,96 @@ public class RabbitMqBroadcasterTests
     }
 
     [Test]
+    public async Task AMessageNotSignedWithTheKey_IsDropped_AndEmptiesNothing()
+    {
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
+                .Build()
+        );
+        var cache = new RecordingCache();
+        var receiver = new PersistedOperationReceiverService(
+            options,
+            cache,
+            NoOpInvalidator(),
+            NullLogger<PersistedOperationReceiverService>.Instance
+        );
+        await receiver.StartAsync(CancellationToken.None);
+
+        var unsigned = $"unsigned_{Guid.NewGuid():N}";
+        var forged = $"forged_{Guid.NewGuid():N}";
+        var sentinel = $"sentinel_{Guid.NewGuid():N}";
+        try
+        {
+            var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
+            await using (var connection = await factory.CreateConnectionAsync())
+            await using (var channel = await connection.CreateChannelAsync())
+            {
+                await channel.BasicPublishAsync(
+                    options.RabbitMqExchange,
+                    string.Empty,
+                    mandatory: false,
+                    new BasicProperties(),
+                    Body(unsigned)
+                );
+                var otherKey = "another-key-of-thirty-two-bytes!"u8.ToArray();
+                await channel.BasicPublishAsync(
+                    options.RabbitMqExchange,
+                    string.Empty,
+                    mandatory: false,
+                    new BasicProperties
+                    {
+                        Headers = new Dictionary<string, object?>
+                        {
+                            [InvalidationMessageSignature.Header] =
+                                InvalidationMessageSignature.Create(
+                                    otherKey,
+                                    options.RabbitMqExchange,
+                                    Body(forged),
+                                    DateTimeOffset.UtcNow
+                                ),
+                        },
+                    },
+                    Body(forged)
+                );
+            }
+
+            await using var publisher = new RabbitMqPersistedOperationBroadcaster(
+                options,
+                NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
+            );
+            await publisher.PublishAsync(Change(sentinel), CancellationToken.None);
+
+            (
+                await WaitUntilAsync(
+                    () => cache.Invalidations.Any(p => p.Id == sentinel),
+                    TimeSpan.FromSeconds(10)
+                )
+            )
+                .Should()
+                .BeTrue("a message signed with the key is received");
+            cache
+                .Invalidations.Should()
+                .NotContain(
+                    p => p.Id == unsigned || p.Id == forged,
+                    "a message with no signature, or another key's, empties nothing"
+                );
+            receiver.RefusedMessages.Should().Be(2);
+        }
+        finally
+        {
+            await receiver.StopAsync(CancellationToken.None);
+        }
+
+        static PersistedOperationChangedMessage Change(string id) =>
+            new(null, id, PersistedOperationChangeType.Upsert, DateTime.UtcNow);
+
+        static byte[] Body(string id) =>
+            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(Change(id));
+    }
+
+    [Test]
     public async Task ReceiverService_StoppedReceiver_DoesNotInvalidateCache()
     {
         // After Stop, a published message must NOT reach the receiver's cache.
@@ -263,7 +373,7 @@ public class RabbitMqBroadcasterTests
         var options = OnRunExchange(
             new PersistedOperationsBuilder()
                 .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri)
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
                 .Build()
         );
         var cache = new RecordingCache();
@@ -338,7 +448,7 @@ public class RabbitMqBroadcasterTests
         var options = OnRunExchange(
             new PersistedOperationsBuilder()
                 .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri)
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
                 .Build()
         );
         var cache = new RecordingCache();
@@ -413,7 +523,7 @@ public class RabbitMqBroadcasterTests
         var options = OnRunExchange(
             new PersistedOperationsBuilder()
                 .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri)
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
                 .Build()
         );
         var svc = new PersistedOperationReceiverService(
@@ -441,7 +551,7 @@ public class RabbitMqBroadcasterTests
         var options = OnRunExchange(
             new PersistedOperationsBuilder()
                 .WithInMemoryCache()
-                .UseRabbitMqInvalidation(AmqpUri)
+                .UseRabbitMqInvalidation(AmqpUri, TestInvalidationKey.Sign)
                 .Build()
         );
         var cache = new RecordingCache();
@@ -466,10 +576,7 @@ public class RabbitMqBroadcasterTests
             exchange: _exchange,
             routingKey: string.Empty,
             mandatory: false,
-            basicProperties: new RabbitMQ.Client.BasicProperties
-            {
-                ContentType = "application/json",
-            },
+            basicProperties: Signed(System.Text.Encoding.UTF8.GetBytes("garbage-not-json")),
             body: System.Text.Encoding.UTF8.GetBytes("garbage-not-json"),
             cancellationToken: CancellationToken.None
         );
@@ -477,22 +584,20 @@ public class RabbitMqBroadcasterTests
         // A valid message published after it on the same channel reaches the queue after it, so once
         // the receiver has handled it the malformed one was received and rejected.
         var sentinel = $"sentinel_{Guid.NewGuid():N}";
+        var sentinelBody = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new PersistedOperationChangedMessage(
+                null,
+                sentinel,
+                PersistedOperationChangeType.Upsert,
+                DateTime.UtcNow
+            )
+        );
         await channel.BasicPublishAsync(
             exchange: _exchange,
             routingKey: string.Empty,
             mandatory: false,
-            basicProperties: new RabbitMQ.Client.BasicProperties
-            {
-                ContentType = "application/json",
-            },
-            body: System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
-                new PersistedOperationChangedMessage(
-                    null,
-                    sentinel,
-                    PersistedOperationChangeType.Upsert,
-                    DateTime.UtcNow
-                )
-            ),
+            basicProperties: Signed(sentinelBody),
+            body: sentinelBody,
             cancellationToken: CancellationToken.None
         );
         (

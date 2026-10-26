@@ -20,7 +20,44 @@ public sealed partial class PersistedOperationsBuilder
     /// A host that runs more than one node needs this; a host that runs one declares
     /// <see cref="SingleNode"/> instead. Persisted operations refuse to start with neither.
     /// </para>
+    /// <para>
+    /// Every message is signed with the key <paramref name="configure"/> sets
+    /// (<see cref="RabbitMqInvalidationOptions.SigningKey"/>), and a node drops one that is not.
+    /// Persisted operations refuse to start without a key unless
+    /// <see cref="RabbitMqInvalidationOptions.AllowUnsignedMessages"/> is called, and refuse plain
+    /// <c>amqp://</c> to a host that is not loopback unless
+    /// <see cref="RabbitMqInvalidationOptions.AllowInsecureTransport"/> is set.
+    /// </para>
     /// </remarks>
+    /// <param name="connectionString">The broker every node and uploader uses.</param>
+    /// <param name="configure">Sets the signing key, and any opt-out.</param>
+    public PersistedOperationsBuilder UseRabbitMqInvalidation(
+        string connectionString,
+        Action<RabbitMqInvalidationOptions> configure
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        UseRabbitMqInvalidation(connectionString);
+        configure(_rabbitMqInvalidation);
+        return this;
+    }
+
+    // The store's registration hands over the options its own builder collected.
+    internal PersistedOperationsBuilder UseStoreRabbitMqInvalidation(
+        string connectionString,
+        RabbitMqInvalidationOptions invalidation
+    )
+    {
+        UseRabbitMqInvalidation(connectionString);
+        _rabbitMqInvalidation = invalidation;
+        return this;
+    }
+
+    /// <summary>
+    /// Broadcast every persisted-operation change over RabbitMQ, with no signing key yet. Persisted
+    /// operations refuse to start until one is set through
+    /// <see cref="UseRabbitMqInvalidation(string, Action{RabbitMqInvalidationOptions})"/>.
+    /// </summary>
     public PersistedOperationsBuilder UseRabbitMqInvalidation(string connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -39,7 +76,7 @@ public sealed partial class PersistedOperationsBuilder
     /// </summary>
     /// <remarks>
     /// Persisted operations refuse to start unless the host either declares this or calls
-    /// <see cref="UseRabbitMqInvalidation"/>. The declaration is a claim about the deployment that
+    /// <see cref="UseRabbitMqInvalidation(string, Action{RabbitMqInvalidationOptions})"/>. The declaration is a claim about the deployment that
     /// nothing at runtime can check: run a second node, or write the store from another process
     /// (a CI uploader using <c>AddPersistedOperationStore</c>), and a change made there reaches
     /// this node's caches only when the entry reaches its maximum age (<see cref="WithCacheMaxAge"/>).

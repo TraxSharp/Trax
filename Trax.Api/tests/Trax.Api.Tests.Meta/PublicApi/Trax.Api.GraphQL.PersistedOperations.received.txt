@@ -36,6 +36,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder GateManagementToAuthenticatedUsers() { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder SingleNode() { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString) { }
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString, System.Action<Trax.Api.GraphQL.PersistedOperations.Configuration.RabbitMqInvalidationOptions> configure) { }
     }
     public sealed class PersistedOperationsBuilder
     {
@@ -53,6 +54,7 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
             "tered by AddEffects(e => e.UsePostgres(...)). Remove the call.")]
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder UseDatabase(string connectionString) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder UseRabbitMqInvalidation(string connectionString) { }
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder UseRabbitMqInvalidation(string connectionString, System.Action<Trax.Api.GraphQL.PersistedOperations.Configuration.RabbitMqInvalidationOptions> configure) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder WithCacheMaxAge(System.TimeSpan maxAge) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder WithInMemoryCache(System.Action<Trax.Api.GraphQL.PersistedOperations.Configuration.CacheOptions>? configure = null) { }
     }
@@ -71,6 +73,16 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
         public string? RabbitMqConnectionString { get; }
         public bool RequirePersisted { get; }
         public bool SingleNode { get; }
+    }
+    public sealed class RabbitMqInvalidationOptions
+    {
+        public const int MinimumSigningKeyLength = 32;
+        public RabbitMqInvalidationOptions() { }
+        public bool AllowInsecureTransport { get; set; }
+        public System.TimeSpan MaxClockSkew { get; set; }
+        public byte[]? SigningKey { get; set; }
+        public bool UnsignedMessagesAllowed { get; }
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.RabbitMqInvalidationOptions AllowUnsignedMessages() { }
     }
 }
 namespace Trax.Api.GraphQL.PersistedOperations.Extensions

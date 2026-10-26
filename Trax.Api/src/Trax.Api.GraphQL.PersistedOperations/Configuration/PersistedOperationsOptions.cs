@@ -130,6 +130,13 @@ public sealed class PersistedOperationsOptions
         Broadcasting.RabbitMqPersistedOperationBroadcaster.ExchangeName;
 
     /// <summary>
+    /// The signing key and transport posture for <see cref="RabbitMqConnectionString"/>, set by
+    /// <c>UseRabbitMqInvalidation</c>. With no key and no opt-out, the broadcaster and the receiver
+    /// refuse to start.
+    /// </summary>
+    internal RabbitMqInvalidationOptions RabbitMqInvalidation { get; set; } = new();
+
+    /// <summary>
     /// True when the host declared, with <c>SingleNode()</c>, that one process serves this
     /// endpoint and writes the store, so no broadcast is needed.
     /// </summary>

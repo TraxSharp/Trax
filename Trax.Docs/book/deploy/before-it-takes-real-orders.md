@@ -18,7 +18,7 @@ follows: book/deploy/the-console
   in `AddShopfront`. Each is an interface, so a real one replaces it there, and nothing else
   changes.
 - **A second hub** needs persisted-operation changes broadcast between hubs: replace `SingleNode()`
-  with `UseRabbitMqInvalidation(rabbitMq)`. Only one hub runs the schedule at a time; the others
+  with `UseRabbitMqInvalidation(rabbitMq, o => o.SigningKey = broadcastKey)`. Only one hub runs the schedule at a time; the others
   serve.
 
 ## What we have

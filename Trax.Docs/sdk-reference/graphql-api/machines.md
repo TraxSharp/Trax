@@ -69,7 +69,7 @@ Exposing a machine requires [persisted operations](/docs/api/persisted-operation
 served as [persisted documents](#persisted-documents) that carry its version, and a node orders a machine's versions
 across a rolling deploy through them. A host that exposes a machine without `UsePersistedOperations` refuses to start,
 naming the machines and the call to add. `SingleNode()` suits one process; more than one node uses
-`UseRabbitMqInvalidation(connectionString)`.
+`UseRabbitMqInvalidation(connectionString, o => o.SigningKey = key)`.
 
 ### Names
 

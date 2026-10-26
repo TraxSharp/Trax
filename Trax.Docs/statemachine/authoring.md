@@ -200,7 +200,7 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted => persisted.SingleNode()));
 ```
 
-`SingleNode()` suits one process; more than one node uses `UseRabbitMqInvalidation(connectionString)`, as
+`SingleNode()` suits one process; more than one node uses `UseRabbitMqInvalidation(connectionString, o => o.SigningKey = key)`, as
 [Turn on persisted operations](/docs/api/persisted-operations) describes. Host options (draft expiry, the per-user draft
 cap, the change feed) are under [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines#options).
 The rules for which registered machines are served, and the refusals for a marked subclass or a duplicate id, are

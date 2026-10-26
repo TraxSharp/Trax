@@ -125,6 +125,7 @@ Configuration errors throw `InvalidOperationException` when `UsePersistedOperati
 | `RequirePersisted(false)` and `LogNonPersistedRequests(false)` | Throws: configuration does nothing. |
 | Neither `SingleNode()` nor `UseRabbitMqInvalidation(...)` | Throws: names both, since a change reaches another node at once only by broadcast. |
 | Both `SingleNode()` and `UseRabbitMqInvalidation(...)` | Throws: the two contradict each other. |
+| `UseRabbitMqInvalidation(...)` with no `SigningKey` and no `AllowUnsignedMessages()`, a key shorter than 32 bytes, or plain `amqp://` to a host that is not loopback without `AllowInsecureTransport` | Throws, naming the option to set. |
 | `WithInMemoryCache` called twice | Throws. |
 | `WithInMemoryCache` TTL longer than `WithCacheMaxAge` | Throws: the TTL would not take effect. |
 | `WithCacheMaxAge` not positive | Throws `ArgumentOutOfRangeException` when called. |
@@ -153,7 +154,10 @@ services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(opts => opts
         .RequirePersisted(true)
         .WithInMemoryCache()
-        .UseRabbitMqInvalidation(rabbitMqConnectionString)
+        .UseRabbitMqInvalidation(
+            rabbitMqConnectionString,
+            o => o.SigningKey = Convert.FromBase64String(configuration["Trax:InvalidationSigningKey"]!)
+        )
         .GateManagement(policy: "TraxAdmin")
     )
 );

@@ -10,6 +10,7 @@ using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Middleware;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Api.Tests.PersistedOperations.Fixtures;
 using Trax.Effect.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
@@ -112,7 +113,8 @@ public class ExtensionMethodTests
         >();
         var builder = new TraxGraphQLBuilder(sc);
         builder.UsePersistedOperations(opts =>
-            opts.WithInMemoryCache().UseRabbitMqInvalidation("amqp://localhost")
+            opts.WithInMemoryCache()
+                .UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign)
         );
 
         await using var sp = sc.BuildServiceProvider();
@@ -250,7 +252,9 @@ public class ExtensionMethodTests
     {
         Action act = () =>
             new ServiceCollection().AddPersistedOperationStore(store =>
-                store.SingleNode().UseRabbitMqInvalidation("amqp://localhost")
+                store
+                    .SingleNode()
+                    .UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign)
             );
         act.Should().Throw<InvalidOperationException>().WithMessage("*contradict*");
     }
@@ -270,7 +274,9 @@ public class ExtensionMethodTests
     {
         var sc = new ServiceCollection();
         sc.AddLogging();
-        sc.AddPersistedOperationStore(store => store.UseRabbitMqInvalidation("amqp://localhost"));
+        sc.AddPersistedOperationStore(store =>
+            store.UseRabbitMqInvalidation("amqp://localhost", TestInvalidationKey.Sign)
+        );
         await using var sp = sc.BuildServiceProvider();
 
         sp.GetRequiredService<IPersistedOperationBroadcaster>()
@@ -298,8 +304,9 @@ public class ExtensionMethodTests
     /// against it; the database string is not used. Called by reflection, as such a host would.
     /// </summary>
     [Test]
-    public async Task AddPersistedOperationStore_TheTwoStringOverload_StillBroadcasts()
+    public void AddPersistedOperationStore_TheTwoStringOverload_RefusesWithoutASigningKey()
     {
+        // It names a broker and nothing else, so it has no key to sign the broadcast with.
         var overload = typeof(ServiceCollectionPersistedOperationsExtensions).GetMethod(
             nameof(ServiceCollectionPersistedOperationsExtensions.AddPersistedOperationStore),
             [typeof(IServiceCollection), typeof(string), typeof(string)]
@@ -307,12 +314,12 @@ public class ExtensionMethodTests
         var sc = new ServiceCollection();
         sc.AddLogging();
 
-        overload.Invoke(null, [sc, FakeConn, "amqp://localhost"]);
+        var act = () => overload.Invoke(null, [sc, FakeConn, "amqp://localhost"]);
 
-        await using var sp = sc.BuildServiceProvider();
-        sp.GetRequiredService<IPersistedOperationBroadcaster>()
-            .Should()
-            .BeOfType<RabbitMqPersistedOperationBroadcaster>();
+        act.Should()
+            .Throw<System.Reflection.TargetInvocationException>()
+            .WithInnerException<InvalidOperationException>()
+            .WithMessage("*SigningKey*");
     }
 
     [Test]

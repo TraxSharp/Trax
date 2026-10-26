@@ -36,6 +36,10 @@ public sealed partial class PersistedOperationsBuilder
     public PersistedOperationsBuilder DisableIntrospection();
     public PersistedOperationsBuilder WithInMemoryCache(Action<CacheOptions>? configure = null);
     public PersistedOperationsBuilder WithCacheMaxAge(TimeSpan maxAge);
+    public PersistedOperationsBuilder UseRabbitMqInvalidation(
+        string connectionString,
+        Action<RabbitMqInvalidationOptions> configure
+    );
     public PersistedOperationsBuilder UseRabbitMqInvalidation(string connectionString);
     public PersistedOperationsBuilder SingleNode();
     public PersistedOperationsBuilder GateManagement(string? policy = null, string? roles = null);
@@ -50,6 +54,16 @@ public sealed class CacheOptions
     public TimeSpan? Ttl { get; }
     public CacheOptions WithTtl(TimeSpan ttl);
 }
+
+public sealed class RabbitMqInvalidationOptions
+{
+    public const int MinimumSigningKeyLength = 32;
+    public byte[]? SigningKey { get; set; }
+    public TimeSpan MaxClockSkew { get; set; }
+    public bool AllowInsecureTransport { get; set; }
+    public bool UnsignedMessagesAllowed { get; }
+    public RabbitMqInvalidationOptions AllowUnsignedMessages();
+}
 ```
 
 ## Members
@@ -63,7 +77,8 @@ public sealed class CacheOptions
 | `DisableIntrospection()` | introspection allowed | Inline introspection requests are refused like any other inline document. |
 | `WithInMemoryCache(Action<CacheOptions>?)` | no cache | Cache the store's lookups in `IMemoryCache`, under the document and prepared-operation caches, which are always on. Without it the database is read when a node first serves an id, after a change empties those caches, and when an entry reaches its maximum age. |
 | `WithCacheMaxAge(TimeSpan maxAge)` | 5 minutes | The longest any cache on a node keeps a persisted operation, counted from when its document was read from the database. The backstop for a change that did not reach the node: it serves what it cached for at most this long, then reads the store again. Must be positive. |
-| `UseRabbitMqInvalidation(string connectionString)` | none | Broadcast every change over a RabbitMQ fanout so every node empties its caches. Required when more than one node serves the endpoint. Works with or without `WithInMemoryCache()`. A publish the broker does not confirm is reported as `CHANGE_NOT_BROADCAST`. |
+| `UseRabbitMqInvalidation(string connectionString, Action<RabbitMqInvalidationOptions> configure)` | none | Broadcast every change over a RabbitMQ fanout so every node empties its caches, each message signed with the key `configure` sets. Required when more than one node serves the endpoint. Works with or without `WithInMemoryCache()`. A publish the broker does not confirm is reported as `CHANGE_NOT_BROADCAST`. See [Signing and transport](#signing-and-transport). |
+| `UseRabbitMqInvalidation(string connectionString)` | none | The same broker with no key set, which refuses the start until one is set through the overload above. |
 | `SingleNode()` | none | Declare that one process serves the endpoint and writes the store, so no broadcast is needed. |
 | `GateManagement(string? policy = null, string? roles = null)` | not served | Serve the [management fields](/docs/sdk-reference/persisted-operations/management-mutations), `persistedOperations { ... }` at the root, behind `@authorize` with this policy or these roles. A comma-separated `roles` list is any of; repeated calls are all of. A policy or roles is required. Without this call or the next, the fields are not in the schema. |
 | `GateManagementToAuthenticatedUsers()` | not served | Serve the management fields to any authenticated caller. On a host with public sign-up that is anyone, so prefer `GateManagement`. |
@@ -78,11 +93,42 @@ public sealed class CacheOptions
 |---|---|---|
 | `WithTtl(TimeSpan ttl)` | the maximum age | Entry lifetime for the Trax lookup cache, read back from `Ttl`. Must be positive (`ArgumentOutOfRangeException`) and may not exceed `WithCacheMaxAge` (`InvalidOperationException` when the options are built). |
 
+## Signing and transport
+
+A message on the invalidation exchange empties a node's caches, so the broadcast is signed. Every
+node and every uploader (`AddPersistedOperationStore`) sets the same key, and each message carries a
+`trax-signature` header: HMAC-SHA256 over the body, the exchange, a timestamp and a message id, the
+scheme [UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq#signing-and-transport) uses for
+train events. A node checks it before it reads the body and drops a message that is unsigned,
+signed with another key, or further than `MaxClockSkew` from its clock, logging a warning at most
+once a minute.
+
+| `RabbitMqInvalidationOptions` | Default | Purpose |
+|---|---|---|
+| `SigningKey` | `null` | The shared key, at least `MinimumSigningKeyLength` (32) bytes. Required unless `AllowUnsignedMessages()` is called. |
+| `MaxClockSkew` | 5 minutes | How far a message's timestamp may be from the receiving node's clock, either way. Must be positive. |
+| `AllowUnsignedMessages()` | off | Publish unsigned and accept messages without a signature when no key is set. The receiver logs a warning when it starts. Only for a broker no one else can publish to. Read back from `UnsignedMessagesAllowed`. |
+| `AllowInsecureTransport` | `false` | Accept plain `amqp://` to a broker that is not loopback. Without it such a URI refuses the start, since the broker credentials and every message would cross the network in cleartext. The receiver logs a warning when it is what lets the connection through. |
+
+```csharp compile
+services.AddTraxGraphQL(graphql => graphql
+    .UsePersistedOperations(opts => opts
+        .UseRabbitMqInvalidation(
+            "amqps://trax:secret@rabbitmq.internal:5671/",
+            o => o.SigningKey = Convert.FromBase64String(configuration["Trax:InvalidationSigningKey"]!)
+        )
+    )
+);
+```
+
 ## Behavior
 
 - Exactly one of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required. See [One node or many](/docs/api/persisted-operations#one-node-or-many).
 - `GateManagement` throws `InvalidOperationException` with neither a policy nor roles, or with a role list that holds only separators. A policy it names that is not registered with `AddAuthorization` fails startup.
 - `ClientDocuments` throws `ArgumentException` for a blank path.
+- With `UseRabbitMqInvalidation`, building the options throws `InvalidOperationException` without a
+  `SigningKey` (unless `AllowUnsignedMessages()`), with one shorter than 32 bytes, or for plain
+  `amqp://` to a host that is not loopback without `AllowInsecureTransport`.
 - `UseRabbitMqInvalidation` throws `ArgumentException` for a blank connection string; `WithCacheMaxAge` and `KeepOlderMachineDocumentsFor` throw `ArgumentOutOfRangeException` for a value that is not positive; a second `WithInMemoryCache` throws `InvalidOperationException`.
 - The remaining checks run when `UsePersistedOperations` builds the options and throw `InvalidOperationException`; the [UsePersistedOperations validation table](/docs/sdk-reference/persisted-operations/use-persisted-operations#validation) lists them.
 - What the allowlist does and does not protect: [Allowlist and dev carve-outs](/docs/api/persisted-operations#allowlist-and-dev-carve-outs).
@@ -98,7 +144,10 @@ services.AddTraxGraphQL(graphql => graphql
         .AllowOperationsMatching(id => id.StartsWith("dev_"))
         .WithCacheMaxAge(TimeSpan.FromMinutes(5))
         .WithInMemoryCache(c => c.WithTtl(TimeSpan.FromMinutes(2)))
-        .UseRabbitMqInvalidation(rabbitMqConnectionString)
+        .UseRabbitMqInvalidation(
+            rabbitMqConnectionString,
+            o => o.SigningKey = Convert.FromBase64String(configuration["Trax:InvalidationSigningKey"]!)
+        )
         .GateManagement(roles: "Deployer")
     )
 );
