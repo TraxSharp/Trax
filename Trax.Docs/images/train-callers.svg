@@ -1,55 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 260" width="768" height="260" role="img" aria-labelledby="title">
   <title id="title">Five callers run the same train: your code, a GraphQL client, the scheduler, a worker process and a state machine. Each run of the train leaves a run record, and the operations console shows the records.</title>
-  <style>
-    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #e4e2de; font-size: 14px; }
-    .muted { fill: #a09d96; font-size: 13px; }
-    .label { fill: #a09d96; font-size: 12px; letter-spacing: 1px; }
-    .card { fill: #1e1e1e; stroke: #2a2a28; stroke-width: 1.5; }
-    .junction { fill: #1b2430; stroke: #3a4a5c; stroke-width: 1.5; }
-    .line { stroke: #686560; stroke-width: 1.5; fill: none; }
-  </style>
-  <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#686560"/>
-    </marker>
-  </defs>
-  <rect width="768" height="260" fill="#151515"/>
-
-  <text x="16" y="26" class="label">CALLERS</text>
-  <rect x="16" y="36" width="168" height="34" rx="6" class="card"/>
-  <text x="30" y="58">your code</text>
-  <rect x="16" y="78" width="168" height="34" rx="6" class="card"/>
-  <text x="30" y="100">a GraphQL client</text>
-  <rect x="16" y="120" width="168" height="34" rx="6" class="card"/>
-  <text x="30" y="142">the scheduler</text>
-  <rect x="16" y="162" width="168" height="34" rx="6" class="card"/>
-  <text x="30" y="184">a worker process</text>
-  <rect x="16" y="204" width="168" height="34" rx="6" class="card"/>
-  <text x="30" y="226">a state machine</text>
-
-  <path d="M184,53 C220,53 222,137 252,137" class="line"/>
-  <path d="M184,95 C220,95 222,137 252,137" class="line"/>
-  <path d="M184,137 L254,137" class="line" marker-end="url(#arrow)"/>
-  <path d="M184,179 C220,179 222,137 252,137" class="line"/>
-  <path d="M184,221 C220,221 222,137 252,137" class="line"/>
-
-  <text x="260" y="26" class="label" style="fill:#7a9ec2">ONE TRAIN</text>
-  <rect x="260" y="80" width="268" height="114" rx="10" fill="#1e1e1e" stroke="#7a9ec2" stroke-width="1.5"/>
-  <rect x="276" y="118" width="70" height="38" rx="6" class="junction"/>
-  <text x="311" y="142" text-anchor="middle" style="font-size:12px">junction</text>
-  <rect x="360" y="118" width="70" height="38" rx="6" class="junction"/>
-  <text x="395" y="142" text-anchor="middle" style="font-size:12px">junction</text>
-  <rect x="444" y="118" width="70" height="38" rx="6" class="junction"/>
-  <text x="479" y="142" text-anchor="middle" style="font-size:12px">junction</text>
-  <path d="M346,137 L358,137 M430,137 L442,137" class="line"/>
-  <text x="276" y="180" class="muted">written once, unchanged by its callers</text>
-
-  <path d="M528,137 L570,137" class="line" marker-end="url(#arrow)"/>
-  <rect x="574" y="80" width="178" height="70" rx="8" class="card"/>
-  <text x="590" y="106" style="font-weight:600">a run record</text>
-  <text x="590" y="126" class="muted">when, how it ended,</text>
-  <text x="590" y="142" class="muted">which step failed, why</text>
-  <path d="M663,150 L663,182" class="line" marker-end="url(#arrow)"/>
-  <rect x="574" y="186" width="178" height="40" rx="8" fill="#1a2e18" stroke="#3d8b37" stroke-width="1.5"/>
-  <text x="590" y="211">the operations console</text>
+  <defs><marker id="a686560" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#686560"/></marker></defs>
+<rect width="768" height="260" fill="#151515"/>
+  <text x="16" y="26" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96;letter-spacing:1px">CALLERS</text>
+  <rect x="16" y="36" width="168" height="34" rx="6" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="30" y="58" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">your code</text>
+  <path d="M184,53 C220,53 222,137 252,137" fill="none" stroke="#686560" stroke-width="1.5"/>
+  <rect x="16" y="78" width="168" height="34" rx="6" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="30" y="100" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">a GraphQL client</text>
+  <path d="M184,95 C220,95 222,137 252,137" fill="none" stroke="#686560" stroke-width="1.5"/>
+  <rect x="16" y="120" width="168" height="34" rx="6" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="30" y="142" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">the scheduler</text>
+  <path d="M184,137 L254,137" fill="none" stroke="#686560" stroke-width="1.5" marker-end="url(#a686560)"/>
+  <rect x="16" y="162" width="168" height="34" rx="6" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="30" y="184" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">a worker process</text>
+  <path d="M184,179 C220,179 222,137 252,137" fill="none" stroke="#686560" stroke-width="1.5"/>
+  <rect x="16" y="204" width="168" height="34" rx="6" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="30" y="226" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">a state machine</text>
+  <path d="M184,221 C220,221 222,137 252,137" fill="none" stroke="#686560" stroke-width="1.5"/>
+  <text x="260" y="26" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#7fb0e0;letter-spacing:1px">ONE TRAIN</text>
+  <rect x="260" y="80" width="268" height="114" rx="10" fill="#16243a" stroke="#7fb0e0" stroke-width="1.5"/>
+  <rect x="276" y="118" width="70" height="38" rx="6" fill="#1e1e1e" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="311" y="142" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#e4e2de">junction</text>
+  <rect x="360" y="118" width="70" height="38" rx="6" fill="#1e1e1e" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="395" y="142" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#e4e2de">junction</text>
+  <rect x="444" y="118" width="70" height="38" rx="6" fill="#1e1e1e" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="479" y="142" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#e4e2de">junction</text>
+  <path d="M346,137 L358,137 M430,137 L442,137" fill="none" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="276" y="180" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">written once, unchanged by its callers</text>
+  <path d="M528,137 L570,137" fill="none" stroke="#686560" stroke-width="1.5" marker-end="url(#a686560)"/>
+  <rect x="574" y="80" width="178" height="70" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="590" y="106" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:600;fill:#e4e2de">a run record</text>
+  <text x="590" y="126" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">when, how it ended,</text>
+  <text x="590" y="142" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">which step failed, why</text>
+  <path d="M663,150 L663,182" fill="none" stroke="#686560" stroke-width="1.5" marker-end="url(#a686560)"/>
+  <rect x="574" y="186" width="178" height="40" rx="8" fill="#12302b" stroke="#5fc9b5" stroke-width="1.5"/>
+  <text x="590" y="211" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">the operations console</text>
 </svg>

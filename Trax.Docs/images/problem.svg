@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 250" width="768" height="250" role="img" aria-labelledby="title">
+  <title id="title">A web user, a script and an AI agent all reach the same process. The web user skips ahead to payment, the script sends data in the wrong shape, the agent approves its own work. The process's rules usually live in checks spread through the code, or in a prompt an AI may ignore.</title>
+  <defs><marker id="ae8853d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8853d"/></marker></defs>
+<rect width="768" height="250" fill="#151515"/>
+  <rect x="16" y="16" width="200" height="64" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="32" y="43" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">A web user</text>
+  <text x="32" y="64" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">forms, clicks, back buttons</text>
+  <path d="M216,48 L494,48" fill="none" stroke="#e8853d" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#ae8853d)"/>
+  <text x="232" y="40" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;font-weight:400;fill:#e8853d">skips ahead to payment</text>
+  <rect x="16" y="92" width="200" height="64" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="32" y="119" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">A script</text>
+  <text x="32" y="140" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">integrations, other services</text>
+  <path d="M216,124 L494,124" fill="none" stroke="#e8853d" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#ae8853d)"/>
+  <text x="232" y="116" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;font-weight:400;fill:#e8853d">sends data in the wrong shape</text>
+  <rect x="16" y="168" width="200" height="64" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="32" y="195" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">An AI agent</text>
+  <text x="32" y="216" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">calls tools on its own</text>
+  <path d="M216,200 L494,200" fill="none" stroke="#e8853d" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#ae8853d)"/>
+  <text x="232" y="192" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;font-weight:400;fill:#e8853d">approves its own work</text>
+  <rect x="500" y="16" width="252" height="216" rx="10" fill="#12302b" stroke="#5fc9b5" stroke-width="2"/>
+  <text x="520" y="50" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:18px;font-weight:600;fill:#e4e2de">Your process</text>
+  <text x="520" y="82" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">Its rules usually live in checks</text>
+  <text x="520" y="101" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">spread through the code, or in</text>
+  <text x="520" y="120" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">instructions in a prompt that an</text>
+  <text x="520" y="139" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">AI may not follow.</text>
+</svg>

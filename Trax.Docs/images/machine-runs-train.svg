@@ -1,49 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 220" width="768" height="220" role="img" aria-labelledby="title">
-  <title id="title">When the checkout enters Placing, the machine runs the PlaceOrder train. The train runs its junctions and returns a result: the checkout moves to Placed when the train succeeds and to Failed when it does not.</title>
-  <style>
-    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #e4e2de; font-size: 15px; }
-    .muted { fill: #a09d96; font-size: 13px; }
-    .label { fill: #a09d96; font-size: 12px; letter-spacing: 1px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
-    .junction { fill: #1b2430; stroke: #3a4a5c; stroke-width: 1.5; }
-    .line { stroke: #686560; stroke-width: 1.5; fill: none; }
-  </style>
-  <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#686560"/>
-    </marker>
-  </defs>
-  <rect width="768" height="220" fill="#151515"/>
-
-  <text x="16" y="30" class="label" style="fill:#d4a24c">THE MACHINE</text>
-  <rect x="16" y="78" width="120" height="64" rx="8" fill="#332a14" stroke="#d4a24c" stroke-width="2"/>
-  <text x="32" y="104" class="muted">state</text>
-  <text x="32" y="126" font-weight="600">Placing</text>
-
-  <path d="M136,110 L176,110" class="line" marker-end="url(#arrow)"/>
-  <text x="156" y="100" class="muted" text-anchor="middle">runs</text>
-
-  <text x="180" y="30" class="label" style="fill:#7a9ec2">THE TRAIN</text>
-  <rect x="180" y="44" width="412" height="132" rx="10" fill="#1e1e1e" stroke="#7a9ec2" stroke-width="1.5"/>
-  <text x="196" y="72" class="mono" style="fill:#7a9ec2">PlaceOrder</text>
-  <rect x="196" y="88" width="90" height="40" rx="6" class="junction"/>
-  <text x="241" y="113" text-anchor="middle" style="font-size:12px">PriceCart</text>
-  <rect x="292" y="88" width="90" height="40" rx="6" class="junction"/>
-  <text x="337" y="113" text-anchor="middle" style="font-size:12px">ReserveStock</text>
-  <rect x="388" y="88" width="90" height="40" rx="6" class="junction"/>
-  <text x="433" y="113" text-anchor="middle" style="font-size:12px">TakePayment</text>
-  <rect x="484" y="88" width="90" height="40" rx="6" class="junction"/>
-  <text x="529" y="113" text-anchor="middle" style="font-size:12px">ConfirmOrder</text>
-  <text x="196" y="158" class="muted">records the run and returns a result</text>
-
-  <path d="M592,90 L640,64" stroke="#5cb85c" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <path d="M592,130 L640,156" stroke="#c45c5c" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <rect x="644" y="36" width="108" height="56" rx="8" fill="#1a2e18" stroke="#5cb85c" stroke-width="1.5"/>
-  <text x="660" y="60" font-weight="600">Placed</text>
-  <text x="660" y="80" class="muted">it succeeded</text>
-  <rect x="644" y="128" width="108" height="56" rx="8" fill="#2e1616" stroke="#c45c5c" stroke-width="1.5"/>
-  <text x="660" y="152" font-weight="600">Failed</text>
-  <text x="660" y="172" class="muted">it did not</text>
-
-  <text x="16" y="206" class="muted">A train also runs on its own: from your code, over GraphQL, on a schedule, or on a worker.</text>
+  <title id="title">Reaching the Placing station starts the PlaceOrder train. The train passes its junctions without stopping and returns a result: the checkout arrives at Placed when the train succeeds and at Failed when it does not.</title>
+  <defs><marker id="a7fb0e0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7fb0e0"/></marker><marker id="a5fc9b5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5fc9b5"/></marker><marker id="ae8853d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8853d"/></marker></defs>
+<rect width="768" height="220" fill="#151515"/>
+  <text x="16" y="30" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#5fc9b5;letter-spacing:1px">STATION (STATE)</text>
+  <rect x="16" y="78" width="120" height="64" rx="8" fill="#12302b" stroke="#5fc9b5" stroke-width="2"/>
+  <text x="32" y="116" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">Placing</text>
+  <path d="M136,110 L176,110" fill="none" stroke="#7fb0e0" stroke-width="2" marker-end="url(#a7fb0e0)"/>
+  <text x="156" y="100" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#7fb0e0">starts</text>
+  <text x="180" y="30" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#7fb0e0;letter-spacing:1px">THE TRAIN</text>
+  <rect x="180" y="44" width="412" height="132" rx="10" fill="#16243a" stroke="#7fb0e0" stroke-width="1.5"/>
+  <text x="196" y="72" style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:13px;font-weight:400;fill:#7fb0e0">PlaceOrder</text>
+  <rect x="196" y="88" width="90" height="40" rx="6" fill="#1e1e1e" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="241" y="113" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#e4e2de">PriceCart</text>
+  <rect x="292" y="88" width="90" height="40" rx="6" fill="#1e1e1e" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="337" y="113" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#e4e2de">ReserveStock</text>
+  <rect x="388" y="88" width="90" height="40" rx="6" fill="#1e1e1e" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="433" y="113" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#e4e2de">TakePayment</text>
+  <rect x="484" y="88" width="90" height="40" rx="6" fill="#1e1e1e" stroke="#f2a7c3" stroke-width="1.5"/>
+  <text x="529" y="113" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#e4e2de">ConfirmOrder</text>
+  <text x="196" y="158" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">passes its junctions without stopping</text>
+  <path d="M592,90 L640,64" fill="none" stroke="#5fc9b5" stroke-width="1.5" marker-end="url(#a5fc9b5)"/>
+  <path d="M592,130 L640,156" fill="none" stroke="#e8853d" stroke-width="1.5" marker-end="url(#ae8853d)"/>
+  <rect x="644" y="36" width="108" height="56" rx="8" fill="#12302b" stroke="#5fc9b5" stroke-width="1.5"/>
+  <text x="660" y="60" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">Placed</text>
+  <text x="660" y="80" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">on success</text>
+  <rect x="644" y="128" width="108" height="56" rx="8" fill="#33200f" stroke="#e8853d" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="660" y="152" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e8853d">Failed</text>
+  <text x="660" y="172" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">on failure</text>
+  <text x="16" y="206" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">A train also runs on its own: from your code, over GraphQL, on a schedule, or on a worker.</text>
 </svg>

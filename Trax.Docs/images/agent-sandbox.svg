@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 290" width="768" height="290" role="img" aria-labelledby="title">
+  <title id="title">Two layers around an AI agent. The sandbox lets the agent run code, edit files, call tools and read data, but nothing in it reaches real systems. The only way out is through Trax's guards, which check that the move is allowed in this state, allowed for this agent, and that its evidence holds up. Only verified moves reach the real systems: tickets, orders, data.</title>
+  <defs><marker id="ab4a7f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b4a7f5"/></marker><marker id="a5fc9b5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5fc9b5"/></marker></defs>
+<rect width="768" height="290" fill="#151515"/>
+  <rect x="16" y="16" width="250" height="200" rx="12" fill="none" stroke="#686560" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="32" y="40" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#a09d96;letter-spacing:1px">SANDBOX</text>
+  <rect x="36" y="56" width="210" height="140" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="52" y="82" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">The agent</text>
+  <text x="52" y="106" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">runs code</text>
+  <text x="52" y="125" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">edits files</text>
+  <text x="52" y="144" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">calls tools</text>
+  <text x="52" y="163" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">reads data</text>
+  <path d="M266,116 L314,116" fill="none" stroke="#b4a7f5" stroke-width="2" marker-end="url(#ab4a7f5)"/>
+  <text x="290" y="106" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#b4a7f5">moves</text>
+  <rect x="318" y="36" width="220" height="160" rx="10" fill="#2f2810" stroke="#f2c94c" stroke-width="1.5"/>
+  <text x="334" y="64" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">Trax guards</text>
+  <circle cx="344" cy="93" r="9" fill="#f2c94c"/>
+  <text x="344" y="98" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:600;fill:#151515">1</text>
+  <text x="362" y="98" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">Allowed in this state?</text>
+  <circle cx="344" cy="125" r="9" fill="#f2c94c"/>
+  <text x="344" y="130" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:600;fill:#151515">2</text>
+  <text x="362" y="130" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">Allowed for this agent?</text>
+  <circle cx="344" cy="157" r="9" fill="#f2c94c"/>
+  <text x="344" y="162" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:600;fill:#151515">3</text>
+  <text x="362" y="162" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:14px;font-weight:400;fill:#e4e2de">Evidence holds up?</text>
+  <path d="M538,116 L586,116" fill="none" stroke="#5fc9b5" stroke-width="2" marker-end="url(#a5fc9b5)"/>
+  <text x="562" y="106" text-anchor="middle" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:12px;font-weight:400;fill:#5fc9b5">verified</text>
+  <rect x="590" y="56" width="162" height="120" rx="8" fill="#12302b" stroke="#5fc9b5" stroke-width="1.5"/>
+  <text x="606" y="84" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#e4e2de">Real systems</text>
+  <text x="606" y="108" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">tickets</text>
+  <text x="606" y="127" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">orders</text>
+  <text x="606" y="146" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:13px;font-weight:400;fill:#a09d96">data</text>
+  <text x="16" y="252" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:400;fill:#e4e2de">The sandbox limits what the agent can do.</text>
+  <text x="16" y="276" style="font-family:ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;font-size:15px;font-weight:600;fill:#f2c94c">Trax limits what the agent can change.</text>
+</svg>

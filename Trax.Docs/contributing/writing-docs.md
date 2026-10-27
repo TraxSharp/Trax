@@ -154,11 +154,13 @@ else:
 ```
 
 `sync-docs.sh` copies the folder to the site's `/docs-images/`, and the site loads images from its
-own origin only. Draw a figure on the site's dark background (`#151515`) with its palette from
-`Trax.Website/src/app/globals.css`, 768 pixels wide (the width of the text column), with text no
-smaller than 12px and the system font stacks, since an SVG shown as an image cannot load the site's
-fonts. Keep it as simple as the idea it shows. Put a `<title>` in the SVG too, for anyone who opens
-the file on its own.
+own origin only. The figures are drawn by `Trax.Docs/tools/figures/draw.py`: change a figure there
+and run `python3 Trax.Docs/tools/figures/draw.py Trax.Docs/images`, rather than editing the SVG.
+Every figure is 768 pixels wide (the width of the text column) on the site's dark background, with
+text no smaller than 12px in the system font stacks, since an SVG shown as an image cannot load the
+site's fonts, and a `<title>` for anyone who opens the file on its own. One colour means one idea
+in every figure: teal states, lavender moves, amber guards, blue trains, pink junctions, orange
+failures. Keep a figure as simple as the idea it shows.
 
 | Test | Fails on |
 |---|---|

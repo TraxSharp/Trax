@@ -11,7 +11,7 @@ nav_order: 1
 Trax makes sure a process happens in the right order, by the right people, with nothing skipped,
 whether a person, a script or an AI agent is doing the work.
 
-![A browser, a script and an AI agent each propose a move. The server reads the stored state and asks three questions: is the move allowed from here, may this caller make it, does the input hold up. All three pass and the new state is saved; any one fails and the client gets a typed error such as GUARD_FAILED, and nothing changes.](/docs-images/propose-decide.svg)
+![A browser, a script and an AI agent each propose a move. The server reads the stored state and checks three things: is the move allowed from here, may this caller make it, do the data and evidence hold up. All three pass and the new state is saved; any one fails and the client gets a typed error such as GUARD_FAILED, and nothing changes.](/docs-images/propose-decide.svg)
 
 You define the process once, in C#. Any client can drive it, and the server checks every move and
 refuses a bad one with a typed error that says why. Every run is recorded in your own database. Trax
