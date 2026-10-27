@@ -42,6 +42,15 @@ find . -name "*.md" -not -name "README.md" \
   cp "$file" "$CACHE_DIR/$file"
 done
 
+# The figures pages show (![...](/docs-images/name.svg)) are served from public/, which
+# git ignores, so the site always shows the images of the commit it was built from.
+IMAGES_DIR="$ROOT_DIR/public/docs-images"
+rm -rf "$IMAGES_DIR"
+if [ -d "$SOURCE_DIR/images" ]; then
+  mkdir -p "$IMAGES_DIR"
+  cp "$SOURCE_DIR"/images/* "$IMAGES_DIR"/
+fi
+
 # Every Trax package releases at one version, and a page names it in each
 # <PackageReference Include="Trax.*" Version="..."> or <PackageVersion ...> it shows. A production build stamps
 # the version of the latest release into those, so the site always tells a reader to

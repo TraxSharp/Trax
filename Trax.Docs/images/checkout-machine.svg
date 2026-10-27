@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 296" width="768" height="296" role="img" aria-labelledby="title">
+  <title id="title">The book's checkout machine. Cart moves to Address on SetAddress, Address to Payment on ChoosePayment, Payment to Placing on PlaceOrder. Placing ends in Placed or Failed. The checkout is at Address. From Cart there is no PlaceOrder move, so the server refuses it whoever asks.</title>
+  <style>
+    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #e4e2de; font-size: 15px; }
+    .muted { fill: #a09d96; font-size: 13px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; fill: #a09d96; }
+    .state { fill: #1e1e1e; stroke: #686560; stroke-width: 1.5; }
+    .line { stroke: #686560; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#686560"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c45c5c"/>
+    </marker>
+  </defs>
+  <rect width="768" height="296" fill="#151515"/>
+
+  <text x="230" y="38" text-anchor="middle" class="muted" style="fill:#d4a24c">you are here</text>
+
+  <rect x="16" y="56" width="110" height="48" rx="8" class="state"/>
+  <text x="71" y="85" text-anchor="middle">Cart</text>
+  <rect x="175" y="56" width="110" height="48" rx="8" fill="#332a14" stroke="#d4a24c" stroke-width="2.5"/>
+  <text x="230" y="85" text-anchor="middle" font-weight="600">Address</text>
+  <rect x="356" y="56" width="110" height="48" rx="8" class="state"/>
+  <text x="411" y="85" text-anchor="middle">Payment</text>
+  <rect x="530" y="56" width="110" height="48" rx="8" class="state"/>
+  <text x="585" y="85" text-anchor="middle">Placing</text>
+  <rect x="672" y="20" width="84" height="40" rx="8" fill="#1a2e18" stroke="#5cb85c" stroke-width="1.5"/>
+  <text x="714" y="45" text-anchor="middle">Placed</text>
+  <rect x="672" y="100" width="84" height="40" rx="8" fill="#2e1616" stroke="#c45c5c" stroke-width="1.5"/>
+  <text x="714" y="125" text-anchor="middle">Failed</text>
+
+  <path d="M126,80 L173,80" class="line" marker-end="url(#arrow)"/>
+  <text x="150" y="122" text-anchor="middle" class="mono">SetAddress</text>
+  <path d="M285,80 L354,80" class="line" marker-end="url(#arrow)"/>
+  <text x="320" y="122" text-anchor="middle" class="mono">ChoosePayment</text>
+  <path d="M466,80 L528,80" class="line" marker-end="url(#arrow)"/>
+  <text x="497" y="122" text-anchor="middle" class="mono">PlaceOrder</text>
+  <path d="M640,72 L670,46" class="line" marker-end="url(#arrow)"/>
+  <path d="M640,88 L670,114" class="line" marker-end="url(#arrow)"/>
+
+  <path d="M71,104 C71,186 585,186 585,106" stroke="#c45c5c" stroke-width="1.5" stroke-dasharray="5 5" fill="none" marker-end="url(#arrow-red)"/>
+  <line x1="318" y1="156" x2="338" y2="176" stroke="#c45c5c" stroke-width="3"/>
+  <line x1="338" y1="156" x2="318" y2="176" stroke="#c45c5c" stroke-width="3"/>
+
+  <rect x="16" y="200" width="736" height="80" rx="8" fill="#1e1e1e" stroke="#2a2a28" stroke-width="1.5"/>
+  <text x="36" y="232">From <tspan font-weight="600">Cart</tspan>, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">PlaceOrder</tspan> is not a move. The server refuses it, whoever asks,</text>
+  <text x="36" y="256">with <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" fill="#c45c5c">NO_TRANSITION</tspan>. The browser has the same machine, so it can hide the button.</text>
+</svg>

@@ -16,6 +16,11 @@ test("blockquotes render as blockquotes", async () => {
   assert.match(html, /<blockquote>\s*<p><strong>Note:<\/strong> read this first.<\/p>\s*<\/blockquote>/);
 });
 
+test("a markdown image renders as an img with its src and alt", async () => {
+  const html = await render("![A railway with four stations](/docs-images/railway.svg)\n");
+  assert.match(html, /<img src="\/docs-images\/railway.svg" alt="A railway with four stations"\/?>/);
+});
+
 test("an inline anchor keeps its id unprefixed", async () => {
   const html = await render('## No warranty <a id="no-warranty"></a>\n\nSee [above](#no-warranty).\n');
   assert.match(html, /<a id="no-warranty"><\/a>/);

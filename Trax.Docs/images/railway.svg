@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 300" width="768" height="300" role="img" aria-labelledby="title">
+  <title id="title">A railway with four stations: Cart, Address, Payment and Placed. A train runs between Cart and Address, and a signal stands before Placed. Stations are states, tracks are the allowed moves, signals are the server's checks, and trains are the work.</title>
+  <style>
+    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #e4e2de; font-size: 15px; }
+    .muted { fill: #a09d96; font-size: 13px; }
+    .label { fill: #a09d96; font-size: 12px; letter-spacing: 1px; }
+    .head { font-size: 16px; font-weight: 600; }
+    .card { fill: #1e1e1e; stroke: #2a2a28; stroke-width: 1.5; }
+  </style>
+  <rect width="768" height="300" fill="#151515"/>
+
+  <line x1="0" y1="100" x2="768" y2="100" stroke="#282828" stroke-width="28" stroke-dasharray="6 14"/>
+  <line x1="0" y1="91" x2="768" y2="91" stroke="#686560" stroke-width="2.5"/>
+  <line x1="0" y1="109" x2="768" y2="109" stroke="#686560" stroke-width="2.5"/>
+
+  <rect x="128" y="80" width="100" height="30" rx="8" fill="#7a9ec2"/>
+  <rect x="140" y="87" width="18" height="10" rx="2" fill="#151515"/>
+  <rect x="168" y="87" width="18" height="10" rx="2" fill="#151515"/>
+  <rect x="196" y="87" width="18" height="10" rx="2" fill="#151515"/>
+  <text x="178" y="64" class="muted" text-anchor="middle" style="fill:#7a9ec2">a train at work</text>
+
+  <line x1="630" y1="40" x2="630" y2="88" stroke="#a09d96" stroke-width="3"/>
+  <rect x="620" y="22" width="20" height="34" rx="6" fill="#101010" stroke="#a09d96" stroke-width="1.5"/>
+  <circle cx="630" cy="32" r="5" fill="#d4a24c"/>
+  <circle cx="630" cy="46" r="5" fill="#333"/>
+  <text x="646" y="44" class="muted" style="fill:#d4a24c">server check</text>
+
+  <circle cx="64" cy="100" r="12" fill="#151515" stroke="#5cb85c" stroke-width="3.5"/>
+  <circle cx="300" cy="100" r="12" fill="#151515" stroke="#5cb85c" stroke-width="3.5"/>
+  <circle cx="490" cy="100" r="12" fill="#151515" stroke="#5cb85c" stroke-width="3.5"/>
+  <circle cx="700" cy="100" r="12" fill="#5cb85c" stroke="#5cb85c" stroke-width="3.5"/>
+  <text x="64" y="140" text-anchor="middle" class="muted">Cart</text>
+  <text x="300" y="140" text-anchor="middle" class="muted">Address</text>
+  <text x="490" y="140" text-anchor="middle" class="muted">Payment</text>
+  <text x="700" y="140" text-anchor="middle" font-weight="600">Placed</text>
+
+  <rect x="16" y="172" width="176" height="112" rx="8" class="card"/>
+  <text x="32" y="198" class="label" style="fill:#5cb85c">STATIONS</text>
+  <text x="32" y="224" class="head">are states</text>
+  <text x="32" y="250" class="muted">Where the process</text>
+  <text x="32" y="267" class="muted">is right now.</text>
+
+  <rect x="204" y="172" width="176" height="112" rx="8" class="card"/>
+  <text x="220" y="198" class="label" style="fill:#5cb85c">TRACKS</text>
+  <text x="220" y="224" class="head">are allowed moves</text>
+  <text x="220" y="250" class="muted">The only ways from</text>
+  <text x="220" y="267" class="muted">one step to the next.</text>
+
+  <rect x="392" y="172" width="176" height="112" rx="8" class="card"/>
+  <text x="408" y="198" class="label" style="fill:#d4a24c">SIGNALS</text>
+  <text x="408" y="224" class="head">are server checks</text>
+  <text x="408" y="250" class="muted">Every move is checked</text>
+  <text x="408" y="267" class="muted">before it happens.</text>
+
+  <rect x="580" y="172" width="172" height="112" rx="8" class="card"/>
+  <text x="596" y="198" class="label" style="fill:#7a9ec2">TRAINS</text>
+  <text x="596" y="224" class="head">are the work</text>
+  <text x="596" y="250" class="muted">Recorded pipelines</text>
+  <text x="596" y="267" class="muted">that run between.</text>
+</svg>

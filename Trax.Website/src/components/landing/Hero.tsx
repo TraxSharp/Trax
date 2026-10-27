@@ -23,10 +23,10 @@ export default function Hero() {
                 Get started
               </Link>
               <Link
-                href="/docs/what-trax-does"
+                href="/docs/introduction"
                 className="text-sm font-medium text-accent transition-colors hover:text-accent-hover"
               >
-                What Trax does &rarr;
+                Trax in five minutes &rarr;
               </Link>
               <a
                 href="https://github.com/TraxSharp/Trax"

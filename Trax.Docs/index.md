@@ -8,41 +8,49 @@ nav_order: 1
 
 # Trax .NET
 
-Trax .NET is a framework for .NET business logic you can call, schedule, serve as an API, or move
-to workers, with every run recorded in your Postgres. You write a train: a typed pipeline of small
-steps called junctions, where a failing junction skips the rest and the train returns the
-exception. The same class runs from a controller, on a cron schedule, as a GraphQL mutation, or on
-a worker in another process or in AWS Lambda, and every run leaves a record of when it started, how
-it ended, and which junction failed with what. Trax is MIT licensed and targets .NET 10. The
-[Glossary](/docs/reference/glossary) defines the names the docs use.
+Trax makes sure a process happens in the right order, by the right people, with nothing skipped,
+whether a person, a script or an AI agent is doing the work.
 
-Everything in Trax is a way to use a train. The database records its runs, the mediator, the
-scheduler and workers decide when and where it runs, the GraphQL API and the operations console let
-a client or an operator call it and watch it, and a state machine walks a user through a longer
-process and runs trains along the way. [What Trax does](/docs/what-trax-does) maps every capability
-to the chapter that teaches it and the page that explains it.
+![A browser, a script and an AI agent each propose a move. The server reads the stored state and asks three questions: is the move allowed from here, may this caller make it, does the input hold up. All three pass and the new state is saved; any one fails and the client gets a typed error such as GUARD_FAILED, and nothing changes.](/docs-images/propose-decide.svg)
 
-## Start here
+You define the process once, in C#. Any client can drive it, and the server checks every move and
+refuses a bad one with a typed error that says why. Every run is recorded in your own database. Trax
+is MIT licensed and targets .NET 10.
 
-New to Trax, read these in order. Everything else on this site is for when you need it.
+**New here?** Read [Trax in five minutes](/docs/introduction): what Trax is for, in pictures, with
+no code.
 
-1. [What Trax does](/docs/what-trax-does): every capability on one page, and how they fit.
-2. [Quick start](/docs/getting-started): one app from an empty folder, in-process to GraphQL.
-3. [Trains and junctions](/docs/core/trains-and-junctions): what a train is and how it runs.
-4. [Memory](/docs/core/memory): how a junction gets its input.
-5. [How a chain runs](/docs/core/building-chains): the steps a train can declare.
-6. [Handle errors in trains](/docs/cross-cutting/handle-errors-in-trains): what a failing junction
-   does to the rest.
-7. [Test a train](/docs/cross-cutting/test-a-train): with in-memory effects, no database.
-8. [Recording runs](/docs/effect): what gets recorded for each run, and where.
-9. [Calling a train by its input](/docs/mediator): how every caller starts a train.
-10. [Schedule a train](/docs/scheduler/setup): cron, intervals and one-off runs.
-11. [The GraphQL API](/docs/api): serving trains to a client.
-12. [Authorization rules](/docs/security/authorization-rules): nothing is served until a rule allows it.
-13. [Operations console](/docs/dashboard): finding and requeuing runs.
-14. [Train or machine](/docs/statemachine/train-or-machine): when a process needs a state machine.
-15. [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim.
-16. [Packages](/docs/reference/packages): which ones to install.
+## Pick your way in
+
+**Deciding whether Trax fits**
+
+- [Trax in five minutes](/docs/introduction): the problem, the idea, and how the pieces fit.
+- [What Trax does](/docs/what-trax-does): every capability on one page, and where each is taught.
+- [Trax compared with Quartz.NET and Hangfire](/docs/reference/comparison): what each is for.
+- [Samples](/docs/samples): complete applications you can run.
+
+**Building with it in .NET**
+
+1. [Quick start](/docs/getting-started): one app from an empty folder, in-process to GraphQL.
+2. [Trains and junctions](/docs/core/trains-and-junctions): what a train is and how it runs.
+3. [Test a train](/docs/cross-cutting/test-a-train): with in-memory effects, no database.
+4. [The Trax book](/docs/book): a whole shop, one feature per chapter.
+
+**Putting AI agents to work on it**
+
+- [Board](/docs/samples/board): scripted agents work tickets, and the server checks their evidence.
+- [Train or machine](/docs/statemachine/train-or-machine): which one a piece of work needs.
+- [State machines](/docs/statemachine): states, moves and the guarantees the server keeps.
+- [Authorization rules](/docs/security/authorization-rules): nothing is served until a rule allows it.
+
+**Running it in production**
+
+- [Operations console](/docs/dashboard): finding, reading and requeuing runs.
+- [How retries work](/docs/scheduler/how-retries-work): backoff, dead letters and requeues.
+- [Deployment topologies](/docs/reference/deployment-topologies): one host, or a hub and workers.
+- [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim.
+
+The [Glossary](/docs/reference/glossary) gives every Trax name its plain meaning.
 
 ## Where to go
 
@@ -72,6 +80,7 @@ New to Trax, read these in order. Everything else on this site is for when you n
 
 ### Understand
 
+- [Trax in five minutes](/docs/introduction): what Trax is for, in pictures.
 - [What Trax does](/docs/what-trax-does): every capability, with where to learn and read about it.
 - [Trains](/docs/core): trains, junctions, and how a chain runs.
 - [Decisions](/docs/core/decisions): a branch in a chain as a typed question a rule or a model answers.

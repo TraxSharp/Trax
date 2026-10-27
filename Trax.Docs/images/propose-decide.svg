@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 296" width="768" height="296" role="img" aria-labelledby="title">
+  <title id="title">A browser, a script and an AI agent each propose a move. The server reads the stored state and asks three questions: is the move allowed from here, may this caller make it, does the input hold up. If all pass the new state is saved; if any fails the client gets a typed error and nothing changes.</title>
+  <style>
+    text { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #e4e2de; font-size: 15px; }
+    .muted { fill: #a09d96; font-size: 13px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+    .head { font-size: 16px; font-weight: 600; }
+    .box { fill: #1e1e1e; stroke: #3a3a37; stroke-width: 1.5; }
+    .line { stroke: #686560; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#686560"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5cb85c"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c45c5c"/>
+    </marker>
+  </defs>
+  <rect width="768" height="296" fill="#151515"/>
+
+  <text x="16" y="34" class="muted">ANY CLIENT</text>
+  <rect x="16" y="50" width="160" height="48" rx="8" class="box"/>
+  <text x="32" y="79">A browser</text>
+  <rect x="16" y="118" width="160" height="48" rx="8" class="box"/>
+  <text x="32" y="147">A script or service</text>
+  <rect x="16" y="186" width="160" height="48" rx="8" class="box"/>
+  <text x="32" y="215">An AI agent</text>
+
+  <path d="M176,74 C210,74 214,142 248,142" class="line"/>
+  <path d="M176,142 L248,142" class="line" marker-end="url(#arrow)"/>
+  <path d="M176,210 C210,210 214,142 248,142" class="line"/>
+  <text x="16" y="266" class="muted">Each sends only a move,</text>
+  <text x="16" y="284" class="muted">never the new state.</text>
+
+  <rect x="256" y="34" width="290" height="216" rx="10" fill="#1a2e18" stroke="#3d8b37" stroke-width="1.5"/>
+  <text x="276" y="62" class="head">The server</text>
+  <text x="276" y="84" class="muted">reads the stored state, not the client's</text>
+  <circle cx="288" cy="117" r="11" fill="#3d8b37"/>
+  <text x="284" y="122" font-size="13" font-weight="600">1</text>
+  <text x="308" y="122">Is this move allowed from here?</text>
+  <circle cx="288" cy="159" r="11" fill="#3d8b37"/>
+  <text x="284" y="164" font-size="13" font-weight="600">2</text>
+  <text x="308" y="164">May this caller make it?</text>
+  <circle cx="288" cy="201" r="11" fill="#3d8b37"/>
+  <text x="284" y="206" font-size="13" font-weight="600">3</text>
+  <text x="308" y="206">Does the input hold up?</text>
+
+  <path d="M546,100 L584,82" stroke="#5cb85c" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)"/>
+  <path d="M546,190 L584,206" stroke="#c45c5c" stroke-width="1.5" fill="none" marker-end="url(#arrow-red)"/>
+
+  <rect x="590" y="40" width="166" height="80" rx="8" fill="#1e1e1e" stroke="#5cb85c" stroke-width="1.5"/>
+  <text x="606" y="68" class="head" fill="#5cb85c" style="fill:#5cb85c">Accepted</text>
+  <text x="606" y="92" class="muted">All three pass.</text>
+  <text x="606" y="108" class="muted">The new state is saved.</text>
+
+  <rect x="590" y="146" width="166" height="132" rx="8" fill="#2e1616" stroke="#c45c5c" stroke-width="1.5"/>
+  <text x="606" y="176" class="head" style="fill:#c45c5c">Refused</text>
+  <text x="606" y="198" class="muted">Any one fails.</text>
+  <text x="606" y="222" class="mono">GUARD_FAILED</text>
+  <text x="606" y="246" class="muted">A typed error says why.</text>
+  <text x="606" y="264" class="muted">Nothing changes.</text>
+</svg>

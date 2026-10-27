@@ -8,6 +8,9 @@ nav_order: 2
 
 # What Trax does
 
+This page is the map. If you have not met Trax before, [Trax in five minutes](/docs/introduction)
+explains what it is for first, in pictures.
+
 Trax is built around one thing: the **train**, a class that does one piece of business work as a
 chain of small steps called junctions. Everything else in Trax is a way to use that same class.
 The database records every run of it. The mediator, the scheduler and workers decide when and
@@ -15,16 +18,7 @@ where it runs. The GraphQL API and the operations console let a client or an ope
 watch it. A state machine walks a user through a longer process and runs trains along the way. You
 write the train once, and each of these attaches to it without changing it.
 
-```text
-                          ┌──────────────────────────────┐
-  your code ─────────────►│                              │
-  a GraphQL client ──────►│           a train            │───► a run record
-  the scheduler ─────────►│  junction → junction → ...   │     (when, how it ended,
-  a worker process ──────►│                              │      which step failed, why)
-  a state machine ───────►│                              │            │
-                          └──────────────────────────────┘            ▼
-                                                            the operations console
-```
+![Five callers run the same train: your code, a GraphQL client, the scheduler, a worker process and a state machine. Each run leaves a run record (when, how it ended, which step failed and why), and the operations console shows the records.](/docs-images/train-callers.svg)
 
 The [Glossary](/docs/reference/glossary) gives each Trax name its plain equivalent. The tables
 below list what Trax does, grouped the way [the book](/docs/book) teaches it. Each row names the
