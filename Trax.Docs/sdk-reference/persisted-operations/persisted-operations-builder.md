@@ -97,11 +97,13 @@ public sealed class RabbitMqInvalidationOptions
 
 A message on the invalidation exchange empties a node's caches, so the broadcast is signed. Every
 node and every uploader (`AddPersistedOperationStore`) sets the same key, and each message carries a
-`trax-signature` header: HMAC-SHA256 over the body, the exchange, a timestamp and a message id, the
-scheme [UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq#signing-and-transport) uses for
-train events. A node checks it before it reads the body and drops a message that is unsigned,
-signed with another key, or further than `MaxClockSkew` from its clock, logging a warning at most
-once a minute.
+`trax-signature` header: HMAC-SHA256 over the body, the exchange, a timestamp and a message id. The
+header has the format [UseRabbitMq](/docs/sdk-reference/configuration/use-rabbit-mq#signing-and-transport)
+uses for train events, but the MAC is tagged for invalidations, so a train event never verifies as
+an invalidation even when both use the same key. A node drops a message delivered from any exchange
+but the one it subscribed to, then checks the signature before it reads the body and drops a
+message that is unsigned, signed with another key, or further than `MaxClockSkew` from its clock,
+logging a warning at most once a minute.
 
 | `RabbitMqInvalidationOptions` | Default | Purpose |
 |---|---|---|

@@ -22,18 +22,27 @@ internal enum InvalidationSignatureVerdict
 }
 
 /// <summary>
-/// The signature each invalidation carries, the same scheme as the RabbitMQ train-event
-/// broadcaster's (<c>Trax.Effect.Broadcaster.RabbitMQ</c>), in the <see cref="Header"/> header:
+/// The signature each invalidation carries, in the <see cref="Header"/> header:
 /// <c>v1,t=&lt;unix seconds&gt;,n=&lt;message id&gt;,s=&lt;base64 HMAC-SHA256&gt;</c>. The MAC covers
-/// the version, the timestamp, the message id, the exchange the message is published to and the
-/// body, so a body moved to another exchange, or given another timestamp, no longer matches.
+/// a domain tag, the version, the timestamp, the message id, the exchange the message is published
+/// to and the body, so a body moved to another exchange, or given another timestamp, no longer
+/// matches.
 /// </summary>
+/// <remarks>
+/// The header has the RabbitMQ train-event broadcaster's format
+/// (<c>Trax.Effect.Broadcaster.RabbitMQ</c>), but the MAC starts with its own tag,
+/// <see cref="DomainTag"/>, so a message signed for one of the two never verifies as the other's,
+/// even when a host gives both the same key.
+/// </remarks>
 internal static class InvalidationMessageSignature
 {
     /// <summary>The message header the signature travels in.</summary>
     internal const string Header = "trax-signature";
 
     private const string Version = "v1";
+
+    /// <summary>What every MAC starts with, distinct from the train-event broadcaster's.</summary>
+    internal const string DomainTag = "trax-invalidation/" + Version;
     private const int MessageIdBytes = 16;
 
     /// <summary>Signs <paramref name="body"/> for <paramref name="exchange"/> at <paramref name="now"/>.</summary>
@@ -163,7 +172,7 @@ internal static class InvalidationMessageSignature
             Encoding.UTF8.GetBytes(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"trax-broadcast/{Version}\n{timestamp}\n{messageId}\n{exchangeBytes.Length}\n"
+                    $"{DomainTag}\n{timestamp}\n{messageId}\n{exchangeBytes.Length}\n"
                 )
             )
         );

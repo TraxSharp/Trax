@@ -64,7 +64,12 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         _cache = cache;
         _hcInvalidator = hcInvalidator;
         _logger = logger;
-        _verifier = new InvalidationMessageVerifier(options.RabbitMqInvalidation, logger, time);
+        _verifier = new InvalidationMessageVerifier(
+            options.RabbitMqExchange,
+            options.RabbitMqInvalidation,
+            logger,
+            time
+        );
     }
 
     /// <summary>Messages dropped for a missing, wrong or stale signature. For tests.</summary>

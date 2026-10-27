@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -178,6 +180,7 @@ public class InvalidationSigningTests
     public void WithUnsignedMessagesAllowed_AMessageWithNoSignature_IsAccepted()
     {
         var verifier = new InvalidationMessageVerifier(
+            Exchange,
             new RabbitMqInvalidationOptions().AllowUnsignedMessages(),
             NullLogger.Instance
         );
@@ -185,8 +188,94 @@ public class InvalidationSigningTests
         verifier.Accept(Exchange, Body, null).Should().BeTrue();
     }
 
+    [Test]
+    public void AMessageSignedWithTheSameKeyUnderTheTrainEventScheme_IsDropped()
+    {
+        // The train-event broadcaster's MAC, built by hand: the same header format, the same
+        // fields, the same key, and its own domain tag.
+        var clock = new ManualClock();
+        var verifier = Verifier(clock);
+        var timestamp = clock.GetUtcNow().ToUnixTimeSeconds();
+        const string messageId = "0123456789ABCDEF0123456789ABCDEF";
+        var mac = MacUnder(
+            "trax-broadcast/v1",
+            TestInvalidationKey.Value,
+            Exchange,
+            timestamp,
+            messageId
+        );
+        var signature = $"v1,t={timestamp},n={messageId},s={Convert.ToBase64String(mac)}";
+
+        verifier
+            .Accept(Exchange, Body, signature)
+            .Should()
+            .BeFalse("an invalidation's MAC is tagged apart from a train event's");
+
+        var ours = MacUnder(
+            InvalidationMessageSignature.DomainTag,
+            TestInvalidationKey.Value,
+            Exchange,
+            timestamp,
+            messageId
+        );
+        verifier
+            .Accept(
+                Exchange,
+                Body,
+                $"v1,t={timestamp},n={messageId},s={Convert.ToBase64String(ours)}"
+            )
+            .Should()
+            .BeTrue("the same construction under the invalidation tag is accepted");
+    }
+
+    [Test]
+    public void ADeliveryFromAnotherExchange_IsDropped_EvenWhenSignedForIt()
+    {
+        var clock = new ManualClock();
+        var verifier = Verifier(clock);
+        const string other = "trax.somewhere_else";
+
+        verifier
+            .Accept(other, Body, Sign(TestInvalidationKey.Value, other, clock))
+            .Should()
+            .BeFalse("only the exchange the node subscribed to delivers invalidations");
+        verifier.Accept("", Body, Sign(TestInvalidationKey.Value, "", clock)).Should().BeFalse();
+        verifier.Refused.Should().Be(2);
+    }
+
+    [Test]
+    public void WithUnsignedMessagesAllowed_ADeliveryFromAnotherExchange_IsDropped()
+    {
+        var verifier = new InvalidationMessageVerifier(
+            Exchange,
+            new RabbitMqInvalidationOptions().AllowUnsignedMessages(),
+            NullLogger.Instance
+        );
+
+        verifier.Accept("trax.somewhere_else", Body, null).Should().BeFalse();
+    }
+
+    private static byte[] MacUnder(
+        string tag,
+        byte[] key,
+        string exchange,
+        long timestamp,
+        string messageId
+    )
+    {
+        var exchangeBytes = Encoding.UTF8.GetBytes(exchange);
+        var input = Encoding
+            .UTF8.GetBytes($"{tag}\n{timestamp}\n{messageId}\n{exchangeBytes.Length}\n")
+            .Concat(exchangeBytes)
+            .Concat("\n"u8.ToArray())
+            .Concat(Body)
+            .ToArray();
+        return HMACSHA256.HashData(key, input);
+    }
+
     private static InvalidationMessageVerifier Verifier(TimeProvider clock) =>
         new(
+            Exchange,
             new RabbitMqInvalidationOptions { SigningKey = TestInvalidationKey.Value },
             NullLogger.Instance,
             clock

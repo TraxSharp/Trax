@@ -9,7 +9,8 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 /// A message on the invalidation exchange empties a node's persisted-operation caches, so whoever
 /// can publish one can make every node read its documents again. Every node and every uploader
 /// signs what it publishes with <see cref="SigningKey"/>, and a node drops a message that is not
-/// signed with it. The signature is the one the RabbitMQ train-event broadcaster uses.
+/// signed with it. The signature header has the RabbitMQ train-event broadcaster's format, and its
+/// MAC is tagged for invalidations, so neither verifies as the other.
 /// </remarks>
 /// <seealso href="https://traxsharp.net/docs/sdk-reference/persisted-operations/persisted-operations-builder">SDK reference</seealso>
 public sealed class RabbitMqInvalidationOptions
